@@ -54,12 +54,12 @@ const HEBREW_MONTHS: Record<number, string> = {
 
 export async function POST(
   req: NextRequest,
-  { params }: { { params }: { params: { id: string } }<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
 
   try {
-    const { id } = params;
+    const { id } = await context.params;
     const body: SyncRequest = await req.json();
 
     const client = clients.getById(id);

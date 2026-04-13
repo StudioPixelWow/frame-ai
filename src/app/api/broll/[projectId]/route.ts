@@ -22,15 +22,15 @@ import type { GenerateBrollOptions }    from "@/lib/broll/types";
 import type { TranscriptSegment }       from "@/lib/transcript/types";
 import type { HighlightResult }         from "@/lib/transcript/highlights/types";
 
-type Params = { { params }: { params: { id: string } }<{ projectId: string }> };
+type Params = { params: Promise<{ projectId: string }> };
 
 const VALID_TONES      = ["energetic","persuasive","educational","inspirational","professional","casual"];
 const VALID_PRIORITIES = ["high","medium","low"];
 
 // ─── GET ──────────────────────────────────────────────────────────────────────
 
-export async function GET(_req: NextRequest, { params }: Params) {
-  const { projectId } = params;
+export async function GET(_req: NextRequest, context: Params) {
+  const { projectId } = await context.params;
   const result = getBroll(projectId);
 
   if (!result) {
@@ -45,8 +45,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 // ─── POST ─────────────────────────────────────────────────────────────────────
 
-export async function POST(req: NextRequest, { params }: Params) {
-  const { projectId } = params;
+export async function POST(req: NextRequest, context: Params) {
+  const { projectId } = await context.params;
 
   let body: unknown;
   try {
@@ -130,8 +130,8 @@ export async function POST(req: NextRequest, { params }: Params) {
 
 // ─── DELETE ───────────────────────────────────────────────────────────────────
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
-  const { projectId } = params;
+export async function DELETE(_req: NextRequest, context: Params) {
+  const { projectId } = await context.params;
   const deleted = deleteBroll(projectId);
 
   if (!deleted) {

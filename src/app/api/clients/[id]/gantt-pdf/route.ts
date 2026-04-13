@@ -16,9 +16,9 @@ const STATUS_MAP: Record<string, string> = {
   cancelled: "בוטל",
 };
 
-export async function GET(req: NextRequest, { params }: { { params }: { params: { id: string } }<{ id: string }> }) {
+export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   ensureSeeded();
-  const { id } = params;
+  const { id } = await context.params;
   const client = clients.getById(id);
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 

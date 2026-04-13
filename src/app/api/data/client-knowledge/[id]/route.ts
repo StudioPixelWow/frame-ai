@@ -11,12 +11,12 @@ import type { ClientKnowledge } from '@/lib/db';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
 
   try {
-    const { id } = params;
+    const { id } = await context.params;
     const record = clientKnowledge.getById(id);
 
     if (!record) {
@@ -45,13 +45,14 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
 
   try {
+    const { id } = await context.params;
     const body = await req.json();
-    const existing = clientKnowledge.getById(params.id);
+    const existing = clientKnowledge.getById(id);
 
     if (!existing) {
       return NextResponse.json(
@@ -79,7 +80,7 @@ export async function PUT(
       updatedAt: new Date().toISOString(),
     };
 
-    clientKnowledge.update(params.id, updated);
+    clientKnowledge.update(id, updated);
 
     return NextResponse.json({
       success: true,
@@ -101,12 +102,13 @@ export async function PUT(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
 
   try {
-    const existing = clientKnowledge.getById(params.id);
+    const { id } = await context.params;
+    const existing = clientKnowledge.getById(id);
 
     if (!existing) {
       return NextResponse.json(
@@ -115,7 +117,7 @@ export async function DELETE(
       );
     }
 
-    clientKnowledge.delete(params.id);
+    clientKnowledge.delete(id);
 
     return NextResponse.json({
       success: true,

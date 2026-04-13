@@ -353,7 +353,7 @@ async function generateWinnerInsights(
   winner: any,
   allMetrics: any[],
   clientId: string | undefined
-): { recommendedNextSteps: string } | null> {
+): Promise<{ recommendedNextSteps: string } | null> {
   try {
     const systemPrompt = `You are an expert A/B testing analyst for Hebrew RTL marketing. Analyze the A/B test results and provide concise, actionable next steps. Be direct and strategic.`;
 

@@ -10,11 +10,11 @@ import { ensureSeeded } from '@/lib/db/seed';
 
 export async function GET(
   _req: NextRequest,
-  { params }: { { params }: { params: { id: string } }<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const { id } = params;
+    const { id } = await context.params;
     const meeting = meetings.getById(id);
     if (!meeting) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
     return NextResponse.json(meeting);
@@ -25,11 +25,11 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { { params }: { params: { id: string } }<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const { id } = params;
+    const { id } = await context.params;
     const body = await req.json();
     const updated = meetings.update(id, body);
     if (!updated) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
@@ -41,11 +41,11 @@ export async function PUT(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { { params }: { params: { id: string } }<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const { id } = params;
+    const { id } = await context.params;
     const deleted = meetings.delete(id);
     if (!deleted) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
     return NextResponse.json({ success: true });

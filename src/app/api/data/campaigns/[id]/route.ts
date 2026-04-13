@@ -10,11 +10,11 @@ import { ensureSeeded } from '@/lib/db/seed';
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const { id } = params;
+    const { id } = await context.params;
     const campaign = campaigns.getById(id);
     if (!campaign) {
       return NextResponse.json(
@@ -33,11 +33,11 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const { id } = params;
+    const { id } = await context.params;
     const body = await req.json();
     const updated = campaigns.update(id, body);
     if (!updated) {
@@ -57,11 +57,11 @@ export async function PUT(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const { id } = params;
+    const { id } = await context.params;
     const deleted = campaigns.delete(id);
     if (!deleted) {
       return NextResponse.json(

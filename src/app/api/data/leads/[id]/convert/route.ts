@@ -15,11 +15,11 @@ type ConvertToType = 'marketing_client' | 'podcast_client' | 'branding_project' 
 
 export async function POST(
   req: NextRequest,
-  { params }: { { params }: { params: { id: string } }<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const { id } = params;
+    const { id } = await context.params;
     const lead = leads.getById(id);
     if (!lead) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });

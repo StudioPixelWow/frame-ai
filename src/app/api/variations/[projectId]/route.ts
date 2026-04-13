@@ -34,14 +34,14 @@ import type { HookResult }                    from "@/lib/hooks/types";
 import type { CtaResult }                     from "@/lib/cta/types";
 import type { TrimResult }                    from "@/lib/trimmer/types";
 
-type Params = { { params }: { params: { id: string } }<{ projectId: string }> };
+type Params = { params: Promise<{ projectId: string }> };
 
 const VALID_STRATEGIES = new Set<string>(ALL_STRATEGIES);
 
 // ─── GET ──────────────────────────────────────────────────────────────────────
 
-export async function GET(_req: NextRequest, { params }: Params) {
-  const { projectId } = params;
+export async function GET(_req: NextRequest, context: Params) {
+  const { projectId } = await context.params;
   const result = getVariations(projectId);
 
   if (!result) {
@@ -56,8 +56,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 // ─── POST ─────────────────────────────────────────────────────────────────────
 
-export async function POST(req: NextRequest, { params }: Params) {
-  const { projectId } = params;
+export async function POST(req: NextRequest, context: Params) {
+  const { projectId } = await context.params;
 
   // ── Parse body ───────────────────────────────────────────────────────────────
   let body: Record<string, unknown>;
@@ -127,8 +127,8 @@ export async function POST(req: NextRequest, { params }: Params) {
 
 // ─── DELETE ───────────────────────────────────────────────────────────────────
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
-  const { projectId } = params;
+export async function DELETE(_req: NextRequest, context: Params) {
+  const { projectId } = await context.params;
   const deleted = deleteVariations(projectId);
 
   if (!deleted) {

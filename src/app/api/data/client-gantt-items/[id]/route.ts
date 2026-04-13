@@ -11,11 +11,11 @@ import { ensureSeeded } from '@/lib/db/seed';
 
 export async function GET(
   _req: NextRequest,
-  { params }: { { params }: { params: { id: string } }<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const { id } = params;
+    const { id } = await context.params;
     const item = clientGanttItems.getById(id);
     if (!item) {
       return NextResponse.json({ error: 'Client gantt item not found' }, { status: 404 });
@@ -34,11 +34,11 @@ const WORK_STATUSES = ['in_progress', 'approved', 'draft'];
 
 export async function PUT(
   req: NextRequest,
-  { params }: { { params }: { params: { id: string } }<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const { id } = params;
+    const { id } = await context.params;
     const body = await req.json();
 
     // Read current item BEFORE update to detect status transition
@@ -114,11 +114,11 @@ export async function PUT(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { { params }: { params: { id: string } }<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const { id } = params;
+    const { id } = await context.params;
     const deleted = clientGanttItems.delete(id);
     if (!deleted) {
       return NextResponse.json({ error: 'Client gantt item not found' }, { status: 404 });

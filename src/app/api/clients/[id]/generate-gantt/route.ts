@@ -848,12 +848,12 @@ function getItemType(format: string): GanttItemType {
 
 export async function POST(
   req: NextRequest,
-  { params }: { { params }: { params: { id: string } }<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
 
   try {
-    const { id } = params;
+    const { id } = await context.params;
     const body: GenerateGanttRequest = await req.json();
 
     // Validate input
@@ -1570,7 +1570,7 @@ ${hasResearch ? `חובה: researchSource ו-researchReason בכל פריט. פ�
     let clientIdForError = 'unknown';
 
     try {
-      const { id } = params;
+      const { id } = await context.params;
       clientIdForError = id;
     } catch (e) {
       // Use fallback if params can't be awaited

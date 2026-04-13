@@ -126,10 +126,10 @@ function generateKeyOpportunities(
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await context.params;
     const body: GenerateAnnualGanttRequest = await request.json();
 
     if (!body.year) {
