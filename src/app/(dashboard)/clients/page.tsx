@@ -201,11 +201,15 @@ export default function ClientsPage() {
     setModalOpen(true);
   };
 
+  const [saving, setSaving] = useState(false);
+
   const handleSave = async () => {
+    if (saving) return;
     if (!form.name.trim()) {
       toast("שם הלקוח הוא שדה חובה", "error");
       return;
     }
+    setSaving(true);
     try {
       if (editingClient) {
         await update(editingClient.id, form);
@@ -215,8 +219,11 @@ export default function ClientsPage() {
         toast("לקוח חדש נוצר בהצלחה", "success");
       }
       setModalOpen(false);
-    } catch {
+    } catch (err) {
+      console.error("[ClientsPage] handleSave error:", err);
       toast("שגיאה בשמירת הלקוח", "error");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -873,11 +880,11 @@ export default function ClientsPage() {
         title={editingClient ? "עריכת לקוח" : "לקוח חדש"}
         footer={
           <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-            <button className="mod-btn-ghost" onClick={() => setModalOpen(false)}>
+            <button type="button" className="mod-btn-ghost" onClick={() => setModalOpen(false)}>
               ביטול
             </button>
-            <button className="mod-btn-primary" onClick={handleSave}>
-              {editingClient ? "שמור שינויים" : "צור לקוח"}
+            <button type="button" className="mod-btn-primary" onClick={handleSave} disabled={saving}>
+              {saving ? "שומר..." : editingClient ? "שמור שינויים" : "צור לקוח"}
             </button>
           </div>
         }
