@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getApiKeys, getApiKeyStatus } from "@/lib/db/api-keys";
+import { DATA_DIR as FRAMEAI_DATA_DIR } from "@/lib/db/paths";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Types
@@ -378,7 +379,7 @@ function getTranscriptionPriority(): { primary: string; fallback: string } {
   try {
     const fs = require("fs");
     const path = require("path");
-    const settingsFile = path.join(process.cwd(), ".frameai", "data", "ai-settings.json");
+    const settingsFile = path.join(FRAMEAI_DATA_DIR, "ai-settings.json");
     if (!fs.existsSync(settingsFile)) return { primary: "whisper", fallback: "assemblyai" };
     const raw = fs.readFileSync(settingsFile, "utf8");
     const arr = JSON.parse(raw);

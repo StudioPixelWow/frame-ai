@@ -7,12 +7,12 @@
 
 import fs   from "fs";
 import path from "path";
+import { FRAMEAI_DIR } from "@/lib/db/paths";
 import type { TrimResult, StoredTrimResult } from "./types";
 
 function getStorageDir(): string {
   const base =
-    process.env.FRAMEAI_STORAGE_DIR ??
-    path.join(process.cwd(), ".frameai");
+    process.env.FRAMEAI_STORAGE_DIR ?? FRAMEAI_DIR;
   return path.join(base, "trimmer");
 }
 

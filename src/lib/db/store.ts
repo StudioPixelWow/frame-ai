@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-
-const DATA_DIR = path.join(process.cwd(), '.frameai', 'data');
+import { DATA_DIR } from './paths';
 
 export class JsonStore<T extends { id: string }> {
   private filePath: string;

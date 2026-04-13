@@ -11,8 +11,8 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
+import { DATA_DIR } from "./paths";
 
-const DATA_DIR = join(process.cwd(), ".frameai", "data");
 const KEYS_FILE = join(DATA_DIR, "api-keys.json");
 const AI_SETTINGS_FILE = join(DATA_DIR, "ai-settings.json");
 

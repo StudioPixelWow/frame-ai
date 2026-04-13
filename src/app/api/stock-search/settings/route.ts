@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { StockProviderConfig } from "@/lib/stock-media/providers";
 
-const DATA_DIR = join(process.cwd(), ".frameai", "data");
+import { DATA_DIR } from "@/lib/db/paths";
 const STOCK_SETTINGS_FILE = join(DATA_DIR, "stock-settings.json");
 
 // Default stock settings structure

@@ -5,8 +5,9 @@
  */
 import fs from "fs";
 import path from "path";
+import { DATA_DIR as FRAMEAI_DATA_DIR } from "@/lib/db/paths";
 
-const DATA_DIR = path.join(process.cwd(), ".frameai/data/render-jobs");
+const DATA_DIR = path.join(FRAMEAI_DATA_DIR, "render-jobs");
 
 // Ensure directory exists
 if (!fs.existsSync(DATA_DIR)) {

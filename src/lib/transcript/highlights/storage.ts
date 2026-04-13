@@ -8,14 +8,14 @@
 
 import fs   from "fs";
 import path from "path";
+import { FRAMEAI_DIR } from "@/lib/db/paths";
 import type { HighlightResult, StoredHighlightResult } from "./types";
 
 // ─── Storage dir ─────────────────────────────────────────────────────────────
 
 function getStorageDir(): string {
   const base =
-    process.env.FRAMEAI_STORAGE_DIR ??
-    path.join(process.cwd(), ".frameai");
+    process.env.FRAMEAI_STORAGE_DIR ?? FRAMEAI_DIR;
   return path.join(base, "highlights");
 }
 

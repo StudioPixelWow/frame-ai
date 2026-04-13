@@ -10,7 +10,9 @@ import fs from "fs";
 let workerProcess: ChildProcess | null = null;
 let workerStartedAt: Date | null = null;
 
-const LOG_DIR = path.join(process.cwd(), ".frameai/logs");
+import { FRAMEAI_DIR } from "@/lib/db/paths";
+
+const LOG_DIR = path.join(FRAMEAI_DIR, "logs");
 
 function ensureLogDir(): void {
   if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });

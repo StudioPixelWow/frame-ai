@@ -10,6 +10,7 @@
 
 import fs   from "fs/promises";
 import path from "path";
+import { FRAMEAI_DIR } from "@/lib/db/paths";
 import type { TranscriptAnalysis, StoredAnalysis } from "./types";
 
 // ── Storage directory ─────────────────────────────────────────────────────────
@@ -18,7 +19,7 @@ function storageDir(): string {
   // FRAMEAI_STORAGE_DIR env var allows overriding the storage path (e.g. in tests)
   return (
     process.env.FRAMEAI_STORAGE_DIR ??
-    path.join(process.cwd(), ".frameai", "analyses")
+    path.join(FRAMEAI_DIR, "analyses")
   );
 }
 
