@@ -145,13 +145,10 @@ function generateKeyOpportunities(
 }
 
 export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } }
+  request: Request,
+  context: { params: Promise<{ id: string }> }
 ) {
-  ensureSeeded();
-
-  try {
-    const body: GenerateAnnualGanttRequest = await req.json();
+  const { id } = await context.params;
 
     // Validate input
     if (!body.year) {
@@ -162,7 +159,7 @@ export async function POST(
     }
 
     // Load client
-    const client = clients.getById(params.id);
+    const client = clients.getById(id);
     if (!client) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
@@ -198,7 +195,7 @@ export async function POST(
       // Create the annual gantt item
       const ganttItem: ClientGanttItem = {
         id: 'cgi_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
-        clientId: params.id,
+        clientId: id,
         ganttType: 'annual',
         month,
         year: body.year,
