@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { clients, clientEmailLogs } from "@/lib/db";
 import { ensureSeeded } from "@/lib/db/seed";
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const { id } = await context.params;
   ensureSeeded();
-  const client = clients.getById(params.id);
+  const client = clients.getById(id);
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 
   const body = await req.json();
