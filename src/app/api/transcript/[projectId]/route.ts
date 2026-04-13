@@ -6,10 +6,10 @@
 import { NextRequest, NextResponse }        from "next/server";
 import { getAnalysis, deleteAnalysis }      from "@/lib/transcript";
 
-type Params = { params: Promise<{ projectId: string }> };
+type Params = { { params }: { params: { id: string } }<{ projectId: string }> };
 
 export async function GET(_req: NextRequest, { params }: Params) {
-  const { projectId } = await params;
+  const { projectId } = params;
   const analysis = await getAnalysis(projectId);
   if (!analysis) {
     return NextResponse.json(
@@ -21,7 +21,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
-  const { projectId } = await params;
+  const { projectId } = params;
   const deleted = await deleteAnalysis(projectId);
   if (!deleted) {
     return NextResponse.json(

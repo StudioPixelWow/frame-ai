@@ -11,11 +11,11 @@ import { ensureSeeded } from '@/lib/db/seed';
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { { params }: { params: { id: string } }<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const { id } = await params;
+    const { id } = params;
     const employeeTask = employeeTasks.getById(id);
     if (!employeeTask) {
       return NextResponse.json({ error: 'Employee task not found' }, { status: 404 });
@@ -31,11 +31,11 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { { params }: { params: { id: string } }<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const { id } = await params;
+    const { id } = params;
     const before = employeeTasks.getById(id) as EmployeeTask | null;
     const body = await req.json();
     const updated = employeeTasks.update(id, body);
@@ -63,11 +63,11 @@ export async function PUT(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { { params }: { params: { id: string } }<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const { id } = await params;
+    const { id } = params;
     const deleted = employeeTasks.delete(id);
     if (!deleted) {
       return NextResponse.json({ error: 'Employee task not found' }, { status: 404 });

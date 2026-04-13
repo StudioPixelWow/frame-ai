@@ -10,11 +10,11 @@ import { ensureSeeded } from '@/lib/db/seed';
 
 export async function GET(
   _req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const { id } = await context.params;
+    const { id } = params;
     const task = clientTasks.getById(id);
     if (!task) {
       return NextResponse.json({ error: 'Client task not found' }, { status: 404 });
@@ -30,11 +30,11 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const { id } = await context.params;
+    const { id } = params;
     const body = await req.json();
     const updated = clientTasks.update(id, body);
     if (!updated) {
@@ -51,11 +51,11 @@ export async function PUT(
 
 export async function DELETE(
   _req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const { id } = await context.params;
+    const { id } = params;
     const deleted = clientTasks.delete(id);
     if (!deleted) {
       return NextResponse.json({ error: 'Client task not found' }, { status: 404 });

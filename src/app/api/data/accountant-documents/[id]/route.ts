@@ -4,10 +4,10 @@ import { ensureSeeded } from '@/lib/db/seed';
 
 export async function GET(
   _req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }<{ id: string }> }
 ) {
   ensureSeeded();
-  const { id } = await context.params;
+  const { id } = params;
 
   try {
     const item = accountantDocuments.getById(id);
@@ -22,10 +22,10 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }<{ id: string }> }
 ) {
   ensureSeeded();
-  const { id } = await context.params;
+  const { id } = params;
 
   try {
     const body = await req.json();
@@ -41,10 +41,10 @@ export async function PUT(
 
 export async function DELETE(
   _req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }<{ id: string }> }
 ) {
   ensureSeeded();
-  const { id } = await context.params;
+  const { id } = params;
 
   try {
     const deleted = accountantDocuments.delete(id);

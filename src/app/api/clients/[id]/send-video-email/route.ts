@@ -10,12 +10,12 @@ import { ensureSeeded } from '@/lib/db/seed';
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { { params }: { params: { id: string } }<{ id: string }> }
 ) {
   ensureSeeded();
 
   try {
-    const { id } = await params;
+    const { id } = params;
     const client = clients.getById(id);
     if (!client) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });

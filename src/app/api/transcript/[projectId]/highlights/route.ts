@@ -21,12 +21,12 @@ import {
 import type { TranscriptSegment }       from "@/lib/transcript/types";
 import type { DetectOptions }           from "@/lib/transcript/highlights/types";
 
-type Params = { params: Promise<{ projectId: string }> };
+type Params = { { params }: { params: { id: string } }<{ projectId: string }> };
 
 // ─── GET ──────────────────────────────────────────────────────────────────────
 
 export async function GET(_req: NextRequest, { params }: Params) {
-  const { projectId } = await params;
+  const { projectId } = params;
   const result = getHighlights(projectId);
 
   if (!result) {
@@ -42,7 +42,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 // ─── POST ─────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest, { params }: Params) {
-  const { projectId } = await params;
+  const { projectId } = params;
 
   let body: unknown;
   try {
@@ -110,7 +110,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 // ─── DELETE ───────────────────────────────────────────────────────────────────
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
-  const { projectId } = await params;
+  const { projectId } = params;
   const deleted = deleteHighlights(projectId);
 
   if (!deleted) {

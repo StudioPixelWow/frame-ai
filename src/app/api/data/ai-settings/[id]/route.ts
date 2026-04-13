@@ -4,12 +4,12 @@ import { ensureSeeded } from '@/lib/db/seed';
 
 export async function GET(
   _req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }<{ id: string }> }
 ) {
   ensureSeeded();
 
   try {
-    const { id } = await context.params;
+    const { id } = params;
     const setting = aiSettings.getById(id);
 
     if (!setting) {
@@ -24,12 +24,12 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }<{ id: string }> }
 ) {
   ensureSeeded();
 
   try {
-    const { id } = await context.params;
+    const { id } = params;
     const body = await req.json();
     const updated = aiSettings.update(id, body);
 
@@ -45,12 +45,12 @@ export async function PUT(
 
 export async function DELETE(
   _req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }<{ id: string }> }
 ) {
   ensureSeeded();
 
   try {
-    const { id } = await context.params;
+    const { id } = params;
     const deleted = aiSettings.delete(id);
 
     if (!deleted) {

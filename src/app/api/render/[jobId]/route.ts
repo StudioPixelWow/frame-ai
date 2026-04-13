@@ -12,9 +12,9 @@ import {
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ jobId: string }> }
+  { params }: { { params }: { params: { id: string } }<{ jobId: string }> }
 ) {
-  const { jobId } = await params;
+  const { jobId } = params;
   const job = readRenderJob(jobId);
 
   if (!job) {
@@ -26,9 +26,9 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: Promise<{ jobId: string }> }
+  { params }: { { params }: { params: { id: string } }<{ jobId: string }> }
 ) {
-  const { jobId } = await params;
+  const { jobId } = params;
   const body = await req.json();
 
   const job = readRenderJob(jobId);
@@ -63,9 +63,9 @@ export async function PUT(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: Promise<{ jobId: string }> }
+  { params }: { { params }: { params: { id: string } }<{ jobId: string }> }
 ) {
-  const { jobId } = await params;
+  const { jobId } = params;
   const deleted = deleteRenderJobFile(jobId);
 
   if (!deleted) {

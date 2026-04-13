@@ -59,7 +59,7 @@ const STATUS_OPTIONS: Array<{ value: CampaignStatus; label: string }> = [
   { value: 'completed', label: 'הושלם' },
 ];
 
-export default function CampaignDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+export default function CampaignDetailsPage({ params }: { { params }: { params: { id: string } }<{ id: string }> }) {
   const { id } = use(params);
   const { data: campaigns, loading, update, remove } = useCampaigns();
   const toast = useToast();

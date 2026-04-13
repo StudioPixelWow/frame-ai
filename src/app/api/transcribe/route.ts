@@ -55,7 +55,7 @@ function mime(p: string): string {
 
 async function whisperTranscribe(
   key: string, filePath: string, lang: string,
-): Promise<{ segments: SubSegment[]; error?: string }> {
+): { segments: SubSegment[]; error?: string }> {
   const fs = require("fs");
   const path = require("path");
 
@@ -101,7 +101,7 @@ async function whisperTranscribe(
 
 async function assemblyaiTranscribe(
   key: string, filePath: string, lang: string,
-): Promise<{ segments: SubSegment[]; error?: string }> {
+): { segments: SubSegment[]; error?: string }> {
   const fs = require("fs");
   const path = require("path");
 
@@ -443,7 +443,7 @@ export async function POST(req: NextRequest) {
     console.log(`[transcribe] File: ${audioUrl} size=${fileSizeMB}MB lang=${language} dur=${durationSec}s`);
 
     // ── Build provider order based on settings & available keys ──
-    const providers: { name: string; fn: () => Promise<{ segments: SubSegment[]; error?: string }> }[] = [];
+    const providers: { name: string; fn: () => { segments: SubSegment[]; error?: string }> }[] = [];
 
     const addProvider = (name: string) => {
       if (name === "whisper" && keys.openai) {

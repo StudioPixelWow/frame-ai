@@ -25,7 +25,7 @@ import type { GenerateCtaOptions,
               CtaGoal }               from "@/lib/cta/types";
 import type { TranscriptAnalysis }    from "@/lib/transcript/types";
 
-type Params = { params: Promise<{ projectId: string }> };
+type Params = { { params }: { params: { id: string } }<{ projectId: string }> };
 
 const VALID_GOALS: CtaGoal[] = [
   "lead-generation", "awareness", "inquiry", "booking", "contact",
@@ -37,7 +37,7 @@ const VALID_TONES = [
 // ─── GET ──────────────────────────────────────────────────────────────────────
 
 export async function GET(_req: NextRequest, { params }: Params) {
-  const { projectId } = await params;
+  const { projectId } = params;
   const result = getCtas(projectId);
 
   if (!result) {
@@ -53,7 +53,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 // ─── POST ─────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest, { params }: Params) {
-  const { projectId } = await params;
+  const { projectId } = params;
 
   let body: unknown;
   try {
@@ -147,7 +147,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 // ─── DELETE ───────────────────────────────────────────────────────────────────
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
-  const { projectId } = await params;
+  const { projectId } = params;
   const deleted = deleteCtas(projectId);
 
   if (!deleted) {

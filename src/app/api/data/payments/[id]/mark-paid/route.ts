@@ -10,11 +10,11 @@ import { ensureSeeded } from '@/lib/db/seed';
 
 export async function POST(
   _req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const { id } = await context.params;
+    const { id } = params;
     const payment = payments.getById(id);
     if (!payment) {
       return NextResponse.json(

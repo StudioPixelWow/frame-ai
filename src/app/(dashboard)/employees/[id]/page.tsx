@@ -67,7 +67,7 @@ interface UnifiedTask {
   source: "global" | "employee";
 }
 
-export default function EmployeeDashboardPage({ params }: { params: Promise<{ id: string }> }) {
+export default function EmployeeDashboardPage({ params }: { { params }: { params: { id: string } }<{ id: string }> }) {
   const { id: employeeId } = use(params);
   const { data: employees } = useEmployees();
   const { data: employeeTasks } = useEmployeeTasks();
