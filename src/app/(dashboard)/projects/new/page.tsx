@@ -16,7 +16,7 @@ import { FPS, FORMAT_DIMENSIONS } from "@/remotion/types";
 import { analyzeBroll, planToPlacements, type BrollPlan } from "@/lib/video-engine/broll-analysis";
 import { PreviewPanel, type PreviewWizardData } from "@/components/ui/PreviewPanel";
 import { UnifiedEditedPreviewPlayer, type SubtitleStyleData } from "@/components/ui/UnifiedEditedPreviewPlayer";
-import TimelineEditor from "@/components/...";
+import TimelineEditor from "@/components/ui/TimelineEditor";
 import { generateReEdit, getReEditModes, type ReEditResult, type ReEditMode } from "@/lib/video-engine/ai-reedit";
 import type { FinalCompositionData } from "@/lib/video-engine/composition-data";
 import { generateUnifiedEditPlan, getEditPresets, EDIT_PRESETS, type UnifiedEditPlan, type EditProfile } from "@/lib/video-engine/edit-coordinator";
