@@ -11,12 +11,13 @@ import type { ClientKnowledge } from '@/lib/db';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
 
   try {
-    const record = clientKnowledge.getById(params.id);
+    const { id } = await context.params;
+    const record = clientKnowledge.getById(id);
 
     if (!record) {
       return NextResponse.json(
@@ -44,7 +45,7 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
 
@@ -100,7 +101,7 @@ export async function PUT(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
 

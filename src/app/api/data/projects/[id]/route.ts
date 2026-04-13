@@ -10,11 +10,12 @@ import { ensureSeeded } from '@/lib/db/seed';
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const project = projects.getById(params.id);
+    const { id } = await context.params;
+    const project = projects.getById(id);
     if (!project) {
       return NextResponse.json(
         { error: 'Project not found' },
@@ -32,12 +33,13 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
+    const { id } = await context.params;
     const body = await req.json();
-    const updated = projects.update(params.id, body);
+    const updated = projects.update(id, body);
     if (!updated) {
       return NextResponse.json(
         { error: 'Project not found' },
@@ -55,11 +57,12 @@ export async function PUT(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const deleted = projects.delete(params.id);
+    const { id } = await context.params;
+    const deleted = projects.delete(id);
     if (!deleted) {
       return NextResponse.json(
         { error: 'Project not found' },

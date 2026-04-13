@@ -10,11 +10,12 @@ import { ensureSeeded } from '@/lib/db/seed';
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const rule = automationRules.getById(params.id);
+    const { id } = await context.params;
+    const rule = automationRules.getById(id);
     if (!rule) {
       return NextResponse.json(
         { error: 'Automation rule not found' },
@@ -32,12 +33,13 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
+    const { id } = await context.params;
     const body = await req.json();
-    const updated = automationRules.update(params.id, body);
+    const updated = automationRules.update(id, body);
     if (!updated) {
       return NextResponse.json(
         { error: 'Automation rule not found' },
@@ -55,11 +57,12 @@ export async function PUT(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const deleted = automationRules.delete(params.id);
+    const { id } = await context.params;
+    const deleted = automationRules.delete(id);
     if (!deleted) {
       return NextResponse.json(
         { error: 'Automation rule not found' },

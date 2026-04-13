@@ -4,11 +4,12 @@ import { ensureSeeded } from '@/lib/db/seed';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const setting = aiSettings.getById(params.id);
+    const { id } = await context.params;
+    const setting = aiSettings.getById(id);
     if (!setting) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
@@ -20,7 +21,7 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
@@ -37,7 +38,7 @@ export async function PUT(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {

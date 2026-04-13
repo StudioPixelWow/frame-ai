@@ -10,11 +10,12 @@ import { ensureSeeded } from '@/lib/db/seed';
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const reminder = followUpReminders.getById(params.id);
+    const { id } = await context.params;
+    const reminder = followUpReminders.getById(id);
     if (!reminder) {
       return NextResponse.json({ error: 'Follow-up reminder not found' }, { status: 404 });
     }
@@ -29,12 +30,13 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
+    const { id } = await context.params;
     const body = await req.json();
-    const updated = followUpReminders.update(params.id, body);
+    const updated = followUpReminders.update(id, body);
     if (!updated) {
       return NextResponse.json({ error: 'Follow-up reminder not found' }, { status: 404 });
     }
@@ -49,11 +51,12 @@ export async function PUT(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const deleted = followUpReminders.delete(params.id);
+    const { id } = await context.params;
+    const deleted = followUpReminders.delete(id);
     if (!deleted) {
       return NextResponse.json({ error: 'Follow-up reminder not found' }, { status: 404 });
     }

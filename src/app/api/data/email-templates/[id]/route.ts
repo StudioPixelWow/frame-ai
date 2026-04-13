@@ -10,11 +10,12 @@ import { ensureSeeded } from '@/lib/db/seed';
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const template = emailTemplates.getById(params.id);
+    const { id } = await context.params;
+    const template = emailTemplates.getById(id);
     if (!template) {
       return NextResponse.json(
         { error: 'Email template not found' },
@@ -32,12 +33,13 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
+    const { id } = await context.params;
     const body = await req.json();
-    const updated = emailTemplates.update(params.id, body);
+    const updated = emailTemplates.update(id, body);
     if (!updated) {
       return NextResponse.json(
         { error: 'Email template not found' },
@@ -55,11 +57,12 @@ export async function PUT(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const deleted = emailTemplates.delete(params.id);
+    const { id } = await context.params;
+    const deleted = emailTemplates.delete(id);
     if (!deleted) {
       return NextResponse.json(
         { error: 'Email template not found' },

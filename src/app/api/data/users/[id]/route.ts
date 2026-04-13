@@ -10,11 +10,12 @@ import { ensureSeeded } from '@/lib/db/seed';
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const user = users.getById(params.id);
+    const { id } = await context.params;
+    const user = users.getById(id);
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
@@ -29,12 +30,13 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
+    const { id } = await context.params;
     const body = await req.json();
-    const updated = users.update(params.id, body);
+    const updated = users.update(id, body);
     if (!updated) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
@@ -49,11 +51,12 @@ export async function PUT(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const deleted = users.delete(params.id);
+    const { id } = await context.params;
+    const deleted = users.delete(id);
     if (!deleted) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }

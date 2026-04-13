@@ -10,11 +10,12 @@ import { ensureSeeded } from '@/lib/db/seed';
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const clientEmailLog = clientEmailLogs.getById(params.id);
+    const { id } = await context.params;
+    const clientEmailLog = clientEmailLogs.getById(id);
     if (!clientEmailLog) {
       return NextResponse.json({ error: 'Client email log not found' }, { status: 404 });
     }
@@ -29,12 +30,13 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
+    const { id } = await context.params;
     const body = await req.json();
-    const updated = clientEmailLogs.update(params.id, body);
+    const updated = clientEmailLogs.update(id, body);
     if (!updated) {
       return NextResponse.json({ error: 'Client email log not found' }, { status: 404 });
     }
@@ -49,11 +51,12 @@ export async function PUT(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const deleted = clientEmailLogs.delete(params.id);
+    const { id } = await context.params;
+    const deleted = clientEmailLogs.delete(id);
     if (!deleted) {
       return NextResponse.json({ error: 'Client email log not found' }, { status: 404 });
     }

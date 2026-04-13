@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { hostingRecords } from '@/lib/db';
 import { ensureSeeded } from '@/lib/db/seed';
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   ensureSeeded();
   try {
-    const item = hostingRecords.getById(params.id);
+    const { id } = await context.params;
+    const item = hostingRecords.getById(id);
     if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(item);
   } catch (error) {
@@ -13,11 +14,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   }
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   ensureSeeded();
   try {
+    const { id } = await context.params;
     const body = await req.json();
-    const updated = hostingRecords.update(params.id, body);
+    const updated = hostingRecords.update(id, body);
     if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(updated);
   } catch (error) {
@@ -25,10 +27,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   ensureSeeded();
   try {
-    const deleted = hostingRecords.delete(params.id);
+    const { id } = await context.params;
+    const deleted = hostingRecords.delete(id);
     if (!deleted) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (error) {

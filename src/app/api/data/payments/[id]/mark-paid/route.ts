@@ -10,11 +10,12 @@ import { ensureSeeded } from '@/lib/db/seed';
 
 export async function POST(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   ensureSeeded();
   try {
-    const payment = payments.getById(params.id);
+    const { id } = await context.params;
+    const payment = payments.getById(id);
     if (!payment) {
       return NextResponse.json(
         { error: 'Payment not found' },
