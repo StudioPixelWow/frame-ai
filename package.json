@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
+    "@supabase/supabase-js": "^2.49.4",
     "@remotion/bundler": "^4.0.447",
     "@remotion/cli": "^4.0.447",
     "@remotion/player": "^4.0.447",

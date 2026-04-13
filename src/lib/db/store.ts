@@ -1,6 +1,59 @@
 import fs from 'fs';
 import path from 'path';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { DATA_DIR } from './paths';
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Supabase client — used by migrated routes (clients, etc.)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+let _supabase: SupabaseClient | null = null;
+
+export function getSupabase(): SupabaseClient {
+  if (_supabase) return _supabase;
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !key) {
+    throw new Error(
+      'Missing Supabase env vars: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required'
+    );
+  }
+
+  _supabase = createClient(url, key, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  return _supabase;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Auto-create table helper — runs CREATE TABLE IF NOT EXISTS via rpc
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const _ensuredTables = new Set<string>();
+
+export async function ensureTable(table: string, ddl: string): Promise<void> {
+  if (_ensuredTables.has(table)) return;
+  const sb = getSupabase();
+  // Use Supabase's ability to run raw SQL via the rpc endpoint.
+  // Requires the "exec_sql" function — if it doesn't exist, the error is non-fatal.
+  try {
+    const { error } = await sb.rpc('exec_sql', { query: ddl });
+    if (error && !error.message.includes('already exists')) {
+      console.warn(`[ensureTable] Could not auto-create "${table}":`, error.message);
+      console.warn(`[ensureTable] Create it manually:\n${ddl}`);
+    }
+  } catch {
+    // rpc function doesn't exist — that's OK, table may already be there
+  }
+  _ensuredTables.add(table);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   JsonStore — file-based fallback for routes not yet migrated to Supabase
+   ══════════════════════════════════════════════════════════════════════════ */
 
 export class JsonStore<T extends { id: string }> {
   private filePath: string;
