@@ -85,7 +85,11 @@ export function useData<T extends { id: string }>(endpoint: string): UseDataResu
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(item),
     });
-    if (!res.ok) throw new Error('Failed to create');
+    if (!res.ok) {
+      let msg = `Failed to create (${res.status})`;
+      try { const body = await res.json(); if (body?.error) msg = body.error; } catch {}
+      throw new Error(msg);
+    }
     const created = await res.json();
     if (isMounted.current) {
       setData(prev => [...prev, created]);
@@ -101,7 +105,11 @@ export function useData<T extends { id: string }>(endpoint: string): UseDataResu
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(item),
     });
-    if (!res.ok) throw new Error('Failed to update');
+    if (!res.ok) {
+      let msg = `Failed to update (${res.status})`;
+      try { const body = await res.json(); if (body?.error) msg = body.error; } catch {}
+      throw new Error(msg);
+    }
     const updated = await res.json();
     if (isMounted.current) {
       setData(prev => prev.map(d => d.id === id ? updated : d));
@@ -112,7 +120,11 @@ export function useData<T extends { id: string }>(endpoint: string): UseDataResu
 
   const remove = async (id: string): Promise<void> => {
     const res = await fetch(`/api/data/${endpoint}/${id}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('Failed to delete');
+    if (!res.ok) {
+      let msg = `Failed to delete (${res.status})`;
+      try { const body = await res.json(); if (body?.error) msg = body.error; } catch {}
+      throw new Error(msg);
+    }
     if (isMounted.current) {
       setData(prev => prev.filter(d => d.id !== id));
     }

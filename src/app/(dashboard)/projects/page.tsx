@@ -8,7 +8,7 @@ import { Modal } from "@/components/ui/modal";
 import type { Project } from "@/lib/db/schema";
 import { scoreVideo } from "@/lib/video-engine/ai-scoring";
 
-type ProjectStatus = "draft" | "analysing" | "approved" | "rendering" | "complete" | "failed";
+type ProjectStatus = "draft" | "analysing" | "approved" | "rendering" | "complete" | "failed" | "sent_to_client";
 type ProjectFormat = "9:16" | "16:9" | "1:1" | "4:5";
 
 function statusBadgeColor(s: ProjectStatus): string {
@@ -19,6 +19,7 @@ function statusBadgeColor(s: ProjectStatus): string {
     analysing: "#a78bfa",
     draft: "#6b7280",
     failed: "#f87171",
+    sent_to_client: "#14b8a6",
   };
   return colors[s] || "#6b7280";
 }
@@ -31,6 +32,7 @@ function statusLabel(s: ProjectStatus): string {
     rendering: "בייצוא",
     complete: "הושלם",
     failed: "נכשל",
+    sent_to_client: "נשלח ללקוח",
   };
   return labels[s] || s;
 }

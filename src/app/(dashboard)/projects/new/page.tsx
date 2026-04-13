@@ -1660,7 +1660,11 @@ function StepInfo({ data, patch, clients, createClient }: {
       setShowNewClient(false);
       setNc({ name: "", company: "", contactPerson: "", email: "", notes: "", color: "#00B5FE", clientType: "marketing" });
       toast("לקוח נוצר בהצלחה", "success");
-    } catch { toast("שגיאה ביצירת לקוח", "error"); }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "שגיאה לא ידועה";
+      toast(`שגיאה ביצירת לקוח: ${msg}`, "error");
+      console.error("[StepInfo] handleCreateClient error:", err);
+    }
   };
 
   const sel = clients.find((c) => c.id === data.clientId);

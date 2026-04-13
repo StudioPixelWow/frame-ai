@@ -9,32 +9,22 @@ import { ensureSeeded } from '@/lib/db/seed';
 import type { ClientKnowledge } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
-  ensureSeeded();
-
   try {
-    const all = clientKnowledge.getAll();
-    return NextResponse.json({
-      success: true,
-      data: all,
-      count: all.length,
-    });
+    ensureSeeded();
+    // useData<T> expects a direct JSON array from GET endpoints
+    return NextResponse.json(clientKnowledge.getAll());
   } catch (error) {
-    console.error('Error fetching client knowledge:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[API] GET /api/data/client-knowledge error:', error);
     return NextResponse.json(
-      {
-        error: 'Failed to fetch client knowledge',
-        details: errorMessage,
-      },
+      { error: 'Failed to fetch client knowledge' },
       { status: 500 }
     );
   }
 }
 
 export async function POST(req: NextRequest) {
-  ensureSeeded();
-
   try {
+    ensureSeeded();
     const body = await req.json();
 
     // Validate required fields
@@ -54,16 +44,41 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Create new knowledge record
-    const newKnowledge: ClientKnowledge = {
-      id: 'ckn_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+    const now = new Date().toISOString();
+
+    // Build record with all required ClientKnowledge fields
+    const knowledgeData: Omit<ClientKnowledge, 'id'> = {
       clientId: body.clientId,
+      // AI-generated intelligence
+      businessSummary: body.businessSummary || '',
+      toneOfVoice: body.toneOfVoice || '',
+      audienceProfile: body.audienceProfile || '',
+      keySellingPoints: body.keySellingPoints || [],
+      brandPersonality: body.brandPersonality || '',
+      competitiveAdvantage: body.competitiveAdvantage || '',
+      // Learning data
+      winningContentPatterns: body.winningContentPatterns || [],
+      failedPatterns: body.failedPatterns || [],
+      topPerformingTopics: body.topPerformingTopics || [],
+      // Sources
+      websiteUrl: body.websiteUrl || '',
+      facebookUrl: body.facebookUrl || '',
+      instagramUrl: body.instagramUrl || '',
+      sourcesAnalyzed: body.sourcesAnalyzed || [],
+      // Weakness analysis
+      weaknesses: body.weaknesses || [],
+      // Ideal customer profile
+      idealCustomer: body.idealCustomer || null,
+      // Metadata
+      lastAnalyzedAt: body.lastAnalyzedAt || now,
+      createdAt: now,
+      updatedAt: now,
+      // Legacy fields
       websiteSummary: body.websiteSummary || '',
       facebookInsights: body.facebookInsights || '',
       instagramInsights: body.instagramInsights || '',
       businessContext: body.businessContext || '',
       toneAndStyle: body.toneAndStyle || '',
-      audienceProfile: body.audienceProfile || '',
       previousContentThemes: body.previousContentThemes || [],
       approvedCaptionStyles: body.approvedCaptionStyles || [],
       topPerformingFormats: body.topPerformingFormats || [],
@@ -71,25 +86,14 @@ export async function POST(req: NextRequest) {
       seasonalPatterns: body.seasonalPatterns || '',
       lastUpdatedSources: body.lastUpdatedSources || [],
       lastEnrichedAt: body.lastEnrichedAt || null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
     };
 
-    clientKnowledge.create(newKnowledge);
-
-    return NextResponse.json({
-      success: true,
-      data: newKnowledge,
-      message: 'Client knowledge record created successfully',
-    });
+    const created = clientKnowledge.create(knowledgeData);
+    return NextResponse.json(created, { status: 201 });
   } catch (error) {
-    console.error('Error creating client knowledge:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[API] POST /api/data/client-knowledge error:', error);
     return NextResponse.json(
-      {
-        error: 'Failed to create client knowledge',
-        details: errorMessage,
-      },
+      { error: 'Failed to create client knowledge' },
       { status: 500 }
     );
   }

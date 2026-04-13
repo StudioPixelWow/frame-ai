@@ -221,7 +221,8 @@ export default function ClientsPage() {
       setModalOpen(false);
     } catch (err) {
       console.error("[ClientsPage] handleSave error:", err);
-      toast("שגיאה בשמירת הלקוח", "error");
+      const msg = err instanceof Error ? err.message : "שגיאה לא ידועה";
+      toast(`שגיאה בשמירת הלקוח: ${msg}`, "error");
     } finally {
       setSaving(false);
     }

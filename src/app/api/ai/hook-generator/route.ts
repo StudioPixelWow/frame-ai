@@ -140,25 +140,22 @@ ${itemsContext}
 [פריט 1] FOMO: רק היום ברי הטוב
 ...`;
 
-  const response = await client.messages.create({
-    model: "claude-3-5-sonnet-20241022",
+  const response = await client.chat.completions.create({
+    model: "gpt-4o-mini",
     max_tokens: 2000,
     messages: [
-      {
-        role: "user",
-        content: userPrompt,
-      },
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
     ],
-    system: systemPrompt,
   });
 
   // Parse response
-  const content = response.content[0];
-  if (content.type !== "text") {
-    throw new Error("Unexpected response type from OpenAI");
+  const choice = response.choices?.[0];
+  if (!choice?.message?.content) {
+    throw new Error("Empty response from OpenAI");
   }
 
-  const hooksText = content.text;
+  const hooksText = choice.message.content;
   const results: HookVariants[] = [];
 
   // Parse lines and group by item

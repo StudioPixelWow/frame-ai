@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useClients, useEmployees, useClientGanttItems, useClientTasks, useTasks } from "@/lib/api/use-entity";
@@ -90,6 +90,14 @@ function formatDate(dateStr: string | null): string {
 }
 
 export default function ClientDetailPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--foreground-muted)' }}>טוען...</div>}>
+      <ClientDetailContent />
+    </Suspense>
+  );
+}
+
+function ClientDetailContent() {
   const params = useParams();
   const router = useRouter();
   const clientId = (params?.id as string) || "";

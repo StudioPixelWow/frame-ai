@@ -67,22 +67,24 @@ const DEFAULT_VERB = "Book";
 
 import type { TranscriptTone } from "@/lib/transcript/types";
 
-const TONE_QUALIFIER: Record<TranscriptTone, string> = {
+const TONE_QUALIFIER: Record<TranscriptTone["primary"], string> = {
   energetic:     "free",
   persuasive:    "complimentary",
   educational:   "free",
   inspirational: "complimentary",
   professional:  "complimentary",
   casual:        "quick",
+  neutral:       "complimentary",
 };
 
-const TONE_URGENCY: Record<TranscriptTone, string> = {
+const TONE_URGENCY: Record<TranscriptTone["primary"], string> = {
   energetic:     "now",
   persuasive:    "today",
   educational:   "",
   inspirational: "",
   professional:  "",
   casual:        "now",
+  neutral:       "",
 };
 
 // ─── Signal resolution ────────────────────────────────────────────────────────
@@ -102,14 +104,15 @@ export function resolveSignals(
   analysis?: TranscriptAnalysis
 ): CtaSignals {
   const preset       = options.preset      ?? null;
-  const tone         = options.tone        ?? analysis?.tone ?? null;
+  const toneObj      = options.tone        ?? analysis?.tone ?? null;
+  const tonePrimary  = toneObj ? (typeof toneObj === 'string' ? toneObj : toneObj.primary) : null;
   const businessType = options.businessType ?? null;
 
   // Qualifier: preset > tone > default "free"
   const qualifier = preset
     ? (PRESET_QUALIFIER[preset] ?? "complimentary")
-    : tone
-      ? TONE_QUALIFIER[tone]
+    : tonePrimary
+      ? TONE_QUALIFIER[tonePrimary]
       : "complimentary";
 
   // Urgency: preset > tone > ""
@@ -118,8 +121,8 @@ export function resolveSignals(
     ? ""
     : preset
       ? (PRESET_URGENCY[preset] ?? "")
-      : tone
-        ? TONE_URGENCY[tone]
+      : tonePrimary
+        ? TONE_URGENCY[tonePrimary]
         : "";
 
   // Action verb: business type (goal-compat checked) > goal default

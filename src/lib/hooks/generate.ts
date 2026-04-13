@@ -36,13 +36,14 @@ const PRESET_STYLE_ORDER: Record<string, HookStyle[]> = {
 };
 
 // Tone → preferred style order
-const TONE_STYLE_ORDER: Record<TranscriptTone, HookStyle[]> = {
+const TONE_STYLE_ORDER: Record<TranscriptTone["primary"], HookStyle[]> = {
   energetic:     ["bold-statement", "question",       "benefit-driven", "curiosity"],
   persuasive:    ["benefit-driven", "bold-statement", "question",       "curiosity"],
   educational:   ["curiosity",      "question",       "bold-statement", "benefit-driven"],
   inspirational: ["question",       "curiosity",      "bold-statement", "benefit-driven"],
   professional:  ["bold-statement", "curiosity",      "benefit-driven", "question"],
   casual:        ["question",       "curiosity",      "benefit-driven", "bold-statement"],
+  neutral:       ["bold-statement", "question",       "curiosity",      "benefit-driven"],
 };
 
 // All four styles in rotation order (fallback when nothing else is available)
@@ -233,7 +234,8 @@ export function resolveStyles(
 
   // Build priority list: preset order first, then fill from tone order
   const presetOrder = preset ? (PRESET_STYLE_ORDER[preset] ?? []) : [];
-  const toneOrder   = TONE_STYLE_ORDER[tone] ?? ALL_STYLES;
+  const tonePrimary = typeof tone === 'string' ? tone : tone.primary;
+  const toneOrder   = TONE_STYLE_ORDER[tonePrimary] ?? ALL_STYLES;
   const combined    = [...presetOrder];
 
   for (const s of toneOrder) {
