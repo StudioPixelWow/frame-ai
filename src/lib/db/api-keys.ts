@@ -84,17 +84,32 @@ function readFromAISettings(): ApiKeysConfig {
  * otherwise fall back to api-keys.json.
  */
 export function getApiKeys(): ApiKeysConfig {
-  ensureDir();
-  const fromFile = readFromApiKeysFile();
-  const fromSettings = readFromAISettings();
+  // Prefer environment variables (work on Vercel). Fall back to disk-based
+  // stores for local dev where keys are configured via the Settings UI.
+  console.log("OPENAI KEY EXISTS:", !!process.env.OPENAI_API_KEY);
+  const envOpenAi = process.env.OPENAI_API_KEY || "";
+  const envAssembly = process.env.ASSEMBLYAI_API_KEY || "";
+
+  let fromFile: ApiKeysConfig = EMPTY_KEYS;
+  let fromSettings: ApiKeysConfig = EMPTY_KEYS;
+  try {
+    ensureDir();
+    fromFile = readFromApiKeysFile();
+    fromSettings = readFromAISettings();
+  } catch (err) {
+    // On read-only filesystems (e.g. Vercel) this is expected — env vars cover it.
+    console.warn("[api-keys] Disk read skipped:", err instanceof Error ? err.message : err);
+  }
 
   const merged: ApiKeysConfig = {
-    openai: fromSettings.openai || fromFile.openai,
-    assemblyai: fromSettings.assemblyai || fromFile.assemblyai,
+    openai: envOpenAi || fromSettings.openai || fromFile.openai,
+    assemblyai: envAssembly || fromSettings.assemblyai || fromFile.assemblyai,
     updatedAt: fromSettings.updatedAt || fromFile.updatedAt,
   };
 
-  console.log(`[api-keys] Resolved: openai=${merged.openai ? "yes" : "no"} (settings=${!!fromSettings.openai} file=${!!fromFile.openai}), assemblyai=${merged.assemblyai ? "yes" : "no"} (settings=${!!fromSettings.assemblyai} file=${!!fromFile.assemblyai})`);
+  console.log(
+    `[api-keys] Resolved: openai=${merged.openai ? "yes" : "no"} (env=${!!envOpenAi} settings=${!!fromSettings.openai} file=${!!fromFile.openai}), assemblyai=${merged.assemblyai ? "yes" : "no"} (env=${!!envAssembly} settings=${!!fromSettings.assemblyai} file=${!!fromFile.assemblyai})`
+  );
 
   return merged;
 }

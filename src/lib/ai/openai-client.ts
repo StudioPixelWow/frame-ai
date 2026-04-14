@@ -118,12 +118,17 @@ export async function generateWithAI(
   userPrompt: string,
   options?: { temperature?: number; maxTokens?: number }
 ): Promise<AIGenerationResult> {
+  // Prefer env var (server-side, works on Vercel). Fall back to DB-stored settings for local dev.
+  console.log("OPENAI KEY EXISTS:", !!process.env.OPENAI_API_KEY);
+  const envKey = process.env.OPENAI_API_KEY || '';
   const settings = getSettings();
+  const apiKey = envKey || settings?.apiKey || '';
+  const model = settings?.defaultModel || 'gpt-4.1';
 
-  if (!settings || !settings.apiKey) {
+  if (!apiKey) {
     return {
       success: false,
-      error: 'Missing OpenAI API key. Go to Settings → AI to configure.',
+      error: 'Missing OpenAI API key. Set OPENAI_API_KEY in environment variables.',
       errorType: 'missing_api_key',
     };
   }
@@ -133,10 +138,10 @@ export async function generateWithAI(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${settings.apiKey}`,
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: settings.defaultModel || 'gpt-4.1',
+        model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
