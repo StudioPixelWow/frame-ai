@@ -2,15 +2,15 @@
  * GET  /api/data/projects — list all projects
  * POST /api/data/projects — create a new project
  *
- * Storage: Supabase "projects" table. Simple schema: id + JSONB data blob.
- * Because projects carry very nested state (wizardState, renderPayload, etc.)
- * we keep the DB schema minimal and store everything except id in `data`.
+ * Storage: Supabase "projects" table with FLAT columns (no JSONB "data").
  *
- * Required one-time DDL (run in Supabase SQL editor):
- *   CREATE TABLE IF NOT EXISTS projects (
- *     id   TEXT PRIMARY KEY,
- *     data JSONB NOT NULL DEFAULT '{}'::jsonb
- *   );
+ * Expected columns (DB owns the schema; code adapts to it):
+ *   id, name, client_id, status, description,
+ *   project_type, start_date, end_date, assigned_manager_id,
+ *   created_at, updated_at
+ *
+ * Any column that doesn't exist is automatically dropped and the request
+ * retried, so partial DB schemas still accept the write.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -22,34 +22,99 @@ function generateId(): string {
   return `prj_${ts}_${rand}`;
 }
 
-function rowToProject(r: { id: string; data: Record<string, unknown> | null }) {
-  return { ...(r.data ?? {}), id: r.id };
+/* ── Row → API object (snake_case → camelCase) ────────────────────────── */
+
+type ProjectRow = {
+  id: string;
+  name?: string | null;
+  client_id?: string | null;
+  status?: string | null;
+  description?: string | null;
+  project_type?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  assigned_manager_id?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+function rowToProject(r: ProjectRow) {
+  return {
+    id: r.id,
+    name: r.name ?? '',
+    projectName: r.name ?? '', // alias for business-project UIs
+    clientId: r.client_id ?? '',
+    status: r.status ?? 'draft',
+    projectStatus: r.status ?? 'not_started', // alias
+    description: r.description ?? '',
+    projectType: r.project_type ?? 'general',
+    startDate: r.start_date ?? null,
+    endDate: r.end_date ?? null,
+    assignedManagerId: r.assigned_manager_id ?? null,
+    createdAt: r.created_at ?? '',
+    updatedAt: r.updated_at ?? '',
+  };
 }
+
+/* ── Incoming body (camelCase, either shape) → flat DB columns ────────── */
+
+export function toDbInsert(body: Record<string, unknown>, id: string, now: string): Record<string, unknown> {
+  return {
+    id,
+    name: (body.name ?? body.projectName ?? '') as string,
+    client_id: (body.clientId ?? null) as string | null,
+    status: (body.status ?? body.projectStatus ?? 'draft') as string,
+    description: (body.description ?? '') as string,
+    project_type: (body.projectType ?? null) as string | null,
+    start_date: (body.startDate ?? null) as string | null,
+    end_date: (body.endDate ?? null) as string | null,
+    assigned_manager_id: (body.assignedManagerId ?? null) as string | null,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+/* ── Column lists ─────────────────────────────────────────────────────── */
+
+const SELECT_COLUMNS =
+  'id, name, client_id, status, description, project_type, start_date, end_date, assigned_manager_id, created_at, updated_at';
+
+/* ── GET ──────────────────────────────────────────────────────────────── */
 
 export async function GET() {
   try {
     const sb = getSupabase();
-    const { data: rows, error } = await sb
-      .from('projects')
-      .select('id, data')
-      .order('id');
 
-    if (error) {
-      console.error('[API] GET /api/data/projects supabase error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    // Try full select; on unknown-column error, progressively drop the column.
+    let selectList = SELECT_COLUMNS;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { data: rows, error } = await sb.from('projects').select(selectList).order('id');
+      if (!error) {
+        const projects = (rows ?? []).map((r) => rowToProject(r as ProjectRow));
+        return NextResponse.json(projects);
+      }
+      const m = error.message.match(/column .*?\.?['"]?([a-z_]+)['"]? does not exist|Could not find the '([^']+)' column/i);
+      const bad = m?.[1] || m?.[2];
+      if (!bad) {
+        console.error('[API] GET /api/data/projects supabase error:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      console.warn(`[API] GET /api/data/projects dropping unknown column "${bad}" from select`);
+      selectList = selectList
+        .split(',')
+        .map((s) => s.trim())
+        .filter((c) => c !== bad)
+        .join(', ');
     }
-
-    const projects = (rows ?? []).map(rowToProject);
-    return NextResponse.json(projects);
+    return NextResponse.json({ error: 'Failed to build a valid select list' }, { status: 500 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] GET /api/data/projects error:', msg);
-    return NextResponse.json(
-      { error: `Failed to fetch projects: ${msg}` },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: `Failed to fetch projects: ${msg}` }, { status: 500 });
   }
 }
+
+/* ── POST ─────────────────────────────────────────────────────────────── */
 
 export async function POST(req: NextRequest) {
   try {
@@ -60,80 +125,71 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     const id = generateId();
 
-    // Strip any client-supplied id — we always assign one server-side so the
-    // frontend and server agree on the value we'll route to.
-    const { id: _ignored, ...rest } = body;
-    void _ignored;
+    let insertRow = toDbInsert(body, id, now);
+    let selectList = SELECT_COLUMNS;
 
-    const projectData = {
-      ...rest,
-      createdAt: now,
-      updatedAt: now,
-    };
+    console.log(`[API] POST /api/data/projects inserting id=${id} cols=${Object.keys(insertRow).join(',')}`);
 
-    console.log(`[API] POST /api/data/projects inserting id=${id}`);
+    // Auto-drop unknown columns on the insert OR the select-back and retry.
+    let inserted: ProjectRow | null = null;
+    let lastErr: { message: string; code?: string } | null = null;
 
-    // Step 1: insert
-    const { data: inserted, error: insertErr } = await sb
-      .from('projects')
-      .insert({ id, data: projectData })
-      .select('id, data')
-      .single();
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const { data, error } = await sb
+        .from('projects')
+        .insert(insertRow)
+        .select(selectList)
+        .single();
 
-    if (insertErr) {
-      console.error('[API] POST /api/data/projects insert error:', insertErr);
-      const code = (insertErr as any).code ?? null;
-      const hint =
-        code === '42P01'
-          ? 'Run: CREATE TABLE IF NOT EXISTS projects ( id TEXT PRIMARY KEY, data JSONB NOT NULL DEFAULT \'{}\'::jsonb );'
-          : code === '42501'
-          ? 'Service role is blocked by RLS. Disable RLS or add policy.'
-          : null;
-      return NextResponse.json({ error: insertErr.message, code, hint }, { status: 500 });
+      if (!error) { inserted = data as ProjectRow; break; }
+
+      lastErr = error as any;
+      const m = error.message.match(/column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);
+      const bad = m?.[1] || m?.[2];
+      if (!bad) break;
+
+      if (bad in insertRow) {
+        console.warn(`[API] POST /api/data/projects dropping unknown insert column "${bad}"`);
+        const { [bad]: _d, ...rest } = insertRow;
+        void _d;
+        insertRow = rest;
+      } else if (selectList.includes(bad)) {
+        console.warn(`[API] POST /api/data/projects dropping unknown select column "${bad}"`);
+        selectList = selectList.split(',').map((s) => s.trim()).filter((c) => c !== bad).join(', ');
+      } else {
+        break;
+      }
     }
 
     if (!inserted) {
-      console.error('[API] POST /api/data/projects insert returned no row');
+      const code = (lastErr as any)?.code ?? null;
+      console.error('[API] POST /api/data/projects insert error:', lastErr);
       return NextResponse.json(
-        { error: 'Insert returned no row — check RLS or table existence' },
+        { error: lastErr?.message ?? 'Insert failed', code },
         { status: 500 }
       );
     }
 
-    // Step 2: verify by reading it back in a separate query. If it isn't
-    // there we return a real failure instead of a false success.
+    // Verify by reading back.
     const { data: verify, error: verifyErr } = await sb
       .from('projects')
-      .select('id, data')
+      .select(selectList)
       .eq('id', id)
       .maybeSingle();
 
-    if (verifyErr) {
-      console.error('[API] POST /api/data/projects verify error:', verifyErr);
+    if (verifyErr || !verify) {
+      console.error('[API] POST /api/data/projects verify failed', verifyErr);
       return NextResponse.json(
-        { error: `Verification read failed: ${verifyErr.message}` },
-        { status: 500 }
-      );
-    }
-    if (!verify) {
-      console.error('[API] POST /api/data/projects verify: row missing after insert', { id });
-      return NextResponse.json(
-        { error: 'Project was not persisted (verify read returned null)', projectId: id },
+        { error: verifyErr?.message ?? 'Project not persisted', projectId: id },
         { status: 500 }
       );
     }
 
     console.log(`[API] POST /api/data/projects ✅ persisted id=${id}`);
-    return NextResponse.json(
-      rowToProject(verify as { id: string; data: Record<string, unknown> | null }),
-      { status: 201 }
-    );
+    return NextResponse.json(rowToProject(verify as ProjectRow), { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] POST /api/data/projects fatal:', msg);
-    return NextResponse.json(
-      { error: `Failed to create project: ${msg}` },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: `Failed to create project: ${msg}` }, { status: 500 });
   }
 }
