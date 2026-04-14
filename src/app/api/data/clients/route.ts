@@ -69,16 +69,28 @@ function rowToClient(r: ClientRow) {
 const COLUMNS =
   'id, name, company, contact_person, email, phone, notes, business_field, client_type, status, retainer_amount, retainer_day, color, converted_from_lead, assigned_manager_id, created_at, updated_at';
 
+const COLUMNS_FALLBACK =
+  'id, name, company, contact_person, email, phone, notes, business_field, client_type, status, retainer_amount, retainer_day, color, converted_from_lead, created_at, updated_at';
+
 /* ── GET ──────────────────────────────────────────────────────────────── */
 
 export async function GET() {
   try {
     const sb = getSupabase();
 
-    const { data: rows, error } = await sb
+    // Try full column list; fall back if a column (e.g. assigned_manager_id)
+    // hasn't been added to the DB yet.
+    let { data: rows, error } = await sb
       .from('clients')
       .select(COLUMNS)
       .order('id');
+
+    if (error && /column .* does not exist|Could not find the '([^']+)' column/i.test(error.message)) {
+      console.warn(`[API] GET /api/data/clients falling back to minimal column set: ${error.message}`);
+      const retry = await sb.from('clients').select(COLUMNS_FALLBACK).order('id');
+      rows = retry.data as any;
+      error = retry.error as any;
+    }
 
     if (error) {
       console.error('[API] GET /api/data/clients supabase error:', error);
@@ -88,9 +100,10 @@ export async function GET() {
     const clients = (rows ?? []).map((r) => rowToClient(r as ClientRow));
     return NextResponse.json(clients);
   } catch (error) {
-    console.error('[API] GET /api/data/clients error:', error);
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[API] GET /api/data/clients error:', msg);
     return NextResponse.json(
-      { error: 'Failed to fetch clients' },
+      { error: `Failed to fetch clients: ${msg}` },
       { status: 500 }
     );
   }
