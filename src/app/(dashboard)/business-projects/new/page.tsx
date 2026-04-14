@@ -188,7 +188,7 @@ export default function NewBusinessProjectPage() {
       }
 
       toast("הפרויקט נוצר בהצלחה!", "success");
-      router.push(`/business-projects/${createdProject.id}`);
+      router.push(`/projects/${createdProject.id}`);
     } catch (error) {
       console.error("Error:", error);
       toast(

@@ -267,7 +267,7 @@ export default function BusinessProjectsPage() {
       setProjectForm({ projectName: "", clientId: "", projectType: "general", description: "", startDate: "", assignedManagerId: "" });
       setShowCreateModal(false);
       toast("פרויקט נוצר בהצלחה", "success");
-      router.push(`/business-projects/${newProject.id}`);
+      router.push(`/projects/${newProject.id}`);
     } catch (error) {
       console.error("Error creating project:", error);
       toast("שגיאה ביצירת פרויקט", "error");
@@ -538,7 +538,7 @@ export default function BusinessProjectsPage() {
                   cursor: "pointer",
                   transition: "all 150ms",
                 }}
-                onClick={() => router.push(`/business-projects/${project.id}`)}
+                onClick={() => router.push(`/projects/${project.id}`)}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.12)";
                   e.currentTarget.style.transform = "translateY(-2px)";
@@ -678,7 +678,7 @@ export default function BusinessProjectsPage() {
                   alignItems: "center",
                   gap: "1rem",
                 }}
-                onClick={() => router.push(`/business-projects/${project.id}`)}
+                onClick={() => router.push(`/projects/${project.id}`)}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = "var(--accent)";
                 }}
