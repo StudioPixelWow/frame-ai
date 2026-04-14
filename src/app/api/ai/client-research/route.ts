@@ -10,13 +10,53 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   clientResearch,
-  clients,
   clientGanttItems,
   creativeDNA,
 } from '@/lib/db/collections';
 import { ensureSeeded } from '@/lib/db/seed';
+import { getSupabase } from '@/lib/db/store';
 import { generateWithAI, getClientKnowledgeContext } from '@/lib/ai/openai-client';
 import type { ClientResearch, Client } from '@/lib/db/schema';
+
+/**
+ * Fetch a client by id from Supabase (the real source of truth).
+ * Maps snake_case DB columns → camelCase Client shape expected by this route.
+ */
+async function fetchClientFromSupabase(clientId: string): Promise<Client | null> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from('clients')
+    .select(
+      'id, name, company, contact_person, email, phone, notes, business_field, client_type, status, retainer_amount, retainer_day, color, converted_from_lead, created_at, updated_at'
+    )
+    .eq('id', clientId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[client-research] supabase fetch error:', error);
+    return null;
+  }
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    name: data.name ?? '',
+    company: data.company ?? '',
+    contactPerson: data.contact_person ?? '',
+    email: data.email ?? '',
+    phone: data.phone ?? '',
+    notes: data.notes ?? '',
+    businessField: data.business_field ?? '',
+    clientType: data.client_type ?? 'marketing',
+    status: data.status ?? 'active',
+    retainerAmount: data.retainer_amount ?? 0,
+    retainerDay: data.retainer_day ?? 1,
+    color: data.color ?? '#00B5FE',
+    convertedFromLead: data.converted_from_lead ?? null,
+    createdAt: data.created_at ?? '',
+    updatedAt: data.updated_at ?? '',
+  } as unknown as Client;
+}
 
 // ---------- Strict JSON schema for validation ----------
 
@@ -325,7 +365,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing clientId in request body' }, { status: 400 });
     }
 
-    const client = clients.getById(clientId);
+    const client = await fetchClientFromSupabase(clientId);
     if (!client) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
