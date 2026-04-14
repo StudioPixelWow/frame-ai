@@ -106,7 +106,8 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     const id = generateId();
 
-    const insertRow = {
+    // Base row — only columns that are always required/present.
+    const baseRow: Record<string, unknown> = {
       id,
       name: body.name ?? '',
       company: body.company ?? '',
@@ -121,27 +122,73 @@ export async function POST(req: NextRequest) {
       retainer_day: body.retainerDay ?? 1,
       color: body.color ?? '#00B5FE',
       converted_from_lead: body.convertedFromLead ?? null,
-      assigned_manager_id: body.assignedManagerId ?? null,
       created_at: now,
       updated_at: now,
     };
 
-    const { data: inserted, error } = await sb
-      .from('clients')
-      .insert(insertRow)
-      .select(COLUMNS)
-      .single();
+    // Only include assigned_manager_id if the caller actually provided a value.
+    // This way creation doesn't fail when the column doesn't exist yet, and
+    // a newly assigned client can still be created atomically when it does.
+    const insertRow: Record<string, unknown> = { ...baseRow };
+    if (body.assignedManagerId != null && body.assignedManagerId !== '') {
+      insertRow.assigned_manager_id = body.assignedManagerId;
+    }
+
+    // Auto-fallback helper: try full select, retry with minimal select if DB
+    // doesn't know a requested column. Also strips unknown columns on retry.
+    const COLUMNS_FALLBACK =
+      'id, name, company, contact_person, email, phone, notes, business_field, client_type, status, retainer_amount, retainer_day, color, converted_from_lead, created_at, updated_at';
+
+    async function doInsert(payload: Record<string, unknown>) {
+      let { data, error } = await sb
+        .from('clients')
+        .insert(payload)
+        .select(COLUMNS)
+        .single();
+      if (error && /Could not find the '([^']+)' column/i.test(error.message)) {
+        const m = error.message.match(/Could not find the '([^']+)' column/i);
+        const badCol = m?.[1];
+        if (badCol && badCol in payload) {
+          console.warn(`[API] POST /api/data/clients dropping unknown column "${badCol}" and retrying`);
+          const { [badCol]: _dropped, ...rest } = payload;
+          void _dropped;
+          const retry = await sb
+            .from('clients')
+            .insert(rest)
+            .select(COLUMNS_FALLBACK)
+            .single();
+          data = retry.data as any;
+          error = retry.error as any;
+        } else {
+          // unknown column in select only — retry select with fallback
+          const retry = await sb
+            .from('clients')
+            .insert(payload)
+            .select(COLUMNS_FALLBACK)
+            .single();
+          data = retry.data as any;
+          error = retry.error as any;
+        }
+      }
+      return { data, error };
+    }
+
+    const { data: inserted, error } = await doInsert(insertRow);
 
     if (error) {
       console.error('[API] POST /api/data/clients supabase error:', error);
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json(
+        { error: error.message, code: (error as any).code ?? null },
+        { status: 400 }
+      );
     }
 
     return NextResponse.json(rowToClient(inserted as ClientRow), { status: 201 });
   } catch (error) {
-    console.error('[API] POST /api/data/clients error:', error);
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[API] POST /api/data/clients error:', msg);
     return NextResponse.json(
-      { error: 'Failed to create client' },
+      { error: `Failed to create client: ${msg}` },
       { status: 400 }
     );
   }
