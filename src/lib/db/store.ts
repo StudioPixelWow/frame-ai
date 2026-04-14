@@ -15,10 +15,12 @@ export function getSupabase(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  console.log('Supabase env check', {
+  console.log('Supabase connection diagnostic', {
     hasNextPublicUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
     hasSupabaseUrl: !!process.env.SUPABASE_URL,
     hasServiceRole: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    startsWithHttp: typeof url === 'string' ? url.startsWith('http') : false,
+    preview: typeof url === 'string' ? url.slice(0, 20) : null,
   });
 
   if (!url || !key) {
@@ -26,12 +28,6 @@ export function getSupabase(): SupabaseClient {
       'Missing Supabase env vars: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required'
     );
   }
-
-  console.log('Supabase URL debug', {
-    exists: !!url,
-    startsWithHttp: typeof url === 'string' ? url.startsWith('http') : false,
-    preview: typeof url === 'string' ? url.slice(0, 20) : null,
-  });
 
   _supabase = createClient(url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
