@@ -191,8 +191,8 @@ function generateFallbackAnalysis(
 ): CompetitorAnalysisResponse {
   const patterns = INDUSTRY_PATTERNS[businessType.toLowerCase()] || INDUSTRY_PATTERNS['default'];
 
-  const competitorAnalyses: CompetitorAnalysis[] = competitors.map((comp) => ({
-    name: comp.name,
+  const competitorAnalyses: CompetitorAnalysis[] = (competitors || []).map((comp) => ({
+    name: comp?.name ?? '(ללא שם)',
     analysis: {
       contentTypes: patterns.contentTypes,
       engagementPatterns: 'עדכונים שבועיים, עם תגובות ספורדיות',
@@ -254,7 +254,7 @@ function generateFallbackAnalysis(
     contentRecommendations,
     debug: {
       method: 'fallback',
-      competitorsCount: competitors.length,
+      competitorsCount: (competitors || []).length,
       businessType,
     },
   };
@@ -262,17 +262,34 @@ function generateFallbackAnalysis(
 
 export async function POST(req: NextRequest) {
   try {
-    const body: CompetitorAnalysisRequest = await req.json();
-    const { clientId, businessType, competitors } = body;
+    let body: Partial<CompetitorAnalysisRequest> = {};
+    try {
+      body = (await req.json()) as Partial<CompetitorAnalysisRequest>;
+    } catch {
+      console.warn('[competitor-analysis] Invalid or empty JSON body');
+    }
+
+    const clientId = body?.clientId;
+    const businessType = body?.businessType;
+    const competitors: Competitor[] = Array.isArray(body?.competitors)
+      ? (body!.competitors as Competitor[])
+      : [];
 
     console.log(
-      `[competitor-analysis] Received request for client=${clientId}, type=${businessType}, competitors=${competitors.length}`
+      `[competitor-analysis] Received request for client=${clientId ?? '(missing)'}, type=${businessType ?? '(missing)'}, competitors=${(competitors || []).length}`
     );
 
-    // Validate inputs
-    if (!clientId || !businessType || !Array.isArray(competitors) || competitors.length === 0) {
+    // Validate inputs — log exactly which fields are missing for debugging
+    const missing: string[] = [];
+    if (!clientId) missing.push('clientId');
+    if (!businessType) missing.push('businessType');
+    if (!Array.isArray(body?.competitors)) missing.push('competitors (not array)');
+    else if (competitors.length === 0) missing.push('competitors (empty)');
+
+    if (missing.length > 0) {
+      console.warn(`[competitor-analysis] Missing fields: ${missing.join(', ')}`);
       return NextResponse.json(
-        { error: 'Invalid request parameters' },
+        { error: 'Invalid request parameters', missing },
         { status: 400 }
       );
     }
@@ -300,12 +317,12 @@ export async function POST(req: NextRequest) {
       const prompt = `
 בעברית בלבד:
 
-אנא עשו ניתוח תחרות עבור ${competitors.length} מתחרים.
+אנא עשו ניתוח תחרות עבור ${(competitors || []).length} מתחרים.
 
 סוג העסק שלנו: ${businessType}
 
 מתחרים:
-${competitors.map(c => `- ${c.name} (Instagram: ${c.instagramUrl || 'N/A'}, Facebook: ${c.facebookUrl || 'N/A'}, Website: ${c.websiteUrl || 'N/A'})`).join('\n')}
+${(competitors || []).map(c => `- ${c?.name ?? '(ללא שם)'} (Instagram: ${c?.instagramUrl || 'N/A'}, Facebook: ${c?.facebookUrl || 'N/A'}, Website: ${c?.websiteUrl || 'N/A'})`).join('\n')}
 
 הערה חשובה: אנחנו לא יכולים לגשת לאתרים בעצמנו. אנא בנו ניתוח על:
 1. תבניות תעשיה אופיניות לסוג עסק זה
@@ -374,18 +391,28 @@ ${competitors.map(c => `- ${c.name} (Instagram: ${c.instagramUrl || 'N/A'}, Face
       console.log('[competitor-analysis] No OpenAI key, using fallback analysis');
     }
 
+    // Normalize response shape so downstream consumers never see undefined arrays
+    response.competitors = Array.isArray(response.competitors) ? response.competitors : [];
+    response.contentRecommendations = Array.isArray(response.contentRecommendations)
+      ? response.contentRecommendations
+      : [];
+    response.insights = response.insights || { doMoreOf: [], avoid: [], opportunities: [] };
+    response.insights.doMoreOf = Array.isArray(response.insights.doMoreOf) ? response.insights.doMoreOf : [];
+    response.insights.avoid = Array.isArray(response.insights.avoid) ? response.insights.avoid : [];
+    response.insights.opportunities = Array.isArray(response.insights.opportunities) ? response.insights.opportunities : [];
+
     // Add debug info
     response.debug = {
       ...response.debug,
       clientId,
       businessType,
-      competitorsAnalyzed: competitors.length,
+      competitorsAnalyzed: (competitors || []).length,
       usedAI,
       timestamp: new Date().toISOString(),
     };
 
     console.log(
-      `[competitor-analysis] Returning analysis for ${competitors.length} competitors with ${response.contentRecommendations.length} recommendations`
+      `[competitor-analysis] Returning analysis for ${(competitors || []).length} competitors with ${(response.contentRecommendations || []).length} recommendations`
     );
 
     return NextResponse.json(response, { status: 200 });

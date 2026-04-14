@@ -358,11 +358,18 @@ export async function POST(req: NextRequest) {
   ensureSeeded();
 
   try {
-    const body = await req.json();
-    const { clientId, strategicNotes: incomingNotes } = body;
+    let body: Record<string, unknown> = {};
+    try {
+      body = (await req.json()) as Record<string, unknown>;
+    } catch {
+      console.warn('[client-research] Invalid or empty JSON body');
+    }
+    const clientId = (body?.clientId as string) || '';
+    const incomingNotes = (body?.strategicNotes as string) || '';
 
     if (!clientId) {
-      return NextResponse.json({ error: 'Missing clientId in request body' }, { status: 400 });
+      console.warn('[client-research] Missing field: clientId');
+      return NextResponse.json({ error: 'Missing clientId in request body', missing: ['clientId'] }, { status: 400 });
     }
 
     const client = await fetchClientFromSupabase(clientId);
@@ -513,11 +520,13 @@ export async function POST(req: NextRequest) {
         contentIdeas25: (researchData.contentIdeas25 as ClientResearch['contentIdeas25']) || [],
         recommendedCampaignConcepts: researchData.recommendedCampaignConcepts as ClientResearch['recommendedCampaignConcepts'],
         actionPlan: researchData.actionPlan as ClientResearch['actionPlan'],
-        sourcesAnalyzed: (researchData.sourcesAnalyzed as string[]) || [
-          client.websiteUrl,
-          client.facebookPageUrl,
-          client.instagramProfileUrl,
-        ].filter(Boolean),
+        sourcesAnalyzed: Array.isArray(researchData.sourcesAnalyzed)
+          ? (researchData.sourcesAnalyzed as string[])
+          : [
+              client.websiteUrl,
+              client.facebookPageUrl,
+              client.instagramProfileUrl,
+            ].filter(Boolean),
         strategicNotes,
         notesAppliedAt: strategicNotes ? new Date().toISOString() : initialResearch.notesAppliedAt,
         savedAt: new Date().toISOString(), // Auto-save after generation
@@ -572,11 +581,13 @@ export async function PUT(req: NextRequest) {
   ensureSeeded();
 
   try {
-    const body = await req.json();
-    const { clientId } = body;
+    let body: Record<string, unknown> = {};
+    try { body = (await req.json()) as Record<string, unknown>; } catch { /* noop */ }
+    const clientId = (body?.clientId as string) || '';
 
     if (!clientId) {
-      return NextResponse.json({ error: 'Missing clientId' }, { status: 400 });
+      console.warn('[client-research PUT] Missing field: clientId');
+      return NextResponse.json({ error: 'Missing clientId', missing: ['clientId'] }, { status: 400 });
     }
 
     const existing = clientResearch.query((r) => r.clientId === clientId);
@@ -615,14 +626,18 @@ export async function PATCH(req: NextRequest) {
   ensureSeeded();
 
   try {
-    const body = await req.json();
-    const { clientId, strategicNotes } = body;
+    let body: Record<string, unknown> = {};
+    try { body = (await req.json()) as Record<string, unknown>; } catch { /* noop */ }
+    const clientId = (body?.clientId as string) || '';
+    const strategicNotes = body?.strategicNotes;
 
     if (!clientId) {
-      return NextResponse.json({ error: 'Missing clientId' }, { status: 400 });
+      console.warn('[client-research PATCH] Missing field: clientId');
+      return NextResponse.json({ error: 'Missing clientId', missing: ['clientId'] }, { status: 400 });
     }
 
     if (typeof strategicNotes !== 'string') {
+      console.warn('[client-research PATCH] strategicNotes not a string');
       return NextResponse.json({ error: 'strategicNotes must be a string' }, { status: 400 });
     }
 

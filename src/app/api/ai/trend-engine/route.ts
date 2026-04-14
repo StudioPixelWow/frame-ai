@@ -118,9 +118,11 @@ function generateFallbackTrends(
   holidays: any[]
 ): TrendSuggestion[] {
   const trends: TrendSuggestion[] = [];
-  const fallbackData = HEBREW_TRENDS_FALLBACK[businessType.toLowerCase()] || HEBREW_TRENDS_FALLBACK['marketing'];
+  const safeHolidays = Array.isArray(holidays) ? holidays : [];
+  const bt = (businessType || '').toLowerCase();
+  const fallbackData = HEBREW_TRENDS_FALLBACK[bt] || HEBREW_TRENDS_FALLBACK['marketing'];
 
-  fallbackData.forEach((item, idx) => {
+  (fallbackData || []).forEach((item, idx) => {
     trends.push({
       trendName: item.trend,
       whyTrending: `טרנד פופולרי בחודש ${month} - ${item.message}`,
@@ -137,16 +139,18 @@ function generateFallbackTrends(
   });
 
   // Add holiday-based trends
-  holidays.forEach((holiday) => {
+  safeHolidays.forEach((holiday) => {
+    const holidayName = holiday?.hebrewName ?? '';
+    const ideas = Array.isArray(holiday?.contentIdeas) ? holiday.contentIdeas : [];
     trends.push({
-      trendName: `קמפיין ${holiday.hebrewName}`,
+      trendName: `קמפיין ${holidayName}`,
       whyTrending: `חג חשוב בישראל - הזדמנות למכירות`,
       relevanceScore: 85,
       urgency: 'high',
       contentIdea: {
-        hook: holiday.contentIdeas[0] || `ברוכים הבאים ל${holiday.hebrewName}`,
-        mainMessage: `חגיגה של ${holiday.hebrewName} - טיפול מיוחד לקהל שלכם`,
-        visualConcept: `עיצוב חגיגי בנושא ${holiday.hebrewName}, צבעים חמים, סמלים קשורים לחג`,
+        hook: ideas[0] || `ברוכים הבאים ל${holidayName}`,
+        mainMessage: `חגיגה של ${holidayName} - טיפול מיוחד לקהל שלכם`,
+        visualConcept: `עיצוב חגיגי בנושא ${holidayName}, צבעים חמים, סמלים קשורים לחג`,
         platform: 'facebook',
         format: 'Reel',
       },
@@ -160,14 +164,15 @@ function generateWeeklyRecommendations(
   trends: TrendSuggestion[]
 ): WeeklyRecommendation[] {
   const weeks: WeeklyRecommendation[] = [];
+  const safeTrends = Array.isArray(trends) ? trends : [];
 
   for (let week = 1; week <= 4; week++) {
-    const weekTrends = trends.slice((week - 1) * 2, week * 2);
-    const posts: WeeklyPost[] = weekTrends.map((trend, idx) => ({
+    const weekTrends = safeTrends.slice((week - 1) * 2, week * 2);
+    const posts: WeeklyPost[] = (weekTrends || []).map((trend, idx) => ({
       title: `שבוע ${week} - פוסט ${idx + 1}`,
-      hook: trend.contentIdea.hook,
-      reason: `${trend.trendName} - רלוונטי לנישה שלכם`,
-      urgencyScore: trend.urgency === 'high' ? 90 : trend.urgency === 'medium' ? 70 : 50,
+      hook: trend?.contentIdea?.hook ?? '',
+      reason: `${trend?.trendName ?? ''} - רלוונטי לנישה שלכם`,
+      urgencyScore: trend?.urgency === 'high' ? 90 : trend?.urgency === 'medium' ? 70 : 50,
     }));
 
     weeks.push({
@@ -188,37 +193,48 @@ function generateWeeklyRecommendations(
 
 export async function POST(req: NextRequest) {
   try {
-    const body: TrendEngineRequest = await req.json();
-    const {
-      clientId,
-      businessType,
-      businessField,
-      month,
-      year,
-      platforms,
-      clientBrain,
-    } = body;
+    let body: Partial<TrendEngineRequest> = {};
+    try {
+      body = (await req.json()) as Partial<TrendEngineRequest>;
+    } catch {
+      console.warn('[trend-engine] Invalid or empty JSON body');
+    }
+
+    const clientId = body?.clientId;
+    const businessType = body?.businessType;
+    const businessField = body?.businessField ?? '';
+    const month = body?.month;
+    const year = body?.year ?? new Date().getFullYear();
+    const platforms: string[] = Array.isArray(body?.platforms) ? body!.platforms! : [];
+    const clientBrain = body?.clientBrain;
 
     console.log(
-      `[trend-engine] Received request for client=${clientId}, type=${businessType}, month=${month}`
+      `[trend-engine] Received request for client=${clientId ?? '(missing)'}, type=${businessType ?? '(missing)'}, month=${month ?? '(missing)'}`
     );
 
-    // Validate inputs
-    if (!clientId || !businessType || !month || month < 1 || month > 12) {
+    // Validate required inputs — report each missing field
+    const missing: string[] = [];
+    if (!clientId) missing.push('clientId');
+    if (!businessType) missing.push('businessType');
+    if (typeof month !== 'number' || month < 1 || month > 12) missing.push('month (1-12)');
+
+    if (missing.length > 0) {
+      console.warn(`[trend-engine] Missing fields: ${missing.join(', ')}`);
       return NextResponse.json(
-        { error: 'Missing or invalid required fields' },
+        { error: 'Missing or invalid required fields', missing },
         { status: 400 }
       );
     }
 
     // Get API keys and holidays
     const apiKeys = getApiKeys();
-    const holidays = getHolidaysForMonth(month);
+    const holidaysRaw = getHolidaysForMonth(month as number);
+    const holidays = Array.isArray(holidaysRaw) ? holidaysRaw : [];
 
     console.log(`[trend-engine] Found ${holidays.length} holidays for month ${month}`);
 
     // Generate fallback trends
-    const fallbackTrends = generateFallbackTrends(businessType, month, holidays);
+    const fallbackTrends = generateFallbackTrends(businessType as string, month as number, holidays);
 
     let trends = fallbackTrends;
     let usedAI = false;
@@ -231,17 +247,17 @@ export async function POST(req: NextRequest) {
       const prompt = `
 בשפה עברית בלבד:
 
-אני צריך להמליץ על ${platforms.length} טרנדים לעסק מסוג "${businessType}" בתחום "${businessField}".
+אני צריך להמליץ על ${(platforms || []).length} טרנדים לעסק מסוג "${businessType}" בתחום "${businessField}".
 חודש: ${month}/2024-2030, שנה: ${year}
-פלטפורמות: ${platforms.join(', ')}
+פלטפורמות: ${(platforms || []).join(', ')}
 
 מידע על הלקוח:
 ${clientBrain?.toneOfVoice ? `- טון קול: ${clientBrain.toneOfVoice}` : ''}
-${clientBrain?.keySellingPoints ? `- נקודות מכירה: ${clientBrain.keySellingPoints.join(', ')}` : ''}
+${Array.isArray(clientBrain?.keySellingPoints) && clientBrain!.keySellingPoints!.length > 0 ? `- נקודות מכירה: ${clientBrain!.keySellingPoints!.join(', ')}` : ''}
 ${clientBrain?.audienceProfile ? `- פרופיל קהל: ${clientBrain.audienceProfile}` : ''}
 
 חגים רלוונטיים לחודש זה:
-${holidays.map(h => `- ${h.hebrewName} (${h.name}): ${h.contentIdeas.join(', ')}`).join('\n') || '- אין חגים בחודש זה'}
+${(holidays || []).map(h => `- ${h?.hebrewName ?? ''} (${h?.name ?? ''}): ${Array.isArray(h?.contentIdeas) ? h.contentIdeas.join(', ') : ''}`).join('\n') || '- אין חגים בחודש זה'}
 
 אנא תן 5 טרנדים ספציפיים עם:
 1. שם הטרנד (בעברית)
@@ -283,8 +299,21 @@ ${holidays.map(h => `- ${h.hebrewName} (${h.name}): ${h.contentIdeas.join(', ')}
 
       try {
         const parsed = JSON.parse(aiResponse);
-        if (Array.isArray(parsed.trends)) {
-          trends = parsed.trends;
+        if (Array.isArray(parsed?.trends)) {
+          // Normalize every trend entry so downstream .length/.map never blow up
+          trends = parsed.trends.map((t: any) => ({
+            trendName: t?.trendName ?? '',
+            whyTrending: t?.whyTrending ?? '',
+            relevanceScore: typeof t?.relevanceScore === 'number' ? t.relevanceScore : 50,
+            urgency: (t?.urgency === 'high' || t?.urgency === 'low' || t?.urgency === 'medium') ? t.urgency : 'medium',
+            contentIdea: {
+              hook: t?.contentIdea?.hook ?? '',
+              mainMessage: t?.contentIdea?.mainMessage ?? '',
+              visualConcept: t?.contentIdea?.visualConcept ?? '',
+              platform: t?.contentIdea?.platform ?? 'instagram',
+              format: t?.contentIdea?.format ?? 'Post',
+            },
+          }));
           console.log('[trend-engine] Successfully parsed AI response');
         }
       } catch (parseError) {
@@ -296,25 +325,26 @@ ${holidays.map(h => `- ${h.hebrewName} (${h.name}): ${h.contentIdeas.join(', ')}
     }
 
     // Generate weekly recommendations
-    const weeklyRecommendations = generateWeeklyRecommendations(trends);
+    const safeTrends = Array.isArray(trends) ? trends : [];
+    const weeklyRecommendations = generateWeeklyRecommendations(safeTrends);
 
     const response: TrendEngineResponse = {
-      trendSuggestions: trends,
-      weeklyRecommendations,
+      trendSuggestions: safeTrends,
+      weeklyRecommendations: Array.isArray(weeklyRecommendations) ? weeklyRecommendations : [],
       debug: {
         clientId,
         businessType,
         businessField,
         month,
         year,
-        platforms,
-        holidaysCount: holidays.length,
+        platforms: platforms || [],
+        holidaysCount: (holidays || []).length,
         usedAI,
-        trendsCount: trends.length,
+        trendsCount: safeTrends.length,
       },
     };
 
-    console.log(`[trend-engine] Returning ${trends.length} trends with ${weeklyRecommendations.length} weeks`);
+    console.log(`[trend-engine] Returning ${safeTrends.length} trends with ${response.weeklyRecommendations.length} weeks`);
 
     return NextResponse.json(response, { status: 200 });
   } catch (error) {

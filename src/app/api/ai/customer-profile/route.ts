@@ -103,11 +103,14 @@ function buildUserPromptHebrew(req: CustomerProfileRequest): string {
     existingContext = `\n### נתונים קיימים:\n${req.existingData}`;
   } else if (req.existingData && typeof req.existingData === 'object') {
     const brain = req.existingData as any;
+    const sellingStr = Array.isArray(brain?.keySellingPoints) && brain.keySellingPoints.length > 0
+      ? brain.keySellingPoints.join(', ')
+      : 'לא צוין';
     existingContext = `\n### מידע קיים מ-ClientBrain:
-- **קהל יעד:** ${brain.audienceProfile || 'לא צוין'}
-- **אישיות מותג:** ${brain.brandPersonality || 'לא צוין'}
-- **נקודות מכירה:** ${brain.keySellingPoints?.join(', ') || 'לא צוין'}
-- **טון קול:** ${brain.toneOfVoice || 'לא צוין'}`;
+- **קהל יעד:** ${brain?.audienceProfile || 'לא צוין'}
+- **אישיות מותג:** ${brain?.brandPersonality || 'לא צוין'}
+- **נקודות מכירה:** ${sellingStr}
+- **טון קול:** ${brain?.toneOfVoice || 'לא צוין'}`;
   }
 
   return `## בקשה להגדרת פרופיל קהל אידיאלי (Ideal Customer Profile)
@@ -187,14 +190,23 @@ export async function POST(req: NextRequest) {
   console.log('[customer-profile] POST: Received request');
 
   try {
-    const body = await req.json();
+    let body: Partial<CustomerProfileRequest> = {};
+    try {
+      body = (await req.json()) as Partial<CustomerProfileRequest>;
+    } catch {
+      console.warn('[customer-profile] Invalid or empty JSON body');
+    }
     const request = body as CustomerProfileRequest;
 
     // Validate
-    if (!request.clientId || !request.businessType || !request.businessField) {
-      console.log('[customer-profile] POST: Missing required fields');
+    const missing: string[] = [];
+    if (!request?.clientId) missing.push('clientId');
+    if (!request?.businessType) missing.push('businessType');
+    if (!request?.businessField) missing.push('businessField');
+    if (missing.length > 0) {
+      console.warn(`[customer-profile] Missing fields: ${missing.join(', ')}`);
       return NextResponse.json(
-        { error: 'Missing required fields: clientId, businessType, businessField' },
+        { error: 'Missing required fields: clientId, businessType, businessField', missing },
         { status: 400 }
       );
     }
@@ -285,9 +297,22 @@ export async function POST(req: NextRequest) {
     const latency = Date.now() - startTime;
     console.log(`[customer-profile] POST: Success (${latency}ms)`);
 
+    // Normalize shape so consumers never see undefined arrays
+    const safeIdealCustomer: IdealCustomer = {
+      ageRange: parsed?.ageRange ?? '',
+      gender: (parsed?.gender === 'male' || parsed?.gender === 'female') ? parsed.gender : 'mixed',
+      interests: Array.isArray(parsed?.interests) ? parsed.interests : [],
+      behaviors: Array.isArray(parsed?.behaviors) ? parsed.behaviors : [],
+      painPoints: Array.isArray(parsed?.painPoints) ? parsed.painPoints : [],
+      primarySegment: parsed?.primarySegment ?? '',
+      secondarySegment: parsed?.secondarySegment ?? '',
+      contentPreferences: Array.isArray(parsed?.contentPreferences) ? parsed.contentPreferences : [],
+      bestPlatforms: Array.isArray(parsed?.bestPlatforms) ? parsed.bestPlatforms : [],
+    };
+
     return NextResponse.json(
       {
-        idealCustomer: parsed,
+        idealCustomer: safeIdealCustomer,
         debug: { latencyMs: latency, fallback: false },
       },
       { status: 200 }

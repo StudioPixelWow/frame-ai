@@ -234,14 +234,25 @@ export async function POST(req: NextRequest) {
   console.log('[client-brain] POST: Received request');
 
   try {
-    const body = await req.json();
+    let body: Partial<ClientBrainRequest> = {};
+    try {
+      body = (await req.json()) as Partial<ClientBrainRequest>;
+    } catch {
+      console.warn('[client-brain] Invalid or empty JSON body');
+    }
     const request = body as ClientBrainRequest;
 
-    // Validate required fields
-    if (!request.clientId || !request.clientName || !request.businessType || !request.businessField || !request.industryType) {
-      console.log('[client-brain] POST: Missing required fields');
+    // Validate required fields — log exact missing fields
+    const missing: string[] = [];
+    if (!request?.clientId) missing.push('clientId');
+    if (!request?.clientName) missing.push('clientName');
+    if (!request?.businessType) missing.push('businessType');
+    if (!request?.businessField) missing.push('businessField');
+    if (!request?.industryType) missing.push('industryType');
+    if (missing.length > 0) {
+      console.warn(`[client-brain] POST: Missing fields: ${missing.join(', ')}`);
       return NextResponse.json(
-        { error: 'Missing required fields: clientId, clientName, businessType, businessField, industryType' },
+        { error: 'Missing required fields: clientId, clientName, businessType, businessField, industryType', missing },
         { status: 400 }
       );
     }
@@ -360,18 +371,29 @@ export async function POST(req: NextRequest) {
       }, { status: 200 });
     }
 
-    // Build the ClientKnowledge object
+    // Build the ClientKnowledge object — every array/object field guarded
+    const safeIdeal = parsed?.idealCustomer && typeof parsed.idealCustomer === 'object'
+      ? {
+          ageRange: parsed.idealCustomer?.ageRange ?? '',
+          interests: Array.isArray(parsed.idealCustomer?.interests) ? parsed.idealCustomer.interests : [],
+          behaviors: Array.isArray(parsed.idealCustomer?.behaviors) ? parsed.idealCustomer.behaviors : [],
+          painPoints: Array.isArray(parsed.idealCustomer?.painPoints) ? parsed.idealCustomer.painPoints : [],
+          primarySegment: parsed.idealCustomer?.primarySegment ?? '',
+          secondarySegment: parsed.idealCustomer?.secondarySegment ?? '',
+        }
+      : null;
+
     const knowledgeData: Omit<ClientKnowledgeType, 'id'> = {
       clientId: request.clientId,
-      businessSummary: parsed.businessSummary || '',
-      toneOfVoice: parsed.toneOfVoice || '',
-      audienceProfile: parsed.audienceProfile || '',
-      keySellingPoints: parsed.keySellingPoints || [],
-      brandPersonality: parsed.brandPersonality || '',
-      competitiveAdvantage: parsed.competitiveAdvantage || '',
-      winningContentPatterns: parsed.winningContentPatterns || [],
-      failedPatterns: parsed.failedPatterns || [],
-      topPerformingTopics: parsed.topPerformingTopics || [],
+      businessSummary: parsed?.businessSummary || '',
+      toneOfVoice: parsed?.toneOfVoice || '',
+      audienceProfile: parsed?.audienceProfile || '',
+      keySellingPoints: Array.isArray(parsed?.keySellingPoints) ? parsed.keySellingPoints : [],
+      brandPersonality: parsed?.brandPersonality || '',
+      competitiveAdvantage: parsed?.competitiveAdvantage || '',
+      winningContentPatterns: Array.isArray(parsed?.winningContentPatterns) ? parsed.winningContentPatterns : [],
+      failedPatterns: Array.isArray(parsed?.failedPatterns) ? parsed.failedPatterns : [],
+      topPerformingTopics: Array.isArray(parsed?.topPerformingTopics) ? parsed.topPerformingTopics : [],
       websiteUrl: request.websiteUrl || '',
       facebookUrl: request.facebookUrl || '',
       instagramUrl: request.instagramUrl || '',
@@ -380,8 +402,8 @@ export async function POST(req: NextRequest) {
         request.facebookUrl ? 'Facebook' : '',
         request.instagramUrl ? 'Instagram' : '',
       ].filter(Boolean),
-      weaknesses: parsed.weaknesses || [],
-      idealCustomer: parsed.idealCustomer || null,
+      weaknesses: Array.isArray(parsed?.weaknesses) ? parsed.weaknesses : [],
+      idealCustomer: safeIdeal,
       lastAnalyzedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

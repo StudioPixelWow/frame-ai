@@ -101,22 +101,31 @@ function buildSystemPromptHebrew(): string {
 }
 
 function buildUserPromptHebrew(clientBrain: ClientKnowledge): string {
-  const sellingPointsStr = clientBrain.keySellingPoints?.join(', ') || 'לא צוין';
-  const topicsStr = clientBrain.topPerformingTopics?.join(', ') || 'לא צוין';
-  const failedStr = clientBrain.failedPatterns?.join(', ') || 'לא צוין';
-  const idealCustomer = clientBrain.idealCustomer
-    ? `גיל: ${clientBrain.idealCustomer.ageRange}, עניינים: ${clientBrain.idealCustomer.interests?.join(', ')}`
+  const cb: any = clientBrain || {};
+  const sellingPointsStr = Array.isArray(cb?.keySellingPoints) && cb.keySellingPoints.length > 0
+    ? cb.keySellingPoints.join(', ') : 'לא צוין';
+  const topicsStr = Array.isArray(cb?.topPerformingTopics) && cb.topPerformingTopics.length > 0
+    ? cb.topPerformingTopics.join(', ') : 'לא צוין';
+  const failedStr = Array.isArray(cb?.failedPatterns) && cb.failedPatterns.length > 0
+    ? cb.failedPatterns.join(', ') : 'לא צוין';
+  const interestsStr = Array.isArray(cb?.idealCustomer?.interests)
+    ? cb.idealCustomer.interests.join(', ') : '';
+  const idealCustomer = cb?.idealCustomer
+    ? `גיל: ${cb.idealCustomer?.ageRange ?? ''}, עניינים: ${interestsStr}`
     : 'לא צוין';
+  const weaknessesStr = Array.isArray(cb?.weaknesses) && cb.weaknesses.length > 0
+    ? cb.weaknesses.map((w: any, i: number) => `${i + 1}. ${w?.description ?? ''} (${w?.severity ?? ''})`).join('\n')
+    : 'לא צוינו';
 
   return `## ניתוח חולשות משיווקיות - "אודיט מוח ברייִן"
 
 ### פרופיל העסק:
-- **סיכום:** ${clientBrain.businessSummary}
-- **טון קול:** ${clientBrain.toneOfVoice}
-- **קהל יעד:** ${clientBrain.audienceProfile}
+- **סיכום:** ${cb?.businessSummary ?? ''}
+- **טון קול:** ${cb?.toneOfVoice ?? ''}
+- **קהל יעד:** ${cb?.audienceProfile ?? ''}
 - **נקודות מכירה:** ${sellingPointsStr}
-- **אישיות מותג:** ${clientBrain.brandPersonality}
-- **יתרון תחרותי:** ${clientBrain.competitiveAdvantage}
+- **אישיות מותג:** ${cb?.brandPersonality ?? ''}
+- **יתרון תחרותי:** ${cb?.competitiveAdvantage ?? ''}
 
 ### ביצועים קודמים:
 - **נושאים בעלי ביצוע גבוה:** ${topicsStr}
@@ -124,7 +133,7 @@ function buildUserPromptHebrew(clientBrain: ClientKnowledge): string {
 - **פרופיל קהל אידיאלי:** ${idealCustomer}
 
 ### בעיות ידועות:
-${clientBrain.weaknesses?.map((w, i) => `${i + 1}. ${w.description} (${w.severity})`).join('\n') || 'לא צוינו'}
+${weaknessesStr}
 
 ---
 
@@ -173,14 +182,22 @@ export async function POST(req: NextRequest) {
   console.log('[brand-weakness] POST: Received request');
 
   try {
-    const body = await req.json();
+    let body: Partial<BrandWeaknessRequest> = {};
+    try {
+      body = (await req.json()) as Partial<BrandWeaknessRequest>;
+    } catch {
+      console.warn('[brand-weakness] Invalid or empty JSON body');
+    }
     const request = body as BrandWeaknessRequest;
 
     // Validate
-    if (!request.clientId || !request.clientBrain) {
-      console.log('[brand-weakness] POST: Missing clientId or clientBrain');
+    const missing: string[] = [];
+    if (!request?.clientId) missing.push('clientId');
+    if (!request?.clientBrain || typeof request.clientBrain !== 'object') missing.push('clientBrain');
+    if (missing.length > 0) {
+      console.warn(`[brand-weakness] POST: Missing fields: ${missing.join(', ')}`);
       return NextResponse.json(
-        { error: 'Missing clientId or clientBrain' },
+        { error: 'Missing clientId or clientBrain', missing },
         { status: 400 }
       );
     }
@@ -269,12 +286,23 @@ export async function POST(req: NextRequest) {
     }
 
     const latency = Date.now() - startTime;
-    console.log(`[brand-weakness] POST: Success (${latency}ms, ${parsed.weaknesses?.length || 0} weaknesses)`);
+    const parsedWeaknesses: WeaknessAnalysis[] = Array.isArray(parsed?.weaknesses)
+      ? parsed.weaknesses.map((w: any) => ({
+          area: w?.area ?? '',
+          description: w?.description ?? '',
+          severity: (w?.severity === 'high' || w?.severity === 'low') ? w.severity : 'medium',
+          impact: w?.impact ?? '',
+          fixSuggestions: Array.isArray(w?.fixSuggestions) ? w.fixSuggestions : [],
+          messagingImprovement: w?.messagingImprovement ?? '',
+          creativeDirection: w?.creativeDirection ?? '',
+        }))
+      : [];
+    console.log(`[brand-weakness] POST: Success (${latency}ms, ${parsedWeaknesses.length} weaknesses)`);
 
     return NextResponse.json(
       {
-        weaknesses: parsed.weaknesses || [],
-        overallScore: parsed.overallScore || 50,
+        weaknesses: parsedWeaknesses,
+        overallScore: typeof parsed?.overallScore === 'number' ? parsed.overallScore : 50,
         debug: { latencyMs: latency, fallback: false },
       },
       { status: 200 }
