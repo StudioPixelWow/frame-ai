@@ -27,6 +27,12 @@ export function getSupabase(): SupabaseClient {
     );
   }
 
+  console.log('Supabase URL debug', {
+    exists: !!url,
+    startsWithHttp: typeof url === 'string' ? url.startsWith('http') : false,
+    preview: typeof url === 'string' ? url.slice(0, 20) : null,
+  });
+
   _supabase = createClient(url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
