@@ -71,30 +71,69 @@ export async function POST(req: NextRequest) {
       updatedAt: now,
     };
 
-    const { data: inserted, error } = await sb
+    console.log(`[API] POST /api/data/projects inserting id=${id}`);
+
+    // Step 1: insert
+    const { data: inserted, error: insertErr } = await sb
       .from('projects')
       .insert({ id, data: projectData })
       .select('id, data')
       .single();
 
-    if (error) {
-      console.error('[API] POST /api/data/projects supabase error:', error);
+    if (insertErr) {
+      console.error('[API] POST /api/data/projects insert error:', insertErr);
+      const code = (insertErr as any).code ?? null;
+      const hint =
+        code === '42P01'
+          ? 'Run: CREATE TABLE IF NOT EXISTS projects ( id TEXT PRIMARY KEY, data JSONB NOT NULL DEFAULT \'{}\'::jsonb );'
+          : code === '42501'
+          ? 'Service role is blocked by RLS. Disable RLS or add policy.'
+          : null;
+      return NextResponse.json({ error: insertErr.message, code, hint }, { status: 500 });
+    }
+
+    if (!inserted) {
+      console.error('[API] POST /api/data/projects insert returned no row');
       return NextResponse.json(
-        { error: error.message, code: (error as any).code ?? null },
-        { status: 400 }
+        { error: 'Insert returned no row — check RLS or table existence' },
+        { status: 500 }
       );
     }
 
+    // Step 2: verify by reading it back in a separate query. If it isn't
+    // there we return a real failure instead of a false success.
+    const { data: verify, error: verifyErr } = await sb
+      .from('projects')
+      .select('id, data')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (verifyErr) {
+      console.error('[API] POST /api/data/projects verify error:', verifyErr);
+      return NextResponse.json(
+        { error: `Verification read failed: ${verifyErr.message}` },
+        { status: 500 }
+      );
+    }
+    if (!verify) {
+      console.error('[API] POST /api/data/projects verify: row missing after insert', { id });
+      return NextResponse.json(
+        { error: 'Project was not persisted (verify read returned null)', projectId: id },
+        { status: 500 }
+      );
+    }
+
+    console.log(`[API] POST /api/data/projects ✅ persisted id=${id}`);
     return NextResponse.json(
-      rowToProject(inserted as { id: string; data: Record<string, unknown> | null }),
+      rowToProject(verify as { id: string; data: Record<string, unknown> | null }),
       { status: 201 }
     );
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[API] POST /api/data/projects error:', msg);
+    console.error('[API] POST /api/data/projects fatal:', msg);
     return NextResponse.json(
       { error: `Failed to create project: ${msg}` },
-      { status: 400 }
+      { status: 500 }
     );
   }
 }
