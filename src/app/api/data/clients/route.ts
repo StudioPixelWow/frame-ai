@@ -39,6 +39,7 @@ type ClientRow = {
   retainer_day: number | null;
   color: string | null;
   converted_from_lead: string | null;
+  assigned_manager_id: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -59,13 +60,14 @@ function rowToClient(r: ClientRow) {
     retainerDay: r.retainer_day ?? 1,
     color: r.color ?? '#00B5FE',
     convertedFromLead: r.converted_from_lead ?? null,
+    assignedManagerId: r.assigned_manager_id ?? null,
     createdAt: r.created_at ?? '',
     updatedAt: r.updated_at ?? '',
   };
 }
 
 const COLUMNS =
-  'id, name, company, contact_person, email, phone, notes, business_field, client_type, status, retainer_amount, retainer_day, color, converted_from_lead, created_at, updated_at';
+  'id, name, company, contact_person, email, phone, notes, business_field, client_type, status, retainer_amount, retainer_day, color, converted_from_lead, assigned_manager_id, created_at, updated_at';
 
 /* ── GET ──────────────────────────────────────────────────────────────── */
 
@@ -119,6 +121,7 @@ export async function POST(req: NextRequest) {
       retainer_day: body.retainerDay ?? 1,
       color: body.color ?? '#00B5FE',
       converted_from_lead: body.convertedFromLead ?? null,
+      assigned_manager_id: body.assignedManagerId ?? null,
       created_at: now,
       updated_at: now,
     };
