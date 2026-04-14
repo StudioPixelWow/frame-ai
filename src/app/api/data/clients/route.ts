@@ -2,69 +2,88 @@
  * GET  /api/data/clients — Get all clients
  * POST /api/data/clients — Create a new client
  *
- * Storage: Supabase "clients" table (JSONB data column).
+ * Storage: Supabase "clients" table with normal columns:
+ *   id, name, company, contact_person, email, phone, notes,
+ *   business_field, client_type, status, retainer_amount, retainer_day,
+ *   color, converted_from_lead, created_at, updated_at
  *
- * ┌─────────────────────────────────────────────────────────┐
- * │  Table DDL (run once in Supabase SQL Editor):           │
- * │                                                         │
- * │  CREATE TABLE IF NOT EXISTS clients (                   │
- * │    id   TEXT PRIMARY KEY,                               │
- * │    data JSONB NOT NULL DEFAULT '{}'::jsonb              │
- * │  );                                                     │
- * │                                                         │
- * │  -- Optional: enable RLS but allow service-role full    │
- * │  ALTER TABLE clients ENABLE ROW LEVEL SECURITY;         │
- * │  CREATE POLICY "service_role_all" ON clients            │
- * │    FOR ALL USING (true) WITH CHECK (true);              │
- * └─────────────────────────────────────────────────────────┘
+ * The frontend uses camelCase field names; this route maps between
+ * camelCase (API contract) and snake_case (DB columns).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabase, ensureTable } from '@/lib/db/store';
-
-/* ── Table bootstrap DDL ──────────────────────────────────────────────── */
-
-const CLIENTS_DDL = `
-  CREATE TABLE IF NOT EXISTS clients (
-    id   TEXT PRIMARY KEY,
-    data JSONB NOT NULL DEFAULT '{}'::jsonb
-  );
-`;
+import { getSupabase } from '@/lib/db/store';
 
 /* ── ID generator ─────────────────────────────────────────────────────── */
 
 function generateId(): string {
-  // Matches the old JsonStore pattern: cli_<number>
-  // Use timestamp + random to avoid collisions across serverless instances
   const ts = Date.now().toString(36);
   const rand = Math.random().toString(36).slice(2, 6);
   return `cli_${ts}_${rand}`;
 }
+
+/* ── Row → API object (snake_case → camelCase) ────────────────────────── */
+
+type ClientRow = {
+  id: string;
+  name: string | null;
+  company: string | null;
+  contact_person: string | null;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
+  business_field: string | null;
+  client_type: string | null;
+  status: string | null;
+  retainer_amount: number | null;
+  retainer_day: number | null;
+  color: string | null;
+  converted_from_lead: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+function rowToClient(r: ClientRow) {
+  return {
+    id: r.id,
+    name: r.name ?? '',
+    company: r.company ?? '',
+    contactPerson: r.contact_person ?? '',
+    email: r.email ?? '',
+    phone: r.phone ?? '',
+    notes: r.notes ?? '',
+    businessField: r.business_field ?? '',
+    clientType: r.client_type ?? 'marketing',
+    status: r.status ?? 'active',
+    retainerAmount: r.retainer_amount ?? 0,
+    retainerDay: r.retainer_day ?? 1,
+    color: r.color ?? '#00B5FE',
+    convertedFromLead: r.converted_from_lead ?? null,
+    createdAt: r.created_at ?? '',
+    updatedAt: r.updated_at ?? '',
+  };
+}
+
+const COLUMNS =
+  'id, name, company, contact_person, email, phone, notes, business_field, client_type, status, retainer_amount, retainer_day, color, converted_from_lead, created_at, updated_at';
 
 /* ── GET ──────────────────────────────────────────────────────────────── */
 
 export async function GET() {
   try {
     const sb = getSupabase();
-    await ensureTable('clients', CLIENTS_DDL);
 
     const { data: rows, error } = await sb
       .from('clients')
-      .select('id, data')
+      .select(COLUMNS)
       .order('id');
 
     if (error) {
       console.error('[API] GET /api/data/clients supabase error:', error);
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Flatten: each row → { id, ...data }
-    // useData<T> on the frontend expects a direct JSON array.
-    const clients = (rows ?? []).map((r) => ({ ...r.data, id: r.id }));
-
+    const clients = (rows ?? []).map((r) => rowToClient(r as ClientRow));
     return NextResponse.json(clients);
   } catch (error) {
     console.error('[API] GET /api/data/clients error:', error);
@@ -80,69 +99,42 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const sb = getSupabase();
-    await ensureTable('clients', CLIENTS_DDL);
-
     const body = await req.json();
 
-    // Build the full client record with defaults
     const now = new Date().toISOString();
     const id = generateId();
 
-    const clientData = {
+    const insertRow = {
       id,
-      name: body.name || '',
-      company: body.company || '',
-      contactPerson: body.contactPerson || '',
-      email: body.email || '',
-      phone: body.phone || '',
-      logoUrl: body.logoUrl || '',
-      color: body.color || '#00B5FE',
-      clientType: body.clientType || 'marketing',
-      businessField: body.businessField || '',
-      marketingGoals: body.marketingGoals || '',
-      keyMarketingMessages: body.keyMarketingMessages || '',
-      assignedManagerId: body.assignedManagerId || null,
-      websiteUrl: body.websiteUrl || '',
-      facebookPageUrl: body.facebookPageUrl || '',
-      instagramProfileUrl: body.instagramProfileUrl || '',
-      tiktokProfileUrl: body.tiktokProfileUrl || '',
-      retainerAmount: body.retainerAmount ?? 0,
-      retainerDay: body.retainerDay ?? 1,
-      paymentStatus: body.paymentStatus || 'none',
-      nextPaymentDate: body.nextPaymentDate || null,
-      status: body.status || 'active',
-      notes: body.notes || '',
-      convertedFromLead: body.convertedFromLead || null,
-      createdAt: now,
-      updatedAt: now,
-      portalEnabled: body.portalEnabled ?? false,
-      portalUserId: body.portalUserId || null,
-      lastPortalLoginAt: null,
-      facebookPageId: body.facebookPageId || '',
-      facebookPageName: body.facebookPageName || '',
-      instagramAccountId: body.instagramAccountId || '',
-      instagramUsername: body.instagramUsername || '',
-      tiktokAccountId: body.tiktokAccountId || '',
-      tiktokUsername: body.tiktokUsername || '',
-      monthlyGanttStatus: body.monthlyGanttStatus || 'none',
-      annualGanttStatus: body.annualGanttStatus || 'none',
+      name: body.name ?? '',
+      company: body.company ?? '',
+      contact_person: body.contactPerson ?? '',
+      email: body.email ?? '',
+      phone: body.phone ?? '',
+      notes: body.notes ?? '',
+      business_field: body.businessField ?? '',
+      client_type: body.clientType ?? 'marketing',
+      status: body.status ?? 'active',
+      retainer_amount: body.retainerAmount ?? 0,
+      retainer_day: body.retainerDay ?? 1,
+      color: body.color ?? '#00B5FE',
+      converted_from_lead: body.convertedFromLead ?? null,
+      created_at: now,
+      updated_at: now,
     };
 
-    // Insert into Supabase. The "data" column stores the full object.
-    const { error } = await sb
+    const { data: inserted, error } = await sb
       .from('clients')
-      .insert({ id, data: clientData });
+      .insert(insertRow)
+      .select(COLUMNS)
+      .single();
 
     if (error) {
       console.error('[API] POST /api/data/clients supabase error:', error);
-      return NextResponse.json(
-        { error: error.message },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    // useData.create() expects the full created object back.
-    return NextResponse.json(clientData, { status: 201 });
+    return NextResponse.json(rowToClient(inserted as ClientRow), { status: 201 });
   } catch (error) {
     console.error('[API] POST /api/data/clients error:', error);
     return NextResponse.json(
