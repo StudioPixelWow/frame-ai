@@ -240,7 +240,10 @@ export default function BusinessProjectPage() {
       if (updates.status === 'submitted') {
         enriched.submittedAt = now;
       }
-      if (updates.status === 'approved' || updates.status === 'completed') {
+      if (updates.status === 'approved') {
+        enriched.approvedAt = now;
+      }
+      if (updates.status === 'completed') {
         enriched.completedAt = now;
       }
       await updateMilestone(milestoneId, enriched as any);
@@ -907,6 +910,35 @@ export default function BusinessProjectPage() {
                             </span>
                           </div>
                         </div>
+
+                        {((milestone as any)?.startedAt || (milestone as any)?.submittedAt || (milestone as any)?.approvedAt) && (
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              gap: '12px',
+                              fontSize: '11px',
+                              color: 'var(--foreground-muted)',
+                              marginBottom: '12px',
+                            }}
+                          >
+                            {(milestone as any)?.startedAt && (
+                              <span>
+                                התחיל: <span style={{ color: 'var(--foreground)' }}>{formatDate((milestone as any).startedAt)}</span>
+                              </span>
+                            )}
+                            {(milestone as any)?.submittedAt && (
+                              <span>
+                                הוגש: <span style={{ color: 'var(--foreground)' }}>{formatDate((milestone as any).submittedAt)}</span>
+                              </span>
+                            )}
+                            {(milestone as any)?.approvedAt && (
+                              <span>
+                                אושר: <span style={{ color: 'var(--foreground)' }}>{formatDate((milestone as any).approvedAt)}</span>
+                              </span>
+                            )}
+                          </div>
+                        )}
 
                         {milestone?.notes && (
                           <div style={{ marginBottom: '12px', padding: '8px', background: 'var(--border)', borderRadius: '4px' }}>
