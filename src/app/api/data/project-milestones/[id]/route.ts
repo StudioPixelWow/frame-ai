@@ -47,22 +47,19 @@ function nullIfEmpty(v: unknown): string | null {
 
 function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  // Keep business_project_id in sync if caller supplies either alias.
+
+  // Business project linkage (canonical column).
   const pid = body.businessProjectId !== undefined ? body.businessProjectId : body.projectId;
-  if (pid !== undefined) {
-    out.business_project_id = pid;
-    out.project_id = pid;
-  }
-  // Assignee: accept either camelCase alias, write to both snake_case names
-  // so whichever DB column exists gets populated (the other is auto-dropped).
+  if (pid !== undefined) out.business_project_id = nullIfEmpty(pid);
+
+  // Assignee — canonical column is assignee_id. Do NOT write legacy aliases;
+  // that caused drop-column churn and risked silently dropping the value
+  // when PostgREST's schema cache was stale.
   const assignee = body.assigneeId !== undefined
     ? body.assigneeId
     : body.assignedEmployeeId;
-  if (assignee !== undefined) {
-    const coerced = nullIfEmpty(assignee);
-    out.assignee_id = coerced;
-    out.assigned_employee_id = coerced;
-  }
+  if (assignee !== undefined) out.assignee_id = nullIfEmpty(assignee);
+
   const map: Array<[string, string]> = [
     ['title', 'title'],
     ['description', 'description'],
@@ -80,6 +77,10 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
   out.updated_at = new Date().toISOString();
   return out;
 }
+
+/** Columns that must NEVER be silently dropped. If Supabase says one of these
+ *  doesn't exist, that's an error worth surfacing, not papering over. */
+const PROTECTED_COLUMNS = new Set(['assignee_id', 'business_project_id', 'status']);
 
 const SELECT_COLUMNS =
   'id, project_id, title, description, due_date, assigned_employee_id, status, files, notes, created_at, updated_at';
@@ -315,28 +316,52 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 
     let updated: Row | null = null;
     let lastErr: { message: string; code?: string } | null = null;
+    let protectedError: string | null = null;
+
     for (let attempt = 0; attempt < 10; attempt++) {
-      console.log(`[API] PUT /api/data/project-milestones/${id} attempt=${attempt} updateRow=${JSON.stringify(updateRow)}`);
+      console.log(
+        `[API] PUT /api/data/project-milestones/${id} attempt=${attempt} updateRow=${JSON.stringify(updateRow)}`
+      );
       const { data, error } = await sb.from(TABLE).update(updateRow).eq('id', id).select('*').maybeSingle();
-      if (!error) { updated = (data as Row) ?? null; break; }
+      if (!error) {
+        updated = (data as Row) ?? null;
+        console.log(
+          `[API] PUT /api/data/project-milestones/${id} ✅ UPDATE succeeded on attempt=${attempt}`
+        );
+        break;
+      }
       lastErr = error as any;
-      console.warn(`[API] PUT /api/data/project-milestones/${id} attempt=${attempt} supabase error: ${error.message} (code=${(error as any).code ?? 'none'})`);
+      console.warn(
+        `[API] PUT /api/data/project-milestones/${id} attempt=${attempt} supabase error: ${error.message} (code=${(error as any).code ?? 'none'})`
+      );
       const bad = parseBadColumn(error.message);
       if (!bad) break;
-      if (bad === 'assignee_id') {
-        // Loud alarm — this means PostgREST doesn't see the column we just
-        // added. Schema cache is stale. Do NOT silently drop the field.
-        console.error(
-          `[API] PUT /api/data/project-milestones/${id} ⚠ Supabase schema cache does not see "assignee_id". ` +
-          `Go to Supabase dashboard → Database → Tables, click on business_project_milestones, or run NOTIFY pgrst, 'reload schema'; to force a refresh.`
-        );
+
+      if (PROTECTED_COLUMNS.has(bad)) {
+        // Refuse to silently drop a required column. Surface the error so
+        // the client can see why the save didn't land.
+        protectedError = `Supabase does not recognise column "${bad}" on business_project_milestones. ` +
+          `The column was added but PostgREST's schema cache is stale. ` +
+          `Run NOTIFY pgrst, 'reload schema'; in the SQL editor, or reload the table in the Supabase dashboard.`;
+        console.error(`[API] PUT /api/data/project-milestones/${id} ❌ ${protectedError}`);
+        break;
       }
+
       if (bad in updateRow) {
         console.warn(`[API] PUT /api/data/project-milestones/${id} dropping unknown update column "${bad}"`);
         const { [bad]: _d, ...rest } = updateRow; void _d; updateRow = rest;
+      } else if (selectList.includes(bad)) {
+        selectList = selectList.split(',').map((s) => s.trim()).filter((c) => c !== bad).join(', ');
+      } else {
+        break;
       }
-      else if (selectList.includes(bad)) selectList = selectList.split(',').map((s) => s.trim()).filter((c) => c !== bad).join(', ');
-      else break;
+    }
+
+    if (protectedError) {
+      return NextResponse.json(
+        { error: protectedError, code: 'schema_cache_stale', column: parseBadColumn(lastErr?.message ?? '') },
+        { status: 500 }
+      );
     }
 
     if (lastErr && !updated) {
