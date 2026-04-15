@@ -307,18 +307,34 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     const incomingAssignee =
       body.assigneeId !== undefined ? body.assigneeId : body.assignedEmployeeId;
     console.log(
-      `[API] PUT /api/data/project-milestones/${id} fields=${Object.keys(updateRow).join(',')} incomingAssignee=${incomingAssignee ?? 'undefined'}`
+      `[API] PUT /api/data/project-milestones/${id} body_keys=${Object.keys(body).join(',')} assigneeId=${JSON.stringify(body.assigneeId)} assignedEmployeeId=${JSON.stringify(body.assignedEmployeeId)}`
+    );
+    console.log(
+      `[API] PUT /api/data/project-milestones/${id} initial updateRow keys=${Object.keys(updateRow).join(',')} assignee_id=${JSON.stringify(updateRow.assignee_id)} incomingAssignee=${incomingAssignee ?? 'undefined'}`
     );
 
     let updated: Row | null = null;
     let lastErr: { message: string; code?: string } | null = null;
     for (let attempt = 0; attempt < 10; attempt++) {
+      console.log(`[API] PUT /api/data/project-milestones/${id} attempt=${attempt} updateRow=${JSON.stringify(updateRow)}`);
       const { data, error } = await sb.from(TABLE).update(updateRow).eq('id', id).select('*').maybeSingle();
       if (!error) { updated = (data as Row) ?? null; break; }
       lastErr = error as any;
+      console.warn(`[API] PUT /api/data/project-milestones/${id} attempt=${attempt} supabase error: ${error.message} (code=${(error as any).code ?? 'none'})`);
       const bad = parseBadColumn(error.message);
       if (!bad) break;
-      if (bad in updateRow) { const { [bad]: _d, ...rest } = updateRow; void _d; updateRow = rest; }
+      if (bad === 'assignee_id') {
+        // Loud alarm — this means PostgREST doesn't see the column we just
+        // added. Schema cache is stale. Do NOT silently drop the field.
+        console.error(
+          `[API] PUT /api/data/project-milestones/${id} ⚠ Supabase schema cache does not see "assignee_id". ` +
+          `Go to Supabase dashboard → Database → Tables, click on business_project_milestones, or run NOTIFY pgrst, 'reload schema'; to force a refresh.`
+        );
+      }
+      if (bad in updateRow) {
+        console.warn(`[API] PUT /api/data/project-milestones/${id} dropping unknown update column "${bad}"`);
+        const { [bad]: _d, ...rest } = updateRow; void _d; updateRow = rest;
+      }
       else if (selectList.includes(bad)) selectList = selectList.split(',').map((s) => s.trim()).filter((c) => c !== bad).join(', ');
       else break;
     }
@@ -331,7 +347,14 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 
     const savedAssignee =
       (updated.assignee_id as string) || (updated.assigned_employee_id as string) || null;
-    console.log(`[API] PUT /api/data/project-milestones/${id} ✅ assignee_id=${savedAssignee ?? 'null'}`);
+    console.log(
+      `[API] PUT /api/data/project-milestones/${id} ✅ UPDATE succeeded. savedAssignee=${savedAssignee ?? 'null'} updated.keys=${Object.keys(updated).join(',')}`
+    );
+    if (incomingAssignee !== undefined && !savedAssignee && incomingAssignee) {
+      console.warn(
+        `[API] PUT /api/data/project-milestones/${id} ⚠ assignee_id not reflected in updated row but task creation will still run with incoming value "${incomingAssignee}"`
+      );
+    }
 
     // Side effect: if this update set an assignee (and the caller intended
     // assignee changes), ensure a task exists. Pass EXPLICIT args from the
