@@ -357,6 +357,31 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       }
     }
 
+    // Post-update verification: re-read the row to prove assignee_id landed.
+    // This catches silent failures like RLS policies blocking the write or
+    // PostgREST returning a stale cached column value.
+    if (updated && body.assigneeId !== undefined) {
+      const { data: verify, error: verifyErr } = await sb
+        .from(TABLE)
+        .select('id, assignee_id')
+        .eq('id', id)
+        .maybeSingle();
+      const verifyAssignee = verify ? (verify as any).assignee_id : null;
+      const intended = nullIfEmpty(body.assigneeId);
+      if (verifyErr) {
+        console.warn(`[API] PUT /api/data/project-milestones/${id} verify error: ${verifyErr.message}`);
+      } else if (verifyAssignee !== intended) {
+        console.error(
+          `[API] PUT /api/data/project-milestones/${id} ❌ VERIFY MISMATCH: intended=${JSON.stringify(intended)} persisted=${JSON.stringify(verifyAssignee)}. ` +
+          `This means the UPDATE did not actually write assignee_id. Likely causes: ` +
+          `(1) PostgREST schema cache stale — run NOTIFY pgrst, 'reload schema'; ` +
+          `(2) RLS policy blocking the update for the service role.`
+        );
+      } else {
+        console.log(`[API] PUT /api/data/project-milestones/${id} ✅ verify: assignee_id=${JSON.stringify(verifyAssignee)} matches intended`);
+      }
+    }
+
     if (protectedError) {
       return NextResponse.json(
         { error: protectedError, code: 'schema_cache_stale', column: parseBadColumn(lastErr?.message ?? '') },
