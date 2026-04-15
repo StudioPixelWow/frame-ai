@@ -102,7 +102,7 @@ export default function BusinessProjectPage() {
   const params = useParams();
   const projectId = params.id as string;
 
-  const { data: projectsData = [], update: updateProject } = useBusinessProjects();
+  const { data: projectsData = [], loading: projectsLoading, update: updateProject } = useBusinessProjects();
   const { data: milestonesData = [], create: createMilestone, update: updateMilestone } = useProjectMilestones();
   const { data: paymentsData = [], update: updatePayment } = useProjectPayments();
   const { data: clientsData = [] } = useClients();
@@ -145,6 +145,17 @@ export default function BusinessProjectPage() {
     () => project ? clientFilesData.filter((f: ClientFile) => f.clientId === project.clientId) : [],
     [clientFilesData, project]
   );
+
+  // While the projects list is still loading on first mount, projectsData is []
+  // and `project` is undefined — don't render a misleading 404. Show a loader
+  // until the fetch finishes, then check for the actual not-found case.
+  if (projectsLoading) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', direction: 'rtl', color: 'var(--foreground-muted)' }}>
+        טוען...
+      </div>
+    );
+  }
 
   if (!project) {
     return (
