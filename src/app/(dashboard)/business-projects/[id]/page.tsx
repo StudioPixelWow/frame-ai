@@ -131,6 +131,10 @@ export default function BusinessProjectPage() {
     category: 'general',
   });
   const [loading, setLoading] = useState(false);
+  // Client-side override map — applied on top of the server milestone list so
+  // a button click reflects instantly in the UI regardless of whether the
+  // server response (or DB schema) includes the timestamp columns.
+  const [milestoneOverrides, setMilestoneOverrides] = useState<Record<string, Record<string, unknown>>>({});
 
   const project = useMemo(
     () => projectsData.find((p: BusinessProject) => p.id === projectId),
@@ -138,8 +142,14 @@ export default function BusinessProjectPage() {
   );
 
   const projectMilestones = useMemo(
-    () => milestonesData.filter((m: ProjectMilestone) => m.projectId === projectId),
-    [milestonesData, projectId]
+    () =>
+      (milestonesData || [])
+        .filter((m: ProjectMilestone) => m.projectId === projectId)
+        .map((m: ProjectMilestone) => ({
+          ...(m as any),
+          ...(milestoneOverrides[(m as any).id] || {}),
+        })),
+    [milestonesData, projectId, milestoneOverrides]
   );
 
   const projectPayments = useMemo(
@@ -228,28 +238,51 @@ export default function BusinessProjectPage() {
 
   const handleUpdateMilestone = async (milestoneId: string, updates: Partial<ProjectMilestone>) => {
     setLoading(true);
+
+    // Build the enriched payload. Status transitions auto-attach timestamps.
+    const now = new Date().toISOString();
+    const currentMilestone = (milestonesData || []).find((m: any) => m?.id === milestoneId) as any;
+    const enriched: Record<string, unknown> = { ...updates };
+    if (updates.status === 'in_progress' && !currentMilestone?.startedAt) {
+      enriched.startedAt = now;
+    }
+    if (updates.status === 'submitted') {
+      enriched.submittedAt = now;
+    }
+    if (updates.status === 'approved') {
+      enriched.approvedAt = now;
+    }
+    if (updates.status === 'completed') {
+      enriched.completedAt = now;
+    }
+
+    // Apply immediate local override so the card updates the instant the
+    // user clicks — no waiting for the network, no dependence on whether
+    // the DB column exists.
+    setMilestoneOverrides((prev) => ({
+      ...prev,
+      [milestoneId]: { ...(prev[milestoneId] || {}), ...enriched },
+    }));
+
     try {
-      // Enrich status transitions with the corresponding timestamp so
-      // Start / Submit / Complete carry their own dates to the DB.
-      const enriched: Record<string, unknown> = { ...updates };
-      const currentMilestone = milestonesData.find((m: any) => m?.id === milestoneId) as any;
-      const now = new Date().toISOString();
-      if (updates.status === 'in_progress' && !currentMilestone?.startedAt) {
-        enriched.startedAt = now;
+      const saved = await updateMilestone(milestoneId, enriched as any);
+      // Merge any server-confirmed fields back into the override so the
+      // local view matches the server response exactly.
+      if (saved && typeof saved === 'object') {
+        setMilestoneOverrides((prev) => ({
+          ...prev,
+          [milestoneId]: { ...(prev[milestoneId] || {}), ...(saved as any) },
+        }));
       }
-      if (updates.status === 'submitted') {
-        enriched.submittedAt = now;
-      }
-      if (updates.status === 'approved') {
-        enriched.approvedAt = now;
-      }
-      if (updates.status === 'completed') {
-        enriched.completedAt = now;
-      }
-      await updateMilestone(milestoneId, enriched as any);
       setEditingMilestoneId(null);
     } catch (error) {
       console.error('Error updating milestone:', error);
+      // Roll back the override on failure so the UI doesn't show stale state.
+      setMilestoneOverrides((prev) => {
+        const next = { ...prev };
+        delete next[milestoneId];
+        return next;
+      });
     } finally {
       setLoading(false);
     }
