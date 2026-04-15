@@ -53,9 +53,7 @@ export const useClientFiles = () => useData<ClientFile>('client-files');
 export const usePortalUsers = () => useData<PortalUser>('portal-users');
 export const useSocialPosts = () => useData<SocialPost>('social-posts');
 export const useClientEmailLogs = () => useData<ClientEmailLog>('client-email-logs');
-// Unified source of truth: business projects and video projects both live in
-// the Supabase "projects" table. Keeping the hook name for call-site stability.
-export const useBusinessProjects = () => useData<BusinessProject>('projects');
+export const useBusinessProjects = () => useData<BusinessProject>('business-projects');
 export const useProjectMilestones = () => useData<ProjectMilestone>('project-milestones');
 export const useProjectPayments = () => useData<ProjectPayment>('project-payments');
 export const useHostingRecords = () => useData<HostingRecord>('hosting-records');

@@ -191,7 +191,7 @@ export default function LeadDetailPage() {
       if (data.entityType === "client") {
         router.push(`/clients/${data.entityId}`);
       } else if (data.entityType === "project") {
-        router.push(`/projects/${data.entityId}`);
+        router.push(`/business-projects/${data.entityId}`);
       }
     } catch (error) {
       toast("שגיאה בהמרת הליד", "error");
