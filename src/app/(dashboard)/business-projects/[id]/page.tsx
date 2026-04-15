@@ -229,7 +229,21 @@ export default function BusinessProjectPage() {
   const handleUpdateMilestone = async (milestoneId: string, updates: Partial<ProjectMilestone>) => {
     setLoading(true);
     try {
-      await updateMilestone(milestoneId, updates as any);
+      // Enrich status transitions with the corresponding timestamp so
+      // Start / Submit / Complete carry their own dates to the DB.
+      const enriched: Record<string, unknown> = { ...updates };
+      const currentMilestone = milestonesData.find((m: any) => m?.id === milestoneId) as any;
+      const now = new Date().toISOString();
+      if (updates.status === 'in_progress' && !currentMilestone?.startedAt) {
+        enriched.startedAt = now;
+      }
+      if (updates.status === 'submitted') {
+        enriched.submittedAt = now;
+      }
+      if (updates.status === 'approved' || updates.status === 'completed') {
+        enriched.completedAt = now;
+      }
+      await updateMilestone(milestoneId, enriched as any);
       setEditingMilestoneId(null);
     } catch (error) {
       console.error('Error updating milestone:', error);

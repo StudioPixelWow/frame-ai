@@ -15,6 +15,7 @@ type Row = Record<string, unknown> & { id: string };
 
 function rowToMilestone(r: Row) {
   const projectId = (r.business_project_id as string) || (r.project_id as string) || '';
+  const assigneeId = (r.assignee_id as string) || (r.assigned_employee_id as string) || null;
   return {
     id: r.id,
     projectId,
@@ -22,14 +23,25 @@ function rowToMilestone(r: Row) {
     title: (r.title as string) ?? '',
     description: (r.description as string) ?? '',
     dueDate: (r.due_date as string) ?? null,
-    assignedEmployeeId: (r.assigned_employee_id as string) ?? null,
+    // Expose all common alias names so existing UI code keeps working.
+    assigneeId,
+    assignedEmployeeId: assigneeId,
     status: (r.status as string) ?? 'pending',
     sortOrder: typeof r.sort_order === 'number' ? r.sort_order : 0,
+    startedAt: (r.started_at as string) ?? null,
+    submittedAt: (r.submitted_at as string) ?? null,
+    completedAt: (r.completed_at as string) ?? null,
     files: Array.isArray(r.files) ? r.files : [],
     notes: (r.notes as string) ?? '',
     createdAt: (r.created_at as string) ?? '',
     updatedAt: (r.updated_at as string) ?? '',
   };
+}
+
+function nullIfEmpty(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const t = v.trim();
+  return t === '' ? null : t;
 }
 
 function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
@@ -40,13 +52,25 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
     out.business_project_id = pid;
     out.project_id = pid;
   }
+  // Assignee: accept either camelCase alias, write to both snake_case names
+  // so whichever DB column exists gets populated (the other is auto-dropped).
+  const assignee = body.assigneeId !== undefined
+    ? body.assigneeId
+    : body.assignedEmployeeId;
+  if (assignee !== undefined) {
+    const coerced = nullIfEmpty(assignee);
+    out.assignee_id = coerced;
+    out.assigned_employee_id = coerced;
+  }
   const map: Array<[string, string]> = [
     ['title', 'title'],
     ['description', 'description'],
     ['dueDate', 'due_date'],
-    ['assignedEmployeeId', 'assigned_employee_id'],
     ['status', 'status'],
     ['sortOrder', 'sort_order'],
+    ['startedAt', 'started_at'],
+    ['submittedAt', 'submitted_at'],
+    ['completedAt', 'completed_at'],
     ['files', 'files'],
     ['notes', 'notes'],
   ];
