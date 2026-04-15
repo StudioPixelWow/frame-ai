@@ -109,31 +109,29 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
  * business_project_milestone_id). Never throws — logs only, so the PUT itself
  * always completes from the client's perspective.
  */
+interface EnsureTaskArgs {
+  milestoneId: string;
+  assigneeId: string | null;
+  businessProjectId: string | null;
+  title: string;
+}
+
 async function ensureTaskForMilestone(
   sb: ReturnType<typeof getSupabase>,
-  milestoneRow: Row
+  args: EnsureTaskArgs
 ): Promise<{ action: 'skipped' | 'updated' | 'created'; taskId?: string; error?: string; missing?: string[] }> {
-  const milestoneId = milestoneRow.id;
-  const assigneeId =
-    (milestoneRow.assignee_id as string) ||
-    (milestoneRow.assigned_employee_id as string) ||
-    null;
-  const businessProjectId =
-    (milestoneRow.business_project_id as string) ||
-    (milestoneRow.project_id as string) ||
-    null;
-  const title =
-    (milestoneRow.title as string) ||
-    (milestoneRow.name as string) ||
-    'משימה';
+  const { milestoneId, assigneeId, businessProjectId, title } = args;
+
+  console.log(
+    `[ensureTask] called milestoneId=${milestoneId} assigneeId=${assigneeId ?? 'null'} businessProjectId=${businessProjectId ?? 'null'} title="${title}"`
+  );
 
   if (!assigneeId) {
     console.log(`[ensureTask] skip — no assignee on milestone=${milestoneId}`);
     return { action: 'skipped' };
   }
 
-  // Fetch client_id from the parent business project, so the task links to
-  // the client too (required per the new contract).
+  // Fetch client_id from the parent business project.
   let clientId: string | null = null;
   if (businessProjectId) {
     const { data: proj, error: projErr } = await sb
@@ -146,6 +144,9 @@ async function ensureTaskForMilestone(
     } else if (proj) {
       clientId = ((proj as any).client_id as string) || null;
     }
+    console.log(`[ensureTask] resolved clientId=${clientId ?? 'null'} from project=${businessProjectId}`);
+  } else {
+    console.warn('[ensureTask] no businessProjectId — client_id lookup skipped');
   }
 
   // Log any missing required values up-front.
@@ -247,6 +248,37 @@ async function ensureTaskForMilestone(
       return { action: 'created', taskId, missing: missing.length ? missing : undefined };
     }
     lastErr = error as any;
+
+    // 23505 = unique_violation. A row already exists for this milestone
+    // (possibly the broken one with null fields). Find it and UPDATE.
+    if ((error as any).code === '23505') {
+      console.warn('[ensureTask] unique_violation — falling back to UPDATE of existing task row');
+      for (const col of ['milestone_id', 'business_project_milestone_id']) {
+        const { data: ex, error: exErr } = await sb.from('tasks').select('id').eq(col, milestoneId).maybeSingle();
+        if (exErr) continue;
+        if (ex) {
+          let updateFields: Record<string, unknown> = { ...fullFields };
+          for (let a2 = 0; a2 < 15; a2++) {
+            const { error: uErr } = await sb.from('tasks').update(updateFields).eq('id', (ex as any).id);
+            if (!uErr) {
+              console.log(`[ensureTask] ✅ task repaired via UPDATE id=${(ex as any).id} milestone=${milestoneId}`);
+              return { action: 'updated', taskId: (ex as any).id, missing: missing.length ? missing : undefined };
+            }
+            const m2 = uErr.message.match(/column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);
+            const bad2 = m2?.[1] || m2?.[2];
+            if (!bad2 || !(bad2 in updateFields)) {
+              console.error('[ensureTask] ❌ update after unique_violation failed:', uErr);
+              return { action: 'skipped', taskId: (ex as any).id, error: uErr.message };
+            }
+            const { [bad2]: _dd, ...rest2 } = updateFields;
+            void _dd;
+            updateFields = rest2;
+          }
+        }
+      }
+      return { action: 'skipped', error: 'unique_violation but existing row not findable' };
+    }
+
     const m = error.message.match(
       /column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i
     );
@@ -302,15 +334,38 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     console.log(`[API] PUT /api/data/project-milestones/${id} ✅ assignee_id=${savedAssignee ?? 'null'}`);
 
     // Side effect: if this update set an assignee (and the caller intended
-    // assignee changes), ensure a task exists. Never blocks or fails the PUT.
-    let taskResult: { action: string; taskId?: string; error?: string } | null = null;
+    // assignee changes), ensure a task exists. Pass EXPLICIT args from the
+    // request body + the verified milestone row so missing or unmapped DB
+    // columns can't cause the helper to short-circuit.
+    let taskResult: { action: string; taskId?: string; error?: string; missing?: string[] } | null = null;
     if (incomingAssignee !== undefined) {
+      const resolvedAssignee =
+        typeof incomingAssignee === 'string' && incomingAssignee.trim() !== ''
+          ? incomingAssignee
+          : (updated.assignee_id as string) || (updated.assigned_employee_id as string) || null;
+      const resolvedProjectId =
+        (updated.business_project_id as string) || (updated.project_id as string) || null;
+      const resolvedTitle =
+        (updated.title as string) || (updated.name as string) || 'משימה';
+
+      console.log(
+        `[API] PUT /api/data/project-milestones/${id} triggering ensureTask incomingAssignee=${incomingAssignee} resolvedAssignee=${resolvedAssignee ?? 'null'} resolvedProject=${resolvedProjectId ?? 'null'}`
+      );
+
       try {
-        taskResult = await ensureTaskForMilestone(sb, updated);
+        taskResult = await ensureTaskForMilestone(sb, {
+          milestoneId: id,
+          assigneeId: resolvedAssignee,
+          businessProjectId: resolvedProjectId,
+          title: resolvedTitle,
+        });
+        console.log(`[API] PUT /api/data/project-milestones/${id} ensureTask returned action=${taskResult.action} taskId=${taskResult.taskId ?? 'none'} error=${taskResult.error ?? 'none'}`);
       } catch (e) {
         console.error('[ensureTask] unexpected error:', e);
         taskResult = { action: 'skipped', error: e instanceof Error ? e.message : 'unknown' };
       }
+    } else {
+      console.log(`[API] PUT /api/data/project-milestones/${id} no assigneeId in body — skipping task side effect`);
     }
 
     return NextResponse.json({
