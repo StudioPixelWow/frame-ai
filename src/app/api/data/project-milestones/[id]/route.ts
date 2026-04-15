@@ -103,6 +103,98 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
   }
 }
 
+/**
+ * Server-side side effect: when a milestone gets a non-null assignee, ensure
+ * a task row exists in public.tasks. Dedups by milestone_id (or
+ * business_project_milestone_id). Never throws — logs only, so the PUT itself
+ * always completes from the client's perspective.
+ */
+async function ensureTaskForMilestone(
+  sb: ReturnType<typeof getSupabase>,
+  milestoneRow: Row
+): Promise<{ action: 'skipped' | 'existing' | 'created'; taskId?: string; error?: string }> {
+  const milestoneId = milestoneRow.id;
+  const assigneeId =
+    (milestoneRow.assignee_id as string) ||
+    (milestoneRow.assigned_employee_id as string) ||
+    null;
+  const businessProjectId =
+    (milestoneRow.business_project_id as string) ||
+    (milestoneRow.project_id as string) ||
+    null;
+  const title =
+    (milestoneRow.title as string) ||
+    (milestoneRow.name as string) ||
+    'משימה';
+
+  if (!assigneeId) {
+    console.log(`[ensureTask] skip — no assignee on milestone=${milestoneId}`);
+    return { action: 'skipped' };
+  }
+
+  // Dedup: is there already a task for this milestone? Try each possible
+  // column name for the FK link.
+  for (const col of ['milestone_id', 'business_project_milestone_id']) {
+    const { data: existing, error: existErr } = await sb
+      .from('tasks')
+      .select('id')
+      .eq(col, milestoneId)
+      .maybeSingle();
+    if (existErr) continue; // column probably doesn't exist — try next alias
+    if (existing) {
+      console.log(`[ensureTask] existing task ${col}=${milestoneId} id=${(existing as any).id} — skipping`);
+      return { action: 'existing', taskId: (existing as any).id };
+    }
+    break;
+  }
+
+  // Insert with every common alias column; the drop-unknown-column loop
+  // removes whichever the real schema doesn't have.
+  const now = new Date().toISOString();
+  const taskId = `tsk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  let insertRow: Record<string, unknown> = {
+    id: taskId,
+    title,
+    name: title,
+    employee_id: assigneeId,
+    assigned_employee_id: assigneeId,
+    assignee_id: assigneeId,
+    business_project_id: businessProjectId,
+    project_id: businessProjectId,
+    milestone_id: milestoneId,
+    business_project_milestone_id: milestoneId,
+    status: 'pending',
+    created_at: now,
+    updated_at: now,
+  };
+
+  console.log(
+    `[ensureTask] ➜ inserting task milestone=${milestoneId} employee=${assigneeId} project=${businessProjectId} title="${title}"`
+  );
+
+  let lastErr: { message: string; code?: string } | null = null;
+  for (let attempt = 0; attempt < 15; attempt++) {
+    const { error } = await sb.from('tasks').insert(insertRow);
+    if (!error) {
+      console.log(`[ensureTask] ✅ task inserted id=${taskId} milestone=${milestoneId}`);
+      return { action: 'created', taskId };
+    }
+    lastErr = error as any;
+    const m = error.message.match(
+      /column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i
+    );
+    const bad = m?.[1] || m?.[2];
+    if (!bad || !(bad in insertRow)) break;
+    console.warn(`[ensureTask] dropping unknown tasks column "${bad}"`);
+    const { [bad]: _d, ...rest } = insertRow;
+    void _d;
+    insertRow = rest;
+  }
+
+  console.error('[ensureTask] ❌ task insert failed:', lastErr);
+  return { action: 'skipped', error: lastErr?.message ?? 'unknown' };
+}
+
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
@@ -112,6 +204,12 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     const sb = getSupabase();
     let updateRow = toUpdate(body);
     let selectList = SELECT_COLUMNS;
+
+    const incomingAssignee =
+      body.assigneeId !== undefined ? body.assigneeId : body.assignedEmployeeId;
+    console.log(
+      `[API] PUT /api/data/project-milestones/${id} fields=${Object.keys(updateRow).join(',')} incomingAssignee=${incomingAssignee ?? 'undefined'}`
+    );
 
     let updated: Row | null = null;
     let lastErr: { message: string; code?: string } | null = null;
@@ -126,11 +224,35 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       else break;
     }
 
-    if (lastErr && !updated) return NextResponse.json({ error: lastErr.message }, { status: 400 });
+    if (lastErr && !updated) {
+      console.error('[API] PUT /api/data/project-milestones/[id] update failed:', lastErr);
+      return NextResponse.json({ error: lastErr.message }, { status: 400 });
+    }
     if (!updated) return NextResponse.json({ error: 'Not found', milestoneId: id }, { status: 404 });
-    return NextResponse.json(rowToMilestone(updated));
+
+    const savedAssignee =
+      (updated.assignee_id as string) || (updated.assigned_employee_id as string) || null;
+    console.log(`[API] PUT /api/data/project-milestones/${id} ✅ assignee_id=${savedAssignee ?? 'null'}`);
+
+    // Side effect: if this update set an assignee (and the caller intended
+    // assignee changes), ensure a task exists. Never blocks or fails the PUT.
+    let taskResult: { action: string; taskId?: string; error?: string } | null = null;
+    if (incomingAssignee !== undefined) {
+      try {
+        taskResult = await ensureTaskForMilestone(sb, updated);
+      } catch (e) {
+        console.error('[ensureTask] unexpected error:', e);
+        taskResult = { action: 'skipped', error: e instanceof Error ? e.message : 'unknown' };
+      }
+    }
+
+    return NextResponse.json({
+      ...rowToMilestone(updated),
+      _task: taskResult,
+    });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[API] PUT /api/data/project-milestones/[id] fatal:', msg);
     return NextResponse.json({ error: `Failed to update: ${msg}` }, { status: 400 });
   }
 }
