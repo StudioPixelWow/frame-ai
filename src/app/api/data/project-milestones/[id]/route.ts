@@ -112,7 +112,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
 async function ensureTaskForMilestone(
   sb: ReturnType<typeof getSupabase>,
   milestoneRow: Row
-): Promise<{ action: 'skipped' | 'existing' | 'created'; taskId?: string; error?: string }> {
+): Promise<{ action: 'skipped' | 'updated' | 'created'; taskId?: string; error?: string; missing?: string[] }> {
   const milestoneId = milestoneRow.id;
   const assigneeId =
     (milestoneRow.assignee_id as string) ||
@@ -132,28 +132,40 @@ async function ensureTaskForMilestone(
     return { action: 'skipped' };
   }
 
-  // Dedup: is there already a task for this milestone? Try each possible
-  // column name for the FK link.
-  for (const col of ['milestone_id', 'business_project_milestone_id']) {
-    const { data: existing, error: existErr } = await sb
-      .from('tasks')
-      .select('id')
-      .eq(col, milestoneId)
+  // Fetch client_id from the parent business project, so the task links to
+  // the client too (required per the new contract).
+  let clientId: string | null = null;
+  if (businessProjectId) {
+    const { data: proj, error: projErr } = await sb
+      .from('business_projects')
+      .select('*')
+      .eq('id', businessProjectId)
       .maybeSingle();
-    if (existErr) continue; // column probably doesn't exist — try next alias
-    if (existing) {
-      console.log(`[ensureTask] existing task ${col}=${milestoneId} id=${(existing as any).id} — skipping`);
-      return { action: 'existing', taskId: (existing as any).id };
+    if (projErr) {
+      console.warn('[ensureTask] business_projects lookup failed:', projErr.message);
+    } else if (proj) {
+      clientId = ((proj as any).client_id as string) || null;
     }
-    break;
   }
 
-  // Insert with every common alias column; the drop-unknown-column loop
-  // removes whichever the real schema doesn't have.
+  // Log any missing required values up-front.
+  const missing: string[] = [];
+  if (!title) missing.push('title');
+  if (!assigneeId) missing.push('employee_id');
+  if (!businessProjectId) missing.push('business_project_id');
+  if (!clientId) missing.push('client_id');
+  if (!milestoneId) missing.push('milestone_id');
+  if (missing.length > 0) {
+    console.warn(
+      `[ensureTask] ⚠ missing fields on milestone=${milestoneId}: ${missing.join(', ')} — will still proceed with best-effort values`
+    );
+  }
+
+  // Shared field set used by both INSERT (new task) and UPDATE (fix a
+  // broken row that already exists). Every alias column is written; the
+  // drop-unknown-column loop strips the ones the real schema doesn't have.
   const now = new Date().toISOString();
-  const taskId = `tsk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-  let insertRow: Record<string, unknown> = {
-    id: taskId,
+  const fullFields: Record<string, unknown> = {
     title,
     name: title,
     employee_id: assigneeId,
@@ -161,15 +173,70 @@ async function ensureTaskForMilestone(
     assignee_id: assigneeId,
     business_project_id: businessProjectId,
     project_id: businessProjectId,
+    client_id: clientId,
     milestone_id: milestoneId,
     business_project_milestone_id: milestoneId,
     status: 'pending',
-    created_at: now,
     updated_at: now,
   };
 
+  // Dedup: find an existing task for this milestone (try each FK column alias).
+  let existingId: string | null = null;
+  for (const col of ['milestone_id', 'business_project_milestone_id']) {
+    const { data: existing, error: existErr } = await sb
+      .from('tasks')
+      .select('id')
+      .eq(col, milestoneId)
+      .maybeSingle();
+    if (existErr) continue;
+    if (existing) {
+      existingId = (existing as any).id;
+      break;
+    }
+    break; // column exists, no row — proceed to INSERT
+  }
+
+  // If a task already exists for this milestone (possibly broken with null
+  // fields), UPDATE it to the correct full values instead of skipping.
+  if (existingId) {
+    console.log(
+      `[ensureTask] ➜ updating existing task id=${existingId} milestone=${milestoneId} to populate missing fields`
+    );
+    let updateFields: Record<string, unknown> = { ...fullFields };
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const { error } = await sb.from('tasks').update(updateFields).eq('id', existingId);
+      if (!error) {
+        console.log(
+          `[ensureTask] ✅ task updated id=${existingId} title="${title}" employee=${assigneeId} project=${businessProjectId} client=${clientId} milestone=${milestoneId}`
+        );
+        return { action: 'updated', taskId: existingId, missing: missing.length ? missing : undefined };
+      }
+      const m = error.message.match(
+        /column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i
+      );
+      const bad = m?.[1] || m?.[2];
+      if (!bad || !(bad in updateFields)) {
+        console.error('[ensureTask] ❌ task update failed:', error);
+        return { action: 'skipped', taskId: existingId, error: error.message };
+      }
+      console.warn(`[ensureTask] dropping unknown tasks column "${bad}" from update`);
+      const { [bad]: _d, ...rest } = updateFields;
+      void _d;
+      updateFields = rest;
+    }
+    return { action: 'skipped', taskId: existingId, error: 'update retry limit exceeded' };
+  }
+
+  // Otherwise INSERT a new task with full fields.
+  const taskId = `tsk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  let insertRow: Record<string, unknown> = {
+    id: taskId,
+    ...fullFields,
+    created_at: now,
+  };
+
   console.log(
-    `[ensureTask] ➜ inserting task milestone=${milestoneId} employee=${assigneeId} project=${businessProjectId} title="${title}"`
+    `[ensureTask] ➜ inserting task milestone=${milestoneId} employee=${assigneeId} project=${businessProjectId} client=${clientId} title="${title}"`
   );
 
   let lastErr: { message: string; code?: string } | null = null;
@@ -177,7 +244,7 @@ async function ensureTaskForMilestone(
     const { error } = await sb.from('tasks').insert(insertRow);
     if (!error) {
       console.log(`[ensureTask] ✅ task inserted id=${taskId} milestone=${milestoneId}`);
-      return { action: 'created', taskId };
+      return { action: 'created', taskId, missing: missing.length ? missing : undefined };
     }
     lastErr = error as any;
     const m = error.message.match(
@@ -185,7 +252,7 @@ async function ensureTaskForMilestone(
     );
     const bad = m?.[1] || m?.[2];
     if (!bad || !(bad in insertRow)) break;
-    console.warn(`[ensureTask] dropping unknown tasks column "${bad}"`);
+    console.warn(`[ensureTask] dropping unknown tasks column "${bad}" from insert`);
     const { [bad]: _d, ...rest } = insertRow;
     void _d;
     insertRow = rest;
