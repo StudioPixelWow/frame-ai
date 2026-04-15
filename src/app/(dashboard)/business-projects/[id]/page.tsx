@@ -45,11 +45,16 @@ const paymentStatusLabels: Record<ProjectPaymentStatus, string> = {
 };
 
 const projectTypeLabels: Record<string, string> = {
-  branding: 'ברנדינג',
   website: 'אתר',
+  branding: 'מיתוג',
+  social: 'סושיאל',
   campaign: 'קמפיין',
-  podcast: 'פודקאסט',
-  general: 'כללי',
+  seo: 'SEO',
+  landing_page: 'דף נחיתה',
+  automation: 'אוטומציה',
+  crm: 'CRM',
+  design: 'עיצוב',
+  consulting: 'ייעוץ',
 };
 
 const projectStatusLabels: Record<string, string> = {
@@ -87,7 +92,8 @@ function formatDate(dateStr: string | null): string {
 }
 
 function getProjectTypeLabel(type: string | undefined): string {
-  return projectTypeLabels[type || 'general'] || 'כללי';
+  if (!type) return '—';
+  return projectTypeLabels[type] || type;
 }
 
 function getProjectStatusLabel(status: string | undefined): string {

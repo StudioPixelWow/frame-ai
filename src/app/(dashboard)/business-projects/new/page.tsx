@@ -33,11 +33,19 @@ interface FormData {
   endDate: string;
 }
 
+// Values here must match service_type rows in
+// public.business_project_milestone_templates for milestone auto-generation.
 const PROJECT_TYPES: { id: BusinessProjectType; label: string; icon: string }[] = [
-  { id: "branding", label: "מיתוג", icon: "🎨" },
   { id: "website", label: "אתר", icon: "🌐" },
+  { id: "branding", label: "מיתוג", icon: "🎨" },
+  { id: "social", label: "סושיאל", icon: "📱" },
   { id: "campaign", label: "קמפיין", icon: "📢" },
-  { id: "general", label: "כללי", icon: "📋" },
+  { id: "seo", label: "SEO", icon: "🔎" },
+  { id: "landing_page", label: "דף נחיתה", icon: "🛬" },
+  { id: "automation", label: "אוטומציה", icon: "⚙️" },
+  { id: "crm", label: "CRM", icon: "🗂️" },
+  { id: "design", label: "עיצוב", icon: "✏️" },
+  { id: "consulting", label: "ייעוץ", icon: "💡" },
 ];
 
 export default function NewBusinessProjectPage() {
@@ -52,7 +60,7 @@ export default function NewBusinessProjectPage() {
   const [form, setForm] = useState<FormData>({
     clientId: "",
     projectName: "",
-    projectType: "general",
+    projectType: "website",
     description: "",
     agreementSigned: false,
     assignedManagerId: "",

@@ -29,7 +29,7 @@ function generateId(): string {
 type Row = Record<string, unknown> & { id: string };
 
 function rowToProject(r: Row) {
-  const serviceType = (r.service_type as string) || (r.project_type as string) || 'general';
+  const serviceType = (r.service_type as string) || (r.project_type as string) || '';
   return {
     id: r.id,
     projectName: (r.project_name as string) ?? '',

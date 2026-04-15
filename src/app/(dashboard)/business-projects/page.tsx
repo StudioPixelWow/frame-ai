@@ -11,22 +11,32 @@ type ViewMode = "grid" | "list";
 
 function getProjectTypeColor(type: BusinessProjectType): string {
   const colors: Record<BusinessProjectType, string> = {
-    branding: "#ec4899",
     website: "#10b981",
+    branding: "#ec4899",
+    social: "#0ea5e9",
     campaign: "#f59e0b",
-    podcast: "#8b5cf6",
-    general: "#6b7280",
+    seo: "#14b8a6",
+    landing_page: "#22c55e",
+    automation: "#6366f1",
+    crm: "#a855f7",
+    design: "#f43f5e",
+    consulting: "#64748b",
   };
   return colors[type] || "#6b7280";
 }
 
 function getProjectTypeLabel(type: BusinessProjectType): string {
   const labels: Record<BusinessProjectType, string> = {
-    branding: "מיתוג",
     website: "אתר",
+    branding: "מיתוג",
+    social: "סושיאל",
     campaign: "קמפיין",
-    podcast: "פודקאסט",
-    general: "כללי",
+    seo: "SEO",
+    landing_page: "דף נחיתה",
+    automation: "אוטומציה",
+    crm: "CRM",
+    design: "עיצוב",
+    consulting: "ייעוץ",
   };
   return labels[type] || type;
 }
@@ -104,7 +114,7 @@ export default function BusinessProjectsPage() {
   const [projectForm, setProjectForm] = useState<ProjectFormData>({
     projectName: "",
     clientId: "",
-    projectType: "general",
+    projectType: "website",
     description: "",
     startDate: "",
     assignedManagerId: "",
@@ -268,7 +278,7 @@ export default function BusinessProjectsPage() {
         endDate: null,
         assignedManagerId: projectForm.assignedManagerId || null,
       } as any);
-      setProjectForm({ projectName: "", clientId: "", projectType: "general", description: "", startDate: "", assignedManagerId: "" });
+      setProjectForm({ projectName: "", clientId: "", projectType: "website", description: "", startDate: "", assignedManagerId: "" });
       setShowCreateModal(false);
       toast("פרויקט נוצר בהצלחה", "success");
       router.push(`/business-projects/${newProject.id}`);
@@ -341,11 +351,16 @@ export default function BusinessProjectsPage() {
               style={{ fontSize: "0.875rem" }}
             >
               <option value="all">הכל</option>
-              <option value="branding">מיתוג</option>
               <option value="website">אתר</option>
+              <option value="branding">מיתוג</option>
+              <option value="social">סושיאל</option>
               <option value="campaign">קמפיין</option>
-              <option value="podcast">פודקאסט</option>
-              <option value="general">כללי</option>
+              <option value="seo">SEO</option>
+              <option value="landing_page">דף נחיתה</option>
+              <option value="automation">אוטומציה</option>
+              <option value="crm">CRM</option>
+              <option value="design">עיצוב</option>
+              <option value="consulting">ייעוץ</option>
             </select>
           </div>
 
@@ -956,11 +971,16 @@ export default function BusinessProjectsPage() {
                 onChange={(e) => setProjectForm({ ...projectForm, projectType: e.target.value as BusinessProjectType })}
                 style={{ fontSize: "0.875rem" }}
               >
-                <option value="general">כללי</option>
+                <option value="website">אתר</option>
                 <option value="branding">מיתוג</option>
-                <option value="website">בניית אתרים</option>
+                <option value="social">סושיאל</option>
                 <option value="campaign">קמפיין</option>
-                <option value="podcast">פודקאסט</option>
+                <option value="seo">SEO</option>
+                <option value="landing_page">דף נחיתה</option>
+                <option value="automation">אוטומציה</option>
+                <option value="crm">CRM</option>
+                <option value="design">עיצוב</option>
+                <option value="consulting">ייעוץ</option>
               </select>
             </div>
 

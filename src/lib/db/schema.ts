@@ -604,8 +604,20 @@ export interface ClientEmailLog {
   createdAt: string;
 }
 
-// Business Project (one-time: branding, website, campaign, podcast, general)
-export type BusinessProjectType = 'branding' | 'website' | 'campaign' | 'podcast' | 'general';
+// Business Project service types — must match values in
+// public.business_project_milestone_templates.service_type exactly so that
+// milestone auto-generation on create finds matching templates.
+export type BusinessProjectType =
+  | 'website'
+  | 'branding'
+  | 'social'
+  | 'campaign'
+  | 'seo'
+  | 'landing_page'
+  | 'automation'
+  | 'crm'
+  | 'design'
+  | 'consulting';
 export type BusinessProjectStatus = 'not_started' | 'in_progress' | 'waiting_for_client' | 'completed';
 
 export interface BusinessProject {
