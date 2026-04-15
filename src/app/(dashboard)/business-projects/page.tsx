@@ -118,18 +118,22 @@ export default function BusinessProjectsPage() {
     clientType: "branding",
   });
 
-  // Auto-assign project manager from client when client is selected
+  // Auto-assign project manager from client when client is selected — but only if
+  // that manager id still exists in the employees list, otherwise we'd send a
+  // stale id and trigger a foreign-key violation on insert.
   useEffect(() => {
     if (projectForm.clientId && clients) {
       const selectedClient = clients.find(c => c.id === projectForm.clientId);
-      if (selectedClient?.assignedManagerId && !projectForm.assignedManagerId) {
+      const candidateId = selectedClient?.assignedManagerId;
+      const employeeExists = !!candidateId && (employees || []).some(e => e.id === candidateId);
+      if (employeeExists && !projectForm.assignedManagerId) {
         setProjectForm(prev => ({
           ...prev,
-          assignedManagerId: selectedClient.assignedManagerId || ""
+          assignedManagerId: candidateId as string,
         }));
       }
     }
-  }, [projectForm.clientId, clients]);
+  }, [projectForm.clientId, clients, employees]);
 
   // Filter and sort projects
   const filteredProjects = useMemo(() => {

@@ -56,18 +56,26 @@ function rowToProject(r: Row) {
   };
 }
 
+/** Coerce empty / non-string values to null so we never send "" into a FK column. */
+function nullIfEmpty(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const trimmed = v.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
 function toInsert(body: Record<string, unknown>, id: string, now: string): Record<string, unknown> {
   return {
     id,
     project_name: (body.projectName ?? body.name ?? '') as string,
-    client_id: (body.clientId ?? null) as string | null,
-    project_type: (body.projectType ?? null) as string | null,
+    client_id: nullIfEmpty(body.clientId),
+    project_type: nullIfEmpty(body.projectType),
     description: (body.description ?? '') as string,
     agreement_signed: (body.agreementSigned ?? false) as boolean,
     project_status: (body.projectStatus ?? body.status ?? 'not_started') as string,
-    start_date: (body.startDate ?? null) as string | null,
-    end_date: (body.endDate ?? null) as string | null,
-    assigned_manager_id: (body.assignedManagerId ?? null) as string | null,
+    start_date: nullIfEmpty(body.startDate),
+    end_date: nullIfEmpty(body.endDate),
+    // FK to employees(id) — empty string would violate the constraint, force null.
+    assigned_manager_id: nullIfEmpty(body.assignedManagerId),
     created_at: now,
     updated_at: now,
   };

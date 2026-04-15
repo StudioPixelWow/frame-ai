@@ -88,7 +88,7 @@ export async function GET() {
     // Try full select; on unknown-column error, progressively drop the column.
     let selectList = SELECT_COLUMNS;
     for (let attempt = 0; attempt < 5; attempt++) {
-      const { data: rows, error } = await sb.from('projects').select(selectList).order('id');
+      const { data: rows, error } = await sb.from('video_projects').select(selectList).order('id');
       if (!error) {
         const projects = (rows ?? []).map((r) => rowToProject(r as ProjectRow));
         return NextResponse.json(projects);
@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
 
     for (let attempt = 0; attempt < 8; attempt++) {
       const { data, error } = await sb
-        .from('projects')
+        .from('video_projects')
         .insert(insertRow)
         .select(selectList)
         .single();
@@ -172,7 +172,7 @@ export async function POST(req: NextRequest) {
 
     // Verify by reading back.
     const { data: verify, error: verifyErr } = await sb
-      .from('projects')
+      .from('video_projects')
       .select(selectList)
       .eq('id', id)
       .maybeSingle();

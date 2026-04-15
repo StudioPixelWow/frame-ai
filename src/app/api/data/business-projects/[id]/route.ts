@@ -44,6 +44,21 @@ function rowToProject(r: Row) {
   };
 }
 
+function nullIfEmpty(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const trimmed = v.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
+// Columns that are foreign keys / nullable strings: must coerce '' → null.
+const NULLABLE_STRING_COLS = new Set([
+  'client_id',
+  'assigned_manager_id',
+  'start_date',
+  'end_date',
+  'project_type',
+]);
+
 function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   const map: Array<[string, string]> = [
@@ -59,7 +74,11 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
     ['endDate', 'end_date'],
     ['assignedManagerId', 'assigned_manager_id'],
   ];
-  for (const [k, dbKey] of map) if (body[k] !== undefined) out[dbKey] = body[k];
+  for (const [k, dbKey] of map) {
+    if (body[k] !== undefined) {
+      out[dbKey] = NULLABLE_STRING_COLS.has(dbKey) ? nullIfEmpty(body[k]) : body[k];
+    }
+  }
   out.updated_at = new Date().toISOString();
   return out;
 }

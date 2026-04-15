@@ -80,7 +80,7 @@ export async function GET(
     const sb = getSupabase();
     let selectList = SELECT_COLUMNS;
     for (let attempt = 0; attempt < 5; attempt++) {
-      const { data, error } = await sb.from('projects').select(selectList).eq('id', id).maybeSingle();
+      const { data, error } = await sb.from('video_projects').select(selectList).eq('id', id).maybeSingle();
       if (!error) {
         if (!data) return NextResponse.json({ error: 'Project not found', projectId: id }, { status: 404 });
         return NextResponse.json(rowToProject(data as ProjectRow));
@@ -120,7 +120,7 @@ export async function PUT(
 
     for (let attempt = 0; attempt < 8; attempt++) {
       const { data, error } = await sb
-        .from('projects')
+        .from('video_projects')
         .update(updateRow)
         .eq('id', id)
         .select(selectList)
@@ -164,7 +164,7 @@ export async function DELETE(
   try {
     const { id } = await context.params;
     const sb = getSupabase();
-    const { error } = await sb.from('projects').delete().eq('id', id);
+    const { error } = await sb.from('video_projects').delete().eq('id', id);
     if (error) {
       console.error('[API] DELETE /api/data/projects/[id] supabase error:', error);
       return NextResponse.json({ error: error.message }, { status: 400 });
