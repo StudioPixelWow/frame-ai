@@ -27,14 +27,18 @@ function nullIfEmpty(v: unknown): string | null {
 type Row = Record<string, unknown> & { id: string };
 
 function rowToTask(r: Row) {
+  const employee = (r.employee_id as string) || (r.assigned_employee_id as string) || (r.assignee_id as string) || null;
+  const project = (r.business_project_id as string) || (r.project_id as string) || null;
+  const milestone = (r.milestone_id as string) || (r.business_project_milestone_id as string) || null;
+  const title = (r.title as string) || (r.name as string) || '';
   return {
     id: r.id,
-    title: (r.title as string) ?? '',
-    employeeId: (r.employee_id as string) ?? null,
-    assignedEmployeeId: (r.employee_id as string) ?? null, // alias for existing UI
-    businessProjectId: (r.business_project_id as string) ?? null,
-    projectId: (r.business_project_id as string) ?? null, // alias
-    milestoneId: (r.milestone_id as string) ?? null,
+    title,
+    employeeId: employee,
+    assignedEmployeeId: employee,
+    businessProjectId: project,
+    projectId: project,
+    milestoneId: milestone,
     status: (r.status as string) ?? 'pending',
     description: (r.description as string) ?? '',
     dueDate: (r.due_date as string) ?? null,
@@ -44,13 +48,28 @@ function rowToTask(r: Row) {
 }
 
 function toInsert(body: Record<string, unknown>, id: string, now: string): Record<string, unknown> {
+  const title = (body.title ?? '') as string;
+  const employee = nullIfEmpty(body.employeeId ?? body.assignedEmployeeId ?? body.assigneeId);
+  const project = nullIfEmpty(body.businessProjectId ?? body.projectId);
+  const milestone = nullIfEmpty(body.milestoneId);
+  const status = (body.status ?? 'pending') as string;
+
+  // Write under every common snake_case alias. The drop-unknown-column loop
+  // in POST will remove whichever aliases don't exist in the real schema,
+  // leaving the canonical column populated. This is what prevents the fields
+  // from coming back NULL when the DB uses e.g. assigned_employee_id.
   return {
     id,
-    title: (body.title ?? '') as string,
-    employee_id: nullIfEmpty(body.employeeId ?? body.assignedEmployeeId ?? body.assigneeId),
-    business_project_id: nullIfEmpty(body.businessProjectId ?? body.projectId),
-    milestone_id: nullIfEmpty(body.milestoneId),
-    status: (body.status ?? 'pending') as string,
+    title,
+    name: title, // some schemas use "name" instead of "title"
+    employee_id: employee,
+    assigned_employee_id: employee,
+    assignee_id: employee,
+    business_project_id: project,
+    project_id: project,
+    milestone_id: milestone,
+    business_project_milestone_id: milestone,
+    status,
     description: (body.description ?? '') as string,
     due_date: nullIfEmpty(body.dueDate),
     created_at: now,
@@ -89,23 +108,36 @@ export async function POST(req: NextRequest) {
 
     // Dedup: if this call carries milestoneId AND a task already exists for
     // that milestone, return the existing one instead of creating a duplicate.
+    // Try whichever column name the real schema uses.
     const milestoneId = nullIfEmpty(body.milestoneId);
     if (milestoneId) {
-      const { data: existing } = await sb.from(TABLE).select('*').eq('milestone_id', milestoneId).maybeSingle();
-      if (existing) {
-        console.log(`[API] POST /api/data/tasks dedup: task already exists for milestone=${milestoneId}`);
-        return NextResponse.json({ ...rowToTask(existing as Row), _deduped: true }, { status: 200 });
+      for (const col of ['milestone_id', 'business_project_milestone_id']) {
+        const { data: existing, error: existErr } = await sb
+          .from(TABLE)
+          .select('*')
+          .eq(col, milestoneId)
+          .maybeSingle();
+        if (existErr) {
+          // Column doesn't exist — try the next alias.
+          continue;
+        }
+        if (existing) {
+          console.log(`[API] POST /api/data/tasks dedup: existing task for ${col}=${milestoneId}`);
+          return NextResponse.json({ ...rowToTask(existing as Row), _deduped: true }, { status: 200 });
+        }
+        break; // column exists, no row — proceed to insert
       }
     }
 
     const now = new Date().toISOString();
     const id = generateId();
     let insertRow = toInsert(body, id, now);
+    console.log(`[API] POST /api/data/tasks inserting cols=${Object.keys(insertRow).join(',')} milestoneId=${milestoneId ?? 'null'} employee=${insertRow.employee_id ?? 'null'} project=${insertRow.business_project_id ?? 'null'}`);
 
     let inserted: Row | null = null;
     let lastErr: { message: string; code?: string } | null = null;
 
-    for (let attempt = 0; attempt < 10; attempt++) {
+    for (let attempt = 0; attempt < 15; attempt++) {
       const { data, error } = await sb.from(TABLE).insert(insertRow).select('*').single();
       if (!error) { inserted = data as Row; break; }
       lastErr = error as any;
@@ -123,7 +155,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: lastErr?.message ?? 'Insert failed', code: (lastErr as any)?.code ?? null }, { status: 500 });
     }
 
-    return NextResponse.json(rowToTask(inserted), { status: 201 });
+    const mapped = rowToTask(inserted);
+    console.log(
+      `[API] POST /api/data/tasks ✅ persisted id=${mapped.id} title="${mapped.title}" employee_id=${mapped.employeeId ?? 'null'} business_project_id=${mapped.businessProjectId ?? 'null'} milestone_id=${mapped.milestoneId ?? 'null'} status=${mapped.status}`
+    );
+    return NextResponse.json(mapped, { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] POST /api/data/tasks fatal:', msg);
