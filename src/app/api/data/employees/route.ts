@@ -31,43 +31,50 @@ function nullIfEmpty(v: unknown): string | null {
   return t === '' ? null : t;
 }
 
-type Row = {
-  id: string;
-  name?: string | null;
-  role_id?: string | null;
-  role?: string | null;
-  email?: string | null;
-  phone?: string | null;
-  avatar_url?: string | null;
-  salary?: number | null;
-  status?: string | null;
-  skills?: unknown;
-  tasks_count?: number | null;
-  workload?: number | null;
-  join_date?: string | null;
-  notes?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-};
+// Row shape is intentionally open — the real Supabase schema may use
+// first_name/last_name/full_name instead of name, etc. We map defensively.
+type Row = Record<string, unknown> & { id: string };
+
+function pickString(r: Row, ...keys: string[]): string {
+  for (const k of keys) {
+    const v = r[k];
+    if (typeof v === 'string' && v.trim() !== '') return v;
+  }
+  return '';
+}
+function pickNumber(r: Row, ...keys: string[]): number {
+  for (const k of keys) {
+    const v = r[k];
+    if (typeof v === 'number') return v;
+  }
+  return 0;
+}
 
 function rowToEmployee(r: Row) {
+  const first = pickString(r, 'first_name', 'firstName');
+  const last = pickString(r, 'last_name', 'lastName');
+  const combined = [first, last].filter(Boolean).join(' ');
+  const name = pickString(r, 'name', 'full_name', 'fullName', 'display_name') || combined;
+
   return {
     id: r.id,
-    name: r.name ?? '',
-    roleId: r.role_id ?? '',
-    role: r.role ?? '',
-    email: r.email ?? '',
-    phone: r.phone ?? '',
-    avatarUrl: r.avatar_url ?? '',
-    salary: typeof r.salary === 'number' ? r.salary : 0,
-    status: r.status ?? 'offline',
+    name,
+    firstName: first,
+    lastName: last,
+    roleId: pickString(r, 'role_id', 'roleId'),
+    role: pickString(r, 'role', 'title', 'position'),
+    email: pickString(r, 'email'),
+    phone: pickString(r, 'phone', 'phone_number'),
+    avatarUrl: pickString(r, 'avatar_url', 'avatarUrl', 'photo_url'),
+    salary: pickNumber(r, 'salary'),
+    status: pickString(r, 'status', 'employment_status') || 'offline',
     skills: Array.isArray(r.skills) ? r.skills : [],
-    tasksCount: typeof r.tasks_count === 'number' ? r.tasks_count : 0,
-    workload: typeof r.workload === 'number' ? r.workload : 0,
-    joinDate: r.join_date ?? '',
-    notes: r.notes ?? '',
-    createdAt: r.created_at ?? '',
-    updatedAt: r.updated_at ?? '',
+    tasksCount: pickNumber(r, 'tasks_count', 'tasksCount'),
+    workload: pickNumber(r, 'workload'),
+    joinDate: pickString(r, 'join_date', 'joinDate', 'hired_at', 'start_date'),
+    notes: pickString(r, 'notes'),
+    createdAt: pickString(r, 'created_at', 'createdAt'),
+    updatedAt: pickString(r, 'updated_at', 'updatedAt'),
   };
 }
 
@@ -103,18 +110,15 @@ function parseBadColumn(msg: string): string | null {
 export async function GET() {
   try {
     const sb = getSupabase();
-    let selectList = SELECT_COLUMNS;
-    for (let attempt = 0; attempt < 8; attempt++) {
-      const { data: rows, error } = await sb.from(TABLE).select(selectList).order('id');
-      if (!error) return NextResponse.json((rows ?? []).map((r) => rowToEmployee(r as Row)));
-      const bad = parseBadColumn(error.message);
-      if (!bad) {
-        console.error('[API] GET /api/data/employees supabase error:', error);
-        return NextResponse.json({ error: error.message, code: (error as any).code ?? null }, { status: 500 });
-      }
-      selectList = selectList.split(',').map((s) => s.trim()).filter((c) => c !== bad).join(', ');
+    // Select all columns so we get whatever the real schema has
+    // (first_name/last_name/full_name, etc.) and map defensively below.
+    const { data: rows, error } = await sb.from(TABLE).select('*').order('id');
+    if (error) {
+      console.error('[API] GET /api/data/employees supabase error:', error);
+      return NextResponse.json({ error: error.message, code: (error as any).code ?? null }, { status: 500 });
     }
-    return NextResponse.json({ error: 'Failed to build valid select list' }, { status: 500 });
+    console.log(`[API] GET /api/data/employees returned ${(rows ?? []).length} rows`);
+    return NextResponse.json((rows ?? []).map((r) => rowToEmployee(r as Row)));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] GET /api/data/employees error:', msg);
