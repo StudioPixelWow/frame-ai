@@ -250,8 +250,14 @@ export default function BusinessProjectPage() {
     milestone: any,
     newEmployeeId: string
   ) => {
-    if (!milestone?.id) return;
+    if (!milestone?.id) {
+      console.warn('[assign] aborted — milestone has no id', milestone);
+      return;
+    }
     const normalized = newEmployeeId && newEmployeeId.trim() !== '' ? newEmployeeId : null;
+    console.log(
+      `[assign] start milestoneId=${milestone.id} employee=${normalized ?? 'null'} project=${projectId} title="${milestone.title ?? ''}"`
+    );
 
     // 1. Immediate local override so the dropdown shows the new selection.
     setMilestoneOverrides((prev) => ({
@@ -263,34 +269,15 @@ export default function BusinessProjectPage() {
       },
     }));
 
+    // 2. Persist the assignee on the milestone. Split try/catch so a task
+    //    creation failure doesn't roll back the (already successful) assignee.
+    let assigneeSaved = false;
     try {
-      // 2. Persist assignee on the milestone.
       await updateMilestone(milestone.id, { assigneeId: normalized } as any);
-
-      // 3. If an employee was actually picked, ensure a task exists.
-      //    Client-side dedup: skip if we already have one locally.
-      if (normalized) {
-        const existing = (tasksData || []).find(
-          (t: any) => t?.milestoneId === milestone.id
-        );
-        if (!existing) {
-          await createTask({
-            title: milestone.title || 'משימה',
-            employeeId: normalized,
-            businessProjectId: projectId,
-            milestoneId: milestone.id,
-            status: 'pending',
-          } as any);
-          console.log('[assign] created task for milestone', milestone.id);
-        } else if ((existing as any).employeeId !== normalized) {
-          // Task exists but points to a different employee — future step
-          // can migrate it; for now, leave it alone per scope constraints.
-          console.log('[assign] task already exists for milestone, not recreating', milestone.id);
-        }
-      }
+      assigneeSaved = true;
+      console.log(`[assign] ✅ assignee saved milestone=${milestone.id} employee=${normalized ?? 'null'}`);
     } catch (error) {
-      console.error('Error assigning milestone employee:', error);
-      // Roll back local override on error.
+      console.error('[assign] ❌ assignee save failed:', error);
       setMilestoneOverrides((prev) => {
         const next = { ...prev };
         if (next[milestone.id]) {
@@ -301,6 +288,42 @@ export default function BusinessProjectPage() {
         }
         return next;
       });
+      return;
+    }
+
+    // 3. Only create a task if the milestone save succeeded AND a real
+    //    employee was picked. The task creation is separate so its errors
+    //    are isolated and visibly logged.
+    if (!assigneeSaved || !normalized) {
+      console.log('[assign] skipping task creation — assigneeSaved=', assigneeSaved, 'normalized=', normalized);
+      return;
+    }
+
+    try {
+      const existing = (tasksData || []).find(
+        (t: any) => t?.milestoneId === milestone.id
+      );
+      if (existing) {
+        console.log(`[assign] task already exists locally for milestone=${milestone.id} id=${(existing as any).id} — skipping insert`);
+        return;
+      }
+
+      const taskPayload = {
+        title: milestone.title || 'משימה',
+        employeeId: normalized,
+        businessProjectId: projectId,
+        milestoneId: milestone.id,
+        status: 'pending' as const,
+      };
+      console.log('[assign] ➜ createTask payload:', taskPayload);
+
+      const created = await createTask(taskPayload as any);
+      console.log(`[assign] ✅ task created id=${(created as any)?.id} employee_id=${(created as any)?.employeeId} business_project_id=${(created as any)?.businessProjectId} milestone_id=${(created as any)?.milestoneId}`);
+    } catch (error: any) {
+      // Do NOT roll back the assignee — it really is saved. Surface the
+      // real error to the browser console so the operator can see why.
+      const msg = error?.message ?? String(error);
+      console.error('[assign] ❌ task creation failed:', msg, error);
     }
   };
 
