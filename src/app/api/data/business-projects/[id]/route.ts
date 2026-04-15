@@ -12,35 +12,24 @@ import { getSupabase } from '@/lib/db/store';
 
 const TABLE = 'business_projects';
 
-type Row = {
-  id: string;
-  project_name?: string | null;
-  client_id?: string | null;
-  project_type?: string | null;
-  description?: string | null;
-  agreement_signed?: boolean | null;
-  project_status?: string | null;
-  start_date?: string | null;
-  end_date?: string | null;
-  assigned_manager_id?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-};
+type Row = Record<string, unknown> & { id: string };
 
 function rowToProject(r: Row) {
+  const serviceType = (r.service_type as string) || (r.project_type as string) || 'general';
   return {
     id: r.id,
-    projectName: r.project_name ?? '',
-    clientId: r.client_id ?? '',
-    projectType: r.project_type ?? 'general',
-    description: r.description ?? '',
-    agreementSigned: r.agreement_signed ?? false,
-    projectStatus: r.project_status ?? 'not_started',
-    startDate: r.start_date ?? null,
-    endDate: r.end_date ?? null,
-    assignedManagerId: r.assigned_manager_id ?? null,
-    createdAt: r.created_at ?? '',
-    updatedAt: r.updated_at ?? '',
+    projectName: (r.project_name as string) ?? '',
+    clientId: (r.client_id as string) ?? '',
+    projectType: serviceType,
+    serviceType,
+    description: (r.description as string) ?? '',
+    agreementSigned: (r.agreement_signed as boolean) ?? false,
+    projectStatus: (r.project_status as string) ?? 'not_started',
+    startDate: (r.start_date as string) ?? null,
+    endDate: (r.end_date as string) ?? null,
+    assignedManagerId: (r.assigned_manager_id as string) ?? null,
+    createdAt: (r.created_at as string) ?? '',
+    updatedAt: (r.updated_at as string) ?? '',
   };
 }
 
@@ -61,11 +50,16 @@ const NULLABLE_STRING_COLS = new Set([
 
 function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
+  // Handle service_type / project_type from either key, write to both for tolerance.
+  const svc = body.serviceType !== undefined ? body.serviceType : body.projectType;
+  if (svc !== undefined) {
+    out.service_type = nullIfEmpty(svc);
+    out.project_type = nullIfEmpty(svc);
+  }
   const map: Array<[string, string]> = [
     ['projectName', 'project_name'],
     ['name', 'project_name'],
     ['clientId', 'client_id'],
-    ['projectType', 'project_type'],
     ['description', 'description'],
     ['agreementSigned', 'agreement_signed'],
     ['projectStatus', 'project_status'],
@@ -95,21 +89,10 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
   try {
     const { id } = await context.params;
     const sb = getSupabase();
-    let selectList = SELECT_COLUMNS;
-    for (let attempt = 0; attempt < 6; attempt++) {
-      const { data, error } = await sb.from(TABLE).select(selectList).eq('id', id).maybeSingle();
-      if (!error) {
-        if (!data) return NextResponse.json({ error: 'Not found', projectId: id }, { status: 404 });
-        return NextResponse.json(rowToProject(data as Row));
-      }
-      const bad = parseBadColumn(error.message);
-      if (!bad) {
-        console.error('[API] GET /api/data/business-projects/[id] supabase error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
-      selectList = selectList.split(',').map((s) => s.trim()).filter((c) => c !== bad).join(', ');
-    }
-    return NextResponse.json({ error: 'Failed to build valid select list' }, { status: 500 });
+    const { data, error } = await sb.from(TABLE).select('*').eq('id', id).maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) return NextResponse.json({ error: 'Not found', projectId: id }, { status: 404 });
+    return NextResponse.json(rowToProject(data as Row));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] GET /api/data/business-projects/[id] error:', msg);
@@ -131,7 +114,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     let lastErr: { message: string; code?: string } | null = null;
 
     for (let attempt = 0; attempt < 10; attempt++) {
-      const { data, error } = await sb.from(TABLE).update(updateRow).eq('id', id).select(selectList).maybeSingle();
+      const { data, error } = await sb.from(TABLE).update(updateRow).eq('id', id).select('*').maybeSingle();
       if (!error) { updated = (data as Row) ?? null; break; }
       lastErr = error as any;
       const bad = parseBadColumn(error.message);
