@@ -110,74 +110,99 @@ function milestoneId(i: number): string {
   return `mil_${ts}_${i}_${rand}`;
 }
 
-/** Fetch template rows matching service_type, insert milestones for the project.
- *  Never throws — any failure is logged and the create still succeeds. */
+/**
+ * Fetch template rows matching service_type, insert milestones for the project.
+ *
+ * Milestones go into public.business_project_milestones.
+ * Required per-row columns: id, business_project_id, title, status, sort_order.
+ *
+ * Returns a detailed result: { inserted, templatesFound, error? }.
+ * Errors are NO LONGER swallowed — they're propagated so the POST caller can
+ * decide what to do (we surface them in the response + server logs).
+ */
 async function seedMilestonesFromTemplates(
   sb: ReturnType<typeof getSupabase>,
   projectId: string,
   serviceType: string | null,
   now: string
-): Promise<number> {
-  if (!serviceType) return 0;
-  try {
-    const { data: templates, error: tErr } = await sb
-      .from(TEMPLATES_TABLE)
-      .select('*')
-      .eq('service_type', serviceType);
-    if (tErr) {
-      console.warn('[seedMilestones] templates read error:', tErr.message);
-      return 0;
-    }
-    const tmpls = Array.isArray(templates) ? templates : [];
-    if (tmpls.length === 0) return 0;
-
-    // Sort by order_index / position / sort_order if present
-    tmpls.sort((a: any, b: any) => {
-      const ao = a?.order_index ?? a?.position ?? a?.sort_order ?? 0;
-      const bo = b?.order_index ?? b?.position ?? b?.sort_order ?? 0;
-      return Number(ao) - Number(bo);
-    });
-
-    const rows = tmpls.map((t: any, i: number) => ({
-      id: milestoneId(i),
-      project_id: projectId,
-      title: t?.title ?? t?.name ?? `שלב ${i + 1}`,
-      description: t?.description ?? '',
-      due_date: null,
-      assigned_employee_id: null,
-      status: 'pending',
-      files: [],
-      notes: '',
-      created_at: now,
-      updated_at: now,
-    }));
-
-    // Drop-unknown-column retry loop so we're schema-tolerant.
-    let insertRows: Record<string, unknown>[] = rows;
-    for (let attempt = 0; attempt < 8; attempt++) {
-      const { error } = await sb.from(MILESTONES_TABLE).insert(insertRows);
-      if (!error) {
-        console.log(`[seedMilestones] ✅ inserted ${insertRows.length} milestones for project=${projectId} service=${serviceType}`);
-        return insertRows.length;
-      }
-      const m = error.message.match(/column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);
-      const bad = m?.[1] || m?.[2];
-      if (!bad) {
-        console.warn('[seedMilestones] insert error:', error.message);
-        return 0;
-      }
-      console.warn(`[seedMilestones] dropping unknown milestone column "${bad}"`);
-      insertRows = insertRows.map((row) => {
-        const { [bad]: _d, ...rest } = row;
-        void _d;
-        return rest;
-      });
-    }
-    return 0;
-  } catch (e) {
-    console.warn('[seedMilestones] unexpected error:', e instanceof Error ? e.message : e);
-    return 0;
+): Promise<{ inserted: number; templatesFound: number; error?: string; details?: unknown }> {
+  if (!serviceType) {
+    return { inserted: 0, templatesFound: 0, error: 'service_type missing; cannot match templates' };
   }
+
+  // 1. Fetch templates by exact service_type.
+  const { data: templates, error: tErr } = await sb
+    .from(TEMPLATES_TABLE)
+    .select('*')
+    .eq('service_type', serviceType);
+  if (tErr) {
+    console.error('[seedMilestones] templates fetch error:', tErr);
+    return { inserted: 0, templatesFound: 0, error: `templates fetch failed: ${tErr.message}`, details: tErr };
+  }
+
+  const tmpls = Array.isArray(templates) ? templates : [];
+  console.log(`[seedMilestones] service_type="${serviceType}" matched ${tmpls.length} template(s)`);
+  if (tmpls.length === 0) {
+    return { inserted: 0, templatesFound: 0 };
+  }
+
+  // Sort by sort_order / order_index / position if present on the templates.
+  tmpls.sort((a: any, b: any) => {
+    const ao = a?.sort_order ?? a?.order_index ?? a?.position ?? 0;
+    const bo = b?.sort_order ?? b?.order_index ?? b?.position ?? 0;
+    return Number(ao) - Number(bo);
+  });
+
+  // 2. Build milestone rows. Keys match public.business_project_milestones.
+  const rows = tmpls.map((t: any, i: number) => ({
+    id: milestoneId(i),
+    business_project_id: projectId,
+    title: t?.title ?? t?.name ?? `שלב ${i + 1}`,
+    description: t?.description ?? '',
+    due_date: null,
+    assigned_employee_id: null,
+    status: 'pending',
+    sort_order: typeof t?.sort_order === 'number' ? t.sort_order : i,
+    created_at: now,
+    updated_at: now,
+  }));
+
+  // 3. Insert. If an OPTIONAL column isn't in the real schema drop it and
+  //    retry — BUT refuse to drop business_project_id, title, status, or
+  //    sort_order since those are required by the user's contract.
+  const REQUIRED = new Set(['id', 'business_project_id', 'title', 'status', 'sort_order']);
+  let insertRows: Record<string, unknown>[] = rows;
+  let lastErr: { message: string; code?: string } | null = null;
+
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { error } = await sb.from(MILESTONES_TABLE).insert(insertRows);
+    if (!error) {
+      console.log(`[seedMilestones] ✅ inserted ${insertRows.length} milestones for project=${projectId} service=${serviceType}`);
+      return { inserted: insertRows.length, templatesFound: tmpls.length };
+    }
+    lastErr = error as any;
+    const m = error.message.match(/column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);
+    const bad = m?.[1] || m?.[2];
+    if (!bad) break;
+    if (REQUIRED.has(bad)) {
+      console.error(`[seedMilestones] schema mismatch on REQUIRED column "${bad}" — refusing to drop`);
+      break;
+    }
+    console.warn(`[seedMilestones] dropping optional milestone column "${bad}" and retrying`);
+    insertRows = insertRows.map((row) => {
+      const { [bad]: _d, ...rest } = row;
+      void _d;
+      return rest;
+    });
+  }
+
+  console.error('[seedMilestones] insert failed:', lastErr);
+  return {
+    inserted: 0,
+    templatesFound: tmpls.length,
+    error: `milestones insert failed: ${lastErr?.message ?? 'unknown'}`,
+    details: lastErr,
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -236,10 +261,24 @@ export async function POST(req: NextRequest) {
     // Auto-generate milestones from templates matching service_type.
     const verifyRow = verify as Row;
     const svc = (verifyRow.service_type as string) || (verifyRow.project_type as string) || null;
-    const seeded = await seedMilestonesFromTemplates(sb, id, svc, now);
+    const seed = await seedMilestonesFromTemplates(sb, id, svc, now);
 
-    console.log(`[API] POST /api/data/business-projects ✅ persisted id=${id} milestones=${seeded}`);
-    return NextResponse.json(rowToProject(verifyRow), { status: 201 });
+    console.log(
+      `[API] POST /api/data/business-projects ✅ persisted id=${id} service=${svc} templates=${seed.templatesFound} milestones=${seed.inserted}${seed.error ? ` error="${seed.error}"` : ''}`
+    );
+
+    return NextResponse.json(
+      {
+        ...rowToProject(verifyRow),
+        _milestones: {
+          serviceType: svc,
+          templatesFound: seed.templatesFound,
+          inserted: seed.inserted,
+          error: seed.error,
+        },
+      },
+      { status: 201 }
+    );
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] POST /api/data/business-projects fatal:', msg);

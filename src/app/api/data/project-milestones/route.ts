@@ -20,54 +20,49 @@ function generateId(): string {
   return `mil_${ts}_${rand}`;
 }
 
-type Row = {
-  id: string;
-  project_id?: string | null;
-  title?: string | null;
-  description?: string | null;
-  due_date?: string | null;
-  assigned_employee_id?: string | null;
-  status?: string | null;
-  files?: unknown;
-  notes?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-};
+// Row shape is intentionally open — the real column is business_project_id;
+// we fall back to project_id for any legacy rows.
+type Row = Record<string, unknown> & { id: string };
 
 function rowToMilestone(r: Row) {
+  const projectId = (r.business_project_id as string) || (r.project_id as string) || '';
   return {
     id: r.id,
-    projectId: r.project_id ?? '',
-    title: r.title ?? '',
-    description: r.description ?? '',
-    dueDate: r.due_date ?? null,
-    assignedEmployeeId: r.assigned_employee_id ?? null,
-    status: r.status ?? 'pending',
+    projectId,
+    businessProjectId: projectId,
+    title: (r.title as string) ?? '',
+    description: (r.description as string) ?? '',
+    dueDate: (r.due_date as string) ?? null,
+    assignedEmployeeId: (r.assigned_employee_id as string) ?? null,
+    status: (r.status as string) ?? 'pending',
+    sortOrder: typeof r.sort_order === 'number' ? r.sort_order : 0,
     files: Array.isArray(r.files) ? r.files : [],
-    notes: r.notes ?? '',
-    createdAt: r.created_at ?? '',
-    updatedAt: r.updated_at ?? '',
+    notes: (r.notes as string) ?? '',
+    createdAt: (r.created_at as string) ?? '',
+    updatedAt: (r.updated_at as string) ?? '',
   };
 }
 
 function toInsert(body: Record<string, unknown>, id: string, now: string): Record<string, unknown> {
+  const projectId = (body.businessProjectId ?? body.projectId ?? null) as string | null;
   return {
     id,
-    project_id: (body.projectId ?? null) as string | null,
+    // Write to the real column name; the drop-column loop will strip project_id
+    // if it doesn't exist. Both are set for backward compatibility.
+    business_project_id: projectId,
+    project_id: projectId,
     title: (body.title ?? '') as string,
     description: (body.description ?? '') as string,
     due_date: (body.dueDate ?? null) as string | null,
     assigned_employee_id: (body.assignedEmployeeId ?? null) as string | null,
     status: (body.status ?? 'pending') as string,
+    sort_order: typeof body.sortOrder === 'number' ? body.sortOrder : 0,
     files: Array.isArray(body.files) ? body.files : [],
     notes: (body.notes ?? '') as string,
     created_at: now,
     updated_at: now,
   };
 }
-
-const SELECT_COLUMNS =
-  'id, project_id, title, description, due_date, assigned_employee_id, status, files, notes, created_at, updated_at';
 
 function parseBadColumn(msg: string): string | null {
   const m = msg.match(/column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);
@@ -77,15 +72,14 @@ function parseBadColumn(msg: string): string | null {
 export async function GET() {
   try {
     const sb = getSupabase();
-    let selectList = SELECT_COLUMNS;
-    for (let attempt = 0; attempt < 6; attempt++) {
-      const { data: rows, error } = await sb.from(TABLE).select(selectList).order('id');
-      if (!error) return NextResponse.json((rows ?? []).map((r) => rowToMilestone(r as Row)));
-      const bad = parseBadColumn(error.message);
-      if (!bad) return NextResponse.json({ error: error.message }, { status: 500 });
-      selectList = selectList.split(',').map((s) => s.trim()).filter((c) => c !== bad).join(', ');
+    // select('*') so we get whatever the real schema uses (business_project_id,
+    // sort_order, etc.) without enumerating columns.
+    const { data: rows, error } = await sb.from(TABLE).select('*').order('id');
+    if (error) {
+      console.error('[API] GET /api/data/project-milestones supabase error:', error);
+      return NextResponse.json({ error: error.message, code: (error as any).code ?? null }, { status: 500 });
     }
-    return NextResponse.json({ error: 'Failed to build valid select list' }, { status: 500 });
+    return NextResponse.json((rows ?? []).map((r) => rowToMilestone(r as Row)));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: `Failed to fetch milestones: ${msg}` }, { status: 500 });

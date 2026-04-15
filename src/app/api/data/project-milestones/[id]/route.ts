@@ -11,45 +11,42 @@ import { getSupabase } from '@/lib/db/store';
 
 const TABLE = 'business_project_milestones';
 
-type Row = {
-  id: string;
-  project_id?: string | null;
-  title?: string | null;
-  description?: string | null;
-  due_date?: string | null;
-  assigned_employee_id?: string | null;
-  status?: string | null;
-  files?: unknown;
-  notes?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-};
+type Row = Record<string, unknown> & { id: string };
 
 function rowToMilestone(r: Row) {
+  const projectId = (r.business_project_id as string) || (r.project_id as string) || '';
   return {
     id: r.id,
-    projectId: r.project_id ?? '',
-    title: r.title ?? '',
-    description: r.description ?? '',
-    dueDate: r.due_date ?? null,
-    assignedEmployeeId: r.assigned_employee_id ?? null,
-    status: r.status ?? 'pending',
+    projectId,
+    businessProjectId: projectId,
+    title: (r.title as string) ?? '',
+    description: (r.description as string) ?? '',
+    dueDate: (r.due_date as string) ?? null,
+    assignedEmployeeId: (r.assigned_employee_id as string) ?? null,
+    status: (r.status as string) ?? 'pending',
+    sortOrder: typeof r.sort_order === 'number' ? r.sort_order : 0,
     files: Array.isArray(r.files) ? r.files : [],
-    notes: r.notes ?? '',
-    createdAt: r.created_at ?? '',
-    updatedAt: r.updated_at ?? '',
+    notes: (r.notes as string) ?? '',
+    createdAt: (r.created_at as string) ?? '',
+    updatedAt: (r.updated_at as string) ?? '',
   };
 }
 
 function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
+  // Keep business_project_id in sync if caller supplies either alias.
+  const pid = body.businessProjectId !== undefined ? body.businessProjectId : body.projectId;
+  if (pid !== undefined) {
+    out.business_project_id = pid;
+    out.project_id = pid;
+  }
   const map: Array<[string, string]> = [
-    ['projectId', 'project_id'],
     ['title', 'title'],
     ['description', 'description'],
     ['dueDate', 'due_date'],
     ['assignedEmployeeId', 'assigned_employee_id'],
     ['status', 'status'],
+    ['sortOrder', 'sort_order'],
     ['files', 'files'],
     ['notes', 'notes'],
   ];
@@ -70,18 +67,10 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
   try {
     const { id } = await context.params;
     const sb = getSupabase();
-    let selectList = SELECT_COLUMNS;
-    for (let attempt = 0; attempt < 6; attempt++) {
-      const { data, error } = await sb.from(TABLE).select(selectList).eq('id', id).maybeSingle();
-      if (!error) {
-        if (!data) return NextResponse.json({ error: 'Not found', milestoneId: id }, { status: 404 });
-        return NextResponse.json(rowToMilestone(data as Row));
-      }
-      const bad = parseBadColumn(error.message);
-      if (!bad) return NextResponse.json({ error: error.message }, { status: 500 });
-      selectList = selectList.split(',').map((s) => s.trim()).filter((c) => c !== bad).join(', ');
-    }
-    return NextResponse.json({ error: 'Failed to build select list' }, { status: 500 });
+    const { data, error } = await sb.from(TABLE).select('*').eq('id', id).maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) return NextResponse.json({ error: 'Not found', milestoneId: id }, { status: 404 });
+    return NextResponse.json(rowToMilestone(data as Row));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: `Failed to fetch: ${msg}` }, { status: 500 });
@@ -101,7 +90,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     let updated: Row | null = null;
     let lastErr: { message: string; code?: string } | null = null;
     for (let attempt = 0; attempt < 10; attempt++) {
-      const { data, error } = await sb.from(TABLE).update(updateRow).eq('id', id).select(selectList).maybeSingle();
+      const { data, error } = await sb.from(TABLE).update(updateRow).eq('id', id).select('*').maybeSingle();
       if (!error) { updated = (data as Row) ?? null; break; }
       lastErr = error as any;
       const bad = parseBadColumn(error.message);
