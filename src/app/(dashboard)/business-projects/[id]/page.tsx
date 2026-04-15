@@ -9,6 +9,7 @@ import {
   useClients,
   useEmployees,
   useClientFiles,
+  useTasks,
 } from '@/lib/api/use-entity';
 import { BusinessProject, ProjectMilestone, ProjectPayment, Client, Employee, ClientFile } from '@/lib/db/schema';
 
@@ -114,6 +115,7 @@ export default function BusinessProjectPage() {
   const { data: clientsData = [] } = useClients();
   const { data: employeesData = [] } = useEmployees();
   const { data: clientFilesData = [], create: createClientFile } = useClientFiles();
+  const { data: tasksData = [], create: createTask } = useTasks();
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null);
@@ -233,6 +235,72 @@ export default function BusinessProjectPage() {
       console.error('Error adding milestone:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * Assign (or clear) an employee on a milestone.
+   * - Persists assignee_id on business_project_milestones.
+   * - If an employee is picked and no task exists for this milestone yet,
+   *   creates a row in public.tasks linking milestone ↔ employee ↔ project.
+   * - Server-side POST /api/data/tasks also dedupes by milestone_id, so even
+   *   concurrent clicks can't produce duplicate tasks.
+   */
+  const handleAssignMilestoneEmployee = async (
+    milestone: any,
+    newEmployeeId: string
+  ) => {
+    if (!milestone?.id) return;
+    const normalized = newEmployeeId && newEmployeeId.trim() !== '' ? newEmployeeId : null;
+
+    // 1. Immediate local override so the dropdown shows the new selection.
+    setMilestoneOverrides((prev) => ({
+      ...prev,
+      [milestone.id]: {
+        ...(prev[milestone.id] || {}),
+        assigneeId: normalized,
+        assignedEmployeeId: normalized,
+      },
+    }));
+
+    try {
+      // 2. Persist assignee on the milestone.
+      await updateMilestone(milestone.id, { assigneeId: normalized } as any);
+
+      // 3. If an employee was actually picked, ensure a task exists.
+      //    Client-side dedup: skip if we already have one locally.
+      if (normalized) {
+        const existing = (tasksData || []).find(
+          (t: any) => t?.milestoneId === milestone.id
+        );
+        if (!existing) {
+          await createTask({
+            title: milestone.title || 'משימה',
+            employeeId: normalized,
+            businessProjectId: projectId,
+            milestoneId: milestone.id,
+            status: 'pending',
+          } as any);
+          console.log('[assign] created task for milestone', milestone.id);
+        } else if ((existing as any).employeeId !== normalized) {
+          // Task exists but points to a different employee — future step
+          // can migrate it; for now, leave it alone per scope constraints.
+          console.log('[assign] task already exists for milestone, not recreating', milestone.id);
+        }
+      }
+    } catch (error) {
+      console.error('Error assigning milestone employee:', error);
+      // Roll back local override on error.
+      setMilestoneOverrides((prev) => {
+        const next = { ...prev };
+        if (next[milestone.id]) {
+          const entry = { ...next[milestone.id] };
+          delete entry.assigneeId;
+          delete entry.assignedEmployeeId;
+          next[milestone.id] = entry;
+        }
+        return next;
+      });
     }
   };
 
@@ -929,9 +997,28 @@ export default function BusinessProjectPage() {
                             <span style={{ fontSize: '11px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '2px' }}>
                               מוקצה ל
                             </span>
-                            <span style={{ fontSize: '13px', color: 'var(--foreground)' }}>
-                              {assignee?.name || 'לא הוצמד'}
-                            </span>
+                            <select
+                              value={(milestone as any)?.assigneeId || (milestone as any)?.assignedEmployeeId || ''}
+                              onChange={(e) => handleAssignMilestoneEmployee(milestone, e.target.value)}
+                              disabled={loading}
+                              style={{
+                                fontSize: '13px',
+                                color: 'var(--foreground)',
+                                background: 'var(--surface)',
+                                border: '1px solid var(--border)',
+                                borderRadius: '4px',
+                                padding: '2px 6px',
+                                width: '100%',
+                                direction: 'rtl',
+                              }}
+                            >
+                              <option value="">לא הוצמד</option>
+                              {(employeesData || []).map((emp: Employee) => (
+                                <option key={emp.id} value={emp.id}>
+                                  {emp.name || (emp as any).email}
+                                </option>
+                              ))}
+                            </select>
                           </div>
 
                           <div>
