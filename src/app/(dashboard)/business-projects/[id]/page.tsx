@@ -146,6 +146,18 @@ export default function BusinessProjectPage() {
     [clientFilesData, project]
   );
 
+  // NOTE: All hooks must run on every render (Rules of Hooks). Keep these
+  // useMemos above the early returns and make them safe when project is undefined.
+  const projectClient = useMemo(
+    () => project ? clientsData.find((c: Client) => c.id === project.clientId) : undefined,
+    [clientsData, project]
+  );
+
+  const assignedManager = useMemo(
+    () => project ? employeesData.find((e: Employee) => e.id === project.assignedManagerId) : undefined,
+    [employeesData, project]
+  );
+
   // While the projects list is still loading on first mount, projectsData is []
   // and `project` is undefined — don't render a misleading 404. Show a loader
   // until the fetch finishes, then check for the actual not-found case.
@@ -165,16 +177,6 @@ export default function BusinessProjectPage() {
       </div>
     );
   }
-
-  const projectClient = useMemo(
-    () => clientsData.find((c: Client) => c.id === project.clientId),
-    [clientsData, project.clientId]
-  );
-
-  const assignedManager = useMemo(
-    () => employeesData.find((e: Employee) => e.id === project.assignedManagerId),
-    [employeesData, project.assignedManagerId]
-  );
 
   const completedMilestones = (projectMilestones || []).filter(
     (m: ProjectMilestone) => m?.status === 'approved'
