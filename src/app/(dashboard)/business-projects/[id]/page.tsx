@@ -329,27 +329,31 @@ export default function BusinessProjectPage() {
   const [uploadingMilestone, setUploadingMilestone] = useState<string | null>(null);
 
   const handleMilestoneFileUpload = useCallback(async (milestoneId: string, file: File) => {
+    console.log(`[milestone-upload] ▶ START  milestoneId="${milestoneId}" file="${file.name}" size=${file.size} type="${file.type}"`);
     setUploadingMilestone(milestoneId);
     try {
       const form = new FormData();
       form.append('file', file);
       form.append('milestoneId', milestoneId);
+      console.log(`[milestone-upload] ▶ POST /api/data/milestone-files …`);
       const res = await fetch('/api/data/milestone-files', { method: 'POST', body: form });
+      const body = await res.json().catch(() => ({}));
+      console.log(`[milestone-upload] ◀ status=${res.status}`, JSON.stringify(body).slice(0, 300));
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
         throw new Error(body?.error || `Upload failed (${res.status})`);
       }
-      console.log(`[milestone-files] ✅ uploaded to milestone=${milestoneId}`);
+      console.log(`[milestone-upload] ✅ upload saved, refetching files…`);
       await refetchMilestoneFiles();
+      console.log(`[milestone-upload] ✅ refetch done, milestoneFilesData count=${milestoneFilesData?.length ?? '?'}`);
     } catch (err: any) {
-      console.error('[milestone-files] upload error:', err);
+      console.error('[milestone-upload] ❌ error:', err?.message || err);
       alert(`שגיאה בהעלאת קובץ: ${err?.message || 'unknown'}`);
     } finally {
       setUploadingMilestone(null);
       const input = fileInputRefs.current[milestoneId];
       if (input) input.value = '';
     }
-  }, [refetchMilestoneFiles]);
+  }, [refetchMilestoneFiles, milestoneFilesData?.length]);
 
   const handleDeleteMilestoneFile = useCallback(async (fileId: string) => {
     try {

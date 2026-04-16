@@ -147,14 +147,15 @@ export async function GET(req: NextRequest) {
         const { data: rows2, error: err2 } = await sb.from(TABLE).select('*');
         if (!err2 && rows2) {
           console.log(`[milestone-files] GET → ${rows2.length} files (no order)`);
-          return NextResponse.json(rows2.map((r) => rowToFile(r as Row)), { headers: NO_CACHE_HEADERS });
+          return NextResponse.json(rows2.map((r: Record<string, unknown>) => rowToFile(r as Row)), { headers: NO_CACHE_HEADERS });
         }
       }
       return NextResponse.json({ error: error.message }, { status: 500, headers: NO_CACHE_HEADERS });
     }
 
-    console.log(`[milestone-files] GET → ${(rows ?? []).length} files`);
-    return NextResponse.json((rows ?? []).map((r) => rowToFile(r as Row)), { headers: NO_CACHE_HEADERS });
+    const mapped = (rows ?? []).map((r: Record<string, unknown>) => rowToFile(r as Row));
+    console.log(`[milestone-files GET] → ${mapped.length} files`, mapped.length > 0 ? { firstId: mapped[0].id, firstMilestoneId: mapped[0].milestoneId } : '(empty)');
+    return NextResponse.json(mapped, { headers: NO_CACHE_HEADERS });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[milestone-files] GET fatal:', msg);
@@ -163,12 +164,19 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const t0 = Date.now();
+  const log = (step: string, detail?: unknown) =>
+    console.log(`[milestone-files POST] ${step}${detail !== undefined ? ' → ' + JSON.stringify(detail) : ''}`);
+
   try {
     const sb = getSupabase();
+    log('1/7 parsing formData');
     const formData = await req.formData();
 
     const file = formData.get('file') as File | null;
     const milestoneId = formData.get('milestoneId') as string | null;
+
+    log('2/7 validation', { hasFile: !!file, fileName: file?.name, fileSize: file?.size, milestoneId });
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -178,13 +186,16 @@ export async function POST(req: NextRequest) {
     }
 
     // 0. Ensure table and bucket exist.
+    log('3/7 ensureTable');
     const tableOk = await ensureTable(sb);
+    log('3/7 ensureTable result', { tableOk });
     if (!tableOk) {
       return NextResponse.json(
         { error: `Table "${TABLE}" does not exist. Check server logs for CREATE TABLE DDL.` },
         { status: 500 }
       );
     }
+    log('3b/7 ensureBucket');
     await ensureBucket(sb);
 
     // 1. Upload file bytes to Supabase Storage.
@@ -192,9 +203,12 @@ export async function POST(req: NextRequest) {
     const ext = file.name.includes('.') ? '.' + file.name.split('.').pop() : '';
     const storagePath = `${milestoneId}/${fileId}${ext}`;
 
+    log('4/7 reading file buffer');
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+    log('4/7 buffer ready', { bytes: buffer.length });
 
+    log('5/7 storage upload', { bucket: BUCKET, path: storagePath, contentType: file.type });
     const { error: uploadErr } = await sb.storage
       .from(BUCKET)
       .upload(storagePath, buffer, {
@@ -203,13 +217,15 @@ export async function POST(req: NextRequest) {
       });
 
     if (uploadErr) {
-      console.error('[milestone-files] storage upload error:', uploadErr);
+      log('5/7 ❌ storage upload FAILED', { error: uploadErr.message });
       return NextResponse.json({ error: `Upload failed: ${uploadErr.message}` }, { status: 500 });
     }
+    log('5/7 ✅ storage upload OK');
 
     // 2. Get the public URL.
     const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(storagePath);
     const publicUrl = urlData?.publicUrl ?? '';
+    log('6/7 publicUrl', { url: publicUrl.slice(0, 80) });
 
     // 3. Insert metadata row into the DB table.
     const now = new Date().toISOString();
@@ -224,18 +240,25 @@ export async function POST(req: NextRequest) {
       updated_at: now,
     };
 
+    log('7/7 DB insert', { table: TABLE, columns: Object.keys(insertRow) });
+
     // Retry loop: auto-drop unknown columns.
     let inserted: Row | null = null;
     let lastErr: { message: string } | null = null;
     for (let attempt = 0; attempt < 6; attempt++) {
       const { data, error } = await sb.from(TABLE).insert(insertRow).select('*').single();
-      if (!error) { inserted = data as Row; break; }
+      if (!error) {
+        inserted = data as Row;
+        log(`7/7 ✅ DB insert OK (attempt ${attempt + 1})`, { returnedColumns: Object.keys(data || {}) });
+        break;
+      }
       lastErr = error;
-
-      // If the table itself doesn't exist, break immediately with a clear error.
       const code = (error as any)?.code ?? '';
+      log(`7/7 ❌ DB insert attempt ${attempt + 1} FAILED`, { code, msg: error.message });
+
+      // If the table itself doesn't exist, break immediately.
       if (code === '42P01' || (error.message?.includes('relation') && error.message?.includes('does not exist'))) {
-        _tableReady = false; // reset so ensureTable retries next time
+        _tableReady = false;
         console.error(
           `[milestone-files] ❌ Table "${TABLE}" does not exist!\n` +
           `Run this SQL in Supabase Dashboard → SQL Editor:\n\n${TABLE_DDL}`
@@ -246,7 +269,7 @@ export async function POST(req: NextRequest) {
       const m = error.message.match(/column .*?['"]?([a-z_]+)['"]? (?:does not exist)/i);
       const bad = m?.[1];
       if (bad && bad in insertRow) {
-        console.warn(`[milestone-files] dropping unknown column "${bad}"`);
+        log(`7/7 dropping unknown column "${bad}"`, { remainingCols: Object.keys(insertRow).filter(k => k !== bad) });
         delete insertRow[bad];
       } else {
         break;
@@ -254,18 +277,19 @@ export async function POST(req: NextRequest) {
     }
 
     if (!inserted) {
-      console.error('[milestone-files] insert error:', lastErr);
+      log('7/7 ❌ DB insert FINAL FAILURE', { lastErr: lastErr?.message });
       return NextResponse.json(
         { error: lastErr?.message ?? 'Insert failed — check server logs for CREATE TABLE DDL' },
         { status: 500 }
       );
     }
 
-    console.log(`[milestone-files] ✅ uploaded id=${fileId} milestone=${milestoneId} name="${file.name}" size=${buffer.length}`);
-    return NextResponse.json(rowToFile(inserted), { status: 201 });
+    const mapped = rowToFile(inserted);
+    log(`DONE in ${Date.now() - t0}ms`, { id: mapped.id, milestoneId: mapped.milestoneId, fileName: mapped.fileName });
+    return NextResponse.json(mapped, { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[milestone-files] POST fatal:', msg);
+    console.error(`[milestone-files POST] FATAL (${Date.now() - t0}ms):`, msg);
     return NextResponse.json({ error: `Failed to upload: ${msg}` }, { status: 500 });
   }
 }
