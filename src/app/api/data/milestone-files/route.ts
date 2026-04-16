@@ -16,6 +16,19 @@ import { getSupabase } from '@/lib/db/store';
 const TABLE = 'business_project_milestone_files';
 const BUCKET = 'milestone-files';
 
+const TABLE_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE} (
+  id            TEXT PRIMARY KEY,
+  milestone_id  TEXT NOT NULL,
+  file_name     TEXT NOT NULL DEFAULT '',
+  file_url      TEXT NOT NULL DEFAULT '',
+  file_size     INTEGER DEFAULT 0,
+  content_type  TEXT DEFAULT '',
+  created_at    TIMESTAMPTZ DEFAULT now(),
+  updated_at    TIMESTAMPTZ DEFAULT now()
+);
+`;
+
 type Row = Record<string, unknown> & { id: string };
 
 function generateId(): string {
@@ -51,9 +64,56 @@ async function ensureBucket(sb: ReturnType<typeof getSupabase>) {
   }
 }
 
+/**
+ * Ensure the DB table exists. Uses Supabase rpc('exec_sql') if available,
+ * otherwise tries a probe SELECT and logs the CREATE TABLE DDL for manual use.
+ */
+let _tableReady = false;
+async function ensureTable(sb: ReturnType<typeof getSupabase>) {
+  if (_tableReady) return;
+
+  // Try rpc-based auto-creation first.
+  try {
+    const { error } = await sb.rpc('exec_sql', { query: TABLE_DDL });
+    if (!error) {
+      console.log(`[milestone-files] ✅ table "${TABLE}" ensured via exec_sql`);
+      _tableReady = true;
+      return;
+    }
+    // If the rpc doesn't exist, fall through to the probe.
+    if (!error.message?.includes('function') && !error.message?.includes('does not exist')) {
+      console.warn('[milestone-files] exec_sql warning:', error.message);
+    }
+  } catch {
+    // rpc not available — fall through
+  }
+
+  // Probe: try a no-op SELECT. If it succeeds, the table exists.
+  const { error: probeErr } = await sb.from(TABLE).select('id').limit(1);
+  if (!probeErr) {
+    _tableReady = true;
+    return;
+  }
+
+  // Table doesn't exist. Log a helpful CREATE TABLE statement.
+  const code = (probeErr as any)?.code ?? '';
+  if (code === '42P01' || probeErr.message?.includes('does not exist')) {
+    console.error(
+      `[milestone-files] ❌ Table "${TABLE}" does not exist!\n` +
+      `Run this SQL in Supabase Dashboard → SQL Editor:\n\n${TABLE_DDL}`
+    );
+  } else {
+    console.error('[milestone-files] table probe error:', probeErr);
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const sb = getSupabase();
+
+    // Auto-create table on first access.
+    await ensureTable(sb);
+
     const url = new URL(req.url);
     const milestoneId = url.searchParams.get('milestone_id') || url.searchParams.get('milestoneId');
 
@@ -62,12 +122,21 @@ export async function GET(req: NextRequest) {
 
     const { data: rows, error } = await q;
     if (error) {
-      console.error('[API] GET /api/data/milestone-files error:', error);
+      const code = (error as any)?.code ?? '';
+      console.error(`[milestone-files] GET error (code=${code}):`, error.message);
+
+      // If the table doesn't exist, return empty array instead of 500
+      // so the UI doesn't break. The ensureTable call above already
+      // logged the DDL the user needs to run.
+      if (code === '42P01' || error.message?.includes('does not exist')) {
+        return NextResponse.json([]);
+      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     return NextResponse.json((rows ?? []).map((r) => rowToFile(r as Row)));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[milestone-files] GET fatal:', msg);
     return NextResponse.json({ error: `Failed to fetch: ${msg}` }, { status: 500 });
   }
 }
@@ -87,10 +156,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'milestoneId is required' }, { status: 400 });
     }
 
-    // 1. Ensure storage bucket exists.
+    // 0. Ensure table and bucket exist.
+    await ensureTable(sb);
     await ensureBucket(sb);
 
-    // 2. Upload file bytes to Supabase Storage.
+    // 1. Upload file bytes to Supabase Storage.
     const fileId = generateId();
     const ext = file.name.includes('.') ? '.' + file.name.split('.').pop() : '';
     const storagePath = `${milestoneId}/${fileId}${ext}`;
@@ -110,11 +180,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Upload failed: ${uploadErr.message}` }, { status: 500 });
     }
 
-    // 3. Get the public URL.
+    // 2. Get the public URL.
     const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(storagePath);
     const publicUrl = urlData?.publicUrl ?? '';
 
-    // 4. Insert metadata row into the DB table.
+    // 3. Insert metadata row into the DB table.
     const now = new Date().toISOString();
     const insertRow: Record<string, unknown> = {
       id: fileId,
@@ -134,6 +204,17 @@ export async function POST(req: NextRequest) {
       const { data, error } = await sb.from(TABLE).insert(insertRow).select('*').single();
       if (!error) { inserted = data as Row; break; }
       lastErr = error;
+
+      // If the table itself doesn't exist, break immediately with a clear error.
+      const code = (error as any)?.code ?? '';
+      if (code === '42P01' || error.message?.includes('relation') && error.message?.includes('does not exist')) {
+        console.error(
+          `[milestone-files] ❌ Table "${TABLE}" does not exist!\n` +
+          `Run this SQL in Supabase Dashboard → SQL Editor:\n\n${TABLE_DDL}`
+        );
+        break;
+      }
+
       const m = error.message.match(/column .*?['"]?([a-z_]+)['"]? (?:does not exist)/i);
       const bad = m?.[1];
       if (bad && bad in insertRow) {
@@ -146,7 +227,10 @@ export async function POST(req: NextRequest) {
 
     if (!inserted) {
       console.error('[milestone-files] insert error:', lastErr);
-      return NextResponse.json({ error: lastErr?.message ?? 'Insert failed' }, { status: 500 });
+      return NextResponse.json(
+        { error: lastErr?.message ?? 'Insert failed — check server logs for CREATE TABLE DDL' },
+        { status: 500 }
+      );
     }
 
     console.log(`[milestone-files] ✅ uploaded id=${fileId} milestone=${milestoneId} name="${file.name}" size=${buffer.length}`);
