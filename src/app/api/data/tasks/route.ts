@@ -3,8 +3,8 @@
  * POST /api/data/tasks — create a task
  *
  * Storage: Supabase "tasks" table with flat columns:
- *   id, title, assignee_id, project_id, client_id,
- *   milestone_id, status, created_at, updated_at
+ *   id, title, assignee_id, project_id, milestone_id,
+ *   status, created_at, updated_at
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -54,17 +54,15 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
   const title = (body.title ?? '') as string;
   const assignee = nullIfEmpty(body.assigneeId ?? body.employeeId ?? body.assignedEmployeeId);
   const project = nullIfEmpty(body.businessProjectId ?? body.projectId);
-  const client = nullIfEmpty(body.clientId);
   const milestone = nullIfEmpty(body.milestoneId);
   const status = (body.status ?? 'pending') as string;
 
-  // Use ONLY the actual columns in public.tasks.
+  // Use ONLY confirmed columns in public.tasks.
   return {
     id,
     title,
     assignee_id: assignee,
     project_id: project,
-    client_id: client,
     milestone_id: milestone,
     status,
     created_at: now,

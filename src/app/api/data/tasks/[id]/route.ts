@@ -17,10 +17,11 @@ function rowToTask(r: Row) {
   return {
     id: r.id,
     title: (r.title as string) ?? '',
-    employeeId: (r.employee_id as string) ?? null,
-    assignedEmployeeId: (r.employee_id as string) ?? null,
-    businessProjectId: (r.business_project_id as string) ?? null,
-    projectId: (r.business_project_id as string) ?? null,
+    assigneeId: (r.assignee_id as string) ?? null,
+    employeeId: (r.assignee_id as string) ?? null,         // legacy alias
+    assignedEmployeeId: (r.assignee_id as string) ?? null,  // legacy alias
+    projectId: (r.project_id as string) ?? null,
+    businessProjectId: (r.project_id as string) ?? null,    // legacy alias
     milestoneId: (r.milestone_id as string) ?? null,
     status: (r.status as string) ?? 'pending',
     description: (r.description as string) ?? '',
@@ -43,11 +44,11 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
     ['status', 'status', false],
     ['description', 'description', false],
     ['dueDate', 'due_date', true],
-    ['employeeId', 'employee_id', true],
-    ['assignedEmployeeId', 'employee_id', true],
-    ['assigneeId', 'employee_id', true],
-    ['businessProjectId', 'business_project_id', true],
-    ['projectId', 'business_project_id', true],
+    ['assigneeId', 'assignee_id', true],
+    ['employeeId', 'assignee_id', true],
+    ['assignedEmployeeId', 'assignee_id', true],
+    ['projectId', 'project_id', true],
+    ['businessProjectId', 'project_id', true],
     ['milestoneId', 'milestone_id', true],
   ];
   for (const [k, dbKey, nullable] of map) {

@@ -115,7 +115,7 @@ export default function BusinessProjectPage() {
   const { data: clientsData = [] } = useClients();
   const { data: employeesData = [] } = useEmployees();
   const { data: clientFilesData = [], create: createClientFile } = useClientFiles();
-  const { data: tasksData = [], create: createTask } = useTasks();
+  const { data: tasksData = [], create: createTask, update: updateTask } = useTasks();
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null);
@@ -137,6 +137,12 @@ export default function BusinessProjectPage() {
   // a button click reflects instantly in the UI regardless of whether the
   // server response (or DB schema) includes the timestamp columns.
   const [milestoneOverrides, setMilestoneOverrides] = useState<Record<string, Record<string, unknown>>>({});
+  // Pending employee selection per milestone — only committed on button click
+  const [pendingAssignee, setPendingAssignee] = useState<Record<string, string>>({});
+  // Per-milestone feedback: { milestoneId: { type: 'success'|'error', message: string } }
+  const [assignFeedback, setAssignFeedback] = useState<Record<string, { type: 'success' | 'error'; message: string }>>({});
+  // Track which milestone is currently being assigned (for loading state)
+  const [assigningMilestone, setAssigningMilestone] = useState<string | null>(null);
 
   const project = useMemo(
     () => projectsData.find((p: BusinessProject) => p.id === projectId),
@@ -246,17 +252,36 @@ export default function BusinessProjectPage() {
    * - Server-side POST /api/data/tasks also dedupes by milestone_id, so even
    *   concurrent clicks can't produce duplicate tasks.
    */
-  const handleAssignMilestoneEmployee = async (
-    milestone: any,
-    newEmployeeId: string
-  ) => {
+  /**
+   * Called ONLY by the "שייך לעובד" button — never by dropdown onChange.
+   * 1. Validates that an employee is selected
+   * 2. Saves assignee_id on the milestone
+   * 3. Creates or updates the related task in public.tasks
+   * 4. Shows success/failure feedback
+   */
+  const handleAssignMilestoneEmployee = async (milestone: any) => {
     if (!milestone?.id) {
       console.warn('[assign] aborted — milestone has no id', milestone);
       return;
     }
-    const normalized = newEmployeeId && newEmployeeId.trim() !== '' ? newEmployeeId : null;
+    const selected = pendingAssignee[milestone.id];
+    const normalized = selected && selected.trim() !== '' ? selected : null;
+
+    // Validation: must pick an employee
+    if (!normalized) {
+      setAssignFeedback((prev) => ({
+        ...prev,
+        [milestone.id]: { type: 'error', message: 'יש לבחור עובד לפני שיוך' },
+      }));
+      return;
+    }
+
+    // Clear previous feedback, set loading
+    setAssignFeedback((prev) => { const n = { ...prev }; delete n[milestone.id]; return n; });
+    setAssigningMilestone(milestone.id);
+
     console.log(
-      `[assign] start milestoneId=${milestone.id} employee=${normalized ?? 'null'} project=${projectId} title="${milestone.title ?? ''}"`
+      `[assign] start milestoneId=${milestone.id} employee=${normalized} project=${projectId} title="${milestone.title ?? ''}"`
     );
 
     // 1. Immediate local override so the dropdown shows the new selection.
@@ -269,15 +294,12 @@ export default function BusinessProjectPage() {
       },
     }));
 
-    // 2. Persist the assignee on the milestone. Split try/catch so a task
-    //    creation failure doesn't roll back the (already successful) assignee.
-    let assigneeSaved = false;
+    // 2. Persist the assignee on the milestone.
     try {
       const payload = { assigneeId: normalized, businessProjectId: projectId };
       console.log(`[assign] ➜ PUT /api/data/project-milestones/${milestone.id} payload=${JSON.stringify(payload)}`);
       const saved = await updateMilestone(milestone.id, payload as any);
-      assigneeSaved = true;
-      console.log(`[assign] ✅ assignee saved milestone=${milestone.id} employee=${normalized ?? 'null'} serverAssigneeId=${(saved as any)?.assigneeId ?? 'null'}`);
+      console.log(`[assign] ✅ assignee saved milestone=${milestone.id} employee=${normalized} serverAssigneeId=${(saved as any)?.assigneeId ?? 'null'}`);
     } catch (error) {
       console.error('[assign] ❌ assignee save failed:', error);
       setMilestoneOverrides((prev) => {
@@ -290,43 +312,67 @@ export default function BusinessProjectPage() {
         }
         return next;
       });
+      setAssignFeedback((prev) => ({
+        ...prev,
+        [milestone.id]: { type: 'error', message: 'שגיאה בשמירת העובד על האבן דרך' },
+      }));
+      setAssigningMilestone(null);
       return;
     }
 
-    // 3. Only create a task if the milestone save succeeded AND a real
-    //    employee was picked. The task creation is separate so its errors
-    //    are isolated and visibly logged.
-    if (!assigneeSaved || !normalized) {
-      console.log('[assign] skipping task creation — assigneeSaved=', assigneeSaved, 'normalized=', normalized);
-      return;
-    }
-
+    // 3. Create or update the task for this milestone.
+    //    Check if a task already exists for this milestone_id.
     try {
-      const existing = (tasksData || []).find(
-        (t: any) => t?.milestoneId === milestone.id
+      const existingTask = (tasksData || []).find(
+        (t: any) => t.milestoneId === milestone.id || (t as any).milestone_id === milestone.id
       );
-      if (existing) {
-        console.log(`[assign] task already exists locally for milestone=${milestone.id} id=${(existing as any).id} — skipping insert`);
-        return;
+
+      if (existingTask) {
+        // UPDATE existing task
+        const updatePayload = {
+          assigneeId: normalized,
+          projectId: projectId,
+          title: milestone.title || 'משימה',
+        };
+        console.log(`[assign] ➜ PUT /api/data/tasks/${existingTask.id} (update) payload=${JSON.stringify(updatePayload)}`);
+        const updated = await updateTask(existingTask.id, updatePayload as any);
+        console.log(`[assign] ✅ task updated:`, JSON.stringify(updated));
+      } else {
+        // CREATE new task
+        const taskPayload = {
+          title: milestone.title || 'משימה',
+          assigneeId: normalized,
+          projectId: projectId,
+          milestoneId: milestone.id,
+          status: 'pending',
+        };
+        console.log(`[assign] ➜ POST /api/data/tasks payload=${JSON.stringify(taskPayload)}`);
+        const created = await createTask(taskPayload as any);
+        console.log(`[assign] ✅ task created:`, JSON.stringify(created));
       }
 
-      const taskPayload = {
-        title: milestone.title || 'משימה',
-        employeeId: normalized,
-        businessProjectId: projectId,
-        milestoneId: milestone.id,
-        status: 'pending' as const,
-      };
-      console.log('[assign] ➜ createTask payload:', taskPayload);
-
-      const created = await createTask(taskPayload as any);
-      console.log(`[assign] ✅ task created id=${(created as any)?.id} employee_id=${(created as any)?.employeeId} business_project_id=${(created as any)?.businessProjectId} milestone_id=${(created as any)?.milestoneId}`);
+      setAssignFeedback((prev) => ({
+        ...prev,
+        [milestone.id]: { type: 'success', message: 'העובד שויך בהצלחה ומשימה נוצרה' },
+      }));
     } catch (error: any) {
-      // Do NOT roll back the assignee — it really is saved. Surface the
-      // real error to the browser console so the operator can see why.
       const msg = error?.message ?? String(error);
-      console.error('[assign] ❌ task creation failed:', msg, error);
+      console.error('[assign] ❌ task creation/update failed:', msg, error);
+      setAssignFeedback((prev) => ({
+        ...prev,
+        [milestone.id]: { type: 'error', message: `העובד שויך אך יצירת המשימה נכשלה: ${msg}` },
+      }));
     }
+
+    setAssigningMilestone(null);
+    // Auto-clear success feedback after 4 seconds
+    setTimeout(() => {
+      setAssignFeedback((prev) => {
+        const n = { ...prev };
+        if (n[milestone.id]?.type === 'success') delete n[milestone.id];
+        return n;
+      });
+    }, 4000);
   };
 
   const handleUpdateMilestone = async (milestoneId: string, updates: Partial<ProjectMilestone>) => {
@@ -1022,28 +1068,65 @@ export default function BusinessProjectPage() {
                             <span style={{ fontSize: '11px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '2px' }}>
                               מוקצה ל
                             </span>
-                            <select
-                              value={(milestone as any)?.assigneeId || (milestone as any)?.assignedEmployeeId || ''}
-                              onChange={(e) => handleAssignMilestoneEmployee(milestone, e.target.value)}
-                              disabled={loading}
-                              style={{
-                                fontSize: '13px',
-                                color: 'var(--foreground)',
-                                background: 'var(--surface)',
-                                border: '1px solid var(--border)',
-                                borderRadius: '4px',
-                                padding: '2px 6px',
-                                width: '100%',
-                                direction: 'rtl',
-                              }}
-                            >
-                              <option value="">לא הוצמד</option>
-                              {(employeesData || []).map((emp: Employee) => (
-                                <option key={emp.id} value={emp.id}>
-                                  {emp.name || (emp as any).email}
-                                </option>
-                              ))}
-                            </select>
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              <select
+                                value={
+                                  pendingAssignee[milestone.id] !== undefined
+                                    ? pendingAssignee[milestone.id]
+                                    : (milestone as any)?.assigneeId || (milestone as any)?.assignedEmployeeId || ''
+                                }
+                                onChange={(e) => {
+                                  setPendingAssignee((prev) => ({ ...prev, [milestone.id]: e.target.value }));
+                                  // Clear any stale feedback when user changes selection
+                                  setAssignFeedback((prev) => { const n = { ...prev }; delete n[milestone.id]; return n; });
+                                }}
+                                disabled={loading || assigningMilestone === milestone.id}
+                                style={{
+                                  fontSize: '13px',
+                                  color: 'var(--foreground)',
+                                  background: 'var(--surface)',
+                                  border: '1px solid var(--border)',
+                                  borderRadius: '4px',
+                                  padding: '2px 6px',
+                                  flex: 1,
+                                  direction: 'rtl',
+                                }}
+                              >
+                                <option value="">לא הוצמד</option>
+                                {(employeesData || []).map((emp: Employee) => (
+                                  <option key={emp.id} value={emp.id}>
+                                    {emp.name || (emp as any).email}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={() => handleAssignMilestoneEmployee(milestone)}
+                                disabled={loading || assigningMilestone === milestone.id}
+                                style={{
+                                  fontSize: '12px',
+                                  padding: '3px 10px',
+                                  borderRadius: '4px',
+                                  border: '1px solid var(--accent)',
+                                  background: assigningMilestone === milestone.id ? 'var(--surface)' : 'var(--accent)',
+                                  color: assigningMilestone === milestone.id ? 'var(--foreground-muted)' : '#fff',
+                                  cursor: assigningMilestone === milestone.id ? 'wait' : 'pointer',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {assigningMilestone === milestone.id ? '...' : 'שייך לעובד'}
+                              </button>
+                            </div>
+                            {assignFeedback[milestone.id] && (
+                              <div
+                                style={{
+                                  fontSize: '11px',
+                                  marginTop: '4px',
+                                  color: assignFeedback[milestone.id].type === 'success' ? '#22c55e' : '#ef4444',
+                                }}
+                              >
+                                {assignFeedback[milestone.id].message}
+                              </div>
+                            )}
                           </div>
 
                           <div>
