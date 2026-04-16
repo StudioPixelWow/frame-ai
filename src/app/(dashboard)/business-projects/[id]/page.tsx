@@ -151,6 +151,49 @@ export default function BusinessProjectPage() {
   const [savingProject, setSavingProject] = useState(false);
   const [projectSaveFeedback, setProjectSaveFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  // ── Milestone file uploads (hooks MUST be before any early return) ──
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [uploadingMilestone, setUploadingMilestone] = useState<string | null>(null);
+
+  const handleMilestoneFileUpload = useCallback(async (milestoneId: string, file: File) => {
+    setUploadingMilestone(milestoneId);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('milestoneId', milestoneId);
+      const res = await fetch('/api/data/milestone-files', { method: 'POST', body: form });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `Upload failed (${res.status})`);
+      }
+      console.log(`[milestone-files] ✅ uploaded to milestone=${milestoneId}`);
+      await refetchMilestoneFiles();
+    } catch (err: any) {
+      console.error('[milestone-files] upload error:', err);
+      alert(`שגיאה בהעלאת קובץ: ${err?.message || 'unknown'}`);
+    } finally {
+      setUploadingMilestone(null);
+      const input = fileInputRefs.current[milestoneId];
+      if (input) input.value = '';
+    }
+  }, [refetchMilestoneFiles]);
+
+  const handleDeleteMilestoneFile = useCallback(async (fileId: string) => {
+    try {
+      await deleteMilestoneFile(fileId);
+      console.log(`[milestone-files] ✅ deleted file=${fileId}`);
+    } catch (err: any) {
+      console.error('[milestone-files] delete error:', err);
+    }
+  }, [deleteMilestoneFile]);
+
+  const getFilesForMilestone = useCallback((milestoneId: string): MilestoneFile[] => {
+    const files = Array.isArray(milestoneFilesData) ? milestoneFilesData : [];
+    return files.filter(
+      (f: MilestoneFile) => f?.milestoneId === milestoneId
+    );
+  }, [milestoneFilesData]);
+
   const project = useMemo(
     () => projectsData.find((p: BusinessProject) => p.id === projectId),
     [projectsData, projectId]
@@ -549,49 +592,6 @@ export default function BusinessProjectPage() {
       console.error('[project-edit] contract toggle failed:', error);
     }
   };
-
-  // ── Milestone file uploads ──────────────────────────────────────
-  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
-  const [uploadingMilestone, setUploadingMilestone] = useState<string | null>(null);
-
-  const handleMilestoneFileUpload = useCallback(async (milestoneId: string, file: File) => {
-    setUploadingMilestone(milestoneId);
-    try {
-      const form = new FormData();
-      form.append('file', file);
-      form.append('milestoneId', milestoneId);
-      const res = await fetch('/api/data/milestone-files', { method: 'POST', body: form });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error || `Upload failed (${res.status})`);
-      }
-      console.log(`[milestone-files] ✅ uploaded to milestone=${milestoneId}`);
-      await refetchMilestoneFiles();
-    } catch (err: any) {
-      console.error('[milestone-files] upload error:', err);
-      alert(`שגיאה בהעלאת קובץ: ${err?.message || 'unknown'}`);
-    } finally {
-      setUploadingMilestone(null);
-      // Reset the file input so the same file can be re-selected
-      const input = fileInputRefs.current[milestoneId];
-      if (input) input.value = '';
-    }
-  }, [refetchMilestoneFiles]);
-
-  const handleDeleteMilestoneFile = useCallback(async (fileId: string) => {
-    try {
-      await deleteMilestoneFile(fileId);
-      console.log(`[milestone-files] ✅ deleted file=${fileId}`);
-    } catch (err: any) {
-      console.error('[milestone-files] delete error:', err);
-    }
-  }, [deleteMilestoneFile]);
-
-  const getFilesForMilestone = useCallback((milestoneId: string): MilestoneFile[] => {
-    return (milestoneFilesData || []).filter(
-      (f: MilestoneFile) => f.milestoneId === milestoneId
-    );
-  }, [milestoneFilesData]);
 
   const startDate = project?.startDate ? new Date(project.startDate) : null;
   const endDate = project?.endDate ? new Date(project.endDate) : null;
@@ -1502,9 +1502,9 @@ export default function BusinessProjectPage() {
                                     {mf.fileName}
                                   </a>
                                   <span style={{ color: 'var(--foreground-muted)', fontSize: '10px', flexShrink: 0 }}>
-                                    {mf.fileSize > 1024 * 1024
-                                      ? `${(mf.fileSize / (1024 * 1024)).toFixed(1)} MB`
-                                      : `${Math.round(mf.fileSize / 1024)} KB`}
+                                    {(mf.fileSize || 0) > 1024 * 1024
+                                      ? `${((mf.fileSize || 0) / (1024 * 1024)).toFixed(1)} MB`
+                                      : `${Math.round((mf.fileSize || 0) / 1024)} KB`}
                                   </span>
                                   <button
                                     onClick={() => handleDeleteMilestoneFile(mf.id)}
