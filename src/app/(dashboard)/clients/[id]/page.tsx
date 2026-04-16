@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useClients, useEmployees, useClientGanttItems, useClientTasks, useTasks } from "@/lib/api/use-entity";
+import { useClients, useEmployees, useClientGanttItems, useClientTasks, useTasks, useClientFiles } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import type { Client, Employee } from "@/lib/db/schema";
 import TabOverview from "./tab-overview";
@@ -113,12 +113,29 @@ function ClientDetailContent() {
   const [editForm, setEditForm] = useState<Partial<Client>>({});
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
+  // ── UGC Video Generation State ──
+  const { create: createClientFile, refetch: refetchClientFiles } = useClientFiles();
+  const [ugcModalOpen, setUgcModalOpen] = useState(false);
+  const [ugcAvatars, setUgcAvatars] = useState<any[]>([]);
+  const [ugcVoices, setUgcVoices] = useState<any[]>([]);
+  const [ugcLoadingOptions, setUgcLoadingOptions] = useState(false);
+  const [ugcAvatarId, setUgcAvatarId] = useState("");
+  const [ugcVoiceId, setUgcVoiceId] = useState("");
+  const [ugcScript, setUgcScript] = useState("");
+  const [ugcGenerating, setUgcGenerating] = useState(false);
+  const [ugcVideoId, setUgcVideoId] = useState<string | null>(null);
+  const [ugcStatus, setUgcStatus] = useState<string>("");
+  const [ugcProgress, setUgcProgress] = useState<string>("");
+  const ugcPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
     if (clients && clientId) {
       const found = clients.find((c) => c.id === clientId);
       setClient(found || null);
     }
   }, [clients, clientId]);
+
+  const ugcAutoOpened = useRef(false);
 
   const handleOpenEditModal = () => {
     if (client) {
@@ -162,6 +179,154 @@ function ClientDetailContent() {
       setIsSavingEdit(false);
     }
   };
+
+  // ── UGC Video Handlers ──
+  const openUgcModal = useCallback(async () => {
+    setUgcModalOpen(true);
+    setUgcAvatarId("");
+    setUgcVoiceId("");
+    setUgcScript("");
+    setUgcVideoId(null);
+    setUgcStatus("");
+    setUgcProgress("");
+    setUgcGenerating(false);
+
+    setUgcLoadingOptions(true);
+    try {
+      const [avatarsRes, voicesRes] = await Promise.all([
+        fetch("/api/data/heygen/avatars"),
+        fetch("/api/data/heygen/voices"),
+      ]);
+      if (!avatarsRes.ok) {
+        const err = await avatarsRes.json().catch(() => ({}));
+        throw new Error(err?.error || `Avatars failed: ${avatarsRes.status}`);
+      }
+      if (!voicesRes.ok) {
+        const err = await voicesRes.json().catch(() => ({}));
+        throw new Error(err?.error || `Voices failed: ${voicesRes.status}`);
+      }
+      const avatars = await avatarsRes.json();
+      const voices = await voicesRes.json();
+      setUgcAvatars(Array.isArray(avatars) ? avatars : []);
+      setUgcVoices(Array.isArray(voices) ? voices : []);
+    } catch (err: any) {
+      console.error("[UGC] Failed to load options:", err);
+      toast(`שגיאה בטעינת אפשרויות HeyGen: ${err?.message || "unknown"}`, "error");
+    } finally {
+      setUgcLoadingOptions(false);
+    }
+  }, [toast]);
+
+  const closeUgcModal = useCallback(() => {
+    if (ugcPollRef.current) {
+      clearInterval(ugcPollRef.current);
+      ugcPollRef.current = null;
+    }
+    setUgcModalOpen(false);
+  }, []);
+
+  const handleGenerateUGC = useCallback(async () => {
+    if (!client || !ugcAvatarId || !ugcVoiceId || !ugcScript.trim()) {
+      toast("יש למלא את כל השדות", "error");
+      return;
+    }
+
+    setUgcGenerating(true);
+    setUgcProgress("שולח בקשה ל-HeyGen...");
+
+    try {
+      const res = await fetch("/api/data/heygen/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          avatarId: ugcAvatarId,
+          voiceId: ugcVoiceId,
+          script: ugcScript,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `Failed to generate (${res.status})`);
+
+      const videoId = data.videoId;
+      setUgcVideoId(videoId);
+      setUgcProgress("הסרטון בתהליך יצירה... זה עשוי לקחת כמה דקות");
+
+      // Poll for completion every 5 seconds
+      const clientRef = client; // capture for closure
+      ugcPollRef.current = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`/api/data/heygen/status?videoId=${videoId}`);
+          const statusData = await statusRes.json();
+          const status = statusData?.status;
+          setUgcStatus(status);
+
+          if (status === "completed" && statusData.videoUrl) {
+            if (ugcPollRef.current) {
+              clearInterval(ugcPollRef.current);
+              ugcPollRef.current = null;
+            }
+
+            setUgcProgress("שומר את הסרטון בקבצי הלקוח...");
+
+            try {
+              await createClientFile({
+                clientId: clientRef.id,
+                fileName: `UGC_${clientRef.name}_${new Date().toISOString().split("T")[0]}.mp4`,
+                fileUrl: statusData.videoUrl,
+                fileType: "video",
+                category: "social_media",
+                fileSize: 0,
+                uploadedBy: "HeyGen AI",
+                notes: `סרטון UGC שנוצר באמצעות HeyGen.\nתסריט: ${ugcScript.slice(0, 200)}`,
+              } as any);
+
+              await refetchClientFiles();
+              setUgcProgress("הסרטון נוצר ונשמר בהצלחה! ניתן לראות בלשונית קבצים.");
+              toast("סרטון UGC נוצר ונשמר בקבצי הלקוח!", "success");
+            } catch (saveErr: any) {
+              console.error("[UGC] Failed to save file:", saveErr);
+              setUgcProgress(`הסרטון נוצר בהצלחה אבל השמירה נכשלה: ${saveErr?.message}. קישור לסרטון: ${statusData.videoUrl}`);
+              toast("הסרטון נוצר אך השמירה נכשלה", "error");
+            }
+
+            setUgcGenerating(false);
+          } else if (status === "failed") {
+            if (ugcPollRef.current) {
+              clearInterval(ugcPollRef.current);
+              ugcPollRef.current = null;
+            }
+            setUgcProgress(`יצירת הסרטון נכשלה: ${statusData.error || "שגיאה לא ידועה"}`);
+            setUgcGenerating(false);
+          } else {
+            setUgcProgress(`סטטוס: ${status || "processing"}... ממתין לסיום`);
+          }
+        } catch (pollErr) {
+          console.error("[UGC] poll error:", pollErr);
+        }
+      }, 5000);
+    } catch (err: any) {
+      console.error("[UGC] generate error:", err);
+      setUgcProgress("");
+      toast(`שגיאה ביצירת סרטון: ${err?.message}`, "error");
+      setUgcGenerating(false);
+    }
+  }, [client, ugcAvatarId, ugcVoiceId, ugcScript, toast, createClientFile, refetchClientFiles]);
+
+  // Cleanup poll interval on unmount
+  useEffect(() => {
+    return () => {
+      if (ugcPollRef.current) clearInterval(ugcPollRef.current);
+    };
+  }, []);
+
+  // Auto-open UGC modal when ?ugc=1 is in URL (e.g. from clients list page)
+  useEffect(() => {
+    if (searchParams.get("ugc") === "1" && client && !ugcAutoOpened.current) {
+      ugcAutoOpened.current = true;
+      openUgcModal();
+    }
+  }, [searchParams, client, openUgcModal]);
 
   const loading = clientsLoading || employeesLoading;
 
@@ -322,6 +487,22 @@ function ClientDetailContent() {
                   onClick={() => setActiveTab("content")}
                 >
                   📊 גאנט
+                </button>
+                <button
+                  className="mod-btn-ghost"
+                  style={{
+                    fontSize: "0.875rem",
+                    padding: "0.5rem 1.125rem",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    color: "#8b5cf6",
+                    borderColor: "rgba(139,92,246,0.3)",
+                    background: "rgba(139,92,246,0.06)",
+                  }}
+                  onClick={openUgcModal}
+                >
+                  🎬 צור סרטון UGC
                 </button>
               </div>
             </div>
@@ -549,7 +730,7 @@ function ClientDetailContent() {
           <TabSocial client={client} employees={employees || []} />
         )}
         {activeTab === "files" && (
-          <TabFiles client={client} />
+          <TabFiles client={client} onOpenUgcModal={openUgcModal} />
         )}
         {activeTab === "accounting" && (
           <TabAccounting client={client} />
@@ -880,6 +1061,165 @@ function ClientDetailContent() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── UGC Video Generation Modal ── */}
+      {ugcModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 50,
+            direction: "rtl",
+          }}
+          onClick={closeUgcModal}
+        >
+          <div
+            style={{
+              background: "var(--surface-raised)",
+              borderRadius: "0.75rem",
+              padding: "2rem",
+              maxWidth: "560px",
+              width: "90%",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              border: "1px solid var(--border)",
+            }}
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          >
+            <h2 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "1.5rem" }}>
+              🎬 יצירת סרטון UGC {client ? `— ${client.name}` : ""}
+            </h2>
+
+            {ugcLoadingOptions ? (
+              <div style={{ textAlign: "center", padding: "2rem", color: "var(--foreground-muted)" }}>
+                טוען אפשרויות מ-HeyGen...
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                {/* Avatar Selection */}
+                <div>
+                  <label style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)", display: "block", marginBottom: "0.5rem" }}>
+                    אווטאר (דמות)
+                  </label>
+                  <select
+                    className="form-select"
+                    value={ugcAvatarId}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUgcAvatarId(e.target.value)}
+                    disabled={ugcGenerating}
+                    style={{ width: "100%", padding: "0.625rem", fontSize: "0.875rem" }}
+                  >
+                    <option value="">בחר אווטאר...</option>
+                    {ugcAvatars.map((a: any) => (
+                      <option key={a.avatar_id} value={a.avatar_id}>
+                        {a.avatar_name || a.avatar_id}
+                      </option>
+                    ))}
+                  </select>
+                  {ugcAvatars.length === 0 && !ugcLoadingOptions && (
+                    <p style={{ fontSize: "0.75rem", color: "#f59e0b", marginTop: "0.25rem" }}>
+                      לא נמצאו אווטארים. בדוק את מפתח ה-API של HeyGen.
+                    </p>
+                  )}
+                </div>
+
+                {/* Voice Selection */}
+                <div>
+                  <label style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)", display: "block", marginBottom: "0.5rem" }}>
+                    קול
+                  </label>
+                  <select
+                    className="form-select"
+                    value={ugcVoiceId}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUgcVoiceId(e.target.value)}
+                    disabled={ugcGenerating}
+                    style={{ width: "100%", padding: "0.625rem", fontSize: "0.875rem" }}
+                  >
+                    <option value="">בחר קול...</option>
+                    {ugcVoices.map((v: any) => (
+                      <option key={v.voice_id} value={v.voice_id}>
+                        {v.name || v.display_name || v.voice_id}{v.language ? ` (${v.language})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Script */}
+                <div>
+                  <label style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)", display: "block", marginBottom: "0.5rem" }}>
+                    תסריט (טקסט שהאווטאר יגיד)
+                  </label>
+                  <textarea
+                    className="form-input"
+                    value={ugcScript}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setUgcScript(e.target.value)}
+                    disabled={ugcGenerating}
+                    placeholder="כתוב כאן את הטקסט לסרטון UGC..."
+                    rows={5}
+                    style={{ width: "100%", padding: "0.625rem", fontSize: "0.875rem", resize: "vertical" }}
+                  />
+                </div>
+
+                {/* Progress / Status */}
+                {ugcProgress && (
+                  <div
+                    style={{
+                      padding: "0.75rem 1rem",
+                      borderRadius: "0.5rem",
+                      background: ugcStatus === "completed"
+                        ? "rgba(34,197,94,0.1)"
+                        : ugcStatus === "failed"
+                          ? "rgba(239,68,68,0.1)"
+                          : "rgba(139,92,246,0.1)",
+                      color: ugcStatus === "completed"
+                        ? "#22c55e"
+                        : ugcStatus === "failed"
+                          ? "#ef4444"
+                          : "#8b5cf6",
+                      fontSize: "0.85rem",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {ugcProgress}
+                  </div>
+                )}
+
+                {/* Buttons */}
+                <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-start" }}>
+                  <button
+                    className="mod-btn-primary"
+                    onClick={handleGenerateUGC}
+                    disabled={ugcGenerating || !ugcAvatarId || !ugcVoiceId || !ugcScript.trim()}
+                    style={{
+                      padding: "0.625rem 1.5rem",
+                      fontSize: "0.875rem",
+                      fontWeight: 600,
+                      opacity: (ugcGenerating || !ugcAvatarId || !ugcVoiceId || !ugcScript.trim()) ? 0.5 : 1,
+                      background: "#8b5cf6",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "0.5rem",
+                      cursor: ugcGenerating ? "wait" : "pointer",
+                    }}
+                  >
+                    {ugcGenerating ? "מייצר סרטון..." : "🎬 צור סרטון"}
+                  </button>
+                  <button
+                    onClick={closeUgcModal}
+                    className="mod-btn-ghost"
+                    style={{ padding: "0.625rem 1.5rem", fontSize: "0.875rem", fontWeight: 600 }}
+                  >
+                    סגור
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useClientFiles } from "@/lib/api/use-entity";
 import type { Client, ClientFile } from "@/lib/db/schema";
 
 interface TabFilesProps {
   client: Client;
+  onOpenUgcModal?: () => void;
 }
 
 type CategoryFilter = "all" | "social_media" | "agreements" | "branding" | "website" | "accountant" | "approved_final" | "general";
@@ -55,7 +56,7 @@ function formatDate(dateStr: string): string {
   return `${d.getDate()} ${months[d.getMonth()]}`;
 }
 
-export default function TabFiles({ client }: TabFilesProps) {
+export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
   const { data: allFiles, loading } = useClientFiles();
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -85,6 +86,26 @@ export default function TabFiles({ client }: TabFilesProps) {
         >
           📤 העלה קובץ
         </button>
+
+        {onOpenUgcModal && (
+          <button
+            onClick={onOpenUgcModal}
+            className="mod-btn-ghost"
+            style={{
+              padding: "0.625rem 1.125rem",
+              fontSize: "0.875rem",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              whiteSpace: "nowrap",
+              color: "#8b5cf6",
+              borderColor: "rgba(139,92,246,0.3)",
+              background: "rgba(139,92,246,0.06)",
+            }}
+          >
+            🎬 צור סרטון UGC
+          </button>
+        )}
 
         {/* Search Input */}
         <input
