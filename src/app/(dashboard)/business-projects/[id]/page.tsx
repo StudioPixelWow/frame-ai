@@ -16,7 +16,7 @@ import { BusinessProject, ProjectMilestone, ProjectPayment, Client, Employee, Cl
 
 type Tab = 'overview' | 'milestones' | 'files' | 'payments' | 'activity';
 type MilestoneStatus = 'pending' | 'in_progress' | 'submitted' | 'approved' | 'returned';
-type ProjectPaymentStatus = 'pending' | 'collection_needed' | 'paid';
+type ProjectPaymentStatus = 'pending' | 'collection_needed' | 'paid' | 'overdue';
 type FileCategory = 'agreements' | 'branding' | 'website' | 'general';
 
 interface MilestoneFormData {
@@ -44,7 +44,16 @@ const paymentStatusLabels: Record<ProjectPaymentStatus, string> = {
   pending: 'בתהליך',
   collection_needed: 'צריך גביה',
   paid: 'שולם',
+  overdue: 'באיחור',
 };
+
+interface PaymentFormData {
+  title: string;
+  amount: string;
+  dueDate: string;
+  description: string;
+  milestoneId: string;
+}
 
 const projectTypeLabels: Record<string, string> = {
   website: 'אתר',
@@ -116,7 +125,7 @@ export default function BusinessProjectPage() {
 
   const { data: projectsData = [], loading: projectsLoading, update: updateProject } = useBusinessProjects();
   const { data: milestonesData = [], create: createMilestone, update: updateMilestone } = useProjectMilestones();
-  const { data: paymentsData = [], update: updatePayment } = useProjectPayments();
+  const { data: paymentsData = [], create: createPayment, update: updatePayment } = useProjectPayments();
   const { data: clientsData = [] } = useClients();
   const { data: employeesData = [] } = useEmployees();
   const { data: clientFilesData = [], create: createClientFile } = useClientFiles();
@@ -154,6 +163,10 @@ export default function BusinessProjectPage() {
   const [editForm, setEditForm] = useState<Record<string, unknown>>({});
   const [savingProject, setSavingProject] = useState(false);
   const [projectSaveFeedback, setProjectSaveFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [paymentFormData, setPaymentFormData] = useState<PaymentFormData>({
+    title: '', amount: '', dueDate: '', description: '', milestoneId: '',
+  });
 
   // ── Derived data (useMemo) — must be declared before useCallback blocks that reference them ──
   const project = useMemo(
@@ -191,6 +204,28 @@ export default function BusinessProjectPage() {
     () => project ? employeesData.find((e: Employee) => e.id === project.assignedManagerId) : undefined,
     [employeesData, project]
   );
+
+  // ── Derived project status & progress from milestones (source of truth) ──
+  const milestoneProgress = useMemo(() => {
+    const total = projectMilestones?.length || 0;
+    if (total === 0) return 0;
+    const approved = projectMilestones.filter((m: any) => m.status === 'approved').length;
+    return Math.round((approved / total) * 100);
+  }, [projectMilestones]);
+
+  const derivedProjectStatus = useMemo(() => {
+    const total = projectMilestones?.length || 0;
+    if (total === 0) return project?.projectStatus || 'not_started';
+    const approved = projectMilestones.filter((m: any) => m.status === 'approved').length;
+    const inProgress = projectMilestones.filter((m: any) =>
+      m.status === 'in_progress' || m.status === 'submitted'
+    ).length;
+    const returned = projectMilestones.filter((m: any) => m.status === 'returned').length;
+    if (approved === total) return 'completed';
+    if (returned > 0) return 'waiting_for_client';
+    if (inProgress > 0 || approved > 0) return 'in_progress';
+    return 'not_started';
+  }, [projectMilestones, project?.projectStatus]);
 
   // ── Project file upload (hooks MUST be before any early return) ──
   const projectFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -549,6 +584,29 @@ export default function BusinessProjectPage() {
     }
   };
 
+  async function handleAddPayment() {
+    if (!paymentFormData.title || !paymentFormData.amount) return;
+    setLoading(true);
+    try {
+      await createPayment({
+        projectId,
+        clientId: project?.clientId || '',
+        title: paymentFormData.title,
+        amount: parseFloat(paymentFormData.amount) || 0,
+        dueDate: paymentFormData.dueDate || null,
+        status: 'pending',
+        description: paymentFormData.description,
+        milestoneId: paymentFormData.milestoneId || null,
+      } as any);
+      setPaymentFormData({ title: '', amount: '', dueDate: '', description: '', milestoneId: '' });
+      setShowPaymentForm(false);
+    } catch (error) {
+      console.error('Error adding payment:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleAddFile() {
     if (!fileFormData.url) {
       return;
@@ -833,10 +891,10 @@ export default function BusinessProjectPage() {
             ) : (
               <div style={{
                 display: 'inline-block', padding: '4px 12px',
-                background: getProjectStatusColor(project?.projectStatus),
+                background: getProjectStatusColor(derivedProjectStatus),
                 color: '#fff', borderRadius: '6px', fontSize: '12px', fontWeight: '600',
               }}>
-                {getProjectStatusLabel(project?.projectStatus)}
+                {getProjectStatusLabel(derivedProjectStatus)}
               </div>
             )}
           </div>
@@ -1058,7 +1116,7 @@ export default function BusinessProjectPage() {
                 }}
               >
                 <span style={{ color: 'var(--foreground)', fontWeight: '600', fontSize: '14px' }}>
-                  {completedMilestones} / {projectMilestones?.length || 0}
+                  {completedMilestones} / {projectMilestones?.length || 0} ({milestoneProgress}%)
                 </span>
               </div>
               <div
@@ -1073,7 +1131,7 @@ export default function BusinessProjectPage() {
                 <div
                   style={{
                     height: '100%',
-                    width: `${(projectMilestones?.length || 0) > 0 ? (completedMilestones / (projectMilestones?.length || 1)) * 100 : 0}%`,
+                    width: `${milestoneProgress}%`,
                     background: '#22c55e',
                     transition: 'width 0.3s',
                   }}
@@ -1889,6 +1947,7 @@ export default function BusinessProjectPage() {
 
       {activeTab === 'payments' && (
         <div>
+          {/* Summary cards */}
           <div
             style={{
               display: 'grid',
@@ -1897,118 +1956,182 @@ export default function BusinessProjectPage() {
               marginBottom: '24px',
             }}
           >
-            <div
-              className="agd-card"
-              style={{
-                background: 'var(--surface-raised)',
-                border: `1px solid var(--border)`,
-                borderRadius: '8px',
-                padding: '16px',
-              }}
-            >
-              <h4 style={{ fontSize: '12px', color: 'var(--foreground-muted)', margin: '0 0 8px 0', textTransform: 'uppercase' }}>
-                סה"כ
-              </h4>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: 'var(--foreground)' }}>
-                ₪{totalAmount.toLocaleString('he-IL')}
-              </div>
+            <div className="agd-card" style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '8px', padding: '16px' }}>
+              <h4 style={{ fontSize: '12px', color: 'var(--foreground-muted)', margin: '0 0 8px 0' }}>סה&quot;כ</h4>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: 'var(--foreground)' }}>₪{totalAmount.toLocaleString('he-IL')}</div>
             </div>
-
-            <div
-              className="agd-card"
-              style={{
-                background: 'var(--surface-raised)',
-                border: `1px solid var(--border)`,
-                borderRadius: '8px',
-                padding: '16px',
-              }}
-            >
-              <h4 style={{ fontSize: '12px', color: 'var(--foreground-muted)', margin: '0 0 8px 0', textTransform: 'uppercase' }}>
-                שולם
-              </h4>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: '#22c55e' }}>
-                ₪{paidAmount.toLocaleString('he-IL')}
-              </div>
+            <div className="agd-card" style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '8px', padding: '16px' }}>
+              <h4 style={{ fontSize: '12px', color: 'var(--foreground-muted)', margin: '0 0 8px 0' }}>שולם</h4>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: '#22c55e' }}>₪{paidAmount.toLocaleString('he-IL')}</div>
             </div>
-
-            <div
-              className="agd-card"
-              style={{
-                background: 'var(--surface-raised)',
-                border: `1px solid var(--border)`,
-                borderRadius: '8px',
-                padding: '16px',
-              }}
-            >
-              <h4 style={{ fontSize: '12px', color: 'var(--foreground-muted)', margin: '0 0 8px 0', textTransform: 'uppercase' }}>
-                נותר
-              </h4>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: '#f59e0b' }}>
-                ₪{(totalAmount - paidAmount).toLocaleString('he-IL')}
-              </div>
+            <div className="agd-card" style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '8px', padding: '16px' }}>
+              <h4 style={{ fontSize: '12px', color: 'var(--foreground-muted)', margin: '0 0 8px 0' }}>נותר</h4>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: '#f59e0b' }}>₪{(totalAmount - paidAmount).toLocaleString('he-IL')}</div>
             </div>
           </div>
 
-          <div
-            style={{
-              display: 'grid',
-              gap: '12px',
-            }}
-          >
-            {(projectPayments?.length || 0) === 0 ? (
-              <div
-                style={{
-                  background: 'var(--surface-raised)',
-                  border: `1px solid var(--border)`,
-                  borderRadius: '8px',
-                  padding: '24px',
-                  textAlign: 'center',
-                }}
+          {/* Add payment button + form */}
+          <div style={{ marginBottom: '16px' }}>
+            {!showPaymentForm ? (
+              <button
+                className="mod-btn-primary"
+                onClick={() => setShowPaymentForm(true)}
+                style={{ fontSize: '14px', padding: '8px 16px' }}
               >
-                <p style={{ color: 'var(--foreground-muted)', margin: 0 }}>
-                  אין תשלומים לפרויקט זה
-                </p>
+                + הוסף תשלום
+              </button>
+            ) : (
+              <div style={{
+                background: 'var(--surface-raised)', border: '1px solid var(--border)',
+                borderRadius: '8px', padding: '16px', marginBottom: '16px',
+              }}>
+                <h4 style={{ fontSize: '14px', fontWeight: '600', color: 'var(--foreground)', margin: '0 0 12px 0' }}>
+                  תשלום חדש
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>כותרת *</label>
+                    <input
+                      type="text"
+                      value={paymentFormData.title}
+                      onChange={(e) => setPaymentFormData((f) => ({ ...f, title: e.target.value }))}
+                      placeholder="למשל: תשלום ראשון"
+                      style={{
+                        width: '100%', fontSize: '13px', padding: '8px',
+                        background: 'var(--surface)', border: '1px solid var(--border)',
+                        borderRadius: '6px', color: 'var(--foreground)', direction: 'rtl',
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>סכום (₪) *</label>
+                    <input
+                      type="number"
+                      value={paymentFormData.amount}
+                      onChange={(e) => setPaymentFormData((f) => ({ ...f, amount: e.target.value }))}
+                      placeholder="0"
+                      style={{
+                        width: '100%', fontSize: '13px', padding: '8px',
+                        background: 'var(--surface)', border: '1px solid var(--border)',
+                        borderRadius: '6px', color: 'var(--foreground)', direction: 'ltr',
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>תאריך יעד</label>
+                    <input
+                      type="date"
+                      value={paymentFormData.dueDate}
+                      onChange={(e) => setPaymentFormData((f) => ({ ...f, dueDate: e.target.value }))}
+                      style={{
+                        width: '100%', fontSize: '13px', padding: '8px',
+                        background: 'var(--surface)', border: '1px solid var(--border)',
+                        borderRadius: '6px', color: 'var(--foreground)',
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>אבן דרך מקושרת</label>
+                    <select
+                      value={paymentFormData.milestoneId}
+                      onChange={(e) => setPaymentFormData((f) => ({ ...f, milestoneId: e.target.value }))}
+                      style={{
+                        width: '100%', fontSize: '13px', padding: '8px',
+                        background: 'var(--surface)', border: '1px solid var(--border)',
+                        borderRadius: '6px', color: 'var(--foreground)', direction: 'rtl',
+                      }}
+                    >
+                      <option value="">ללא</option>
+                      {(projectMilestones || []).map((m: any) => (
+                        <option key={m.id} value={m.id}>{m.title}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>תיאור</label>
+                  <textarea
+                    value={paymentFormData.description}
+                    onChange={(e) => setPaymentFormData((f) => ({ ...f, description: e.target.value }))}
+                    rows={2}
+                    placeholder="הערות לגבי התשלום..."
+                    style={{
+                      width: '100%', fontSize: '13px', padding: '8px',
+                      background: 'var(--surface)', border: '1px solid var(--border)',
+                      borderRadius: '6px', color: 'var(--foreground)', direction: 'rtl', resize: 'vertical',
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    className="mod-btn-primary"
+                    onClick={handleAddPayment}
+                    disabled={loading || !paymentFormData.title || !paymentFormData.amount}
+                    style={{ fontSize: '13px', padding: '8px 16px' }}
+                  >
+                    {loading ? '...' : 'שמור תשלום'}
+                  </button>
+                  <button
+                    className="mod-btn-ghost"
+                    onClick={() => { setShowPaymentForm(false); setPaymentFormData({ title: '', amount: '', dueDate: '', description: '', milestoneId: '' }); }}
+                    style={{ fontSize: '13px', padding: '8px 16px' }}
+                  >
+                    ביטול
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Payment list */}
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {(projectPayments?.length || 0) === 0 ? (
+              <div style={{
+                background: 'var(--surface-raised)', border: '1px solid var(--border)',
+                borderRadius: '8px', padding: '24px', textAlign: 'center',
+              }}>
+                <p style={{ color: 'var(--foreground-muted)', margin: 0 }}>אין תשלומים לפרויקט זה</p>
               </div>
             ) : (
               (projectPayments || []).map((payment) => {
-                const dueDate = payment?.dueDate ? new Date(payment.dueDate) : null;
                 const statusColor =
-                  payment?.status === 'paid'
-                    ? '#22c55e'
-                    : payment?.status === 'pending'
-                    ? '#f59e0b'
-                    : '#f97316';
+                  payment?.status === 'paid' ? '#22c55e'
+                  : payment?.status === 'overdue' ? '#ef4444'
+                  : payment?.status === 'collection_needed' ? '#f97316'
+                  : '#f59e0b';
+                const linkedMilestone = payment?.milestoneId
+                  ? (projectMilestones || []).find((m: any) => m.id === payment.milestoneId)
+                  : null;
 
                 return (
                   <div
                     key={payment?.id || ''}
                     style={{
-                      background: 'var(--surface-raised)',
-                      border: `1px solid var(--border)`,
-                      borderRadius: '8px',
-                      padding: '16px',
-                      display: 'grid',
-                      gridTemplateColumns: 'auto 1fr auto auto auto',
-                      alignItems: 'center',
-                      gap: '16px',
+                      background: 'var(--surface-raised)', border: '1px solid var(--border)',
+                      borderRadius: '8px', padding: '16px',
+                      display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto',
+                      alignItems: 'center', gap: '16px',
                     }}
                   >
-                    <div
-                      style={{
-                        width: '4px',
-                        height: '40px',
-                        background: statusColor,
-                        borderRadius: '2px',
-                      }}
-                    />
+                    <div style={{ width: '4px', height: '40px', background: statusColor, borderRadius: '2px' }} />
 
                     <div>
                       <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--foreground)', marginBottom: '4px' }}>
-                        {payment?.description || 'תשלום'}
+                        {payment?.title || payment?.description || 'תשלום'}
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--foreground-muted)' }}>
                         לתאריך: {formatDate(payment?.dueDate || null)}
+                        {linkedMilestone && (
+                          <span style={{ marginRight: '8px' }}>
+                            | אבן דרך: {(linkedMilestone as any).title}
+                          </span>
+                        )}
                       </div>
+                      {payment?.description && payment?.title && (
+                        <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginTop: '2px' }}>
+                          {payment.description}
+                        </div>
+                      )}
                     </div>
 
                     <div style={{ textAlign: 'left' }}>
@@ -2017,44 +2140,24 @@ export default function BusinessProjectPage() {
                       </div>
                     </div>
 
-                    <div
-                      style={{
-                        display: 'inline-block',
-                        padding: '4px 12px',
-                        background: statusColor,
-                        color: '#fff',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {paymentStatusLabels[payment?.status || 'pending']}
+                    <div style={{
+                      display: 'inline-block', padding: '4px 12px', background: statusColor,
+                      color: '#fff', borderRadius: '6px', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap',
+                    }}>
+                      {paymentStatusLabels[(payment?.status as ProjectPaymentStatus) || 'pending'] || payment?.status}
                     </div>
 
                     <div style={{ display: 'flex', gap: '8px' }}>
                       {payment?.status !== 'paid' && (
                         <button
                           className="mod-btn-primary"
-                          onClick={() =>
-                            handleUpdatePaymentStatus(payment?.id || '', 'paid')
-                          }
+                          onClick={() => handleUpdatePaymentStatus(payment?.id || '', 'paid')}
                           disabled={loading}
                           style={{ fontSize: '12px', padding: '6px 12px' }}
                         >
                           סימון כשולם
                         </button>
                       )}
-                      <button
-                        className="mod-btn-ghost"
-                        onClick={() => {
-                          // Send reminder logic
-                        }}
-                        disabled={loading}
-                        style={{ fontSize: '12px', padding: '6px 12px' }}
-                      >
-                        הזכר
-                      </button>
                     </div>
                   </div>
                 );

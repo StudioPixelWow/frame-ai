@@ -653,16 +653,18 @@ export interface ProjectMilestone {
 }
 
 // Project Payment
-export type ProjectPaymentStatus = 'pending' | 'collection_needed' | 'paid';
+export type ProjectPaymentStatus = 'pending' | 'collection_needed' | 'paid' | 'overdue';
 
 export interface ProjectPayment {
   id: string;
   projectId: string;
   clientId: string;
+  title: string;
   amount: number;
   dueDate: string;
   status: ProjectPaymentStatus;
   description: string;
+  milestoneId: string | null;
   paidAt: string | null;
   createdAt: string;
   updatedAt: string;
