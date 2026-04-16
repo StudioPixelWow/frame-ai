@@ -863,6 +863,14 @@ export interface MilestoneFile {
   updatedAt: string;
 }
 
+export interface ProjectTimelineEvent {
+  id: string;
+  projectId: string;
+  actionType: string;
+  description: string;
+  createdAt: string;
+}
+
 export interface GmailSettings {
   id: string;
   connectionStatus: GmailConnectionStatus;

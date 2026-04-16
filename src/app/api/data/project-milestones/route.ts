@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
+import { insertTimelineEvent, deriveAndUpdateProjectStatus } from '@/lib/timeline';
 
 const TABLE = 'business_project_milestones';
 
@@ -85,6 +86,9 @@ function parseBadColumn(msg: string): string | null {
   return m?.[1] || m?.[2] || null;
 }
 
+const SELECT_COLUMNS =
+  'id, project_id, title, description, due_date, assignee_id, status, files, notes, created_at, updated_at';
+
 export async function GET() {
   try {
     const sb = getSupabase();
@@ -134,7 +138,20 @@ export async function POST(req: NextRequest) {
       console.error('[API] POST /api/data/project-milestones insert error:', lastErr);
       return NextResponse.json({ error: lastErr?.message ?? 'Insert failed' }, { status: 500 });
     }
-    return NextResponse.json(rowToMilestone(inserted), { status: 201 });
+
+    // ── Timeline event + project status derivation (fire-and-forget) ──
+    const mapped = rowToMilestone(inserted);
+    const resolvedProjectId = mapped.projectId || mapped.businessProjectId;
+    if (resolvedProjectId) {
+      insertTimelineEvent(
+        resolvedProjectId,
+        'milestone_created',
+        `אבן דרך חדשה נוצרה: "${mapped.title}"`,
+      );
+      deriveAndUpdateProjectStatus(resolvedProjectId);
+    }
+
+    return NextResponse.json(mapped, { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: `Failed to create milestone: ${msg}` }, { status: 500 });

@@ -11,8 +11,9 @@ import {
   useClientFiles,
   useTasks,
   useMilestoneFiles,
+  useProjectTimeline,
 } from '@/lib/api/use-entity';
-import { BusinessProject, ProjectMilestone, ProjectPayment, Client, Employee, ClientFile, MilestoneFile } from '@/lib/db/schema';
+import { BusinessProject, ProjectMilestone, ProjectPayment, Client, Employee, ClientFile, MilestoneFile, ProjectTimelineEvent } from '@/lib/db/schema';
 
 type Tab = 'overview' | 'milestones' | 'files' | 'payments' | 'activity';
 type MilestoneStatus = 'pending' | 'in_progress' | 'submitted' | 'approved' | 'returned';
@@ -133,6 +134,7 @@ export default function BusinessProjectPage() {
   const { data: clientFilesData = [], create: createClientFile } = useClientFiles();
   const { data: tasksData = [], create: createTask, update: updateTask } = useTasks();
   const { data: milestoneFilesData = [], refetch: refetchMilestoneFiles, remove: deleteMilestoneFile } = useMilestoneFiles();
+  const { data: timelineData = [], refetch: refetchTimeline } = useProjectTimeline();
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null);
@@ -205,6 +207,17 @@ export default function BusinessProjectPage() {
   const assignedManager = useMemo(
     () => project ? employeesData.find((e: Employee) => e.id === project.assignedManagerId) : undefined,
     [employeesData, project]
+  );
+
+  // Timeline events filtered for this project, sorted by newest first
+  const projectTimeline = useMemo(
+    () =>
+      (timelineData || [])
+        .filter((e: ProjectTimelineEvent) => e.projectId === projectId)
+        .sort((a: ProjectTimelineEvent, b: ProjectTimelineEvent) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        ),
+    [timelineData, projectId]
   );
 
   // ── Derived project status & progress from milestones (source of truth) ──
@@ -605,6 +618,8 @@ export default function BusinessProjectPage() {
         }));
       }
       setEditingMilestoneId(null);
+      // Refetch timeline to show new events
+      refetchTimeline();
     } catch (error) {
       console.error('Error updating milestone:', error);
       // Roll back the override on failure so the UI doesn't show stale state.
@@ -2268,150 +2283,106 @@ export default function BusinessProjectPage() {
 
       {activeTab === 'activity' && (
         <div>
-          <div
-            style={{
-              display: 'grid',
-              gap: '16px',
-            }}
-          >
-            {(projectMilestones?.length || 0) === 0 && (projectPayments?.length || 0) === 0 ? (
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {/* Always show project creation as first event */}
+            <div
+              style={{
+                background: 'var(--surface-raised)',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                padding: '16px',
+                display: 'flex',
+                gap: '16px',
+                alignItems: 'flex-start',
+              }}
+            >
               <div
                 style={{
-                  background: 'var(--surface-raised)',
-                  border: `1px solid var(--border)`,
-                  borderRadius: '8px',
-                  padding: '24px',
-                  textAlign: 'center',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  background: 'rgba(0,181,254,0.12)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '16px',
+                  flexShrink: 0,
                 }}
               >
-                <p style={{ color: 'var(--foreground-muted)', margin: 0 }}>
-                  אין פעילות בפרויקט זה
-                </p>
+                ⭐
               </div>
-            ) : (
-              <>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--foreground)', marginBottom: '4px' }}>
+                  פרויקט נוצר
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--foreground-muted)' }}>
+                  {new Date(project.createdAt).toLocaleDateString('he-IL', {
+                    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Timeline events from DB */}
+            {projectTimeline.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '16px', color: 'var(--foreground-muted)', fontSize: '14px' }}>
+                אין אירועי ציר זמן נוספים עדיין. אירועים ייווצרו אוטומטית כאשר תבוצע פעולה על אבני דרך.
+              </div>
+            )}
+
+            {projectTimeline.map((event: ProjectTimelineEvent) => {
+              const iconMap: Record<string, { icon: string; color: string }> = {
+                milestone_created: { icon: '📌', color: 'rgba(0,181,254,0.12)' },
+                milestone_status_changed: { icon: '🔄', color: 'rgba(245,158,11,0.12)' },
+                milestone_assigned: { icon: '👤', color: 'rgba(139,92,246,0.12)' },
+                milestone_completed: { icon: '✅', color: 'rgba(34,197,94,0.12)' },
+                file_uploaded: { icon: '📎', color: 'rgba(59,130,246,0.12)' },
+                payment_created: { icon: '💰', color: 'rgba(245,158,11,0.12)' },
+                project_created: { icon: '⭐', color: 'rgba(0,181,254,0.12)' },
+              };
+              const { icon, color } = iconMap[event.actionType] || { icon: '📋', color: 'rgba(107,114,128,0.12)' };
+
+              return (
                 <div
+                  key={event.id}
                   style={{
                     background: 'var(--surface-raised)',
-                    border: `1px solid var(--border)`,
+                    border: '1px solid var(--border)',
                     borderRadius: '8px',
                     padding: '16px',
                     display: 'flex',
                     gap: '16px',
+                    alignItems: 'flex-start',
                   }}
                 >
                   <div
                     style={{
-                      fontSize: '24px',
-                      minWidth: '32px',
-                      textAlign: 'center',
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '50%',
+                      background: color,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '16px',
+                      flexShrink: 0,
                     }}
                   >
-                    ⭐
+                    {icon}
                   </div>
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--foreground)', marginBottom: '4px' }}>
-                      פרויקט נוצר
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '14px', fontWeight: '500', color: 'var(--foreground)', marginBottom: '4px' }}>
+                      {event.description}
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--foreground-muted)' }}>
-                      {new Date(project.createdAt).toLocaleDateString('he-IL', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
+                      {new Date(event.createdAt).toLocaleDateString('he-IL', {
+                        year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
                       })}
                     </div>
                   </div>
                 </div>
-
-                {projectMilestones
-                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                  .map((milestone) => (
-                    <div
-                      key={`milestone-${milestone.id}`}
-                      style={{
-                        background: 'var(--surface-raised)',
-                        border: `1px solid var(--border)`,
-                        borderRadius: '8px',
-                        padding: '16px',
-                        display: 'flex',
-                        gap: '16px',
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: '24px',
-                          minWidth: '32px',
-                          textAlign: 'center',
-                        }}
-                      >
-                        ✓
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--foreground)', marginBottom: '4px' }}>
-                          אבן דרך: {milestone.title}
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginBottom: '4px' }}>
-                          סטטוס: {milestoneStatusLabels[milestone.status]}
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--foreground-muted)' }}>
-                          {new Date(milestone.createdAt).toLocaleDateString('he-IL', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-
-                {projectPayments
-                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                  .map((payment) => (
-                    <div
-                      key={`payment-${payment.id}`}
-                      style={{
-                        background: 'var(--surface-raised)',
-                        border: `1px solid var(--border)`,
-                        borderRadius: '8px',
-                        padding: '16px',
-                        display: 'flex',
-                        gap: '16px',
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: '24px',
-                          minWidth: '32px',
-                          textAlign: 'center',
-                        }}
-                      >
-                        💰
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--foreground)', marginBottom: '4px' }}>
-                          תשלום: ₪{payment.amount.toLocaleString('he-IL')}
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginBottom: '4px' }}>
-                          סטטוס: {paymentStatusLabels[payment.status]}
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--foreground-muted)' }}>
-                          {new Date(payment.createdAt).toLocaleDateString('he-IL', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-              </>
-            )}
+              );
+            })}
           </div>
         </div>
       )}

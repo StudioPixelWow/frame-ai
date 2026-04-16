@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
+import { insertTimelineEvent, deriveAndUpdateProjectStatus } from '@/lib/timeline';
 
 const TABLE = 'business_project_milestones';
 
@@ -357,8 +358,54 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       console.log(`[API] PUT /api/data/project-milestones/${id} no assigneeId in body — skipping task side effect`);
     }
 
+    // ── Timeline events + project status derivation (fire-and-forget) ──
+    const mapped = rowToMilestone(updated);
+    const resolvedProjectId =
+      mapped.projectId || mapped.businessProjectId ||
+      (body.businessProjectId as string) || (body.projectId as string) || '';
+
+    if (resolvedProjectId) {
+      // Status change event
+      if (body.status !== undefined) {
+        const statusLabel: Record<string, string> = {
+          pending: 'בהמתנה',
+          in_progress: 'בתהליך',
+          submitted: 'הוגש',
+          approved: 'אושר',
+          returned: 'הוחזר',
+        };
+        const label = statusLabel[body.status as string] || (body.status as string);
+
+        if (body.status === 'approved') {
+          insertTimelineEvent(
+            resolvedProjectId,
+            'milestone_completed',
+            `אבן דרך הושלמה: "${mapped.title}"`,
+          );
+        } else {
+          insertTimelineEvent(
+            resolvedProjectId,
+            'milestone_status_changed',
+            `אבן דרך "${mapped.title}" → ${label}`,
+          );
+        }
+      }
+
+      // Assignment event
+      if (incomingAssignee !== undefined && incomingAssignee) {
+        insertTimelineEvent(
+          resolvedProjectId,
+          'milestone_assigned',
+          `אבן דרך "${mapped.title}" שויכה לעובד`,
+        );
+      }
+
+      // Always re-derive project status after any milestone update
+      deriveAndUpdateProjectStatus(resolvedProjectId);
+    }
+
     return NextResponse.json({
-      ...rowToMilestone(updated),
+      ...mapped,
       _task: taskResult,
     });
   } catch (error) {

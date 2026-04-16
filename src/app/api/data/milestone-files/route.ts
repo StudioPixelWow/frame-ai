@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
+import { insertTimelineEvent } from '@/lib/timeline';
 
 const TABLE = 'business_project_milestone_files';
 const BUCKET = 'milestone-files';
@@ -285,6 +286,28 @@ export async function POST(req: NextRequest) {
 
     const mapped = rowToFile(inserted);
     log(`DONE in ${Date.now() - t0}ms`, { id: mapped.id, milestoneId: mapped.milestoneId, fileName: mapped.fileName });
+
+    // ── Timeline event: file uploaded to milestone (fire-and-forget) ──
+    // We need to look up the milestone's project_id to insert the timeline event.
+    try {
+      const { data: milestone } = await sb
+        .from('business_project_milestones')
+        .select('business_project_id, project_id, title')
+        .eq('id', milestoneId)
+        .maybeSingle();
+      const pId = (milestone as any)?.business_project_id || (milestone as any)?.project_id;
+      if (pId) {
+        const mTitle = (milestone as any)?.title || milestoneId;
+        insertTimelineEvent(
+          pId,
+          'file_uploaded',
+          `קובץ "${mapped.fileName}" הועלה לאבן דרך "${mTitle}"`,
+        );
+      }
+    } catch (tlErr) {
+      console.warn('[milestone-files] timeline event failed:', tlErr);
+    }
+
     return NextResponse.json(mapped, { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
