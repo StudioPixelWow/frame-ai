@@ -18,10 +18,10 @@ function rowToTask(r: Row) {
     id: r.id,
     title: (r.title as string) ?? '',
     assigneeId: (r.assignee_id as string) ?? null,
-    employeeId: (r.assignee_id as string) ?? null,         // legacy alias
-    assignedEmployeeId: (r.assignee_id as string) ?? null,  // legacy alias
-    projectId: (r.project_id as string) ?? null,
-    businessProjectId: (r.project_id as string) ?? null,    // legacy alias
+    employeeId: (r.assignee_id as string) ?? null,                // legacy alias
+    assignedEmployeeId: (r.assignee_id as string) ?? null,        // legacy alias
+    projectId: (r.project_id as string) ?? null,                  // FK → public.projects
+    businessProjectId: (r.business_project_id as string) ?? null, // FK → public.business_projects
     milestoneId: (r.milestone_id as string) ?? null,
     status: (r.status as string) ?? 'pending',
     description: (r.description as string) ?? '',
@@ -47,8 +47,8 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
     ['assigneeId', 'assignee_id', true],
     ['employeeId', 'assignee_id', true],
     ['assignedEmployeeId', 'assignee_id', true],
-    ['projectId', 'project_id', true],
-    ['businessProjectId', 'project_id', true],
+    ['projectId', 'project_id', true],                  // FK → public.projects
+    ['businessProjectId', 'business_project_id', true],  // FK → public.business_projects
     ['milestoneId', 'milestone_id', true],
   ];
   for (const [k, dbKey, nullable] of map) {

@@ -331,7 +331,7 @@ export default function BusinessProjectPage() {
         // UPDATE existing task
         const updatePayload = {
           assigneeId: normalized,
-          projectId: projectId,
+          businessProjectId: projectId,  // FK → public.business_projects (NOT project_id)
           title: milestone.title || 'משימה',
         };
         console.log(`[assign] ➜ PUT /api/data/tasks/${existingTask.id} (update) payload=${JSON.stringify(updatePayload)}`);
@@ -342,7 +342,7 @@ export default function BusinessProjectPage() {
         const taskPayload = {
           title: milestone.title || 'משימה',
           assigneeId: normalized,
-          projectId: projectId,
+          businessProjectId: projectId,  // FK → public.business_projects (NOT project_id)
           milestoneId: milestone.id,
           status: 'pending',
         };

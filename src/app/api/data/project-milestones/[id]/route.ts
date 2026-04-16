@@ -108,13 +108,16 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
  * Server-side side effect: when a milestone gets a non-null assignee, ensure
  * a task row exists in public.tasks. Always tries INSERT first.
  *
- * public.tasks confirmed columns: id, title, assignee_id, project_id,
- *   milestone_id, status, created_at, updated_at
+ * public.tasks FK columns:
+ *   project_id          → public.projects          (general projects)
+ *   business_project_id → public.business_projects  (milestone tasks)
+ *
+ * Milestone-originated tasks use business_project_id, NOT project_id.
  */
 interface EnsureTaskArgs {
   milestoneId: string;
   assigneeId: string | null;
-  projectId: string | null;      // maps to tasks.project_id
+  businessProjectId: string | null;  // maps to tasks.business_project_id
   title: string;
 }
 
@@ -122,7 +125,7 @@ async function ensureTaskForMilestone(
   sb: ReturnType<typeof getSupabase>,
   args: EnsureTaskArgs
 ): Promise<{ action: 'skipped' | 'updated' | 'created'; taskId?: string; error?: string }> {
-  const { milestoneId, assigneeId, projectId, title } = args;
+  const { milestoneId, assigneeId, businessProjectId, title } = args;
 
   if (!assigneeId) {
     console.log(`[ensureTask] skip — no assignee`);
@@ -132,12 +135,11 @@ async function ensureTaskForMilestone(
   const now = new Date().toISOString();
   const taskId = `tsk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 
-  // Use ONLY columns we are 100% sure exist. No client_id, no guessing.
   const payload: Record<string, unknown> = {
     id: taskId,
     title: title || 'משימה',
     assignee_id: assigneeId,
-    project_id: projectId,
+    business_project_id: businessProjectId,   // FK → public.business_projects
     milestone_id: milestoneId,
     status: 'pending',
     created_at: now,
@@ -146,8 +148,6 @@ async function ensureTaskForMilestone(
 
   console.log('TASK PAYLOAD:', JSON.stringify(payload));
 
-  // Always INSERT — no dedup. Old broken rows (mil_ IDs) should not block
-  // creation of a proper tsk_ row.
   const { data: inserted, error: insertErr } = await sb
     .from('tasks')
     .insert(payload)
@@ -155,11 +155,10 @@ async function ensureTaskForMilestone(
     .single();
 
   if (!insertErr && inserted) {
-    console.log(`[ensureTask] ✅ task created id=${taskId} assignee=${assigneeId} project=${projectId} milestone=${milestoneId}`);
+    console.log(`[ensureTask] ✅ task created id=${taskId} assignee=${assigneeId} business_project=${businessProjectId} milestone=${milestoneId}`);
     return { action: 'created', taskId };
   }
 
-  // If INSERT failed, log the full error.
   const errMsg = insertErr?.message ?? 'no data returned';
   const errCode = (insertErr as any)?.code ?? 'none';
   console.error(`[ensureTask] ❌ INSERT failed: ${errMsg} (code=${errCode})`);
@@ -174,7 +173,7 @@ async function ensureTaskForMilestone(
         .update({
           title: payload.title,
           assignee_id: assigneeId,
-          project_id: projectId,
+          business_project_id: businessProjectId,
           status: 'pending',
           updated_at: now,
         })
@@ -338,15 +337,15 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       const resolvedTitle = (updated.title as string) || 'משימה';
 
       console.log(
-        `[API] PUT /api/data/project-milestones/${id} triggering ensureTask incomingAssignee=${incomingAssignee} resolvedAssignee=${resolvedAssignee ?? 'null'} resolvedProject=${resolvedProjectId ?? 'null'}`
+        `[API] PUT /api/data/project-milestones/${id} triggering ensureTask incomingAssignee=${incomingAssignee} resolvedAssignee=${resolvedAssignee ?? 'null'} resolvedBusinessProject=${resolvedProjectId ?? 'null'}`
       );
-      console.log(`TASK PAYLOAD: milestoneId=${id} assigneeId=${resolvedAssignee} projectId=${resolvedProjectId} title=${resolvedTitle}`);
+      console.log(`TASK PAYLOAD: milestoneId=${id} assigneeId=${resolvedAssignee} businessProjectId=${resolvedProjectId} title=${resolvedTitle}`);
 
       try {
         taskResult = await ensureTaskForMilestone(sb, {
           milestoneId: id,
           assigneeId: resolvedAssignee,
-          projectId: resolvedProjectId,
+          businessProjectId: resolvedProjectId,
           title: resolvedTitle,
         });
         console.log(`[API] PUT /api/data/project-milestones/${id} ensureTask returned action=${taskResult.action} taskId=${taskResult.taskId ?? 'none'} error=${taskResult.error ?? 'none'}`);

@@ -3,8 +3,11 @@
  * POST /api/data/tasks — create a task
  *
  * Storage: Supabase "tasks" table with flat columns:
- *   id, title, assignee_id, project_id, milestone_id,
+ *   id, title, assignee_id, project_id, business_project_id, milestone_id,
  *   status, created_at, updated_at
+ *
+ * project_id      → FK to public.projects (general projects)
+ * business_project_id → FK to public.business_projects (milestone tasks)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -29,6 +32,7 @@ type Row = Record<string, unknown> & { id: string };
 function rowToTask(r: Row) {
   const assignee = (r.assignee_id as string) || null;
   const project = (r.project_id as string) || null;
+  const businessProject = (r.business_project_id as string) || null;
   const client = (r.client_id as string) || null;
   const milestone = (r.milestone_id as string) || null;
   const title = (r.title as string) || '';
@@ -36,10 +40,10 @@ function rowToTask(r: Row) {
     id: r.id,
     title,
     assigneeId: assignee,
-    employeeId: assignee,           // legacy alias for frontend compat
-    assignedEmployeeId: assignee,   // legacy alias for frontend compat
-    projectId: project,
-    businessProjectId: project,     // legacy alias for frontend compat
+    employeeId: assignee,                      // legacy alias
+    assignedEmployeeId: assignee,              // legacy alias
+    projectId: project,                        // FK → public.projects
+    businessProjectId: businessProject,        // FK → public.business_projects
     clientId: client,
     milestoneId: milestone,
     status: (r.status as string) ?? 'pending',
@@ -53,21 +57,27 @@ function rowToTask(r: Row) {
 function toInsert(body: Record<string, unknown>, id: string, now: string): Record<string, unknown> {
   const title = (body.title ?? '') as string;
   const assignee = nullIfEmpty(body.assigneeId ?? body.employeeId ?? body.assignedEmployeeId);
-  const project = nullIfEmpty(body.businessProjectId ?? body.projectId);
+  // business_project_id and project_id are SEPARATE FK columns.
+  // businessProjectId → business_project_id (FK → public.business_projects)
+  // projectId         → project_id          (FK → public.projects)
+  const businessProject = nullIfEmpty(body.businessProjectId);
+  const project = nullIfEmpty(body.projectId);
   const milestone = nullIfEmpty(body.milestoneId);
   const status = (body.status ?? 'pending') as string;
 
-  // Use ONLY confirmed columns in public.tasks.
-  return {
+  const row: Record<string, unknown> = {
     id,
     title,
     assignee_id: assignee,
-    project_id: project,
     milestone_id: milestone,
     status,
     created_at: now,
     updated_at: now,
   };
+  // Only set the FK columns that are actually provided — avoids FK violations.
+  if (businessProject) row.business_project_id = businessProject;
+  if (project) row.project_id = project;
+  return row;
 }
 
 export async function GET(req: NextRequest) {
@@ -75,11 +85,13 @@ export async function GET(req: NextRequest) {
     const sb = getSupabase();
     const url = new URL(req.url);
     const milestoneId = url.searchParams.get('milestone_id') || url.searchParams.get('milestoneId');
-    const projectId = url.searchParams.get('project_id') || url.searchParams.get('business_project_id') || url.searchParams.get('projectId');
+    const projectId = url.searchParams.get('project_id') || url.searchParams.get('projectId');
+    const businessProjectId = url.searchParams.get('business_project_id') || url.searchParams.get('businessProjectId');
 
     let q = sb.from(TABLE).select('*').order('id');
     if (milestoneId) q = q.eq('milestone_id', milestoneId);
     if (projectId) q = q.eq('project_id', projectId);
+    if (businessProjectId) q = q.eq('business_project_id', businessProjectId);
 
     const { data: rows, error } = await q;
     if (error) {
@@ -131,7 +143,7 @@ export async function POST(req: NextRequest) {
 
     const mapped = rowToTask(inserted as Row);
     console.log(
-      `[API] POST /api/data/tasks ✅ persisted id=${mapped.id} title="${mapped.title}" assignee_id=${mapped.assigneeId ?? 'null'} project_id=${mapped.projectId ?? 'null'} milestone_id=${mapped.milestoneId ?? 'null'} status=${mapped.status}`
+      `[API] POST /api/data/tasks ✅ persisted id=${mapped.id} title="${mapped.title}" assignee_id=${mapped.assigneeId ?? 'null'} project_id=${mapped.projectId ?? 'null'} business_project_id=${mapped.businessProjectId ?? 'null'} milestone_id=${mapped.milestoneId ?? 'null'} status=${mapped.status}`
     );
     return NextResponse.json(mapped, { status: 201 });
   } catch (error) {
