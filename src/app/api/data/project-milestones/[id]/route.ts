@@ -83,7 +83,7 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
 const PROTECTED_COLUMNS = new Set(['assignee_id', 'business_project_id', 'status']);
 
 const SELECT_COLUMNS =
-  'id, project_id, title, description, due_date, assigned_employee_id, status, files, notes, created_at, updated_at';
+  'id, project_id, title, description, due_date, assignee_id, assigned_employee_id, status, files, notes, created_at, updated_at';
 
 function parseBadColumn(msg: string): string | null {
   const m = msg.match(/column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);
