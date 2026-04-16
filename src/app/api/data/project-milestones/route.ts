@@ -5,7 +5,7 @@
  * Storage: Supabase "business_project_milestones" table.
  * Expected columns:
  *   id, project_id, title, description, due_date,
- *   assigned_employee_id, status, files (jsonb), notes,
+ *   assignee_id, status, files (jsonb), notes,
  *   created_at, updated_at
  */
 
@@ -26,7 +26,7 @@ type Row = Record<string, unknown> & { id: string };
 
 function rowToMilestone(r: Row) {
   const projectId = (r.business_project_id as string) || (r.project_id as string) || '';
-  const assigneeId = (r.assignee_id as string) || (r.assigned_employee_id as string) || null;
+  const assigneeId = (r.assignee_id as string) || null;
   return {
     id: r.id,
     projectId,
@@ -67,7 +67,6 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
     description: (body.description ?? '') as string,
     due_date: (body.dueDate ?? null) as string | null,
     assignee_id: assigneeId,
-    assigned_employee_id: assigneeId,
     status: (body.status ?? 'pending') as string,
     sort_order: typeof body.sortOrder === 'number' ? body.sortOrder : 0,
     started_at: (body.startedAt ?? null) as string | null,
