@@ -48,11 +48,12 @@ export function useData<T extends { id: string }>(endpoint: string): UseDataResu
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/data/${endpoint}`);
+      const res = await fetch(`/api/data/${endpoint}`, { cache: 'no-store' });
       if (!res.ok) throw new Error('Failed to fetch');
       const json = await res.json();
       if (isMounted.current) {
-        setData(json);
+        // Guard: if the API returns a non-array (e.g. error object), keep data empty
+        setData(Array.isArray(json) ? json : []);
         setError(null);
       }
     } catch (e) {

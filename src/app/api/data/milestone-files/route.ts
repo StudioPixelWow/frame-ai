@@ -65,22 +65,24 @@ async function ensureBucket(sb: ReturnType<typeof getSupabase>) {
 }
 
 /**
- * Ensure the DB table exists. Uses Supabase rpc('exec_sql') if available,
- * otherwise tries a probe SELECT and logs the CREATE TABLE DDL for manual use.
+ * Ensure the DB table exists.
+ * Strategy:
+ *  1. exec_sql RPC (auto-creates if available)
+ *  2. Probe SELECT (confirms table exists)
+ *  3. If table missing, log DDL + return false so callers know
  */
 let _tableReady = false;
-async function ensureTable(sb: ReturnType<typeof getSupabase>) {
-  if (_tableReady) return;
+async function ensureTable(sb: ReturnType<typeof getSupabase>): Promise<boolean> {
+  if (_tableReady) return true;
 
-  // Try rpc-based auto-creation first.
+  // 1. Try rpc-based auto-creation.
   try {
     const { error } = await sb.rpc('exec_sql', { query: TABLE_DDL });
     if (!error) {
       console.log(`[milestone-files] ✅ table "${TABLE}" ensured via exec_sql`);
       _tableReady = true;
-      return;
+      return true;
     }
-    // If the rpc doesn't exist, fall through to the probe.
     if (!error.message?.includes('function') && !error.message?.includes('does not exist')) {
       console.warn('[milestone-files] exec_sql warning:', error.message);
     }
@@ -88,14 +90,14 @@ async function ensureTable(sb: ReturnType<typeof getSupabase>) {
     // rpc not available — fall through
   }
 
-  // Probe: try a no-op SELECT. If it succeeds, the table exists.
+  // 2. Probe SELECT.
   const { error: probeErr } = await sb.from(TABLE).select('id').limit(1);
   if (!probeErr) {
     _tableReady = true;
-    return;
+    return true;
   }
 
-  // Table doesn't exist. Log a helpful CREATE TABLE statement.
+  // 3. Table does not exist.
   const code = (probeErr as any)?.code ?? '';
   if (code === '42P01' || probeErr.message?.includes('does not exist')) {
     console.error(
@@ -105,14 +107,24 @@ async function ensureTable(sb: ReturnType<typeof getSupabase>) {
   } else {
     console.error('[milestone-files] table probe error:', probeErr);
   }
+  return false;
 }
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate',
+  'Pragma': 'no-cache',
+};
 
 export async function GET(req: NextRequest) {
   try {
     const sb = getSupabase();
 
-    // Auto-create table on first access.
-    await ensureTable(sb);
+    // Auto-create table on first access; if missing, return []
+    const tableOk = await ensureTable(sb);
+    if (!tableOk) {
+      console.warn('[milestone-files] GET → table not ready, returning []');
+      return NextResponse.json([], { headers: NO_CACHE_HEADERS });
+    }
 
     const url = new URL(req.url);
     const milestoneId = url.searchParams.get('milestone_id') || url.searchParams.get('milestoneId');
@@ -125,19 +137,28 @@ export async function GET(req: NextRequest) {
       const code = (error as any)?.code ?? '';
       console.error(`[milestone-files] GET error (code=${code}):`, error.message);
 
-      // If the table doesn't exist, return empty array instead of 500
-      // so the UI doesn't break. The ensureTable call above already
-      // logged the DDL the user needs to run.
       if (code === '42P01' || error.message?.includes('does not exist')) {
-        return NextResponse.json([]);
+        // Reset table-ready flag so ensureTable retries next time
+        _tableReady = false;
+        return NextResponse.json([], { headers: NO_CACHE_HEADERS });
       }
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      // If a specific column in order() doesn't exist, retry without ordering
+      if (error.message?.includes('created_at')) {
+        const { data: rows2, error: err2 } = await sb.from(TABLE).select('*');
+        if (!err2 && rows2) {
+          console.log(`[milestone-files] GET → ${rows2.length} files (no order)`);
+          return NextResponse.json(rows2.map((r) => rowToFile(r as Row)), { headers: NO_CACHE_HEADERS });
+        }
+      }
+      return NextResponse.json({ error: error.message }, { status: 500, headers: NO_CACHE_HEADERS });
     }
-    return NextResponse.json((rows ?? []).map((r) => rowToFile(r as Row)));
+
+    console.log(`[milestone-files] GET → ${(rows ?? []).length} files`);
+    return NextResponse.json((rows ?? []).map((r) => rowToFile(r as Row)), { headers: NO_CACHE_HEADERS });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[milestone-files] GET fatal:', msg);
-    return NextResponse.json({ error: `Failed to fetch: ${msg}` }, { status: 500 });
+    return NextResponse.json({ error: `Failed to fetch: ${msg}` }, { status: 500, headers: NO_CACHE_HEADERS });
   }
 }
 
@@ -157,7 +178,13 @@ export async function POST(req: NextRequest) {
     }
 
     // 0. Ensure table and bucket exist.
-    await ensureTable(sb);
+    const tableOk = await ensureTable(sb);
+    if (!tableOk) {
+      return NextResponse.json(
+        { error: `Table "${TABLE}" does not exist. Check server logs for CREATE TABLE DDL.` },
+        { status: 500 }
+      );
+    }
     await ensureBucket(sb);
 
     // 1. Upload file bytes to Supabase Storage.
@@ -207,7 +234,8 @@ export async function POST(req: NextRequest) {
 
       // If the table itself doesn't exist, break immediately with a clear error.
       const code = (error as any)?.code ?? '';
-      if (code === '42P01' || error.message?.includes('relation') && error.message?.includes('does not exist')) {
+      if (code === '42P01' || (error.message?.includes('relation') && error.message?.includes('does not exist'))) {
+        _tableReady = false; // reset so ensureTable retries next time
         console.error(
           `[milestone-files] ❌ Table "${TABLE}" does not exist!\n` +
           `Run this SQL in Supabase Dashboard → SQL Editor:\n\n${TABLE_DDL}`
