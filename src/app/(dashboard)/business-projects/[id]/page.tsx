@@ -81,6 +81,10 @@ const milestoneStatusLabels: Record<MilestoneStatus, string> = {
   returned: 'החזר',
 };
 
+// Project file upload constants
+const MAX_PROJECT_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const ALLOWED_FILE_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp'];
+
 // Safe helper functions
 function formatDate(dateStr: string | null): string {
   try {
@@ -150,6 +154,61 @@ export default function BusinessProjectPage() {
   const [editForm, setEditForm] = useState<Record<string, unknown>>({});
   const [savingProject, setSavingProject] = useState(false);
   const [projectSaveFeedback, setProjectSaveFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // ── Project file upload (hooks MUST be before any early return) ──
+  const projectFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadingProjectFile, setUploadingProjectFile] = useState(false);
+  const [projectFileError, setProjectFileError] = useState<string | null>(null);
+
+  const handleProjectFileUpload = useCallback(async (file: File) => {
+    setProjectFileError(null);
+
+    // Client-side validation
+    if (file.size > MAX_PROJECT_FILE_SIZE) {
+      setProjectFileError(`הקובץ גדול מדי (${(file.size / (1024 * 1024)).toFixed(1)} MB). מקסימום 10 MB`);
+      return;
+    }
+    const ext = file.name.includes('.') ? file.name.split('.').pop()?.toLowerCase() || '' : '';
+    if (!ALLOWED_FILE_EXTENSIONS.includes(ext)) {
+      setProjectFileError(`סוג קובץ לא נתמך (${ext}). מותר: PDF, תמונות`);
+      return;
+    }
+
+    setUploadingProjectFile(true);
+    try {
+      // 1. Upload to Supabase Storage via server endpoint
+      const form = new FormData();
+      form.append('file', file);
+      form.append('projectId', projectId);
+      const res = await fetch('/api/data/project-file-upload', { method: 'POST', body: form });
+      const result = await res.json();
+      if (!res.ok) {
+        throw new Error(result?.error || `Upload failed (${res.status})`);
+      }
+
+      // 2. Save reference via the existing client-files flow
+      await createClientFile({
+        clientId: project?.clientId || '',
+        fileName: file.name,
+        fileUrl: result.url,
+        fileType: ext === 'pdf' ? 'document' : 'image',
+        category: fileFormData.category || 'general',
+        fileSize: file.size,
+        linkedTaskId: null,
+        linkedGanttItemId: null,
+        uploadedBy: null,
+        notes: '',
+      } as any);
+
+      console.log(`[project-file-upload] ✅ saved file="${file.name}" url=${result.url}`);
+    } catch (err: any) {
+      console.error('[project-file-upload] error:', err);
+      setProjectFileError(err?.message || 'שגיאה בהעלאה');
+    } finally {
+      setUploadingProjectFile(false);
+      if (projectFileInputRef.current) projectFileInputRef.current.value = '';
+    }
+  }, [projectId, project?.clientId, fileFormData.category, createClientFile]);
 
   // ── Milestone file uploads (hooks MUST be before any early return) ──
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -1619,24 +1678,18 @@ export default function BusinessProjectPage() {
                   marginBottom: '16px',
                 }}
               >
-                <h4 style={{ marginTop: 0, color: 'var(--foreground)' }}>קובץ חדש</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '12px' }}>
-                  <input
-                    type="url"
-                    className="form-input"
-                    placeholder="כתובת URL של הקובץ"
-                    value={fileFormData.url}
-                    onChange={(e) =>
-                      setFileFormData({ ...fileFormData, url: e.target.value })
-                    }
-                    style={{ direction: 'rtl' }}
-                  />
+                {/* Category selector — shared by both upload methods */}
+                <div style={{ marginBottom: '12px' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
+                    קטגוריה
+                  </span>
                   <select
                     className="form-select"
                     value={fileFormData.category}
                     onChange={(e) =>
                       setFileFormData({ ...fileFormData, category: e.target.value as FileCategory })
                     }
+                    style={{ maxWidth: '200px' }}
                   >
                     <option value="general">כללי</option>
                     <option value="agreements">הסכמים</option>
@@ -1645,21 +1698,93 @@ export default function BusinessProjectPage() {
                   </select>
                 </div>
 
-                <button
-                  className="mod-btn-primary"
-                  onClick={handleAddFile}
-                  disabled={loading}
-                  style={{ marginRight: '8px' }}
+                {/* ── Upload from computer ── */}
+                <div
+                  style={{
+                    padding: '12px',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                    marginBottom: '12px',
+                  }}
                 >
-                  {loading ? 'שומר...' : 'הוסף'}
-                </button>
-                <button
-                  className="mod-btn-ghost"
-                  onClick={() => setShowFileForm(false)}
-                  disabled={loading}
+                  <h4 style={{ marginTop: 0, fontSize: '14px', color: 'var(--foreground)' }}>
+                    העלאה מהמחשב
+                  </h4>
+                  <p style={{ fontSize: '11px', color: 'var(--foreground-muted)', margin: '0 0 8px 0' }}>
+                    PDF, תמונות (PNG, JPG, GIF, WEBP) — עד 10 MB
+                  </p>
+                  <input
+                    type="file"
+                    ref={projectFileInputRef}
+                    accept=".pdf,.png,.jpg,.jpeg,.gif,.webp"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleProjectFileUpload(file);
+                    }}
+                  />
+                  <button
+                    onClick={() => projectFileInputRef.current?.click()}
+                    disabled={uploadingProjectFile}
+                    style={{
+                      fontSize: '13px', padding: '6px 16px', borderRadius: '6px',
+                      border: '1px solid var(--accent)', background: 'var(--accent)',
+                      color: '#fff', cursor: uploadingProjectFile ? 'wait' : 'pointer',
+                    }}
+                  >
+                    {uploadingProjectFile ? 'מעלה...' : 'העלה קובץ'}
+                  </button>
+                  {projectFileError && (
+                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#ef4444' }}>
+                      {projectFileError}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Or add by URL link ── */}
+                <div
+                  style={{
+                    padding: '12px',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                  }}
                 >
-                  ביטול
-                </button>
+                  <h4 style={{ marginTop: 0, fontSize: '14px', color: 'var(--foreground)' }}>
+                    או הוספה מקישור
+                  </h4>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="url"
+                      className="form-input"
+                      placeholder="כתובת URL של הקובץ"
+                      value={fileFormData.url}
+                      onChange={(e) =>
+                        setFileFormData({ ...fileFormData, url: e.target.value })
+                      }
+                      style={{ direction: 'rtl', flex: 1 }}
+                    />
+                    <button
+                      className="mod-btn-primary"
+                      onClick={handleAddFile}
+                      disabled={loading}
+                      style={{ whiteSpace: 'nowrap' }}
+                    >
+                      {loading ? 'שומר...' : 'הוסף קישור'}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '12px' }}>
+                  <button
+                    className="mod-btn-ghost"
+                    onClick={() => { setShowFileForm(false); setProjectFileError(null); }}
+                    disabled={loading || uploadingProjectFile}
+                  >
+                    ביטול
+                  </button>
+                </div>
               </div>
             )}
           </div>
