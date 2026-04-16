@@ -38,6 +38,8 @@ function rowToProject(r: Row) {
     serviceType,                        // also expose serviceType for new callsites
     description: (r.description as string) ?? '',
     agreementSigned: (r.agreement_signed as boolean) ?? false,
+    contractSigned: (r.contract_signed as boolean) ?? false,
+    contractSignedAt: (r.contract_signed_at as string) ?? null,
     projectStatus: (r.project_status as string) ?? 'not_started',
     startDate: (r.start_date as string) ?? null,
     endDate: (r.end_date as string) ?? null,

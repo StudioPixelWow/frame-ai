@@ -24,6 +24,8 @@ function rowToProject(r: Row) {
     serviceType,
     description: (r.description as string) ?? '',
     agreementSigned: (r.agreement_signed as boolean) ?? false,
+    contractSigned: (r.contract_signed as boolean) ?? false,
+    contractSignedAt: (r.contract_signed_at as string) ?? null,
     projectStatus: (r.project_status as string) ?? 'not_started',
     startDate: (r.start_date as string) ?? null,
     endDate: (r.end_date as string) ?? null,
@@ -46,6 +48,7 @@ const NULLABLE_STRING_COLS = new Set([
   'start_date',
   'end_date',
   'project_type',
+  'contract_signed_at',
 ]);
 
 function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
@@ -62,6 +65,8 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
     ['clientId', 'client_id'],
     ['description', 'description'],
     ['agreementSigned', 'agreement_signed'],
+    ['contractSigned', 'contract_signed'],
+    ['contractSignedAt', 'contract_signed_at'],
     ['projectStatus', 'project_status'],
     ['status', 'project_status'],
     ['startDate', 'start_date'],

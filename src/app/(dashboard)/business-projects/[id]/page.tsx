@@ -143,6 +143,11 @@ export default function BusinessProjectPage() {
   const [assignFeedback, setAssignFeedback] = useState<Record<string, { type: 'success' | 'error'; message: string }>>({});
   // Track which milestone is currently being assigned (for loading state)
   const [assigningMilestone, setAssigningMilestone] = useState<string | null>(null);
+  // Project editing state
+  const [isEditingProject, setIsEditingProject] = useState(false);
+  const [editForm, setEditForm] = useState<Record<string, unknown>>({});
+  const [savingProject, setSavingProject] = useState(false);
+  const [projectSaveFeedback, setProjectSaveFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const project = useMemo(
     () => projectsData.find((p: BusinessProject) => p.id === projectId),
@@ -484,6 +489,65 @@ export default function BusinessProjectPage() {
     await handleUpdateProjectStatus('completed');
   };
 
+  const handleStartEditProject = () => {
+    setEditForm({
+      projectName: project?.projectName || '',
+      serviceType: project?.serviceType || project?.projectType || '',
+      description: project?.description || '',
+      assignedManagerId: project?.assignedManagerId || '',
+      startDate: project?.startDate ? (project.startDate as string).slice(0, 10) : '',
+      endDate: project?.endDate ? (project.endDate as string).slice(0, 10) : '',
+      projectStatus: project?.projectStatus || 'not_started',
+      contractSigned: (project as any)?.contractSigned ?? false,
+    });
+    setIsEditingProject(true);
+    setProjectSaveFeedback(null);
+  };
+
+  const handleCancelEditProject = () => {
+    setIsEditingProject(false);
+    setEditForm({});
+    setProjectSaveFeedback(null);
+  };
+
+  const handleSaveProject = async () => {
+    setSavingProject(true);
+    setProjectSaveFeedback(null);
+    try {
+      const payload: Record<string, unknown> = { ...editForm };
+      // If contractSigned changed to true and was previously false, set timestamp
+      const wasSigned = (project as any)?.contractSigned ?? false;
+      if (payload.contractSigned && !wasSigned) {
+        payload.contractSignedAt = new Date().toISOString();
+      } else if (!payload.contractSigned && wasSigned) {
+        payload.contractSignedAt = null;
+      }
+      console.log(`[project-edit] saving project=${projectId} payload=${JSON.stringify(payload)}`);
+      await updateProject(projectId, payload as any);
+      setIsEditingProject(false);
+      setProjectSaveFeedback({ type: 'success', message: 'הפרויקט עודכן בהצלחה' });
+      setTimeout(() => setProjectSaveFeedback(null), 3000);
+    } catch (error: any) {
+      console.error('[project-edit] save failed:', error);
+      setProjectSaveFeedback({ type: 'error', message: `שגיאה בשמירה: ${error?.message || 'unknown'}` });
+    } finally {
+      setSavingProject(false);
+    }
+  };
+
+  const handleToggleContractSigned = async () => {
+    const current = (project as any)?.contractSigned ?? false;
+    const newVal = !current;
+    try {
+      const payload: Record<string, unknown> = { contractSigned: newVal };
+      if (newVal) payload.contractSignedAt = new Date().toISOString();
+      else payload.contractSignedAt = null;
+      await updateProject(projectId, payload as any);
+    } catch (error) {
+      console.error('[project-edit] contract toggle failed:', error);
+    }
+  };
+
   const startDate = project?.startDate ? new Date(project.startDate) : null;
   const endDate = project?.endDate ? new Date(project.endDate) : null;
 
@@ -509,27 +573,27 @@ export default function BusinessProjectPage() {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
           <div style={{ flex: 1 }}>
-            <h1
-              style={{
-                fontSize: '32px',
-                fontWeight: '700',
-                color: 'var(--foreground)',
-                margin: '0 0 8px 0',
-              }}
-            >
-              {project.projectName}
-            </h1>
+            {isEditingProject ? (
+              <input
+                type="text"
+                value={(editForm.projectName as string) || ''}
+                onChange={(e) => setEditForm((f) => ({ ...f, projectName: e.target.value }))}
+                style={{
+                  fontSize: '28px', fontWeight: '700', color: 'var(--foreground)',
+                  background: 'var(--surface)', border: '1px solid var(--border)',
+                  borderRadius: '6px', padding: '4px 8px', width: '100%',
+                  marginBottom: '8px', direction: 'rtl',
+                }}
+                placeholder="שם הפרויקט"
+              />
+            ) : (
+              <h1 style={{ fontSize: '32px', fontWeight: '700', color: 'var(--foreground)', margin: '0 0 8px 0' }}>
+                {project.projectName}
+              </h1>
+            )}
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
               {projectClient && (
-                <a
-                  href={`/clients/${projectClient.id}`}
-                  style={{
-                    color: 'var(--accent)',
-                    textDecoration: 'none',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                  }}
-                >
+                <a href={`/clients/${projectClient.id}`} style={{ color: 'var(--accent)', textDecoration: 'none', fontSize: '14px', fontWeight: '600' }}>
                   {projectClient.name}
                 </a>
               )}
@@ -537,106 +601,271 @@ export default function BusinessProjectPage() {
           </div>
 
           <div style={{ display: 'flex', gap: '8px', flexDirection: 'column', alignItems: 'flex-start' }}>
-            <button
-              className="mod-btn-primary"
-              style={{ width: '100%', minWidth: '140px' }}
-              onClick={handleMarkComplete}
-              disabled={loading}
-            >
-              סימון כהושלם
-            </button>
-            <select
-              className="form-select"
-              value={project?.projectStatus || 'not_started'}
-              onChange={(e) => handleUpdateProjectStatus(e.target.value)}
-              disabled={loading}
-              style={{ minWidth: '140px' }}
-            >
-              <option value="not_started">לא התחיל</option>
-              <option value="in_progress">בתהליך</option>
-              <option value="waiting_for_client">בהמתנה ללקוח</option>
-              <option value="completed">הושלם</option>
-            </select>
+            {isEditingProject ? (
+              <>
+                <button
+                  onClick={handleSaveProject}
+                  disabled={savingProject}
+                  style={{
+                    width: '100%', minWidth: '140px', padding: '8px 16px',
+                    borderRadius: '6px', border: '1px solid var(--accent)',
+                    background: 'var(--accent)', color: '#fff', cursor: savingProject ? 'wait' : 'pointer',
+                    fontSize: '14px', fontWeight: '600',
+                  }}
+                >
+                  {savingProject ? '...' : 'שמור שינויים'}
+                </button>
+                <button
+                  onClick={handleCancelEditProject}
+                  disabled={savingProject}
+                  style={{
+                    width: '100%', minWidth: '140px', padding: '8px 16px',
+                    borderRadius: '6px', border: '1px solid var(--border)',
+                    background: 'var(--surface)', color: 'var(--foreground)', cursor: 'pointer',
+                    fontSize: '14px',
+                  }}
+                >
+                  ביטול
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={handleStartEditProject}
+                  style={{
+                    width: '100%', minWidth: '140px', padding: '8px 16px',
+                    borderRadius: '6px', border: '1px solid var(--border)',
+                    background: 'var(--surface)', color: 'var(--foreground)', cursor: 'pointer',
+                    fontSize: '14px',
+                  }}
+                >
+                  עריכת פרויקט
+                </button>
+                <button
+                  className="mod-btn-primary"
+                  style={{ width: '100%', minWidth: '140px' }}
+                  onClick={handleMarkComplete}
+                  disabled={loading}
+                >
+                  סימון כהושלם
+                </button>
+              </>
+            )}
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px' }}>
+        {/* Description — edit mode */}
+        {isEditingProject && (
+          <div style={{ marginBottom: '16px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
+              תיאור
+            </span>
+            <textarea
+              value={(editForm.description as string) || ''}
+              onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+              rows={3}
+              style={{
+                width: '100%', fontSize: '14px', color: 'var(--foreground)',
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: '6px', padding: '8px', direction: 'rtl', resize: 'vertical',
+              }}
+              placeholder="תיאור הפרויקט"
+            />
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
+          {/* Service Type */}
           <div>
             <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
               סוג
             </span>
-            <div
-              style={{
-                display: 'inline-block',
-                padding: '4px 12px',
-                background: 'var(--accent-muted)',
-                color: 'var(--accent)',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: '600',
-              }}
-            >
-              {getProjectTypeLabel(project?.projectType)}
-            </div>
+            {isEditingProject ? (
+              <select
+                value={(editForm.serviceType as string) || ''}
+                onChange={(e) => setEditForm((f) => ({ ...f, serviceType: e.target.value }))}
+                style={{
+                  fontSize: '13px', color: 'var(--foreground)', background: 'var(--surface)',
+                  border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px',
+                  width: '100%', direction: 'rtl',
+                }}
+              >
+                <option value="">בחר סוג</option>
+                {Object.entries(projectTypeLabels).map(([val, label]) => (
+                  <option key={val} value={val}>{label}</option>
+                ))}
+              </select>
+            ) : (
+              <div style={{
+                display: 'inline-block', padding: '4px 12px', background: 'var(--accent-muted)',
+                color: 'var(--accent)', borderRadius: '6px', fontSize: '12px', fontWeight: '600',
+              }}>
+                {getProjectTypeLabel(project?.projectType)}
+              </div>
+            )}
           </div>
 
+          {/* Status */}
           <div>
             <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
               סטטוס
             </span>
-            <div
-              style={{
-                display: 'inline-block',
-                padding: '4px 12px',
+            {isEditingProject ? (
+              <select
+                value={(editForm.projectStatus as string) || 'not_started'}
+                onChange={(e) => setEditForm((f) => ({ ...f, projectStatus: e.target.value }))}
+                style={{
+                  fontSize: '13px', color: 'var(--foreground)', background: 'var(--surface)',
+                  border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px',
+                  width: '100%', direction: 'rtl',
+                }}
+              >
+                <option value="not_started">לא התחיל</option>
+                <option value="in_progress">בתהליך</option>
+                <option value="waiting_for_client">בהמתנה ללקוח</option>
+                <option value="completed">הושלם</option>
+              </select>
+            ) : (
+              <div style={{
+                display: 'inline-block', padding: '4px 12px',
                 background: getProjectStatusColor(project?.projectStatus),
-                color: '#fff',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: '600',
-              }}
-            >
-              {getProjectStatusLabel(project?.projectStatus)}
-            </div>
+                color: '#fff', borderRadius: '6px', fontSize: '12px', fontWeight: '600',
+              }}>
+                {getProjectStatusLabel(project?.projectStatus)}
+              </div>
+            )}
           </div>
 
+          {/* Contract Signed */}
           <div>
             <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
-              הסכם
+              חוזה חתום
             </span>
-            <span style={{ fontSize: '16px' }}>
-              {project?.agreementSigned ? '✓' : '✗'}
-            </span>
+            {isEditingProject ? (
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={!!editForm.contractSigned}
+                  onChange={(e) => setEditForm((f) => ({ ...f, contractSigned: e.target.checked }))}
+                  style={{ width: '16px', height: '16px', accentColor: 'var(--accent)' }}
+                />
+                <span style={{ fontSize: '13px', color: 'var(--foreground)' }}>
+                  {editForm.contractSigned ? 'חתום' : 'לא חתום'}
+                </span>
+              </label>
+            ) : (
+              <button
+                onClick={handleToggleContractSigned}
+                disabled={loading}
+                title={(project as any)?.contractSignedAt ? `חתום ב-${formatDate((project as any).contractSignedAt)}` : 'לחץ לשינוי'}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  padding: '4px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: '600',
+                  cursor: 'pointer', border: '1px solid var(--border)',
+                  background: (project as any)?.contractSigned ? '#dcfce7' : '#fef2f2',
+                  color: (project as any)?.contractSigned ? '#16a34a' : '#dc2626',
+                }}
+              >
+                {(project as any)?.contractSigned ? '✓ חתום' : '✗ לא חתום'}
+              </button>
+            )}
           </div>
 
+          {/* Assigned Manager */}
           <div>
             <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
               מנהל
             </span>
-            <span style={{ fontSize: '14px', color: 'var(--foreground)', fontWeight: '500' }}>
-              {assignedManager?.name || 'לא הוצמד' || 'לא ידוע'}
-            </span>
+            {isEditingProject ? (
+              <select
+                value={(editForm.assignedManagerId as string) || ''}
+                onChange={(e) => setEditForm((f) => ({ ...f, assignedManagerId: e.target.value }))}
+                style={{
+                  fontSize: '13px', color: 'var(--foreground)', background: 'var(--surface)',
+                  border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px',
+                  width: '100%', direction: 'rtl',
+                }}
+              >
+                <option value="">לא הוצמד</option>
+                {(employeesData || []).map((emp: Employee) => (
+                  <option key={emp.id} value={emp.id}>{emp.name || (emp as any).email}</option>
+                ))}
+              </select>
+            ) : (
+              <span style={{ fontSize: '14px', color: 'var(--foreground)', fontWeight: '500' }}>
+                {assignedManager?.name || 'לא הוצמד'}
+              </span>
+            )}
           </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginTop: '16px' }}>
+          {/* Start Date */}
           <div>
             <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
               תאריך התחלה
             </span>
-            <span style={{ fontSize: '14px', color: 'var(--foreground)' }}>
-              {formatDate(project?.startDate || null)}
-            </span>
+            {isEditingProject ? (
+              <input
+                type="date"
+                value={(editForm.startDate as string) || ''}
+                onChange={(e) => setEditForm((f) => ({ ...f, startDate: e.target.value }))}
+                style={{
+                  fontSize: '13px', color: 'var(--foreground)', background: 'var(--surface)',
+                  border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px', width: '100%',
+                }}
+              />
+            ) : (
+              <span style={{ fontSize: '14px', color: 'var(--foreground)' }}>
+                {formatDate(project?.startDate || null)}
+              </span>
+            )}
           </div>
 
+          {/* End Date */}
           <div>
             <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
               תאריך סיום
             </span>
-            <span style={{ fontSize: '14px', color: 'var(--foreground)' }}>
-              {formatDate(project?.endDate || null)}
-            </span>
+            {isEditingProject ? (
+              <input
+                type="date"
+                value={(editForm.endDate as string) || ''}
+                onChange={(e) => setEditForm((f) => ({ ...f, endDate: e.target.value }))}
+                style={{
+                  fontSize: '13px', color: 'var(--foreground)', background: 'var(--surface)',
+                  border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px', width: '100%',
+                }}
+              />
+            ) : (
+              <span style={{ fontSize: '14px', color: 'var(--foreground)' }}>
+                {formatDate(project?.endDate || null)}
+              </span>
+            )}
           </div>
+
+          {/* Contract Signed At (read-only, shown when signed) */}
+          {!isEditingProject && (project as any)?.contractSigned && (project as any)?.contractSignedAt && (
+            <div>
+              <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
+                תאריך חתימה
+              </span>
+              <span style={{ fontSize: '14px', color: 'var(--foreground)' }}>
+                {formatDate((project as any).contractSignedAt)}
+              </span>
+            </div>
+          )}
         </div>
+
+        {/* Feedback */}
+        {projectSaveFeedback && (
+          <div style={{
+            marginTop: '12px', fontSize: '13px',
+            color: projectSaveFeedback.type === 'success' ? '#22c55e' : '#ef4444',
+          }}>
+            {projectSaveFeedback.message}
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
