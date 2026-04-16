@@ -109,8 +109,8 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
  * a task row exists in public.tasks. Dedups by milestone_id. Never throws —
  * logs only, so the PUT itself always completes from the client's perspective.
  *
- * public.tasks columns: id, title, assignee_id, project_id, milestone_id,
- *                       status, created_at, updated_at
+ * public.tasks columns: id, title, assignee_id, project_id, client_id,
+ *                       milestone_id, status, created_at, updated_at
  */
 interface EnsureTaskArgs {
   milestoneId: string;
@@ -134,11 +134,28 @@ async function ensureTaskForMilestone(
     return { action: 'skipped' };
   }
 
+  // Fetch client_id from the parent business project.
+  let clientId: string | null = null;
+  if (projectId) {
+    const { data: proj, error: projErr } = await sb
+      .from('business_projects')
+      .select('client_id')
+      .eq('id', projectId)
+      .maybeSingle();
+    if (projErr) {
+      console.warn('[ensureTask] business_projects lookup failed:', projErr.message);
+    } else if (proj) {
+      clientId = ((proj as any).client_id as string) || null;
+    }
+    console.log(`[ensureTask] resolved clientId=${clientId ?? 'null'} from project=${projectId}`);
+  }
+
   // Log any missing required values up-front.
   const missing: string[] = [];
   if (!title) missing.push('title');
   if (!assigneeId) missing.push('assignee_id');
   if (!projectId) missing.push('project_id');
+  if (!clientId) missing.push('client_id');
   if (!milestoneId) missing.push('milestone_id');
   if (missing.length > 0) {
     console.warn(
@@ -152,6 +169,7 @@ async function ensureTaskForMilestone(
     title,
     assignee_id: assigneeId,
     project_id: projectId,
+    client_id: clientId,
     milestone_id: milestoneId,
     status: 'pending',
     updated_at: now,
@@ -202,9 +220,7 @@ async function ensureTaskForMilestone(
     created_at: now,
   };
 
-  console.log(
-    `[ensureTask] ➜ inserting task id=${taskId} cols=${Object.keys(insertRow).join(',')} milestone=${milestoneId} assignee=${assigneeId} project=${projectId}`
-  );
+  console.log('TASK PAYLOAD:', JSON.stringify(insertRow));
 
   const { data: inserted, error: insertErr } = await sb
     .from('tasks')
@@ -379,13 +395,31 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
         typeof incomingAssignee === 'string' && incomingAssignee.trim() !== ''
           ? incomingAssignee
           : (updated.assignee_id as string) || null;
-      const resolvedProjectId =
+
+      // Resolve the business project ID from the milestone row.
+      // The milestones table may use business_project_id OR project_id —
+      // try both from the select('*') response.
+      let resolvedProjectId =
         (updated.business_project_id as string) || (updated.project_id as string) || null;
+
+      // Fallback: if neither was in the row, re-read the milestone explicitly.
+      if (!resolvedProjectId) {
+        console.warn(`[API] PUT /api/data/project-milestones/${id} ⚠ project_id not found in updated row keys=[${Object.keys(updated).join(',')}] — re-reading milestone`);
+        const { data: milestoneRow } = await sb.from(TABLE).select('*').eq('id', id).maybeSingle();
+        if (milestoneRow) {
+          resolvedProjectId =
+            ((milestoneRow as any).business_project_id as string) ||
+            ((milestoneRow as any).project_id as string) || null;
+          console.log(`[API] PUT /api/data/project-milestones/${id} re-read resolved project_id=${resolvedProjectId ?? 'null'}`);
+        }
+      }
+
       const resolvedTitle = (updated.title as string) || 'משימה';
 
       console.log(
         `[API] PUT /api/data/project-milestones/${id} triggering ensureTask incomingAssignee=${incomingAssignee} resolvedAssignee=${resolvedAssignee ?? 'null'} resolvedProject=${resolvedProjectId ?? 'null'}`
       );
+      console.log(`TASK PAYLOAD: milestoneId=${id} assigneeId=${resolvedAssignee} projectId=${resolvedProjectId} title=${resolvedTitle}`);
 
       try {
         taskResult = await ensureTaskForMilestone(sb, {

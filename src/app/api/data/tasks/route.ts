@@ -3,8 +3,8 @@
  * POST /api/data/tasks — create a task
  *
  * Storage: Supabase "tasks" table with flat columns:
- *   id, title, assignee_id, project_id, milestone_id,
- *   status, created_at, updated_at
+ *   id, title, assignee_id, project_id, client_id,
+ *   milestone_id, status, created_at, updated_at
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -29,6 +29,7 @@ type Row = Record<string, unknown> & { id: string };
 function rowToTask(r: Row) {
   const assignee = (r.assignee_id as string) || null;
   const project = (r.project_id as string) || null;
+  const client = (r.client_id as string) || null;
   const milestone = (r.milestone_id as string) || null;
   const title = (r.title as string) || '';
   return {
@@ -37,8 +38,9 @@ function rowToTask(r: Row) {
     assigneeId: assignee,
     employeeId: assignee,           // legacy alias for frontend compat
     assignedEmployeeId: assignee,   // legacy alias for frontend compat
-    businessProjectId: project,     // legacy alias for frontend compat
     projectId: project,
+    businessProjectId: project,     // legacy alias for frontend compat
+    clientId: client,
     milestoneId: milestone,
     status: (r.status as string) ?? 'pending',
     description: (r.description as string) ?? '',
@@ -52,6 +54,7 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
   const title = (body.title ?? '') as string;
   const assignee = nullIfEmpty(body.assigneeId ?? body.employeeId ?? body.assignedEmployeeId);
   const project = nullIfEmpty(body.businessProjectId ?? body.projectId);
+  const client = nullIfEmpty(body.clientId);
   const milestone = nullIfEmpty(body.milestoneId);
   const status = (body.status ?? 'pending') as string;
 
@@ -61,6 +64,7 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
     title,
     assignee_id: assignee,
     project_id: project,
+    client_id: client,
     milestone_id: milestone,
     status,
     created_at: now,
@@ -115,7 +119,7 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     const id = generateId();
     const insertRow = toInsert(body, id, now);
-    console.log(`[API] POST /api/data/tasks inserting cols=${Object.keys(insertRow).join(',')} milestoneId=${milestoneId ?? 'null'} assignee=${insertRow.assignee_id ?? 'null'} project=${insertRow.project_id ?? 'null'}`);
+    console.log('Creating task:', JSON.stringify(insertRow));
 
     const { data: inserted, error } = await sb.from(TABLE).insert(insertRow).select('*').single();
     if (error) {
