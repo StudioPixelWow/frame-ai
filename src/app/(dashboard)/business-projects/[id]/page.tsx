@@ -155,6 +155,43 @@ export default function BusinessProjectPage() {
   const [savingProject, setSavingProject] = useState(false);
   const [projectSaveFeedback, setProjectSaveFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  // ── Derived data (useMemo) — must be declared before useCallback blocks that reference them ──
+  const project = useMemo(
+    () => projectsData.find((p: BusinessProject) => p.id === projectId),
+    [projectsData, projectId]
+  );
+
+  const projectMilestones = useMemo(
+    () =>
+      (milestonesData || [])
+        .filter((m: ProjectMilestone) => m.projectId === projectId)
+        .map((m: ProjectMilestone) => ({
+          ...(m as any),
+          ...(milestoneOverrides[(m as any).id] || {}),
+        })),
+    [milestonesData, projectId, milestoneOverrides]
+  );
+
+  const projectPayments = useMemo(
+    () => paymentsData.filter((p: ProjectPayment) => p.projectId === projectId),
+    [paymentsData, projectId]
+  );
+
+  const projectClientFiles = useMemo(
+    () => project ? clientFilesData.filter((f: ClientFile) => f.clientId === project.clientId) : [],
+    [clientFilesData, project]
+  );
+
+  const projectClient = useMemo(
+    () => project ? clientsData.find((c: Client) => c.id === project.clientId) : undefined,
+    [clientsData, project]
+  );
+
+  const assignedManager = useMemo(
+    () => project ? employeesData.find((e: Employee) => e.id === project.assignedManagerId) : undefined,
+    [employeesData, project]
+  );
+
   // ── Project file upload (hooks MUST be before any early return) ──
   const projectFileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadingProjectFile, setUploadingProjectFile] = useState(false);
@@ -253,44 +290,6 @@ export default function BusinessProjectPage() {
     );
   }, [milestoneFilesData]);
 
-  const project = useMemo(
-    () => projectsData.find((p: BusinessProject) => p.id === projectId),
-    [projectsData, projectId]
-  );
-
-  const projectMilestones = useMemo(
-    () =>
-      (milestonesData || [])
-        .filter((m: ProjectMilestone) => m.projectId === projectId)
-        .map((m: ProjectMilestone) => ({
-          ...(m as any),
-          ...(milestoneOverrides[(m as any).id] || {}),
-        })),
-    [milestonesData, projectId, milestoneOverrides]
-  );
-
-  const projectPayments = useMemo(
-    () => paymentsData.filter((p: ProjectPayment) => p.projectId === projectId),
-    [paymentsData, projectId]
-  );
-
-  const projectClientFiles = useMemo(
-    () => project ? clientFilesData.filter((f: ClientFile) => f.clientId === project.clientId) : [],
-    [clientFilesData, project]
-  );
-
-  // NOTE: All hooks must run on every render (Rules of Hooks). Keep these
-  // useMemos above the early returns and make them safe when project is undefined.
-  const projectClient = useMemo(
-    () => project ? clientsData.find((c: Client) => c.id === project.clientId) : undefined,
-    [clientsData, project]
-  );
-
-  const assignedManager = useMemo(
-    () => project ? employeesData.find((e: Employee) => e.id === project.assignedManagerId) : undefined,
-    [employeesData, project]
-  );
-
   // While the projects list is still loading on first mount, projectsData is []
   // and `project` is undefined — don't render a misleading 404. Show a loader
   // until the fetch finishes, then check for the actual not-found case.
@@ -321,7 +320,9 @@ export default function BusinessProjectPage() {
 
   const totalAmount = (projectPayments || []).reduce((sum: number, p: ProjectPayment) => sum + (p?.amount || 0), 0);
 
-  const handleAddMilestone = async () => {
+  // NOTE: All handlers below use `function` declarations (not `const` arrows)
+  // so they are hoisted and cannot cause TDZ "Cannot access before initialization" errors.
+  async function handleAddMilestone() {
     if (!milestoneFormData.title || !milestoneFormData.dueDate) {
       return;
     }
@@ -368,7 +369,7 @@ export default function BusinessProjectPage() {
    * 3. Creates or updates the related task in public.tasks
    * 4. Shows success/failure feedback
    */
-  const handleAssignMilestoneEmployee = async (milestone: any) => {
+  async function handleAssignMilestoneEmployee(milestone: any) {
     if (!milestone?.id) {
       console.warn('[assign] aborted — milestone has no id', milestone);
       return;
@@ -484,7 +485,7 @@ export default function BusinessProjectPage() {
     }, 4000);
   };
 
-  const handleUpdateMilestone = async (milestoneId: string, updates: Partial<ProjectMilestone>) => {
+  async function handleUpdateMilestone(milestoneId: string, updates: Partial<ProjectMilestone>) {
     setLoading(true);
 
     // Build the enriched payload. Status transitions auto-attach timestamps.
@@ -536,7 +537,7 @@ export default function BusinessProjectPage() {
     }
   };
 
-  const handleUpdatePaymentStatus = async (paymentId: string, status: ProjectPaymentStatus) => {
+  async function handleUpdatePaymentStatus(paymentId: string, status: ProjectPaymentStatus) {
     setLoading(true);
     try {
       const paidAt = status === 'paid' ? new Date().toISOString() : null;
@@ -548,7 +549,7 @@ export default function BusinessProjectPage() {
     }
   };
 
-  const handleAddFile = async () => {
+  async function handleAddFile() {
     if (!fileFormData.url) {
       return;
     }
@@ -578,7 +579,7 @@ export default function BusinessProjectPage() {
     }
   };
 
-  const handleUpdateProjectStatus = async (newStatus: string) => {
+  async function handleUpdateProjectStatus(newStatus: string) {
     setLoading(true);
     try {
       await updateProject(projectId, { projectStatus: newStatus } as any);
@@ -589,11 +590,11 @@ export default function BusinessProjectPage() {
     }
   };
 
-  const handleMarkComplete = async () => {
+  async function handleMarkComplete() {
     await handleUpdateProjectStatus('completed');
-  };
+  }
 
-  const handleStartEditProject = () => {
+  function handleStartEditProject() {
     setEditForm({
       projectName: project?.projectName || '',
       serviceType: project?.serviceType || project?.projectType || '',
@@ -608,13 +609,13 @@ export default function BusinessProjectPage() {
     setProjectSaveFeedback(null);
   };
 
-  const handleCancelEditProject = () => {
+  function handleCancelEditProject() {
     setIsEditingProject(false);
     setEditForm({});
     setProjectSaveFeedback(null);
   };
 
-  const handleSaveProject = async () => {
+  async function handleSaveProject() {
     setSavingProject(true);
     setProjectSaveFeedback(null);
     try {
@@ -639,7 +640,7 @@ export default function BusinessProjectPage() {
     }
   };
 
-  const handleToggleContractSigned = async () => {
+  async function handleToggleContractSigned() {
     const current = (project as any)?.contractSigned ?? false;
     const newVal = !current;
     try {
