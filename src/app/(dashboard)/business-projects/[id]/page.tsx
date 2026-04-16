@@ -273,7 +273,7 @@ export default function BusinessProjectPage() {
     //    creation failure doesn't roll back the (already successful) assignee.
     let assigneeSaved = false;
     try {
-      const payload = { assigneeId: normalized };
+      const payload = { assigneeId: normalized, businessProjectId: projectId };
       console.log(`[assign] ➜ PUT /api/data/project-milestones/${milestone.id} payload=${JSON.stringify(payload)}`);
       const saved = await updateMilestone(milestone.id, payload as any);
       assigneeSaved = true;

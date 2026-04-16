@@ -396,21 +396,23 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
           ? incomingAssignee
           : (updated.assignee_id as string) || null;
 
-      // Resolve the business project ID from the milestone row.
-      // The milestones table may use business_project_id OR project_id —
-      // try both from the select('*') response.
-      let resolvedProjectId =
-        (updated.business_project_id as string) || (updated.project_id as string) || null;
+      // Resolve the business project ID.
+      // Priority: (1) explicit from request body, (2) milestone row, (3) re-read.
+      const bodyProjectId =
+        (body.businessProjectId as string) || (body.projectId as string) || null;
+      let resolvedProjectId = bodyProjectId
+        || (updated.business_project_id as string)
+        || (updated.project_id as string)
+        || null;
 
-      // Fallback: if neither was in the row, re-read the milestone explicitly.
+      // Fallback: if still null, re-read the milestone row explicitly.
       if (!resolvedProjectId) {
-        console.warn(`[API] PUT /api/data/project-milestones/${id} ⚠ project_id not found in updated row keys=[${Object.keys(updated).join(',')}] — re-reading milestone`);
+        console.warn(`[API] PUT /api/data/project-milestones/${id} ⚠ project_id not in body or row keys=[${Object.keys(updated).join(',')}] — re-reading milestone`);
         const { data: milestoneRow } = await sb.from(TABLE).select('*').eq('id', id).maybeSingle();
         if (milestoneRow) {
           resolvedProjectId =
             ((milestoneRow as any).business_project_id as string) ||
             ((milestoneRow as any).project_id as string) || null;
-          console.log(`[API] PUT /api/data/project-milestones/${id} re-read resolved project_id=${resolvedProjectId ?? 'null'}`);
         }
       }
 
