@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import {
   useBusinessProjects,
@@ -71,6 +71,7 @@ const projectTypeLabels: Record<string, string> = {
 const projectStatusLabels: Record<string, string> = {
   not_started: 'לא התחיל',
   in_progress: 'בתהליך',
+  awaiting_approval: 'ממתין לאישור',
   waiting_for_client: 'בהמתנה ללקוח',
   completed: 'הושלם',
 };
@@ -78,7 +79,8 @@ const projectStatusLabels: Record<string, string> = {
 const projectStatusColors: Record<string, string> = {
   not_started: '#6b7280',
   in_progress: '#f59e0b',
-  waiting_for_client: '#8b5cf6',
+  awaiting_approval: '#8b5cf6',
+  waiting_for_client: '#f97316',
   completed: '#22c55e',
 };
 
@@ -206,26 +208,66 @@ export default function BusinessProjectPage() {
   );
 
   // ── Derived project status & progress from milestones (source of truth) ──
-  const milestoneProgress = useMemo(() => {
-    const total = projectMilestones?.length || 0;
-    if (total === 0) return 0;
-    const approved = projectMilestones.filter((m: any) => m.status === 'approved').length;
-    return Math.round((approved / total) * 100);
+  // Counts per status bucket — used by both progress and status derivation.
+  const milestoneCounts = useMemo(() => {
+    const all = projectMilestones || [];
+    return {
+      total: all.length,
+      pending: all.filter((m: any) => m.status === 'pending').length,
+      inProgress: all.filter((m: any) => m.status === 'in_progress').length,
+      submitted: all.filter((m: any) => m.status === 'submitted').length,
+      approved: all.filter((m: any) => m.status === 'approved').length,
+      returned: all.filter((m: any) => m.status === 'returned').length,
+    };
   }, [projectMilestones]);
 
+  // Progress: weighted — approved=100%, submitted=75%, in_progress=50%
+  const milestoneProgress = useMemo(() => {
+    if (milestoneCounts.total === 0) return 0;
+    const weightedSum =
+      milestoneCounts.approved * 100 +
+      milestoneCounts.submitted * 75 +
+      milestoneCounts.inProgress * 50 +
+      milestoneCounts.returned * 25;
+    return Math.round(weightedSum / milestoneCounts.total);
+  }, [milestoneCounts]);
+
+  // Status: derived entirely from milestone states
   const derivedProjectStatus = useMemo(() => {
-    const total = projectMilestones?.length || 0;
+    const { total, approved, submitted, inProgress, returned, pending } = milestoneCounts;
     if (total === 0) return project?.projectStatus || 'not_started';
-    const approved = projectMilestones.filter((m: any) => m.status === 'approved').length;
-    const inProgress = projectMilestones.filter((m: any) =>
-      m.status === 'in_progress' || m.status === 'submitted'
-    ).length;
-    const returned = projectMilestones.filter((m: any) => m.status === 'returned').length;
     if (approved === total) return 'completed';
+    if (submitted > 0 && inProgress === 0 && pending === 0 && returned === 0) return 'awaiting_approval';
     if (returned > 0) return 'waiting_for_client';
-    if (inProgress > 0 || approved > 0) return 'in_progress';
+    if (inProgress > 0 || approved > 0 || submitted > 0) return 'in_progress';
     return 'not_started';
-  }, [projectMilestones, project?.projectStatus]);
+  }, [milestoneCounts, project?.projectStatus]);
+
+  // ── Sync derived status & progress back to the project DB record ──
+  // Runs whenever milestones change so the project row always reflects reality.
+  const lastSyncedRef = useRef<string>('');
+  useEffect(() => {
+    if (!project?.id || milestoneCounts.total === 0) return;
+    // Build a fingerprint to avoid duplicate writes
+    const fingerprint = `${derivedProjectStatus}|${milestoneProgress}`;
+    if (fingerprint === lastSyncedRef.current) return;
+    // Also skip if the project already has the correct values
+    if (
+      project?.projectStatus === derivedProjectStatus &&
+      (project as any)?.progress === milestoneProgress
+    ) {
+      lastSyncedRef.current = fingerprint;
+      return;
+    }
+    lastSyncedRef.current = fingerprint;
+    // Fire-and-forget — no loading spinner, no blocking
+    updateProject(project.id, {
+      projectStatus: derivedProjectStatus,
+      progress: milestoneProgress,
+    } as any).catch((err: any) =>
+      console.warn('[project-sync] failed to persist derived status:', err?.message)
+    );
+  }, [project?.id, project?.projectStatus, derivedProjectStatus, milestoneProgress, milestoneCounts.total, updateProject]);
 
   // ── Project file upload (hooks MUST be before any early return) ──
   const projectFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -885,6 +927,7 @@ export default function BusinessProjectPage() {
               >
                 <option value="not_started">לא התחיל</option>
                 <option value="in_progress">בתהליך</option>
+                <option value="awaiting_approval">ממתין לאישור</option>
                 <option value="waiting_for_client">בהמתנה ללקוח</option>
                 <option value="completed">הושלם</option>
               </select>
@@ -1169,7 +1212,7 @@ export default function BusinessProjectPage() {
             </div>
           </div>
 
-          {/* Timeline */}
+          {/* Timeline & Progress */}
           <div
             className="agd-card"
             style={{
@@ -1181,37 +1224,89 @@ export default function BusinessProjectPage() {
             }}
           >
             <h3 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--foreground)', marginTop: 0 }}>
-              ציר הזמן
+              ציר הזמן והתקדמות
             </h3>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+
+            {/* Dates row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginBottom: '4px' }}>
-                  התחלה
-                </div>
+                <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginBottom: '4px' }}>התחלה</div>
                 <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--foreground)' }}>
                   {formatDate(project?.startDate || null)}
                 </div>
               </div>
-
-              <div
-                style={{
-                  flex: 1,
-                  height: '2px',
-                  background: 'var(--border)',
-                  margin: '0 16px',
-                  marginTop: '16px',
-                }}
-              />
-
+              <div style={{ flex: 1, height: '2px', background: 'var(--border)', margin: '0 16px', marginTop: '16px' }} />
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginBottom: '4px' }}>
-                  סיום
-                </div>
+                <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginBottom: '4px' }}>סיום</div>
                 <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--foreground)' }}>
                   {formatDate(project?.endDate || null)}
                 </div>
               </div>
             </div>
+
+            {/* Overall progress bar */}
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--foreground)' }}>
+                  התקדמות כללית
+                </span>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: getProjectStatusColor(derivedProjectStatus) }}>
+                  {milestoneProgress}%
+                </span>
+              </div>
+              <div style={{ width: '100%', height: '10px', background: 'var(--border)', borderRadius: '5px', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${milestoneProgress}%`,
+                  background: `linear-gradient(90deg, ${getProjectStatusColor(derivedProjectStatus)}, ${milestoneProgress === 100 ? '#22c55e' : getProjectStatusColor(derivedProjectStatus)}dd)`,
+                  borderRadius: '5px',
+                  transition: 'width 0.4s ease',
+                }} />
+              </div>
+            </div>
+
+            {/* Status badge */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--foreground-muted)' }}>סטטוס נוכחי:</span>
+              <div style={{
+                display: 'inline-block', padding: '3px 10px',
+                background: getProjectStatusColor(derivedProjectStatus),
+                color: '#fff', borderRadius: '6px', fontSize: '12px', fontWeight: '600',
+              }}>
+                {getProjectStatusLabel(derivedProjectStatus)}
+              </div>
+            </div>
+
+            {/* Per-status breakdown */}
+            {milestoneCounts.total > 0 && (
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                {milestoneCounts.approved > 0 && (
+                  <span style={{ fontSize: '11px', color: '#22c55e', fontWeight: '600' }}>
+                    ✓ {milestoneCounts.approved} אושרו
+                  </span>
+                )}
+                {milestoneCounts.submitted > 0 && (
+                  <span style={{ fontSize: '11px', color: '#8b5cf6', fontWeight: '600' }}>
+                    ⏳ {milestoneCounts.submitted} הוגשו
+                  </span>
+                )}
+                {milestoneCounts.inProgress > 0 && (
+                  <span style={{ fontSize: '11px', color: '#f59e0b', fontWeight: '600' }}>
+                    ▸ {milestoneCounts.inProgress} בתהליך
+                  </span>
+                )}
+                {milestoneCounts.returned > 0 && (
+                  <span style={{ fontSize: '11px', color: '#f97316', fontWeight: '600' }}>
+                    ↩ {milestoneCounts.returned} הוחזרו
+                  </span>
+                )}
+                {milestoneCounts.pending > 0 && (
+                  <span style={{ fontSize: '11px', color: '#6b7280', fontWeight: '600' }}>
+                    ○ {milestoneCounts.pending} בהמתנה
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Recent Activity */}

@@ -27,6 +27,7 @@ function rowToProject(r: Row) {
     contractSigned: (r.contract_signed as boolean) ?? false,
     contractSignedAt: (r.contract_signed_at as string) ?? null,
     projectStatus: (r.project_status as string) ?? 'not_started',
+    progress: typeof r.progress === 'number' ? r.progress : 0,
     startDate: (r.start_date as string) ?? null,
     endDate: (r.end_date as string) ?? null,
     assignedManagerId: (r.assigned_manager_id as string) ?? null,
@@ -72,6 +73,7 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
     ['startDate', 'start_date'],
     ['endDate', 'end_date'],
     ['assignedManagerId', 'assigned_manager_id'],
+    ['progress', 'progress'],
   ];
   for (const [k, dbKey] of map) {
     if (body[k] !== undefined) {

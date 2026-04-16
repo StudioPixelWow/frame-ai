@@ -41,6 +41,7 @@ function rowToProject(r: Row) {
     contractSigned: (r.contract_signed as boolean) ?? false,
     contractSignedAt: (r.contract_signed_at as string) ?? null,
     projectStatus: (r.project_status as string) ?? 'not_started',
+    progress: typeof r.progress === 'number' ? r.progress : 0,
     startDate: (r.start_date as string) ?? null,
     endDate: (r.end_date as string) ?? null,
     assignedManagerId: (r.assigned_manager_id as string) ?? null,
