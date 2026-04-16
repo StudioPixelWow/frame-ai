@@ -182,6 +182,14 @@ async function ensureTaskForMilestone(
     updated_at: now,
   };
 
+  // Helper: regex to detect unknown-column errors from PostgREST.
+  const extractBadCol = (msg: string): string | null => {
+    const m = msg.match(
+      /column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i
+    );
+    return m?.[1] || m?.[2] || null;
+  };
+
   // Dedup: find an existing task for this milestone (try each FK column alias).
   let existingId: string | null = null;
   for (const col of ['milestone_id', 'business_project_milestone_id']) {
@@ -190,46 +198,64 @@ async function ensureTaskForMilestone(
       .select('id')
       .eq(col, milestoneId)
       .maybeSingle();
-    if (existErr) continue;
+    if (existErr) {
+      console.warn(`[ensureTask] dedup query col="${col}" error: ${existErr.message} — trying next alias`);
+      continue;
+    }
     if (existing) {
       existingId = (existing as any).id;
-      break;
+      console.log(`[ensureTask] found existing task id=${existingId} via col="${col}"`);
     }
-    break; // column exists, no row — proceed to INSERT
+    break; // column exists (whether row found or not) — stop probing
   }
 
-  // If a task already exists for this milestone (possibly broken with null
-  // fields), UPDATE it to the correct full values instead of skipping.
+  // If a task already exists for this milestone, UPDATE it to fill in
+  // any null fields from a previous broken insert.
   if (existingId) {
     console.log(
-      `[ensureTask] ➜ updating existing task id=${existingId} milestone=${milestoneId} to populate missing fields`
+      `[ensureTask] ➜ updating existing task id=${existingId} milestone=${milestoneId}`
     );
     let updateFields: Record<string, unknown> = { ...fullFields };
     for (let attempt = 0; attempt < 15; attempt++) {
-      const { error } = await sb.from('tasks').update(updateFields).eq('id', existingId);
-      if (!error) {
+      // Use .select('id').single() to VERIFY the update actually landed.
+      const { data: uData, error: uErr } = await sb
+        .from('tasks')
+        .update(updateFields)
+        .eq('id', existingId)
+        .select('id')
+        .single();
+      if (!uErr && uData) {
         console.log(
-          `[ensureTask] ✅ task updated id=${existingId} title="${title}" employee=${assigneeId} project=${businessProjectId} client=${clientId} milestone=${milestoneId}`
+          `[ensureTask] ✅ task updated id=${existingId} title="${title}" employee=${assigneeId} project=${businessProjectId} milestone=${milestoneId}`
         );
         return { action: 'updated', taskId: existingId, missing: missing.length ? missing : undefined };
       }
-      const m = error.message.match(
-        /column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i
-      );
-      const bad = m?.[1] || m?.[2];
+      if (!uErr && !uData) {
+        console.error(`[ensureTask] ❌ task update returned no data (row may not exist) id=${existingId}`);
+        // Row vanished — fall through to INSERT path below.
+        existingId = null;
+        break;
+      }
+      const bad = extractBadCol(uErr!.message);
       if (!bad || !(bad in updateFields)) {
-        console.error('[ensureTask] ❌ task update failed:', error);
-        return { action: 'skipped', taskId: existingId, error: error.message };
+        console.error(`[ensureTask] ❌ task update failed: ${uErr!.message} (code=${(uErr as any)?.code ?? 'none'}) details=${JSON.stringify((uErr as any)?.details ?? null)}`);
+        return { action: 'skipped', taskId: existingId, error: uErr!.message };
       }
       console.warn(`[ensureTask] dropping unknown tasks column "${bad}" from update`);
       const { [bad]: _d, ...rest } = updateFields;
       void _d;
       updateFields = rest;
     }
-    return { action: 'skipped', taskId: existingId, error: 'update retry limit exceeded' };
+    if (existingId) {
+      return { action: 'skipped', taskId: existingId, error: 'update retry limit exceeded' };
+    }
+    // If existingId was nulled (row vanished), fall through to INSERT.
   }
 
-  // Otherwise INSERT a new task with full fields.
+  // INSERT a new task. Use .select('*').single() to VERIFY the row was
+  // actually created — the old code used .insert() without .select(),
+  // which could report success even if the row was not persisted (e.g.
+  // RLS policies, triggers returning NULL, or PostgREST edge cases).
   const taskId = `tsk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
   let insertRow: Record<string, unknown> = {
     id: taskId,
@@ -238,20 +264,39 @@ async function ensureTaskForMilestone(
   };
 
   console.log(
-    `[ensureTask] ➜ inserting task milestone=${milestoneId} employee=${assigneeId} project=${businessProjectId} client=${clientId} title="${title}"`
+    `[ensureTask] ➜ inserting task id=${taskId} cols=${Object.keys(insertRow).join(',')} milestone=${milestoneId} employee=${assigneeId} project=${businessProjectId} client=${clientId}`
   );
 
-  let lastErr: { message: string; code?: string } | null = null;
+  let lastErr: { message: string; code?: string; details?: string } | null = null;
   for (let attempt = 0; attempt < 15; attempt++) {
-    const { error } = await sb.from('tasks').insert(insertRow);
-    if (!error) {
-      console.log(`[ensureTask] ✅ task inserted id=${taskId} milestone=${milestoneId}`);
+    const { data: inserted, error } = await sb
+      .from('tasks')
+      .insert(insertRow)
+      .select('*')
+      .single();
+
+    if (!error && inserted) {
+      console.log(
+        `[ensureTask] ✅ task INSERT verified id=${taskId} milestone=${milestoneId} returned_keys=${Object.keys(inserted).join(',')}`
+      );
       return { action: 'created', taskId, missing: missing.length ? missing : undefined };
     }
-    lastErr = error as any;
 
-    // 23505 = unique_violation. A row already exists for this milestone
-    // (possibly the broken one with null fields). Find it and UPDATE.
+    if (!error && !inserted) {
+      // Insert reported no error but returned no row — very suspicious.
+      console.error(
+        `[ensureTask] ❌ INSERT returned no error AND no data. Row may not have been persisted. insertRow=${JSON.stringify(insertRow)}`
+      );
+      lastErr = { message: 'insert returned no data despite no error' };
+      break;
+    }
+
+    lastErr = error as any;
+    console.warn(
+      `[ensureTask] INSERT attempt=${attempt} error: ${error!.message} (code=${(error as any)?.code ?? 'none'}) details=${JSON.stringify((error as any)?.details ?? null)} hint=${JSON.stringify((error as any)?.hint ?? null)}`
+    );
+
+    // 23505 = unique_violation. A row already exists — find and UPDATE it.
     if ((error as any).code === '23505') {
       console.warn('[ensureTask] unique_violation — falling back to UPDATE of existing task row');
       for (const col of ['milestone_id', 'business_project_milestone_id']) {
@@ -260,38 +305,53 @@ async function ensureTaskForMilestone(
         if (ex) {
           let updateFields: Record<string, unknown> = { ...fullFields };
           for (let a2 = 0; a2 < 15; a2++) {
-            const { error: uErr } = await sb.from('tasks').update(updateFields).eq('id', (ex as any).id);
-            if (!uErr) {
+            const { data: uData, error: uErr } = await sb.from('tasks').update(updateFields).eq('id', (ex as any).id).select('id').single();
+            if (!uErr && uData) {
               console.log(`[ensureTask] ✅ task repaired via UPDATE id=${(ex as any).id} milestone=${milestoneId}`);
               return { action: 'updated', taskId: (ex as any).id, missing: missing.length ? missing : undefined };
             }
-            const m2 = uErr.message.match(/column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);
-            const bad2 = m2?.[1] || m2?.[2];
-            if (!bad2 || !(bad2 in updateFields)) {
-              console.error('[ensureTask] ❌ update after unique_violation failed:', uErr);
-              return { action: 'skipped', taskId: (ex as any).id, error: uErr.message };
+            if (uErr) {
+              const bad2 = extractBadCol(uErr.message);
+              if (!bad2 || !(bad2 in updateFields)) {
+                console.error(`[ensureTask] ❌ update after unique_violation failed: ${uErr.message}`);
+                return { action: 'skipped', taskId: (ex as any).id, error: uErr.message };
+              }
+              const { [bad2]: _dd, ...rest2 } = updateFields;
+              void _dd;
+              updateFields = rest2;
             }
-            const { [bad2]: _dd, ...rest2 } = updateFields;
-            void _dd;
-            updateFields = rest2;
           }
         }
       }
       return { action: 'skipped', error: 'unique_violation but existing row not findable' };
     }
 
-    const m = error.message.match(
-      /column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i
-    );
-    const bad = m?.[1] || m?.[2];
-    if (!bad || !(bad in insertRow)) break;
-    console.warn(`[ensureTask] dropping unknown tasks column "${bad}" from insert`);
+    // Unknown-column error — strip it and retry.
+    const bad = extractBadCol(error!.message);
+    if (!bad || !(bad in insertRow)) {
+      console.error(`[ensureTask] ❌ non-column error, breaking. error=${error!.message}`);
+      break;
+    }
+    console.warn(`[ensureTask] dropping unknown tasks column "${bad}" from insert (attempt ${attempt})`);
     const { [bad]: _d, ...rest } = insertRow;
     void _d;
     insertRow = rest;
   }
 
-  console.error('[ensureTask] ❌ task insert failed:', lastErr);
+  // Final fallback: the retry loop failed. Log everything for diagnosis.
+  console.error(
+    `[ensureTask] ❌ task insert FAILED after retries. lastErr=${JSON.stringify(lastErr)} finalInsertRow=${JSON.stringify(insertRow)}`
+  );
+
+  // LAST RESORT: verify whether the row actually exists despite errors.
+  // Some PostgREST versions return errors on .select() even when the
+  // INSERT itself succeeded.
+  const { data: verifyRow } = await sb.from('tasks').select('id').eq('id', taskId).maybeSingle();
+  if (verifyRow) {
+    console.log(`[ensureTask] ⚠ task row DOES exist id=${taskId} despite reported errors — treating as success`);
+    return { action: 'created', taskId, missing: missing.length ? missing : undefined };
+  }
+
   return { action: 'skipped', error: lastErr?.message ?? 'unknown' };
 }
 
