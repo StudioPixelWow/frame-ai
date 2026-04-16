@@ -850,6 +850,17 @@ export interface Mailing {
 // Gmail Integration
 export type GmailConnectionStatus = 'not_connected' | 'connected' | 'error' | 'reconnecting';
 
+export interface MilestoneFile {
+  id: string;
+  milestoneId: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number;
+  contentType: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface GmailSettings {
   id: string;
   connectionStatus: GmailConnectionStatus;

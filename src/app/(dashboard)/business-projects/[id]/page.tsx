@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import {
   useBusinessProjects,
@@ -10,8 +10,9 @@ import {
   useEmployees,
   useClientFiles,
   useTasks,
+  useMilestoneFiles,
 } from '@/lib/api/use-entity';
-import { BusinessProject, ProjectMilestone, ProjectPayment, Client, Employee, ClientFile } from '@/lib/db/schema';
+import { BusinessProject, ProjectMilestone, ProjectPayment, Client, Employee, ClientFile, MilestoneFile } from '@/lib/db/schema';
 
 type Tab = 'overview' | 'milestones' | 'files' | 'payments' | 'activity';
 type MilestoneStatus = 'pending' | 'in_progress' | 'submitted' | 'approved' | 'returned';
@@ -116,6 +117,7 @@ export default function BusinessProjectPage() {
   const { data: employeesData = [] } = useEmployees();
   const { data: clientFilesData = [], create: createClientFile } = useClientFiles();
   const { data: tasksData = [], create: createTask, update: updateTask } = useTasks();
+  const { data: milestoneFilesData = [], refetch: refetchMilestoneFiles, remove: deleteMilestoneFile } = useMilestoneFiles();
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null);
@@ -547,6 +549,49 @@ export default function BusinessProjectPage() {
       console.error('[project-edit] contract toggle failed:', error);
     }
   };
+
+  // ── Milestone file uploads ──────────────────────────────────────
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [uploadingMilestone, setUploadingMilestone] = useState<string | null>(null);
+
+  const handleMilestoneFileUpload = useCallback(async (milestoneId: string, file: File) => {
+    setUploadingMilestone(milestoneId);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('milestoneId', milestoneId);
+      const res = await fetch('/api/data/milestone-files', { method: 'POST', body: form });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `Upload failed (${res.status})`);
+      }
+      console.log(`[milestone-files] ✅ uploaded to milestone=${milestoneId}`);
+      await refetchMilestoneFiles();
+    } catch (err: any) {
+      console.error('[milestone-files] upload error:', err);
+      alert(`שגיאה בהעלאת קובץ: ${err?.message || 'unknown'}`);
+    } finally {
+      setUploadingMilestone(null);
+      // Reset the file input so the same file can be re-selected
+      const input = fileInputRefs.current[milestoneId];
+      if (input) input.value = '';
+    }
+  }, [refetchMilestoneFiles]);
+
+  const handleDeleteMilestoneFile = useCallback(async (fileId: string) => {
+    try {
+      await deleteMilestoneFile(fileId);
+      console.log(`[milestone-files] ✅ deleted file=${fileId}`);
+    } catch (err: any) {
+      console.error('[milestone-files] delete error:', err);
+    }
+  }, [deleteMilestoneFile]);
+
+  const getFilesForMilestone = useCallback((milestoneId: string): MilestoneFile[] => {
+    return (milestoneFilesData || []).filter(
+      (f: MilestoneFile) => f.milestoneId === milestoneId
+    );
+  }, [milestoneFilesData]);
 
   const startDate = project?.startDate ? new Date(project.startDate) : null;
   const endDate = project?.endDate ? new Date(project.endDate) : null;
@@ -1363,7 +1408,7 @@ export default function BusinessProjectPage() {
                               קבצים
                             </span>
                             <span style={{ fontSize: '13px', color: 'var(--accent)' }}>
-                              {milestone?.files?.length || 0} קבצים
+                              {getFilesForMilestone(milestone.id).length} קבצים
                             </span>
                           </div>
                         </div>
@@ -1407,6 +1452,80 @@ export default function BusinessProjectPage() {
                             </span>
                           </div>
                         )}
+
+                        {/* ── Milestone Files Section ── */}
+                        <div style={{ marginBottom: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--foreground)' }}>
+                              קבצים מצורפים
+                            </span>
+                            <input
+                              type="file"
+                              ref={(el) => { fileInputRefs.current[milestone.id] = el; }}
+                              style={{ display: 'none' }}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleMilestoneFileUpload(milestone.id, file);
+                              }}
+                            />
+                            <button
+                              onClick={() => fileInputRefs.current[milestone.id]?.click()}
+                              disabled={uploadingMilestone === milestone.id}
+                              style={{
+                                fontSize: '11px', padding: '2px 8px', borderRadius: '4px',
+                                border: '1px solid var(--accent)', background: 'var(--accent)',
+                                color: '#fff', cursor: uploadingMilestone === milestone.id ? 'wait' : 'pointer',
+                              }}
+                            >
+                              {uploadingMilestone === milestone.id ? 'מעלה...' : 'העלאת קובץ'}
+                            </button>
+                          </div>
+                          {getFilesForMilestone(milestone.id).length > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              {getFilesForMilestone(milestone.id).map((mf: MilestoneFile) => (
+                                <div
+                                  key={mf.id}
+                                  style={{
+                                    display: 'flex', alignItems: 'center', gap: '8px',
+                                    padding: '4px 8px', background: 'var(--surface)',
+                                    border: '1px solid var(--border)', borderRadius: '4px',
+                                    fontSize: '12px',
+                                  }}
+                                >
+                                  <a
+                                    href={mf.fileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ color: 'var(--accent)', textDecoration: 'none', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                    title={mf.fileName}
+                                  >
+                                    {mf.fileName}
+                                  </a>
+                                  <span style={{ color: 'var(--foreground-muted)', fontSize: '10px', flexShrink: 0 }}>
+                                    {mf.fileSize > 1024 * 1024
+                                      ? `${(mf.fileSize / (1024 * 1024)).toFixed(1)} MB`
+                                      : `${Math.round(mf.fileSize / 1024)} KB`}
+                                  </span>
+                                  <button
+                                    onClick={() => handleDeleteMilestoneFile(mf.id)}
+                                    style={{
+                                      fontSize: '11px', padding: '1px 6px', borderRadius: '3px',
+                                      border: '1px solid #fca5a5', background: '#fef2f2',
+                                      color: '#dc2626', cursor: 'pointer', flexShrink: 0,
+                                    }}
+                                    title="מחק קובץ"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: '11px', color: 'var(--foreground-muted)' }}>
+                              אין קבצים מצורפים
+                            </span>
+                          )}
+                        </div>
 
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                           {milestone?.status === 'pending' && (

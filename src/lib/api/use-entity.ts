@@ -35,6 +35,7 @@ import type {
   Mailing,
   GmailSettings,
   Meeting,
+  MilestoneFile,
 } from '@/lib/db/schema';
 
 export const useClients = () => useData<Client>('clients');
@@ -70,3 +71,4 @@ export const useEmailTemplates = () => useData<EmailTemplate>('email-templates')
 export const useMailings = () => useData<Mailing>('mailings');
 export const useGmailSettings = () => useData<GmailSettings>('gmail-settings');
 export const useMeetings = () => useData<Meeting>('meetings');
+export const useMilestoneFiles = () => useData<MilestoneFile>('milestone-files');
