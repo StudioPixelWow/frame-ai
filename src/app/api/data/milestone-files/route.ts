@@ -18,7 +18,7 @@ const BUCKET = 'milestone-files';
 
 const TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS ${TABLE} (
-  id            TEXT PRIMARY KEY,
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   milestone_id  TEXT NOT NULL,
   file_name     TEXT NOT NULL DEFAULT '',
   file_url      TEXT NOT NULL DEFAULT '',
@@ -31,10 +31,11 @@ CREATE TABLE IF NOT EXISTS ${TABLE} (
 
 type Row = Record<string, unknown> & { id: string };
 
-function generateId(): string {
+/** Generate a unique path segment for Storage (NOT used as DB id). */
+function storageSlug(): string {
   const ts = Date.now().toString(36);
   const rand = Math.random().toString(36).slice(2, 6);
-  return `mf_${ts}_${rand}`;
+  return `${ts}_${rand}`;
 }
 
 function rowToFile(r: Row) {
@@ -199,9 +200,9 @@ export async function POST(req: NextRequest) {
     await ensureBucket(sb);
 
     // 1. Upload file bytes to Supabase Storage.
-    const fileId = generateId();
+    const slug = storageSlug();
     const ext = file.name.includes('.') ? '.' + file.name.split('.').pop() : '';
-    const storagePath = `${milestoneId}/${fileId}${ext}`;
+    const storagePath = `${milestoneId}/${slug}${ext}`;
 
     log('4/7 reading file buffer');
     const arrayBuffer = await file.arrayBuffer();
@@ -228,16 +229,14 @@ export async function POST(req: NextRequest) {
     log('6/7 publicUrl', { url: publicUrl.slice(0, 80) });
 
     // 3. Insert metadata row into the DB table.
-    const now = new Date().toISOString();
+    //    Do NOT send `id` — Postgres generates a uuid automatically.
+    //    Do NOT send `created_at`/`updated_at` — DB defaults handle them.
     const insertRow: Record<string, unknown> = {
-      id: fileId,
       milestone_id: milestoneId,
       file_name: file.name,
       file_url: publicUrl,
       file_size: buffer.length,
       content_type: file.type || 'application/octet-stream',
-      created_at: now,
-      updated_at: now,
     };
 
     log('7/7 DB insert', { table: TABLE, columns: Object.keys(insertRow) });
