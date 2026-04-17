@@ -45,7 +45,7 @@ export default function PaymentsPage() {
 
     if (projectPayments) {
       projectPayments
-        .filter((payment: any) => payment.isDue === true || payment.paymentType === 'custom')
+        .filter((payment: any) => (payment.isDue === true || payment.paymentType === 'custom') && payment.status !== 'paid')
         .forEach((payment: any) => {
           const client = clients?.find((c: any) => c.id === payment.clientId);
           const typeLabel = payment.paymentType === 'deposit' ? ' (מקדמה)' : payment.paymentType === 'final' ? ' (סופי)' : '';
