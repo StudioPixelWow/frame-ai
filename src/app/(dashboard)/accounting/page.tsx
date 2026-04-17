@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { usePayments, useClients, useHostingRecords } from "@/lib/api/use-entity";
+import { usePayments, useClients, useHostingRecords, useProjectPayments } from "@/lib/api/use-entity";
 import { useState, useMemo } from "react";
 
 export default function AccountingPage() {
@@ -9,10 +9,9 @@ export default function AccountingPage() {
   const { data: payments } = usePayments();
   const { data: clients } = useClients();
   const { data: hostingRecords } = useHostingRecords();
+  const { data: projectPayments } = useProjectPayments();
 
   const stats = useMemo(() => {
-    if (!payments) return { totalRevenue: 0, pendingCollections: 0, overdueAmount: 0 };
-
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -21,24 +20,50 @@ export default function AccountingPage() {
     let pendingCollections = 0;
     let overdueAmount = 0;
 
-    payments.forEach((p: any) => {
-      const dueDate = new Date(p.dueDate);
-      if (p.paymentStatus === "paid" && dueDate >= monthStart && dueDate <= monthEnd) {
-        totalRevenue += p.amount || 0;
-      }
-      if (p.paymentStatus === "pending") {
-        pendingCollections += p.amount || 0;
-      }
-      if (p.paymentStatus === "collection_needed" && dueDate < now) {
-        overdueAmount += p.amount || 0;
-      }
-    });
+    // Old payments table
+    if (payments) {
+      payments.forEach((p: any) => {
+        const dueDate = new Date(p.dueDate);
+        if (p.paymentStatus === "paid" && dueDate >= monthStart && dueDate <= monthEnd) {
+          totalRevenue += p.amount || 0;
+        }
+        if (p.paymentStatus === "pending") {
+          pendingCollections += p.amount || 0;
+        }
+        if (p.paymentStatus === "collection_needed" && dueDate < now) {
+          overdueAmount += p.amount || 0;
+        }
+      });
+    }
+
+    // Business project payments (source of truth: business_project_payments)
+    if (projectPayments) {
+      projectPayments.forEach((p: any) => {
+        const amt = Number(p.amount) || 0;
+        if (p.status === "paid") {
+          const paidDate = p.paidAt ? new Date(p.paidAt) : (p.updatedAt ? new Date(p.updatedAt) : now);
+          if (paidDate >= monthStart && paidDate <= monthEnd) {
+            totalRevenue += amt;
+          }
+        } else if (p.isDue && p.status !== "paid") {
+          // Due but not paid = pending collection
+          pendingCollections += amt;
+          // If it has a dueDate in the past, it's overdue
+          if (p.dueDate && new Date(p.dueDate) < now) {
+            overdueAmount += amt;
+          }
+        }
+      });
+    }
 
     return { totalRevenue, pendingCollections, overdueAmount };
-  }, [payments]);
+  }, [payments, projectPayments]);
 
-  const pendingPaymentCount = payments?.filter((p: any) => p.paymentStatus === "pending").length || 0;
-  const overdueCount = payments?.filter((p: any) => p.paymentStatus === "collection_needed").length || 0;
+  // Counts: old payments + project payments that are due & unpaid
+  const dueProjectPayments = projectPayments?.filter((p: any) => p.isDue && p.status !== "paid") || [];
+  const pendingPaymentCount = (payments?.filter((p: any) => p.paymentStatus === "pending").length || 0) + dueProjectPayments.length;
+  const overdueCount = (payments?.filter((p: any) => p.paymentStatus === "collection_needed").length || 0)
+    + dueProjectPayments.filter((p: any) => p.dueDate && new Date(p.dueDate) < new Date()).length;
 
   return (
     <div style={{ direction: "rtl", padding: "2rem" }}>

@@ -50,18 +50,23 @@ export default function CollectionsPage() {
     }
 
     if (projectPayments) {
-      projectPayments.forEach((payment: any) => {
-        const client = clients?.find((c: any) => c.id === payment.clientId);
-        events.push({
-          id: `project-${payment.id}`,
-          clientId: payment.clientId,
-          clientName: client?.name || payment.clientName || "לא ידוע",
-          amount: payment.amount || 0,
-          date: new Date(payment.dueDate),
-          type: "project",
-          status: payment.status || "pending",
+      projectPayments
+        .filter((payment: any) => payment.isDue === true && payment.status !== "paid")
+        .forEach((payment: any) => {
+          const client = clients?.find((c: any) => c.id === payment.clientId);
+          const typeLabel = payment.paymentType === "deposit" ? " (מקדמה)" : payment.paymentType === "final" ? " (סופי)" : "";
+          // Use dueDate if set, otherwise use today (payment is due now but has no specific date)
+          const paymentDate = payment.dueDate ? new Date(payment.dueDate) : new Date();
+          events.push({
+            id: `project-${payment.id}`,
+            clientId: payment.clientId,
+            clientName: (client?.name || payment.clientName || "לא ידוע") + typeLabel,
+            amount: payment.amount || 0,
+            date: paymentDate,
+            type: "project",
+            status: payment.status || "pending",
+          });
         });
-      });
     }
 
     if (hostingRecords) {
