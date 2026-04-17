@@ -19,6 +19,7 @@ import type {
   Task,
   ProjectTimelineEvent,
 } from '@/lib/db/schema';
+import { deriveProjectData, STATUS_COLORS, STATUS_LABELS, type DerivedProjectStatus } from '@/lib/project-status-utils';
 
 /* ────────────────────────────── helpers ────────────────────────────── */
 
@@ -80,54 +81,60 @@ export default function BusinessProjectsDashboard() {
     [employees],
   );
 
-  /* ── per-project milestone stats ── */
-  const projectStats = useMemo(() => {
-    const map: Record<string, { total: number; approved: number; progress: number }> = {};
-    const grouped: Record<string, ProjectMilestone[]> = {};
-    for (const m of milestones) {
-      if (!grouped[m.projectId]) grouped[m.projectId] = [];
-      grouped[m.projectId].push(m);
-    }
-    for (const [pid, ms] of Object.entries(grouped)) {
-      const total = ms.length;
-      const approved = ms.filter((m) => m.status === 'approved').length;
-      map[pid] = { total, approved, progress: total > 0 ? Math.round((approved / total) * 100) : 0 };
+  /* ── per-project milestone stats (derived from milestones = source of truth) ── */
+  const derivedMap = useMemo(() => {
+    const map: Record<string, ReturnType<typeof deriveProjectData>> = {};
+    for (const p of projects) {
+      const pMilestones = milestones.filter((m) => m.projectId === p.id);
+      map[p.id] = deriveProjectData(pMilestones, p.projectStatus);
     }
     return map;
-  }, [milestones]);
+  }, [projects, milestones]);
 
-  /* ── top KPIs ── */
+  // Backwards-compatible shape used by existing rendering code
+  const projectStats = useMemo(() => {
+    const map: Record<string, { total: number; approved: number; progress: number }> = {};
+    for (const [pid, d] of Object.entries(derivedMap)) {
+      map[pid] = { total: d.counts.total, approved: d.counts.approved, progress: d.progress };
+    }
+    return map;
+  }, [derivedMap]);
+
+  const getDerivedStatus = (projectId: string): DerivedProjectStatus =>
+    derivedMap[projectId]?.status ?? 'not_started';
+
+  /* ── top KPIs (derived from milestones) ── */
   const kpis = useMemo(() => {
     const total = projects.length;
     const inProgress = projects.filter((p: BusinessProject) =>
-      ['in_progress', 'awaiting_approval', 'waiting_for_client'].includes(p.projectStatus || ''),
+      ['in_progress', 'awaiting_approval', 'waiting_for_client'].includes(getDerivedStatus(p.id)),
     ).length;
-    const completed = projects.filter((p: BusinessProject) => p.projectStatus === 'completed').length;
+    const completed = projects.filter((p: BusinessProject) => getDerivedStatus(p.id) === 'completed').length;
 
     // Delayed = has end date in the past AND is not completed
     const now = new Date();
     const delayed = projects.filter((p: BusinessProject) => {
-      if (p.projectStatus === 'completed') return false;
+      if (getDerivedStatus(p.id) === 'completed') return false;
       if (!p.endDate) return false;
       return new Date(p.endDate) < now;
     }).length;
 
     return { total, inProgress, completed, delayed };
-  }, [projects]);
+  }, [projects, derivedMap]);
 
   /* ── sorted project list (delayed first, then by progress ascending) ── */
   const sortedProjects = useMemo(() => {
     const now = new Date();
     return [...projects].sort((a: BusinessProject, b: BusinessProject) => {
-      const aDelayed = a.projectStatus !== 'completed' && a.endDate && new Date(a.endDate) < now;
-      const bDelayed = b.projectStatus !== 'completed' && b.endDate && new Date(b.endDate) < now;
+      const aDelayed = getDerivedStatus(a.id) !== 'completed' && a.endDate && new Date(a.endDate) < now;
+      const bDelayed = getDerivedStatus(b.id) !== 'completed' && b.endDate && new Date(b.endDate) < now;
       if (aDelayed && !bDelayed) return -1;
       if (!aDelayed && bDelayed) return 1;
       const aProg = projectStats[a.id]?.progress ?? 0;
       const bProg = projectStats[b.id]?.progress ?? 0;
       return aProg - bProg;
     });
-  }, [projects, projectStats]);
+  }, [projects, projectStats, derivedMap]);
 
   /* ── employee workload ── */
   const employeeWorkload = useMemo(() => {
@@ -347,7 +354,8 @@ export default function BusinessProjectsDashboard() {
                   const client = clientMap[project.clientId];
                   const stats = projectStats[project.id] || { total: 0, approved: 0, progress: 0 };
                   const now = new Date();
-                  const isDelayed = project.projectStatus !== 'completed' && project.endDate && new Date(project.endDate) < now;
+                  const derivedStatus = getDerivedStatus(project.id);
+                  const isDelayed = derivedStatus !== 'completed' && project.endDate && new Date(project.endDate) < now;
                   const pColor = progressColor(stats.progress);
 
                   const statusConfig: Record<string, { bg: string; color: string }> = {
@@ -357,7 +365,7 @@ export default function BusinessProjectsDashboard() {
                     waiting_for_client: { bg: 'rgba(249,115,22,0.12)', color: '#fb923c' },
                     completed: { bg: 'rgba(34,197,94,0.12)', color: '#4ade80' },
                   };
-                  const sc = statusConfig[project.projectStatus || 'not_started'] || statusConfig.not_started;
+                  const sc = statusConfig[derivedStatus] || statusConfig.not_started;
 
                   return (
                     <Link
@@ -404,7 +412,7 @@ export default function BusinessProjectsDashboard() {
                       <div>
                         <span className="dash-badge" style={{ background: sc.bg, color: sc.color }}>
                           <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: sc.color }} />
-                          {projectStatusLabels[project.projectStatus || 'not_started']}
+                          {projectStatusLabels[derivedStatus] || derivedStatus}
                         </span>
                       </div>
 

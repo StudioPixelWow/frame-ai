@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useBusinessProjects, useProjectMilestones, useProjectPayments, useClients, useEmployees } from "@/lib/api/use-entity";
 import type { BusinessProject, BusinessProjectType, BusinessProjectStatus, ClientType } from "@/lib/db/schema";
+import { deriveProjectData, STATUS_COLORS, STATUS_LABELS, type DerivedProjectStatus } from "@/lib/project-status-utils";
 import { useToast } from "@/components/ui/toast";
 
 type ViewMode = "grid" | "list";
@@ -41,24 +42,12 @@ function getProjectTypeLabel(type: BusinessProjectType): string {
   return labels[type] || type;
 }
 
-function getStatusColor(status: BusinessProjectStatus): string {
-  const colors: Record<BusinessProjectStatus, string> = {
-    not_started: "#6b7280",
-    in_progress: "#f59e0b",
-    waiting_for_client: "#8b5cf6",
-    completed: "#22c55e",
-  };
-  return colors[status] || "#6b7280";
+function getStatusColor(status: string): string {
+  return STATUS_COLORS[status as DerivedProjectStatus] || "#6b7280";
 }
 
-function getStatusLabel(status: BusinessProjectStatus): string {
-  const labels: Record<BusinessProjectStatus, string> = {
-    not_started: "לא התחיל",
-    in_progress: "בתהליך",
-    waiting_for_client: "בהמתנה ללקוח",
-    completed: "הושלם",
-  };
-  return labels[status] || status;
+function getStatusLabel(status: string): string {
+  return STATUS_LABELS[status as DerivedProjectStatus] || status;
 }
 
 function formatDate(dateStr: string | null): string {
@@ -148,6 +137,24 @@ export default function BusinessProjectsPage() {
   }, [projectForm.clientId, clients, employees]);
 
   // Filter and sort projects
+  // ── Derive progress & status from milestones (source of truth) ──
+  const derivedMap = useMemo(() => {
+    const map: Record<string, ReturnType<typeof deriveProjectData>> = {};
+    for (const p of (projects || [])) {
+      const pMilestones = (milestones || []).filter((m) => m.projectId === p.id);
+      map[p.id] = deriveProjectData(pMilestones, p.projectStatus);
+    }
+    return map;
+  }, [projects, milestones]);
+
+  const getDerivedStatus = (projectId: string): DerivedProjectStatus =>
+    derivedMap[projectId]?.status ?? 'not_started';
+
+  const getProjectProgress = (projectId: string): { approved: number; total: number } => {
+    const d = derivedMap[projectId];
+    return d ? { approved: d.counts.approved, total: d.counts.total } : { approved: 0, total: 0 };
+  };
+
   const filteredProjects = useMemo(() => {
     let filtered = projects || [];
 
@@ -165,7 +172,7 @@ export default function BusinessProjectsPage() {
     }
 
     if (filterStatus !== "all") {
-      filtered = filtered.filter((p) => p.projectStatus === filterStatus);
+      filtered = filtered.filter((p) => getDerivedStatus(p.id) === filterStatus);
     }
 
     if (filterClientId !== "all") {
@@ -176,26 +183,21 @@ export default function BusinessProjectsPage() {
     if (sortBy === "name") {
       filtered.sort((a, b) => a.projectName.localeCompare(b.projectName));
     } else if (sortBy === "status") {
-      const statusOrder: Record<BusinessProjectStatus, number> = {
+      const statusOrder: Record<string, number> = {
         not_started: 0,
         in_progress: 1,
-        waiting_for_client: 2,
-        completed: 3,
+        awaiting_approval: 2,
+        waiting_for_client: 3,
+        completed: 4,
       };
-      filtered.sort((a, b) => statusOrder[a.projectStatus] - statusOrder[b.projectStatus]);
+      filtered.sort((a, b) => (statusOrder[getDerivedStatus(a.id)] ?? 0) - (statusOrder[getDerivedStatus(b.id)] ?? 0));
     } else {
       // date (newest first)
       filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
 
     return filtered;
-  }, [projects, search, filterType, filterStatus, filterClientId, sortBy, clients]);
-
-  const getProjectProgress = (projectId: string): { approved: number; total: number } => {
-    const projectMilestones = (milestones || []).filter((m) => m.projectId === projectId);
-    const approved = projectMilestones.filter((m) => m.status === "approved").length;
-    return { approved, total: projectMilestones.length };
-  };
+  }, [projects, search, filterType, filterStatus, filterClientId, sortBy, clients, derivedMap]);
 
   const getNextPayment = (projectId: string): { amount: number; date: string } | null => {
     const projectPayments = (payments || []).filter((p) => p.projectId === projectId && p.status === "pending");
@@ -381,6 +383,7 @@ export default function BusinessProjectsPage() {
               <option value="all">הכל</option>
               <option value="not_started">לא התחיל</option>
               <option value="in_progress">בתהליך</option>
+              <option value="awaiting_approval">ממתין לאישור</option>
               <option value="waiting_for_client">בהמתנה ללקוח</option>
               <option value="completed">הושלם</option>
             </select>
@@ -593,10 +596,10 @@ export default function BusinessProjectsPage() {
                       fontSize: "0.7rem",
                       fontWeight: "600",
                       color: "#fff",
-                      backgroundColor: getStatusColor(project.projectStatus),
+                      backgroundColor: getStatusColor(getDerivedStatus(project.id)),
                     }}
                   >
-                    {getStatusLabel(project.projectStatus)}
+                    {getStatusLabel(getDerivedStatus(project.id))}
                   </span>
                 </div>
 
@@ -744,10 +747,10 @@ export default function BusinessProjectsPage() {
                         fontSize: "0.65rem",
                         fontWeight: "600",
                         color: "#fff",
-                        backgroundColor: getStatusColor(project.projectStatus),
+                        backgroundColor: getStatusColor(getDerivedStatus(project.id)),
                       }}
                     >
-                      {getStatusLabel(project.projectStatus)}
+                      {getStatusLabel(getDerivedStatus(project.id))}
                     </span>
                   </div>
                   <h4 style={{ fontSize: "0.95rem", fontWeight: "600", margin: "0 0 0.25rem 0", color: "var(--foreground)" }}>
