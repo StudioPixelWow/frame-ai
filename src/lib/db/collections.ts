@@ -35,6 +35,7 @@ import type {
   Mailing,
   GmailSettings,
   Meeting,
+  ProjectNotification,
 } from './schema';
 
 export const clients = new JsonStore<Client>('clients', 'cli');
@@ -72,3 +73,4 @@ export const emailTemplates = new JsonStore<EmailTemplate>('email-templates', 'e
 export const mailings = new JsonStore<Mailing>('mailings', 'mai');
 export const gmailSettings = new JsonStore<GmailSettings>('gmail-settings', 'gml');
 export const meetings = new JsonStore<Meeting>('meetings', 'mtg');
+export const projectNotifications = new JsonStore<ProjectNotification>('project-notifications', 'pno');

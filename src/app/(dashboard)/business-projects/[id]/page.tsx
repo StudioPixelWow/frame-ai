@@ -14,6 +14,7 @@ import {
   useProjectTimeline,
 } from '@/lib/api/use-entity';
 import { BusinessProject, ProjectMilestone, ProjectPayment, Client, Employee, ClientFile, MilestoneFile, ProjectTimelineEvent } from '@/lib/db/schema';
+import { ProjectNotificationBell } from '@/components/project-notification-bell';
 
 type Tab = 'overview' | 'milestones' | 'files' | 'payments' | 'activity';
 type MilestoneStatus = 'pending' | 'in_progress' | 'submitted' | 'approved' | 'returned';
@@ -1012,6 +1013,7 @@ export default function BusinessProjectPage() {
           </div>
 
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <ProjectNotificationBell projectId={projectId} />
             {isEditingProject ? (
               <>
                 <button className="prj-btn prj-btn-primary" onClick={handleSaveProject} disabled={savingProject}>

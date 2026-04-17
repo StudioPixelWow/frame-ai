@@ -10,6 +10,7 @@ import {
   useTasks,
   useProjectTimeline,
 } from '@/lib/api/use-entity';
+import { ProjectNotificationBell } from '@/components/project-notification-bell';
 import type {
   BusinessProject,
   ProjectMilestone,
@@ -266,13 +267,16 @@ export default function BusinessProjectsDashboard() {
             סקירה כללית של כל הפרויקטים, צוות ופעילות
           </p>
         </div>
-        <Link href="/business-projects" style={{
-          padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '600',
-          background: '#6366f1', color: '#fff', textDecoration: 'none',
-          transition: 'all 0.2s ease',
-        }}>
-          כל הפרויקטים
-        </Link>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <ProjectNotificationBell />
+          <Link href="/business-projects" style={{
+            padding: '10px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '600',
+            background: '#6366f1', color: '#fff', textDecoration: 'none',
+            transition: 'all 0.2s ease',
+          }}>
+            כל הפרויקטים
+          </Link>
+        </div>
       </div>
 
       {/* ══════════ KPI CARDS ══════════ */}

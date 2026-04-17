@@ -871,6 +871,23 @@ export interface ProjectTimelineEvent {
   createdAt: string;
 }
 
+// ── Project Notifications ──
+export type ProjectNotificationType = 'milestone_overdue' | 'no_assignee' | 'inactivity' | 'payment_overdue' | 'status_change';
+export type ProjectNotificationSeverity = 'critical' | 'warning' | 'info';
+
+export interface ProjectNotification {
+  id: string;
+  type: ProjectNotificationType;
+  severity: ProjectNotificationSeverity;
+  message: string;
+  projectId: string;
+  milestoneId: string | null;
+  isRead: boolean;
+  linkHref: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface GmailSettings {
   id: string;
   connectionStatus: GmailConnectionStatus;
