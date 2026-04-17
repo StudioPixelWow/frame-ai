@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useClientFiles } from "@/lib/api/use-entity";
 import type { Client, ClientFile } from "@/lib/db/schema";
 
@@ -42,7 +42,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 function formatFileSize(bytes: number): string {
-  if (bytes === 0) return "0 B";
+  if (bytes === 0) return "";
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -56,17 +56,64 @@ function formatDate(dateStr: string): string {
   return `${d.getDate()} ${months[d.getMonth()]}`;
 }
 
+function isVideoFile(file: ClientFile): boolean {
+  return (
+    file.fileType === "video" ||
+    /\.(mp4|webm|mov|avi|mkv)$/i.test(file.fileName) ||
+    (file.fileUrl || "").includes("heygen")
+  );
+}
+
+function isImageFile(file: ClientFile): boolean {
+  return (
+    file.fileType === "image" ||
+    /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(file.fileName)
+  );
+}
+
+/** Trigger a real browser download for any URL */
+function triggerDownload(url: string, fileName: string) {
+  // For cross-origin URLs (like HeyGen), open in new tab which triggers browser download
+  // For same-origin URLs, use the anchor trick
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
   const { data: allFiles, loading } = useClientFiles();
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [videoModalFile, setVideoModalFile] = useState<ClientFile | null>(null);
+  const [imageModalFile, setImageModalFile] = useState<ClientFile | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const files = (allFiles || [])
     .filter((f) => f.clientId === client.id)
     .filter((f) => categoryFilter === "all" || f.category === categoryFilter)
     .filter((f) => searchQuery === "" || f.fileName.toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const handleDownload = useCallback((file: ClientFile) => {
+    if (!file.fileUrl) return;
+    triggerDownload(file.fileUrl, file.fileName);
+  }, []);
+
+  const handleOpenFile = useCallback((file: ClientFile) => {
+    if (isVideoFile(file)) {
+      setVideoModalFile(file);
+    } else if (isImageFile(file)) {
+      setImageModalFile(file);
+    } else if (file.fileUrl) {
+      window.open(file.fileUrl, "_blank", "noopener,noreferrer");
+    }
+  }, []);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
@@ -114,11 +161,7 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="form-input"
-          style={{
-            flex: 1,
-            padding: "0.625rem 1rem",
-            fontSize: "0.875rem",
-          }}
+          style={{ flex: 1, padding: "0.625rem 1rem", fontSize: "0.875rem" }}
         />
       </div>
 
@@ -142,7 +185,7 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
                 transition: "all 150ms",
                 background: categoryFilter === cat.id ? "var(--accent)" : "var(--surface-raised)",
                 color: categoryFilter === cat.id ? "white" : "var(--foreground)",
-                borderBottom: categoryFilter === cat.id ? "none" : `1px solid var(--border)`,
+                borderBottom: categoryFilter === cat.id ? "none" : "1px solid var(--border)",
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "0.375rem",
@@ -167,7 +210,7 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
               padding: "3rem 2rem",
               background: "var(--surface-raised)",
               borderRadius: "0.75rem",
-              border: `1px solid var(--border)`,
+              border: "1px solid var(--border)",
               color: "var(--foreground-muted)",
             }}
           >
@@ -176,10 +219,7 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
             <button
               onClick={() => setShowUploadModal(true)}
               className="mod-btn-primary"
-              style={{
-                padding: "0.5rem 1rem",
-                fontSize: "0.875rem",
-              }}
+              style={{ padding: "0.5rem 1rem", fontSize: "0.875rem" }}
             >
               📤 העלה קובץ
             </button>
@@ -192,122 +232,400 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
               gap: "1rem",
             }}
           >
-            {files.map((file) => (
-              <div
-                key={file.id}
-                style={{
-                  background: "var(--surface-raised)",
-                  border: `1px solid var(--border)`,
-                  borderRadius: "0.75rem",
-                  padding: "1.25rem",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "1rem",
-                }}
-              >
-                {/* File Icon and Name */}
-                <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
-                  <div
-                    style={{
-                      fontSize: "1.75rem",
-                      lineHeight: 1,
-                      minWidth: "2rem",
-                    }}
-                  >
-                    {FILE_TYPE_ICONS[file.fileType] || FILE_TYPE_ICONS.other}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <h4
+            {files.map((file) => {
+              const isVideo = isVideoFile(file);
+              const isImage = isImageFile(file);
+
+              return (
+                <div
+                  key={file.id}
+                  style={{
+                    background: "var(--surface-raised)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "0.75rem",
+                    overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "column",
+                    transition: "border-color 150ms, box-shadow 150ms",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = isVideo ? "rgba(139,92,246,0.4)" : "var(--accent)";
+                    e.currentTarget.style.boxShadow = isVideo ? "0 0 16px rgba(139,92,246,0.08)" : "0 0 12px rgba(0,0,0,0.06)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "var(--border)";
+                    e.currentTarget.style.boxShadow = "none";
+                  }}
+                >
+                  {/* Video Preview Thumbnail */}
+                  {isVideo && file.fileUrl && (
+                    <div
+                      onClick={() => handleOpenFile(file)}
                       style={{
-                        fontSize: "0.875rem",
-                        fontWeight: 600,
-                        color: "var(--foreground)",
-                        margin: "0 0 0.25rem 0",
+                        position: "relative",
+                        width: "100%",
+                        height: "160px",
+                        background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)",
+                        cursor: "pointer",
                         overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
                       }}
-                      title={file.fileName}
                     >
-                      {file.fileName}
-                    </h4>
-                    <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
-                      {formatFileSize(file.fileSize)}
+                      {/* Silhouette video element for thumbnail */}
+                      <video
+                        src={file.fileUrl}
+                        preload="metadata"
+                        muted
+                        playsInline
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          opacity: 0.6,
+                        }}
+                        onLoadedData={(e) => {
+                          // Seek to 1s to get a meaningful frame
+                          const v = e.currentTarget;
+                          if (v.duration > 1) v.currentTime = 1;
+                        }}
+                      />
+                      {/* Play overlay */}
+                      <div style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: "rgba(0,0,0,0.15)",
+                      }}>
+                        <div style={{
+                          width: "48px",
+                          height: "48px",
+                          borderRadius: "50%",
+                          background: "rgba(139,92,246,0.9)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          boxShadow: "0 4px 20px rgba(139,92,246,0.4)",
+                          transition: "transform 150ms",
+                        }}>
+                          <span style={{ color: "#fff", fontSize: "1.25rem", marginRight: "-2px" }}>▶</span>
+                        </div>
+                      </div>
+                      {/* Duration badge */}
+                      <div style={{
+                        position: "absolute",
+                        bottom: "8px",
+                        left: "8px",
+                        background: "rgba(0,0,0,0.7)",
+                        color: "#fff",
+                        fontSize: "0.65rem",
+                        fontWeight: 600,
+                        padding: "2px 6px",
+                        borderRadius: "4px",
+                      }}>
+                        UGC Video
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Image Preview */}
+                  {isImage && file.fileUrl && (
+                    <div
+                      onClick={() => handleOpenFile(file)}
+                      style={{
+                        width: "100%",
+                        height: "160px",
+                        cursor: "pointer",
+                        overflow: "hidden",
+                        background: "var(--surface)",
+                      }}
+                    >
+                      <img
+                        src={file.fileUrl}
+                        alt={file.fileName}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Card Content */}
+                  <div style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem", flex: 1 }}>
+                    {/* File Icon and Name */}
+                    <div style={{ display: "flex", gap: "0.625rem", alignItems: "flex-start" }}>
+                      {!isVideo && !isImage && (
+                        <div style={{ fontSize: "1.5rem", lineHeight: 1, minWidth: "1.75rem" }}>
+                          {FILE_TYPE_ICONS[file.fileType] || FILE_TYPE_ICONS.other}
+                        </div>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <h4
+                          style={{
+                            fontSize: "0.85rem",
+                            fontWeight: 600,
+                            color: "var(--foreground)",
+                            margin: "0 0 0.125rem 0",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={file.fileName}
+                        >
+                          {file.fileName}
+                        </h4>
+                        <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                          {formatFileSize(file.fileSize) && <span>{formatFileSize(file.fileSize)}</span>}
+                          <span>📅 {formatDate(file.createdAt)}</span>
+                          {(file as any).uploadedBy && (
+                            <span style={{ color: "#a78bfa" }}>{(file as any).uploadedBy}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Category Badge */}
+                    <div
+                      style={{
+                        fontSize: "0.625rem",
+                        padding: "0.2rem 0.5rem",
+                        background: isVideo ? "rgba(139,92,246,0.1)" : "#f0f9ff",
+                        color: isVideo ? "#a78bfa" : "#0369a1",
+                        borderRadius: "0.25rem",
+                        fontWeight: 600,
+                        width: "fit-content",
+                      }}
+                    >
+                      {isVideo ? "🎬 סרטון UGC" : (CATEGORY_LABELS[file.category] || file.category)}
+                    </div>
+
+                    {/* Notes Preview */}
+                    {file.notes && (
+                      <div
+                        style={{
+                          fontSize: "0.75rem",
+                          color: "var(--foreground-muted)",
+                          lineHeight: 1.4,
+                          borderRight: "2px solid var(--border)",
+                          paddingRight: "0.625rem",
+                          maxHeight: "52px",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                        }}
+                      >
+                        {file.notes}
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div style={{ display: "flex", gap: "0.5rem", marginTop: "auto" }}>
+                      {isVideo && (
+                        <button
+                          onClick={() => handleOpenFile(file)}
+                          className="mod-btn-ghost"
+                          style={{
+                            flex: 1,
+                            padding: "0.5rem 0.75rem",
+                            fontSize: "0.75rem",
+                            color: "#8b5cf6",
+                            borderColor: "rgba(139,92,246,0.2)",
+                          }}
+                        >
+                          ▶ צפה
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDownload(file)}
+                        className="mod-btn-ghost"
+                        style={{
+                          flex: 1,
+                          padding: "0.5rem 0.75rem",
+                          fontSize: "0.75rem",
+                        }}
+                      >
+                        📥 הורד
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (file.fileUrl) {
+                            window.open(file.fileUrl, "_blank", "noopener,noreferrer");
+                          }
+                        }}
+                        className="mod-btn-ghost"
+                        style={{
+                          flex: 1,
+                          padding: "0.5rem 0.75rem",
+                          fontSize: "0.75rem",
+                        }}
+                      >
+                        🔗 פתח
+                      </button>
                     </div>
                   </div>
                 </div>
-
-                {/* Category Badge */}
-                <div
-                  style={{
-                    fontSize: "0.65rem",
-                    padding: "0.25rem 0.625rem",
-                    background: "#f0f9ff",
-                    color: "#0369a1",
-                    borderRadius: "0.25rem",
-                    fontWeight: 600,
-                    width: "fit-content",
-                  }}
-                >
-                  {CATEGORY_LABELS[file.category]}
-                </div>
-
-                {/* File Metadata */}
-                <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                  <div>📅 {formatDate(file.createdAt)}</div>
-                </div>
-
-                {/* Notes Preview */}
-                {file.notes && (
-                  <div
-                    style={{
-                      fontSize: "0.8rem",
-                      color: "var(--foreground-muted)",
-                      lineHeight: 1.4,
-                      borderLeft: `2px solid var(--border)`,
-                      paddingLeft: "0.75rem",
-                      maxHeight: "60px",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      display: "-webkit-box",
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical",
-                    }}
-                  >
-                    {file.notes}
-                  </div>
-                )}
-
-                {/* Action Buttons */}
-                <div style={{ display: "flex", gap: "0.5rem" }}>
-                  <button
-                    className="mod-btn-ghost"
-                    style={{
-                      flex: 1,
-                      padding: "0.5rem 0.75rem",
-                      fontSize: "0.75rem",
-                    }}
-                  >
-                    📥 הורד
-                  </button>
-                  <button
-                    className="mod-btn-ghost"
-                    style={{
-                      flex: 1,
-                      padding: "0.5rem 0.75rem",
-                      fontSize: "0.75rem",
-                    }}
-                  >
-                    🔗 קשור
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Upload Modal */}
+      {/* ═══ Video Player Modal ═══ */}
+      {videoModalFile && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+          }}
+          onClick={() => { setVideoModalFile(null); }}
+        >
+          <div
+            style={{
+              background: "#111",
+              borderRadius: "1rem",
+              maxWidth: "900px",
+              width: "95%",
+              maxHeight: "90vh",
+              overflow: "hidden",
+              border: "1px solid rgba(139,92,246,0.2)",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "1rem 1.25rem",
+              borderBottom: "1px solid rgba(255,255,255,0.06)",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span style={{ fontSize: "1.25rem" }}>🎬</span>
+                <h3 style={{ fontSize: "0.9rem", fontWeight: 600, color: "#e2e8f0", margin: 0 }}>
+                  {videoModalFile.fileName}
+                </h3>
+              </div>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <button
+                  onClick={() => handleDownload(videoModalFile)}
+                  style={{
+                    background: "rgba(139,92,246,0.15)",
+                    border: "1px solid rgba(139,92,246,0.25)",
+                    borderRadius: "0.375rem",
+                    padding: "0.375rem 0.75rem",
+                    color: "#c4b5fd",
+                    fontSize: "0.75rem",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                  }}
+                >
+                  📥 הורד
+                </button>
+                <button
+                  onClick={() => setVideoModalFile(null)}
+                  style={{
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: "0.375rem",
+                    padding: "0.375rem 0.75rem",
+                    color: "rgba(255,255,255,0.5)",
+                    fontSize: "0.8rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Video Player */}
+            <div style={{ padding: "0", background: "#000" }}>
+              <video
+                ref={videoRef}
+                src={videoModalFile.fileUrl}
+                controls
+                autoPlay
+                playsInline
+                style={{
+                  width: "100%",
+                  maxHeight: "70vh",
+                  display: "block",
+                }}
+              />
+            </div>
+
+            {/* Video Info */}
+            {videoModalFile.notes && (
+              <div style={{
+                padding: "0.75rem 1.25rem",
+                borderTop: "1px solid rgba(255,255,255,0.06)",
+                fontSize: "0.75rem",
+                color: "rgba(255,255,255,0.4)",
+                lineHeight: 1.5,
+                whiteSpace: "pre-wrap",
+                maxHeight: "80px",
+                overflow: "auto",
+              }}>
+                {videoModalFile.notes}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Image Viewer Modal ═══ */}
+      {imageModalFile && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+          }}
+          onClick={() => setImageModalFile(null)}
+        >
+          <div
+            style={{
+              position: "relative",
+              maxWidth: "90vw",
+              maxHeight: "90vh",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setImageModalFile(null)}
+              style={{
+                position: "absolute", top: "-40px", left: "0",
+                background: "rgba(255,255,255,0.1)",
+                border: "none", borderRadius: "0.375rem",
+                padding: "0.375rem 0.75rem", color: "#fff",
+                fontSize: "0.8rem", cursor: "pointer",
+              }}
+            >
+              ✕ סגור
+            </button>
+            <img
+              src={imageModalFile.fileUrl}
+              alt={imageModalFile.fileName}
+              style={{ maxWidth: "90vw", maxHeight: "85vh", borderRadius: "0.5rem" }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Upload Modal ═══ */}
       {showUploadModal && (
         <div
           style={{
@@ -330,7 +648,7 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
               width: "90%",
               maxHeight: "90vh",
               overflowY: "auto",
-              border: `1px solid var(--border)`,
+              border: "1px solid var(--border)",
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -375,11 +693,7 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
               </label>
               <select
                 className="form-select"
-                style={{
-                  width: "100%",
-                  padding: "0.625rem",
-                  fontSize: "0.875rem",
-                }}
+                style={{ width: "100%", padding: "0.625rem", fontSize: "0.875rem" }}
               >
                 {CATEGORY_OPTIONS.filter((c) => c.id !== "all").map((cat) => (
                   <option key={cat.id} value={cat.id}>
@@ -397,13 +711,7 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
               <textarea
                 className="form-input"
                 placeholder="הוסף הערות על הקובץ..."
-                style={{
-                  width: "100%",
-                  padding: "0.625rem",
-                  fontSize: "0.875rem",
-                  minHeight: "100px",
-                  resize: "vertical",
-                }}
+                style={{ width: "100%", padding: "0.625rem", fontSize: "0.875rem", minHeight: "100px", resize: "vertical" }}
               />
             </div>
 
@@ -412,19 +720,13 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
               <button
                 onClick={() => setShowUploadModal(false)}
                 className="mod-btn-ghost"
-                style={{
-                  padding: "0.625rem 1.125rem",
-                  fontSize: "0.875rem",
-                }}
+                style={{ padding: "0.625rem 1.125rem", fontSize: "0.875rem" }}
               >
                 ביטול
               </button>
               <button
                 className="mod-btn-primary"
-                style={{
-                  padding: "0.625rem 1.125rem",
-                  fontSize: "0.875rem",
-                }}
+                style={{ padding: "0.625rem 1.125rem", fontSize: "0.875rem" }}
               >
                 📤 העלה
               </button>

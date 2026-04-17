@@ -465,7 +465,7 @@ function ClientDetailContent() {
 
     setUgcGenerating(true);
     setUgcStatus("");
-    setUgcProgress("שולח בקשה ל-HeyGen...");
+    setUgcProgress("preparing");
 
     const dimension = FORMAT_DIMENSIONS[ugcFormat] || FORMAT_DIMENSIONS["9:16"];
     const formatSlug = ugcFormat.replace(":", "x");
@@ -488,7 +488,7 @@ function ClientDetailContent() {
       const videoId = data.videoId;
       if (!videoId) throw new Error("לא התקבל מזהה סרטון מ-HeyGen");
       setUgcVideoId(videoId);
-      setUgcProgress("הסרטון בתהליך יצירה... זה עשוי לקחת כמה דקות");
+      setUgcProgress("generating");
 
       // Poll for completion every 5 seconds
       const clientRef = client; // capture for closure
@@ -504,12 +504,12 @@ function ClientDetailContent() {
 
             // Validate the video URL before saving
             if (!statusData.videoUrl.startsWith("http")) {
-              setUgcProgress("שגיאה: כתובת הסרטון אינה תקינה");
+              setUgcProgress("error");
               setUgcGenerating(false);
               return;
             }
 
-            setUgcProgress("שומר את הסרטון בקבצי הלקוח...");
+            setUgcProgress("saving");
 
             try {
               const now = new Date().toISOString();
@@ -534,21 +534,29 @@ function ClientDetailContent() {
               }
 
               await refetchClientFiles();
-              setUgcProgress("הסרטון נוצר ונשמר בהצלחה! ניתן לראות בלשונית קבצים.");
+              setUgcProgress("done");
               toast("סרטון UGC נוצר ונשמר בקבצי הלקוח!", "success");
+              // Auto-close after brief delay to show completion state
+              setTimeout(() => {
+                setUgcGenerating(false);
+                setUgcModalOpen(false);
+                setActiveTab("files");
+              }, 1800);
+              return; // don't setUgcGenerating(false) below
             } catch (saveErr: any) {
               console.error("[UGC] Failed to save file:", saveErr);
-              setUgcProgress(`הסרטון נוצר בהצלחה אבל השמירה נכשלה: ${saveErr?.message}.\nקישור לסרטון: ${statusData.videoUrl}`);
+              setUgcProgress("save_error");
               toast("הסרטון נוצר אך השמירה נכשלה", "error");
             }
 
             setUgcGenerating(false);
           } else if (status === "failed") {
             if (ugcPollRef.current) { clearInterval(ugcPollRef.current); ugcPollRef.current = null; }
-            setUgcProgress(`יצירת הסרטון נכשלה: ${statusData.error || "שגיאה לא ידועה"}`);
+            setUgcProgress("error");
             setUgcGenerating(false);
           } else {
-            setUgcProgress(`סטטוס: ${status || "processing"}... ממתין לסיום`);
+            // Keep the generating stage active during poll
+            if (ugcProgress !== "generating") setUgcProgress("generating");
           }
         } catch (pollErr: any) {
           console.error("[UGC] poll error:", pollErr);
@@ -556,11 +564,11 @@ function ClientDetailContent() {
       }, 5000);
     } catch (err: any) {
       console.error("[UGC] generate error:", err);
-      setUgcProgress("");
+      setUgcProgress("error");
       toast(`שגיאה ביצירת סרטון: ${err?.message}`, "error");
       setUgcGenerating(false);
     }
-  }, [client, ugcAvatarId, ugcVoiceId, ugcScript, ugcFormat, toast, createClientFile, refetchClientFiles]);
+  }, [client, ugcAvatarId, ugcVoiceId, ugcScript, ugcFormat, toast, createClientFile, refetchClientFiles, setActiveTab]);
 
   // Cleanup poll interval on unmount
   useEffect(() => {
@@ -1878,40 +1886,141 @@ function ClientDetailContent() {
                 </section>
 
                 {/* ─────────────────────────────────────
-                   Progress / Status
+                   Progress / Status — Premium Multi-Step
                 ───────────────────────────────────── */}
-                {ugcProgress && (
-                  <div style={{
-                    padding: "0.75rem 1rem", borderRadius: "0.5rem", marginBottom: "1rem",
-                    background: ugcStatus === "completed" ? "rgba(34,197,94,0.1)" : ugcStatus === "failed" ? "rgba(239,68,68,0.1)" : "rgba(139,92,246,0.08)",
-                    color: ugcStatus === "completed" ? "#4ade80" : ugcStatus === "failed" ? "#f87171" : "#a78bfa",
-                    fontSize: "0.85rem", fontWeight: 500, whiteSpace: "pre-wrap",
-                  }}>
-                    {ugcProgress}
-                  </div>
-                )}
+                {ugcProgress && ugcProgress !== "" && (() => {
+                  const PROGRESS_STEPS = [
+                    { key: "preparing", label: "מכין בקשה", icon: "📋" },
+                    { key: "generating", label: "מייצר סרטון", icon: "🎬" },
+                    { key: "saving", label: "שומר קובץ", icon: "💾" },
+                    { key: "done", label: "הושלם", icon: "✅" },
+                  ];
+                  const isError = ugcProgress === "error" || ugcProgress === "save_error";
+                  const currentIdx = PROGRESS_STEPS.findIndex(s => s.key === ugcProgress);
+                  const activeIdx = isError ? -1 : currentIdx;
+
+                  return (
+                    <div style={{
+                      padding: "1.5rem", borderRadius: "0.75rem", marginBottom: "1rem",
+                      background: isError ? "rgba(239,68,68,0.06)" : "rgba(139,92,246,0.04)",
+                      border: `1px solid ${isError ? "rgba(239,68,68,0.15)" : "rgba(139,92,246,0.12)"}`,
+                    }}>
+                      <style>{`
+                        @keyframes ugc-pulse-dot { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+                        @keyframes ugc-progress-shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+                        @keyframes ugc-check-pop { 0% { transform: scale(0); } 60% { transform: scale(1.2); } 100% { transform: scale(1); } }
+                      `}</style>
+
+                      {isError ? (
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>❌</div>
+                          <div style={{ color: "#f87171", fontWeight: 600, fontSize: "0.9rem", marginBottom: "0.25rem" }}>
+                            {ugcProgress === "save_error" ? "הסרטון נוצר אך השמירה נכשלה" : "שגיאה ביצירת הסרטון"}
+                          </div>
+                          <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.8rem" }}>ניתן לנסות שוב</div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Step indicators */}
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem" }}>
+                            {PROGRESS_STEPS.map((step, i) => {
+                              const isDone = i < activeIdx || ugcProgress === "done";
+                              const isActive = i === activeIdx && ugcProgress !== "done";
+                              const isPending = i > activeIdx && ugcProgress !== "done";
+                              return (
+                                <div key={step.key} style={{ display: "flex", alignItems: "center", flex: i < PROGRESS_STEPS.length - 1 ? 1 : "none" }}>
+                                  <div style={{
+                                    display: "flex", flexDirection: "column", alignItems: "center", gap: "0.375rem",
+                                    minWidth: "3.5rem",
+                                  }}>
+                                    <div style={{
+                                      width: "2.25rem", height: "2.25rem", borderRadius: "50%",
+                                      display: "flex", alignItems: "center", justifyContent: "center",
+                                      fontSize: isDone ? "1rem" : "0.9rem",
+                                      background: isDone ? "rgba(34,197,94,0.15)" : isActive ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.04)",
+                                      border: `2px solid ${isDone ? "#4ade80" : isActive ? "#a78bfa" : "rgba(255,255,255,0.08)"}`,
+                                      transition: "all 0.4s ease",
+                                      animation: isDone ? "ugc-check-pop 0.4s ease" : isActive ? "ugc-pulse-dot 1.5s ease-in-out infinite" : "none",
+                                    }}>
+                                      {isDone ? "✓" : step.icon}
+                                    </div>
+                                    <span style={{
+                                      fontSize: "0.65rem", fontWeight: isActive ? 600 : 500,
+                                      color: isDone ? "#4ade80" : isActive ? "#c4b5fd" : "rgba(255,255,255,0.25)",
+                                      textAlign: "center", lineHeight: 1.2, whiteSpace: "nowrap",
+                                    }}>
+                                      {step.label}
+                                    </span>
+                                  </div>
+                                  {i < PROGRESS_STEPS.length - 1 && (
+                                    <div style={{
+                                      flex: 1, height: "2px", margin: "0 0.25rem", marginBottom: "1.25rem",
+                                      background: i < activeIdx || ugcProgress === "done"
+                                        ? "#4ade80"
+                                        : i === activeIdx
+                                          ? "linear-gradient(90deg, #a78bfa, rgba(255,255,255,0.08))"
+                                          : "rgba(255,255,255,0.06)",
+                                      borderRadius: "1px",
+                                      backgroundSize: i === activeIdx ? "200% 100%" : "auto",
+                                      animation: i === activeIdx ? "ugc-progress-shimmer 2s linear infinite" : "none",
+                                    }} />
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Status message */}
+                          <div style={{ textAlign: "center" }}>
+                            {ugcProgress === "done" ? (
+                              <div style={{ color: "#4ade80", fontWeight: 600, fontSize: "0.85rem" }}>
+                                הסרטון נוצר ונשמר בהצלחה — עובר לקבצים...
+                              </div>
+                            ) : (
+                              <div style={{
+                                color: "#c4b5fd", fontSize: "0.8rem", fontWeight: 500,
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
+                              }}>
+                                <span style={{ display: "inline-flex", gap: "3px" }}>
+                                  <span style={{ animation: "ugc-pulse-dot 1.2s ease-in-out infinite", animationDelay: "0s" }}>.</span>
+                                  <span style={{ animation: "ugc-pulse-dot 1.2s ease-in-out infinite", animationDelay: "0.2s" }}>.</span>
+                                  <span style={{ animation: "ugc-pulse-dot 1.2s ease-in-out infinite", animationDelay: "0.4s" }}>.</span>
+                                </span>
+                                {ugcProgress === "preparing" && "מכין ושולח את הבקשה"}
+                                {ugcProgress === "generating" && "HeyGen מייצר את הסרטון — זה עשוי לקחת כמה דקות"}
+                                {ugcProgress === "saving" && "שומר את הסרטון בקבצי הלקוח"}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* ─────────────────────────────────────
                    9. FINAL ACTION
                 ───────────────────────────────────── */}
+                {!ugcGenerating && (
                 <button
                   type="button"
                   onClick={handleGenerateUGC}
-                  disabled={ugcGenerating || !ugcAvatarId || !ugcVoiceId || !ugcScript.trim()}
+                  disabled={!ugcAvatarId || !ugcVoiceId || !ugcScript.trim()}
                   style={{
                     width: "100%", padding: "0.875rem", fontSize: "1rem", fontWeight: 800,
                     borderRadius: "0.5rem", border: "none",
-                    background: (ugcGenerating || !ugcAvatarId || !ugcVoiceId || !ugcScript.trim())
+                    background: (!ugcAvatarId || !ugcVoiceId || !ugcScript.trim())
                       ? "rgba(139,92,246,0.2)"
                       : "linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)",
                     color: "#fff",
-                    cursor: ugcGenerating ? "wait" : ((!ugcAvatarId || !ugcVoiceId || !ugcScript.trim()) ? "not-allowed" : "pointer"),
-                    opacity: (ugcGenerating || !ugcAvatarId || !ugcVoiceId || !ugcScript.trim()) ? 0.5 : 1,
+                    cursor: (!ugcAvatarId || !ugcVoiceId || !ugcScript.trim()) ? "not-allowed" : "pointer",
+                    opacity: (!ugcAvatarId || !ugcVoiceId || !ugcScript.trim()) ? 0.5 : 1,
                     transition: "all 200ms", letterSpacing: "0.01em",
                   }}
                 >
-                  {ugcGenerating ? "מייצר סרטון..." : "צור סרטון UGC"}
+                  {(ugcProgress === "error" || ugcProgress === "save_error") ? "נסה שוב" : "צור סרטון UGC"}
                 </button>
+                )}
 
               </div>
             )}
