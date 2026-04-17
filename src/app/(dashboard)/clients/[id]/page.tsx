@@ -143,8 +143,6 @@ function ClientDetailContent() {
   const [ugcReferenceFiles, setUgcReferenceFiles] = useState<File[]>([]);
   const [ugcReferenceTexts, setUgcReferenceTexts] = useState<string[]>([]);
   const [ugcScriptGenerating, setUgcScriptGenerating] = useState(false);
-  const [ugcShowStructuredFields, setUgcShowStructuredFields] = useState(false);
-  const [ugcShowReferenceUpload, setUgcShowReferenceUpload] = useState(false);
   const [ugcScriptReplaceConfirm, setUgcScriptReplaceConfirm] = useState(false);
   const ugcFileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -242,8 +240,6 @@ function ClientDetailContent() {
     setUgcReferenceFiles([]);
     setUgcReferenceTexts([]);
     setUgcScriptGenerating(false);
-    setUgcShowStructuredFields(false);
-    setUgcShowReferenceUpload(false);
     setUgcScriptReplaceConfirm(false);
 
     setUgcLoadingOptions(true);
@@ -1275,465 +1271,447 @@ function ClientDetailContent() {
         </div>
       )}
 
-      {/* ── UGC Video Generation Modal ── */}
+      {/* ── UGC Video Generation Panel ── */}
       {ugcModalOpen && (
         <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 50,
-            direction: "rtl",
-          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "stretch", justifyContent: "center", zIndex: 50, direction: "rtl" }}
           onClick={closeUgcModal}
         >
           <div
             style={{
-              background: "var(--surface-raised)",
-              borderRadius: "0.75rem",
-              padding: "2rem",
-              maxWidth: "720px",
-              width: "95%",
-              maxHeight: "90vh",
+              background: "#16162a",
+              width: "100%",
+              maxWidth: "780px",
               overflowY: "auto",
-              border: "1px solid var(--border)",
+              borderRight: "1px solid rgba(139,92,246,0.2)",
+              borderLeft: "1px solid rgba(139,92,246,0.2)",
+              padding: "2.5rem 2rem 3rem",
             }}
             onClick={(e: React.MouseEvent) => e.stopPropagation()}
           >
-            <h2 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "1.5rem" }}>
-              יצירת סרטון UGC {client ? `— ${client.name}` : ""}
-            </h2>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2rem" }}>
+              <div>
+                <h2 style={{ fontSize: "1.35rem", fontWeight: 800, color: "#fff", margin: 0, letterSpacing: "-0.01em" }}>
+                  יצירת סרטון UGC
+                </h2>
+                {client && <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.45)", marginTop: "0.25rem" }}>{client.name}</p>}
+              </div>
+              <button onClick={closeUgcModal} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "0.375rem", padding: "0.375rem 0.75rem", color: "rgba(255,255,255,0.5)", fontSize: "0.8rem", cursor: "pointer" }}>
+                סגור
+              </button>
+            </div>
 
             {ugcLoadingOptions ? (
-              <div style={{ textAlign: "center", padding: "2rem", color: "var(--foreground-muted)" }}>
+              <div style={{ textAlign: "center", padding: "4rem 0", color: "rgba(255,255,255,0.4)" }}>
+                <div style={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid rgba(139,92,246,0.5)", borderTopColor: "transparent", margin: "0 auto 0.75rem", animation: "ugcSpin 0.8s linear infinite" }} />
                 טוען אפשרויות מ-HeyGen...
+                <style>{`@keyframes ugcSpin { to { transform: rotate(360deg); } }`}</style>
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
 
-                {/* ═══════════════════════════════════════
-                    SECTION 1: Creative Brief (for AI script generation)
-                    ═══════════════════════════════════════ */}
-                <div style={{ background: "rgba(139,92,246,0.04)", border: "1px solid rgba(139,92,246,0.15)", borderRadius: "0.625rem", padding: "1.25rem" }}>
-                  <h3 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#8b5cf6", marginBottom: "0.75rem" }}>
-                    בריף יצירתי
-                  </h3>
-
-                  {/* Creative Prompt */}
-                  <div style={{ marginBottom: "1rem" }}>
-                    <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--foreground)", display: "block", marginBottom: "0.375rem" }}>
-                      פרומפט יצירתי
-                    </label>
-                    <textarea
-                      className="form-input"
-                      value={ugcCreativePrompt}
-                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setUgcCreativePrompt(e.target.value)}
-                      disabled={ugcGenerating || ugcScriptGenerating}
-                      placeholder="תאר מה אתה רוצה לסרטון — טון דיבור, קהל יעד, סגנון, זווית מכירה, כיוון רגשי, UGC אותנטי / פרימיום / ישיר..."
-                      rows={3}
-                      style={{ width: "100%", padding: "0.625rem", fontSize: "0.85rem", resize: "vertical" }}
-                    />
-                    <p style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>
-                      תיאור חופשי של מה שאתה מחפש. ישמש ליצירת התסריט עם AI.
-                    </p>
-                  </div>
-
-                  {/* Toggle: Structured fields */}
-                  <button
-                    type="button"
-                    onClick={() => setUgcShowStructuredFields((v) => !v)}
+                {/* ─────────────────────────────────────
+                   1. CREATIVE PROMPT
+                ───────────────────────────────────── */}
+                <section style={{ marginBottom: "1.75rem" }}>
+                  <label style={{ fontSize: "0.85rem", fontWeight: 700, color: "#c4b5fd", display: "block", marginBottom: "0.5rem" }}>
+                    Creative Prompt
+                  </label>
+                  <textarea
+                    value={ugcCreativePrompt}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setUgcCreativePrompt(e.target.value)}
+                    disabled={ugcGenerating || ugcScriptGenerating}
+                    placeholder="תאר את הסרטון שאתה רוצה — טון דיבור, קהל יעד, סגנון UGC, זווית מכירה, כיוון רגשי, פרימיום / אותנטי / direct-response..."
+                    rows={4}
                     style={{
-                      background: "none", border: "none", cursor: "pointer", padding: "0.375rem 0",
-                      fontSize: "0.8rem", fontWeight: 600, color: "#8b5cf6", display: "flex", alignItems: "center", gap: "0.375rem",
+                      width: "100%", padding: "0.875rem 1rem", fontSize: "0.9rem", lineHeight: 1.6,
+                      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(139,92,246,0.2)",
+                      borderRadius: "0.5rem", color: "#fff", resize: "vertical",
+                      outline: "none",
                     }}
-                  >
-                    {ugcShowStructuredFields ? "▾" : "▸"} שדות מובנים (אופציונלי)
-                  </button>
+                  />
+                  <p style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.3)", marginTop: "0.375rem" }}>
+                    המקור העיקרי ליצירת התסריט. תאר בפירוט מה שאתה מחפש.
+                  </p>
+                </section>
 
-                  {ugcShowStructuredFields && (
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.625rem", marginTop: "0.625rem" }}>
-                      {([
-                        { label: "מותג / מוצר", value: ugcBrandName, setter: setUgcBrandName, placeholder: "שם המותג או המוצר" },
-                        { label: "הצעת ערך / מבצע", value: ugcMainOffer, setter: setUgcMainOffer, placeholder: "מה ההצעה המרכזית?" },
-                        { label: "קהל יעד", value: ugcTargetAudience, setter: setUgcTargetAudience, placeholder: "למי מיועד הסרטון?" },
-                        { label: "מסר מרכזי", value: ugcKeyMessage, setter: setUgcKeyMessage, placeholder: "מה המסר העיקרי?" },
-                        { label: "קריאה לפעולה (CTA)", value: ugcCallToAction, setter: setUgcCallToAction, placeholder: 'למשל: "הירשמו עכשיו"' },
-                        { label: "סגנון ויזואלי", value: ugcVisualStyle, setter: setUgcVisualStyle, placeholder: "מינימליסטי, צבעוני, פרימיום..." },
-                      ] as const).map(({ label, value, setter, placeholder }) => (
-                        <div key={label}>
-                          <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground)", display: "block", marginBottom: "0.25rem" }}>
-                            {label}
-                          </label>
-                          <input
-                            className="form-input"
-                            type="text"
-                            value={value}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setter(e.target.value)}
-                            disabled={ugcGenerating || ugcScriptGenerating}
-                            placeholder={placeholder}
-                            style={{ width: "100%", padding: "0.5rem", fontSize: "0.8rem" }}
-                          />
-                        </div>
-                      ))}
-                      <div style={{ gridColumn: "1 / -1" }}>
-                        <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground)", display: "block", marginBottom: "0.25rem" }}>
-                          הנחיות נוספות
+                {/* Divider */}
+                <div style={{ height: 1, background: "rgba(255,255,255,0.06)", marginBottom: "1.75rem" }} />
+
+                {/* ─────────────────────────────────────
+                   2. STRUCTURED CONTENT INPUTS
+                ───────────────────────────────────── */}
+                <section style={{ marginBottom: "1.75rem" }}>
+                  <h3 style={{ fontSize: "0.8rem", fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.875rem" }}>
+                    פרטי תוכן
+                  </h3>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                    {([
+                      { label: "מותג / מוצר", val: ugcBrandName, set: setUgcBrandName, ph: "שם המותג או המוצר", wide: false },
+                      { label: "הצעת ערך / מבצע", val: ugcMainOffer, set: setUgcMainOffer, ph: "מה ההצעה המרכזית?", wide: false },
+                      { label: "קהל יעד", val: ugcTargetAudience, set: setUgcTargetAudience, ph: "למי מיועד הסרטון?", wide: false },
+                      { label: "מסר מרכזי", val: ugcKeyMessage, set: setUgcKeyMessage, ph: "מה המסר העיקרי?", wide: false },
+                      { label: "קריאה לפעולה (CTA)", val: ugcCallToAction, set: setUgcCallToAction, ph: 'למשל: ״הירשמו עכשיו״', wide: false },
+                      { label: "סגנון ויזואלי", val: ugcVisualStyle, set: setUgcVisualStyle, ph: "מינימליסטי, צבעוני, פרימיום...", wide: false },
+                    ] as const).map(({ label, val, set, ph }) => (
+                      <div key={label}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(255,255,255,0.55)", display: "block", marginBottom: "0.25rem" }}>
+                          {label}
                         </label>
                         <input
-                          className="form-input"
                           type="text"
-                          value={ugcAdditionalInstructions}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUgcAdditionalInstructions(e.target.value)}
+                          value={val}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => set(e.target.value)}
                           disabled={ugcGenerating || ugcScriptGenerating}
-                          placeholder="כל דבר נוסף שחשוב לך..."
-                          style={{ width: "100%", padding: "0.5rem", fontSize: "0.8rem" }}
+                          placeholder={ph}
+                          style={{
+                            width: "100%", padding: "0.5rem 0.75rem", fontSize: "0.825rem",
+                            background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                            borderRadius: "0.375rem", color: "#fff", outline: "none",
+                          }}
                         />
                       </div>
+                    ))}
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(255,255,255,0.55)", display: "block", marginBottom: "0.25rem" }}>
+                        הנחיות נוספות
+                      </label>
+                      <textarea
+                        value={ugcAdditionalInstructions}
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setUgcAdditionalInstructions(e.target.value)}
+                        disabled={ugcGenerating || ugcScriptGenerating}
+                        placeholder="כל דבר נוסף שחשוב לך..."
+                        rows={2}
+                        style={{
+                          width: "100%", padding: "0.5rem 0.75rem", fontSize: "0.825rem",
+                          background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                          borderRadius: "0.375rem", color: "#fff", resize: "vertical", outline: "none",
+                        }}
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                {/* Divider */}
+                <div style={{ height: 1, background: "rgba(255,255,255,0.06)", marginBottom: "1.75rem" }} />
+
+                {/* ─────────────────────────────────────
+                   3. REFERENCE MATERIALS
+                ───────────────────────────────────── */}
+                <section style={{ marginBottom: "1.75rem" }}>
+                  <h3 style={{ fontSize: "0.8rem", fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>
+                    חומרי התייחסות
+                  </h3>
+                  <p style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.3)", marginBottom: "0.625rem" }}>
+                    לוגו, בריף, סקריפט קיים, תמונות, PDF — טקסט מקבצים נתמכים ישמש ליצירת התסריט עם AI.
+                  </p>
+                  <input
+                    ref={ugcFileInputRef}
+                    type="file"
+                    multiple
+                    accept=".txt,.md,.csv,.json,.html,.rtf,.pdf,.doc,.docx,.png,.jpg,.jpeg,.svg,.webp"
+                    onChange={(e) => handleReferenceFileUpload(e.target.files)}
+                    style={{ display: "none" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => ugcFileInputRef.current?.click()}
+                    disabled={ugcGenerating || ugcScriptGenerating}
+                    style={{
+                      padding: "0.5rem 1rem", fontSize: "0.8rem", fontWeight: 600,
+                      borderRadius: "0.375rem", border: "1px dashed rgba(255,255,255,0.15)",
+                      background: "rgba(255,255,255,0.03)", color: "rgba(255,255,255,0.6)", cursor: "pointer",
+                      transition: "all 150ms",
+                    }}
+                  >
+                    + העלה קבצים
+                  </button>
+                  {ugcReferenceFiles.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem", marginTop: "0.625rem" }}>
+                      {ugcReferenceFiles.map((f, i) => (
+                        <span key={i} style={{
+                          display: "inline-flex", alignItems: "center", gap: "0.375rem",
+                          padding: "0.3rem 0.625rem", fontSize: "0.72rem", borderRadius: "0.25rem",
+                          background: "rgba(139,92,246,0.12)", color: "#c4b5fd",
+                        }}>
+                          {f.name}
+                          <button
+                            type="button" onClick={() => removeReferenceFile(i)}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "#c4b5fd", fontSize: "0.75rem", padding: 0, lineHeight: 1 }}
+                          >
+                            x
+                          </button>
+                        </span>
+                      ))}
                     </div>
                   )}
+                </section>
 
-                  {/* Toggle: Reference file upload */}
-                  <div style={{ marginTop: "0.625rem" }}>
+                {/* Divider */}
+                <div style={{ height: 1, background: "rgba(255,255,255,0.06)", marginBottom: "1.75rem" }} />
+
+                {/* ─────────────────────────────────────
+                   4. GENERATE SCRIPT WITH AI
+                ───────────────────────────────────── */}
+                <section style={{ marginBottom: "1.75rem" }}>
+                  {!ugcScriptReplaceConfirm ? (
                     <button
                       type="button"
-                      onClick={() => setUgcShowReferenceUpload((v) => !v)}
+                      onClick={() => handleGenerateScript()}
+                      disabled={ugcScriptGenerating || ugcGenerating || (!ugcCreativePrompt.trim() && !ugcBrandName.trim() && !ugcMainOffer.trim() && !ugcTargetAudience.trim() && !ugcKeyMessage.trim() && ugcReferenceTexts.length === 0)}
                       style={{
-                        background: "none", border: "none", cursor: "pointer", padding: "0.375rem 0",
-                        fontSize: "0.8rem", fontWeight: 600, color: "#8b5cf6", display: "flex", alignItems: "center", gap: "0.375rem",
+                        width: "100%", padding: "0.75rem", fontSize: "0.9rem", fontWeight: 700,
+                        borderRadius: "0.5rem", border: "1px solid rgba(139,92,246,0.35)",
+                        background: ugcScriptGenerating
+                          ? "rgba(139,92,246,0.15)"
+                          : "linear-gradient(135deg, rgba(139,92,246,0.18) 0%, rgba(99,102,241,0.18) 100%)",
+                        color: "#c4b5fd", cursor: ugcScriptGenerating ? "wait" : "pointer",
+                        opacity: (ugcScriptGenerating || ugcGenerating || (!ugcCreativePrompt.trim() && !ugcBrandName.trim() && !ugcMainOffer.trim() && !ugcTargetAudience.trim() && !ugcKeyMessage.trim() && ugcReferenceTexts.length === 0)) ? 0.4 : 1,
+                        transition: "all 200ms", letterSpacing: "0.01em",
                       }}
                     >
-                      {ugcShowReferenceUpload ? "▾" : "▸"} חומרי התייחסות (אופציונלי)
+                      {ugcScriptGenerating ? "מייצר תסריט..." : "צור תסריט עם AI"}
                     </button>
-
-                    {ugcShowReferenceUpload && (
-                      <div style={{ marginTop: "0.5rem" }}>
-                        <p style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", marginBottom: "0.5rem" }}>
-                          לוגו, בריף, סקריפט קיים, תמונות, PDF — המערכת תחלץ טקסט מקבצים נתמכים וישמש ליצירת התסריט.
-                        </p>
-                        <input
-                          ref={ugcFileInputRef}
-                          type="file"
-                          multiple
-                          accept=".txt,.md,.csv,.json,.html,.rtf,.pdf,.doc,.docx,.png,.jpg,.jpeg,.svg,.webp"
-                          onChange={(e) => handleReferenceFileUpload(e.target.files)}
-                          style={{ display: "none" }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => ugcFileInputRef.current?.click()}
-                          disabled={ugcGenerating || ugcScriptGenerating}
-                          style={{
-                            padding: "0.4rem 0.875rem", fontSize: "0.8rem", fontWeight: 600,
-                            borderRadius: "0.375rem", border: "1px dashed var(--border)",
-                            background: "transparent", color: "var(--foreground)", cursor: "pointer",
-                          }}
-                        >
-                          + העלה קבצים
-                        </button>
-                        {ugcReferenceFiles.length > 0 && (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem", marginTop: "0.5rem" }}>
-                            {ugcReferenceFiles.map((f, i) => (
-                              <span
-                                key={i}
-                                style={{
-                                  display: "inline-flex", alignItems: "center", gap: "0.25rem",
-                                  padding: "0.25rem 0.5rem", fontSize: "0.7rem", borderRadius: "0.25rem",
-                                  background: "rgba(139,92,246,0.1)", color: "#8b5cf6",
-                                }}
-                              >
-                                {f.name}
-                                <button
-                                  type="button"
-                                  onClick={() => removeReferenceFile(i)}
-                                  style={{ background: "none", border: "none", cursor: "pointer", color: "#8b5cf6", fontSize: "0.8rem", padding: 0, lineHeight: 1 }}
-                                >
-                                  x
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* ═══════════════════════════════════════
-                    SECTION 2: Video Settings (avatar, voice, format)
-                    ═══════════════════════════════════════ */}
-                <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", borderRadius: "0.625rem", padding: "1.25rem" }}>
-                  <h3 style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "0.75rem" }}>
-                    הגדרות סרטון
-                  </h3>
-
-                  <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                    {/* ── Format / Aspect Ratio Selection ── */}
-                    <div>
-                      <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--foreground)", display: "block", marginBottom: "0.375rem" }}>
-                        פורמט סרטון
-                      </label>
-                      <div style={{ display: "flex", gap: "0.75rem" }}>
-                        {(["9:16", "1:1", "16:9"] as const).map((fmt) => {
-                          const dim = FORMAT_DIMENSIONS[fmt];
-                          const isActive = ugcFormat === fmt;
-                          const aspectW = fmt === "9:16" ? 24 : fmt === "1:1" ? 32 : 42;
-                          const aspectH = fmt === "9:16" ? 42 : fmt === "1:1" ? 32 : 24;
-                          return (
-                            <button
-                              key={fmt}
-                              type="button"
-                              disabled={ugcGenerating}
-                              onClick={() => setUgcFormat(fmt)}
-                              style={{
-                                flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "0.375rem",
-                                padding: "0.625rem 0.5rem", borderRadius: "0.5rem",
-                                border: isActive ? "2px solid #8b5cf6" : "1px solid var(--border)",
-                                background: isActive ? "rgba(139,92,246,0.1)" : "transparent",
-                                cursor: ugcGenerating ? "not-allowed" : "pointer", transition: "all 150ms",
-                              }}
-                            >
-                              <div style={{ width: aspectW, height: aspectH, borderRadius: 3, border: `2px solid ${isActive ? "#8b5cf6" : "var(--foreground-muted)"}`, opacity: isActive ? 1 : 0.5 }} />
-                              <span style={{ fontSize: "0.8rem", fontWeight: 600, color: isActive ? "#8b5cf6" : "var(--foreground)" }}>{fmt}</span>
-                              <span style={{ fontSize: "0.65rem", color: "var(--foreground-muted)", textAlign: "center", lineHeight: 1.2 }}>{dim.label}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* ── Avatar Selection + Preview ── */}
-                    <div>
-                      <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--foreground)", display: "block", marginBottom: "0.375rem" }}>
-                        אווטאר (דמות)
-                      </label>
-                      <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
-                        <select
-                          className="form-select"
-                          value={ugcAvatarId}
-                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUgcAvatarId(e.target.value)}
-                          disabled={ugcGenerating}
-                          style={{ flex: 1, padding: "0.5rem", fontSize: "0.85rem" }}
-                        >
-                          <option value="">בחר אווטאר...</option>
-                          {ugcAvatars.map((a: any) => (
-                            <option key={a.avatar_id} value={a.avatar_id}>
-                              {a.avatar_name || a.avatar_id}
-                            </option>
-                          ))}
-                        </select>
-                        {selectedAvatar && (selectedAvatar.preview_image_url || selectedAvatar.photo_url) && (
-                          <div style={{ width: 48, height: 48, borderRadius: "0.5rem", overflow: "hidden", border: "1px solid var(--border)", flexShrink: 0 }}>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={selectedAvatar.preview_image_url || selectedAvatar.photo_url}
-                              alt={selectedAvatar.avatar_name || "avatar"}
-                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                            />
-                          </div>
-                        )}
-                      </div>
-                      {ugcAvatars.length === 0 && !ugcLoadingOptions && (
-                        <p style={{ fontSize: "0.7rem", color: "#f59e0b", marginTop: "0.25rem" }}>
-                          לא נמצאו אווטארים. בדוק את מפתח ה-API של HeyGen.
-                        </p>
-                      )}
-                    </div>
-
-                    {/* ── Voice Selection (Hebrew only) + Preview ── */}
-                    <div>
-                      <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--foreground)", display: "block", marginBottom: "0.375rem" }}>
-                        קול (עברית)
-                      </label>
-                      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                        <select
-                          className="form-select"
-                          value={ugcVoiceId}
-                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUgcVoiceId(e.target.value)}
-                          disabled={ugcGenerating}
-                          style={{ flex: 1, padding: "0.5rem", fontSize: "0.85rem" }}
-                        >
-                          <option value="">בחר קול...</option>
-                          {(hebrewVoices.length > 0 ? hebrewVoices : ugcVoices).map((v: any) => (
-                            <option key={v.voice_id} value={v.voice_id}>
-                              {v.name || v.display_name || v.voice_id}{v.language ? ` (${v.language})` : ""}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={handlePlayVoicePreview}
-                          disabled={!ugcVoiceId || ugcVoicePlaying || ugcGenerating}
-                          title="השמע תצוגה מקדימה"
-                          style={{
-                            padding: "0.4rem 0.625rem", borderRadius: "0.5rem", border: "1px solid var(--border)",
-                            background: ugcVoicePlaying ? "rgba(139,92,246,0.15)" : "transparent",
-                            color: !ugcVoiceId ? "var(--foreground-muted)" : "#8b5cf6",
-                            fontSize: "0.8rem", fontWeight: 600,
-                            cursor: !ugcVoiceId || ugcGenerating ? "not-allowed" : "pointer",
-                            opacity: !ugcVoiceId ? 0.4 : 1, transition: "all 150ms", whiteSpace: "nowrap", flexShrink: 0,
-                          }}
-                        >
-                          {ugcVoicePlaying ? "מנגן..." : "השמע"}
-                        </button>
-                      </div>
-                      {hebrewVoices.length === 0 && ugcVoices.length > 0 && (
-                        <p style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>
-                          לא נמצאו קולות בעברית — מוצגים כל הקולות הזמינים
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* ═══════════════════════════════════════
-                    SECTION 3: Script (AI generation + manual edit)
-                    ═══════════════════════════════════════ */}
-                <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", borderRadius: "0.625rem", padding: "1.25rem" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.625rem" }}>
-                    <h3 style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--foreground)", margin: 0 }}>
-                      תסריט
-                    </h3>
-                    {/* ── Generate Script with AI button ── */}
-                    {!ugcScriptReplaceConfirm ? (
-                      <button
-                        type="button"
-                        onClick={() => handleGenerateScript()}
-                        disabled={ugcScriptGenerating || ugcGenerating || (!ugcCreativePrompt.trim() && !ugcBrandName.trim() && !ugcMainOffer.trim() && !ugcTargetAudience.trim() && !ugcKeyMessage.trim() && ugcReferenceTexts.length === 0)}
-                        style={{
-                          padding: "0.4rem 0.875rem", fontSize: "0.8rem", fontWeight: 600,
-                          borderRadius: "0.375rem", border: "1px solid rgba(139,92,246,0.3)",
-                          background: ugcScriptGenerating ? "rgba(139,92,246,0.15)" : "rgba(139,92,246,0.08)",
-                          color: "#8b5cf6", cursor: ugcScriptGenerating ? "wait" : "pointer",
-                          opacity: (ugcScriptGenerating || ugcGenerating || (!ugcCreativePrompt.trim() && !ugcBrandName.trim() && !ugcMainOffer.trim() && !ugcTargetAudience.trim() && !ugcKeyMessage.trim() && ugcReferenceTexts.length === 0)) ? 0.5 : 1,
-                          transition: "all 150ms",
-                        }}
-                      >
-                        {ugcScriptGenerating ? "מייצר תסריט..." : "צור תסריט עם AI"}
+                  ) : (
+                    <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", justifyContent: "center", padding: "0.5rem", background: "rgba(139,92,246,0.06)", borderRadius: "0.5rem", border: "1px solid rgba(139,92,246,0.15)" }}>
+                      <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.5)" }}>יש כבר טקסט בתסריט —</span>
+                      <button type="button" onClick={() => handleGenerateScript("replace")}
+                        style={{ padding: "0.375rem 0.75rem", fontSize: "0.8rem", fontWeight: 600, borderRadius: "0.375rem", border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.1)", color: "#c4b5fd", cursor: "pointer" }}>
+                        החלף
                       </button>
-                    ) : (
-                      /* Replace/Append confirmation */
-                      <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
-                        <span style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>יש כבר טקסט —</span>
-                        <button
-                          type="button"
-                          onClick={() => handleGenerateScript("replace")}
-                          style={{
-                            padding: "0.3rem 0.625rem", fontSize: "0.75rem", fontWeight: 600,
-                            borderRadius: "0.25rem", border: "1px solid rgba(139,92,246,0.3)",
-                            background: "rgba(139,92,246,0.08)", color: "#8b5cf6", cursor: "pointer",
-                          }}
-                        >
-                          החלף
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleGenerateScript("append")}
-                          style={{
-                            padding: "0.3rem 0.625rem", fontSize: "0.75rem", fontWeight: 600,
-                            borderRadius: "0.25rem", border: "1px solid rgba(139,92,246,0.3)",
-                            background: "rgba(139,92,246,0.08)", color: "#8b5cf6", cursor: "pointer",
-                          }}
-                        >
-                          הוסף לקיים
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setUgcScriptReplaceConfirm(false)}
-                          style={{
-                            padding: "0.3rem 0.5rem", fontSize: "0.75rem", fontWeight: 600,
-                            borderRadius: "0.25rem", border: "1px solid var(--border)",
-                            background: "transparent", color: "var(--foreground-muted)", cursor: "pointer",
-                          }}
-                        >
-                          ביטול
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {ugcScriptGenerating && (
-                    <div style={{
-                      padding: "0.5rem 0.75rem", marginBottom: "0.5rem", borderRadius: "0.375rem",
-                      background: "rgba(139,92,246,0.08)", color: "#8b5cf6", fontSize: "0.8rem",
-                      display: "flex", alignItems: "center", gap: "0.5rem",
-                    }}>
-                      <span style={{ display: "inline-block", width: 14, height: 14, borderRadius: "50%", border: "2px solid #8b5cf6", borderTopColor: "transparent", animation: "spin 0.8s linear infinite" }} />
-                      מייצר תסריט בעברית על בסיס הבריף...
-                      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                      <button type="button" onClick={() => handleGenerateScript("append")}
+                        style={{ padding: "0.375rem 0.75rem", fontSize: "0.8rem", fontWeight: 600, borderRadius: "0.375rem", border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.1)", color: "#c4b5fd", cursor: "pointer" }}>
+                        הוסף לקיים
+                      </button>
+                      <button type="button" onClick={() => setUgcScriptReplaceConfirm(false)}
+                        style={{ padding: "0.375rem 0.625rem", fontSize: "0.8rem", fontWeight: 600, borderRadius: "0.375rem", border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.4)", cursor: "pointer" }}>
+                        ביטול
+                      </button>
                     </div>
                   )}
+                  {ugcScriptGenerating && (
+                    <div style={{
+                      marginTop: "0.625rem", padding: "0.5rem 0.75rem", borderRadius: "0.375rem",
+                      background: "rgba(139,92,246,0.06)", color: "#a78bfa", fontSize: "0.8rem",
+                      display: "flex", alignItems: "center", gap: "0.5rem",
+                    }}>
+                      <span style={{ display: "inline-block", width: 14, height: 14, borderRadius: "50%", border: "2px solid #a78bfa", borderTopColor: "transparent", animation: "ugcSpin 0.8s linear infinite" }} />
+                      מייצר תסריט בעברית על בסיס הבריף והשדות שמילאת...
+                    </div>
+                  )}
+                </section>
 
+                {/* Divider */}
+                <div style={{ height: 1, background: "rgba(255,255,255,0.06)", marginBottom: "1.75rem" }} />
+
+                {/* ─────────────────────────────────────
+                   5. FINAL SCRIPT
+                ───────────────────────────────────── */}
+                <section style={{ marginBottom: "1.75rem" }}>
+                  <label style={{ fontSize: "0.85rem", fontWeight: 700, color: "#c4b5fd", display: "block", marginBottom: "0.5rem" }}>
+                    תסריט סופי
+                  </label>
                   <textarea
-                    className="form-input"
                     value={ugcScript}
                     onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setUgcScript(e.target.value)}
                     disabled={ugcGenerating || ugcScriptGenerating}
-                    placeholder="כתוב כאן את הטקסט לסרטון UGC, או לחץ על ״צור תסריט עם AI״ למעלה..."
+                    placeholder="כתוב ידנית, או צור אוטומטית עם הכפתור למעלה..."
                     rows={6}
-                    style={{ width: "100%", padding: "0.625rem", fontSize: "0.875rem", resize: "vertical" }}
-                  />
-                  <p style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>
-                    זהו הטקסט הסופי שהאווטאר יגיד בסרטון. ניתן לערוך לאחר יצירה עם AI.
-                  </p>
-                </div>
-
-                {/* ── Progress / Status ── */}
-                {ugcProgress && (
-                  <div
                     style={{
-                      padding: "0.75rem 1rem",
-                      borderRadius: "0.5rem",
-                      background: ugcStatus === "completed"
-                        ? "rgba(34,197,94,0.1)"
-                        : ugcStatus === "failed"
-                          ? "rgba(239,68,68,0.1)"
-                          : "rgba(139,92,246,0.1)",
-                      color: ugcStatus === "completed"
-                        ? "#22c55e"
-                        : ugcStatus === "failed"
-                          ? "#ef4444"
-                          : "#8b5cf6",
-                      fontSize: "0.85rem",
-                      fontWeight: 500,
-                      whiteSpace: "pre-wrap",
+                      width: "100%", padding: "0.875rem 1rem", fontSize: "0.9rem", lineHeight: 1.65,
+                      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(139,92,246,0.2)",
+                      borderRadius: "0.5rem", color: "#fff", resize: "vertical", outline: "none",
                     }}
-                  >
+                  />
+                  <p style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.3)", marginTop: "0.375rem" }}>
+                    זהו הטקסט שהאווטאר יגיד בסרטון. ניתן לערוך בחופשיות.
+                  </p>
+                </section>
+
+                {/* Divider */}
+                <div style={{ height: 1, background: "rgba(255,255,255,0.06)", marginBottom: "1.75rem" }} />
+
+                {/* ─────────────────────────────────────
+                   6. AVATAR SELECTION (Visual Gallery)
+                ───────────────────────────────────── */}
+                <section style={{ marginBottom: "1.75rem" }}>
+                  <h3 style={{ fontSize: "0.8rem", fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.75rem" }}>
+                    בחירת אווטאר
+                  </h3>
+                  {ugcAvatars.length === 0 && !ugcLoadingOptions && (
+                    <p style={{ fontSize: "0.75rem", color: "#f59e0b" }}>לא נמצאו אווטארים. בדוק את מפתח ה-API של HeyGen.</p>
+                  )}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: "0.625rem" }}>
+                    {ugcAvatars.map((a: any) => {
+                      const isSelected = ugcAvatarId === a.avatar_id;
+                      const imgUrl = a.preview_image_url || a.photo_url || "";
+                      return (
+                        <button
+                          key={a.avatar_id}
+                          type="button"
+                          disabled={ugcGenerating}
+                          onClick={() => setUgcAvatarId(a.avatar_id)}
+                          style={{
+                            display: "flex", flexDirection: "column", alignItems: "center", gap: "0.375rem",
+                            padding: "0.5rem", borderRadius: "0.5rem",
+                            border: isSelected ? "2px solid #8b5cf6" : "1px solid rgba(255,255,255,0.08)",
+                            background: isSelected ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.02)",
+                            cursor: ugcGenerating ? "not-allowed" : "pointer",
+                            transition: "all 150ms", textAlign: "center",
+                          }}
+                        >
+                          <div style={{
+                            width: 56, height: 56, borderRadius: "50%", overflow: "hidden",
+                            background: "rgba(255,255,255,0.06)", flexShrink: 0,
+                            border: isSelected ? "2px solid #8b5cf6" : "2px solid transparent",
+                          }}>
+                            {imgUrl ? (
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img src={imgUrl} alt={a.avatar_name || a.avatar_id}
+                                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                              />
+                            ) : (
+                              <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.1rem", color: "rgba(255,255,255,0.3)" }}>
+                                {(a.avatar_name || "?")[0]}
+                              </div>
+                            )}
+                          </div>
+                          <span style={{ fontSize: "0.65rem", fontWeight: isSelected ? 700 : 500, color: isSelected ? "#c4b5fd" : "rgba(255,255,255,0.5)", lineHeight: 1.2, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {a.avatar_name || a.avatar_id}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                {/* Divider */}
+                <div style={{ height: 1, background: "rgba(255,255,255,0.06)", marginBottom: "1.75rem" }} />
+
+                {/* ─────────────────────────────────────
+                   7. VOICE SELECTION
+                ───────────────────────────────────── */}
+                <section style={{ marginBottom: "1.75rem" }}>
+                  <h3 style={{ fontSize: "0.8rem", fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.625rem" }}>
+                    קול (עברית)
+                  </h3>
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                    <select
+                      value={ugcVoiceId}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUgcVoiceId(e.target.value)}
+                      disabled={ugcGenerating}
+                      style={{
+                        flex: 1, padding: "0.625rem 0.75rem", fontSize: "0.85rem",
+                        background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                        borderRadius: "0.375rem", color: "#fff", outline: "none",
+                      }}
+                    >
+                      <option value="">בחר קול...</option>
+                      {(hebrewVoices.length > 0 ? hebrewVoices : ugcVoices).map((v: any) => (
+                        <option key={v.voice_id} value={v.voice_id}>
+                          {v.name || v.display_name || v.voice_id}{v.language ? ` (${v.language})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handlePlayVoicePreview}
+                      disabled={!ugcVoiceId || ugcVoicePlaying || ugcGenerating}
+                      style={{
+                        padding: "0.5rem 0.875rem", borderRadius: "0.375rem",
+                        border: "1px solid rgba(139,92,246,0.25)",
+                        background: ugcVoicePlaying ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.03)",
+                        color: !ugcVoiceId ? "rgba(255,255,255,0.25)" : "#c4b5fd",
+                        fontSize: "0.8rem", fontWeight: 600,
+                        cursor: !ugcVoiceId || ugcGenerating ? "not-allowed" : "pointer",
+                        opacity: !ugcVoiceId ? 0.5 : 1, transition: "all 150ms",
+                        whiteSpace: "nowrap", flexShrink: 0,
+                      }}
+                    >
+                      {ugcVoicePlaying ? "מנגן..." : "השמע"}
+                    </button>
+                  </div>
+                  {hebrewVoices.length === 0 && ugcVoices.length > 0 && (
+                    <p style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.3)", marginTop: "0.375rem" }}>
+                      לא נמצאו קולות בעברית — מוצגים כל הקולות הזמינים
+                    </p>
+                  )}
+                </section>
+
+                {/* Divider */}
+                <div style={{ height: 1, background: "rgba(255,255,255,0.06)", marginBottom: "1.75rem" }} />
+
+                {/* ─────────────────────────────────────
+                   8. VIDEO FORMAT
+                ───────────────────────────────────── */}
+                <section style={{ marginBottom: "1.75rem" }}>
+                  <h3 style={{ fontSize: "0.8rem", fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.625rem" }}>
+                    פורמט סרטון
+                  </h3>
+                  <div style={{ display: "flex", gap: "0.75rem" }}>
+                    {(["9:16", "1:1", "16:9"] as const).map((fmt) => {
+                      const dim = FORMAT_DIMENSIONS[fmt];
+                      const isActive = ugcFormat === fmt;
+                      const aspectW = fmt === "9:16" ? 22 : fmt === "1:1" ? 30 : 40;
+                      const aspectH = fmt === "9:16" ? 38 : fmt === "1:1" ? 30 : 22;
+                      return (
+                        <button key={fmt} type="button" disabled={ugcGenerating}
+                          onClick={() => setUgcFormat(fmt)}
+                          style={{
+                            flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "0.375rem",
+                            padding: "0.75rem 0.5rem", borderRadius: "0.5rem",
+                            border: isActive ? "2px solid #8b5cf6" : "1px solid rgba(255,255,255,0.08)",
+                            background: isActive ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.02)",
+                            cursor: ugcGenerating ? "not-allowed" : "pointer", transition: "all 150ms",
+                          }}
+                        >
+                          <div style={{ width: aspectW, height: aspectH, borderRadius: 3, border: `2px solid ${isActive ? "#8b5cf6" : "rgba(255,255,255,0.2)"}`, opacity: isActive ? 1 : 0.5 }} />
+                          <span style={{ fontSize: "0.8rem", fontWeight: 700, color: isActive ? "#c4b5fd" : "rgba(255,255,255,0.5)" }}>{fmt}</span>
+                          <span style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.3)", textAlign: "center", lineHeight: 1.2 }}>{dim.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                {/* ─────────────────────────────────────
+                   Progress / Status
+                ───────────────────────────────────── */}
+                {ugcProgress && (
+                  <div style={{
+                    padding: "0.75rem 1rem", borderRadius: "0.5rem", marginBottom: "1rem",
+                    background: ugcStatus === "completed" ? "rgba(34,197,94,0.1)" : ugcStatus === "failed" ? "rgba(239,68,68,0.1)" : "rgba(139,92,246,0.08)",
+                    color: ugcStatus === "completed" ? "#4ade80" : ugcStatus === "failed" ? "#f87171" : "#a78bfa",
+                    fontSize: "0.85rem", fontWeight: 500, whiteSpace: "pre-wrap",
+                  }}>
                     {ugcProgress}
                   </div>
                 )}
 
-                {/* ── Buttons ── */}
-                <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-start" }}>
-                  <button
-                    className="mod-btn-primary"
-                    onClick={handleGenerateUGC}
-                    disabled={ugcGenerating || !ugcAvatarId || !ugcVoiceId || !ugcScript.trim()}
-                    style={{
-                      padding: "0.625rem 1.5rem",
-                      fontSize: "0.875rem",
-                      fontWeight: 600,
-                      opacity: (ugcGenerating || !ugcAvatarId || !ugcVoiceId || !ugcScript.trim()) ? 0.5 : 1,
-                      background: "#8b5cf6",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "0.5rem",
-                      cursor: ugcGenerating ? "wait" : "pointer",
-                    }}
-                  >
-                    {ugcGenerating ? "מייצר סרטון..." : "צור סרטון"}
-                  </button>
-                  <button
-                    onClick={closeUgcModal}
-                    className="mod-btn-ghost"
-                    style={{ padding: "0.625rem 1.5rem", fontSize: "0.875rem", fontWeight: 600 }}
-                  >
-                    סגור
-                  </button>
-                </div>
+                {/* ─────────────────────────────────────
+                   9. FINAL ACTION
+                ───────────────────────────────────── */}
+                <button
+                  type="button"
+                  onClick={handleGenerateUGC}
+                  disabled={ugcGenerating || !ugcAvatarId || !ugcVoiceId || !ugcScript.trim()}
+                  style={{
+                    width: "100%", padding: "0.875rem", fontSize: "1rem", fontWeight: 800,
+                    borderRadius: "0.5rem", border: "none",
+                    background: (ugcGenerating || !ugcAvatarId || !ugcVoiceId || !ugcScript.trim())
+                      ? "rgba(139,92,246,0.2)"
+                      : "linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)",
+                    color: "#fff",
+                    cursor: ugcGenerating ? "wait" : ((!ugcAvatarId || !ugcVoiceId || !ugcScript.trim()) ? "not-allowed" : "pointer"),
+                    opacity: (ugcGenerating || !ugcAvatarId || !ugcVoiceId || !ugcScript.trim()) ? 0.5 : 1,
+                    transition: "all 200ms", letterSpacing: "0.01em",
+                  }}
+                >
+                  {ugcGenerating ? "מייצר סרטון..." : "צור סרטון UGC"}
+                </button>
+
               </div>
             )}
           </div>
