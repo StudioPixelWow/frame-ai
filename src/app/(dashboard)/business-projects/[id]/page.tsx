@@ -131,7 +131,7 @@ export default function BusinessProjectPage() {
 
   const { data: projectsData = [], loading: projectsLoading, update: updateProject } = useBusinessProjects();
   const { data: milestonesData = [], create: createMilestone, update: updateMilestone } = useProjectMilestones();
-  const { data: paymentsData = [], create: createPayment, update: updatePayment } = useProjectPayments();
+  const { data: paymentsData = [], create: createPayment, update: updatePayment, refetch: refetchPayments } = useProjectPayments();
   const { data: clientsData = [] } = useClients();
   const { data: employeesData = [] } = useEmployees();
   const { data: clientFilesData = [], create: createClientFile } = useClientFiles();
@@ -300,10 +300,15 @@ export default function BusinessProjectPage() {
     updateProject(project.id, {
       projectStatus: derivedProjectStatus,
       progress: milestoneProgress,
-    } as any).catch((err: any) =>
+    } as any).then(() => {
+      // If status reached completion/approval, refetch payments (server marks final as due)
+      if (derivedProjectStatus === 'completed' || derivedProjectStatus === 'awaiting_approval') {
+        refetchPayments().catch(() => {});
+      }
+    }).catch((err: any) =>
       console.warn('[project-sync] failed to persist derived status:', err?.message)
     );
-  }, [project?.id, project?.projectStatus, derivedProjectStatus, milestoneProgress, milestoneCounts.total, updateProject]);
+  }, [project?.id, project?.projectStatus, derivedProjectStatus, milestoneProgress, milestoneCounts.total, updateProject, refetchPayments]);
 
   // ── Project file upload (hooks MUST be before any early return) ──
   const projectFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -743,6 +748,10 @@ export default function BusinessProjectPage() {
     setLoading(true);
     try {
       await updateProject(projectId, { projectStatus: newStatus } as any);
+      // Refetch payments — server may mark final payment as due on completion/approval
+      if (newStatus === 'completed' || newStatus === 'awaiting_approval') {
+        await refetchPayments();
+      }
     } catch (error) {
       console.error('Error updating project status:', error);
     } finally {
@@ -767,6 +776,8 @@ export default function BusinessProjectPage() {
       );
       // Update the project status explicitly as well (derivation will sync anyway)
       await updateProject(projectId, { projectStatus: 'completed', progress: 100 } as any);
+      // Refetch payments — the server marks final payment as due on completion
+      await refetchPayments();
       refetchTimeline();
     } catch (error) {
       console.error('Error marking project complete:', error);

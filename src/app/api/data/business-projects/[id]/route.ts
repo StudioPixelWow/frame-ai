@@ -196,24 +196,48 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       }
     }
 
-    // ── Mark final payment as due when project reaches submission ──
+    // ── Mark final payment as due when project reaches submission / completion ──
     const newStatus = body.projectStatus as string | undefined;
     if (newStatus === 'awaiting_approval' || newStatus === 'completed') {
+      console.log(`[API] PUT business-projects/[id] status=${newStatus} → marking final payment due for project=${id}`);
       try {
-        const { error: payErr } = await sb
+        // Step 1: Check what payments exist for this project
+        const { data: existingPayments, error: checkErr } = await sb
           .from('business_project_payments')
-          .update({ is_due: true, updated_at: new Date().toISOString() })
-          .eq('business_project_id', id)
-          .eq('payment_type', 'final')
-          .eq('is_due', false);
-        if (payErr) {
-          console.warn(`[API] PUT /api/data/business-projects/[id] failed to mark final payment due:`, payErr.message);
+          .select('id, payment_type, is_due, is_paid, status, amount')
+          .eq('business_project_id', id);
+
+        if (checkErr) {
+          console.error(`[API] PUT final-payment-due: failed to query existing payments:`, checkErr.message);
         } else {
-          console.log(`[API] PUT /api/data/business-projects/[id] ✅ final payment marked as due for project=${id}`);
-          insertTimelineEvent(id, 'payment_created', 'תשלום סופי סומן כמגיע לתשלום');
+          console.log(`[API] PUT final-payment-due: found ${existingPayments?.length ?? 0} payments for project=${id}:`, JSON.stringify(existingPayments));
+
+          const finalPayment = (existingPayments || []).find((p: any) => p.payment_type === 'final');
+
+          if (!finalPayment) {
+            console.warn(`[API] PUT final-payment-due: ⚠️ no payment with payment_type='final' found for project=${id}`);
+          } else if (finalPayment.is_due === true) {
+            console.log(`[API] PUT final-payment-due: final payment ${finalPayment.id} already has is_due=true, skipping`);
+          } else {
+            // Step 2: Update the final payment by its specific id (most reliable)
+            const { data: updatedRows, error: payErr } = await sb
+              .from('business_project_payments')
+              .update({ is_due: true, updated_at: new Date().toISOString() })
+              .eq('id', finalPayment.id)
+              .select('id, payment_type, is_due');
+
+            if (payErr) {
+              console.error(`[API] PUT final-payment-due: UPDATE failed for payment ${finalPayment.id}:`, payErr.message);
+            } else {
+              console.log(`[API] PUT final-payment-due: ✅ updated ${updatedRows?.length ?? 0} row(s):`, JSON.stringify(updatedRows));
+              if (updatedRows && updatedRows.length > 0) {
+                insertTimelineEvent(id, 'payment_created', 'תשלום סופי סומן כמגיע לתשלום');
+              }
+            }
+          }
         }
       } catch (e) {
-        console.warn('[API] PUT final-payment-due error:', e);
+        console.error('[API] PUT final-payment-due exception:', e instanceof Error ? e.message : e);
       }
     }
 
