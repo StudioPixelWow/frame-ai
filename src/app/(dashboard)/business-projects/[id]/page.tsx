@@ -264,7 +264,7 @@ export default function BusinessProjectPage() {
   useEffect(() => {
     if (milestoneProgress === 100 && prevProgressRef.current < 100 && prevProgressRef.current > 0) {
       setShowConfetti(true);
-      const timer = setTimeout(() => setShowConfetti(false), 3000);
+      const timer = setTimeout(() => setShowConfetti(false), 4500);
       return () => clearTimeout(timer);
     }
     prevProgressRef.current = milestoneProgress;
@@ -798,12 +798,12 @@ export default function BusinessProjectPage() {
     >
       {/* ── CSS Animations ── */}
       <style>{`
-        @keyframes confetti-fall {
-          0% { transform: translateY(-10px) rotate(0deg); opacity: 1; }
-          100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
-        }
-        @keyframes progress-fill {
-          from { width: 0%; }
+        @keyframes confetti-drift {
+          0% { transform: translateY(-8px) translateX(0) rotate(0deg) scale(1); opacity: 0.9; }
+          25% { transform: translateY(25vh) translateX(15px) rotate(180deg) scale(0.95); opacity: 0.8; }
+          50% { transform: translateY(50vh) translateX(-10px) rotate(360deg) scale(0.85); opacity: 0.6; }
+          75% { transform: translateY(75vh) translateX(8px) rotate(540deg) scale(0.7); opacity: 0.3; }
+          100% { transform: translateY(100vh) translateX(-5px) rotate(720deg) scale(0.5); opacity: 0; }
         }
         @keyframes fade-in-up {
           from { opacity: 0; transform: translateY(12px); }
@@ -813,12 +813,21 @@ export default function BusinessProjectPage() {
           0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.3); }
           50% { box-shadow: 0 0 16px 4px rgba(34,197,94,0.15); }
         }
+        @keyframes progress-shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(200%); }
+        }
+        @keyframes status-pop {
+          0% { transform: scale(1); }
+          40% { transform: scale(1.08); }
+          100% { transform: scale(1); }
+        }
         .prj-card {
           background: #1a1a2e;
           border: 1px solid rgba(255,255,255,0.06);
           border-radius: 12px;
           padding: 20px;
-          transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+          transition: transform 0.25s cubic-bezier(0.4,0,0.2,1), box-shadow 0.25s cubic-bezier(0.4,0,0.2,1), border-color 0.3s ease;
         }
         .prj-card:hover {
           transform: translateY(-2px);
@@ -830,26 +839,37 @@ export default function BusinessProjectPage() {
           border: 1px solid rgba(255,255,255,0.06);
           border-radius: 12px;
           padding: 20px;
-          transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
-          animation: fade-in-up 0.3s ease both;
+          transition: transform 0.3s cubic-bezier(0.4,0,0.2,1),
+                      box-shadow 0.3s cubic-bezier(0.4,0,0.2,1),
+                      border-color 0.4s ease,
+                      border-right-color 0.5s ease;
+          animation: fade-in-up 0.4s cubic-bezier(0.4,0,0.2,1) both;
         }
         .prj-milestone-card:hover {
-          transform: translateY(-3px);
-          box-shadow: 0 12px 32px rgba(0,0,0,0.35);
+          transform: translateY(-3px) scale(1.003);
+          box-shadow: 0 12px 32px rgba(0,0,0,0.35), 0 0 0 1px rgba(99,102,241,0.08);
           border-color: rgba(255,255,255,0.15);
+        }
+        .prj-milestone-card:active {
+          transform: translateY(-1px) scale(0.998);
+          transition-duration: 0.1s;
         }
         .prj-status-badge {
           display: inline-flex; align-items: center; gap: 6px;
           padding: 5px 14px; border-radius: 20px;
           font-size: 12px; font-weight: 600; letter-spacing: 0.3px;
-          transition: all 0.2s ease;
+          transition: all 0.35s cubic-bezier(0.4,0,0.2,1);
+        }
+        .prj-status-badge[data-fresh="true"] {
+          animation: status-pop 0.35s cubic-bezier(0.4,0,0.2,1);
         }
         .prj-btn {
           padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
-          cursor: pointer; border: none; transition: all 0.2s ease;
+          cursor: pointer; border: none;
+          transition: transform 0.2s cubic-bezier(0.4,0,0.2,1), box-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
         }
         .prj-btn:hover { transform: translateY(-1px); }
-        .prj-btn:active { transform: translateY(0); }
+        .prj-btn:active { transform: translateY(0) scale(0.97); transition-duration: 0.08s; }
         .prj-btn-primary { background: #6366f1; color: #fff; }
         .prj-btn-primary:hover { background: #818cf8; box-shadow: 0 4px 12px rgba(99,102,241,0.3); }
         .prj-btn-success { background: #22c55e; color: #fff; }
@@ -862,7 +882,7 @@ export default function BusinessProjectPage() {
           padding: 12px 20px; background: none; border: none;
           font-size: 14px; font-weight: 500; cursor: pointer;
           color: #64748b; border-bottom: 2px solid transparent;
-          transition: all 0.2s ease; position: relative;
+          transition: color 0.25s ease, border-color 0.25s ease; position: relative;
         }
         .prj-tab:hover { color: #94a3b8; }
         .prj-tab-active { color: #6366f1 !important; border-bottom-color: #6366f1 !important; font-weight: 600; }
@@ -870,8 +890,8 @@ export default function BusinessProjectPage() {
           display: flex; gap: 16px; align-items: flex-start;
           padding: 16px 20px; border-radius: 10px;
           background: #1a1a2e; border: 1px solid rgba(255,255,255,0.04);
-          transition: all 0.2s ease;
-          animation: fade-in-up 0.3s ease both;
+          transition: background 0.25s ease, border-color 0.25s ease;
+          animation: fade-in-up 0.4s cubic-bezier(0.4,0,0.2,1) both;
         }
         .prj-timeline-item:hover { background: #1e1e36; border-color: rgba(255,255,255,0.08); }
         .prj-file-chip {
@@ -882,27 +902,46 @@ export default function BusinessProjectPage() {
           text-decoration: none; color: inherit;
         }
         .prj-file-chip:hover { background: rgba(99,102,241,0.1); border-color: rgba(99,102,241,0.3); }
+        .prj-progress-track {
+          width: 100%; height: 8px; background: rgba(255,255,255,0.06);
+          border-radius: 4px; overflow: hidden; position: relative;
+        }
+        .prj-progress-fill {
+          height: 100%; border-radius: 4px; position: relative; overflow: hidden;
+          transition: width 1s cubic-bezier(0.4,0,0.2,1), background 0.5s ease;
+        }
+        .prj-progress-fill::after {
+          content: '';
+          position: absolute; inset: 0;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+          animation: progress-shimmer 2.5s ease-in-out infinite;
+        }
       `}</style>
 
       {/* ── Confetti Overlay ── */}
       {showConfetti && (
         <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 9999, overflow: 'hidden' }}>
-          {Array.from({ length: 40 }).map((_, i) => (
-            <div
-              key={i}
-              style={{
-                position: 'absolute',
-                top: '-10px',
-                left: `${Math.random() * 100}%`,
-                width: `${6 + Math.random() * 6}px`,
-                height: `${6 + Math.random() * 6}px`,
-                background: ['#22c55e', '#6366f1', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6'][i % 6],
-                borderRadius: Math.random() > 0.5 ? '50%' : '2px',
-                animation: `confetti-fall ${2 + Math.random() * 2}s ease-in ${Math.random() * 0.5}s forwards`,
-                opacity: 0.9,
-              }}
-            />
-          ))}
+          {Array.from({ length: 28 }).map((_, i) => {
+            const colors = ['#22c55e', '#4ade80', '#6366f1', '#818cf8', '#a78bfa', '#34d399'];
+            const size = 4 + Math.random() * 5;
+            const shapes = ['50%', '2px', '1px'];
+            return (
+              <div
+                key={i}
+                style={{
+                  position: 'absolute',
+                  top: '-8px',
+                  left: `${5 + Math.random() * 90}%`,
+                  width: `${size}px`,
+                  height: `${size * (0.6 + Math.random() * 0.8)}px`,
+                  background: colors[i % colors.length],
+                  borderRadius: shapes[i % shapes.length],
+                  animation: `confetti-drift ${3 + Math.random() * 2.5}s cubic-bezier(0.25, 0.46, 0.45, 0.94) ${Math.random() * 0.8}s forwards`,
+                  opacity: 0,
+                }}
+              />
+            );
+          })}
         </div>
       )}
 
@@ -1122,18 +1161,15 @@ export default function BusinessProjectPage() {
               {milestoneProgress}%
             </span>
           </div>
-          <div style={{
-            width: '100%', height: '8px', background: 'rgba(255,255,255,0.06)',
-            borderRadius: '4px', overflow: 'hidden',
-          }}>
-            <div style={{
-              height: '100%',
-              width: `${milestoneProgress}%`,
-              background: `linear-gradient(90deg, ${progressBarColor}, ${progressBarColor}cc)`,
-              borderRadius: '4px',
-              transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1), background 0.4s ease',
-              animation: milestoneProgress === 100 ? 'pulse-glow 2s ease-in-out infinite' : 'none',
-            }} />
+          <div className="prj-progress-track">
+            <div
+              className="prj-progress-fill"
+              style={{
+                width: `${milestoneProgress}%`,
+                background: `linear-gradient(90deg, ${progressBarColor}, ${progressBarColor}cc)`,
+                animation: milestoneProgress === 100 ? 'pulse-glow 2s ease-in-out infinite' : undefined,
+              }}
+            />
           </div>
         </div>
 
@@ -1250,12 +1286,14 @@ export default function BusinessProjectPage() {
                 {milestoneProgress}%
               </span>
             </div>
-            <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
-              <div style={{
-                height: '100%', width: `${milestoneProgress}%`,
-                background: progressBarColor, borderRadius: '4px',
-                transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1), background 0.4s ease',
-              }} />
+            <div className="prj-progress-track">
+              <div
+                className="prj-progress-fill"
+                style={{
+                  width: `${milestoneProgress}%`,
+                  background: progressBarColor,
+                }}
+              />
             </div>
           </div>
 
