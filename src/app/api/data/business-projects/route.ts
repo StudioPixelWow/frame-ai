@@ -242,15 +242,72 @@ async function seedMilestonesFromTemplates(
 
 const PAYMENTS_TABLE = 'business_project_payments';
 
-function paymentId(suffix: string): string {
-  const ts = Date.now().toString(36);
-  const rand = Math.random().toString(36).slice(2, 6);
-  return `ppy_${ts}_${suffix}_${rand}`;
+/**
+ * Ensure the payments table exists and has the new columns.
+ * Mirrors the ensureTable() in project-payments/route.ts.
+ */
+const PAYMENTS_DDL = `
+CREATE TABLE IF NOT EXISTS ${PAYMENTS_TABLE} (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_project_id  TEXT NOT NULL,
+  client_id            TEXT DEFAULT '',
+  title                TEXT DEFAULT '',
+  amount               NUMERIC DEFAULT 0,
+  due_date             DATE,
+  status               TEXT DEFAULT 'pending',
+  description          TEXT DEFAULT '',
+  milestone_id         TEXT,
+  payment_type         TEXT DEFAULT 'custom',
+  is_due               BOOLEAN DEFAULT false,
+  is_paid              BOOLEAN DEFAULT false,
+  paid_at              TIMESTAMPTZ,
+  created_at           TIMESTAMPTZ DEFAULT now(),
+  updated_at           TIMESTAMPTZ DEFAULT now()
+);
+`;
+
+const PAYMENTS_ALTERS = [
+  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS payment_type TEXT DEFAULT 'custom'`,
+  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS is_due BOOLEAN DEFAULT false`,
+  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT false`,
+];
+
+let _paymentsTableReady = false;
+async function ensurePaymentsTable(sb: ReturnType<typeof getSupabase>): Promise<void> {
+  if (_paymentsTableReady) return;
+  try {
+    const { error } = await sb.rpc('exec_sql', { query: PAYMENTS_DDL });
+    if (!error) {
+      for (const alter of PAYMENTS_ALTERS) {
+        await sb.rpc('exec_sql', { query: alter }).catch(() => {});
+      }
+      _paymentsTableReady = true;
+      console.log('[seedPayments] ✅ payments table ensured');
+      return;
+    }
+    console.warn('[seedPayments] exec_sql DDL failed:', error.message);
+  } catch (e) {
+    console.warn('[seedPayments] exec_sql not available:', e);
+  }
+
+  // Fallback: probe if table exists
+  const { error: probe } = await sb.from(PAYMENTS_TABLE).select('id').limit(1);
+  if (!probe) {
+    for (const alter of PAYMENTS_ALTERS) {
+      try { await sb.rpc('exec_sql', { query: alter }); } catch { /* ignore */ }
+    }
+    _paymentsTableReady = true;
+    console.log('[seedPayments] ✅ payments table exists (probe OK)');
+  } else {
+    console.error('[seedPayments] ❌ payments table does not exist and cannot be created. Error:', probe.message);
+  }
 }
 
 /**
  * Create two payment rows for a new project: 50% deposit (due immediately)
  * and 50% final (due when project is submitted).
+ *
+ * IMPORTANT: The id column is UUID with auto-gen — do NOT send a custom id.
  */
 async function seedPayments(
   sb: ReturnType<typeof getSupabase>,
@@ -259,84 +316,115 @@ async function seedPayments(
   budget: number,
   now: string,
 ): Promise<{ inserted: number; error?: string }> {
+  console.log(`[seedPayments] called with projectId=${projectId} clientId=${clientId} budget=${budget}`);
+
   if (!budget || budget <= 0) {
+    console.log(`[seedPayments] ⏭️ budget is ${budget}, skipping payment creation`);
     return { inserted: 0, error: 'budget is 0 or missing; skipping payment creation' };
   }
 
-  // Deduplication: skip if payments already exist for this project
-  const { data: existing } = await sb
+  // Step 1: Ensure the payments table + columns exist
+  await ensurePaymentsTable(sb);
+
+  // Step 2: Deduplication — skip if payments already exist for this project
+  const { data: existing, error: dedupErr } = await sb
     .from(PAYMENTS_TABLE)
     .select('id')
     .eq('business_project_id', projectId)
     .limit(1);
+  if (dedupErr) {
+    console.error(`[seedPayments] ❌ dedup query failed:`, dedupErr.message);
+    // If the table doesn't exist even after ensure, bail out
+    return { inserted: 0, error: `dedup query failed: ${dedupErr.message}` };
+  }
   if (existing && existing.length > 0) {
     console.log(`[seedPayments] ⏭️ payments already exist for project=${projectId}, skipping`);
     return { inserted: 0, error: 'payments already exist (dedup)' };
   }
 
+  // Step 3: Build the two payment rows
+  // NOTE: Do NOT include `id` — the column is UUID with DEFAULT gen_random_uuid()
   const deposit = Math.round(budget * 0.5 * 100) / 100;
-  const final = Math.round((budget - deposit) * 100) / 100;
+  const finalAmt = Math.round((budget - deposit) * 100) / 100;
 
-  const rows = [
-    {
-      id: paymentId('dep'),
-      business_project_id: projectId,
-      client_id: clientId ?? '',
-      title: 'מקדמה (50%)',
-      amount: deposit,
-      due_date: now.slice(0, 10), // today
-      status: 'pending',
-      description: 'מקדמה — 50% מתקציב הפרויקט',
-      payment_type: 'deposit',
-      is_due: true,
-      is_paid: false,
-      created_at: now,
-      updated_at: now,
-    },
-    {
-      id: paymentId('fin'),
-      business_project_id: projectId,
-      client_id: clientId ?? '',
-      title: 'תשלום סופי (50%)',
-      amount: final,
-      due_date: null,
-      status: 'pending',
-      description: 'תשלום סופי — 50% בהגשת הפרויקט',
-      payment_type: 'final',
-      is_due: false,
-      is_paid: false,
-      created_at: now,
-      updated_at: now,
-    },
-  ];
+  const depositRow: Record<string, unknown> = {
+    business_project_id: projectId,
+    client_id: clientId ?? '',
+    title: 'מקדמה (50%)',
+    amount: deposit,
+    due_date: now.slice(0, 10),
+    status: 'pending',
+    description: 'מקדמה — 50% מתקציב הפרויקט',
+    payment_type: 'deposit',
+    is_due: true,
+    is_paid: false,
+    created_at: now,
+    updated_at: now,
+  };
 
-  // Retry loop — auto-drop unknown columns (same pattern as other inserts)
-  let insertRows: Record<string, unknown>[] = rows;
-  let lastErr: { message: string } | null = null;
+  const finalRow: Record<string, unknown> = {
+    business_project_id: projectId,
+    client_id: clientId ?? '',
+    title: 'תשלום סופי (50%)',
+    amount: finalAmt,
+    due_date: null,
+    status: 'pending',
+    description: 'תשלום סופי — 50% בהגשת הפרויקט',
+    payment_type: 'final',
+    is_due: false,
+    is_paid: false,
+    created_at: now,
+    updated_at: now,
+  };
+
+  console.log(`[seedPayments] deposit payload:`, JSON.stringify(depositRow));
+  console.log(`[seedPayments] final payload:`, JSON.stringify(finalRow));
+
+  // Step 4: Insert both rows. Retry with column-dropping on schema mismatch.
+  let insertRows: Record<string, unknown>[] = [depositRow, finalRow];
+  let lastErr: { message: string; code?: string } | null = null;
 
   for (let attempt = 0; attempt < 8; attempt++) {
-    const { error } = await sb.from(PAYMENTS_TABLE).insert(insertRows);
+    console.log(`[seedPayments] insert attempt ${attempt + 1}, columns: ${Object.keys(insertRows[0]).join(',')}`);
+    const { data: insertedData, error } = await sb.from(PAYMENTS_TABLE).insert(insertRows).select('id');
+
     if (!error) {
-      console.log(`[seedPayments] ✅ created deposit (₪${deposit}) + final (₪${final}) for project=${projectId}`);
+      const ids = (insertedData || []).map((r: any) => r.id);
+      console.log(`[seedPayments] ✅ SUCCESS — created 2 payments for project=${projectId}:`);
+      console.log(`[seedPayments]   deposit: ₪${deposit}, id=${ids[0] || '?'}`);
+      console.log(`[seedPayments]   final:   ₪${finalAmt}, id=${ids[1] || '?'}`);
       return { inserted: 2 };
     }
-    lastErr = error;
 
+    lastErr = error as any;
+    const errCode = (error as any)?.code ?? '';
+    console.error(`[seedPayments] attempt ${attempt + 1} failed: code=${errCode} message=${error.message}`);
+
+    // If the table itself doesn't exist, bail immediately
+    if (errCode === '42P01' || error.message.includes('does not exist') && error.message.includes('relation')) {
+      console.error(`[seedPayments] ❌ table "${PAYMENTS_TABLE}" does not exist. Cannot create payments.`);
+      break;
+    }
+
+    // Try to identify and drop unknown columns
     const m = error.message.match(
       /column .*?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i,
     );
     const bad = m?.[1] || m?.[2];
-    if (!bad) break;
+    if (!bad) {
+      console.error(`[seedPayments] ❌ unrecoverable error (not a column issue): ${error.message}`);
+      break;
+    }
 
     console.warn(`[seedPayments] dropping unknown column "${bad}" and retrying`);
     insertRows = insertRows.map((row) => {
-      const { [bad]: _d, ...rest } = row;
-      void _d;
-      return rest;
+      const copy = { ...row };
+      delete copy[bad];
+      return copy;
     });
   }
 
-  console.error('[seedPayments] insert failed:', lastErr);
+  console.error(`[seedPayments] ❌ FAILED to create payments for project=${projectId}. Last error: ${lastErr?.message ?? 'unknown'}`);
   return { inserted: 0, error: lastErr?.message ?? 'unknown' };
 }
 
@@ -410,7 +498,9 @@ export async function POST(req: NextRequest) {
     // Auto-create deposit + final payments (50/50 split)
     const budgetVal = Number(verifyRow.budget) || 0;
     const clientIdVal = (verifyRow.client_id as string) || null;
+    console.log(`[API] POST business-projects — about to seed payments. project=${id} budget=${budgetVal} (raw=${verifyRow.budget}) client=${clientIdVal}`);
     const paymentSeed = await seedPayments(sb, id, clientIdVal, budgetVal, now);
+    console.log(`[API] POST business-projects — payment seed result: inserted=${paymentSeed.inserted} error=${paymentSeed.error ?? 'none'}`);
 
     // Fire-and-forget timeline for payments
     if (paymentSeed.inserted > 0) {
