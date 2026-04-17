@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
+import { insertTimelineEvent } from '@/lib/timeline';
 
 const TABLE = 'business_project_payments';
 
@@ -153,6 +154,19 @@ export async function POST(req: NextRequest) {
     }
 
     console.log(`[project-payments] ✅ created id=${inserted.id} project=${body.projectId}`);
+
+    // Fire-and-forget timeline event
+    const projectId = body.projectId as string;
+    if (projectId) {
+      const title = (body.title as string) || 'תשלום';
+      const amount = Number(body.amount ?? 0);
+      insertTimelineEvent(
+        projectId,
+        'payment_created',
+        `תשלום חדש נוסף: "${title}" — ₪${amount.toLocaleString('he-IL')}`,
+      );
+    }
+
     return NextResponse.json(rowToPayment(inserted), { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';

@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 import { requireRole, getRequestRole, getRequestClientId, getRequestEmployeeId } from '@/lib/auth/api-guard';
+import { insertTimelineEvent } from '@/lib/timeline';
 
 const TABLE = 'business_projects';
 
@@ -27,6 +28,7 @@ function rowToProject(r: Row) {
     agreementSigned: (r.agreement_signed as boolean) ?? false,
     contractSigned: (r.contract_signed as boolean) ?? false,
     contractSignedAt: (r.contract_signed_at as string) ?? null,
+    totalPrice: typeof r.total_price === 'number' ? r.total_price : 0,
     projectStatus: (r.project_status as string) ?? 'not_started',
     progress: typeof r.progress === 'number' ? r.progress : 0,
     startDate: (r.start_date as string) ?? null,
@@ -75,6 +77,7 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
     ['endDate', 'end_date'],
     ['assignedManagerId', 'assigned_manager_id'],
     ['progress', 'progress'],
+    ['totalPrice', 'total_price'],
   ];
   for (const [k, dbKey] of map) {
     if (body[k] !== undefined) {
@@ -165,6 +168,31 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       return NextResponse.json({ error: lastErr.message, code: (lastErr as any).code ?? null }, { status: 400 });
     }
     if (!updated) return NextResponse.json({ error: 'Not found', projectId: id }, { status: 404 });
+
+    // ── Timeline events (fire-and-forget) ──
+    if (body.contractSigned !== undefined) {
+      const signed = body.contractSigned as boolean;
+      insertTimelineEvent(id, 'project_edited', signed ? 'חוזה סומן כחתום' : 'חוזה סומן כלא חתום');
+    }
+    if (body.projectStatus !== undefined) {
+      const statusLabels: Record<string, string> = {
+        not_started: 'לא התחיל', in_progress: 'בתהליך', awaiting_approval: 'ממתין לאישור',
+        waiting_for_client: 'בהמתנה ללקוח', completed: 'הושלם',
+      };
+      const label = statusLabels[body.projectStatus as string] || (body.projectStatus as string);
+      insertTimelineEvent(id, 'project_edited', `סטטוס פרויקט שונה ל: ${label}`);
+    }
+    if (body.projectName !== undefined || body.description !== undefined || body.serviceType !== undefined || body.totalPrice !== undefined) {
+      const changes: string[] = [];
+      if (body.projectName !== undefined) changes.push('שם');
+      if (body.description !== undefined) changes.push('תיאור');
+      if (body.serviceType !== undefined) changes.push('סוג');
+      if (body.totalPrice !== undefined) changes.push(`מחיר כולל: ₪${Number(body.totalPrice).toLocaleString('he-IL')}`);
+      if (changes.length > 0 && body.projectStatus === undefined && body.contractSigned === undefined) {
+        insertTimelineEvent(id, 'project_edited', `פרויקט עודכן: ${changes.join(', ')}`);
+      }
+    }
+
     return NextResponse.json(rowToProject(updated));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';

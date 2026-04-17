@@ -660,7 +660,7 @@ export default function BusinessProjectsPage() {
                 {/* Footer info */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.8rem", color: "var(--foreground-muted)" }}>
                   <div>
-                    {project.agreementSigned ? (
+                    {((project as any).contractSigned || project.agreementSigned) ? (
                       <span style={{ color: "#22c55e" }}>✓ חוזה חתום</span>
                     ) : (
                       <span style={{ color: "#ef4444" }}>✕ חוזה לא חתום</span>
@@ -738,7 +738,7 @@ export default function BusinessProjectsPage() {
                     {project.projectName}
                   </h4>
                   <p style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", margin: "0" }}>
-                    {getClientName(project.clientId)} • {project.agreementSigned ? "✓ חוזה" : "✕ חוזה"} {nextPayment && `• ${formatCurrency(nextPayment.amount)}`}
+                    {getClientName(project.clientId)} • {((project as any).contractSigned || project.agreementSigned) ? "✓ חוזה" : "✕ חוזה"} {nextPayment && `• ${formatCurrency(nextPayment.amount)}`}
                   </p>
                   {progress.total > 0 && (
                     <div style={{ marginTop: "0.375rem" }}>

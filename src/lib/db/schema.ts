@@ -627,6 +627,9 @@ export interface BusinessProject {
   projectType: BusinessProjectType;
   description: string;
   agreementSigned: boolean;
+  contractSigned: boolean;
+  contractSignedAt: string | null;
+  totalPrice: number;
   projectStatus: BusinessProjectStatus;
   startDate: string | null;
   endDate: string | null;

@@ -727,7 +727,27 @@ export default function BusinessProjectPage() {
   };
 
   async function handleMarkComplete() {
-    await handleUpdateProjectStatus('completed');
+    // Mark all non-approved milestones as approved first, so the derivation
+    // logic agrees that the project is completed (it checks all milestones).
+    setLoading(true);
+    try {
+      const nonApproved = (projectMilestones || []).filter(
+        (m: any) => m.status !== 'approved'
+      );
+      await Promise.all(
+        nonApproved.map((m: any) =>
+          updateMilestone(m.id, { status: 'approved' } as any).catch((err: any) =>
+            console.warn(`[handleMarkComplete] failed to approve milestone ${m.id}:`, err?.message)
+          )
+        )
+      );
+      // Update the project status explicitly as well (derivation will sync anyway)
+      await updateProject(projectId, { projectStatus: 'completed', progress: 100 } as any);
+    } catch (error) {
+      console.error('Error marking project complete:', error);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function handleStartEditProject() {
@@ -740,6 +760,7 @@ export default function BusinessProjectPage() {
       endDate: project?.endDate ? (project.endDate as string).slice(0, 10) : '',
       projectStatus: project?.projectStatus || 'not_started',
       contractSigned: (project as any)?.contractSigned ?? false,
+      totalPrice: (project as any)?.totalPrice ?? 0,
     });
     setIsEditingProject(true);
     setProjectSaveFeedback(null);
@@ -989,12 +1010,24 @@ export default function BusinessProjectPage() {
             )}
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
               {projectClient && (
-                <a href={`/clients/${projectClient.id}`} style={{
-                  color: '#818cf8', textDecoration: 'none', fontSize: '14px', fontWeight: '500',
-                  transition: 'color 0.2s',
-                }}>
-                  {projectClient.name}
-                </a>
+                <span style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <a href={`/clients/${projectClient.id}`} style={{
+                    color: '#818cf8', textDecoration: 'none', fontSize: '14px', fontWeight: '500',
+                    transition: 'color 0.2s',
+                  }}>
+                    {projectClient.name}
+                  </a>
+                  {projectClient.phone && (
+                    <a href={`tel:${projectClient.phone}`} style={{ color: '#94a3b8', fontSize: '12px', textDecoration: 'none' }} title="טלפון">
+                      {projectClient.phone}
+                    </a>
+                  )}
+                  {projectClient.email && (
+                    <a href={`mailto:${projectClient.email}`} style={{ color: '#94a3b8', fontSize: '12px', textDecoration: 'none' }} title="אימייל">
+                      {projectClient.email}
+                    </a>
+                  )}
+                </span>
               )}
               <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
               <span className="prj-status-badge" style={{
@@ -1143,6 +1176,19 @@ export default function BusinessProjectPage() {
                     {editForm.contractSigned ? 'חתום' : 'לא חתום'}
                   </span>
                 </label>
+              </div>
+              <div>
+                <span style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>מחיר כולל (₪)</span>
+                <input type="number" value={editForm.totalPrice as number ?? 0}
+                  onChange={(e) => setEditForm((f) => ({ ...f, totalPrice: parseFloat(e.target.value) || 0 }))}
+                  style={{
+                    fontSize: '13px', color: '#e2e8f0', background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '8px 10px',
+                    width: '100%', direction: 'rtl', outline: 'none',
+                  }}
+                  placeholder="0"
+                  min="0"
+                />
               </div>
             </div>
           </div>
@@ -1311,18 +1357,27 @@ export default function BusinessProjectPage() {
               תשלומים
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {((project as any)?.totalPrice > 0) && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b', fontSize: '13px' }}>מחיר פרויקט</span>
+                    <span style={{ color: '#818cf8', fontWeight: '700', fontSize: '16px' }}>₪{((project as any).totalPrice as number).toLocaleString('he-IL')}</span>
+                  </div>
+                  <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
+                </>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#64748b', fontSize: '13px' }}>שולם</span>
                 <span style={{ color: '#4ade80', fontWeight: '600', fontSize: '15px' }}>₪{paidAmount.toLocaleString('he-IL')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748b', fontSize: '13px' }}>כולל</span>
+                <span style={{ color: '#64748b', fontSize: '13px' }}>סה&quot;כ תשלומים</span>
                 <span style={{ color: '#e2e8f0', fontWeight: '600', fontSize: '15px' }}>₪{totalAmount.toLocaleString('he-IL')}</span>
               </div>
               <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748b', fontSize: '13px' }}>נותר</span>
-                <span style={{ color: '#fbbf24', fontWeight: '600', fontSize: '15px' }}>₪{(totalAmount - paidAmount).toLocaleString('he-IL')}</span>
+                <span style={{ color: '#64748b', fontSize: '13px' }}>נותר לגביה</span>
+                <span style={{ color: '#fbbf24', fontWeight: '600', fontSize: '15px' }}>₪{(((project as any)?.totalPrice || totalAmount) - paidAmount).toLocaleString('he-IL')}</span>
               </div>
             </div>
           </div>
@@ -1489,18 +1544,87 @@ export default function BusinessProjectPage() {
                   >
                     {isEditing ? (
                       <div>
-                        <input type="text" value={milestone.title}
-                          onChange={() => {}}
+                        <input type="text"
+                          value={milestoneOverrides[milestone.id]?._editTitle !== undefined ? (milestoneOverrides[milestone.id]._editTitle as string) : milestone.title}
+                          onChange={(e) => setMilestoneOverrides((prev) => ({
+                            ...prev,
+                            [milestone.id]: { ...(prev[milestone.id] || {}), _editTitle: e.target.value },
+                          }))}
                           style={{
                             direction: 'rtl', marginBottom: '12px', width: '100%', fontSize: '14px',
                             padding: '10px 12px', color: '#e2e8f0',
                             background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
                             borderRadius: '8px', outline: 'none',
                           }}
+                          placeholder="שם אבן דרך"
+                        />
+                        <textarea
+                          value={milestoneOverrides[milestone.id]?._editDescription !== undefined ? (milestoneOverrides[milestone.id]._editDescription as string) : (milestone.description || '')}
+                          onChange={(e) => setMilestoneOverrides((prev) => ({
+                            ...prev,
+                            [milestone.id]: { ...(prev[milestone.id] || {}), _editDescription: e.target.value },
+                          }))}
+                          rows={3}
+                          style={{
+                            direction: 'rtl', marginBottom: '12px', width: '100%', fontSize: '13px',
+                            padding: '10px 12px', color: '#e2e8f0', resize: 'vertical',
+                            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                            borderRadius: '8px', outline: 'none',
+                          }}
+                          placeholder="תיאור / פירוט אבן הדרך"
+                        />
+                        <textarea
+                          value={milestoneOverrides[milestone.id]?._editNotes !== undefined ? (milestoneOverrides[milestone.id]._editNotes as string) : (milestone.notes || '')}
+                          onChange={(e) => setMilestoneOverrides((prev) => ({
+                            ...prev,
+                            [milestone.id]: { ...(prev[milestone.id] || {}), _editNotes: e.target.value },
+                          }))}
+                          rows={2}
+                          style={{
+                            direction: 'rtl', marginBottom: '12px', width: '100%', fontSize: '13px',
+                            padding: '10px 12px', color: '#e2e8f0', resize: 'vertical',
+                            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                            borderRadius: '8px', outline: 'none',
+                          }}
+                          placeholder="הערות פנימיות"
                         />
                         <div style={{ display: 'flex', gap: '8px' }}>
-                          <button className="prj-btn prj-btn-primary" onClick={() => setEditingMilestoneId(null)}>שמור</button>
-                          <button className="prj-btn prj-btn-ghost" onClick={() => setEditingMilestoneId(null)}>ביטול</button>
+                          <button className="prj-btn prj-btn-primary" disabled={loading} onClick={async () => {
+                            const overrides = milestoneOverrides[milestone.id] || {};
+                            const newTitle = overrides._editTitle !== undefined ? (overrides._editTitle as string) : milestone.title;
+                            const newDescription = overrides._editDescription !== undefined ? (overrides._editDescription as string) : (milestone.description || '');
+                            const newNotes = overrides._editNotes !== undefined ? (overrides._editNotes as string) : (milestone.notes || '');
+                            setLoading(true);
+                            try {
+                              await updateMilestone(milestone.id, { title: newTitle, description: newDescription, notes: newNotes } as any);
+                              // Clear edit overrides
+                              setMilestoneOverrides((prev) => {
+                                const next = { ...prev };
+                                if (next[milestone.id]) {
+                                  const { _editTitle: _a, _editDescription: _b, _editNotes: _c, ...rest } = next[milestone.id] as any;
+                                  next[milestone.id] = rest;
+                                }
+                                return next;
+                              });
+                              setEditingMilestoneId(null);
+                            } catch (error) {
+                              console.error('Error saving milestone edit:', error);
+                            } finally {
+                              setLoading(false);
+                            }
+                          }}>{loading ? '...' : 'שמור'}</button>
+                          <button className="prj-btn prj-btn-ghost" onClick={() => {
+                            // Clear edit overrides on cancel
+                            setMilestoneOverrides((prev) => {
+                              const next = { ...prev };
+                              if (next[milestone.id]) {
+                                const { _editTitle: _a, _editDescription: _b, _editNotes: _c, ...rest } = next[milestone.id] as any;
+                                next[milestone.id] = rest;
+                              }
+                              return next;
+                            });
+                            setEditingMilestoneId(null);
+                          }}>ביטול</button>
                         </div>
                       </div>
                     ) : (
@@ -1818,59 +1942,127 @@ export default function BusinessProjectPage() {
           </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
-            {(projectClientFiles?.length || 0) === 0 ? (
-              <div className="prj-card" style={{ textAlign: 'center', padding: '40px' }}>
-                <div style={{ fontSize: '32px', marginBottom: '12px', opacity: 0.3 }}>📁</div>
-                <p style={{ color: '#64748b', margin: 0 }}>אין קבצים</p>
-              </div>
-            ) : (
-              (projectClientFiles || []).map((file) => {
-                const uploadDate = file?.createdAt ? new Date(file.createdAt) : null;
-                const categoryLabels: Record<string, string> = { general: 'כללי', agreements: 'הסכמים', branding: 'ברנדינג', website: 'אתר' };
-                const isImage = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(file?.fileName || '');
+          {/* ── Milestone files section ── */}
+          {(() => {
+            const allMilestoneFiles = (milestoneFilesData || []).filter((mf: MilestoneFile) => {
+              const parentMilestone = (projectMilestones || []).find((m: any) => m.id === mf.milestoneId);
+              return !!parentMilestone;
+            });
+            if (allMilestoneFiles.length > 0) {
+              return (
+                <div style={{ marginBottom: '24px' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: '600', color: '#94a3b8', marginBottom: '12px' }}>קבצי אבני דרך</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
+                    {allMilestoneFiles.map((mf: MilestoneFile) => {
+                      const parentMilestone = (projectMilestones || []).find((m: any) => m.id === mf.milestoneId);
+                      const isImage = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(mf.fileName || '');
+                      const uploadDate = mf.createdAt ? new Date(mf.createdAt) : null;
+                      return (
+                        <a key={mf.id} href={mf.fileUrl} target="_blank" rel="noopener noreferrer"
+                          className="prj-card"
+                          style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column', cursor: 'pointer' }}
+                        >
+                          {isImage && mf.fileUrl ? (
+                            <div style={{
+                              width: '100%', height: '100px', borderRadius: '8px', marginBottom: '10px',
+                              overflow: 'hidden', background: 'rgba(255,255,255,0.03)',
+                            }}>
+                              <img src={mf.fileUrl} alt={mf.fileName}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            </div>
+                          ) : (
+                            <div style={{
+                              width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              background: 'rgba(99,102,241,0.1)', borderRadius: '10px', fontSize: '20px', marginBottom: '10px',
+                            }}>
+                              📄
+                            </div>
+                          )}
+                          <h4 style={{
+                            fontSize: '13px', fontWeight: '600', color: '#e2e8f0', margin: '0 0 6px 0',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {mf.fileName || 'קובץ'}
+                          </h4>
+                          <span style={{
+                            display: 'inline-block', fontSize: '10px', padding: '2px 8px',
+                            background: 'rgba(245,158,11,0.1)', color: '#fbbf24', borderRadius: '4px', marginBottom: '6px',
+                            alignSelf: 'flex-start',
+                          }}>
+                            {(parentMilestone as any)?.title || 'אבן דרך'}
+                          </span>
+                          <div style={{ fontSize: '11px', color: '#475569', marginTop: 'auto' }}>
+                            {uploadDate?.toLocaleDateString('he-IL') || '-'}
+                          </div>
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
 
-                return (
-                  <a key={file?.id || ''} href={file?.fileUrl || '#'} target="_blank" rel="noopener noreferrer"
-                    className="prj-card"
-                    style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column', cursor: 'pointer' }}
-                  >
-                    {isImage && file?.fileUrl ? (
-                      <div style={{
-                        width: '100%', height: '100px', borderRadius: '8px', marginBottom: '10px',
-                        overflow: 'hidden', background: 'rgba(255,255,255,0.03)',
-                      }}>
-                        <img src={file.fileUrl} alt={file.fileName}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      </div>
-                    ) : (
-                      <div style={{
-                        width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: 'rgba(99,102,241,0.1)', borderRadius: '10px', fontSize: '20px', marginBottom: '10px',
-                      }}>
-                        📄
-                      </div>
-                    )}
-                    <h4 style={{
-                      fontSize: '13px', fontWeight: '600', color: '#e2e8f0', margin: '0 0 6px 0',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      {file?.fileName || 'קובץ'}
-                    </h4>
-                    <span style={{
-                      display: 'inline-block', fontSize: '10px', padding: '2px 8px',
-                      background: 'rgba(99,102,241,0.1)', color: '#818cf8', borderRadius: '4px', marginBottom: '6px',
-                      alignSelf: 'flex-start',
-                    }}>
-                      {categoryLabels[file.category] || file.category}
-                    </span>
-                    <div style={{ fontSize: '11px', color: '#475569', marginTop: 'auto' }}>
-                      {uploadDate?.toLocaleDateString('he-IL') || '-'}
-                    </div>
-                  </a>
-                );
-              })
+          {/* ── Client / project files section ── */}
+          <div>
+            {(projectClientFiles?.length || 0) > 0 && (
+              <h3 style={{ fontSize: '14px', fontWeight: '600', color: '#94a3b8', marginBottom: '12px' }}>קבצי פרויקט</h3>
             )}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
+              {(projectClientFiles?.length || 0) === 0 && (milestoneFilesData || []).filter((mf: MilestoneFile) => (projectMilestones || []).some((m: any) => m.id === mf.milestoneId)).length === 0 ? (
+                <div className="prj-card" style={{ textAlign: 'center', padding: '40px' }}>
+                  <div style={{ fontSize: '32px', marginBottom: '12px', opacity: 0.3 }}>📁</div>
+                  <p style={{ color: '#64748b', margin: 0 }}>אין קבצים</p>
+                </div>
+              ) : (
+                (projectClientFiles || []).map((file) => {
+                  const uploadDate = file?.createdAt ? new Date(file.createdAt) : null;
+                  const categoryLabels: Record<string, string> = { general: 'כללי', agreements: 'הסכמים', branding: 'ברנדינג', website: 'אתר' };
+                  const isImage = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(file?.fileName || '');
+
+                  return (
+                    <a key={file?.id || ''} href={file?.fileUrl || '#'} target="_blank" rel="noopener noreferrer"
+                      className="prj-card"
+                      style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column', cursor: 'pointer' }}
+                    >
+                      {isImage && file?.fileUrl ? (
+                        <div style={{
+                          width: '100%', height: '100px', borderRadius: '8px', marginBottom: '10px',
+                          overflow: 'hidden', background: 'rgba(255,255,255,0.03)',
+                        }}>
+                          <img src={file.fileUrl} alt={file.fileName}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </div>
+                      ) : (
+                        <div style={{
+                          width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: 'rgba(99,102,241,0.1)', borderRadius: '10px', fontSize: '20px', marginBottom: '10px',
+                        }}>
+                          📄
+                        </div>
+                      )}
+                      <h4 style={{
+                        fontSize: '13px', fontWeight: '600', color: '#e2e8f0', margin: '0 0 6px 0',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {file?.fileName || 'קובץ'}
+                      </h4>
+                      <span style={{
+                        display: 'inline-block', fontSize: '10px', padding: '2px 8px',
+                        background: 'rgba(99,102,241,0.1)', color: '#818cf8', borderRadius: '4px', marginBottom: '6px',
+                        alignSelf: 'flex-start',
+                      }}>
+                        {categoryLabels[file.category] || file.category}
+                      </span>
+                      <div style={{ fontSize: '11px', color: '#475569', marginTop: 'auto' }}>
+                        {uploadDate?.toLocaleDateString('he-IL') || '-'}
+                      </div>
+                    </a>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1880,8 +2072,14 @@ export default function BusinessProjectPage() {
         <div>
           {/* Summary cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+            {((project as any)?.totalPrice > 0) && (
+              <div className="prj-card">
+                <h4 style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>מחיר פרויקט</h4>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: '#818cf8' }}>₪{((project as any).totalPrice as number).toLocaleString('he-IL')}</div>
+              </div>
+            )}
             <div className="prj-card">
-              <h4 style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>סה&quot;כ</h4>
+              <h4 style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>סה&quot;כ תשלומים</h4>
               <div style={{ fontSize: '24px', fontWeight: '700', color: '#e2e8f0' }}>₪{totalAmount.toLocaleString('he-IL')}</div>
             </div>
             <div className="prj-card">
@@ -1889,8 +2087,8 @@ export default function BusinessProjectPage() {
               <div style={{ fontSize: '24px', fontWeight: '700', color: '#4ade80' }}>₪{paidAmount.toLocaleString('he-IL')}</div>
             </div>
             <div className="prj-card">
-              <h4 style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>נותר</h4>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: '#fbbf24' }}>₪{(totalAmount - paidAmount).toLocaleString('he-IL')}</div>
+              <h4 style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>נותר לגביה</h4>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: '#fbbf24' }}>₪{(((project as any)?.totalPrice || totalAmount) - paidAmount).toLocaleString('he-IL')}</div>
             </div>
           </div>
 

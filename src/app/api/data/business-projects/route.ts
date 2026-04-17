@@ -41,6 +41,7 @@ function rowToProject(r: Row) {
     agreementSigned: (r.agreement_signed as boolean) ?? false,
     contractSigned: (r.contract_signed as boolean) ?? false,
     contractSignedAt: (r.contract_signed_at as string) ?? null,
+    totalPrice: typeof r.total_price === 'number' ? r.total_price : 0,
     projectStatus: (r.project_status as string) ?? 'not_started',
     progress: typeof r.progress === 'number' ? r.progress : 0,
     startDate: (r.start_date as string) ?? null,
