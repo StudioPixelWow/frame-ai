@@ -14,27 +14,39 @@ const TABLE = 'business_project_payments';
 const TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS ${TABLE} (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  business_project_id  TEXT NOT NULL,
-  client_id            TEXT DEFAULT '',
-  title                TEXT DEFAULT '',
-  amount               NUMERIC DEFAULT 0,
-  due_date             DATE,
-  status               TEXT DEFAULT 'pending',
-  description          TEXT DEFAULT '',
+  business_project_id  TEXT,
+  client_id            TEXT,
   milestone_id         TEXT,
-  payment_type         TEXT DEFAULT 'custom',
-  is_due               BOOLEAN DEFAULT false,
-  is_paid              BOOLEAN DEFAULT false,
+  title                TEXT,
+  description          TEXT,
+  amount               NUMERIC NOT NULL DEFAULT 0,
+  payment_type         TEXT,
+  is_due               BOOLEAN NOT NULL DEFAULT false,
+  is_paid              BOOLEAN NOT NULL DEFAULT false,
+  status               TEXT NOT NULL DEFAULT 'pending',
+  due_date             DATE,
   paid_at              TIMESTAMPTZ,
   created_at           TIMESTAMPTZ DEFAULT now(),
   updated_at           TIMESTAMPTZ DEFAULT now()
 );
 `;
 
+/** Every column that must exist — runs ADD COLUMN IF NOT EXISTS for each */
 const COLUMN_ALTERS = [
-  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS payment_type TEXT DEFAULT 'custom'`,
-  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS is_due BOOLEAN DEFAULT false`,
-  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT false`,
+  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS business_project_id TEXT`,
+  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS client_id TEXT`,
+  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS milestone_id TEXT`,
+  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS title TEXT`,
+  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS description TEXT`,
+  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS amount NUMERIC NOT NULL DEFAULT 0`,
+  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS payment_type TEXT`,
+  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS is_due BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS is_paid BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending'`,
+  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS due_date DATE`,
+  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`,
+  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now()`,
+  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()`,
 ];
 
 type Row = Record<string, unknown> & { id: string };
@@ -65,39 +77,66 @@ function rowToPayment(r: Row) {
   };
 }
 
-/* ── Auto-create table & ensure new columns ─────────── */
+/* ── Auto-create table & ensure ALL columns ────────── */
 let _tableReady = false;
+
 async function ensureTable(sb: ReturnType<typeof getSupabase>) {
   if (_tableReady) return;
+
+  console.log(`[project-payments] ensureTable: running migration for "${TABLE}"...`);
+
+  // 1. Try CREATE TABLE IF NOT EXISTS via exec_sql RPC
+  let rpcAvailable = false;
   try {
     const { error } = await sb.rpc('exec_sql', { query: TABLE_DDL });
-    if (!error) {
-      // Table exists or was created — now ensure new columns
-      for (const alter of COLUMN_ALTERS) {
-        await sb.rpc('exec_sql', { query: alter }).catch(() => {});
-      }
-      _tableReady = true;
-      return;
+    if (error) {
+      console.warn(`[project-payments] CREATE TABLE via RPC failed: ${error.message}`);
+    } else {
+      rpcAvailable = true;
+      console.log(`[project-payments] CREATE TABLE IF NOT EXISTS: OK`);
     }
-  } catch { /* rpc not available */ }
+  } catch (e) {
+    console.warn('[project-payments] exec_sql RPC not available:', e);
+  }
 
-  const { error: probe } = await sb.from(TABLE).select('id').limit(1);
-  if (!probe) {
-    // Table exists — try adding columns
+  // 2. Always run column alters — even if table already existed, columns may be missing
+  if (rpcAvailable) {
+    let colOk = 0;
+    let colFail = 0;
     for (const alter of COLUMN_ALTERS) {
-      try { await sb.rpc('exec_sql', { query: alter }); } catch { /* ignore */ }
+      try {
+        const { error } = await sb.rpc('exec_sql', { query: alter });
+        if (error) {
+          console.warn(`[project-payments] ALTER failed: ${alter} — ${error.message}`);
+          colFail++;
+        } else {
+          colOk++;
+        }
+      } catch {
+        colFail++;
+      }
     }
+    console.log(`[project-payments] column alters: ${colOk} OK, ${colFail} failed`);
     _tableReady = true;
     return;
   }
 
-  const code = (probe as any)?.code ?? '';
-  if (code === '42P01' || probe.message?.includes('does not exist')) {
-    console.error(
-      `[project-payments] ❌ Table "${TABLE}" does not exist!\n` +
-      `Run this SQL in Supabase Dashboard → SQL Editor:\n\n${TABLE_DDL}`
-    );
+  // 3. Fallback: probe table to check if it exists at all
+  const { error: probe } = await sb.from(TABLE).select('id').limit(1);
+  if (probe) {
+    const code = (probe as any)?.code ?? '';
+    if (code === '42P01' || probe.message?.includes('does not exist')) {
+      console.error(
+        `[project-payments] ❌ Table "${TABLE}" does not exist and exec_sql RPC is unavailable.\n` +
+        `Run this SQL in Supabase Dashboard → SQL Editor:\n\n${TABLE_DDL}`
+      );
+      return; // cannot proceed
+    }
+    console.warn(`[project-payments] probe error: ${probe.message}`);
+  } else {
+    console.log(`[project-payments] table exists (probe OK)`);
   }
+  _tableReady = true;
 }
 
 /* ── GET ─────────────────────────────────────────────── */

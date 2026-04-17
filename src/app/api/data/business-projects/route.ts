@@ -243,23 +243,23 @@ async function seedMilestonesFromTemplates(
 const PAYMENTS_TABLE = 'business_project_payments';
 
 /**
- * Ensure the payments table exists and has the new columns.
- * Mirrors the ensureTable() in project-payments/route.ts.
+ * Ensure the payments table exists and has ALL required columns.
+ * Must match the target schema exactly.
  */
 const PAYMENTS_DDL = `
 CREATE TABLE IF NOT EXISTS ${PAYMENTS_TABLE} (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  business_project_id  TEXT NOT NULL,
-  client_id            TEXT DEFAULT '',
-  title                TEXT DEFAULT '',
-  amount               NUMERIC DEFAULT 0,
-  due_date             DATE,
-  status               TEXT DEFAULT 'pending',
-  description          TEXT DEFAULT '',
+  business_project_id  TEXT,
+  client_id            TEXT,
   milestone_id         TEXT,
-  payment_type         TEXT DEFAULT 'custom',
-  is_due               BOOLEAN DEFAULT false,
-  is_paid              BOOLEAN DEFAULT false,
+  title                TEXT,
+  description          TEXT,
+  amount               NUMERIC NOT NULL DEFAULT 0,
+  payment_type         TEXT,
+  is_due               BOOLEAN NOT NULL DEFAULT false,
+  is_paid              BOOLEAN NOT NULL DEFAULT false,
+  status               TEXT NOT NULL DEFAULT 'pending',
+  due_date             DATE,
   paid_at              TIMESTAMPTZ,
   created_at           TIMESTAMPTZ DEFAULT now(),
   updated_at           TIMESTAMPTZ DEFAULT now()
@@ -267,39 +267,65 @@ CREATE TABLE IF NOT EXISTS ${PAYMENTS_TABLE} (
 `;
 
 const PAYMENTS_ALTERS = [
-  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS payment_type TEXT DEFAULT 'custom'`,
-  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS is_due BOOLEAN DEFAULT false`,
-  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT false`,
+  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS business_project_id TEXT`,
+  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS client_id TEXT`,
+  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS milestone_id TEXT`,
+  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS title TEXT`,
+  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS description TEXT`,
+  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS amount NUMERIC NOT NULL DEFAULT 0`,
+  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS payment_type TEXT`,
+  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS is_due BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS is_paid BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending'`,
+  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS due_date DATE`,
+  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`,
+  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now()`,
+  `ALTER TABLE ${PAYMENTS_TABLE} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()`,
 ];
 
 let _paymentsTableReady = false;
 async function ensurePaymentsTable(sb: ReturnType<typeof getSupabase>): Promise<void> {
   if (_paymentsTableReady) return;
+
+  console.log('[seedPayments] ensuring payments table schema...');
+
+  // 1. CREATE TABLE IF NOT EXISTS
+  let rpcOk = false;
   try {
     const { error } = await sb.rpc('exec_sql', { query: PAYMENTS_DDL });
-    if (!error) {
-      for (const alter of PAYMENTS_ALTERS) {
-        await sb.rpc('exec_sql', { query: alter }).catch(() => {});
-      }
-      _paymentsTableReady = true;
-      console.log('[seedPayments] ✅ payments table ensured');
-      return;
+    if (error) {
+      console.warn('[seedPayments] CREATE TABLE RPC failed:', error.message);
+    } else {
+      rpcOk = true;
+      console.log('[seedPayments] CREATE TABLE IF NOT EXISTS: OK');
     }
-    console.warn('[seedPayments] exec_sql DDL failed:', error.message);
   } catch (e) {
-    console.warn('[seedPayments] exec_sql not available:', e);
+    console.warn('[seedPayments] exec_sql RPC not available:', e);
   }
 
-  // Fallback: probe if table exists
+  // 2. Run ALL column alters (idempotent)
+  if (rpcOk) {
+    let ok = 0;
+    let fail = 0;
+    for (const alter of PAYMENTS_ALTERS) {
+      try {
+        const { error } = await sb.rpc('exec_sql', { query: alter });
+        if (error) { console.warn(`[seedPayments] ALTER failed: ${error.message}`); fail++; }
+        else { ok++; }
+      } catch { fail++; }
+    }
+    console.log(`[seedPayments] column alters: ${ok} OK, ${fail} failed`);
+    _paymentsTableReady = true;
+    return;
+  }
+
+  // 3. Fallback: probe
   const { error: probe } = await sb.from(PAYMENTS_TABLE).select('id').limit(1);
   if (!probe) {
-    for (const alter of PAYMENTS_ALTERS) {
-      try { await sb.rpc('exec_sql', { query: alter }); } catch { /* ignore */ }
-    }
     _paymentsTableReady = true;
-    console.log('[seedPayments] ✅ payments table exists (probe OK)');
+    console.log('[seedPayments] table exists (probe OK, columns not verified via RPC)');
   } else {
-    console.error('[seedPayments] ❌ payments table does not exist and cannot be created. Error:', probe.message);
+    console.error('[seedPayments] ❌ payments table unreachable:', probe.message);
   }
 }
 
