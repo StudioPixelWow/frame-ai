@@ -238,6 +238,97 @@ async function seedMilestonesFromTemplates(
   };
 }
 
+/* ── Auto-create deposit + final payments (50/50 split) ──────────────── */
+
+const PAYMENTS_TABLE = 'business_project_payments';
+
+function paymentId(suffix: string): string {
+  const ts = Date.now().toString(36);
+  const rand = Math.random().toString(36).slice(2, 6);
+  return `ppy_${ts}_${suffix}_${rand}`;
+}
+
+/**
+ * Create two payment rows for a new project: 50% deposit (due immediately)
+ * and 50% final (due when project is submitted).
+ */
+async function seedPayments(
+  sb: ReturnType<typeof getSupabase>,
+  projectId: string,
+  clientId: string | null,
+  budget: number,
+  now: string,
+): Promise<{ inserted: number; error?: string }> {
+  if (!budget || budget <= 0) {
+    return { inserted: 0, error: 'budget is 0 or missing; skipping payment creation' };
+  }
+
+  const deposit = Math.round(budget * 0.5 * 100) / 100;
+  const final = Math.round((budget - deposit) * 100) / 100;
+
+  const rows = [
+    {
+      id: paymentId('dep'),
+      business_project_id: projectId,
+      client_id: clientId ?? '',
+      title: 'מקדמה (50%)',
+      amount: deposit,
+      due_date: now.slice(0, 10), // today
+      status: 'pending',
+      description: 'מקדמה — 50% מתקציב הפרויקט',
+      payment_type: 'deposit',
+      is_due: true,
+      is_paid: false,
+      created_at: now,
+      updated_at: now,
+    },
+    {
+      id: paymentId('fin'),
+      business_project_id: projectId,
+      client_id: clientId ?? '',
+      title: 'תשלום סופי (50%)',
+      amount: final,
+      due_date: null,
+      status: 'pending',
+      description: 'תשלום סופי — 50% בהגשת הפרויקט',
+      payment_type: 'final',
+      is_due: false,
+      is_paid: false,
+      created_at: now,
+      updated_at: now,
+    },
+  ];
+
+  // Retry loop — auto-drop unknown columns (same pattern as other inserts)
+  let insertRows: Record<string, unknown>[] = rows;
+  let lastErr: { message: string } | null = null;
+
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { error } = await sb.from(PAYMENTS_TABLE).insert(insertRows);
+    if (!error) {
+      console.log(`[seedPayments] ✅ created deposit (₪${deposit}) + final (₪${final}) for project=${projectId}`);
+      return { inserted: 2 };
+    }
+    lastErr = error;
+
+    const m = error.message.match(
+      /column .*?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i,
+    );
+    const bad = m?.[1] || m?.[2];
+    if (!bad) break;
+
+    console.warn(`[seedPayments] dropping unknown column "${bad}" and retrying`);
+    insertRows = insertRows.map((row) => {
+      const { [bad]: _d, ...rest } = row;
+      void _d;
+      return rest;
+    });
+  }
+
+  console.error('[seedPayments] insert failed:', lastErr);
+  return { inserted: 0, error: lastErr?.message ?? 'unknown' };
+}
+
 export async function POST(req: NextRequest) {
   // Only admin and employee can create projects
   const roleErr = requireRole(req, 'admin', 'employee');
@@ -305,8 +396,18 @@ export async function POST(req: NextRequest) {
     const svc = (verifyRow.service_type as string) || (verifyRow.project_type as string) || null;
     const seed = await seedMilestonesFromTemplates(sb, id, svc, now);
 
+    // Auto-create deposit + final payments (50/50 split)
+    const budgetVal = Number(verifyRow.budget) || 0;
+    const clientIdVal = (verifyRow.client_id as string) || null;
+    const paymentSeed = await seedPayments(sb, id, clientIdVal, budgetVal, now);
+
+    // Fire-and-forget timeline for payments
+    if (paymentSeed.inserted > 0) {
+      insertTimelineEvent(id, 'payment_created', `תשלומים נוצרו אוטומטית: מקדמה 50% + תשלום סופי 50%`);
+    }
+
     console.log(
-      `[API] POST /api/data/business-projects ✅ persisted id=${id} service=${svc} templates=${seed.templatesFound} milestones=${seed.inserted}${seed.error ? ` error="${seed.error}"` : ''}`
+      `[API] POST /api/data/business-projects ✅ persisted id=${id} service=${svc} templates=${seed.templatesFound} milestones=${seed.inserted}${seed.error ? ` error="${seed.error}"` : ''} payments=${paymentSeed.inserted}${paymentSeed.error ? ` payErr="${paymentSeed.error}"` : ''}`
     );
 
     return NextResponse.json(
@@ -317,6 +418,10 @@ export async function POST(req: NextRequest) {
           templatesFound: seed.templatesFound,
           inserted: seed.inserted,
           error: seed.error,
+        },
+        _payments: {
+          inserted: paymentSeed.inserted,
+          error: paymentSeed.error,
         },
       },
       { status: 201 }

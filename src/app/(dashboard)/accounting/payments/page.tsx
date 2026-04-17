@@ -44,18 +44,21 @@ export default function PaymentsPage() {
     }
 
     if (projectPayments) {
-      projectPayments.forEach((payment: any) => {
-        const client = clients?.find((c: any) => c.id === payment.clientId);
-        combined.push({
-          id: `project-${payment.id}`,
-          type: "project",
-          clientName: client?.name || payment.clientName || "לא ידוע",
-          amount: payment.amount || 0,
-          dueDate: payment.dueDate || new Date().toISOString(),
-          status: payment.status || "pending",
-          rawData: payment,
+      projectPayments
+        .filter((payment: any) => payment.isDue === true || payment.paymentType === 'custom')
+        .forEach((payment: any) => {
+          const client = clients?.find((c: any) => c.id === payment.clientId);
+          const typeLabel = payment.paymentType === 'deposit' ? ' (מקדמה)' : payment.paymentType === 'final' ? ' (סופי)' : '';
+          combined.push({
+            id: `project-${payment.id}`,
+            type: "project",
+            clientName: (client?.name || payment.clientName || "לא ידוע") + typeLabel,
+            amount: payment.amount || 0,
+            dueDate: payment.dueDate || new Date().toISOString(),
+            status: payment.status || "pending",
+            rawData: payment,
+          });
         });
-      });
     }
 
     if (hostingRecords) {

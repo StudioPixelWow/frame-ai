@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   useBusinessProjects,
   useProjectMilestones,
+  useProjectPayments,
   useClients,
   useEmployees,
   useTasks,
@@ -66,6 +67,7 @@ function progressColor(p: number): string {
 export default function BusinessProjectsDashboard() {
   const { data: projects = [], loading: loadingProjects } = useBusinessProjects();
   const { data: milestones = [] } = useProjectMilestones();
+  const { data: payments = [] } = useProjectPayments();
   const { data: clients = [] } = useClients();
   const { data: employees = [] } = useEmployees();
   const { data: tasks = [] } = useTasks();
@@ -121,6 +123,21 @@ export default function BusinessProjectsDashboard() {
 
     return { total, inProgress, completed, delayed };
   }, [projects, derivedMap]);
+
+  /* ── payment KPIs ── */
+  const paymentKpis = useMemo(() => {
+    const allDeposits = payments.filter((p: any) => p.paymentType === 'deposit');
+    const allFinals = payments.filter((p: any) => p.paymentType === 'final');
+    const awaitingDeposit = allDeposits.filter((p: any) => p.isDue && p.status !== 'paid').length;
+    const awaitingFinal = allFinals.filter((p: any) => p.isDue && p.status !== 'paid').length;
+    const totalUnpaid = payments
+      .filter((p: any) => p.isDue && p.status !== 'paid')
+      .reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+    const totalPaid = payments
+      .filter((p: any) => p.status === 'paid')
+      .reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+    return { awaitingDeposit, awaitingFinal, totalUnpaid, totalPaid };
+  }, [payments]);
 
   /* ── sorted project list (delayed first, then by progress ascending) ── */
   const sortedProjects = useMemo(() => {
@@ -315,6 +332,38 @@ export default function BusinessProjectsDashboard() {
           </div>
           <div className="dash-kpi-value" style={{ color: '#4ade80' }}>{kpis.completed}</div>
           <div className="dash-kpi-label">הושלמו</div>
+        </div>
+      </div>
+
+      {/* ══════════ PAYMENT KPI CARDS ══════════ */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '32px' }}>
+        <div className="dash-kpi" style={{ animationDelay: '0.2s' }}>
+          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(251,146,60,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
+            💳
+          </div>
+          <div className="dash-kpi-value" style={{ color: '#fb923c' }}>{paymentKpis.awaitingDeposit}</div>
+          <div className="dash-kpi-label">ממתינים למקדמה</div>
+        </div>
+        <div className="dash-kpi" style={{ animationDelay: '0.25s' }}>
+          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(168,85,247,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
+            📝
+          </div>
+          <div className="dash-kpi-value" style={{ color: '#c084fc' }}>{paymentKpis.awaitingFinal}</div>
+          <div className="dash-kpi-label">ממתינים לתשלום סופי</div>
+        </div>
+        <div className="dash-kpi" style={{ animationDelay: '0.3s' }}>
+          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(251,191,36,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
+            ⏳
+          </div>
+          <div className="dash-kpi-value" style={{ color: '#fbbf24', fontSize: '24px' }}>₪{paymentKpis.totalUnpaid.toLocaleString('he-IL')}</div>
+          <div className="dash-kpi-label">סה&quot;כ לגביה</div>
+        </div>
+        <div className="dash-kpi" style={{ animationDelay: '0.35s' }}>
+          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(74,222,128,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
+            ✅
+          </div>
+          <div className="dash-kpi-value" style={{ color: '#4ade80', fontSize: '24px' }}>₪{paymentKpis.totalPaid.toLocaleString('he-IL')}</div>
+          <div className="dash-kpi-label">סה&quot;כ נגבה</div>
         </div>
       </div>
 

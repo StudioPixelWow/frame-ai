@@ -22,11 +22,20 @@ CREATE TABLE IF NOT EXISTS ${TABLE} (
   status               TEXT DEFAULT 'pending',
   description          TEXT DEFAULT '',
   milestone_id         TEXT,
+  payment_type         TEXT DEFAULT 'custom',
+  is_due               BOOLEAN DEFAULT false,
+  is_paid              BOOLEAN DEFAULT false,
   paid_at              TIMESTAMPTZ,
   created_at           TIMESTAMPTZ DEFAULT now(),
   updated_at           TIMESTAMPTZ DEFAULT now()
 );
 `;
+
+const COLUMN_ALTERS = [
+  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS payment_type TEXT DEFAULT 'custom'`,
+  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS is_due BOOLEAN DEFAULT false`,
+  `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT false`,
+];
 
 type Row = Record<string, unknown> & { id: string };
 
@@ -47,23 +56,40 @@ function rowToPayment(r: Row) {
     status: (r.status as string) ?? 'pending',
     description: (r.description as string) ?? '',
     milestoneId: (r.milestone_id as string) ?? null,
+    paymentType: (r.payment_type as string) ?? 'custom',
+    isDue: r.is_due === true || r.is_due === 'true',
+    isPaid: r.is_paid === true || r.is_paid === 'true',
     paidAt: (r.paid_at as string) ?? null,
     createdAt: (r.created_at as string) ?? '',
     updatedAt: (r.updated_at as string) ?? '',
   };
 }
 
-/* ── Auto-create table ───────────────────────────────── */
+/* ── Auto-create table & ensure new columns ─────────── */
 let _tableReady = false;
 async function ensureTable(sb: ReturnType<typeof getSupabase>) {
   if (_tableReady) return;
   try {
     const { error } = await sb.rpc('exec_sql', { query: TABLE_DDL });
-    if (!error) { _tableReady = true; return; }
+    if (!error) {
+      // Table exists or was created — now ensure new columns
+      for (const alter of COLUMN_ALTERS) {
+        await sb.rpc('exec_sql', { query: alter }).catch(() => {});
+      }
+      _tableReady = true;
+      return;
+    }
   } catch { /* rpc not available */ }
 
   const { error: probe } = await sb.from(TABLE).select('id').limit(1);
-  if (!probe) { _tableReady = true; return; }
+  if (!probe) {
+    // Table exists — try adding columns
+    for (const alter of COLUMN_ALTERS) {
+      try { await sb.rpc('exec_sql', { query: alter }); } catch { /* ignore */ }
+    }
+    _tableReady = true;
+    return;
+  }
 
   const code = (probe as any)?.code ?? '';
   if (code === '42P01' || probe.message?.includes('does not exist')) {
@@ -136,6 +162,9 @@ export async function POST(req: NextRequest) {
       status: body.status ?? 'pending',
       description: body.description ?? '',
       milestone_id: body.milestoneId || null,
+      payment_type: body.paymentType ?? body.payment_type ?? 'custom',
+      is_due: body.isDue === true || body.is_due === true,
+      is_paid: body.isPaid === true || body.is_paid === true,
       paid_at: body.paidAt || null,
       created_at: now,
       updated_at: now,

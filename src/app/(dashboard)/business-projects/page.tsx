@@ -206,6 +206,22 @@ export default function BusinessProjectsPage() {
     return { amount: projectPayments[0].amount, date: projectPayments[0].dueDate };
   };
 
+  /** Payment status summary for a project */
+  const getPaymentStatus = (projectId: string): { label: string; color: string } => {
+    const pp = (payments || []).filter((p) => p.projectId === projectId);
+    if (pp.length === 0) return { label: '', color: '' };
+    const deposit = pp.find((p) => (p as any).paymentType === 'deposit');
+    const final_ = pp.find((p) => (p as any).paymentType === 'final');
+    if (!deposit && !final_) return { label: '', color: '' };
+    const depPaid = deposit?.status === 'paid';
+    const finPaid = final_?.status === 'paid';
+    if (depPaid && finPaid) return { label: 'שולם במלואו', color: '#4ade80' };
+    if (depPaid && !finPaid && (final_ as any)?.isDue) return { label: 'ממתין לתשלום סופי', color: '#fbbf24' };
+    if (depPaid && !finPaid) return { label: 'מקדמה שולמה', color: '#60a5fa' };
+    if (!depPaid && (deposit as any)?.isDue) return { label: 'ממתין למקדמה', color: '#fb923c' };
+    return { label: '', color: '' };
+  };
+
   const getClientName = (clientId: string): string => {
     return clients?.find((c) => c.id === clientId)?.name || "לא זוהה";
   };
@@ -552,6 +568,7 @@ export default function BusinessProjectsPage() {
           {filteredProjects.map((project) => {
             const progress = getProjectProgress(project.id);
             const nextPayment = getNextPayment(project.id);
+            const paymentStatus = getPaymentStatus(project.id);
             const progressPercent = progress.total > 0 ? (progress.approved / progress.total) * 100 : 0;
 
             return (
@@ -674,6 +691,13 @@ export default function BusinessProjectsPage() {
                   {!nextPayment && project.budget <= 0 && (
                     <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>אין תשלומים</div>
                   )}
+                  {paymentStatus.label && (
+                    <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'flex-end' }}>
+                      <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '4px', background: `${paymentStatus.color}18`, color: paymentStatus.color, border: `1px solid ${paymentStatus.color}30` }}>
+                        {paymentStatus.label}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Footer info */}
@@ -699,6 +723,7 @@ export default function BusinessProjectsPage() {
           {filteredProjects.map((project) => {
             const progress = getProjectProgress(project.id);
             const nextPayment = getNextPayment(project.id);
+            const paymentStatus = getPaymentStatus(project.id);
             const progressPercent = progress.total > 0 ? (progress.approved / progress.total) * 100 : 0;
 
             return (
@@ -758,6 +783,7 @@ export default function BusinessProjectsPage() {
                   </h4>
                   <p style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", margin: "0" }}>
                     {getClientName(project.clientId)} • {((project as any).contractSigned || project.agreementSigned) ? "✓ חוזה" : "✕ חוזה"}{project.budget > 0 ? ` • ${formatCurrency(project.budget)}` : ""}{nextPayment && ` • תשלום: ${formatCurrency(nextPayment.amount)}`}
+                    {paymentStatus.label && <span style={{ color: paymentStatus.color }}> • {paymentStatus.label}</span>}
                   </p>
                   {progress.total > 0 && (
                     <div style={{ marginTop: "0.375rem" }}>

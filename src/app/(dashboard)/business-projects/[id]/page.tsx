@@ -442,6 +442,10 @@ export default function BusinessProjectPage() {
   // remainingToCollect = budget minus what's already scheduled
   const remainingToCollect = (project?.budget || 0) - scheduledAmount;
 
+  // Deposit & final payment status
+  const depositPayment = (projectPayments || []).find((p: ProjectPayment) => (p as any).paymentType === 'deposit');
+  const finalPayment = (projectPayments || []).find((p: ProjectPayment) => (p as any).paymentType === 'final');
+
   // NOTE: All handlers below use `function` declarations (not `const` arrows)
   // so they are hoisted and cannot cause TDZ "Cannot access before initialization" errors.
   async function handleAddMilestone() {
@@ -1402,6 +1406,34 @@ export default function BusinessProjectPage() {
                 <span style={{ color: '#64748b', fontSize: '13px' }}>נותר לגביה</span>
                 <span style={{ color: '#fbbf24', fontWeight: '600', fontSize: '15px' }}>₪{remainingToCollect.toLocaleString('he-IL')}</span>
               </div>
+              {/* Deposit / Final status */}
+              {(depositPayment || finalPayment) && (
+                <>
+                  <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', marginTop: '4px' }} />
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                    {depositPayment && (
+                      <span style={{
+                        fontSize: '11px', padding: '3px 10px', borderRadius: '6px',
+                        background: depositPayment.status === 'paid' ? 'rgba(34,197,94,0.15)' : (depositPayment as any).isDue ? 'rgba(251,191,36,0.15)' : 'rgba(100,116,139,0.15)',
+                        color: depositPayment.status === 'paid' ? '#4ade80' : (depositPayment as any).isDue ? '#fbbf24' : '#64748b',
+                        border: `1px solid ${depositPayment.status === 'paid' ? 'rgba(34,197,94,0.25)' : (depositPayment as any).isDue ? 'rgba(251,191,36,0.25)' : 'rgba(100,116,139,0.25)'}`,
+                      }}>
+                        מקדמה: {depositPayment.status === 'paid' ? 'שולמה' : (depositPayment as any).isDue ? 'ממתינה לתשלום' : 'טרם הגיעה'}
+                      </span>
+                    )}
+                    {finalPayment && (
+                      <span style={{
+                        fontSize: '11px', padding: '3px 10px', borderRadius: '6px',
+                        background: finalPayment.status === 'paid' ? 'rgba(34,197,94,0.15)' : (finalPayment as any).isDue ? 'rgba(251,191,36,0.15)' : 'rgba(100,116,139,0.15)',
+                        color: finalPayment.status === 'paid' ? '#4ade80' : (finalPayment as any).isDue ? '#fbbf24' : '#64748b',
+                        border: `1px solid ${finalPayment.status === 'paid' ? 'rgba(34,197,94,0.25)' : (finalPayment as any).isDue ? 'rgba(251,191,36,0.25)' : 'rgba(100,116,139,0.25)'}`,
+                      }}>
+                        סופי: {finalPayment.status === 'paid' ? 'שולם' : (finalPayment as any).isDue ? 'ממתין לתשלום' : 'טרם הגיע'}
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -2260,8 +2292,17 @@ export default function BusinessProjectPage() {
                   >
                     <div style={{ width: '3px', height: '40px', background: statusColor, borderRadius: '2px' }} />
                     <div>
-                      <div style={{ fontSize: '14px', fontWeight: '600', color: '#e2e8f0', marginBottom: '4px' }}>
+                      <div style={{ fontSize: '14px', fontWeight: '600', color: '#e2e8f0', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         {payment?.title || payment?.description || 'תשלום'}
+                        {(payment as any)?.paymentType === 'deposit' && (
+                          <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(99,102,241,0.15)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.25)' }}>מקדמה</span>
+                        )}
+                        {(payment as any)?.paymentType === 'final' && (
+                          <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(168,85,247,0.15)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.25)' }}>סופי</span>
+                        )}
+                        {(payment as any)?.isDue === true && payment?.status !== 'paid' && (
+                          <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.25)' }}>מגיע לתשלום</span>
+                        )}
                       </div>
                       <div style={{ fontSize: '12px', color: '#64748b' }}>
                         לתאריך: {formatDate(payment?.dueDate || null)}

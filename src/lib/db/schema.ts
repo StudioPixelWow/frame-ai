@@ -656,6 +656,7 @@ export interface ProjectMilestone {
 
 // Project Payment
 export type ProjectPaymentStatus = 'pending' | 'collection_needed' | 'paid' | 'overdue';
+export type PaymentType = 'deposit' | 'final' | 'custom';
 
 export interface ProjectPayment {
   id: string;
@@ -667,6 +668,9 @@ export interface ProjectPayment {
   status: ProjectPaymentStatus;
   description: string;
   milestoneId: string | null;
+  paymentType: PaymentType;
+  isDue: boolean;
+  isPaid: boolean;
   paidAt: string | null;
   createdAt: string;
   updatedAt: string;

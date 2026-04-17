@@ -196,6 +196,27 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       }
     }
 
+    // ── Mark final payment as due when project reaches submission ──
+    const newStatus = body.projectStatus as string | undefined;
+    if (newStatus === 'awaiting_approval' || newStatus === 'completed') {
+      try {
+        const { error: payErr } = await sb
+          .from('business_project_payments')
+          .update({ is_due: true, updated_at: new Date().toISOString() })
+          .eq('business_project_id', id)
+          .eq('payment_type', 'final')
+          .eq('is_due', false);
+        if (payErr) {
+          console.warn(`[API] PUT /api/data/business-projects/[id] failed to mark final payment due:`, payErr.message);
+        } else {
+          console.log(`[API] PUT /api/data/business-projects/[id] ✅ final payment marked as due for project=${id}`);
+          insertTimelineEvent(id, 'payment_created', 'תשלום סופי סומן כמגיע לתשלום');
+        }
+      } catch (e) {
+        console.warn('[API] PUT final-payment-due error:', e);
+      }
+    }
+
     return NextResponse.json(rowToProject(updated));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
