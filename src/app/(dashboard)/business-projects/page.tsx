@@ -88,6 +88,7 @@ type ProjectFormData = {
   description: string;
   startDate: string;
   assignedManagerId: string;
+  totalPrice: string;
 };
 
 export default function BusinessProjectsPage() {
@@ -118,6 +119,7 @@ export default function BusinessProjectsPage() {
     description: "",
     startDate: "",
     assignedManagerId: "",
+    totalPrice: "",
   });
 
   const [clientForm, setClientForm] = useState<ClientFormData>({
@@ -260,8 +262,8 @@ export default function BusinessProjectsPage() {
   };
 
   const handleCreateProject = async () => {
-    if (!projectForm.projectName || !projectForm.clientId) {
-      toast("אנא מלא את השדות: שם פרויקט ובחר לקוח", "error");
+    if (!projectForm.projectName || !projectForm.clientId || !projectForm.totalPrice) {
+      toast("אנא מלא את השדות: שם פרויקט, לקוח ומחיר כולל", "error");
       return;
     }
 
@@ -277,8 +279,9 @@ export default function BusinessProjectsPage() {
         startDate: projectForm.startDate || null,
         endDate: null,
         assignedManagerId: projectForm.assignedManagerId || null,
+        totalPrice: parseFloat(projectForm.totalPrice) || 0,
       } as any);
-      setProjectForm({ projectName: "", clientId: "", projectType: "website", description: "", startDate: "", assignedManagerId: "" });
+      setProjectForm({ projectName: "", clientId: "", projectType: "website", description: "", startDate: "", assignedManagerId: "", totalPrice: "" });
       setShowCreateModal(false);
       toast("פרויקט נוצר בהצלחה", "success");
       router.push(`/business-projects/${newProject.id}`);
@@ -995,6 +998,22 @@ export default function BusinessProjectsPage() {
                 value={projectForm.description}
                 onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
                 style={{ fontSize: "0.875rem", minHeight: "100px" }}
+              />
+            </div>
+
+            {/* Total Price */}
+            <div style={{ marginBottom: "1rem" }}>
+              <label style={{ fontSize: "0.875rem", fontWeight: "600", color: "var(--foreground)", display: "block", marginBottom: "0.375rem" }}>
+                מחיר כולל פרויקט (₪) *
+              </label>
+              <input
+                type="number"
+                className="form-input"
+                value={projectForm.totalPrice}
+                onChange={(e) => setProjectForm({ ...projectForm, totalPrice: e.target.value })}
+                placeholder="הכנס מחיר כולל"
+                min="0"
+                style={{ fontSize: "0.875rem" }}
               />
             </div>
 

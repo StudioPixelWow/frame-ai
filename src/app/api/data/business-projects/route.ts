@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 import { requireRole, getRequestRole, getRequestClientId, getRequestEmployeeId } from '@/lib/auth/api-guard';
+import { insertTimelineEvent } from '@/lib/timeline';
 
 const TABLE = 'business_projects';
 
@@ -70,6 +71,7 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
     project_type: svc,
     description: (body.description ?? '') as string,
     agreement_signed: (body.agreementSigned ?? false) as boolean,
+    total_price: typeof body.totalPrice === 'number' ? body.totalPrice : (Number(body.totalPrice) || 0),
     project_status: (body.projectStatus ?? body.status ?? 'not_started') as string,
     start_date: nullIfEmpty(body.startDate),
     end_date: nullIfEmpty(body.endDate),
@@ -289,6 +291,10 @@ export async function POST(req: NextRequest) {
       console.error('[API] POST /api/data/business-projects verify failed', verifyErr);
       return NextResponse.json({ error: verifyErr?.message ?? 'Not persisted', projectId: id }, { status: 500 });
     }
+
+    // Fire-and-forget timeline event for project creation
+    const projectName = (body.projectName ?? body.name ?? '') as string;
+    insertTimelineEvent(id, 'project_created', `פרויקט "${projectName}" נוצר`);
 
     // Auto-generate milestones from templates matching service_type.
     const verifyRow = verify as Row;

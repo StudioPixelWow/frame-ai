@@ -174,6 +174,8 @@ export default function BusinessProjectPage() {
   const [paymentFormData, setPaymentFormData] = useState<PaymentFormData>({
     title: '', amount: '', dueDate: '', description: '', milestoneId: '',
   });
+  const [savingPayment, setSavingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   // ── Derived data (useMemo) — must be declared before useCallback blocks that reference them ──
   const project = useMemo(
@@ -374,6 +376,7 @@ export default function BusinessProjectPage() {
       }
       console.log(`[milestone-upload] ✅ upload saved, refetching files…`);
       await refetchMilestoneFiles();
+      refetchTimeline();
       console.log(`[milestone-upload] ✅ refetch done, milestoneFilesData count=${milestoneFilesData?.length ?? '?'}`);
     } catch (err: any) {
       console.error('[milestone-upload] ❌ error:', err?.message || err);
@@ -383,7 +386,7 @@ export default function BusinessProjectPage() {
       const input = fileInputRefs.current[milestoneId];
       if (input) input.value = '';
     }
-  }, [refetchMilestoneFiles, milestoneFilesData?.length]);
+  }, [refetchMilestoneFiles, refetchTimeline, milestoneFilesData?.length]);
 
   const handleDeleteMilestoneFile = useCallback(async (fileId: string) => {
     try {
@@ -458,6 +461,7 @@ export default function BusinessProjectPage() {
         notes: '',
       });
       setShowMilestoneForm(false);
+      refetchTimeline();
     } catch (error) {
       console.error('Error adding milestone:', error);
     } finally {
@@ -586,6 +590,7 @@ export default function BusinessProjectPage() {
     }
 
     setAssigningMilestone(null);
+    refetchTimeline();
     // Auto-clear success feedback after 4 seconds
     setTimeout(() => {
       setAssignFeedback((prev) => {
@@ -655,6 +660,7 @@ export default function BusinessProjectPage() {
     try {
       const paidAt = status === 'paid' ? new Date().toISOString() : null;
       await updatePayment(paymentId, { status, paidAt } as any);
+      refetchTimeline();
     } catch (error) {
       console.error('Error updating payment:', error);
     } finally {
@@ -664,24 +670,30 @@ export default function BusinessProjectPage() {
 
   async function handleAddPayment() {
     if (!paymentFormData.title || !paymentFormData.amount) return;
-    setLoading(true);
+    setSavingPayment(true);
+    setPaymentError(null);
     try {
-      await createPayment({
+      const payload = {
         projectId,
         clientId: project?.clientId || '',
         title: paymentFormData.title,
         amount: parseFloat(paymentFormData.amount) || 0,
         dueDate: paymentFormData.dueDate || null,
-        status: 'pending',
+        status: 'pending' as const,
         description: paymentFormData.description,
         milestoneId: paymentFormData.milestoneId || null,
-      } as any);
+      };
+      console.log('[handleAddPayment] creating payment:', JSON.stringify(payload));
+      const result = await createPayment(payload as any);
+      console.log('[handleAddPayment] payment created:', JSON.stringify(result));
       setPaymentFormData({ title: '', amount: '', dueDate: '', description: '', milestoneId: '' });
       setShowPaymentForm(false);
-    } catch (error) {
+      refetchTimeline();
+    } catch (error: any) {
       console.error('Error adding payment:', error);
+      setPaymentError(error?.message || 'שגיאה בשמירת התשלום');
     } finally {
-      setLoading(false);
+      setSavingPayment(false);
     }
   }
 
@@ -743,6 +755,7 @@ export default function BusinessProjectPage() {
       );
       // Update the project status explicitly as well (derivation will sync anyway)
       await updateProject(projectId, { projectStatus: 'completed', progress: 100 } as any);
+      refetchTimeline();
     } catch (error) {
       console.error('Error marking project complete:', error);
     } finally {
@@ -789,6 +802,7 @@ export default function BusinessProjectPage() {
       setIsEditingProject(false);
       setProjectSaveFeedback({ type: 'success', message: 'הפרויקט עודכן בהצלחה' });
       setTimeout(() => setProjectSaveFeedback(null), 3000);
+      refetchTimeline();
     } catch (error: any) {
       console.error('[project-edit] save failed:', error);
       setProjectSaveFeedback({ type: 'error', message: `שגיאה בשמירה: ${error?.message || 'unknown'}` });
@@ -805,6 +819,7 @@ export default function BusinessProjectPage() {
       if (newVal) payload.contractSignedAt = new Date().toISOString();
       else payload.contractSignedAt = null;
       await updateProject(projectId, payload as any);
+      refetchTimeline();
     } catch (error) {
       console.error('[project-edit] contract toggle failed:', error);
     }
@@ -1415,6 +1430,7 @@ export default function BusinessProjectPage() {
                   milestone_created: '📌', milestone_status_changed: '🔄',
                   milestone_assigned: '👤', milestone_completed: '✅',
                   file_uploaded: '📎', payment_created: '💰',
+                  project_created: '⭐', project_edited: '✏️',
                 };
                 return (
                   <div key={event.id} style={{ display: 'flex', gap: '10px', alignItems: 'center', fontSize: '13px' }}>
@@ -1607,6 +1623,7 @@ export default function BusinessProjectPage() {
                                 return next;
                               });
                               setEditingMilestoneId(null);
+                              refetchTimeline();
                             } catch (error) {
                               console.error('Error saving milestone edit:', error);
                             } finally {
@@ -2165,13 +2182,18 @@ export default function BusinessProjectPage() {
                     }}
                   />
                 </div>
+                {paymentError && (
+                  <div style={{ color: '#f87171', fontSize: '12px', marginBottom: '8px', padding: '6px 10px', background: 'rgba(248,113,113,0.1)', borderRadius: '6px' }}>
+                    {paymentError}
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button className="prj-btn prj-btn-primary" onClick={handleAddPayment}
-                    disabled={loading || !paymentFormData.title || !paymentFormData.amount}>
-                    {loading ? '...' : 'שמור תשלום'}
+                    disabled={savingPayment || !paymentFormData.title || !paymentFormData.amount}>
+                    {savingPayment ? 'שומר...' : 'שמור תשלום'}
                   </button>
                   <button className="prj-btn prj-btn-ghost"
-                    onClick={() => { setShowPaymentForm(false); setPaymentFormData({ title: '', amount: '', dueDate: '', description: '', milestoneId: '' }); }}>
+                    onClick={() => { setShowPaymentForm(false); setPaymentFormData({ title: '', amount: '', dueDate: '', description: '', milestoneId: '' }); setPaymentError(null); }}>
                     ביטול
                   </button>
                 </div>
@@ -2282,6 +2304,7 @@ export default function BusinessProjectPage() {
                 file_uploaded: { icon: '📎', bg: 'rgba(59,130,246,0.12)' },
                 payment_created: { icon: '💰', bg: 'rgba(245,158,11,0.12)' },
                 project_created: { icon: '⭐', bg: 'rgba(99,102,241,0.12)' },
+                project_edited: { icon: '✏️', bg: 'rgba(100,116,139,0.12)' },
               };
               const { icon, bg } = iconMap[event.actionType] || { icon: '📋', bg: 'rgba(100,116,139,0.12)' };
 
