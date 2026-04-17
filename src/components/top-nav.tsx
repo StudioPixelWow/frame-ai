@@ -23,6 +23,7 @@ const mainNavItems: NavItem[] = [
   { href: "/business-calendar", label: "יומן",            id: "nav-biz-calendar" },
   { href: "/employees",         label: "צוות",            id: "nav-employees" },
   { href: "/business-projects", label: "פרויקטים",        id: "nav-otp" },
+  { href: "/business-projects/dashboard", label: "דשבורד פרויקטים", id: "nav-biz-dash" },
   { href: "/accounting",        label: "חשבונות",         id: "nav-payments" },
   { href: "/accounting/podcast", label: "פודקאסט",        id: "nav-podcast" },
   { href: "/approvals",         label: "אישורים",         id: "nav-approvals" },
