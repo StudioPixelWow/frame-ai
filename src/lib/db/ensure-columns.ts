@@ -1,5 +1,6 @@
 /**
  * Auto-add missing columns to business_projects table.
+ * Uses the same sb.rpc('exec_sql') pattern as ensureTable() in store.ts.
  * Runs once per process lifetime — safe to call from multiple routes.
  */
 
@@ -8,66 +9,59 @@ import { getSupabase } from './store';
 const TABLE = 'business_projects';
 let _done = false;
 
+const REQUIRED_COLUMNS = [
+  { name: 'total_price', def: 'NUMERIC DEFAULT 0' },
+  { name: 'progress', def: 'NUMERIC DEFAULT 0' },
+  { name: 'contract_signed', def: 'BOOLEAN DEFAULT false' },
+  { name: 'contract_signed_at', def: 'TIMESTAMPTZ' },
+];
+
 export async function ensureBusinessProjectColumns() {
   if (_done) return;
   _done = true;
+
   try {
     const sb = getSupabase();
-    // Quick probe — if total_price exists, nothing to do
+
+    // Quick probe — if total_price exists, all columns likely exist
     const { error } = await sb.from(TABLE).select('total_price').limit(1);
-    if (!error) return;
+    if (!error) return; // column exists, nothing to do
 
-    console.warn(`[ensureColumns] column probe failed: ${error.message} — attempting ALTER TABLE`);
+    console.warn(`[ensureColumns] "${TABLE}.total_price" missing — adding columns via exec_sql`);
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-    if (!supabaseUrl || !serviceKey) {
-      console.warn('[ensureColumns] no credentials — cannot auto-add columns');
-      return;
-    }
+    // Build a single ALTER TABLE statement with all columns
+    const alterClauses = REQUIRED_COLUMNS
+      .map(col => `ADD COLUMN IF NOT EXISTS ${col.name} ${col.def}`)
+      .join(', ');
+    const ddl = `ALTER TABLE ${TABLE} ${alterClauses};`;
 
-    const columns = [
-      { name: 'total_price', def: 'NUMERIC DEFAULT 0' },
-      { name: 'progress', def: 'NUMERIC DEFAULT 0' },
-      { name: 'contract_signed', def: 'BOOLEAN DEFAULT false' },
-      { name: 'contract_signed_at', def: 'TIMESTAMPTZ' },
-    ];
+    // Use the same rpc('exec_sql') that ensureTable() uses in store.ts
+    const { error: rpcErr } = await sb.rpc('exec_sql', { query: ddl });
 
-    for (const col of columns) {
-      const sql = `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS ${col.name} ${col.def}`;
-      // Try Supabase management API / pg_net / exec_sql RPC
-      let ok = false;
-      for (const rpcName of ['exec_sql', 'run_sql', '']) {
-        const url = rpcName
-          ? `${supabaseUrl}/rest/v1/rpc/${rpcName}`
-          : `${supabaseUrl}/rest/v1/rpc/`;
-        try {
-          const resp = await fetch(url, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              apikey: serviceKey,
-              Authorization: `Bearer ${serviceKey}`,
-              Prefer: 'return=minimal',
-            },
-            body: JSON.stringify(rpcName ? { sql } : { query: sql }),
-          });
-          if (resp.ok || resp.status === 204) { ok = true; break; }
-        } catch { /* try next */ }
-      }
-      if (!ok) {
-        console.warn(`[ensureColumns] auto-add failed for ${col.name}. Run manually:\n  ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS ${col.name} ${col.def};`);
+    if (rpcErr) {
+      // If combined ALTER fails, try columns one by one
+      console.warn('[ensureColumns] combined ALTER failed:', rpcErr.message, '— trying individually');
+      for (const col of REQUIRED_COLUMNS) {
+        const singleDdl = `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS ${col.name} ${col.def};`;
+        const { error: singleErr } = await sb.rpc('exec_sql', { query: singleDdl });
+        if (singleErr && !singleErr.message.includes('already exists')) {
+          console.warn(`[ensureColumns] failed to add ${col.name}:`, singleErr.message);
+        }
       }
     }
 
-    // Verify
-    const { error: err2 } = await sb.from(TABLE).select('total_price').limit(1);
-    if (err2) {
-      console.error(`[ensureColumns] STILL missing columns after migration attempt. Run manually:\n  ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS total_price NUMERIC DEFAULT 0;\n  ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS progress NUMERIC DEFAULT 0;`);
-      // Reset so we try again next request
-      _done = false;
+    // Verify the column now exists
+    const { error: verifyErr } = await sb.from(TABLE).select('total_price').limit(1);
+    if (verifyErr) {
+      console.error(
+        `[ensureColumns] STILL cannot access total_price after migration.\n` +
+        `Run this SQL manually in Supabase SQL Editor:\n\n` +
+        REQUIRED_COLUMNS.map(c => `  ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS ${c.name} ${c.def};`).join('\n') +
+        '\n'
+      );
+      _done = false; // retry on next request
     } else {
-      console.log('[ensureColumns] columns verified for', TABLE);
+      console.log('[ensureColumns] ✓ columns verified for', TABLE);
     }
   } catch (err) {
     console.warn('[ensureColumns] unexpected error:', err);
