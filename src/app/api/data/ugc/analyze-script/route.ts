@@ -1,12 +1,21 @@
 /**
  * POST /api/data/ugc/analyze-script
  *
- * Script-to-Scene AI Intelligence
- * Analyzes a Hebrew UGC script and generates scene beats for the
- * Remotion branded video composition.
+ * STRICT 5-SCENE Script-to-Scene AI Intelligence
  *
- * Input: { script, brandName, totalDurationSec, format, visualStyle? }
- * Output: { scenes: SceneBeat[], suggestedStyle, musicMood }
+ * Enforces a mandatory cinematic structure for every video:
+ *   Scene 1 — HOOK            (20%) : Attention grab, bold text, dynamic motion
+ *   Scene 2 — PROBLEM/RELATE  (20%) : Pain point, relatable situation
+ *   Scene 3 — SOLUTION INTRO  (20%) : Product/service intro, logo appears
+ *   Scene 4 — PRODUCT HIGHLIGHT(20%): Hero product shot, benefits overlay
+ *   Scene 5 — CTA             (20%) : Call-to-action end card, logo lockup
+ *
+ * The AI splits the script into exactly these 5 segments.
+ * If AI fails, the enforced default structure is used.
+ * Post-validation ensures no loose or unstructured output.
+ *
+ * Input: { script, brandName, totalDurationSec, format, visualStyle?, hasLogo?, hasProductImage? }
+ * Output: { scenes: SceneBeat[], suggestedStyle, musicMood, validation }
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -14,7 +23,7 @@ import { generateWithAI } from '@/lib/ai/openai-client';
 
 interface SceneBeatOutput {
   id: string;
-  type: 'hook' | 'brand_reveal' | 'value_prop' | 'product_focus' | 'benefits' | 'social_proof' | 'cta';
+  type: 'hook' | 'problem' | 'solution' | 'product_highlight' | 'cta';
   startSec: number;
   endSec: number;
   text: string;
@@ -25,8 +34,19 @@ interface SceneBeatOutput {
   avatarScale: number;
   avatarPosition: 'center' | 'left' | 'right' | 'bottom-left' | 'bottom-right';
   transition: 'cut' | 'fade' | 'slide' | 'zoom' | 'blur';
-  motionPreset: 'static' | 'slow-zoom' | 'drift' | 'pulse' | 'parallax';
+  motionPreset: 'static' | 'slow-zoom' | 'drift' | 'pulse' | 'parallax' | 'zoom-out' | 'shake';
+  bgGradientAngle?: number;
 }
+
+const MANDATORY_ORDER: SceneBeatOutput['type'][] = ['hook', 'problem', 'solution', 'product_highlight', 'cta'];
+
+const SCENE_PROPORTIONS: Record<string, number> = {
+  hook: 0.20,
+  problem: 0.20,
+  solution: 0.20,
+  product_highlight: 0.20,
+  cta: 0.20,
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -48,98 +68,105 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const systemPrompt = `You are a premium video director AI that analyzes spoken scripts and creates precise scene-by-scene breakdowns for branded marketing videos.
+    const systemPrompt = `You are a premium short-form video director AI.
+You receive a Hebrew marketing script and MUST split it into EXACTLY 5 scenes in this MANDATORY order:
 
-You receive a Hebrew script for a UGC-style marketing video and must output a structured JSON array of scene beats.
+SCENE 1 — "hook" (${Math.round(totalDurationSec * 0.20)}s)
+Purpose: Extremely strong attention-grabbing opening. Fast, bold, curiosity-driven.
+Rules: Large animated text overlay. avatarScale 0.85, avatarPosition "center", transition "zoom", motionPreset "pulse".
+overlay: 1-4 word Hebrew hook headline that creates instant curiosity.
 
-RULES:
-1. The total duration is ${totalDurationSec} seconds. Scene timings must cover 0 to ${totalDurationSec} exactly.
-2. Every scene must have a start and end time with no gaps or overlaps.
-3. Scene types and their purposes:
-   - "hook" (1-5 sec): Opening grab — bold, attention-catching. Avatar large, maybe a text hook.
-   - "brand_reveal" (2-4 sec): Show the brand — logo prominent, avatar smaller.
-   - "value_prop" (3-8 sec): Core value proposition — avatar speaking, text overlay with key point.
-   - "product_focus" (3-6 sec): Show the product — avatar small or hidden, product image large.
-   - "benefits" (3-8 sec): Feature/benefit list — avatar speaking with benefit overlay.
-   - "social_proof" (2-5 sec): Testimonial/trust — avatar speaking, clean layout.
-   - "cta" (3-5 sec): Final call-to-action — no avatar, brand + CTA text + logo.
+SCENE 2 — "problem" (${Math.round(totalDurationSec * 0.20)}s)
+Purpose: Identify pain point or relatable situation. Natural but sharp delivery.
+Rules: avatarScale 0.70, avatarPosition "right", transition "slide", motionPreset "slow-zoom".
+overlay: Short pain-point text (max 5 words).
 
-4. A video MUST have: at least one "hook" at the start and one "cta" at the end.
-5. The "cta" scene should always be last with avatarScale: 0 (no avatar, just brand card).
-6. Vary avatarPosition across scenes for visual interest (don't keep center for everything).
-7. The "overlay" field is a SHORT Hebrew text (max 6 words) shown on screen — key headline per scene.
-8. Assign transitions: first scene = "fade", last = "fade", vary others between "cut", "slide", "zoom", "blur".
-9. motionPreset: hook = "pulse" or "slow-zoom", cta = "static", others vary.
-10. avatarScale: 0 means avatar hidden, 0.5 = small with room for graphics, 0.85 = full screen.
-11. ${hasLogo ? 'Logo is available — set showLogo: true on hook, brand_reveal, and cta scenes.' : 'No logo uploaded — keep showLogo: false everywhere.'}
-12. ${hasProductImage ? 'Product image is available — set showProduct: true on product_focus and optionally value_prop scenes.' : 'No product image — keep showProduct: false everywhere.'}
+SCENE 3 — "solution" (${Math.round(totalDurationSec * 0.20)}s)
+Purpose: Introduce the product/service clearly with visual emphasis.
+Rules: avatarScale 0.60, avatarPosition "left", transition "blur", motionPreset "drift".
+showLogo: ${hasLogo ? 'true' : 'false'}, showProduct: ${hasProductImage ? 'true' : 'false'}.
+overlay: Solution/brand intro headline (max 5 words).
+
+SCENE 4 — "product_highlight" (${Math.round(totalDurationSec * 0.20)}s)
+Purpose: Strong product presence — hero shot, zoom, highlight, glow. Overlay benefits/features.
+Rules: avatarScale 0.40, avatarPosition "bottom-right", transition "zoom", motionPreset "parallax".
+showProduct: ${hasProductImage ? 'true' : 'false'}.
+overlay: Key benefit or feature (max 5 words).
+
+SCENE 5 — "cta" (${Math.round(totalDurationSec * 0.20)}s)
+Purpose: Clear, strong call to action. End frame that feels like a real ad closing.
+Rules: avatarScale 0, avatarPosition "center", transition "fade", motionPreset "static".
+showLogo: ${hasLogo ? 'true' : 'false'}.
+overlay: CTA text (max 4 words — action-oriented).
+
+CRITICAL REQUIREMENTS:
+- Output EXACTLY 5 scenes. Not 3, not 7. Exactly 5.
+- Scene order MUST be: hook → problem → solution → product_highlight → cta.
+- Total timing must cover 0 to ${totalDurationSec} seconds with no gaps.
+- Each scene MUST have a non-empty "overlay" field (short Hebrew headline for that scene).
+- The "text" field contains the portion of the script spoken during that scene.
+- bgGradientAngle: 135 for hook, 225 for problem, 45 for solution, 315 for product_highlight, 180 for cta.
+- DO NOT output any scene with motionPreset "static" except the CTA.
+- Every scene MUST feel visually different from the previous one.
 
 FORMAT: ${format}
-VIDEO STYLE: ${visualStyle || 'cinematic-dark'}
+STYLE: ${visualStyle || 'cinematic-dark'}
 
-Output ONLY valid JSON: { "scenes": [...], "suggestedStyle": "style-id", "musicMood": "mood description" }
+Output ONLY valid JSON:
+{
+  "scenes": [ ... exactly 5 SceneBeat objects ... ],
+  "suggestedStyle": "style-id",
+  "musicMood": "short English mood description"
+}`;
 
-The "suggestedStyle" should be one of: cinematic-dark, clean-minimal, bold-energy, luxury-gold, neon-glow, organic-warm, corporate-pro, social-pop.
-The "musicMood" should be a short English description like "upbeat corporate" or "dramatic cinematic" or "chill lifestyle".`;
-
-    const userPrompt = `Analyze this Hebrew marketing script and create scene beats:
+    const userPrompt = `Split this Hebrew marketing script into exactly 5 cinematic scenes:
 
 BRAND: ${brandName || 'Unknown'}
+TOTAL DURATION: ${totalDurationSec} seconds
+
 SCRIPT:
 ${script}
 
-Total duration: ${totalDurationSec} seconds.
-Generate the optimal scene breakdown as JSON.`;
+Generate the 5-scene breakdown. Remember: hook → problem → solution → product_highlight → cta.`;
 
     const result = await generateWithAI(systemPrompt, userPrompt, {
-      temperature: 0.4,
+      temperature: 0.3,
     });
+
+    let parsed: { scenes: SceneBeatOutput[]; suggestedStyle?: string; musicMood?: string };
 
     if (!result.success) {
       console.error('[analyze-script] AI generation failed:', result.error);
-      const fallback = buildDefaultScenes(totalDurationSec, hasLogo, hasProductImage);
-      return NextResponse.json(fallback);
-    }
-
-    // Parse the AI response
-    let parsed: { scenes: SceneBeatOutput[]; suggestedStyle?: string; musicMood?: string };
-    try {
-      // generateWithAI returns { success: true, data: parsed_json_or_string }
-      const d = result.data;
-      if (typeof d === 'object' && d !== null && 'scenes' in (d as any)) {
-        parsed = d as any;
-      } else {
-        const text = typeof d === 'string' ? d : JSON.stringify(d);
-        const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
-        const cleanJson = (jsonMatch[1] || text).trim();
-        parsed = JSON.parse(cleanJson);
+      parsed = { scenes: buildEnforcedDefault(totalDurationSec, hasLogo, hasProductImage) };
+    } else {
+      // Parse AI response
+      try {
+        const d = result.data;
+        if (typeof d === 'object' && d !== null && 'scenes' in (d as any)) {
+          parsed = d as any;
+        } else {
+          const text = typeof d === 'string' ? d : JSON.stringify(d);
+          const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
+          const cleanJson = (jsonMatch[1] || text).trim();
+          parsed = JSON.parse(cleanJson);
+        }
+      } catch (parseErr) {
+        console.error('[analyze-script] Failed to parse AI response:', result.data);
+        parsed = { scenes: buildEnforcedDefault(totalDurationSec, hasLogo, hasProductImage) };
       }
-    } catch (parseErr) {
-      console.error('[analyze-script] Failed to parse AI response:', result.data);
-      parsed = buildDefaultScenes(totalDurationSec, hasLogo, hasProductImage);
     }
 
-    // Validate and fix scene timings
-    if (!parsed.scenes || !Array.isArray(parsed.scenes) || parsed.scenes.length === 0) {
-      parsed = buildDefaultScenes(totalDurationSec, hasLogo, hasProductImage);
-    }
+    // ═══ ENFORCEMENT: Fix any AI deviations from the strict structure ═══
+    parsed.scenes = enforceStructure(parsed.scenes, totalDurationSec, hasLogo, hasProductImage);
 
-    // Ensure scenes cover the full duration
-    const lastScene = parsed.scenes[parsed.scenes.length - 1];
-    if (lastScene && Math.abs(lastScene.endSec - totalDurationSec) > 1) {
-      lastScene.endSec = totalDurationSec;
-    }
-
-    // Ensure IDs
-    parsed.scenes = parsed.scenes.map((s, i) => ({
-      ...s,
-      id: s.id || `scene_${i}`,
-    }));
+    // ═══ VALIDATION ═══
+    const validation = validateScenes(parsed.scenes, totalDurationSec, hasLogo, hasProductImage);
 
     return NextResponse.json({
       scenes: parsed.scenes,
       suggestedStyle: parsed.suggestedStyle || 'cinematic-dark',
       musicMood: parsed.musicMood || 'upbeat corporate',
+      validation,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -148,106 +175,228 @@ Generate the optimal scene breakdown as JSON.`;
   }
 }
 
-function buildDefaultScenes(
+// ═══ Enforcement Layer ═══════════════════════════════════════════════
+// Regardless of what the AI outputs, this corrects the structure.
+
+function enforceStructure(
+  scenes: SceneBeatOutput[],
   totalDurationSec: number,
   hasLogo: boolean,
-  hasProductImage: boolean
-): { scenes: SceneBeatOutput[]; suggestedStyle: string; musicMood: string } {
-  const ctaDur = Math.min(4, totalDurationSec * 0.12);
-  const hookDur = Math.min(3, totalDurationSec * 0.1);
-  const remaining = totalDurationSec - hookDur - ctaDur;
-  const midSections = hasProductImage ? 3 : 2;
-  const midDur = remaining / midSections;
-
-  const scenes: SceneBeatOutput[] = [
-    {
-      id: 'scene_0',
-      type: 'hook',
-      startSec: 0,
-      endSec: hookDur,
-      text: '',
-      overlay: '',
-      showLogo: hasLogo,
-      showProduct: false,
-      bgIntensity: 0.3,
-      avatarScale: 0.85,
-      avatarPosition: 'center',
-      transition: 'fade',
-      motionPreset: 'pulse',
-    },
-    {
-      id: 'scene_1',
-      type: 'value_prop',
-      startSec: hookDur,
-      endSec: hookDur + midDur,
-      text: '',
-      overlay: '',
-      showLogo: false,
-      showProduct: false,
-      bgIntensity: 0.4,
-      avatarScale: 0.7,
-      avatarPosition: 'right',
-      transition: 'slide',
-      motionPreset: 'slow-zoom',
-    },
-  ];
-
-  let cursor = hookDur + midDur;
-
-  if (hasProductImage) {
-    scenes.push({
-      id: 'scene_2',
-      type: 'product_focus',
-      startSec: cursor,
-      endSec: cursor + midDur,
-      text: '',
-      overlay: '',
-      showLogo: false,
-      showProduct: true,
-      bgIntensity: 0.6,
-      avatarScale: 0.4,
-      avatarPosition: 'bottom-right',
-      transition: 'zoom',
-      motionPreset: 'drift',
-    });
-    cursor += midDur;
+  hasProductImage: boolean,
+): SceneBeatOutput[] {
+  // If AI didn't return exactly 5 scenes or wrong order, use defaults
+  if (!scenes || !Array.isArray(scenes) || scenes.length !== 5) {
+    return buildEnforcedDefault(totalDurationSec, hasLogo, hasProductImage);
   }
 
-  scenes.push({
-    id: `scene_${scenes.length}`,
-    type: 'benefits',
-    startSec: cursor,
-    endSec: totalDurationSec - ctaDur,
-    text: '',
-    overlay: '',
-    showLogo: false,
-    showProduct: false,
-    bgIntensity: 0.35,
-    avatarScale: 0.75,
-    avatarPosition: 'left',
-    transition: 'slide',
-    motionPreset: 'slow-zoom',
+  // Verify order
+  const actualOrder = scenes.map(s => s.type);
+  if (!MANDATORY_ORDER.every((t, i) => actualOrder[i] === t)) {
+    // Try to reorder if all 5 types exist
+    const reordered: SceneBeatOutput[] = [];
+    for (const type of MANDATORY_ORDER) {
+      const found = scenes.find(s => s.type === type);
+      if (!found) return buildEnforcedDefault(totalDurationSec, hasLogo, hasProductImage);
+      reordered.push(found);
+    }
+    scenes = reordered;
+  }
+
+  // Fix timings to match proportions exactly
+  let cursor = 0;
+  scenes = scenes.map((scene, i) => {
+    const proportion = SCENE_PROPORTIONS[scene.type] || 0.20;
+    const dur = Math.round(totalDurationSec * proportion * 10) / 10;
+    const startSec = Math.round(cursor * 10) / 10;
+    cursor += dur;
+    const endSec = i === 4 ? totalDurationSec : Math.round(cursor * 10) / 10;
+
+    // Enforce per-scene visual rules
+    const rules = ENFORCED_RULES[scene.type];
+    return {
+      ...scene,
+      id: `scene_${i}`,
+      startSec,
+      endSec,
+      // Enforce avatar scale and position
+      avatarScale: rules.avatarScale,
+      avatarPosition: rules.avatarPosition,
+      // Enforce transitions and motion
+      transition: rules.transition,
+      motionPreset: rules.motionPreset,
+      bgGradientAngle: rules.bgGradientAngle,
+      bgIntensity: rules.bgIntensity,
+      // Enforce product/logo rules
+      showLogo: rules.showLogo && hasLogo,
+      showProduct: rules.showProduct && hasProductImage,
+      // Ensure overlay exists (fallback to empty is caught by validation)
+      overlay: scene.overlay || rules.fallbackOverlay,
+    };
   });
 
-  scenes.push({
-    id: `scene_${scenes.length}`,
-    type: 'cta',
-    startSec: totalDurationSec - ctaDur,
-    endSec: totalDurationSec,
-    text: '',
-    overlay: '',
-    showLogo: hasLogo,
+  return scenes;
+}
+
+const ENFORCED_RULES: Record<string, {
+  avatarScale: number;
+  avatarPosition: SceneBeatOutput['avatarPosition'];
+  transition: SceneBeatOutput['transition'];
+  motionPreset: SceneBeatOutput['motionPreset'];
+  bgGradientAngle: number;
+  bgIntensity: number;
+  showLogo: boolean;
+  showProduct: boolean;
+  fallbackOverlay: string;
+}> = {
+  hook: {
+    avatarScale: 0.85,
+    avatarPosition: 'center',
+    transition: 'zoom',
+    motionPreset: 'pulse',
+    bgGradientAngle: 135,
+    bgIntensity: 0.35,
+    showLogo: false,
     showProduct: false,
-    bgIntensity: 0.8,
+    fallbackOverlay: '',
+  },
+  problem: {
+    avatarScale: 0.70,
+    avatarPosition: 'right',
+    transition: 'slide',
+    motionPreset: 'slow-zoom',
+    bgGradientAngle: 225,
+    bgIntensity: 0.45,
+    showLogo: false,
+    showProduct: false,
+    fallbackOverlay: '',
+  },
+  solution: {
+    avatarScale: 0.60,
+    avatarPosition: 'left',
+    transition: 'blur',
+    motionPreset: 'drift',
+    bgGradientAngle: 45,
+    bgIntensity: 0.50,
+    showLogo: true,
+    showProduct: true,
+    fallbackOverlay: '',
+  },
+  product_highlight: {
+    avatarScale: 0.40,
+    avatarPosition: 'bottom-right',
+    transition: 'zoom',
+    motionPreset: 'parallax',
+    bgGradientAngle: 315,
+    bgIntensity: 0.60,
+    showLogo: false,
+    showProduct: true,
+    fallbackOverlay: '',
+  },
+  cta: {
     avatarScale: 0,
     avatarPosition: 'center',
     transition: 'fade',
     motionPreset: 'static',
+    bgGradientAngle: 180,
+    bgIntensity: 0.80,
+    showLogo: true,
+    showProduct: false,
+    fallbackOverlay: '',
+  },
+};
+
+function buildEnforcedDefault(
+  totalDurationSec: number,
+  hasLogo: boolean,
+  hasProductImage: boolean,
+): SceneBeatOutput[] {
+  let cursor = 0;
+  return MANDATORY_ORDER.map((type, i) => {
+    const proportion = SCENE_PROPORTIONS[type] || 0.20;
+    const dur = Math.round(totalDurationSec * proportion * 10) / 10;
+    const startSec = Math.round(cursor * 10) / 10;
+    cursor += dur;
+    const endSec = i === 4 ? totalDurationSec : Math.round(cursor * 10) / 10;
+    const rules = ENFORCED_RULES[type];
+
+    return {
+      id: `scene_${i}`,
+      type,
+      startSec,
+      endSec,
+      text: '',
+      overlay: '',
+      showLogo: rules.showLogo && hasLogo,
+      showProduct: rules.showProduct && hasProductImage,
+      bgIntensity: rules.bgIntensity,
+      avatarScale: rules.avatarScale,
+      avatarPosition: rules.avatarPosition,
+      transition: rules.transition,
+      motionPreset: rules.motionPreset,
+      bgGradientAngle: rules.bgGradientAngle,
+    };
+  });
+}
+
+// ═══ Validation ══════════════════════════════════════════════════════
+function validateScenes(
+  scenes: SceneBeatOutput[],
+  totalDurationSec: number,
+  hasLogo: boolean,
+  hasProductImage: boolean,
+): { passed: boolean; checks: { name: string; passed: boolean; detail: string }[] } {
+  const checks: { name: string; passed: boolean; detail: string }[] = [];
+
+  // 1. Exactly 5 scenes
+  checks.push({
+    name: 'scene_count',
+    passed: scenes.length === 5,
+    detail: `${scenes.length}/5 scenes`,
   });
 
-  return {
-    scenes,
-    suggestedStyle: 'cinematic-dark',
-    musicMood: 'upbeat corporate',
-  };
+  // 2. Correct order
+  const order = scenes.map(s => s.type);
+  const orderOk = MANDATORY_ORDER.every((t, i) => order[i] === t);
+  checks.push({ name: 'scene_order', passed: orderOk, detail: order.join(' → ') });
+
+  // 3. Full timing coverage
+  const startsOk = Math.abs(scenes[0]?.startSec ?? -1) < 0.2;
+  const endsOk = Math.abs((scenes[4]?.endSec ?? 0) - totalDurationSec) < 0.5;
+  checks.push({ name: 'timing', passed: startsOk && endsOk, detail: `0–${scenes[4]?.endSec}s (target: 0–${totalDurationSec}s)` });
+
+  // 4. Product visible in solution + product_highlight
+  if (hasProductImage) {
+    const sol = scenes.find(s => s.type === 'solution');
+    const prod = scenes.find(s => s.type === 'product_highlight');
+    const ok = !!sol?.showProduct && !!prod?.showProduct;
+    checks.push({ name: 'product_shown', passed: ok, detail: ok ? 'Product in solution + highlight' : 'MISSING' });
+  }
+
+  // 5. CTA is end card (no avatar)
+  const cta = scenes.find(s => s.type === 'cta');
+  checks.push({ name: 'cta_endcard', passed: cta?.avatarScale === 0, detail: `CTA avatar: ${cta?.avatarScale}` });
+
+  // 6. Logo in CTA
+  if (hasLogo) {
+    checks.push({ name: 'logo_cta', passed: !!cta?.showLogo, detail: cta?.showLogo ? 'Logo in CTA' : 'MISSING' });
+  }
+
+  // 7. Hook is dynamic (not static)
+  const hook = scenes.find(s => s.type === 'hook');
+  checks.push({ name: 'hook_dynamic', passed: hook?.motionPreset !== 'static', detail: `Hook motion: ${hook?.motionPreset}` });
+
+  // 8. Avatar position variety (min 3 unique across non-CTA scenes)
+  const positions = scenes.filter(s => s.avatarScale > 0).map(s => s.avatarPosition);
+  const unique = new Set(positions).size;
+  checks.push({ name: 'position_variety', passed: unique >= 3, detail: `${unique} unique positions` });
+
+  // 9. Transition variety (min 3 unique)
+  const trans = new Set(scenes.map(s => s.transition)).size;
+  checks.push({ name: 'transition_variety', passed: trans >= 3, detail: `${trans} unique transitions` });
+
+  // 10. No dead air (no non-CTA scene with static + no overlay)
+  const dead = scenes.filter(s => s.motionPreset === 'static' && !s.overlay && s.type !== 'cta');
+  checks.push({ name: 'no_dead_air', passed: dead.length === 0, detail: dead.length === 0 ? 'Clean' : `${dead.length} dead scene(s)` });
+
+  return { passed: checks.every(c => c.passed), checks };
 }

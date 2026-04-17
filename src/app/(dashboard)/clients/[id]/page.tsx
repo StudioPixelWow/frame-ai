@@ -151,6 +151,7 @@ function ClientDetailContent() {
   const ugcFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // ── UGC Branded Video Composition State ──
+  const [ugcDuration, setUgcDuration] = useState<15 | 30 | 45 | 60>(30);
   const [ugcLogoUrl, setUgcLogoUrl] = useState<string | null>(null);
   const [ugcProductImageUrl, setUgcProductImageUrl] = useState<string | null>(null);
   const [ugcTagline, setUgcTagline] = useState("");
@@ -545,7 +546,7 @@ function ClientDetailContent() {
                 body: JSON.stringify({
                   script: ugcScript,
                   brandName: ugcBrandName || clientRef.name,
-                  totalDurationSec: statusData.duration || 30,
+                  totalDurationSec: ugcDuration,
                   format: ugcFormat,
                   visualStyle: ugcVisualStyle,
                   hasLogo: !!ugcLogoUrl,
@@ -568,7 +569,7 @@ function ClientDetailContent() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   avatarVideoUrl: statusData.videoUrl,
-                  durationSec: statusData.duration || 30,
+                  durationSec: ugcDuration,
                   format: ugcFormat,
                   visualStyle: ugcVisualStyle,
                   scenes,
@@ -713,7 +714,7 @@ function ClientDetailContent() {
       toast(`שגיאה ביצירת סרטון: ${err?.message}`, "error");
       setUgcGenerating(false);
     }
-  }, [client, ugcAvatarId, ugcVoiceId, ugcScript, ugcFormat, ugcVisualStyle, ugcLogoUrl, ugcProductImageUrl, ugcBrandName, ugcTagline, ugcPlatform, ugcCallToAction, toast, createClientFile, refetchClientFiles, setActiveTab]);
+  }, [client, ugcAvatarId, ugcVoiceId, ugcScript, ugcFormat, ugcDuration, ugcVisualStyle, ugcLogoUrl, ugcProductImageUrl, ugcBrandName, ugcTagline, ugcPlatform, ugcCallToAction, toast, createClientFile, refetchClientFiles, setActiveTab]);
 
   // Cleanup poll intervals on unmount
   useEffect(() => {
@@ -2030,6 +2031,41 @@ function ClientDetailContent() {
                     })}
                   </div>
                 </section>
+
+                {/* ─────────────────────────────────────
+                   8A2. DURATION PRESET
+                ───────────────────────────────────── */}
+                <section style={{ marginBottom: "1.75rem" }}>
+                  <h3 style={{ fontSize: "0.8rem", fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.625rem" }}>
+                    אורך סרטון
+                  </h3>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    {([15, 30, 45, 60] as const).map((dur) => {
+                      const isActive = ugcDuration === dur;
+                      return (
+                        <button key={dur} type="button" disabled={ugcGenerating}
+                          onClick={() => setUgcDuration(dur)}
+                          style={{
+                            flex: 1, padding: "0.625rem 0.5rem", borderRadius: "0.5rem",
+                            border: isActive ? "2px solid #8b5cf6" : "1px solid rgba(255,255,255,0.08)",
+                            background: isActive ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.02)",
+                            color: isActive ? "#c4b5fd" : "rgba(255,255,255,0.5)",
+                            fontSize: "0.85rem", fontWeight: 700, cursor: ugcGenerating ? "not-allowed" : "pointer",
+                            transition: "all 150ms", textAlign: "center",
+                          }}
+                        >
+                          {dur}s
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.25)", marginTop: "0.375rem" }}>
+                    מבנה 5 סצנות: Hook → Problem → Solution → Product → CTA
+                  </p>
+                </section>
+
+                {/* Divider */}
+                <div style={{ height: 1, background: "rgba(255,255,255,0.06)", marginBottom: "1.75rem" }} />
 
                 {/* ─────────────────────────────────────
                    8B. VISUAL STYLE
