@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
+import { requireRole, getRequestRole, getRequestClientId, getRequestEmployeeId } from '@/lib/auth/api-guard';
 
 const TABLE = 'business_projects';
 
@@ -92,13 +93,31 @@ function parseBadColumn(msg: string): string | null {
   return m?.[1] || m?.[2] || null;
 }
 
-export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
     const sb = getSupabase();
     const { data, error } = await sb.from(TABLE).select('*').eq('id', id).maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: 'Not found', projectId: id }, { status: 404 });
+
+    // Clients can only view their own projects
+    const role = getRequestRole(req);
+    if (role === 'client') {
+      const clientId = getRequestClientId(req);
+      if ((data as any).client_id !== clientId) {
+        return NextResponse.json({ error: 'אין גישה לפרויקט זה' }, { status: 403 });
+      }
+    }
+
+    // Employees can only view projects assigned to them
+    if (role === 'employee') {
+      const employeeId = getRequestEmployeeId(req);
+      if (employeeId && (data as any).assigned_manager_id !== employeeId) {
+        return NextResponse.json({ error: 'אין גישה לפרויקט זה' }, { status: 403 });
+      }
+    }
+
     return NextResponse.json(rowToProject(data as Row));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -108,6 +127,10 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
 }
 
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  // Only admin and employee can update projects
+  const roleErr = requireRole(req, 'admin', 'employee');
+  if (roleErr) return roleErr;
+
   try {
     const { id } = await context.params;
     let body: Record<string, unknown> = {};
@@ -150,7 +173,11 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
   }
 }
 
-export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  // Only admin can delete projects
+  const roleErr = requireRole(req, 'admin');
+  if (roleErr) return roleErr;
+
   try {
     const { id } = await context.params;
     const sb = getSupabase();

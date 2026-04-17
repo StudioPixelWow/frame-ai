@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 import { insertTimelineEvent, deriveAndUpdateProjectStatus } from '@/lib/timeline';
+import { requireRole, getRequestRole, getRequestEmployeeId, getRequestClientId } from '@/lib/auth/api-guard';
 
 const TABLE = 'business_project_milestones';
 
@@ -89,9 +90,11 @@ function parseBadColumn(msg: string): string | null {
 const SELECT_COLUMNS =
   'id, project_id, title, description, due_date, assignee_id, status, files, notes, created_at, updated_at';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const sb = getSupabase();
+    const role = getRequestRole(req);
+
     // select('*') so we get whatever the real schema uses (business_project_id,
     // sort_order, etc.) without enumerating columns.
     const { data: rows, error } = await sb.from(TABLE).select('*').order('id');
@@ -99,7 +102,36 @@ export async function GET() {
       console.error('[API] GET /api/data/project-milestones supabase error:', error);
       return NextResponse.json({ error: error.message, code: (error as any).code ?? null }, { status: 500 });
     }
-    return NextResponse.json((rows ?? []).map((r) => rowToMilestone(r as Row)));
+
+    let milestones = (rows ?? []).map((r) => rowToMilestone(r as Row));
+
+    // Employee: only see milestones assigned to them
+    if (role === 'employee') {
+      const employeeId = getRequestEmployeeId(req);
+      if (employeeId) {
+        milestones = milestones.filter(
+          (m) => m.assigneeId === employeeId || m.assignedEmployeeId === employeeId
+        );
+      } else {
+        milestones = [];
+      }
+    }
+
+    // Client: only see milestones for their projects (filter happens at project level,
+    // but we also filter here for safety). Clients see all milestones on their projects.
+    if (role === 'client') {
+      const clientId = getRequestClientId(req);
+      if (clientId) {
+        // Get the client's project IDs first
+        const { data: projRows } = await sb.from('business_projects').select('id').eq('client_id', clientId);
+        const projectIds = new Set((projRows ?? []).map((p: any) => p.id));
+        milestones = milestones.filter((m) => projectIds.has(m.projectId) || projectIds.has(m.businessProjectId));
+      } else {
+        milestones = [];
+      }
+    }
+
+    return NextResponse.json(milestones);
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: `Failed to fetch milestones: ${msg}` }, { status: 500 });
@@ -107,6 +139,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // Only admin and employee can create milestones
+  const roleErr = requireRole(req, 'admin', 'employee');
+  if (roleErr) return roleErr;
+
   try {
     const sb = getSupabase();
     let body: Record<string, unknown> = {};

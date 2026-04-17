@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
+import { requireRole, getRequestRole, getRequestEmployeeId, getRequestClientId } from '@/lib/auth/api-guard';
 
 const TABLE = 'tasks';
 
@@ -83,6 +84,7 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
 export async function GET(req: NextRequest) {
   try {
     const sb = getSupabase();
+    const role = getRequestRole(req);
     const url = new URL(req.url);
     const milestoneId = url.searchParams.get('milestone_id') || url.searchParams.get('milestoneId');
     const projectId = url.searchParams.get('project_id') || url.searchParams.get('projectId');
@@ -92,6 +94,33 @@ export async function GET(req: NextRequest) {
     if (milestoneId) q = q.eq('milestone_id', milestoneId);
     if (projectId) q = q.eq('project_id', projectId);
     if (businessProjectId) q = q.eq('business_project_id', businessProjectId);
+
+    // Employee: only see tasks assigned to them
+    if (role === 'employee') {
+      const employeeId = getRequestEmployeeId(req);
+      if (employeeId) {
+        q = q.eq('assignee_id', employeeId);
+      } else {
+        return NextResponse.json([]);
+      }
+    }
+
+    // Client: read-only, only tasks on their projects
+    if (role === 'client') {
+      const clientId = getRequestClientId(req);
+      if (clientId) {
+        // Get client's project IDs, then filter tasks
+        const { data: projRows } = await sb.from('business_projects').select('id').eq('client_id', clientId);
+        const projIds = (projRows ?? []).map((p: any) => p.id as string);
+        if (projIds.length > 0) {
+          q = q.in('business_project_id', projIds);
+        } else {
+          return NextResponse.json([]);
+        }
+      } else {
+        return NextResponse.json([]);
+      }
+    }
 
     const { data: rows, error } = await q;
     if (error) {
@@ -106,6 +135,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // Only admin and employee can create tasks
+  const roleErr = requireRole(req, 'admin', 'employee');
+  if (roleErr) return roleErr;
+
   try {
     const sb = getSupabase();
     let body: Record<string, unknown> = {};

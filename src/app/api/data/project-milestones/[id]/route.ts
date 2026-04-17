@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 import { insertTimelineEvent, deriveAndUpdateProjectStatus } from '@/lib/timeline';
+import { requireRole } from '@/lib/auth/api-guard';
 
 const TABLE = 'business_project_milestones';
 
@@ -194,6 +195,10 @@ async function ensureTaskForMilestone(
 }
 
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  // Only admin and employee can update milestones
+  const roleErr = requireRole(req, 'admin', 'employee');
+  if (roleErr) return roleErr;
+
   try {
     const { id } = await context.params;
     let body: Record<string, unknown> = {};
@@ -415,7 +420,11 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
   }
 }
 
-export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  // Only admin can delete milestones
+  const roleErr = requireRole(req, 'admin');
+  if (roleErr) return roleErr;
+
   try {
     const { id } = await context.params;
     const sb = getSupabase();

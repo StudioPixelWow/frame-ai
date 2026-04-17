@@ -7,11 +7,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { leads } from '@/lib/db';
 import { ensureSeeded } from '@/lib/db/seed';
+import { requireRole } from '@/lib/auth/api-guard';
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  // Only admin and employee can view leads
+  const getErr = requireRole(req, 'admin', 'employee');
+  if (getErr) return getErr;
+
   ensureSeeded();
   try {
     const { id } = await context.params;
@@ -32,6 +37,10 @@ export async function PUT(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  // Only admin and employee can update leads
+  const putErr = requireRole(req, 'admin', 'employee');
+  if (putErr) return putErr;
+
   ensureSeeded();
   try {
     const { id } = await context.params;
@@ -50,9 +59,13 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  // Only admin can delete leads
+  const delErr = requireRole(req, 'admin');
+  if (delErr) return delErr;
+
   ensureSeeded();
   try {
     const { id } = await context.params;

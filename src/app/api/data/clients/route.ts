@@ -13,6 +13,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
+import { requireRole } from '@/lib/auth/api-guard';
 
 /* ── ID generator ─────────────────────────────────────────────────────── */
 
@@ -74,7 +75,11 @@ const COLUMNS_FALLBACK =
 
 /* ── GET ──────────────────────────────────────────────────────────────── */
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // Only admin and employee can list clients
+  const roleErr = requireRole(req, 'admin', 'employee');
+  if (roleErr) return roleErr;
+
   try {
     const sb = getSupabase();
 
@@ -112,6 +117,10 @@ export async function GET() {
 /* ── POST ─────────────────────────────────────────────────────────────── */
 
 export async function POST(req: NextRequest) {
+  // Only admin can create clients
+  const roleErr = requireRole(req, 'admin');
+  if (roleErr) return roleErr;
+
   try {
     const sb = getSupabase();
     const body = await req.json();

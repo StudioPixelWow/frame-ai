@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useClients } from '@/lib/api/use-entity';
 import { useToast } from '@/components/ui/toast';
 
 export default function ClientPortalLoginPage() {
@@ -10,27 +9,62 @@ export default function ClientPortalLoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const { data: clients } = useClients();
   const toast = useToast();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email.trim()) {
+      toast('יש להזין דואר אלקטרוני', 'error');
+      return;
+    }
     setIsLoading(true);
 
     try {
-      // Demo: Find first portal-enabled client
-      const portalClient = clients.find(c => c.portalEnabled);
-      if (!portalClient) {
-        toast('אין לקוח פעיל בפורטל', 'error');
+      // Fetch portal users to verify credentials
+      const res = await fetch('/api/data/portal-users', { cache: 'no-store' });
+      const portalUsers = await res.json();
+
+      if (!Array.isArray(portalUsers)) {
+        toast('שגיאה בטעינת נתוני פורטל', 'error');
         setIsLoading(false);
         return;
       }
 
-      // In production, this would verify credentials
-      // For demo, just redirect with the first portal-enabled client
-      router.push(`/client-portal/dashboard?clientId=${portalClient.id}`);
+      // Find matching portal user by email
+      const portalUser = portalUsers.find(
+        (u: any) => u.email?.toLowerCase() === email.toLowerCase() && u.isActive
+      );
+
+      if (!portalUser) {
+        toast('כתובת דואר אלקטרוני לא נמצאה או חשבון לא פעיל', 'error');
+        setIsLoading(false);
+        return;
+      }
+
+      // Verify password (demo mode: passwordHash stores plain text 'demo')
+      if (portalUser.passwordHash && portalUser.passwordHash !== 'demo' && portalUser.passwordHash !== password) {
+        toast('סיסמה שגויה', 'error');
+        setIsLoading(false);
+        return;
+      }
+
+      // Store session info
+      try {
+        localStorage.setItem('portal_client_id', portalUser.clientId);
+        localStorage.setItem('portal_user_id', portalUser.id);
+        localStorage.setItem('portal_email', portalUser.email);
+      } catch {}
+
+      // Update last login
+      fetch(`/api/data/portal-users/${portalUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lastLoginAt: new Date().toISOString() }),
+      }).catch(() => {});
+
+      router.push(`/client-portal/dashboard?clientId=${portalUser.clientId}`);
     } catch (error) {
-      toast('שגיאה בכניסה', 'error');
+      toast('שגיאה בכניסה לפורטל', 'error');
       setIsLoading(false);
     }
   };

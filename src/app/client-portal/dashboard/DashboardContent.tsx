@@ -8,6 +8,8 @@ import {
   useClientFiles,
   useBusinessProjects,
   useActivities,
+  useProjectTimeline,
+  useProjectMilestones,
 } from '@/lib/api/use-entity';
 import { useMemo, Suspense } from 'react';
 
@@ -21,6 +23,7 @@ function DashboardContentInner() {
   const { data: files } = useClientFiles();
   const { data: projects } = useBusinessProjects();
   const { data: activities } = useActivities();
+  const { data: timeline } = useProjectTimeline();
 
   const client = useMemo(() => clients.find(c => c.id === clientId), [clients, clientId]);
 
@@ -31,6 +34,14 @@ function DashboardContentInner() {
   const recentActivities = useMemo(
     () => activities.filter(a => a.entityId === clientId).slice(0, 5),
     [activities, clientId]
+  );
+
+  const clientProjectIds = useMemo(() => clientProjects.map(p => p.id), [clientProjects]);
+  const projectTimeline = useMemo(
+    () => (timeline || [])
+      .filter((e: any) => clientProjectIds.includes(e.projectId))
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [timeline, clientProjectIds]
   );
 
   if (clientsLoading) {
@@ -207,7 +218,7 @@ function DashboardContentInner() {
       </div>
 
       {/* Recent Activity */}
-      <div>
+      <div style={{ marginBottom: '2rem' }}>
         <h2 style={{ fontSize: '1.25rem', fontWeight: 600, margin: '0 0 1rem 0' }}>פעילות אחרונה</h2>
         <div
           style={{
@@ -265,6 +276,60 @@ function DashboardContentInner() {
           )}
         </div>
       </div>
+
+      {/* Project Timeline */}
+      {clientProjects.length > 0 && (
+        <div style={{ marginTop: '2rem' }}>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 600, margin: '0 0 1rem 0' }}>ציר זמן פרויקטים</h2>
+          <div
+            style={{
+              backgroundColor: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '0.75rem',
+              padding: '1.5rem',
+            }}
+          >
+            {projectTimeline.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {projectTimeline.slice(0, 10).map((event: any) => {
+                  const project = clientProjects.find(p => p.id === event.projectId);
+                  return (
+                    <div
+                      key={event.id}
+                      style={{
+                        display: 'flex',
+                        gap: '12px',
+                        alignItems: 'flex-start',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        background: 'var(--background)',
+                        border: '1px solid var(--border)',
+                      }}
+                    >
+                      <div style={{
+                        width: '8px', height: '8px', borderRadius: '50%',
+                        background: 'var(--accent)', marginTop: '6px', flexShrink: 0,
+                      }} />
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: '0.875rem', fontWeight: 500, margin: '0 0 2px 0' }}>
+                          {event.description || event.actionType}
+                        </p>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)', margin: 0 }}>
+                          {project?.projectName || ''} • {new Date(event.createdAt).toLocaleDateString('he-IL')}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p style={{ color: 'var(--foreground-muted)', textAlign: 'center', margin: 0 }}>
+                אין אירועים בציר הזמן
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

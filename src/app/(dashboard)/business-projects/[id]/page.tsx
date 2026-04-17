@@ -15,6 +15,7 @@ import {
 } from '@/lib/api/use-entity';
 import { BusinessProject, ProjectMilestone, ProjectPayment, Client, Employee, ClientFile, MilestoneFile, ProjectTimelineEvent } from '@/lib/db/schema';
 import { ProjectNotificationBell } from '@/components/project-notification-bell';
+import { useAuth } from '@/lib/auth/auth-context';
 
 type Tab = 'overview' | 'milestones' | 'files' | 'payments' | 'activity';
 type MilestoneStatus = 'pending' | 'in_progress' | 'submitted' | 'approved' | 'returned';
@@ -126,6 +127,7 @@ function getProjectStatusColor(status: string | undefined): string {
 export default function BusinessProjectPage() {
   const params = useParams();
   const projectId = params.id as string;
+  const { canEdit, canDelete, isClient } = useAuth();
 
   const { data: projectsData = [], loading: projectsLoading, update: updateProject } = useBusinessProjects();
   const { data: milestonesData = [], create: createMilestone, update: updateMilestone } = useProjectMilestones();
@@ -1025,12 +1027,16 @@ export default function BusinessProjectPage() {
               </>
             ) : (
               <>
-                <button className="prj-btn prj-btn-ghost" onClick={handleStartEditProject}>
-                  עריכה
-                </button>
-                <button className="prj-btn prj-btn-success" onClick={handleMarkComplete} disabled={loading}>
-                  סימון כהושלם
-                </button>
+                {canEdit && (
+                  <button className="prj-btn prj-btn-ghost" onClick={handleStartEditProject}>
+                    עריכה
+                  </button>
+                )}
+                {canEdit && (
+                  <button className="prj-btn prj-btn-success" onClick={handleMarkComplete} disabled={loading}>
+                    סימון כהושלם
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -1376,6 +1382,7 @@ export default function BusinessProjectPage() {
       {/* ══════════ MILESTONES TAB ══════════ */}
       {activeTab === 'milestones' && (
         <div>
+          {canEdit && (
           <div style={{ marginBottom: '24px' }}>
             <button
               className="prj-btn prj-btn-primary"
@@ -1447,6 +1454,7 @@ export default function BusinessProjectPage() {
               </div>
             )}
           </div>
+          )}
 
           <div style={{ display: 'grid', gap: '16px' }}>
             {(projectMilestones?.length || 0) === 0 ? (
@@ -1690,6 +1698,7 @@ export default function BusinessProjectPage() {
                         </div>
 
                         {/* Quick actions */}
+                        {canEdit && (
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
                           {milestone?.status === 'pending' && (
                             <button className="prj-btn prj-btn-primary" style={{ fontSize: '12px', padding: '6px 14px' }}
@@ -1715,11 +1724,14 @@ export default function BusinessProjectPage() {
                               </button>
                             </>
                           )}
+                          {canEdit && (
                           <button className="prj-btn prj-btn-ghost" style={{ fontSize: '12px', padding: '6px 14px' }}
                             onClick={() => setEditingMilestoneId(milestone?.id || null)} disabled={loading}>
                             עריכה
                           </button>
+                          )}
                         </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1733,6 +1745,7 @@ export default function BusinessProjectPage() {
       {/* ══════════ FILES TAB ══════════ */}
       {activeTab === 'files' && (
         <div>
+          {canEdit && (
           <div style={{ marginBottom: '24px' }}>
             <button className="prj-btn prj-btn-primary" onClick={() => setShowFileForm(!showFileForm)}>
               {showFileForm ? 'ביטול' : '+ הוספת קובץ'}
@@ -1803,6 +1816,7 @@ export default function BusinessProjectPage() {
               </div>
             )}
           </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
             {(projectClientFiles?.length || 0) === 0 ? (

@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
+import { requireRole, getRequestRole, getRequestEmployeeId } from '@/lib/auth/api-guard';
 
 const TABLE = 'employees';
 
@@ -33,6 +34,7 @@ function rowToEmployee(r: Row) {
   const last = pickString(r, 'last_name', 'lastName');
   const combined = [first, last].filter(Boolean).join(' ');
   const name = pickString(r, 'name', 'full_name', 'fullName', 'display_name') || combined;
+  const appRole = pickString(r, 'app_role', 'appRole') || 'employee';
   return {
     id: r.id,
     name,
@@ -40,6 +42,7 @@ function rowToEmployee(r: Row) {
     lastName: last,
     roleId: pickString(r, 'role_id', 'roleId'),
     role: pickString(r, 'role', 'title', 'position'),
+    appRole,
     email: pickString(r, 'email'),
     phone: pickString(r, 'phone', 'phone_number'),
     avatarUrl: pickString(r, 'avatar_url', 'avatarUrl', 'photo_url'),
@@ -68,6 +71,7 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
     ['name', 'name'],
     ['roleId', 'role_id'],
     ['role', 'role'],
+    ['appRole', 'app_role'],
     ['email', 'email'],
     ['phone', 'phone'],
     ['avatarUrl', 'avatar_url'],
@@ -94,7 +98,11 @@ function parseBadColumn(msg: string): string | null {
   return m?.[1] || m?.[2] || null;
 }
 
-export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  // Only admin and employee can view employee details
+  const getErr = requireRole(req, 'admin', 'employee');
+  if (getErr) return getErr;
+
   try {
     const { id } = await context.params;
     const sb = getSupabase();
@@ -109,10 +117,30 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
 }
 
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  // Admin can update any employee. Employee can only update themselves (not appRole/salary).
+  const role = getRequestRole(req);
+  if (role === 'client') {
+    return NextResponse.json({ error: 'אין הרשאה לפעולה זו' }, { status: 403 });
+  }
   try {
     const { id } = await context.params;
+
+    // Employee can only edit their own record
+    if (role === 'employee') {
+      const empId = getRequestEmployeeId(req);
+      if (empId !== id) {
+        return NextResponse.json({ error: 'אין הרשאה לערוך עובד אחר' }, { status: 403 });
+      }
+    }
+
     let body: Record<string, unknown> = {};
     try { body = (await req.json()) as Record<string, unknown>; } catch { /* noop */ }
+
+    // Employees cannot change their own appRole or salary — strip those fields
+    if (role === 'employee') {
+      delete body.appRole;
+      delete body.salary;
+    }
 
     const sb = getSupabase();
     let updateRow = toUpdate(body);
@@ -140,7 +168,10 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
   }
 }
 
-export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  // Only admin can delete employees
+  const delErr = requireRole(req, 'admin');
+  if (delErr) return delErr;
   try {
     const { id } = await context.params;
     const sb = getSupabase();

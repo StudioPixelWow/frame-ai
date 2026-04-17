@@ -571,6 +571,22 @@ function ClientDetailContent() {
                 >
                   🎬 צור סרטון UGC
                 </button>
+                <button
+                  className="mod-btn-ghost"
+                  style={{
+                    fontSize: "0.875rem",
+                    padding: "0.5rem 1.125rem",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    color: "#22c55e",
+                    borderColor: "rgba(34,197,94,0.3)",
+                    background: "rgba(34,197,94,0.06)",
+                  }}
+                  onClick={() => router.push(`/business-projects/new?clientId=${clientId}`)}
+                >
+                  📂 צור פרויקט
+                </button>
               </div>
             </div>
 

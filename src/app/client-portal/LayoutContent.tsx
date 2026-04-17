@@ -1,13 +1,56 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { ThemeProvider } from '@/lib/theme';
 import { ToastProvider } from '@/components/ui/toast';
-import { Suspense } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 
 function LayoutContentInner({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
   const clientId = searchParams.get('clientId');
+
+  useEffect(() => {
+    // Check if on login page
+    if (pathname === '/client-portal') {
+      setIsAuthenticated(true);
+      setIsChecking(false);
+      return;
+    }
+
+    // Check for auth token in localStorage
+    try {
+      const portalClientId = localStorage.getItem('portal_client_id');
+      if (portalClientId) {
+        setIsAuthenticated(true);
+      } else {
+        router.push('/client-portal');
+      }
+    } catch {
+      // localStorage access failed, redirect to login
+      router.push('/client-portal');
+    }
+    setIsChecking(false);
+  }, [pathname, router]);
+
+  if (isChecking) {
+    return (
+      <ThemeProvider>
+        <ToastProvider>
+          <div style={{ padding: '2rem', textAlign: 'center', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            ...טוען
+          </div>
+        </ToastProvider>
+      </ThemeProvider>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <ThemeProvider>
@@ -55,6 +98,39 @@ function LayoutContentInner({ children }: { children: React.ReactNode }) {
                 </span>
               </div>
             </div>
+            <button
+              onClick={() => {
+                try {
+                  localStorage.removeItem('portal_client_id');
+                  localStorage.removeItem('portal_user_id');
+                  localStorage.removeItem('portal_email');
+                } catch {}
+                router.push('/client-portal');
+              }}
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: 'transparent',
+                color: 'var(--foreground-muted)',
+                border: `1px solid var(--border)`,
+                borderRadius: '0.5rem',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'all 250ms ease',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--surface-raised)';
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)';
+                (e.currentTarget as HTMLElement).style.color = 'var(--accent)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)';
+                (e.currentTarget as HTMLElement).style.color = 'var(--foreground-muted)';
+              }}
+            >
+              יציאה
+            </button>
           </header>
 
           {/* Navigation Bar */}

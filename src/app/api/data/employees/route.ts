@@ -16,6 +16,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
+import { requireRole } from '@/lib/auth/api-guard';
 
 const TABLE = 'employees';
 
@@ -56,6 +57,10 @@ function rowToEmployee(r: Row) {
   const combined = [first, last].filter(Boolean).join(' ');
   const name = pickString(r, 'name', 'full_name', 'fullName', 'display_name') || combined;
 
+  // app_role is the RBAC role ('admin' | 'employee' | 'client').
+  // Separate from `role` which is the job title (e.g. "מעצב", "מפתח").
+  const appRole = pickString(r, 'app_role', 'appRole') || 'employee';
+
   return {
     id: r.id,
     name,
@@ -63,6 +68,7 @@ function rowToEmployee(r: Row) {
     lastName: last,
     roleId: pickString(r, 'role_id', 'roleId'),
     role: pickString(r, 'role', 'title', 'position'),
+    appRole,
     email: pickString(r, 'email'),
     phone: pickString(r, 'phone', 'phone_number'),
     avatarUrl: pickString(r, 'avatar_url', 'avatarUrl', 'photo_url'),
@@ -84,6 +90,7 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
     name: (body.name ?? '') as string,
     role_id: nullIfEmpty(body.roleId),
     role: (body.role ?? '') as string,
+    app_role: (body.appRole ?? 'employee') as string,
     email: (body.email ?? '') as string,
     phone: (body.phone ?? '') as string,
     avatar_url: (body.avatarUrl ?? '') as string,
@@ -107,7 +114,11 @@ function parseBadColumn(msg: string): string | null {
   return m?.[1] || m?.[2] || null;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // Only admin and employee can list employees
+  const getErr = requireRole(req, 'admin', 'employee');
+  if (getErr) return getErr;
+
   try {
     const sb = getSupabase();
     // Select all columns so we get whatever the real schema has
@@ -127,6 +138,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // Only admin can create employees
+  const postErr = requireRole(req, 'admin');
+  if (postErr) return postErr;
+
   try {
     const sb = getSupabase();
     let body: Record<string, unknown> = {};

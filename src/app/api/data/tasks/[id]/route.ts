@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
+import { requireRole, getRequestRole, getRequestEmployeeId } from '@/lib/auth/api-guard';
 
 const TABLE = 'tasks';
 
@@ -75,8 +76,24 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
 }
 
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  // Client cannot edit tasks
+  const roleErr = requireRole(req, 'admin', 'employee');
+  if (roleErr) return roleErr;
+
   try {
     const { id } = await context.params;
+    const role = getRequestRole(req);
+
+    // Employee can only update tasks assigned to them
+    if (role === 'employee') {
+      const empId = getRequestEmployeeId(req);
+      const sb2 = getSupabase();
+      const { data: existing } = await sb2.from(TABLE).select('assignee_id').eq('id', id).maybeSingle();
+      if (existing && (existing as any).assignee_id !== empId) {
+        return NextResponse.json({ error: 'אין הרשאה לערוך משימה של עובד אחר' }, { status: 403 });
+      }
+    }
+
     let body: Record<string, unknown> = {};
     try { body = (await req.json()) as Record<string, unknown>; } catch { /* noop */ }
 
@@ -92,7 +109,10 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
   }
 }
 
-export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  // Only admin can delete tasks
+  const delErr = requireRole(req, 'admin');
+  if (delErr) return delErr;
   try {
     const { id } = await context.params;
     const sb = getSupabase();

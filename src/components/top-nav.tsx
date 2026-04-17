@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ThemeToggle } from "./theme-toggle";
 import { NotificationCenter } from "./notification-center";
+import { RoleSwitcher } from "./role-switcher";
+import { useAuth } from "@/lib/auth/auth-context";
 
 /* ── Nav items matching the preview exactly ─────────────────────────────── */
 
@@ -11,27 +13,29 @@ interface NavItem {
   href: string;
   label: string;
   id: string;
+  /** Which roles can see this nav item. Omit for 'all roles'. */
+  allowedRoles?: Array<'admin' | 'employee' | 'client'>;
 }
 
 const mainNavItems: NavItem[] = [
   { href: "/dashboard",         label: "דשבורד",          id: "nav-dashboard" },
-  { href: "/projects",          label: "PixelFrameAI",    id: "nav-projects" },
-  { href: "/clients",           label: "לקוחות",          id: "nav-clients" },
-  { href: "/leads",             label: "לידים",           id: "nav-leads" },
-  { href: "/campaigns",         label: "קמפיינים",        id: "nav-campaigns" },
-  { href: "/tasks",             label: "משימות",          id: "nav-tasks" },
-  { href: "/business-calendar", label: "יומן",            id: "nav-biz-calendar" },
-  { href: "/employees",         label: "צוות",            id: "nav-employees" },
+  { href: "/projects",          label: "PixelFrameAI",    id: "nav-projects", allowedRoles: ['admin', 'employee'] },
+  { href: "/clients",           label: "לקוחות",          id: "nav-clients", allowedRoles: ['admin', 'employee'] },
+  { href: "/leads",             label: "לידים",           id: "nav-leads", allowedRoles: ['admin', 'employee'] },
+  { href: "/campaigns",         label: "קמפיינים",        id: "nav-campaigns", allowedRoles: ['admin', 'employee'] },
+  { href: "/tasks",             label: "משימות",          id: "nav-tasks", allowedRoles: ['admin', 'employee'] },
+  { href: "/business-calendar", label: "יומן",            id: "nav-biz-calendar", allowedRoles: ['admin', 'employee'] },
+  { href: "/employees",         label: "צוות",            id: "nav-employees", allowedRoles: ['admin'] },
   { href: "/business-projects", label: "פרויקטים",        id: "nav-otp" },
   { href: "/business-projects/dashboard", label: "דשבורד פרויקטים", id: "nav-biz-dash" },
-  { href: "/accounting",        label: "חשבונות",         id: "nav-payments" },
-  { href: "/accounting/podcast", label: "פודקאסט",        id: "nav-podcast" },
-  { href: "/approvals",         label: "אישורים",         id: "nav-approvals" },
-  { href: "/whatsapp",          label: "וואטסאפ",         id: "nav-whatsapp" },
-  { href: "/mailing",           label: "דיוור",           id: "nav-mailing" },
-  { href: "/stats",             label: "סטטיסטיקות",      id: "nav-stats" },
-  { href: "/exec-dashboard",    label: "מנהלים",          id: "nav-exec" },
-  { href: "/settings",          label: "הגדרות",          id: "nav-settings" },
+  { href: "/accounting",        label: "חשבונות",         id: "nav-payments", allowedRoles: ['admin'] },
+  { href: "/accounting/podcast", label: "פודקאסט",        id: "nav-podcast", allowedRoles: ['admin', 'employee'] },
+  { href: "/approvals",         label: "אישורים",         id: "nav-approvals", allowedRoles: ['admin', 'employee'] },
+  { href: "/whatsapp",          label: "וואטסאפ",         id: "nav-whatsapp", allowedRoles: ['admin', 'employee'] },
+  { href: "/mailing",           label: "דיוור",           id: "nav-mailing", allowedRoles: ['admin', 'employee'] },
+  { href: "/stats",             label: "סטטיסטיקות",      id: "nav-stats", allowedRoles: ['admin'] },
+  { href: "/exec-dashboard",    label: "מנהלים",          id: "nav-exec", allowedRoles: ['admin'] },
+  { href: "/settings",          label: "הגדרות",          id: "nav-settings", allowedRoles: ['admin'] },
 ];
 
 
@@ -39,6 +43,12 @@ const mainNavItems: NavItem[] = [
 
 export function TopNav() {
   const pathname = usePathname();
+  const { role } = useAuth();
+
+  // Filter nav items based on role
+  const visibleNavItems = mainNavItems.filter(
+    (item) => !item.allowedRoles || item.allowedRoles.includes(role)
+  );
 
   const renderNavLink = (item: NavItem) => {
     const active = pathname === item.href || pathname.startsWith(item.href + "/");
@@ -84,7 +94,7 @@ export function TopNav() {
         {/* Scrollable nav items */}
         <div className="flex-1 overflow-x-auto scrollbar-hide">
           <div className="flex items-center gap-0.5">
-            {mainNavItems.map(renderNavLink)}
+            {visibleNavItems.map(renderNavLink)}
           </div>
         </div>
 
@@ -92,6 +102,9 @@ export function TopNav() {
         <div className="flex items-center gap-1.5 flex-shrink-0 mr-1">
           {/* Notification center */}
           <NotificationCenter />
+
+          {/* Role switcher */}
+          <RoleSwitcher />
 
           {/* Email status pill */}
           <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border bg-surface text-xs text-foreground-muted">

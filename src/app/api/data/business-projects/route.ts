@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
+import { requireRole, getRequestRole, getRequestClientId, getRequestEmployeeId } from '@/lib/auth/api-guard';
 
 const TABLE = 'business_projects';
 
@@ -86,10 +87,33 @@ function parseBadColumn(msg: string): string | null {
   return m?.[1] || m?.[2] || null;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const sb = getSupabase();
-    const { data: rows, error } = await sb.from(TABLE).select('*').order('id');
+    const role = getRequestRole(req);
+    let query = sb.from(TABLE).select('*').order('id');
+
+    // Clients only see their own projects
+    if (role === 'client') {
+      const clientId = getRequestClientId(req);
+      if (clientId) {
+        query = query.eq('client_id', clientId);
+      } else {
+        return NextResponse.json([]); // no client ID → empty list
+      }
+    }
+
+    // Employees only see projects they are assigned to manage
+    if (role === 'employee') {
+      const employeeId = getRequestEmployeeId(req);
+      if (employeeId) {
+        query = query.eq('assigned_manager_id', employeeId);
+      } else {
+        return NextResponse.json([]); // no employee ID → empty list
+      }
+    }
+
+    const { data: rows, error } = await query;
     if (error) {
       console.error('[API] GET /api/data/business-projects supabase error:', error);
       return NextResponse.json({ error: error.message, code: (error as any).code ?? null }, { status: 500 });
@@ -209,6 +233,10 @@ async function seedMilestonesFromTemplates(
 }
 
 export async function POST(req: NextRequest) {
+  // Only admin and employee can create projects
+  const roleErr = requireRole(req, 'admin', 'employee');
+  if (roleErr) return roleErr;
+
   try {
     const sb = getSupabase();
     let body: Record<string, unknown> = {};

@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
+import { requireRole } from '@/lib/auth/api-guard';
 
 // Keep this list in sync with src/app/api/data/clients/route.ts COLUMNS.
 // If a listed column doesn't exist in the DB the select itself will fail, so
@@ -88,9 +89,13 @@ function toDbUpdate(body: Record<string, unknown>): Record<string, unknown> {
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  // Only admin and employee can view client details
+  const getErr = requireRole(req, 'admin', 'employee');
+  if (getErr) return getErr;
+
   try {
     const { id } = await context.params;
     const sb = getSupabase();
@@ -118,6 +123,10 @@ export async function PUT(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  // Only admin can update clients
+  const putErr = requireRole(req, 'admin');
+  if (putErr) return putErr;
+
   try {
     const { id } = await context.params;
     let body: Record<string, unknown> = {};
@@ -201,9 +210,13 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  // Only admin can delete clients
+  const delErr = requireRole(req, 'admin');
+  if (delErr) return delErr;
+
   try {
     const { id } = await context.params;
     const sb = getSupabase();
