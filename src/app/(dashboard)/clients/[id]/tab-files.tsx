@@ -60,7 +60,8 @@ function isVideoFile(file: ClientFile): boolean {
   return (
     file.fileType === "video" ||
     /\.(mp4|webm|mov|avi|mkv)$/i.test(file.fileName) ||
-    (file.fileUrl || "").includes("heygen")
+    (file.fileUrl || "").includes("heygen") ||
+    (file.fileUrl || "").includes("/renders/")
   );
 }
 
@@ -73,8 +74,27 @@ function isImageFile(file: ClientFile): boolean {
 
 /** Trigger a real browser download for any URL */
 function triggerDownload(url: string, fileName: string) {
+  // For same-origin URLs (like /renders/...), fetch as blob to trigger real download
+  if (url.startsWith("/") || url.startsWith(window.location.origin)) {
+    fetch(url)
+      .then((res) => res.blob())
+      .then((blob) => {
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      })
+      .catch(() => {
+        // Fallback: open in new tab
+        window.open(url, "_blank");
+      });
+    return;
+  }
   // For cross-origin URLs (like HeyGen), open in new tab which triggers browser download
-  // For same-origin URLs, use the anchor trick
   const a = document.createElement("a");
   a.href = url;
   a.download = fileName;

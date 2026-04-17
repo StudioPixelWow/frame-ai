@@ -80,11 +80,12 @@ async function renderJob(jobId: string): Promise<void> {
 
     // Stage 2: Select composition
     const inputProps = job.inputProps || {};
-    console.log("[Worker] Selecting composition PixelFrameEdit with props:", JSON.stringify(inputProps).slice(0, 200));
+    const compositionId = job.compositionId || "PixelFrameEdit";
+    console.log(`[Worker] Selecting composition ${compositionId} with props:`, JSON.stringify(inputProps).slice(0, 200));
 
     const composition = await selectComposition({
       serveUrl,
-      id: "PixelFrameEdit",
+      id: compositionId,
       inputProps,
     });
 

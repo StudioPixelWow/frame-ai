@@ -5,8 +5,11 @@
 import React from "react";
 import { Composition } from "remotion";
 import { PixelFrameEdit } from "./PixelFrameEdit";
+import { UGCBrandedVideo } from "./UGCBrandedVideo";
 import type { CompositionProps } from "./types";
 import { FPS, FORMAT_DIMENSIONS } from "./types";
+import { defaultUGCProps } from "./ugc-types";
+import type { UGCCompositionProps } from "./ugc-types";
 
 const defaultProps: CompositionProps = {
   videoUrl: "",
@@ -81,6 +84,27 @@ export const RemotionRoot: React.FC = () => {
           const p = props as unknown as CompositionProps;
           const dims = FORMAT_DIMENSIONS[p.format] || FORMAT_DIMENSIONS["9:16"];
           const totalDur = p.durationSec || 15;
+          return {
+            durationInFrames: Math.max(1, Math.ceil(totalDur * FPS)),
+            width: dims.width,
+            height: dims.height,
+            fps: FPS,
+            props,
+          };
+        }}
+      />
+      <Composition
+        id="UGCBrandedVideo"
+        component={UGCBrandedVideo as unknown as React.FC<Record<string, unknown>>}
+        durationInFrames={FPS * 30}
+        fps={FPS}
+        width={1080}
+        height={1920}
+        defaultProps={defaultUGCProps as unknown as Record<string, unknown>}
+        calculateMetadata={async ({ props }) => {
+          const p = props as unknown as UGCCompositionProps;
+          const dims = FORMAT_DIMENSIONS[p.format] || FORMAT_DIMENSIONS["9:16"];
+          const totalDur = p.durationSec || 30;
           return {
             durationInFrames: Math.max(1, Math.ceil(totalDur * FPS)),
             width: dims.width,

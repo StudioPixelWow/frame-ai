@@ -139,7 +139,7 @@ function ClientDetailContent() {
   const [ugcTargetAudience, setUgcTargetAudience] = useState("");
   const [ugcKeyMessage, setUgcKeyMessage] = useState("");
   const [ugcCallToAction, setUgcCallToAction] = useState("");
-  const [ugcVisualStyle, setUgcVisualStyle] = useState("");
+  const [ugcVisualStyle, setUgcVisualStyle] = useState("cinematic-dark");
   const [ugcAdditionalInstructions, setUgcAdditionalInstructions] = useState("");
   const [ugcReferenceFiles, setUgcReferenceFiles] = useState<File[]>([]);
   const [ugcReferenceTexts, setUgcReferenceTexts] = useState<string[]>([]);
@@ -149,6 +149,30 @@ function ClientDetailContent() {
   const [ugcMultiLabels, setUgcMultiLabels] = useState<string[]>([]);
   const [ugcMultiGenerating, setUgcMultiGenerating] = useState(false);
   const ugcFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // ── UGC Branded Video Composition State ──
+  const [ugcLogoUrl, setUgcLogoUrl] = useState<string | null>(null);
+  const [ugcProductImageUrl, setUgcProductImageUrl] = useState<string | null>(null);
+  const [ugcTagline, setUgcTagline] = useState("");
+  const [ugcPlatform, setUgcPlatform] = useState<"instagram-reels" | "tiktok" | "youtube-shorts" | "facebook" | "linkedin" | "generic">("instagram-reels");
+  const [ugcComposeJobId, setUgcComposeJobId] = useState<string | null>(null);
+  const [ugcComposeProgress, setUgcComposeProgress] = useState(0);
+  const [ugcComposeStage, setUgcComposeStage] = useState("");
+  const ugcComposePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ugcLogoInputRef = useRef<HTMLInputElement | null>(null);
+  const ugcProductInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Visual style definitions for the selector
+  const UGC_VISUAL_STYLES: { id: string; label: string; desc: string; gradient: string[] }[] = [
+    { id: "cinematic-dark", label: "קולנועי כהה", desc: "דרמטי, עמוק", gradient: ["#0a0a0f", "#1a1a2e"] },
+    { id: "clean-minimal", label: "נקי ומינימלי", desc: "מודרני, בהיר", gradient: ["#fafafa", "#e8e8e8"] },
+    { id: "bold-energy", label: "אנרגטי ונועז", desc: "חזק, מכירתי", gradient: ["#ff0844", "#ff6a00"] },
+    { id: "luxury-gold", label: "יוקרתי זהוב", desc: "פרימיום, זהב", gradient: ["#0c0c0c", "#2d2006"] },
+    { id: "neon-glow", label: "ניאון זוהר", desc: "טכנולוגי, צעיר", gradient: ["#0f0f23", "#1a0a2e"] },
+    { id: "organic-warm", label: "אורגני וחם", desc: "טבעי, חם", gradient: ["#fef3e2", "#f5deb3"] },
+    { id: "corporate-pro", label: "עסקי מקצועי", desc: "רשמי, B2B", gradient: ["#0f172a", "#334155"] },
+    { id: "social-pop", label: "סושיאל פופ", desc: "שובב, צבעוני", gradient: ["#667eea", "#f093fb"] },
+  ];
 
   // Hebrew voice filter — keep only Hebrew-tagged voices (or fallback common Hebrew voice IDs)
   const HEBREW_VOICE_IDS = new Set([
@@ -466,11 +490,14 @@ function ClientDetailContent() {
     setUgcGenerating(true);
     setUgcStatus("");
     setUgcProgress("preparing");
+    setUgcComposeProgress(0);
+    setUgcComposeStage("");
 
     const dimension = FORMAT_DIMENSIONS[ugcFormat] || FORMAT_DIMENSIONS["9:16"];
     const formatSlug = ugcFormat.replace(":", "x");
 
     try {
+      // ═══ Stage 1: Generate avatar video via HeyGen ═══
       const res = await fetch("/api/data/heygen/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -490,8 +517,8 @@ function ClientDetailContent() {
       setUgcVideoId(videoId);
       setUgcProgress("generating");
 
-      // Poll for completion every 5 seconds
-      const clientRef = client; // capture for closure
+      // Poll for HeyGen completion every 5 seconds
+      const clientRef = client;
       ugcPollRef.current = setInterval(async () => {
         try {
           const statusRes = await fetch(`/api/data/heygen/status?videoId=${videoId}`);
@@ -502,18 +529,150 @@ function ClientDetailContent() {
           if (status === "completed" && statusData.videoUrl) {
             if (ugcPollRef.current) { clearInterval(ugcPollRef.current); ugcPollRef.current = null; }
 
-            // Validate the video URL before saving
             if (!statusData.videoUrl.startsWith("http")) {
               setUgcProgress("error");
               setUgcGenerating(false);
               return;
             }
 
-            setUgcProgress("saving");
-
+            // ═══ Stage 2: Analyze script into scenes ═══
+            setUgcProgress("analyzing");
+            let scenes: any[] = [];
             try {
+              const analyzeRes = await fetch("/api/data/ugc/analyze-script", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  script: ugcScript,
+                  brandName: ugcBrandName || clientRef.name,
+                  totalDurationSec: statusData.duration || 30,
+                  format: ugcFormat,
+                  visualStyle: ugcVisualStyle,
+                  hasLogo: !!ugcLogoUrl,
+                  hasProductImage: !!ugcProductImageUrl,
+                }),
+              });
+              const analyzeData = await analyzeRes.json();
+              if (analyzeRes.ok && analyzeData.scenes) {
+                scenes = analyzeData.scenes;
+              }
+            } catch (analyzeErr) {
+              console.warn("[UGC] Scene analysis failed, using defaults:", analyzeErr);
+            }
+
+            // ═══ Stage 3: Queue Remotion composition render ═══
+            setUgcProgress("composing");
+            try {
+              const composeRes = await fetch("/api/data/ugc/compose", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  avatarVideoUrl: statusData.videoUrl,
+                  durationSec: statusData.duration || 30,
+                  format: ugcFormat,
+                  visualStyle: ugcVisualStyle,
+                  scenes,
+                  logoUrl: ugcLogoUrl,
+                  productImageUrl: ugcProductImageUrl,
+                  brandName: ugcBrandName || clientRef.name,
+                  tagline: ugcTagline,
+                  musicUrl: null,
+                  musicVolume: 20,
+                  platform: ugcPlatform,
+                  ctaText: ugcCallToAction || "",
+                  ctaUrl: "",
+                  watermarkEnabled: false,
+                }),
+              });
+              const composeData = await composeRes.json();
+
+              if (!composeRes.ok) throw new Error(composeData?.error || "Compose failed");
+              const composeJobId = composeData.jobId;
+              setUgcComposeJobId(composeJobId);
+
+              // ═══ Stage 4: Poll for Remotion render completion ═══
+              ugcComposePollRef.current = setInterval(async () => {
+                try {
+                  const jobRes = await fetch(`/api/data/ugc/compose?jobId=${composeJobId}`);
+                  const jobData = await jobRes.json();
+
+                  setUgcComposeProgress(jobData.progress || 0);
+                  setUgcComposeStage(jobData.currentStage || "");
+
+                  if (jobData.status === "completed" && jobData.videoUrl) {
+                    if (ugcComposePollRef.current) { clearInterval(ugcComposePollRef.current); ugcComposePollRef.current = null; }
+
+                    // ═══ Stage 5: Save final composed video ═══
+                    setUgcProgress("saving");
+                    const now = new Date().toISOString();
+                    const savedFile = await createClientFile({
+                      clientId: clientRef.id,
+                      fileName: `UGC_Branded_${clientRef.name}_${formatSlug}_${now.split("T")[0]}.mp4`,
+                      fileUrl: jobData.videoUrl,
+                      fileType: "video",
+                      category: "social_media",
+                      fileSize: 0,
+                      uploadedBy: "PixelFrame AI",
+                      notes: `סרטון UGC ממותג שנוצר עם PixelFrame AI.\nסגנון: ${ugcVisualStyle}\nפלטפורמה: ${ugcPlatform}\nפורמט: ${ugcFormat} (${dimension.width}x${dimension.height})\nתסריט: ${ugcScript.slice(0, 200)}`,
+                      linkedTaskId: null,
+                      linkedGanttItemId: null,
+                      createdAt: now,
+                      updatedAt: now,
+                    } as any);
+
+                    if (!savedFile || !(savedFile as any).id) {
+                      throw new Error("השמירה החזירה תשובה ריקה");
+                    }
+
+                    await refetchClientFiles();
+                    setUgcProgress("done");
+                    toast("סרטון UGC ממותג נוצר ונשמר בהצלחה!", "success");
+                    setTimeout(() => {
+                      setUgcGenerating(false);
+                      setUgcModalOpen(false);
+                      setActiveTab("files");
+                    }, 2000);
+                    return;
+                  } else if (jobData.status === "failed") {
+                    if (ugcComposePollRef.current) { clearInterval(ugcComposePollRef.current); ugcComposePollRef.current = null; }
+
+                    // Fallback: save the raw HeyGen video
+                    setUgcProgress("saving");
+                    const now = new Date().toISOString();
+                    await createClientFile({
+                      clientId: clientRef.id,
+                      fileName: `UGC_${clientRef.name}_${formatSlug}_${now.split("T")[0]}.mp4`,
+                      fileUrl: statusData.videoUrl,
+                      fileType: "video",
+                      category: "social_media",
+                      fileSize: 0,
+                      uploadedBy: "HeyGen AI",
+                      notes: `סרטון UGC (ללא מיתוג — הקומפוזיציה נכשלה).\nפורמט: ${ugcFormat}\nתסריט: ${ugcScript.slice(0, 200)}`,
+                      linkedTaskId: null,
+                      linkedGanttItemId: null,
+                      createdAt: now,
+                      updatedAt: now,
+                    } as any);
+                    await refetchClientFiles();
+                    setUgcProgress("done");
+                    toast("הקומפוזיציה נכשלה — הסרטון הגולמי נשמר", "warning" as any);
+                    setTimeout(() => {
+                      setUgcGenerating(false);
+                      setUgcModalOpen(false);
+                      setActiveTab("files");
+                    }, 2000);
+                  }
+                } catch (composePollErr) {
+                  console.error("[UGC] compose poll error:", composePollErr);
+                }
+              }, 3000);
+
+            } catch (composeErr: any) {
+              // Composition failed — fallback to saving raw HeyGen video
+              console.error("[UGC] compose error, saving raw:", composeErr);
+              setUgcProgress("saving");
               const now = new Date().toISOString();
-              const savedFile = await createClientFile({
+              await createClientFile({
                 clientId: clientRef.id,
                 fileName: `UGC_${clientRef.name}_${formatSlug}_${now.split("T")[0]}.mp4`,
                 fileUrl: statusData.videoUrl,
@@ -521,41 +680,27 @@ function ClientDetailContent() {
                 category: "social_media",
                 fileSize: 0,
                 uploadedBy: "HeyGen AI",
-                notes: `סרטון UGC שנוצר באמצעות HeyGen.\nפורמט: ${ugcFormat} (${dimension.width}x${dimension.height})\nתסריט: ${ugcScript.slice(0, 200)}`,
+                notes: `סרטון UGC שנוצר באמצעות HeyGen.\nפורמט: ${ugcFormat}\nתסריט: ${ugcScript.slice(0, 200)}`,
                 linkedTaskId: null,
                 linkedGanttItemId: null,
                 createdAt: now,
                 updatedAt: now,
               } as any);
-
-              // Verify the file was actually created with an ID
-              if (!savedFile || !(savedFile as any).id) {
-                throw new Error("השמירה החזירה תשובה ריקה — הקובץ לא נשמר בפועל");
-              }
-
               await refetchClientFiles();
               setUgcProgress("done");
-              toast("סרטון UGC נוצר ונשמר בקבצי הלקוח!", "success");
-              // Auto-close after brief delay to show completion state
+              toast("הסרטון נשמר (ללא קומפוזיציה ממותגת)", "success");
               setTimeout(() => {
                 setUgcGenerating(false);
                 setUgcModalOpen(false);
                 setActiveTab("files");
-              }, 1800);
-              return; // don't setUgcGenerating(false) below
-            } catch (saveErr: any) {
-              console.error("[UGC] Failed to save file:", saveErr);
-              setUgcProgress("save_error");
-              toast("הסרטון נוצר אך השמירה נכשלה", "error");
+              }, 2000);
             }
 
-            setUgcGenerating(false);
           } else if (status === "failed") {
             if (ugcPollRef.current) { clearInterval(ugcPollRef.current); ugcPollRef.current = null; }
             setUgcProgress("error");
             setUgcGenerating(false);
           } else {
-            // Keep the generating stage active during poll
             if (ugcProgress !== "generating") setUgcProgress("generating");
           }
         } catch (pollErr: any) {
@@ -568,12 +713,13 @@ function ClientDetailContent() {
       toast(`שגיאה ביצירת סרטון: ${err?.message}`, "error");
       setUgcGenerating(false);
     }
-  }, [client, ugcAvatarId, ugcVoiceId, ugcScript, ugcFormat, toast, createClientFile, refetchClientFiles, setActiveTab]);
+  }, [client, ugcAvatarId, ugcVoiceId, ugcScript, ugcFormat, ugcVisualStyle, ugcLogoUrl, ugcProductImageUrl, ugcBrandName, ugcTagline, ugcPlatform, ugcCallToAction, toast, createClientFile, refetchClientFiles, setActiveTab]);
 
-  // Cleanup poll interval on unmount
+  // Cleanup poll intervals on unmount
   useEffect(() => {
     return () => {
       if (ugcPollRef.current) clearInterval(ugcPollRef.current);
+      if (ugcComposePollRef.current) clearInterval(ugcComposePollRef.current);
     };
   }, []);
 
@@ -1360,7 +1506,7 @@ function ClientDetailContent() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2rem" }}>
               <div>
                 <h2 style={{ fontSize: "1.35rem", fontWeight: 800, color: "#fff", margin: 0, letterSpacing: "-0.01em" }}>
-                  יצירת סרטון UGC
+                  יצירת סרטון UGC ממותג
                 </h2>
                 {client && <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.45)", marginTop: "0.25rem" }}>{client.name}</p>}
               </div>
@@ -1886,13 +2032,220 @@ function ClientDetailContent() {
                 </section>
 
                 {/* ─────────────────────────────────────
+                   8B. VISUAL STYLE
+                ───────────────────────────────────── */}
+                <section style={{ marginBottom: "1.75rem" }}>
+                  <h3 style={{ fontSize: "0.8rem", fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.625rem" }}>
+                    סגנון ויזואלי
+                  </h3>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.5rem" }}>
+                    {UGC_VISUAL_STYLES.map((vs) => {
+                      const isActive = ugcVisualStyle === vs.id;
+                      return (
+                        <button key={vs.id} type="button" disabled={ugcGenerating}
+                          onClick={() => setUgcVisualStyle(vs.id)}
+                          style={{
+                            display: "flex", flexDirection: "column", alignItems: "center", gap: "0.3rem",
+                            padding: "0.5rem 0.25rem", borderRadius: "0.5rem",
+                            border: isActive ? "2px solid #8b5cf6" : "1px solid rgba(255,255,255,0.08)",
+                            background: isActive ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.02)",
+                            cursor: ugcGenerating ? "not-allowed" : "pointer", transition: "all 150ms",
+                          }}
+                        >
+                          <div style={{
+                            width: 32, height: 32, borderRadius: 8,
+                            background: `linear-gradient(135deg, ${vs.gradient[0]}, ${vs.gradient[1]})`,
+                            border: "1px solid rgba(255,255,255,0.1)",
+                          }} />
+                          <span style={{ fontSize: "0.65rem", fontWeight: 600, color: isActive ? "#c4b5fd" : "rgba(255,255,255,0.5)", textAlign: "center", lineHeight: 1.2 }}>{vs.label}</span>
+                          <span style={{ fontSize: "0.55rem", color: "rgba(255,255,255,0.3)", textAlign: "center" }}>{vs.desc}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                {/* Divider */}
+                <div style={{ height: 1, background: "rgba(255,255,255,0.06)", marginBottom: "1.75rem" }} />
+
+                {/* ─────────────────────────────────────
+                   8C. PLATFORM TARGET
+                ───────────────────────────────────── */}
+                <section style={{ marginBottom: "1.75rem" }}>
+                  <h3 style={{ fontSize: "0.8rem", fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.625rem" }}>
+                    פלטפורמה
+                  </h3>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem" }}>
+                    {([
+                      { id: "instagram-reels" as const, label: "Instagram Reels" },
+                      { id: "tiktok" as const, label: "TikTok" },
+                      { id: "youtube-shorts" as const, label: "YouTube Shorts" },
+                      { id: "facebook" as const, label: "Facebook" },
+                      { id: "linkedin" as const, label: "LinkedIn" },
+                      { id: "generic" as const, label: "כללי" },
+                    ]).map((p) => {
+                      const isActive = ugcPlatform === p.id;
+                      return (
+                        <button key={p.id} type="button" disabled={ugcGenerating}
+                          onClick={() => setUgcPlatform(p.id)}
+                          style={{
+                            padding: "0.375rem 0.75rem", borderRadius: "1rem",
+                            fontSize: "0.75rem", fontWeight: 600,
+                            border: isActive ? "1px solid #8b5cf6" : "1px solid rgba(255,255,255,0.08)",
+                            background: isActive ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.02)",
+                            color: isActive ? "#c4b5fd" : "rgba(255,255,255,0.4)",
+                            cursor: ugcGenerating ? "not-allowed" : "pointer", transition: "all 150ms",
+                          }}
+                        >
+                          {p.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                {/* Divider */}
+                <div style={{ height: 1, background: "rgba(255,255,255,0.06)", marginBottom: "1.75rem" }} />
+
+                {/* ─────────────────────────────────────
+                   8D. BRAND ASSETS (Logo, Product, Tagline)
+                ───────────────────────────────────── */}
+                <section style={{ marginBottom: "1.75rem" }}>
+                  <h3 style={{ fontSize: "0.8rem", fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.625rem" }}>
+                    נכסי מותג
+                  </h3>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                    {/* Tagline */}
+                    <input
+                      type="text"
+                      value={ugcTagline}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUgcTagline(e.target.value)}
+                      disabled={ugcGenerating}
+                      placeholder="סלוגן / תת-כותרת (לא חובה)"
+                      style={{
+                        width: "100%", padding: "0.625rem 0.875rem", fontSize: "0.85rem",
+                        background: "rgba(255,255,255,0.04)", border: "1px solid rgba(139,92,246,0.2)",
+                        borderRadius: "0.5rem", color: "#fff", outline: "none",
+                      }}
+                    />
+
+                    <div style={{ display: "flex", gap: "0.75rem" }}>
+                      {/* Logo upload */}
+                      <div style={{ flex: 1 }}>
+                        <button type="button" disabled={ugcGenerating}
+                          onClick={() => ugcLogoInputRef.current?.click()}
+                          style={{
+                            width: "100%", padding: "0.75rem", borderRadius: "0.5rem",
+                            border: ugcLogoUrl ? "2px solid #8b5cf6" : "1px dashed rgba(255,255,255,0.15)",
+                            background: ugcLogoUrl ? "rgba(139,92,246,0.08)" : "rgba(255,255,255,0.02)",
+                            color: ugcLogoUrl ? "#c4b5fd" : "rgba(255,255,255,0.35)",
+                            fontSize: "0.75rem", fontWeight: 600, cursor: "pointer",
+                            display: "flex", flexDirection: "column", alignItems: "center", gap: "0.25rem",
+                          }}
+                        >
+                          {ugcLogoUrl ? "✓ לוגו הועלה" : "העלה לוגו"}
+                          <span style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.25)" }}>PNG / SVG</span>
+                        </button>
+                        <input
+                          ref={ugcLogoInputRef}
+                          type="file"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const url = URL.createObjectURL(file);
+                              setUgcLogoUrl(url);
+                            }
+                          }}
+                        />
+                      </div>
+
+                      {/* Product image upload */}
+                      <div style={{ flex: 1 }}>
+                        <button type="button" disabled={ugcGenerating}
+                          onClick={() => ugcProductInputRef.current?.click()}
+                          style={{
+                            width: "100%", padding: "0.75rem", borderRadius: "0.5rem",
+                            border: ugcProductImageUrl ? "2px solid #8b5cf6" : "1px dashed rgba(255,255,255,0.15)",
+                            background: ugcProductImageUrl ? "rgba(139,92,246,0.08)" : "rgba(255,255,255,0.02)",
+                            color: ugcProductImageUrl ? "#c4b5fd" : "rgba(255,255,255,0.35)",
+                            fontSize: "0.75rem", fontWeight: 600, cursor: "pointer",
+                            display: "flex", flexDirection: "column", alignItems: "center", gap: "0.25rem",
+                          }}
+                        >
+                          {ugcProductImageUrl ? "✓ מוצר הועלה" : "העלה תמונת מוצר"}
+                          <span style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.25)" }}>PNG / JPG</span>
+                        </button>
+                        <input
+                          ref={ugcProductInputRef}
+                          type="file"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const url = URL.createObjectURL(file);
+                              setUgcProductImageUrl(url);
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Asset previews */}
+                    {(ugcLogoUrl || ugcProductImageUrl) && (
+                      <div style={{ display: "flex", gap: "0.5rem" }}>
+                        {ugcLogoUrl && (
+                          <div style={{
+                            width: 48, height: 48, borderRadius: 8, overflow: "hidden",
+                            border: "1px solid rgba(139,92,246,0.2)", background: "rgba(255,255,255,0.04)",
+                            display: "flex", alignItems: "center", justifyContent: "center", position: "relative",
+                          }}>
+                            <img src={ugcLogoUrl} alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                            <button type="button" onClick={() => setUgcLogoUrl(null)}
+                              style={{
+                                position: "absolute", top: -4, right: -4, width: 16, height: 16,
+                                borderRadius: "50%", background: "#ef4444", border: "none",
+                                color: "#fff", fontSize: "0.55rem", cursor: "pointer",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                              }}>x</button>
+                          </div>
+                        )}
+                        {ugcProductImageUrl && (
+                          <div style={{
+                            width: 48, height: 48, borderRadius: 8, overflow: "hidden",
+                            border: "1px solid rgba(139,92,246,0.2)", background: "rgba(255,255,255,0.04)",
+                            display: "flex", alignItems: "center", justifyContent: "center", position: "relative",
+                          }}>
+                            <img src={ugcProductImageUrl} alt="Product" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                            <button type="button" onClick={() => setUgcProductImageUrl(null)}
+                              style={{
+                                position: "absolute", top: -4, right: -4, width: 16, height: 16,
+                                borderRadius: "50%", background: "#ef4444", border: "none",
+                                color: "#fff", fontSize: "0.55rem", cursor: "pointer",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                              }}>x</button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                {/* Divider */}
+                <div style={{ height: 1, background: "rgba(255,255,255,0.06)", marginBottom: "1.75rem" }} />
+
+                {/* ─────────────────────────────────────
                    Progress / Status — Premium Multi-Step
                 ───────────────────────────────────── */}
                 {ugcProgress && ugcProgress !== "" && (() => {
                   const PROGRESS_STEPS = [
-                    { key: "preparing", label: "מכין בקשה", icon: "📋" },
-                    { key: "generating", label: "מייצר סרטון", icon: "🎬" },
-                    { key: "saving", label: "שומר קובץ", icon: "💾" },
+                    { key: "preparing", label: "הכנה", icon: "📋" },
+                    { key: "generating", label: "צילום אווטאר", icon: "🎬" },
+                    { key: "analyzing", label: "ניתוח סצנות", icon: "🧠" },
+                    { key: "composing", label: "קומפוזיציה", icon: "🎨" },
+                    { key: "saving", label: "שמירה", icon: "💾" },
                     { key: "done", label: "הושלם", icon: "✅" },
                   ];
                   const isError = ugcProgress === "error" || ugcProgress === "save_error";
@@ -1926,17 +2279,16 @@ function ClientDetailContent() {
                             {PROGRESS_STEPS.map((step, i) => {
                               const isDone = i < activeIdx || ugcProgress === "done";
                               const isActive = i === activeIdx && ugcProgress !== "done";
-                              const isPending = i > activeIdx && ugcProgress !== "done";
                               return (
                                 <div key={step.key} style={{ display: "flex", alignItems: "center", flex: i < PROGRESS_STEPS.length - 1 ? 1 : "none" }}>
                                   <div style={{
                                     display: "flex", flexDirection: "column", alignItems: "center", gap: "0.375rem",
-                                    minWidth: "3.5rem",
+                                    minWidth: "2.75rem",
                                   }}>
                                     <div style={{
-                                      width: "2.25rem", height: "2.25rem", borderRadius: "50%",
+                                      width: "2rem", height: "2rem", borderRadius: "50%",
                                       display: "flex", alignItems: "center", justifyContent: "center",
-                                      fontSize: isDone ? "1rem" : "0.9rem",
+                                      fontSize: isDone ? "0.85rem" : "0.75rem",
                                       background: isDone ? "rgba(34,197,94,0.15)" : isActive ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.04)",
                                       border: `2px solid ${isDone ? "#4ade80" : isActive ? "#a78bfa" : "rgba(255,255,255,0.08)"}`,
                                       transition: "all 0.4s ease",
@@ -1945,7 +2297,7 @@ function ClientDetailContent() {
                                       {isDone ? "✓" : step.icon}
                                     </div>
                                     <span style={{
-                                      fontSize: "0.65rem", fontWeight: isActive ? 600 : 500,
+                                      fontSize: "0.58rem", fontWeight: isActive ? 600 : 500,
                                       color: isDone ? "#4ade80" : isActive ? "#c4b5fd" : "rgba(255,255,255,0.25)",
                                       textAlign: "center", lineHeight: 1.2, whiteSpace: "nowrap",
                                     }}>
@@ -1954,7 +2306,7 @@ function ClientDetailContent() {
                                   </div>
                                   {i < PROGRESS_STEPS.length - 1 && (
                                     <div style={{
-                                      flex: 1, height: "2px", margin: "0 0.25rem", marginBottom: "1.25rem",
+                                      flex: 1, height: "2px", margin: "0 0.2rem", marginBottom: "1.1rem",
                                       background: i < activeIdx || ugcProgress === "done"
                                         ? "#4ade80"
                                         : i === activeIdx
@@ -1970,11 +2322,29 @@ function ClientDetailContent() {
                             })}
                           </div>
 
+                          {/* Composition progress bar (shown during composing stage) */}
+                          {ugcProgress === "composing" && ugcComposeProgress > 0 && (
+                            <div style={{ marginBottom: "0.75rem" }}>
+                              <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                                <div style={{
+                                  height: "100%", borderRadius: 2, width: `${ugcComposeProgress}%`,
+                                  background: "linear-gradient(90deg, #8b5cf6, #a78bfa)",
+                                  transition: "width 0.5s ease",
+                                }} />
+                              </div>
+                              {ugcComposeStage && (
+                                <div style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.35)", marginTop: "0.375rem", textAlign: "center" }}>
+                                  {ugcComposeStage} ({ugcComposeProgress}%)
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           {/* Status message */}
                           <div style={{ textAlign: "center" }}>
                             {ugcProgress === "done" ? (
                               <div style={{ color: "#4ade80", fontWeight: 600, fontSize: "0.85rem" }}>
-                                הסרטון נוצר ונשמר בהצלחה — עובר לקבצים...
+                                הסרטון הממותג נוצר ונשמר בהצלחה — עובר לקבצים...
                               </div>
                             ) : (
                               <div style={{
@@ -1987,7 +2357,9 @@ function ClientDetailContent() {
                                   <span style={{ animation: "ugc-pulse-dot 1.2s ease-in-out infinite", animationDelay: "0.4s" }}>.</span>
                                 </span>
                                 {ugcProgress === "preparing" && "מכין ושולח את הבקשה"}
-                                {ugcProgress === "generating" && "HeyGen מייצר את הסרטון — זה עשוי לקחת כמה דקות"}
+                                {ugcProgress === "generating" && "HeyGen מייצר את סרטון האווטאר — זה עשוי לקחת כמה דקות"}
+                                {ugcProgress === "analyzing" && "AI מנתח את התסריט ויוצר סצנות"}
+                                {ugcProgress === "composing" && "מרכיב את הסרטון הממותג — רקעים, לוגו, טקסט ואפקטים"}
                                 {ugcProgress === "saving" && "שומר את הסרטון בקבצי הלקוח"}
                               </div>
                             )}
@@ -2018,7 +2390,7 @@ function ClientDetailContent() {
                     transition: "all 200ms", letterSpacing: "0.01em",
                   }}
                 >
-                  {(ugcProgress === "error" || ugcProgress === "save_error") ? "נסה שוב" : "צור סרטון UGC"}
+                  {(ugcProgress === "error" || ugcProgress === "save_error") ? "נסה שוב" : "צור סרטון UGC ממותג"}
                 </button>
                 )}
 
