@@ -88,14 +88,28 @@ export async function GET(req: NextRequest) {
     if (projectId) q = q.eq('project_id', projectId);
     if (clientId) q = q.eq('client_id', clientId);
 
-    const { data: rows, error } = await q;
+    let { data: rows, error } = await q;
     if (error) {
       const code = (error as any)?.code ?? '';
       if (code === '42P01' || error.message?.includes('does not exist')) {
         return NextResponse.json([]);
       }
-      console.error('[project-payments] GET error:', error.message);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      // Retry without client_id filter if schema-cache says column missing
+      const schemaMatch = error.message.match(/Could not find the '([^']+)' column/i);
+      if (schemaMatch && clientId) {
+        console.warn(`[project-payments] GET retrying without column '${schemaMatch[1]}'`);
+        let retryQ = sb.from(TABLE).select('*').order('due_date', { ascending: true });
+        if (projectId) retryQ = retryQ.eq('project_id', projectId);
+        const retry = await retryQ;
+        if (!retry.error) {
+          rows = retry.data;
+          error = null;
+        }
+      }
+      if (error) {
+        console.error('[project-payments] GET error:', error.message);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
     }
     return NextResponse.json((rows ?? []).map((r) => rowToPayment(r as Row)));
   } catch (error) {
@@ -140,8 +154,8 @@ export async function POST(req: NextRequest) {
         console.error(`[project-payments] ❌ Table missing. Run:\n${TABLE_DDL}`);
         break;
       }
-      const m = error.message.match(/column .*?['"]?([a-z_]+)['"]? (?:does not exist)/i);
-      const bad = m?.[1];
+      const m = error.message.match(/column .*?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);
+      const bad = m?.[1] || m?.[2];
       if (bad && bad in insertRow) {
         console.warn(`[project-payments] dropping unknown col "${bad}"`);
         delete insertRow[bad];

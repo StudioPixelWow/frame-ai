@@ -80,7 +80,7 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
 
 /** Columns that must NEVER be silently dropped. If Supabase says one of these
  *  doesn't exist, that's an error worth surfacing, not papering over. */
-const PROTECTED_COLUMNS = new Set(['assignee_id', 'business_project_id', 'status']);
+const PROTECTED_COLUMNS = new Set(['assignee_id', 'business_project_id', 'status', 'description', 'notes']);
 
 const SELECT_COLUMNS =
   'id, project_id, title, description, due_date, assignee_id, status, notes, created_at, updated_at';

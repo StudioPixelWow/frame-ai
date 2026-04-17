@@ -176,6 +176,10 @@ export default function BusinessProjectPage() {
   });
   const [savingPayment, setSavingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  // Inline milestone notes editing (always-visible per-milestone)
+  const [milestoneNotesDraft, setMilestoneNotesDraft] = useState<Record<string, string>>({});
+  const [savingMilestoneNotes, setSavingMilestoneNotes] = useState<string | null>(null);
+  const [milestoneNotesFeedback, setMilestoneNotesFeedback] = useState<Record<string, { type: 'success' | 'error'; message: string }>>({});
 
   // ── Derived data (useMemo) — must be declared before useCallback blocks that reference them ──
   const project = useMemo(
@@ -1741,17 +1745,63 @@ export default function BusinessProjectPage() {
                           </div>
                         )}
 
-                        {/* Notes */}
-                        {milestone?.notes && (
-                          <div style={{
-                            marginBottom: '14px', padding: '10px 14px',
-                            background: 'rgba(255,255,255,0.03)', borderRadius: '8px',
-                            border: '1px solid rgba(255,255,255,0.04)',
-                          }}>
-                            <span style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: '4px' }}>הערות</span>
-                            <span style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: '1.5' }}>{milestone.notes}</span>
+                        {/* Inline editable notes/details */}
+                        <div style={{
+                          marginBottom: '14px', padding: '10px 14px',
+                          background: 'rgba(255,255,255,0.03)', borderRadius: '8px',
+                          border: '1px solid rgba(255,255,255,0.06)',
+                        }}>
+                          <span style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: '6px', fontWeight: 600 }}>פרטים / הערות</span>
+                          <textarea
+                            value={milestoneNotesDraft[milestone.id] !== undefined ? milestoneNotesDraft[milestone.id] : (milestone.notes || '')}
+                            onChange={(e) => {
+                              setMilestoneNotesDraft((prev) => ({ ...prev, [milestone.id]: e.target.value }));
+                              setMilestoneNotesFeedback((prev) => { const n = { ...prev }; delete n[milestone.id]; return n; });
+                            }}
+                            rows={2}
+                            style={{
+                              direction: 'rtl', width: '100%', fontSize: '13px',
+                              padding: '8px 10px', color: '#e2e8f0', resize: 'vertical',
+                              background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                              borderRadius: '6px', outline: 'none', lineHeight: '1.5',
+                              fontFamily: 'inherit',
+                            }}
+                            placeholder="הוסף פרטים, הערות או תיאור לאבן הדרך..."
+                          />
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                            <button
+                              className="prj-btn prj-btn-primary"
+                              disabled={savingMilestoneNotes === milestone.id || (milestoneNotesDraft[milestone.id] === undefined && !milestone.notes) || milestoneNotesDraft[milestone.id] === milestone.notes}
+                              onClick={async () => {
+                                const newNotes = milestoneNotesDraft[milestone.id] !== undefined ? milestoneNotesDraft[milestone.id] : (milestone.notes || '');
+                                setSavingMilestoneNotes(milestone.id);
+                                setMilestoneNotesFeedback((prev) => { const n = { ...prev }; delete n[milestone.id]; return n; });
+                                try {
+                                  await updateMilestone(milestone.id, { notes: newNotes } as any);
+                                  setMilestoneNotesDraft((prev) => { const n = { ...prev }; delete n[milestone.id]; return n; });
+                                  setMilestoneNotesFeedback((prev) => ({ ...prev, [milestone.id]: { type: 'success', message: 'נשמר בהצלחה' } }));
+                                  refetchTimeline();
+                                  setTimeout(() => setMilestoneNotesFeedback((prev) => { const n = { ...prev }; delete n[milestone.id]; return n; }), 2500);
+                                } catch (err: any) {
+                                  setMilestoneNotesFeedback((prev) => ({ ...prev, [milestone.id]: { type: 'error', message: err?.message || 'שגיאה בשמירה' } }));
+                                } finally {
+                                  setSavingMilestoneNotes(null);
+                                }
+                              }}
+                              style={{ fontSize: '11px', padding: '4px 14px' }}
+                            >
+                              {savingMilestoneNotes === milestone.id ? '...' : 'שמור הערות'}
+                            </button>
+                            {milestoneNotesFeedback[milestone.id] && (
+                              <span style={{
+                                fontSize: '11px',
+                                color: milestoneNotesFeedback[milestone.id].type === 'success' ? '#4ade80' : '#f87171',
+                              }}>
+                                {milestoneNotesFeedback[milestone.id].message}
+                              </span>
+                            )}
                           </div>
-                        )}
+                        </div>
 
                         {/* ── Files Section with previews ── */}
                         <div style={{ marginBottom: '14px' }}>

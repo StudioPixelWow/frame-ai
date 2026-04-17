@@ -11,6 +11,8 @@ import {
   useCampaigns,
   useApprovals,
   usePodcastSessions,
+  useProjectPayments,
+  useBusinessProjects,
 } from "@/lib/api/use-entity";
 import { useOperationalAlerts } from "@/lib/alerts/use-alerts";
 
@@ -69,6 +71,8 @@ export default function DashboardPage() {
   const { data: campaigns, loading: campaignsLoading } = useCampaigns();
   const { data: approvals, loading: approvalsLoading } = useApprovals();
   const { data: podcastSessions, loading: podcastLoading } = usePodcastSessions();
+  const { data: projectPayments, loading: projectPaymentsLoading } = useProjectPayments();
+  const { data: businessProjects, loading: businessProjectsLoading } = useBusinessProjects();
   const { alerts, insights, criticalCount, warningCount } = useOperationalAlerts();
 
   // State for computed values
@@ -168,9 +172,14 @@ export default function DashboardPage() {
     const openTasksCount = tasks.filter(
       (t) => t.status !== "completed" && t.status !== "approved"
     ).length;
-    const pendingPaymentAmount = payments
+    // Include both general payments AND project payments in pending amounts
+    const pendingGeneralPayments = payments
       .filter((p) => p.status === "pending" || p.status === "overdue")
       .reduce((sum, p) => sum + p.amount, 0);
+    const pendingProjectPayments = (projectPayments || [])
+      .filter((p: any) => p.status === "pending" || p.status === "overdue" || p.status === "collection_needed")
+      .reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+    const pendingPaymentAmount = pendingGeneralPayments + pendingProjectPayments;
     const pendingApprovalsCount = approvals.filter(
       (a) => a.status === "pending_approval"
     ).length;
@@ -192,17 +201,30 @@ export default function DashboardPage() {
       return created >= monthStart && created <= monthEnd;
     }).length;
 
-    const revenueThisMonth = payments
+    const generalRevenueThisMonth = payments
       .filter((p) => {
         const paidDate = p.paidAt ? new Date(p.paidAt) : null;
         return p.status === "paid" && paidDate && paidDate >= monthStart && paidDate <= monthEnd;
       })
       .reduce((sum, p) => sum + p.amount, 0);
+    const projectRevenueThisMonth = (projectPayments || [])
+      .filter((p: any) => {
+        const paidDate = p.paidAt ? new Date(p.paidAt) : null;
+        return p.status === "paid" && paidDate && paidDate >= monthStart && paidDate <= monthEnd;
+      })
+      .reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+    const revenueThisMonth = generalRevenueThisMonth + projectRevenueThisMonth;
 
-    const overduePaymentCount = payments.filter((p) => p.status === "overdue").length;
-    const overdueTotal = payments
+    const generalOverdueCount = payments.filter((p) => p.status === "overdue").length;
+    const projectOverdueCount = (projectPayments || []).filter((p: any) => p.status === "overdue").length;
+    const overduePaymentCount = generalOverdueCount + projectOverdueCount;
+    const generalOverdueTotal = payments
       .filter((p) => p.status === "overdue")
       .reduce((sum, p) => sum + p.amount, 0);
+    const projectOverdueTotal = (projectPayments || [])
+      .filter((p: any) => p.status === "overdue")
+      .reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+    const overdueTotal = generalOverdueTotal + projectOverdueTotal;
 
     const activeCampaignsCount = campaigns.filter((c) => c.status === "active").length;
 
@@ -223,9 +245,13 @@ export default function DashboardPage() {
     });
 
     // Urgent actions data
-    const upcomingCollections = payments
+    const generalUpcoming = payments
       .filter((p) => p.status === "pending")
       .reduce((sum, p) => sum + p.amount, 0);
+    const projectUpcoming = (projectPayments || [])
+      .filter((p: any) => p.status === "pending" || p.status === "collection_needed")
+      .reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+    const upcomingCollections = generalUpcoming + projectUpcoming;
 
     const today = new Date().toDateString();
     const dueTodayFollowUps = leads.filter((l) => {
@@ -248,13 +274,21 @@ export default function DashboardPage() {
     });
 
     // Financial summary
-    const upcomingPayments = payments
+    const generalUpcomingPayments = payments
       .filter((p) => {
         if (!p.dueDate) return false;
         const dueDate = new Date(p.dueDate);
         return dueDate > now && dueDate <= new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
       })
       .reduce((sum, p) => sum + p.amount, 0);
+    const projectUpcomingPayments = (projectPayments || [])
+      .filter((p: any) => {
+        if (!p.dueDate) return false;
+        const dueDate = new Date(p.dueDate);
+        return dueDate > now && dueDate <= new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      })
+      .reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+    const upcomingPayments = generalUpcomingPayments + projectUpcomingPayments;
 
     setFinancialSummary({
       revenueThisMonth,
@@ -320,7 +354,7 @@ export default function DashboardPage() {
       underReview: underReviewCount,
       busiestEmployee,
     });
-  }, [clients, tasks, payments, leads, employees, campaigns, approvals, podcastSessions]);
+  }, [clients, tasks, payments, leads, employees, campaigns, approvals, podcastSessions, projectPayments, businessProjects]);
 
   return (
     <div className="mhd-root">
