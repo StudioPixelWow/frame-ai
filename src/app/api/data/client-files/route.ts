@@ -23,6 +23,10 @@ export async function POST(req: NextRequest) {
   ensureSeeded();
   try {
     const body = await req.json();
+    // Ensure timestamps are always set
+    const now = new Date().toISOString();
+    if (!body.createdAt) body.createdAt = now;
+    if (!body.updatedAt) body.updatedAt = now;
     const created = clientFiles.create(body);
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
