@@ -4,9 +4,9 @@
  *
  * Storage: Supabase "business_project_milestones" table.
  * Expected columns:
- *   id, project_id, title, description, due_date,
- *   assignee_id, status, files (jsonb), notes,
- *   created_at, updated_at
+ *   id, business_project_id, title, description, notes, due_date,
+ *   assignee_id, status, sort_order, started_at, submitted_at,
+ *   approved_at, completed_at, created_at, updated_at
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -44,7 +44,7 @@ function rowToMilestone(r: Row) {
     submittedAt: (r.submitted_at as string) ?? null,
     approvedAt: (r.approved_at as string) ?? null,
     completedAt: (r.completed_at as string) ?? null,
-    notes: (r.notes as string) ?? (r.description as string) ?? '',
+    notes: (r.notes as string) ?? '',
     createdAt: (r.created_at as string) ?? '',
     updatedAt: (r.updated_at as string) ?? '',
   };
@@ -59,15 +59,14 @@ function nullIfEmpty(v: unknown): string | null {
 function toInsert(body: Record<string, unknown>, id: string, now: string): Record<string, unknown> {
   const projectId = (body.businessProjectId ?? body.projectId ?? null) as string | null;
   const assigneeId = nullIfEmpty(body.assigneeId ?? body.assignedEmployeeId);
-  // Merge notes into description (DB has no separate "notes" column).
-  const desc = (body.description ?? body.notes ?? '') as string;
   return {
     id,
     // Write to both column aliases; drop-column loop removes whichever doesn't exist.
     business_project_id: projectId,
     project_id: projectId,
     title: (body.title ?? '') as string,
-    description: desc,
+    description: (body.description ?? '') as string,
+    notes: (body.notes ?? '') as string,
     due_date: (body.dueDate ?? null) as string | null,
     assignee_id: assigneeId,
     status: (body.status ?? 'pending') as string,

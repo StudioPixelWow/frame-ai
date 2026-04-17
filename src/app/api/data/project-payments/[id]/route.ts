@@ -16,7 +16,7 @@ type Row = Record<string, unknown> & { id: string };
 function rowToPayment(r: Row) {
   return {
     id: r.id,
-    projectId: (r.project_id as string) ?? '',
+    projectId: (r.business_project_id as string) ?? (r.project_id as string) ?? '',
     clientId: (r.client_id as string) ?? '',
     title: (r.title as string) ?? '',
     amount: Number(r.amount ?? 0),
@@ -24,6 +24,9 @@ function rowToPayment(r: Row) {
     status: (r.status as string) ?? 'pending',
     description: (r.description as string) ?? '',
     milestoneId: (r.milestone_id as string) ?? null,
+    paymentType: (r.payment_type as string) ?? 'custom',
+    isDue: r.is_due === true || r.is_due === 'true',
+    isPaid: r.is_paid === true || r.is_paid === 'true',
     paidAt: (r.paid_at as string) ?? null,
     createdAt: (r.created_at as string) ?? '',
     updatedAt: (r.updated_at as string) ?? '',
@@ -33,7 +36,7 @@ function rowToPayment(r: Row) {
 /** Map camelCase body keys → snake_case DB columns for UPDATE */
 function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
   const map: Record<string, string> = {
-    projectId: 'project_id',
+    projectId: 'business_project_id',
     clientId: 'client_id',
     title: 'title',
     amount: 'amount',
@@ -41,6 +44,9 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
     status: 'status',
     description: 'description',
     milestoneId: 'milestone_id',
+    paymentType: 'payment_type',
+    isDue: 'is_due',
+    isPaid: 'is_paid',
     paidAt: 'paid_at',
   };
   const out: Record<string, unknown> = { updated_at: new Date().toISOString() };

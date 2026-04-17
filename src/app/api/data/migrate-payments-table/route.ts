@@ -1,4 +1,8 @@
 /**
+ * @deprecated DELETE THIS FILE — migration is complete.
+ * The canonical schema is now managed by the DB directly.
+ * Payment creation uses public.ensure_business_project_default_payments(project_id).
+ *
  * GET /api/data/migrate-payments-table
  *
  * Temporary migration endpoint — rebuilds public.business_project_payments

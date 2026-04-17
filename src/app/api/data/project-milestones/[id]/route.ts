@@ -34,7 +34,7 @@ function rowToMilestone(r: Row) {
     submittedAt: (r.submitted_at as string) ?? null,
     approvedAt: (r.approved_at as string) ?? null,
     completedAt: (r.completed_at as string) ?? null,
-    notes: (r.notes as string) ?? (r.description as string) ?? '',
+    notes: (r.notes as string) ?? '',
     createdAt: (r.created_at as string) ?? '',
     updatedAt: (r.updated_at as string) ?? '',
   };
@@ -61,14 +61,10 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
     : body.assignedEmployeeId;
   if (assignee !== undefined) out.assignee_id = nullIfEmpty(assignee);
 
-  // If caller sends "notes", merge into description (DB has no "notes" column).
-  if (body.notes !== undefined && body.description === undefined) {
-    body.description = body.notes;
-  }
-
   const map: Array<[string, string]> = [
     ['title', 'title'],
     ['description', 'description'],
+    ['notes', 'notes'],
     ['dueDate', 'due_date'],
     ['status', 'status'],
     ['sortOrder', 'sort_order'],
