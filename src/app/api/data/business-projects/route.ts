@@ -6,7 +6,7 @@
  * Expected schema:
  *   id, project_name, client_id, project_type, description,
  *   agreement_signed, project_status, start_date, end_date,
- *   assigned_manager_id, total_price, progress, contract_signed,
+ *   assigned_manager_id, budget, progress, contract_signed,
  *   contract_signed_at, created_at, updated_at
  *
  * Unknown columns are auto-dropped and the request is retried, so partial
@@ -44,7 +44,7 @@ function rowToProject(r: Row) {
     agreementSigned: (r.agreement_signed as boolean) ?? false,
     contractSigned: (r.contract_signed as boolean) ?? false,
     contractSignedAt: (r.contract_signed_at as string) ?? null,
-    totalPrice: typeof r.total_price === 'number' ? r.total_price : 0,
+    budget: typeof r.budget === 'number' ? r.budget : 0,
     projectStatus: (r.project_status as string) ?? 'not_started',
     progress: typeof r.progress === 'number' ? r.progress : 0,
     startDate: (r.start_date as string) ?? null,
@@ -73,7 +73,7 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
     project_type: svc,
     description: (body.description ?? '') as string,
     agreement_signed: (body.agreementSigned ?? false) as boolean,
-    total_price: typeof body.totalPrice === 'number' ? body.totalPrice : (Number(body.totalPrice) || 0),
+    budget: typeof body.budget === 'number' ? body.budget : (Number(body.budget) || 0),
     project_status: (body.projectStatus ?? body.status ?? 'not_started') as string,
     start_date: nullIfEmpty(body.startDate),
     end_date: nullIfEmpty(body.endDate),
@@ -85,7 +85,7 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
 }
 
 const SELECT_COLUMNS =
-  'id, project_name, client_id, project_type, description, agreement_signed, project_status, start_date, end_date, assigned_manager_id, total_price, progress, created_at, updated_at';
+  'id, project_name, client_id, project_type, description, agreement_signed, project_status, start_date, end_date, assigned_manager_id, budget, progress, created_at, updated_at';
 
 function parseBadColumn(msg: string): string | null {
   const m = msg.match(/column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);
@@ -283,7 +283,7 @@ export async function POST(req: NextRequest) {
       const code = (lastErr as any)?.code ?? null;
       const hint =
         code === '42P01'
-          ? `Run: CREATE TABLE IF NOT EXISTS ${TABLE} ( id TEXT PRIMARY KEY, project_name TEXT, client_id TEXT, project_type TEXT, description TEXT, agreement_signed BOOLEAN, project_status TEXT, start_date DATE, end_date DATE, assigned_manager_id TEXT, total_price NUMERIC DEFAULT 0, progress NUMERIC DEFAULT 0, contract_signed BOOLEAN DEFAULT false, contract_signed_at TIMESTAMPTZ, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ );`
+          ? `Run: CREATE TABLE IF NOT EXISTS ${TABLE} ( id TEXT PRIMARY KEY, project_name TEXT, client_id TEXT, project_type TEXT, description TEXT, agreement_signed BOOLEAN, project_status TEXT, start_date DATE, end_date DATE, assigned_manager_id TEXT, budget NUMERIC DEFAULT 0, progress NUMERIC DEFAULT 0, contract_signed BOOLEAN DEFAULT false, contract_signed_at TIMESTAMPTZ, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ );`
           : null;
       console.error('[API] POST /api/data/business-projects insert error:', lastErr);
       return NextResponse.json({ error: lastErr?.message ?? 'Insert failed', code, hint }, { status: 500 });

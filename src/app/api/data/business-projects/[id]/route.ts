@@ -29,7 +29,7 @@ function rowToProject(r: Row) {
     agreementSigned: (r.agreement_signed as boolean) ?? false,
     contractSigned: (r.contract_signed as boolean) ?? false,
     contractSignedAt: (r.contract_signed_at as string) ?? null,
-    totalPrice: typeof r.total_price === 'number' ? r.total_price : 0,
+    budget: typeof r.budget === 'number' ? r.budget : 0,
     projectStatus: (r.project_status as string) ?? 'not_started',
     progress: typeof r.progress === 'number' ? r.progress : 0,
     startDate: (r.start_date as string) ?? null,
@@ -78,7 +78,7 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
     ['endDate', 'end_date'],
     ['assignedManagerId', 'assigned_manager_id'],
     ['progress', 'progress'],
-    ['totalPrice', 'total_price'],
+    ['budget', 'budget'],
   ];
   for (const [k, dbKey] of map) {
     if (body[k] !== undefined) {
@@ -90,7 +90,7 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
 }
 
 const SELECT_COLUMNS =
-  'id, project_name, client_id, project_type, description, agreement_signed, project_status, start_date, end_date, assigned_manager_id, total_price, progress, created_at, updated_at';
+  'id, project_name, client_id, project_type, description, agreement_signed, project_status, start_date, end_date, assigned_manager_id, budget, progress, created_at, updated_at';
 
 function parseBadColumn(msg: string): string | null {
   const m = msg.match(/column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);
@@ -185,12 +185,12 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       const label = statusLabels[body.projectStatus as string] || (body.projectStatus as string);
       insertTimelineEvent(id, 'project_edited', `סטטוס פרויקט שונה ל: ${label}`);
     }
-    if (body.projectName !== undefined || body.description !== undefined || body.serviceType !== undefined || body.totalPrice !== undefined) {
+    if (body.projectName !== undefined || body.description !== undefined || body.serviceType !== undefined || body.budget !== undefined) {
       const changes: string[] = [];
       if (body.projectName !== undefined) changes.push('שם');
       if (body.description !== undefined) changes.push('תיאור');
       if (body.serviceType !== undefined) changes.push('סוג');
-      if (body.totalPrice !== undefined) changes.push(`מחיר כולל: ₪${Number(body.totalPrice).toLocaleString('he-IL')}`);
+      if (body.budget !== undefined) changes.push(`תקציב: ₪${Number(body.budget).toLocaleString('he-IL')}`);
       if (changes.length > 0 && body.projectStatus === undefined && body.contractSigned === undefined) {
         insertTimelineEvent(id, 'project_edited', `פרויקט עודכן: ${changes.join(', ')}`);
       }

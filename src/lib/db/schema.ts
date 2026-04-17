@@ -629,7 +629,7 @@ export interface BusinessProject {
   agreementSigned: boolean;
   contractSigned: boolean;
   contractSignedAt: string | null;
-  totalPrice: number;
+  budget: number;
   projectStatus: BusinessProjectStatus;
   startDate: string | null;
   endDate: string | null;

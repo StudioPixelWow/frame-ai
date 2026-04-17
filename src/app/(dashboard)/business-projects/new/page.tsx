@@ -31,7 +31,7 @@ interface FormData {
   assignedManagerId: string;
   startDate: string;
   endDate: string;
-  totalPrice: string;
+  budget: string;
 }
 
 // Values here must match service_type rows in
@@ -67,7 +67,7 @@ export default function NewBusinessProjectPage() {
     assignedManagerId: "",
     startDate: "",
     endDate: "",
-    totalPrice: "",
+    budget: "",
   });
 
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -149,7 +149,7 @@ export default function NewBusinessProjectPage() {
         assignedManagerId: form.assignedManagerId || null,
         startDate: form.startDate || null,
         endDate: form.endDate || null,
-        totalPrice: parseFloat(form.totalPrice) || 0,
+        budget: parseFloat(form.budget) || 0,
         projectStatus: "not_started",
         createdAt: now,
         updatedAt: now,
@@ -437,8 +437,8 @@ export default function NewBusinessProjectPage() {
               <input
                 type="number"
                 className="form-input"
-                value={form.totalPrice}
-                onChange={(e) => setForm({ ...form, totalPrice: e.target.value })}
+                value={form.budget}
+                onChange={(e) => setForm({ ...form, budget: e.target.value })}
                 disabled={submitting}
                 placeholder="0"
                 min="0"

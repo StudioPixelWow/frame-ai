@@ -294,7 +294,7 @@ export default function DashboardPage() {
     // Total value of all active business projects
     const projectsTotalValue = (businessProjects || [])
       .filter((p: any) => p.projectStatus !== "completed")
-      .reduce((sum: number, p: any) => sum + (Number(p.totalPrice) || 0), 0);
+      .reduce((sum: number, p: any) => sum + (Number(p.budget) || 0), 0);
 
     setFinancialSummary({
       revenueThisMonth,

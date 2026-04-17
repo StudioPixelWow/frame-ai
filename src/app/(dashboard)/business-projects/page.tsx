@@ -77,7 +77,7 @@ type ProjectFormData = {
   description: string;
   startDate: string;
   assignedManagerId: string;
-  totalPrice: string;
+  budget: string;
 };
 
 export default function BusinessProjectsPage() {
@@ -108,7 +108,7 @@ export default function BusinessProjectsPage() {
     description: "",
     startDate: "",
     assignedManagerId: "",
-    totalPrice: "",
+    budget: "",
   });
 
   const [clientForm, setClientForm] = useState<ClientFormData>({
@@ -264,7 +264,7 @@ export default function BusinessProjectsPage() {
   };
 
   const handleCreateProject = async () => {
-    if (!projectForm.projectName || !projectForm.clientId || !projectForm.totalPrice) {
+    if (!projectForm.projectName || !projectForm.clientId || !projectForm.budget) {
       toast("אנא מלא את השדות: שם פרויקט, לקוח ומחיר כולל", "error");
       return;
     }
@@ -281,9 +281,9 @@ export default function BusinessProjectsPage() {
         startDate: projectForm.startDate || null,
         endDate: null,
         assignedManagerId: projectForm.assignedManagerId || null,
-        totalPrice: parseFloat(projectForm.totalPrice) || 0,
+        budget: parseFloat(projectForm.budget) || 0,
       } as any);
-      setProjectForm({ projectName: "", clientId: "", projectType: "website", description: "", startDate: "", assignedManagerId: "", totalPrice: "" });
+      setProjectForm({ projectName: "", clientId: "", projectType: "website", description: "", startDate: "", assignedManagerId: "", budget: "" });
       setShowCreateModal(false);
       toast("פרויקט נוצר בהצלחה", "success");
       router.push(`/business-projects/${newProject.id}`);
@@ -650,11 +650,11 @@ export default function BusinessProjectsPage() {
 
                 {/* Price & Payment */}
                 <div style={{ marginBottom: "1rem", padding: "0.75rem", borderRadius: "0.5rem", background: "var(--surface)" }}>
-                  {(project.totalPrice > 0) && (
+                  {(project.budget > 0) && (
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: nextPayment ? "0.5rem" : 0 }}>
                       <span style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>מחיר פרויקט</span>
                       <span style={{ fontSize: "0.9rem", fontWeight: "700", color: "#818cf8" }}>
-                        {formatCurrency(project.totalPrice)}
+                        {formatCurrency(project.budget)}
                       </span>
                     </div>
                   )}
@@ -671,7 +671,7 @@ export default function BusinessProjectsPage() {
                       </div>
                     </>
                   )}
-                  {!nextPayment && project.totalPrice <= 0 && (
+                  {!nextPayment && project.budget <= 0 && (
                     <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>אין תשלומים</div>
                   )}
                 </div>
@@ -757,7 +757,7 @@ export default function BusinessProjectsPage() {
                     {project.projectName}
                   </h4>
                   <p style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", margin: "0" }}>
-                    {getClientName(project.clientId)} • {((project as any).contractSigned || project.agreementSigned) ? "✓ חוזה" : "✕ חוזה"}{project.totalPrice > 0 ? ` • ${formatCurrency(project.totalPrice)}` : ""}{nextPayment && ` • תשלום: ${formatCurrency(nextPayment.amount)}`}
+                    {getClientName(project.clientId)} • {((project as any).contractSigned || project.agreementSigned) ? "✓ חוזה" : "✕ חוזה"}{project.budget > 0 ? ` • ${formatCurrency(project.budget)}` : ""}{nextPayment && ` • תשלום: ${formatCurrency(nextPayment.amount)}`}
                   </p>
                   {progress.total > 0 && (
                     <div style={{ marginTop: "0.375rem" }}>
@@ -1025,8 +1025,8 @@ export default function BusinessProjectsPage() {
               <input
                 type="number"
                 className="form-input"
-                value={projectForm.totalPrice}
-                onChange={(e) => setProjectForm({ ...projectForm, totalPrice: e.target.value })}
+                value={projectForm.budget}
+                onChange={(e) => setProjectForm({ ...projectForm, budget: e.target.value })}
                 placeholder="הכנס מחיר כולל"
                 min="0"
                 style={{ fontSize: "0.875rem" }}
