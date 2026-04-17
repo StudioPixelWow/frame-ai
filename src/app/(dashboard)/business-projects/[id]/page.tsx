@@ -1593,30 +1593,14 @@ export default function BusinessProjectPage() {
                           }}
                           placeholder="תיאור / פירוט אבן הדרך"
                         />
-                        <textarea
-                          value={milestoneOverrides[milestone.id]?._editNotes !== undefined ? (milestoneOverrides[milestone.id]._editNotes as string) : (milestone.notes || '')}
-                          onChange={(e) => setMilestoneOverrides((prev) => ({
-                            ...prev,
-                            [milestone.id]: { ...(prev[milestone.id] || {}), _editNotes: e.target.value },
-                          }))}
-                          rows={2}
-                          style={{
-                            direction: 'rtl', marginBottom: '12px', width: '100%', fontSize: '13px',
-                            padding: '10px 12px', color: '#e2e8f0', resize: 'vertical',
-                            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                            borderRadius: '8px', outline: 'none',
-                          }}
-                          placeholder="הערות פנימיות"
-                        />
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button className="prj-btn prj-btn-primary" disabled={loading} onClick={async () => {
                             const overrides = milestoneOverrides[milestone.id] || {};
                             const newTitle = overrides._editTitle !== undefined ? (overrides._editTitle as string) : milestone.title;
                             const newDescription = overrides._editDescription !== undefined ? (overrides._editDescription as string) : (milestone.description || '');
-                            const newNotes = overrides._editNotes !== undefined ? (overrides._editNotes as string) : (milestone.notes || '');
                             setLoading(true);
                             try {
-                              await updateMilestone(milestone.id, { title: newTitle, description: newDescription, notes: newNotes } as any);
+                              await updateMilestone(milestone.id, { title: newTitle, description: newDescription } as any);
                               // Clear edit overrides
                               setMilestoneOverrides((prev) => {
                                 const next = { ...prev };
@@ -1653,14 +1637,9 @@ export default function BusinessProjectPage() {
                         {/* Title row */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
                           <div style={{ flex: 1 }}>
-                            <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#e2e8f0', margin: '0 0 4px 0' }}>
+                            <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#e2e8f0', margin: '0' }}>
                               {milestone.title}
                             </h4>
-                            {milestone.description && (
-                              <p style={{ fontSize: '13px', color: '#64748b', margin: 0, lineHeight: '1.5' }}>
-                                {milestone.description}
-                              </p>
-                            )}
                           </div>
                           <span className="prj-status-badge" style={{
                             background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`,
@@ -1753,7 +1732,7 @@ export default function BusinessProjectPage() {
                         }}>
                           <span style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: '6px', fontWeight: 600 }}>פרטים / הערות</span>
                           <textarea
-                            value={milestoneNotesDraft[milestone.id] !== undefined ? milestoneNotesDraft[milestone.id] : (milestone.notes || '')}
+                            value={milestoneNotesDraft[milestone.id] !== undefined ? milestoneNotesDraft[milestone.id] : (milestone.description || '')}
                             onChange={(e) => {
                               setMilestoneNotesDraft((prev) => ({ ...prev, [milestone.id]: e.target.value }));
                               setMilestoneNotesFeedback((prev) => { const n = { ...prev }; delete n[milestone.id]; return n; });
@@ -1771,13 +1750,13 @@ export default function BusinessProjectPage() {
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
                             <button
                               className="prj-btn prj-btn-primary"
-                              disabled={savingMilestoneNotes === milestone.id || (milestoneNotesDraft[milestone.id] === undefined && !milestone.notes) || milestoneNotesDraft[milestone.id] === milestone.notes}
+                              disabled={savingMilestoneNotes === milestone.id || (milestoneNotesDraft[milestone.id] === undefined && !milestone.description) || milestoneNotesDraft[milestone.id] === (milestone.description || '')}
                               onClick={async () => {
-                                const newNotes = milestoneNotesDraft[milestone.id] !== undefined ? milestoneNotesDraft[milestone.id] : (milestone.notes || '');
+                                const newDesc = milestoneNotesDraft[milestone.id] !== undefined ? milestoneNotesDraft[milestone.id] : (milestone.description || '');
                                 setSavingMilestoneNotes(milestone.id);
                                 setMilestoneNotesFeedback((prev) => { const n = { ...prev }; delete n[milestone.id]; return n; });
                                 try {
-                                  await updateMilestone(milestone.id, { notes: newNotes } as any);
+                                  await updateMilestone(milestone.id, { description: newDesc } as any);
                                   setMilestoneNotesDraft((prev) => { const n = { ...prev }; delete n[milestone.id]; return n; });
                                   setMilestoneNotesFeedback((prev) => ({ ...prev, [milestone.id]: { type: 'success', message: 'נשמר בהצלחה' } }));
                                   refetchTimeline();

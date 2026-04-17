@@ -44,7 +44,7 @@ function rowToMilestone(r: Row) {
     submittedAt: (r.submitted_at as string) ?? null,
     approvedAt: (r.approved_at as string) ?? null,
     completedAt: (r.completed_at as string) ?? null,
-    notes: (r.notes as string) ?? '',
+    notes: (r.notes as string) ?? (r.description as string) ?? '',
     createdAt: (r.created_at as string) ?? '',
     updatedAt: (r.updated_at as string) ?? '',
   };
@@ -59,13 +59,15 @@ function nullIfEmpty(v: unknown): string | null {
 function toInsert(body: Record<string, unknown>, id: string, now: string): Record<string, unknown> {
   const projectId = (body.businessProjectId ?? body.projectId ?? null) as string | null;
   const assigneeId = nullIfEmpty(body.assigneeId ?? body.assignedEmployeeId);
+  // Merge notes into description (DB has no separate "notes" column).
+  const desc = (body.description ?? body.notes ?? '') as string;
   return {
     id,
     // Write to both column aliases; drop-column loop removes whichever doesn't exist.
     business_project_id: projectId,
     project_id: projectId,
     title: (body.title ?? '') as string,
-    description: (body.description ?? '') as string,
+    description: desc,
     due_date: (body.dueDate ?? null) as string | null,
     assignee_id: assigneeId,
     status: (body.status ?? 'pending') as string,
@@ -74,7 +76,6 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
     submitted_at: (body.submittedAt ?? null) as string | null,
     approved_at: (body.approvedAt ?? null) as string | null,
     completed_at: (body.completedAt ?? null) as string | null,
-    notes: (body.notes ?? '') as string,
     created_at: now,
     updated_at: now,
   };
@@ -86,7 +87,7 @@ function parseBadColumn(msg: string): string | null {
 }
 
 const SELECT_COLUMNS =
-  'id, project_id, title, description, due_date, assignee_id, status, notes, created_at, updated_at';
+  'id, project_id, title, description, due_date, assignee_id, status, created_at, updated_at';
 
 export async function GET(req: NextRequest) {
   try {

@@ -645,20 +645,33 @@ export default function BusinessProjectsPage() {
                   </div>
                 )}
 
-                {/* Next Payment */}
-                {nextPayment && (
-                  <div style={{ marginBottom: "1rem", padding: "0.75rem", borderRadius: "0.5rem", background: "var(--surface)" }}>
-                    <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", marginBottom: "0.25rem" }}>
-                      תשלום הבא
+                {/* Price & Payment */}
+                <div style={{ marginBottom: "1rem", padding: "0.75rem", borderRadius: "0.5rem", background: "var(--surface)" }}>
+                  {(project.totalPrice > 0) && (
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: nextPayment ? "0.5rem" : 0 }}>
+                      <span style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>מחיר פרויקט</span>
+                      <span style={{ fontSize: "0.9rem", fontWeight: "700", color: "#818cf8" }}>
+                        {formatCurrency(project.totalPrice)}
+                      </span>
                     </div>
-                    <div style={{ fontSize: "0.9rem", fontWeight: "600", color: "var(--foreground)" }}>
-                      {formatCurrency(nextPayment.amount)}
-                    </div>
-                    <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
-                      {formatDate(nextPayment.date)}
-                    </div>
-                  </div>
-                )}
+                  )}
+                  {nextPayment && (
+                    <>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>תשלום הבא</span>
+                        <span style={{ fontSize: "0.9rem", fontWeight: "600", color: "var(--foreground)" }}>
+                          {formatCurrency(nextPayment.amount)}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", textAlign: "left" }}>
+                        {formatDate(nextPayment.date)}
+                      </div>
+                    </>
+                  )}
+                  {!nextPayment && project.totalPrice <= 0 && (
+                    <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>אין תשלומים</div>
+                  )}
+                </div>
 
                 {/* Footer info */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.8rem", color: "var(--foreground-muted)" }}>
@@ -741,7 +754,7 @@ export default function BusinessProjectsPage() {
                     {project.projectName}
                   </h4>
                   <p style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", margin: "0" }}>
-                    {getClientName(project.clientId)} • {((project as any).contractSigned || project.agreementSigned) ? "✓ חוזה" : "✕ חוזה"} {nextPayment && `• ${formatCurrency(nextPayment.amount)}`}
+                    {getClientName(project.clientId)} • {((project as any).contractSigned || project.agreementSigned) ? "✓ חוזה" : "✕ חוזה"}{project.totalPrice > 0 ? ` • ${formatCurrency(project.totalPrice)}` : ""}{nextPayment && ` • תשלום: ${formatCurrency(nextPayment.amount)}`}
                   </p>
                   {progress.total > 0 && (
                     <div style={{ marginTop: "0.375rem" }}>

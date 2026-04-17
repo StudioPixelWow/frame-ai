@@ -34,7 +34,7 @@ function rowToMilestone(r: Row) {
     submittedAt: (r.submitted_at as string) ?? null,
     approvedAt: (r.approved_at as string) ?? null,
     completedAt: (r.completed_at as string) ?? null,
-    notes: (r.notes as string) ?? '',
+    notes: (r.notes as string) ?? (r.description as string) ?? '',
     createdAt: (r.created_at as string) ?? '',
     updatedAt: (r.updated_at as string) ?? '',
   };
@@ -61,6 +61,11 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
     : body.assignedEmployeeId;
   if (assignee !== undefined) out.assignee_id = nullIfEmpty(assignee);
 
+  // If caller sends "notes", merge into description (DB has no "notes" column).
+  if (body.notes !== undefined && body.description === undefined) {
+    body.description = body.notes;
+  }
+
   const map: Array<[string, string]> = [
     ['title', 'title'],
     ['description', 'description'],
@@ -71,7 +76,6 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
     ['submittedAt', 'submitted_at'],
     ['approvedAt', 'approved_at'],
     ['completedAt', 'completed_at'],
-    ['notes', 'notes'],
   ];
   for (const [k, dbKey] of map) if (body[k] !== undefined) out[dbKey] = body[k];
   out.updated_at = new Date().toISOString();
@@ -80,10 +84,10 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
 
 /** Columns that must NEVER be silently dropped. If Supabase says one of these
  *  doesn't exist, that's an error worth surfacing, not papering over. */
-const PROTECTED_COLUMNS = new Set(['assignee_id', 'business_project_id', 'status', 'description', 'notes']);
+const PROTECTED_COLUMNS = new Set(['assignee_id', 'business_project_id', 'status', 'description']);
 
 const SELECT_COLUMNS =
-  'id, project_id, title, description, due_date, assignee_id, status, notes, created_at, updated_at';
+  'id, project_id, title, description, due_date, assignee_id, status, created_at, updated_at';
 
 function parseBadColumn(msg: string): string | null {
   const m = msg.match(/column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);

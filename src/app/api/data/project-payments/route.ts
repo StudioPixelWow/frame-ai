@@ -126,8 +126,8 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const now = new Date().toISOString();
+    // Do NOT send `id` — the DB column is uuid type and auto-generates.
     const insertRow: Record<string, unknown> = {
-      id: generateId(),
       project_id: body.projectId ?? '',
       client_id: body.clientId ?? '',
       title: body.title ?? '',

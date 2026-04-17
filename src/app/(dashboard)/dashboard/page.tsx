@@ -106,6 +106,7 @@ export default function DashboardPage() {
     revenueThisMonth: 0,
     overdueTotal: 0,
     upcomingCollections: 0,
+    projectsTotalValue: 0,
   });
 
   const [clientHealth, setClientHealth] = useState({
@@ -290,10 +291,16 @@ export default function DashboardPage() {
       .reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
     const upcomingPayments = generalUpcomingPayments + projectUpcomingPayments;
 
+    // Total value of all active business projects
+    const projectsTotalValue = (businessProjects || [])
+      .filter((p: any) => p.projectStatus !== "completed")
+      .reduce((sum: number, p: any) => sum + (Number(p.totalPrice) || 0), 0);
+
     setFinancialSummary({
       revenueThisMonth,
       overdueTotal,
       upcomingCollections: upcomingPayments,
+      projectsTotalValue,
     });
 
     // Client health
@@ -810,6 +817,14 @@ export default function DashboardPage() {
                     {formatCurrency(financialSummary.upcomingCollections)}
                   </span>
                 </div>
+                {financialSummary.projectsTotalValue > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>שווי פרויקטים פעילים</span>
+                    <span style={{ fontSize: "1rem", fontWeight: 700, color: "#818cf8" }}>
+                      {formatCurrency(financialSummary.projectsTotalValue)}
+                    </span>
+                  </div>
+                )}
               </div>
               <Link
                 href="/accounting"
