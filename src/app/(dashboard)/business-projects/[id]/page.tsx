@@ -777,7 +777,7 @@ export default function BusinessProjectPage() {
       endDate: project?.endDate ? (project.endDate as string).slice(0, 10) : '',
       projectStatus: project?.projectStatus || 'not_started',
       contractSigned: (project as any)?.contractSigned ?? false,
-      totalPrice: (project as any)?.totalPrice ?? 0,
+      totalPrice: project?.totalPrice ?? 0,
     });
     setIsEditingProject(true);
     setProjectSaveFeedback(null);
@@ -1376,11 +1376,11 @@ export default function BusinessProjectPage() {
               תשלומים
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {((project as any)?.totalPrice > 0) && (
+              {(project?.totalPrice > 0) && (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#64748b', fontSize: '13px' }}>מחיר פרויקט</span>
-                    <span style={{ color: '#818cf8', fontWeight: '700', fontSize: '16px' }}>₪{((project as any).totalPrice as number).toLocaleString('he-IL')}</span>
+                    <span style={{ color: '#818cf8', fontWeight: '700', fontSize: '16px' }}>₪{(project!.totalPrice).toLocaleString('he-IL')}</span>
                   </div>
                   <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
                 </>
@@ -1396,7 +1396,7 @@ export default function BusinessProjectPage() {
               <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#64748b', fontSize: '13px' }}>נותר לגביה</span>
-                <span style={{ color: '#fbbf24', fontWeight: '600', fontSize: '15px' }}>₪{(((project as any)?.totalPrice || totalAmount) - paidAmount).toLocaleString('he-IL')}</span>
+                <span style={{ color: '#fbbf24', fontWeight: '600', fontSize: '15px' }}>₪{((project?.totalPrice || totalAmount) - paidAmount).toLocaleString('he-IL')}</span>
               </div>
             </div>
           </div>
@@ -2118,10 +2118,10 @@ export default function BusinessProjectPage() {
         <div>
           {/* Summary cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-            {((project as any)?.totalPrice > 0) && (
+            {(project?.totalPrice > 0) && (
               <div className="prj-card">
                 <h4 style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>מחיר פרויקט</h4>
-                <div style={{ fontSize: '24px', fontWeight: '700', color: '#818cf8' }}>₪{((project as any).totalPrice as number).toLocaleString('he-IL')}</div>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: '#818cf8' }}>₪{(project!.totalPrice).toLocaleString('he-IL')}</div>
               </div>
             )}
             <div className="prj-card">
@@ -2134,7 +2134,7 @@ export default function BusinessProjectPage() {
             </div>
             <div className="prj-card">
               <h4 style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>נותר לגביה</h4>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: '#fbbf24' }}>₪{(((project as any)?.totalPrice || totalAmount) - paidAmount).toLocaleString('he-IL')}</div>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: '#fbbf24' }}>₪{((project?.totalPrice || totalAmount) - paidAmount).toLocaleString('he-IL')}</div>
             </div>
           </div>
 

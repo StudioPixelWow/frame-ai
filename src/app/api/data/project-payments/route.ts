@@ -13,18 +13,18 @@ const TABLE = 'business_project_payments';
 
 const TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS ${TABLE} (
-  id            TEXT PRIMARY KEY,
-  project_id    TEXT NOT NULL,
-  client_id     TEXT DEFAULT '',
-  title         TEXT DEFAULT '',
-  amount        NUMERIC DEFAULT 0,
-  due_date      DATE,
-  status        TEXT DEFAULT 'pending',
-  description   TEXT DEFAULT '',
-  milestone_id  TEXT,
-  paid_at       TIMESTAMPTZ,
-  created_at    TIMESTAMPTZ DEFAULT now(),
-  updated_at    TIMESTAMPTZ DEFAULT now()
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_project_id  TEXT NOT NULL,
+  client_id            TEXT DEFAULT '',
+  title                TEXT DEFAULT '',
+  amount               NUMERIC DEFAULT 0,
+  due_date             DATE,
+  status               TEXT DEFAULT 'pending',
+  description          TEXT DEFAULT '',
+  milestone_id         TEXT,
+  paid_at              TIMESTAMPTZ,
+  created_at           TIMESTAMPTZ DEFAULT now(),
+  updated_at           TIMESTAMPTZ DEFAULT now()
 );
 `;
 
@@ -39,7 +39,7 @@ function generateId(): string {
 function rowToPayment(r: Row) {
   return {
     id: r.id,
-    projectId: (r.project_id as string) ?? '',
+    projectId: (r.business_project_id as string) ?? (r.project_id as string) ?? '',
     clientId: (r.client_id as string) ?? '',
     title: (r.title as string) ?? '',
     amount: Number(r.amount ?? 0),
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
     const clientId = url.searchParams.get('client_id') || url.searchParams.get('clientId');
 
     let q = sb.from(TABLE).select('*').order('due_date', { ascending: true });
-    if (projectId) q = q.eq('project_id', projectId);
+    if (projectId) q = q.eq('business_project_id', projectId);
     if (clientId) q = q.eq('client_id', clientId);
 
     let { data: rows, error } = await q;
@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
       if (schemaMatch && clientId) {
         console.warn(`[project-payments] GET retrying without column '${schemaMatch[1]}'`);
         let retryQ = sb.from(TABLE).select('*').order('due_date', { ascending: true });
-        if (projectId) retryQ = retryQ.eq('project_id', projectId);
+        if (projectId) retryQ = retryQ.eq('business_project_id', projectId);
         const retry = await retryQ;
         if (!retry.error) {
           rows = retry.data;
@@ -128,8 +128,8 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     // Do NOT send `id` — the DB column is uuid type and auto-generates.
     const insertRow: Record<string, unknown> = {
-      project_id: body.projectId ?? '',
-      client_id: body.clientId ?? '',
+      business_project_id: body.projectId ?? body.business_project_id ?? '',
+      client_id: body.clientId ?? body.client_id ?? '',
       title: body.title ?? '',
       amount: Number(body.amount ?? 0),
       due_date: body.dueDate || null,
@@ -167,10 +167,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: lastErr?.message ?? 'Insert failed' }, { status: 500 });
     }
 
-    console.log(`[project-payments] ✅ created id=${inserted.id} project=${body.projectId}`);
+    console.log(`[project-payments] ✅ created id=${inserted.id} project=${body.projectId || body.business_project_id}`);
 
     // Fire-and-forget timeline event
-    const projectId = body.projectId as string;
+    const projectId = (body.projectId || body.business_project_id) as string;
     if (projectId) {
       const title = (body.title as string) || 'תשלום';
       const amount = Number(body.amount ?? 0);

@@ -31,6 +31,7 @@ interface FormData {
   assignedManagerId: string;
   startDate: string;
   endDate: string;
+  totalPrice: string;
 }
 
 // Values here must match service_type rows in
@@ -66,6 +67,7 @@ export default function NewBusinessProjectPage() {
     assignedManagerId: "",
     startDate: "",
     endDate: "",
+    totalPrice: "",
   });
 
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -147,6 +149,7 @@ export default function NewBusinessProjectPage() {
         assignedManagerId: form.assignedManagerId || null,
         startDate: form.startDate || null,
         endDate: form.endDate || null,
+        totalPrice: parseFloat(form.totalPrice) || 0,
         projectStatus: "not_started",
         createdAt: now,
         updatedAt: now,
@@ -388,7 +391,7 @@ export default function NewBusinessProjectPage() {
           </div>
         </div>
 
-        {/* Section 4: Dates */}
+        {/* Section 4: Dates & Price */}
         <div
           style={{
             background: "var(--surface-raised)",
@@ -398,7 +401,7 @@ export default function NewBusinessProjectPage() {
           }}
         >
           <h2 style={{ fontSize: "1rem", fontWeight: "700", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            📅 תאריכים
+            📅 תאריכים ומחיר
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>
             <div>
@@ -424,6 +427,21 @@ export default function NewBusinessProjectPage() {
                 value={form.endDate}
                 onChange={(e) => setForm({ ...form, endDate: e.target.value })}
                 disabled={submitting}
+                dir="ltr"
+              />
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: "600", marginBottom: "0.5rem", color: "var(--foreground)" }}>
+                מחיר כולל (₪)
+              </label>
+              <input
+                type="number"
+                className="form-input"
+                value={form.totalPrice}
+                onChange={(e) => setForm({ ...form, totalPrice: e.target.value })}
+                disabled={submitting}
+                placeholder="0"
+                min="0"
                 dir="ltr"
               />
             </div>

@@ -83,7 +83,7 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
 }
 
 const SELECT_COLUMNS =
-  'id, project_name, client_id, project_type, description, agreement_signed, project_status, start_date, end_date, assigned_manager_id, created_at, updated_at';
+  'id, project_name, client_id, project_type, description, agreement_signed, project_status, start_date, end_date, assigned_manager_id, total_price, progress, created_at, updated_at';
 
 function parseBadColumn(msg: string): string | null {
   const m = msg.match(/column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);
