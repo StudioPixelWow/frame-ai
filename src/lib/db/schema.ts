@@ -646,7 +646,6 @@ export interface ProjectMilestone {
   dueDate: string | null;
   assignedEmployeeId: string | null;
   status: MilestoneStatus;
-  files: string[];
   notes: string;
   createdAt: string;
   updatedAt: string;

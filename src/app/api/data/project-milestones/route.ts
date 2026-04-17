@@ -44,7 +44,6 @@ function rowToMilestone(r: Row) {
     submittedAt: (r.submitted_at as string) ?? null,
     approvedAt: (r.approved_at as string) ?? null,
     completedAt: (r.completed_at as string) ?? null,
-    files: Array.isArray(r.files) ? r.files : [],
     notes: (r.notes as string) ?? '',
     createdAt: (r.created_at as string) ?? '',
     updatedAt: (r.updated_at as string) ?? '',
@@ -75,7 +74,6 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
     submitted_at: (body.submittedAt ?? null) as string | null,
     approved_at: (body.approvedAt ?? null) as string | null,
     completed_at: (body.completedAt ?? null) as string | null,
-    files: Array.isArray(body.files) ? body.files : [],
     notes: (body.notes ?? '') as string,
     created_at: now,
     updated_at: now,
@@ -88,7 +86,7 @@ function parseBadColumn(msg: string): string | null {
 }
 
 const SELECT_COLUMNS =
-  'id, project_id, title, description, due_date, assignee_id, status, files, notes, created_at, updated_at';
+  'id, project_id, title, description, due_date, assignee_id, status, notes, created_at, updated_at';
 
 export async function GET(req: NextRequest) {
   try {

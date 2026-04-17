@@ -28,7 +28,8 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
   try {
     const { id } = await context.params;
     const sb = getSupabase();
-    const { data, error } = await sb.from(TABLE).select('*').eq('id', id).maybeSingle();
+    const SAFE_COLS = 'id, milestone_id, file_name, file_url, file_size, content_type, created_at, updated_at';
+    const { data, error } = await sb.from(TABLE).select(SAFE_COLS).eq('id', id).maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(rowToFile(data as Row));
@@ -44,7 +45,8 @@ export async function DELETE(_req: NextRequest, context: { params: Promise<{ id:
     const sb = getSupabase();
 
     // 1. Fetch the row to get the storage path from file_url.
-    const { data: row, error: fetchErr } = await sb.from(TABLE).select('*').eq('id', id).maybeSingle();
+    const DEL_COLS = 'id, milestone_id, file_name, file_url, file_size, content_type, created_at, updated_at';
+    const { data: row, error: fetchErr } = await sb.from(TABLE).select(DEL_COLS).eq('id', id).maybeSingle();
     if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
     if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 

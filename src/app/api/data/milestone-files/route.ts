@@ -131,7 +131,8 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url);
     const milestoneId = url.searchParams.get('milestone_id') || url.searchParams.get('milestoneId');
 
-    let q = sb.from(TABLE).select('*').order('created_at', { ascending: false });
+    const SAFE_COLS = 'id, milestone_id, file_name, file_url, file_size, content_type, created_at, updated_at';
+    let q = sb.from(TABLE).select(SAFE_COLS).order('created_at', { ascending: false });
     if (milestoneId) q = q.eq('milestone_id', milestoneId);
 
     const { data: rows, error } = await q;
@@ -146,7 +147,7 @@ export async function GET(req: NextRequest) {
       }
       // If a specific column in order() doesn't exist, retry without ordering
       if (error.message?.includes('created_at')) {
-        const { data: rows2, error: err2 } = await sb.from(TABLE).select('*');
+        const { data: rows2, error: err2 } = await sb.from(TABLE).select(SAFE_COLS);
         if (!err2 && rows2) {
           console.log(`[milestone-files] GET → ${rows2.length} files (no order)`);
           return NextResponse.json(rows2.map((r: Record<string, unknown>) => rowToFile(r as Row)), { headers: NO_CACHE_HEADERS });
@@ -246,7 +247,8 @@ export async function POST(req: NextRequest) {
     let inserted: Row | null = null;
     let lastErr: { message: string } | null = null;
     for (let attempt = 0; attempt < 6; attempt++) {
-      const { data, error } = await sb.from(TABLE).insert(insertRow).select('*').single();
+      const INSERT_RETURN_COLS = 'id, milestone_id, file_name, file_url, file_size, content_type, created_at, updated_at';
+      const { data, error } = await sb.from(TABLE).insert(insertRow).select(INSERT_RETURN_COLS).single();
       if (!error) {
         inserted = data as Row;
         log(`7/7 ✅ DB insert OK (attempt ${attempt + 1})`, { returnedColumns: Object.keys(data || {}) });
