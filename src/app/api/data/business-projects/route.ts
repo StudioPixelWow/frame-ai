@@ -263,6 +263,17 @@ async function seedPayments(
     return { inserted: 0, error: 'budget is 0 or missing; skipping payment creation' };
   }
 
+  // Deduplication: skip if payments already exist for this project
+  const { data: existing } = await sb
+    .from(PAYMENTS_TABLE)
+    .select('id')
+    .eq('business_project_id', projectId)
+    .limit(1);
+  if (existing && existing.length > 0) {
+    console.log(`[seedPayments] ⏭️ payments already exist for project=${projectId}, skipping`);
+    return { inserted: 0, error: 'payments already exist (dedup)' };
+  }
+
   const deposit = Math.round(budget * 0.5 * 100) / 100;
   const final = Math.round((budget - deposit) * 100) / 100;
 
