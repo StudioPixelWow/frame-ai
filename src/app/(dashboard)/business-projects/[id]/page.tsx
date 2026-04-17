@@ -234,16 +234,18 @@ export default function BusinessProjectPage() {
     };
   }, [projectMilestones]);
 
-  // Progress: weighted — approved=100%, submitted=75%, in_progress=50%
+  // Progress: simple ratio — completed (approved) / total
   const milestoneProgress = useMemo(() => {
     if (milestoneCounts.total === 0) return 0;
-    const weightedSum =
-      milestoneCounts.approved * 100 +
-      milestoneCounts.submitted * 75 +
-      milestoneCounts.inProgress * 50 +
-      milestoneCounts.returned * 25;
-    return Math.round(weightedSum / milestoneCounts.total);
+    return Math.round((milestoneCounts.approved / milestoneCounts.total) * 100);
   }, [milestoneCounts]);
+
+  // Color thresholds: 0–30% red, 30–70% orange, 70–100% green
+  const progressBarColor = useMemo(() => {
+    if (milestoneProgress <= 30) return '#ef4444';
+    if (milestoneProgress <= 70) return '#f59e0b';
+    return '#22c55e';
+  }, [milestoneProgress]);
 
   // Status: derived entirely from milestone states
   const derivedProjectStatus = useMemo(() => {
@@ -255,6 +257,18 @@ export default function BusinessProjectPage() {
     if (inProgress > 0 || approved > 0 || submitted > 0) return 'in_progress';
     return 'not_started';
   }, [milestoneCounts, project?.projectStatus]);
+
+  // ── Confetti effect when project reaches 100% ──
+  const [showConfetti, setShowConfetti] = useState(false);
+  const prevProgressRef = useRef<number>(0);
+  useEffect(() => {
+    if (milestoneProgress === 100 && prevProgressRef.current < 100 && prevProgressRef.current > 0) {
+      setShowConfetti(true);
+      const timer = setTimeout(() => setShowConfetti(false), 3000);
+      return () => clearTimeout(timer);
+    }
+    prevProgressRef.current = milestoneProgress;
+  }, [milestoneProgress]);
 
   // ── Sync derived status & progress back to the project DB record ──
   // Runs whenever milestones change so the project row always reflects reality.
@@ -772,30 +786,146 @@ export default function BusinessProjectPage() {
     }
   };
 
-  const startDate = project?.startDate ? new Date(project.startDate) : null;
-  const endDate = project?.endDate ? new Date(project.endDate) : null;
-
   return (
     <div
       style={{
         direction: 'rtl',
-        padding: '24px',
+        padding: '32px',
         maxWidth: '1400px',
         margin: '0 auto',
         fontFamily: 'system-ui, -apple-system, sans-serif',
       }}
     >
-      {/* Header */}
+      {/* ── CSS Animations ── */}
+      <style>{`
+        @keyframes confetti-fall {
+          0% { transform: translateY(-10px) rotate(0deg); opacity: 1; }
+          100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+        @keyframes progress-fill {
+          from { width: 0%; }
+        }
+        @keyframes fade-in-up {
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes pulse-glow {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.3); }
+          50% { box-shadow: 0 0 16px 4px rgba(34,197,94,0.15); }
+        }
+        .prj-card {
+          background: #1a1a2e;
+          border: 1px solid rgba(255,255,255,0.06);
+          border-radius: 12px;
+          padding: 20px;
+          transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+        .prj-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+          border-color: rgba(255,255,255,0.12);
+        }
+        .prj-milestone-card {
+          background: #1a1a2e;
+          border: 1px solid rgba(255,255,255,0.06);
+          border-radius: 12px;
+          padding: 20px;
+          transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+          animation: fade-in-up 0.3s ease both;
+        }
+        .prj-milestone-card:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 12px 32px rgba(0,0,0,0.35);
+          border-color: rgba(255,255,255,0.15);
+        }
+        .prj-status-badge {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 5px 14px; border-radius: 20px;
+          font-size: 12px; font-weight: 600; letter-spacing: 0.3px;
+          transition: all 0.2s ease;
+        }
+        .prj-btn {
+          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+          cursor: pointer; border: none; transition: all 0.2s ease;
+        }
+        .prj-btn:hover { transform: translateY(-1px); }
+        .prj-btn:active { transform: translateY(0); }
+        .prj-btn-primary { background: #6366f1; color: #fff; }
+        .prj-btn-primary:hover { background: #818cf8; box-shadow: 0 4px 12px rgba(99,102,241,0.3); }
+        .prj-btn-success { background: #22c55e; color: #fff; }
+        .prj-btn-success:hover { background: #4ade80; box-shadow: 0 4px 12px rgba(34,197,94,0.3); }
+        .prj-btn-ghost { background: transparent; color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); }
+        .prj-btn-ghost:hover { background: rgba(255,255,255,0.05); color: #e2e8f0; }
+        .prj-btn-danger { background: transparent; color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+        .prj-btn-danger:hover { background: rgba(248,113,113,0.1); }
+        .prj-tab {
+          padding: 12px 20px; background: none; border: none;
+          font-size: 14px; font-weight: 500; cursor: pointer;
+          color: #64748b; border-bottom: 2px solid transparent;
+          transition: all 0.2s ease; position: relative;
+        }
+        .prj-tab:hover { color: #94a3b8; }
+        .prj-tab-active { color: #6366f1 !important; border-bottom-color: #6366f1 !important; font-weight: 600; }
+        .prj-timeline-item {
+          display: flex; gap: 16px; align-items: flex-start;
+          padding: 16px 20px; border-radius: 10px;
+          background: #1a1a2e; border: 1px solid rgba(255,255,255,0.04);
+          transition: all 0.2s ease;
+          animation: fade-in-up 0.3s ease both;
+        }
+        .prj-timeline-item:hover { background: #1e1e36; border-color: rgba(255,255,255,0.08); }
+        .prj-file-chip {
+          display: flex; align-items: center; gap: 8px;
+          padding: 8px 12px; background: rgba(255,255,255,0.04);
+          border: 1px solid rgba(255,255,255,0.06); border-radius: 8px;
+          font-size: 12px; transition: all 0.2s ease; cursor: pointer;
+          text-decoration: none; color: inherit;
+        }
+        .prj-file-chip:hover { background: rgba(99,102,241,0.1); border-color: rgba(99,102,241,0.3); }
+      `}</style>
+
+      {/* ── Confetti Overlay ── */}
+      {showConfetti && (
+        <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 9999, overflow: 'hidden' }}>
+          {Array.from({ length: 40 }).map((_, i) => (
+            <div
+              key={i}
+              style={{
+                position: 'absolute',
+                top: '-10px',
+                left: `${Math.random() * 100}%`,
+                width: `${6 + Math.random() * 6}px`,
+                height: `${6 + Math.random() * 6}px`,
+                background: ['#22c55e', '#6366f1', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6'][i % 6],
+                borderRadius: Math.random() > 0.5 ? '50%' : '2px',
+                animation: `confetti-fall ${2 + Math.random() * 2}s ease-in ${Math.random() * 0.5}s forwards`,
+                opacity: 0.9,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* ══════════ HEADER ══════════ */}
       <div
         style={{
-          marginBottom: '32px',
-          background: 'var(--surface-raised)',
-          border: `1px solid var(--border)`,
-          borderRadius: '8px',
-          padding: '24px',
+          marginBottom: '28px',
+          background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+          border: '1px solid rgba(255,255,255,0.06)',
+          borderRadius: '16px',
+          padding: '28px 32px',
+          position: 'relative',
+          overflow: 'hidden',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+        {/* Subtle accent glow */}
+        <div style={{
+          position: 'absolute', top: '-40px', left: '-40px', width: '200px', height: '200px',
+          background: `radial-gradient(circle, ${progressBarColor}15 0%, transparent 70%)`,
+          pointerEvents: 'none',
+        }} />
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', position: 'relative' }}>
           <div style={{ flex: 1 }}>
             {isEditingProject ? (
               <input
@@ -803,74 +933,61 @@ export default function BusinessProjectPage() {
                 value={(editForm.projectName as string) || ''}
                 onChange={(e) => setEditForm((f) => ({ ...f, projectName: e.target.value }))}
                 style={{
-                  fontSize: '28px', fontWeight: '700', color: 'var(--foreground)',
-                  background: 'var(--surface)', border: '1px solid var(--border)',
-                  borderRadius: '6px', padding: '4px 8px', width: '100%',
-                  marginBottom: '8px', direction: 'rtl',
+                  fontSize: '28px', fontWeight: '700', color: '#f1f5f9',
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '8px', padding: '6px 12px', width: '100%',
+                  marginBottom: '8px', direction: 'rtl', outline: 'none',
                 }}
                 placeholder="שם הפרויקט"
               />
             ) : (
-              <h1 style={{ fontSize: '32px', fontWeight: '700', color: 'var(--foreground)', margin: '0 0 8px 0' }}>
+              <h1 style={{ fontSize: '28px', fontWeight: '700', color: '#f1f5f9', margin: '0 0 6px 0', letterSpacing: '-0.3px' }}>
                 {project.projectName}
               </h1>
             )}
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
               {projectClient && (
-                <a href={`/clients/${projectClient.id}`} style={{ color: 'var(--accent)', textDecoration: 'none', fontSize: '14px', fontWeight: '600' }}>
+                <a href={`/clients/${projectClient.id}`} style={{
+                  color: '#818cf8', textDecoration: 'none', fontSize: '14px', fontWeight: '500',
+                  transition: 'color 0.2s',
+                }}>
                   {projectClient.name}
                 </a>
+              )}
+              <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
+              <span className="prj-status-badge" style={{
+                background: `${getProjectStatusColor(derivedProjectStatus)}20`,
+                color: getProjectStatusColor(derivedProjectStatus),
+              }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: getProjectStatusColor(derivedProjectStatus) }} />
+                {getProjectStatusLabel(derivedProjectStatus)}
+              </span>
+              {!isEditingProject && (
+                <span className="prj-status-badge" style={{
+                  background: 'rgba(255,255,255,0.05)', color: '#94a3b8',
+                }}>
+                  {getProjectTypeLabel(project?.projectType)}
+                </span>
               )}
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', flexDirection: 'column', alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {isEditingProject ? (
               <>
-                <button
-                  onClick={handleSaveProject}
-                  disabled={savingProject}
-                  style={{
-                    width: '100%', minWidth: '140px', padding: '8px 16px',
-                    borderRadius: '6px', border: '1px solid var(--accent)',
-                    background: 'var(--accent)', color: '#fff', cursor: savingProject ? 'wait' : 'pointer',
-                    fontSize: '14px', fontWeight: '600',
-                  }}
-                >
+                <button className="prj-btn prj-btn-primary" onClick={handleSaveProject} disabled={savingProject}>
                   {savingProject ? '...' : 'שמור שינויים'}
                 </button>
-                <button
-                  onClick={handleCancelEditProject}
-                  disabled={savingProject}
-                  style={{
-                    width: '100%', minWidth: '140px', padding: '8px 16px',
-                    borderRadius: '6px', border: '1px solid var(--border)',
-                    background: 'var(--surface)', color: 'var(--foreground)', cursor: 'pointer',
-                    fontSize: '14px',
-                  }}
-                >
+                <button className="prj-btn prj-btn-ghost" onClick={handleCancelEditProject} disabled={savingProject}>
                   ביטול
                 </button>
               </>
             ) : (
               <>
-                <button
-                  onClick={handleStartEditProject}
-                  style={{
-                    width: '100%', minWidth: '140px', padding: '8px 16px',
-                    borderRadius: '6px', border: '1px solid var(--border)',
-                    background: 'var(--surface)', color: 'var(--foreground)', cursor: 'pointer',
-                    fontSize: '14px',
-                  }}
-                >
-                  עריכת פרויקט
+                <button className="prj-btn prj-btn-ghost" onClick={handleStartEditProject}>
+                  עריכה
                 </button>
-                <button
-                  className="mod-btn-primary"
-                  style={{ width: '100%', minWidth: '140px' }}
-                  onClick={handleMarkComplete}
-                  disabled={loading}
-                >
+                <button className="prj-btn prj-btn-success" onClick={handleMarkComplete} disabled={loading}>
                   סימון כהושלם
                 </button>
               </>
@@ -878,231 +995,215 @@ export default function BusinessProjectPage() {
           </div>
         </div>
 
-        {/* Description — edit mode */}
+        {/* Edit mode fields */}
         {isEditingProject && (
-          <div style={{ marginBottom: '16px' }}>
-            <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
-              תיאור
-            </span>
-            <textarea
-              value={(editForm.description as string) || ''}
-              onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
-              rows={3}
-              style={{
-                width: '100%', fontSize: '14px', color: 'var(--foreground)',
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                borderRadius: '6px', padding: '8px', direction: 'rtl', resize: 'vertical',
-              }}
-              placeholder="תיאור הפרויקט"
-            />
+          <div style={{ marginBottom: '20px', display: 'grid', gap: '16px' }}>
+            <div>
+              <span style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>תיאור</span>
+              <textarea
+                value={(editForm.description as string) || ''}
+                onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                rows={3}
+                style={{
+                  width: '100%', fontSize: '14px', color: '#e2e8f0',
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '8px', padding: '10px 12px', direction: 'rtl', resize: 'vertical', outline: 'none',
+                }}
+                placeholder="תיאור הפרויקט"
+              />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
+              <div>
+                <span style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>סוג</span>
+                <select
+                  value={(editForm.serviceType as string) || ''}
+                  onChange={(e) => setEditForm((f) => ({ ...f, serviceType: e.target.value }))}
+                  style={{
+                    fontSize: '13px', color: '#e2e8f0', background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '8px 10px',
+                    width: '100%', direction: 'rtl', outline: 'none',
+                  }}
+                >
+                  <option value="">בחר סוג</option>
+                  {Object.entries(projectTypeLabels).map(([val, label]) => (
+                    <option key={val} value={val}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <span style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>סטטוס</span>
+                <select
+                  value={(editForm.projectStatus as string) || 'not_started'}
+                  onChange={(e) => setEditForm((f) => ({ ...f, projectStatus: e.target.value }))}
+                  style={{
+                    fontSize: '13px', color: '#e2e8f0', background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '8px 10px',
+                    width: '100%', direction: 'rtl', outline: 'none',
+                  }}
+                >
+                  <option value="not_started">לא התחיל</option>
+                  <option value="in_progress">בתהליך</option>
+                  <option value="awaiting_approval">ממתין לאישור</option>
+                  <option value="waiting_for_client">בהמתנה ללקוח</option>
+                  <option value="completed">הושלם</option>
+                </select>
+              </div>
+              <div>
+                <span style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>מנהל</span>
+                <select
+                  value={(editForm.assignedManagerId as string) || ''}
+                  onChange={(e) => setEditForm((f) => ({ ...f, assignedManagerId: e.target.value }))}
+                  style={{
+                    fontSize: '13px', color: '#e2e8f0', background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '8px 10px',
+                    width: '100%', direction: 'rtl', outline: 'none',
+                  }}
+                >
+                  <option value="">לא הוצמד</option>
+                  {(employeesData || []).map((emp: Employee) => (
+                    <option key={emp.id} value={emp.id}>{emp.name || (emp as any).email}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <span style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>תאריך התחלה</span>
+                <input type="date" value={(editForm.startDate as string) || ''}
+                  onChange={(e) => setEditForm((f) => ({ ...f, startDate: e.target.value }))}
+                  style={{
+                    fontSize: '13px', color: '#e2e8f0', background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '8px 10px', width: '100%', outline: 'none',
+                  }}
+                />
+              </div>
+              <div>
+                <span style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>תאריך סיום</span>
+                <input type="date" value={(editForm.endDate as string) || ''}
+                  onChange={(e) => setEditForm((f) => ({ ...f, endDate: e.target.value }))}
+                  style={{
+                    fontSize: '13px', color: '#e2e8f0', background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '8px 10px', width: '100%', outline: 'none',
+                  }}
+                />
+              </div>
+              <div>
+                <span style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>חוזה חתום</span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '8px 0' }}>
+                  <input type="checkbox" checked={!!editForm.contractSigned}
+                    onChange={(e) => setEditForm((f) => ({ ...f, contractSigned: e.target.checked }))}
+                    style={{ width: '16px', height: '16px', accentColor: '#6366f1' }}
+                  />
+                  <span style={{ fontSize: '13px', color: '#e2e8f0' }}>
+                    {editForm.contractSigned ? 'חתום' : 'לא חתום'}
+                  </span>
+                </label>
+              </div>
+            </div>
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
-          {/* Service Type */}
-          <div>
-            <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
-              סוג
-            </span>
-            {isEditingProject ? (
-              <select
-                value={(editForm.serviceType as string) || ''}
-                onChange={(e) => setEditForm((f) => ({ ...f, serviceType: e.target.value }))}
-                style={{
-                  fontSize: '13px', color: 'var(--foreground)', background: 'var(--surface)',
-                  border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px',
-                  width: '100%', direction: 'rtl',
-                }}
-              >
-                <option value="">בחר סוג</option>
-                {Object.entries(projectTypeLabels).map(([val, label]) => (
-                  <option key={val} value={val}>{label}</option>
-                ))}
-              </select>
-            ) : (
-              <div style={{
-                display: 'inline-block', padding: '4px 12px', background: 'var(--accent-muted)',
-                color: 'var(--accent)', borderRadius: '6px', fontSize: '12px', fontWeight: '600',
-              }}>
-                {getProjectTypeLabel(project?.projectType)}
-              </div>
-            )}
-          </div>
-
-          {/* Status */}
-          <div>
-            <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
-              סטטוס
-            </span>
-            {isEditingProject ? (
-              <select
-                value={(editForm.projectStatus as string) || 'not_started'}
-                onChange={(e) => setEditForm((f) => ({ ...f, projectStatus: e.target.value }))}
-                style={{
-                  fontSize: '13px', color: 'var(--foreground)', background: 'var(--surface)',
-                  border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px',
-                  width: '100%', direction: 'rtl',
-                }}
-              >
-                <option value="not_started">לא התחיל</option>
-                <option value="in_progress">בתהליך</option>
-                <option value="awaiting_approval">ממתין לאישור</option>
-                <option value="waiting_for_client">בהמתנה ללקוח</option>
-                <option value="completed">הושלם</option>
-              </select>
-            ) : (
-              <div style={{
-                display: 'inline-block', padding: '4px 12px',
-                background: getProjectStatusColor(derivedProjectStatus),
-                color: '#fff', borderRadius: '6px', fontSize: '12px', fontWeight: '600',
-              }}>
-                {getProjectStatusLabel(derivedProjectStatus)}
-              </div>
-            )}
-          </div>
-
-          {/* Contract Signed */}
-          <div>
-            <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
-              חוזה חתום
-            </span>
-            {isEditingProject ? (
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={!!editForm.contractSigned}
-                  onChange={(e) => setEditForm((f) => ({ ...f, contractSigned: e.target.checked }))}
-                  style={{ width: '16px', height: '16px', accentColor: 'var(--accent)' }}
-                />
-                <span style={{ fontSize: '13px', color: 'var(--foreground)' }}>
-                  {editForm.contractSigned ? 'חתום' : 'לא חתום'}
-                </span>
-              </label>
-            ) : (
-              <button
-                onClick={handleToggleContractSigned}
-                disabled={loading}
-                title={(project as any)?.contractSignedAt ? `חתום ב-${formatDate((project as any).contractSignedAt)}` : 'לחץ לשינוי'}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '4px',
-                  padding: '4px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: '600',
-                  cursor: 'pointer', border: '1px solid var(--border)',
-                  background: (project as any)?.contractSigned ? '#dcfce7' : '#fef2f2',
-                  color: (project as any)?.contractSigned ? '#16a34a' : '#dc2626',
-                }}
-              >
-                {(project as any)?.contractSigned ? '✓ חתום' : '✗ לא חתום'}
-              </button>
-            )}
-          </div>
-
-          {/* Assigned Manager */}
-          <div>
-            <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
-              מנהל
-            </span>
-            {isEditingProject ? (
-              <select
-                value={(editForm.assignedManagerId as string) || ''}
-                onChange={(e) => setEditForm((f) => ({ ...f, assignedManagerId: e.target.value }))}
-                style={{
-                  fontSize: '13px', color: 'var(--foreground)', background: 'var(--surface)',
-                  border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px',
-                  width: '100%', direction: 'rtl',
-                }}
-              >
-                <option value="">לא הוצמד</option>
-                {(employeesData || []).map((emp: Employee) => (
-                  <option key={emp.id} value={emp.id}>{emp.name || (emp as any).email}</option>
-                ))}
-              </select>
-            ) : (
-              <span style={{ fontSize: '14px', color: 'var(--foreground)', fontWeight: '500' }}>
-                {assignedManager?.name || 'לא הוצמד'}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginTop: '16px' }}>
-          {/* Start Date */}
-          <div>
-            <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
-              תאריך התחלה
-            </span>
-            {isEditingProject ? (
-              <input
-                type="date"
-                value={(editForm.startDate as string) || ''}
-                onChange={(e) => setEditForm((f) => ({ ...f, startDate: e.target.value }))}
-                style={{
-                  fontSize: '13px', color: 'var(--foreground)', background: 'var(--surface)',
-                  border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px', width: '100%',
-                }}
-              />
-            ) : (
-              <span style={{ fontSize: '14px', color: 'var(--foreground)' }}>
-                {formatDate(project?.startDate || null)}
-              </span>
-            )}
-          </div>
-
-          {/* End Date */}
-          <div>
-            <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
-              תאריך סיום
-            </span>
-            {isEditingProject ? (
-              <input
-                type="date"
-                value={(editForm.endDate as string) || ''}
-                onChange={(e) => setEditForm((f) => ({ ...f, endDate: e.target.value }))}
-                style={{
-                  fontSize: '13px', color: 'var(--foreground)', background: 'var(--surface)',
-                  border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px', width: '100%',
-                }}
-              />
-            ) : (
-              <span style={{ fontSize: '14px', color: 'var(--foreground)' }}>
-                {formatDate(project?.endDate || null)}
-              </span>
-            )}
-          </div>
-
-          {/* Contract Signed At (read-only, shown when signed) */}
-          {!isEditingProject && (project as any)?.contractSigned && (project as any)?.contractSignedAt && (
-            <div>
-              <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
-                תאריך חתימה
-              </span>
-              <span style={{ fontSize: '14px', color: 'var(--foreground)' }}>
-                {formatDate((project as any).contractSignedAt)}
-              </span>
+        {/* Progress bar in header */}
+        <div style={{ position: 'relative' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'center', fontSize: '13px', color: '#94a3b8' }}>
+              <span>{completedMilestones} / {projectMilestones?.length || 0} אבני דרך</span>
+              {!isEditingProject && (
+                <>
+                  <span style={{ color: 'rgba(255,255,255,0.1)' }}>|</span>
+                  <span>{assignedManager?.name || 'ללא מנהל'}</span>
+                  <span style={{ color: 'rgba(255,255,255,0.1)' }}>|</span>
+                  <span>{formatDate(project?.startDate || null)} - {formatDate(project?.endDate || null)}</span>
+                </>
+              )}
             </div>
-          )}
+            <span style={{
+              fontSize: '20px', fontWeight: '700', color: progressBarColor,
+              transition: 'color 0.4s ease',
+            }}>
+              {milestoneProgress}%
+            </span>
+          </div>
+          <div style={{
+            width: '100%', height: '8px', background: 'rgba(255,255,255,0.06)',
+            borderRadius: '4px', overflow: 'hidden',
+          }}>
+            <div style={{
+              height: '100%',
+              width: `${milestoneProgress}%`,
+              background: `linear-gradient(90deg, ${progressBarColor}, ${progressBarColor}cc)`,
+              borderRadius: '4px',
+              transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1), background 0.4s ease',
+              animation: milestoneProgress === 100 ? 'pulse-glow 2s ease-in-out infinite' : 'none',
+            }} />
+          </div>
         </div>
+
+        {/* Non-edit info chips */}
+        {!isEditingProject && (
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '16px' }}>
+            <button
+              onClick={handleToggleContractSigned}
+              disabled={loading}
+              className="prj-btn"
+              style={{
+                padding: '4px 14px', fontSize: '12px',
+                background: (project as any)?.contractSigned ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                color: (project as any)?.contractSigned ? '#4ade80' : '#f87171',
+                border: `1px solid ${(project as any)?.contractSigned ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                borderRadius: '20px',
+              }}
+            >
+              {(project as any)?.contractSigned ? '✓ חוזה חתום' : '✗ חוזה לא חתום'}
+            </button>
+            {milestoneCounts.total > 0 && (
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                {milestoneCounts.approved > 0 && (
+                  <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '20px', background: 'rgba(34,197,94,0.1)', color: '#4ade80' }}>
+                    ✓ {milestoneCounts.approved} אושרו
+                  </span>
+                )}
+                {milestoneCounts.submitted > 0 && (
+                  <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '20px', background: 'rgba(139,92,246,0.1)', color: '#a78bfa' }}>
+                    {milestoneCounts.submitted} הוגשו
+                  </span>
+                )}
+                {milestoneCounts.inProgress > 0 && (
+                  <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '20px', background: 'rgba(245,158,11,0.1)', color: '#fbbf24' }}>
+                    {milestoneCounts.inProgress} בתהליך
+                  </span>
+                )}
+                {milestoneCounts.returned > 0 && (
+                  <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '20px', background: 'rgba(249,115,22,0.1)', color: '#fb923c' }}>
+                    {milestoneCounts.returned} הוחזרו
+                  </span>
+                )}
+                {milestoneCounts.pending > 0 && (
+                  <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '20px', background: 'rgba(255,255,255,0.05)', color: '#94a3b8' }}>
+                    {milestoneCounts.pending} בהמתנה
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Feedback */}
         {projectSaveFeedback && (
           <div style={{
-            marginTop: '12px', fontSize: '13px',
-            color: projectSaveFeedback.type === 'success' ? '#22c55e' : '#ef4444',
+            marginTop: '12px', fontSize: '13px', padding: '8px 14px', borderRadius: '8px',
+            background: projectSaveFeedback.type === 'success' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+            color: projectSaveFeedback.type === 'success' ? '#4ade80' : '#f87171',
           }}>
             {projectSaveFeedback.message}
           </div>
         )}
       </div>
 
-      {/* Tabs */}
-      <div
-        style={{
-          display: 'flex',
-          gap: '8px',
-          borderBottom: `2px solid var(--border)`,
-          marginBottom: '24px',
-          paddingBottom: '0',
-        }}
-      >
+      {/* ══════════ TABS ══════════ */}
+      <div style={{
+        display: 'flex', gap: '4px',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        marginBottom: '28px',
+      }}>
         {(['overview', 'milestones', 'files', 'payments', 'activity'] as const).map((tab) => {
           const tabLabels: Record<Tab, string> = {
             overview: 'סקירה',
@@ -1111,22 +1212,11 @@ export default function BusinessProjectPage() {
             payments: 'תשלומים',
             activity: 'פעילות',
           };
-
           return (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              style={{
-                padding: '12px 16px',
-                background: 'none',
-                border: 'none',
-                color: activeTab === tab ? 'var(--accent)' : 'var(--foreground-muted)',
-                borderBottom: activeTab === tab ? `3px solid var(--accent)` : 'none',
-                cursor: 'pointer',
-                fontSize: '14px',
-                fontWeight: activeTab === tab ? '600' : '500',
-                transition: 'all 0.2s',
-              }}
+              className={`prj-tab ${activeTab === tab ? 'prj-tab-active' : ''}`}
             >
               {tabLabels[tab]}
             </button>
@@ -1134,446 +1224,270 @@ export default function BusinessProjectPage() {
         })}
       </div>
 
-      {/* Tab Content */}
+      {/* ══════════ OVERVIEW TAB ══════════ */}
       {activeTab === 'overview' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
           {/* Project Summary */}
-          <div
-            className="agd-card"
-            style={{
-              background: 'var(--surface-raised)',
-              border: `1px solid var(--border)`,
-              borderRadius: '8px',
-              padding: '16px',
-            }}
-          >
-            <h3 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--foreground)', marginTop: 0 }}>
+          <div className="prj-card">
+            <h3 style={{ fontSize: '14px', fontWeight: '600', color: '#94a3b8', marginTop: 0, marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               סיכום פרויקט
             </h3>
-            <p style={{ color: 'var(--foreground-muted)', fontSize: '14px', lineHeight: '1.6' }}>
+            <p style={{ color: '#cbd5e1', fontSize: '14px', lineHeight: '1.7', margin: 0 }}>
               {project?.description || 'אין תיאור זמין'}
             </p>
           </div>
 
-          {/* Milestones Progress */}
-          <div
-            className="agd-card"
-            style={{
-              background: 'var(--surface-raised)',
-              border: `1px solid var(--border)`,
-              borderRadius: '8px',
-              padding: '16px',
-            }}
-          >
-            <h3 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--foreground)', marginTop: 0 }}>
+          {/* Milestones Progress Card */}
+          <div className="prj-card">
+            <h3 style={{ fontSize: '14px', fontWeight: '600', color: '#94a3b8', marginTop: 0, marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               התקדמות אבני דרך
             </h3>
-            <div style={{ marginBottom: '12px' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '8px',
-                }}
-              >
-                <span style={{ color: 'var(--foreground)', fontWeight: '600', fontSize: '14px' }}>
-                  {completedMilestones} / {projectMilestones?.length || 0} ({milestoneProgress}%)
-                </span>
-              </div>
-              <div
-                style={{
-                  width: '100%',
-                  height: '8px',
-                  background: 'var(--border)',
-                  borderRadius: '4px',
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    height: '100%',
-                    width: `${milestoneProgress}%`,
-                    background: '#22c55e',
-                    transition: 'width 0.3s',
-                  }}
-                />
-              </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '10px' }}>
+              <span style={{ color: '#e2e8f0', fontWeight: '600', fontSize: '14px' }}>
+                {completedMilestones} / {projectMilestones?.length || 0}
+              </span>
+              <span style={{ fontSize: '24px', fontWeight: '700', color: progressBarColor, transition: 'color 0.4s' }}>
+                {milestoneProgress}%
+              </span>
+            </div>
+            <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', width: `${milestoneProgress}%`,
+                background: progressBarColor, borderRadius: '4px',
+                transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1), background 0.4s ease',
+              }} />
             </div>
           </div>
 
           {/* Payments Summary */}
-          <div
-            className="agd-card"
-            style={{
-              background: 'var(--surface-raised)',
-              border: `1px solid var(--border)`,
-              borderRadius: '8px',
-              padding: '16px',
-            }}
-          >
-            <h3 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--foreground)', marginTop: 0 }}>
-              סיכום תשלומים
+          <div className="prj-card">
+            <h3 style={{ fontSize: '14px', fontWeight: '600', color: '#94a3b8', marginTop: 0, marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              תשלומים
             </h3>
-            <div style={{ marginBottom: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ color: 'var(--foreground-muted)', fontSize: '12px' }}>שולם</span>
-                <span style={{ color: '#22c55e', fontWeight: '600' }}>₪{paidAmount.toLocaleString('he-IL')}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ color: 'var(--foreground-muted)', fontSize: '12px' }}>כולל</span>
-                <span style={{ color: 'var(--foreground)', fontWeight: '600' }}>₪{totalAmount.toLocaleString('he-IL')}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#64748b', fontSize: '13px' }}>שולם</span>
+                <span style={{ color: '#4ade80', fontWeight: '600', fontSize: '15px' }}>₪{paidAmount.toLocaleString('he-IL')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--foreground-muted)', fontSize: '12px' }}>נותר</span>
-                <span style={{ color: '#f59e0b', fontWeight: '600' }}>₪{(totalAmount - paidAmount).toLocaleString('he-IL')}</span>
+                <span style={{ color: '#64748b', fontSize: '13px' }}>כולל</span>
+                <span style={{ color: '#e2e8f0', fontWeight: '600', fontSize: '15px' }}>₪{totalAmount.toLocaleString('he-IL')}</span>
+              </div>
+              <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#64748b', fontSize: '13px' }}>נותר</span>
+                <span style={{ color: '#fbbf24', fontWeight: '600', fontSize: '15px' }}>₪{(totalAmount - paidAmount).toLocaleString('he-IL')}</span>
               </div>
             </div>
           </div>
 
-          {/* Timeline & Progress */}
-          <div
-            className="agd-card"
-            style={{
-              background: 'var(--surface-raised)',
-              border: `1px solid var(--border)`,
-              borderRadius: '8px',
-              padding: '16px',
-              gridColumn: 'span 2',
-            }}
-          >
-            <h3 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--foreground)', marginTop: 0 }}>
-              ציר הזמן והתקדמות
+          {/* Timeline & Dates */}
+          <div className="prj-card" style={{ gridColumn: '1 / -1' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: '600', color: '#94a3b8', marginTop: 0, marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              ציר זמן
             </h3>
-
-            {/* Dates row */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginBottom: '4px' }}>התחלה</div>
-                <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--foreground)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
+              <div style={{
+                padding: '10px 20px', background: 'rgba(99,102,241,0.1)', borderRadius: '10px',
+                border: '1px solid rgba(99,102,241,0.15)',
+              }}>
+                <div style={{ fontSize: '11px', color: '#818cf8', marginBottom: '2px' }}>התחלה</div>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: '#e2e8f0' }}>
                   {formatDate(project?.startDate || null)}
                 </div>
               </div>
-              <div style={{ flex: 1, height: '2px', background: 'var(--border)', margin: '0 16px', marginTop: '16px' }} />
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginBottom: '4px' }}>סיום</div>
-                <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--foreground)' }}>
+              <div style={{ flex: 1, height: '2px', background: 'linear-gradient(90deg, rgba(99,102,241,0.3), rgba(34,197,94,0.3))' }} />
+              <div style={{
+                padding: '10px 20px', background: 'rgba(34,197,94,0.1)', borderRadius: '10px',
+                border: '1px solid rgba(34,197,94,0.15)',
+              }}>
+                <div style={{ fontSize: '11px', color: '#4ade80', marginBottom: '2px' }}>סיום</div>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: '#e2e8f0' }}>
                   {formatDate(project?.endDate || null)}
                 </div>
               </div>
             </div>
-
-            {/* Overall progress bar */}
-            <div style={{ marginBottom: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--foreground)' }}>
-                  התקדמות כללית
-                </span>
-                <span style={{ fontSize: '13px', fontWeight: '700', color: getProjectStatusColor(derivedProjectStatus) }}>
-                  {milestoneProgress}%
-                </span>
-              </div>
-              <div style={{ width: '100%', height: '10px', background: 'var(--border)', borderRadius: '5px', overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%',
-                  width: `${milestoneProgress}%`,
-                  background: `linear-gradient(90deg, ${getProjectStatusColor(derivedProjectStatus)}, ${milestoneProgress === 100 ? '#22c55e' : getProjectStatusColor(derivedProjectStatus)}dd)`,
-                  borderRadius: '5px',
-                  transition: 'width 0.4s ease',
-                }} />
-              </div>
+            {/* Recent timeline events */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {projectTimeline.slice(0, 5).map((event: ProjectTimelineEvent) => {
+                const iconMap: Record<string, string> = {
+                  milestone_created: '📌', milestone_status_changed: '🔄',
+                  milestone_assigned: '👤', milestone_completed: '✅',
+                  file_uploaded: '📎', payment_created: '💰',
+                };
+                return (
+                  <div key={event.id} style={{ display: 'flex', gap: '10px', alignItems: 'center', fontSize: '13px' }}>
+                    <span>{iconMap[event.actionType] || '📋'}</span>
+                    <span style={{ color: '#cbd5e1', flex: 1 }}>{event.description}</span>
+                    <span style={{ color: '#475569', fontSize: '11px', flexShrink: 0 }}>
+                      {new Date(event.createdAt).toLocaleDateString('he-IL')}
+                    </span>
+                  </div>
+                );
+              })}
+              {projectTimeline.length === 0 && (
+                <span style={{ color: '#475569', fontSize: '13px' }}>פרויקט נוצר בתאריך {formatDate(project?.createdAt || null)}</span>
+              )}
             </div>
-
-            {/* Status badge */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--foreground-muted)' }}>סטטוס נוכחי:</span>
-              <div style={{
-                display: 'inline-block', padding: '3px 10px',
-                background: getProjectStatusColor(derivedProjectStatus),
-                color: '#fff', borderRadius: '6px', fontSize: '12px', fontWeight: '600',
-              }}>
-                {getProjectStatusLabel(derivedProjectStatus)}
-              </div>
-            </div>
-
-            {/* Per-status breakdown */}
-            {milestoneCounts.total > 0 && (
-              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                {milestoneCounts.approved > 0 && (
-                  <span style={{ fontSize: '11px', color: '#22c55e', fontWeight: '600' }}>
-                    ✓ {milestoneCounts.approved} אושרו
-                  </span>
-                )}
-                {milestoneCounts.submitted > 0 && (
-                  <span style={{ fontSize: '11px', color: '#8b5cf6', fontWeight: '600' }}>
-                    ⏳ {milestoneCounts.submitted} הוגשו
-                  </span>
-                )}
-                {milestoneCounts.inProgress > 0 && (
-                  <span style={{ fontSize: '11px', color: '#f59e0b', fontWeight: '600' }}>
-                    ▸ {milestoneCounts.inProgress} בתהליך
-                  </span>
-                )}
-                {milestoneCounts.returned > 0 && (
-                  <span style={{ fontSize: '11px', color: '#f97316', fontWeight: '600' }}>
-                    ↩ {milestoneCounts.returned} הוחזרו
-                  </span>
-                )}
-                {milestoneCounts.pending > 0 && (
-                  <span style={{ fontSize: '11px', color: '#6b7280', fontWeight: '600' }}>
-                    ○ {milestoneCounts.pending} בהמתנה
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Recent Activity */}
-          <div
-            className="agd-card"
-            style={{
-              background: 'var(--surface-raised)',
-              border: `1px solid var(--border)`,
-              borderRadius: '8px',
-              padding: '16px',
-              gridColumn: 'span 2',
-            }}
-          >
-            <h3 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--foreground)', marginTop: 0 }}>
-              פעילות אחרונה
-            </h3>
-            <p style={{ color: 'var(--foreground-muted)', fontSize: '14px', margin: 0 }}>
-              פרויקט נוצר בתאריך {formatDate(project?.createdAt || null)}
-            </p>
           </div>
         </div>
       )}
 
+      {/* ══════════ MILESTONES TAB ══════════ */}
       {activeTab === 'milestones' && (
         <div>
           <div style={{ marginBottom: '24px' }}>
             <button
-              className="mod-btn-primary"
+              className="prj-btn prj-btn-primary"
               onClick={() => setShowMilestoneForm(!showMilestoneForm)}
-              style={{ marginBottom: '16px' }}
             >
               {showMilestoneForm ? 'ביטול' : '+ הוספת אבן דרך'}
             </button>
 
             {showMilestoneForm && (
-              <div
-                style={{
-                  background: 'var(--surface-raised)',
-                  border: `1px solid var(--border)`,
-                  borderRadius: '8px',
-                  padding: '16px',
-                  marginBottom: '16px',
-                }}
-              >
-                <h4 style={{ marginTop: 0, color: 'var(--foreground)' }}>אבן דרך חדשה</h4>
+              <div className="prj-milestone-card" style={{ marginTop: '16px' }}>
+                <h4 style={{ marginTop: 0, color: '#e2e8f0', fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>אבן דרך חדשה</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '12px' }}>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="שם אבן דרך"
-                    value={milestoneFormData.title}
-                    onChange={(e) =>
-                      setMilestoneFormData({ ...milestoneFormData, title: e.target.value })
-                    }
-                    style={{ direction: 'rtl' }}
+                  <input type="text" placeholder="שם אבן דרך" value={milestoneFormData.title}
+                    onChange={(e) => setMilestoneFormData({ ...milestoneFormData, title: e.target.value })}
+                    style={{
+                      direction: 'rtl', fontSize: '14px', padding: '10px 12px', color: '#e2e8f0',
+                      background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '8px', outline: 'none',
+                    }}
                   />
-                  <input
-                    type="date"
-                    className="form-input"
-                    value={milestoneFormData.dueDate}
-                    onChange={(e) =>
-                      setMilestoneFormData({ ...milestoneFormData, dueDate: e.target.value })
-                    }
-                    style={{ direction: 'rtl' }}
+                  <input type="date" value={milestoneFormData.dueDate}
+                    onChange={(e) => setMilestoneFormData({ ...milestoneFormData, dueDate: e.target.value })}
+                    style={{
+                      fontSize: '14px', padding: '10px 12px', color: '#e2e8f0',
+                      background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '8px', outline: 'none',
+                    }}
                   />
-                  <select
-                    className="form-select"
-                    value={milestoneFormData.assigneeId}
-                    onChange={(e) =>
-                      setMilestoneFormData({ ...milestoneFormData, assigneeId: e.target.value })
-                    }
+                  <select value={milestoneFormData.assigneeId}
+                    onChange={(e) => setMilestoneFormData({ ...milestoneFormData, assigneeId: e.target.value })}
+                    style={{
+                      fontSize: '14px', padding: '10px 12px', color: '#e2e8f0',
+                      background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '8px', outline: 'none', direction: 'rtl',
+                    }}
                   >
                     <option value="">בחר עובד</option>
                     {employeesData.map((emp: Employee) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.name}
-                      </option>
+                      <option key={emp.id} value={emp.id}>{emp.name}</option>
                     ))}
                   </select>
                 </div>
-
-                <textarea
-                  className="form-input"
-                  placeholder="תיאור"
-                  value={milestoneFormData.description}
-                  onChange={(e) =>
-                    setMilestoneFormData({ ...milestoneFormData, description: e.target.value })
-                  }
+                <textarea placeholder="תיאור" value={milestoneFormData.description}
+                  onChange={(e) => setMilestoneFormData({ ...milestoneFormData, description: e.target.value })}
                   style={{
-                    direction: 'rtl',
-                    minHeight: '80px',
-                    marginBottom: '12px',
-                    fontFamily: 'inherit',
+                    direction: 'rtl', minHeight: '70px', marginBottom: '12px', fontFamily: 'inherit',
+                    width: '100%', fontSize: '14px', padding: '10px 12px', color: '#e2e8f0',
+                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '8px', outline: 'none', resize: 'vertical',
                   }}
                 />
-
-                <textarea
-                  className="form-input"
-                  placeholder="הערות"
-                  value={milestoneFormData.notes}
-                  onChange={(e) =>
-                    setMilestoneFormData({ ...milestoneFormData, notes: e.target.value })
-                  }
+                <textarea placeholder="הערות" value={milestoneFormData.notes}
+                  onChange={(e) => setMilestoneFormData({ ...milestoneFormData, notes: e.target.value })}
                   style={{
-                    direction: 'rtl',
-                    minHeight: '60px',
-                    marginBottom: '12px',
-                    fontFamily: 'inherit',
+                    direction: 'rtl', minHeight: '50px', marginBottom: '16px', fontFamily: 'inherit',
+                    width: '100%', fontSize: '14px', padding: '10px 12px', color: '#e2e8f0',
+                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '8px', outline: 'none', resize: 'vertical',
                   }}
                 />
-
-                <button
-                  className="mod-btn-primary"
-                  onClick={handleAddMilestone}
-                  disabled={loading}
-                  style={{ marginRight: '8px' }}
-                >
-                  {loading ? 'שומר...' : 'הוסף'}
-                </button>
-                <button
-                  className="mod-btn-ghost"
-                  onClick={() => setShowMilestoneForm(false)}
-                  disabled={loading}
-                >
-                  ביטול
-                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button className="prj-btn prj-btn-primary" onClick={handleAddMilestone} disabled={loading}>
+                    {loading ? 'שומר...' : 'הוסף'}
+                  </button>
+                  <button className="prj-btn prj-btn-ghost" onClick={() => setShowMilestoneForm(false)} disabled={loading}>
+                    ביטול
+                  </button>
+                </div>
               </div>
             )}
           </div>
 
           <div style={{ display: 'grid', gap: '16px' }}>
             {(projectMilestones?.length || 0) === 0 ? (
-              <div
-                style={{
-                  background: 'var(--surface-raised)',
-                  border: `1px solid var(--border)`,
-                  borderRadius: '8px',
-                  padding: '24px',
-                  textAlign: 'center',
-                }}
-              >
-                <p style={{ color: 'var(--foreground-muted)', margin: 0 }}>
+              <div className="prj-milestone-card" style={{ textAlign: 'center', padding: '40px' }}>
+                <div style={{ fontSize: '32px', marginBottom: '12px', opacity: 0.3 }}>📋</div>
+                <p style={{ color: '#64748b', margin: 0, fontSize: '14px' }}>
                   אין אבני דרך לפרויקט זה
                 </p>
               </div>
             ) : (
-              (projectMilestones || []).map((milestone: ProjectMilestone) => {
+              (projectMilestones || []).map((milestone: ProjectMilestone, idx: number) => {
                 const assignee = (employeesData || []).find((e: Employee) => e?.id === milestone?.assignedEmployeeId);
-                const dueDate = milestone?.dueDate ? new Date(milestone.dueDate) : null;
                 const isEditing = editingMilestoneId === milestone?.id;
+                const milestoneFiles = getFilesForMilestone(milestone.id);
+                const statusConfig: Record<string, { bg: string; color: string; border: string }> = {
+                  pending: { bg: 'rgba(100,116,139,0.12)', color: '#94a3b8', border: 'rgba(100,116,139,0.2)' },
+                  in_progress: { bg: 'rgba(245,158,11,0.12)', color: '#fbbf24', border: 'rgba(245,158,11,0.2)' },
+                  submitted: { bg: 'rgba(139,92,246,0.12)', color: '#a78bfa', border: 'rgba(139,92,246,0.2)' },
+                  approved: { bg: 'rgba(34,197,94,0.12)', color: '#4ade80', border: 'rgba(34,197,94,0.2)' },
+                  returned: { bg: 'rgba(249,115,22,0.12)', color: '#fb923c', border: 'rgba(249,115,22,0.2)' },
+                };
+                const sc = statusConfig[milestone?.status || 'pending'] || statusConfig.pending;
 
                 return (
                   <div
                     key={milestone.id}
+                    className="prj-milestone-card"
                     style={{
-                      background: 'var(--surface-raised)',
-                      border: `1px solid var(--border)`,
-                      borderRadius: '8px',
-                      padding: '16px',
+                      animationDelay: `${idx * 0.05}s`,
+                      borderRight: `3px solid ${sc.color}`,
                     }}
                   >
                     {isEditing ? (
                       <div>
-                        <input
-                          type="text"
-                          className="form-input"
-                          value={milestone.title}
-                          onChange={(e) => {
-                            // Update logic would go here
+                        <input type="text" value={milestone.title}
+                          onChange={() => {}}
+                          style={{
+                            direction: 'rtl', marginBottom: '12px', width: '100%', fontSize: '14px',
+                            padding: '10px 12px', color: '#e2e8f0',
+                            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                            borderRadius: '8px', outline: 'none',
                           }}
-                          style={{ direction: 'rtl', marginBottom: '12px' }}
                         />
-                        <button
-                          className="mod-btn-primary"
-                          onClick={() => setEditingMilestoneId(null)}
-                          style={{ marginRight: '8px' }}
-                        >
-                          שמור
-                        </button>
-                        <button
-                          className="mod-btn-ghost"
-                          onClick={() => setEditingMilestoneId(null)}
-                        >
-                          ביטול
-                        </button>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button className="prj-btn prj-btn-primary" onClick={() => setEditingMilestoneId(null)}>שמור</button>
+                          <button className="prj-btn prj-btn-ghost" onClick={() => setEditingMilestoneId(null)}>ביטול</button>
+                        </div>
                       </div>
                     ) : (
                       <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                          <div>
-                            <h4
-                              style={{
-                                fontSize: '16px',
-                                fontWeight: '600',
-                                color: 'var(--foreground)',
-                                margin: '0 0 4px 0',
-                              }}
-                            >
+                        {/* Title row */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+                          <div style={{ flex: 1 }}>
+                            <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#e2e8f0', margin: '0 0 4px 0' }}>
                               {milestone.title}
                             </h4>
-                            <p
-                              style={{
-                                fontSize: '13px',
-                                color: 'var(--foreground-muted)',
-                                margin: 0,
-                              }}
-                            >
-                              {milestone.description}
-                            </p>
+                            {milestone.description && (
+                              <p style={{ fontSize: '13px', color: '#64748b', margin: 0, lineHeight: '1.5' }}>
+                                {milestone.description}
+                              </p>
+                            )}
                           </div>
-
-                          <div
-                            style={{
-                              display: 'inline-block',
-                              padding: '4px 12px',
-                              background: statusColors[milestone?.status || 'pending'],
-                              color: '#fff',
-                              borderRadius: '6px',
-                              fontSize: '12px',
-                              fontWeight: '600',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
+                          <span className="prj-status-badge" style={{
+                            background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`,
+                            marginRight: '12px',
+                          }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: sc.color }} />
                             {milestoneStatusLabels[milestone?.status || 'pending']}
-                          </div>
+                          </span>
                         </div>
 
-                        <div
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
-                            gap: '12px',
-                            marginBottom: '12px',
-                          }}
-                        >
+                        {/* Info row */}
+                        <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginBottom: '14px' }}>
                           <div>
-                            <span style={{ fontSize: '11px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '2px' }}>
-                              תאריך הגשה
-                            </span>
-                            <span style={{ fontSize: '13px', color: 'var(--foreground)' }}>
+                            <span style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: '2px' }}>תאריך הגשה</span>
+                            <span style={{ fontSize: '13px', color: '#cbd5e1', fontWeight: '500' }}>
                               {formatDate(milestone?.dueDate || null)}
                             </span>
                           </div>
-
                           <div>
-                            <span style={{ fontSize: '11px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '2px' }}>
-                              מוקצה ל
-                            </span>
+                            <span style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: '2px' }}>מוקצה ל</span>
                             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                               <select
                                 value={
@@ -1583,116 +1497,78 @@ export default function BusinessProjectPage() {
                                 }
                                 onChange={(e) => {
                                   setPendingAssignee((prev) => ({ ...prev, [milestone.id]: e.target.value }));
-                                  // Clear any stale feedback when user changes selection
                                   setAssignFeedback((prev) => { const n = { ...prev }; delete n[milestone.id]; return n; });
                                 }}
                                 disabled={loading || assigningMilestone === milestone.id}
                                 style={{
-                                  fontSize: '13px',
-                                  color: 'var(--foreground)',
-                                  background: 'var(--surface)',
-                                  border: '1px solid var(--border)',
-                                  borderRadius: '4px',
-                                  padding: '2px 6px',
-                                  flex: 1,
-                                  direction: 'rtl',
+                                  fontSize: '13px', color: '#e2e8f0', direction: 'rtl',
+                                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                                  borderRadius: '6px', padding: '4px 8px', outline: 'none',
                                 }}
                               >
                                 <option value="">לא הוצמד</option>
                                 {(employeesData || []).map((emp: Employee) => (
-                                  <option key={emp.id} value={emp.id}>
-                                    {emp.name || (emp as any).email}
-                                  </option>
+                                  <option key={emp.id} value={emp.id}>{emp.name || (emp as any).email}</option>
                                 ))}
                               </select>
                               <button
+                                className="prj-btn prj-btn-primary"
                                 onClick={() => handleAssignMilestoneEmployee(milestone)}
                                 disabled={loading || assigningMilestone === milestone.id}
-                                style={{
-                                  fontSize: '12px',
-                                  padding: '3px 10px',
-                                  borderRadius: '4px',
-                                  border: '1px solid var(--accent)',
-                                  background: assigningMilestone === milestone.id ? 'var(--surface)' : 'var(--accent)',
-                                  color: assigningMilestone === milestone.id ? 'var(--foreground-muted)' : '#fff',
-                                  cursor: assigningMilestone === milestone.id ? 'wait' : 'pointer',
-                                  whiteSpace: 'nowrap',
-                                }}
+                                style={{ fontSize: '11px', padding: '4px 10px' }}
                               >
-                                {assigningMilestone === milestone.id ? '...' : 'שייך לעובד'}
+                                {assigningMilestone === milestone.id ? '...' : 'שייך'}
                               </button>
                             </div>
                             {assignFeedback[milestone.id] && (
-                              <div
-                                style={{
-                                  fontSize: '11px',
-                                  marginTop: '4px',
-                                  color: assignFeedback[milestone.id].type === 'success' ? '#22c55e' : '#ef4444',
-                                }}
-                              >
+                              <div style={{
+                                fontSize: '11px', marginTop: '4px',
+                                color: assignFeedback[milestone.id].type === 'success' ? '#4ade80' : '#f87171',
+                              }}>
                                 {assignFeedback[milestone.id].message}
                               </div>
                             )}
                           </div>
-
                           <div>
-                            <span style={{ fontSize: '11px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '2px' }}>
-                              קבצים
-                            </span>
-                            <span style={{ fontSize: '13px', color: 'var(--accent)' }}>
-                              {getFilesForMilestone(milestone.id).length} קבצים
+                            <span style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: '2px' }}>קבצים</span>
+                            <span style={{ fontSize: '13px', color: '#818cf8', fontWeight: '500' }}>
+                              {milestoneFiles.length} קבצים
                             </span>
                           </div>
                         </div>
 
+                        {/* Timestamps */}
                         {((milestone as any)?.startedAt || (milestone as any)?.submittedAt || (milestone as any)?.approvedAt) && (
-                          <div
-                            style={{
-                              display: 'flex',
-                              flexWrap: 'wrap',
-                              gap: '12px',
-                              fontSize: '11px',
-                              color: 'var(--foreground-muted)',
-                              marginBottom: '12px',
-                            }}
-                          >
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '11px', color: '#475569', marginBottom: '14px' }}>
                             {(milestone as any)?.startedAt && (
-                              <span>
-                                התחיל: <span style={{ color: 'var(--foreground)' }}>{formatDate((milestone as any).startedAt)}</span>
-                              </span>
+                              <span>התחיל: <span style={{ color: '#94a3b8' }}>{formatDate((milestone as any).startedAt)}</span></span>
                             )}
                             {(milestone as any)?.submittedAt && (
-                              <span>
-                                הוגש: <span style={{ color: 'var(--foreground)' }}>{formatDate((milestone as any).submittedAt)}</span>
-                              </span>
+                              <span>הוגש: <span style={{ color: '#94a3b8' }}>{formatDate((milestone as any).submittedAt)}</span></span>
                             )}
                             {(milestone as any)?.approvedAt && (
-                              <span>
-                                אושר: <span style={{ color: 'var(--foreground)' }}>{formatDate((milestone as any).approvedAt)}</span>
-                              </span>
+                              <span>אושר: <span style={{ color: '#94a3b8' }}>{formatDate((milestone as any).approvedAt)}</span></span>
                             )}
                           </div>
                         )}
 
+                        {/* Notes */}
                         {milestone?.notes && (
-                          <div style={{ marginBottom: '12px', padding: '8px', background: 'var(--border)', borderRadius: '4px' }}>
-                            <span style={{ fontSize: '11px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
-                              הערות
-                            </span>
-                            <span style={{ fontSize: '13px', color: 'var(--foreground)' }}>
-                              {milestone?.notes}
-                            </span>
+                          <div style={{
+                            marginBottom: '14px', padding: '10px 14px',
+                            background: 'rgba(255,255,255,0.03)', borderRadius: '8px',
+                            border: '1px solid rgba(255,255,255,0.04)',
+                          }}>
+                            <span style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: '4px' }}>הערות</span>
+                            <span style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: '1.5' }}>{milestone.notes}</span>
                           </div>
                         )}
 
-                        {/* ── Milestone Files Section ── */}
-                        <div style={{ marginBottom: '12px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                            <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--foreground)' }}>
-                              קבצים מצורפים
-                            </span>
-                            <input
-                              type="file"
+                        {/* ── Files Section with previews ── */}
+                        <div style={{ marginBottom: '14px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: '600', color: '#94a3b8' }}>קבצים מצורפים</span>
+                            <input type="file"
                               ref={(el) => { fileInputRefs.current[milestone.id] = el; }}
                               style={{ display: 'none' }}
                               onChange={(e) => {
@@ -1701,122 +1577,106 @@ export default function BusinessProjectPage() {
                               }}
                             />
                             <button
+                              className="prj-btn prj-btn-primary"
                               onClick={() => fileInputRefs.current[milestone.id]?.click()}
                               disabled={uploadingMilestone === milestone.id}
-                              style={{
-                                fontSize: '11px', padding: '2px 8px', borderRadius: '4px',
-                                border: '1px solid var(--accent)', background: 'var(--accent)',
-                                color: '#fff', cursor: uploadingMilestone === milestone.id ? 'wait' : 'pointer',
-                              }}
+                              style={{ fontSize: '11px', padding: '3px 10px' }}
                             >
                               {uploadingMilestone === milestone.id ? 'מעלה...' : 'העלאת קובץ'}
                             </button>
                           </div>
-                          {getFilesForMilestone(milestone.id).length > 0 ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              {getFilesForMilestone(milestone.id).map((mf: MilestoneFile) => (
-                                <div
-                                  key={mf.id}
-                                  style={{
-                                    display: 'flex', alignItems: 'center', gap: '8px',
-                                    padding: '4px 8px', background: 'var(--surface)',
-                                    border: '1px solid var(--border)', borderRadius: '4px',
-                                    fontSize: '12px',
-                                  }}
-                                >
+                          {milestoneFiles.length > 0 ? (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                              {milestoneFiles.map((mf: MilestoneFile) => {
+                                const isImage = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(mf.fileName);
+                                return (
                                   <a
+                                    key={mf.id}
                                     href={mf.fileUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    style={{ color: 'var(--accent)', textDecoration: 'none', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                    className="prj-file-chip"
                                     title={mf.fileName}
                                   >
-                                    {mf.fileName}
+                                    {isImage ? (
+                                      <img
+                                        src={mf.fileUrl}
+                                        alt={mf.fileName}
+                                        style={{
+                                          width: '32px', height: '32px', objectFit: 'cover',
+                                          borderRadius: '4px', flexShrink: 0,
+                                        }}
+                                      />
+                                    ) : (
+                                      <span style={{
+                                        width: '32px', height: '32px', display: 'flex',
+                                        alignItems: 'center', justifyContent: 'center',
+                                        background: 'rgba(99,102,241,0.1)', borderRadius: '4px',
+                                        fontSize: '14px', flexShrink: 0,
+                                      }}>
+                                        📄
+                                      </span>
+                                    )}
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{
+                                        color: '#cbd5e1', fontSize: '12px', fontWeight: '500',
+                                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                      }}>
+                                        {mf.fileName}
+                                      </div>
+                                      <div style={{ color: '#475569', fontSize: '10px' }}>
+                                        {(mf.fileSize || 0) > 1024 * 1024
+                                          ? `${((mf.fileSize || 0) / (1024 * 1024)).toFixed(1)} MB`
+                                          : `${Math.round((mf.fileSize || 0) / 1024)} KB`}
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteMilestoneFile(mf.id); }}
+                                      className="prj-btn prj-btn-danger"
+                                      style={{
+                                        fontSize: '10px', padding: '2px 6px', borderRadius: '4px',
+                                        flexShrink: 0, minWidth: 'auto',
+                                      }}
+                                    >
+                                      ✕
+                                    </button>
                                   </a>
-                                  <span style={{ color: 'var(--foreground-muted)', fontSize: '10px', flexShrink: 0 }}>
-                                    {(mf.fileSize || 0) > 1024 * 1024
-                                      ? `${((mf.fileSize || 0) / (1024 * 1024)).toFixed(1)} MB`
-                                      : `${Math.round((mf.fileSize || 0) / 1024)} KB`}
-                                  </span>
-                                  <button
-                                    onClick={() => handleDeleteMilestoneFile(mf.id)}
-                                    style={{
-                                      fontSize: '11px', padding: '1px 6px', borderRadius: '3px',
-                                      border: '1px solid #fca5a5', background: '#fef2f2',
-                                      color: '#dc2626', cursor: 'pointer', flexShrink: 0,
-                                    }}
-                                    title="מחק קובץ"
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           ) : (
-                            <span style={{ fontSize: '11px', color: 'var(--foreground-muted)' }}>
-                              אין קבצים מצורפים
-                            </span>
+                            <span style={{ fontSize: '12px', color: '#475569' }}>אין קבצים מצורפים</span>
                           )}
                         </div>
 
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {/* Quick actions */}
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
                           {milestone?.status === 'pending' && (
-                            <button
-                              className="mod-btn-primary"
-                              onClick={() =>
-                                handleUpdateMilestone(milestone?.id || '', { status: 'in_progress' })
-                              }
-                              disabled={loading}
-                              style={{ fontSize: '12px', padding: '6px 12px' }}
-                            >
+                            <button className="prj-btn prj-btn-primary" style={{ fontSize: '12px', padding: '6px 14px' }}
+                              onClick={() => handleUpdateMilestone(milestone?.id || '', { status: 'in_progress' })} disabled={loading}>
                               התחל
                             </button>
                           )}
-
                           {milestone?.status === 'in_progress' && (
-                            <button
-                              className="mod-btn-primary"
-                              onClick={() =>
-                                handleUpdateMilestone(milestone?.id || '', { status: 'submitted' })
-                              }
-                              disabled={loading}
-                              style={{ fontSize: '12px', padding: '6px 12px' }}
-                            >
+                            <button className="prj-btn prj-btn-primary" style={{ fontSize: '12px', padding: '6px 14px' }}
+                              onClick={() => handleUpdateMilestone(milestone?.id || '', { status: 'submitted' })} disabled={loading}>
                               הגש
                             </button>
                           )}
-
                           {milestone?.status === 'submitted' && (
                             <>
-                              <button
-                                className="mod-btn-primary"
-                                onClick={() =>
-                                  handleUpdateMilestone(milestone?.id || '', { status: 'approved' })
-                                }
-                                disabled={loading}
-                                style={{ fontSize: '12px', padding: '6px 12px', background: '#22c55e' }}
-                              >
+                              <button className="prj-btn prj-btn-success" style={{ fontSize: '12px', padding: '6px 14px' }}
+                                onClick={() => handleUpdateMilestone(milestone?.id || '', { status: 'approved' })} disabled={loading}>
                                 אשר
                               </button>
-                              <button
-                                className="mod-btn-ghost"
-                                onClick={() =>
-                                  handleUpdateMilestone(milestone?.id || '', { status: 'returned' })
-                                }
-                                disabled={loading}
-                                style={{ fontSize: '12px', padding: '6px 12px' }}
-                              >
+                              <button className="prj-btn prj-btn-ghost" style={{ fontSize: '12px', padding: '6px 14px' }}
+                                onClick={() => handleUpdateMilestone(milestone?.id || '', { status: 'returned' })} disabled={loading}>
                                 החזר
                               </button>
                             </>
                           )}
-
-                          <button
-                            className="mod-btn-ghost"
-                            onClick={() => setEditingMilestoneId(milestone?.id || null)}
-                            disabled={loading}
-                            style={{ fontSize: '12px', padding: '6px 12px' }}
-                          >
+                          <button className="prj-btn prj-btn-ghost" style={{ fontSize: '12px', padding: '6px 14px' }}
+                            onClick={() => setEditingMilestoneId(milestone?.id || null)} disabled={loading}>
                             עריכה
                           </button>
                         </div>
@@ -1830,39 +1690,25 @@ export default function BusinessProjectPage() {
         </div>
       )}
 
+      {/* ══════════ FILES TAB ══════════ */}
       {activeTab === 'files' && (
         <div>
           <div style={{ marginBottom: '24px' }}>
-            <button
-              className="mod-btn-primary"
-              onClick={() => setShowFileForm(!showFileForm)}
-              style={{ marginBottom: '16px' }}
-            >
+            <button className="prj-btn prj-btn-primary" onClick={() => setShowFileForm(!showFileForm)}>
               {showFileForm ? 'ביטול' : '+ הוספת קובץ'}
             </button>
 
             {showFileForm && (
-              <div
-                style={{
-                  background: 'var(--surface-raised)',
-                  border: `1px solid var(--border)`,
-                  borderRadius: '8px',
-                  padding: '16px',
-                  marginBottom: '16px',
-                }}
-              >
-                {/* Category selector — shared by both upload methods */}
-                <div style={{ marginBottom: '12px' }}>
-                  <span style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>
-                    קטגוריה
-                  </span>
-                  <select
-                    className="form-select"
-                    value={fileFormData.category}
-                    onChange={(e) =>
-                      setFileFormData({ ...fileFormData, category: e.target.value as FileCategory })
-                    }
-                    style={{ maxWidth: '200px' }}
+              <div className="prj-card" style={{ marginTop: '16px' }}>
+                <div style={{ marginBottom: '16px' }}>
+                  <span style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>קטגוריה</span>
+                  <select value={fileFormData.category}
+                    onChange={(e) => setFileFormData({ ...fileFormData, category: e.target.value as FileCategory })}
+                    style={{
+                      maxWidth: '200px', fontSize: '13px', color: '#e2e8f0', direction: 'rtl',
+                      background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '8px', padding: '8px 10px', outline: 'none',
+                    }}
                   >
                     <option value="general">כללי</option>
                     <option value="agreements">הסכמים</option>
@@ -1870,91 +1716,47 @@ export default function BusinessProjectPage() {
                     <option value="website">אתר</option>
                   </select>
                 </div>
-
-                {/* ── Upload from computer ── */}
-                <div
-                  style={{
-                    padding: '12px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '6px',
-                    marginBottom: '12px',
-                  }}
-                >
-                  <h4 style={{ marginTop: 0, fontSize: '14px', color: 'var(--foreground)' }}>
-                    העלאה מהמחשב
-                  </h4>
-                  <p style={{ fontSize: '11px', color: 'var(--foreground-muted)', margin: '0 0 8px 0' }}>
-                    PDF, תמונות (PNG, JPG, GIF, WEBP) — עד 10 MB
-                  </p>
-                  <input
-                    type="file"
-                    ref={projectFileInputRef}
-                    accept=".pdf,.png,.jpg,.jpeg,.gif,.webp"
+                <div style={{
+                  padding: '16px', background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', marginBottom: '12px',
+                }}>
+                  <h4 style={{ marginTop: 0, fontSize: '14px', color: '#e2e8f0' }}>העלאה מהמחשב</h4>
+                  <p style={{ fontSize: '11px', color: '#475569', margin: '0 0 10px 0' }}>PDF, תמונות — עד 10 MB</p>
+                  <input type="file" ref={projectFileInputRef} accept=".pdf,.png,.jpg,.jpeg,.gif,.webp"
                     style={{ display: 'none' }}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleProjectFileUpload(file);
-                    }}
+                    onChange={(e) => { const file = e.target.files?.[0]; if (file) handleProjectFileUpload(file); }}
                   />
-                  <button
-                    onClick={() => projectFileInputRef.current?.click()}
-                    disabled={uploadingProjectFile}
-                    style={{
-                      fontSize: '13px', padding: '6px 16px', borderRadius: '6px',
-                      border: '1px solid var(--accent)', background: 'var(--accent)',
-                      color: '#fff', cursor: uploadingProjectFile ? 'wait' : 'pointer',
-                    }}
-                  >
+                  <button className="prj-btn prj-btn-primary"
+                    onClick={() => projectFileInputRef.current?.click()} disabled={uploadingProjectFile}>
                     {uploadingProjectFile ? 'מעלה...' : 'העלה קובץ'}
                   </button>
                   {projectFileError && (
-                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#ef4444' }}>
-                      {projectFileError}
-                    </div>
+                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#f87171' }}>{projectFileError}</div>
                   )}
                 </div>
-
-                {/* ── Or add by URL link ── */}
-                <div
-                  style={{
-                    padding: '12px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '6px',
-                  }}
-                >
-                  <h4 style={{ marginTop: 0, fontSize: '14px', color: 'var(--foreground)' }}>
-                    או הוספה מקישור
-                  </h4>
+                <div style={{
+                  padding: '16px', background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px',
+                }}>
+                  <h4 style={{ marginTop: 0, fontSize: '14px', color: '#e2e8f0' }}>או הוספה מקישור</h4>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <input
-                      type="url"
-                      className="form-input"
-                      placeholder="כתובת URL של הקובץ"
-                      value={fileFormData.url}
-                      onChange={(e) =>
-                        setFileFormData({ ...fileFormData, url: e.target.value })
-                      }
-                      style={{ direction: 'rtl', flex: 1 }}
+                    <input type="url" placeholder="כתובת URL של הקובץ" value={fileFormData.url}
+                      onChange={(e) => setFileFormData({ ...fileFormData, url: e.target.value })}
+                      style={{
+                        direction: 'rtl', flex: 1, fontSize: '13px', padding: '10px 12px', color: '#e2e8f0',
+                        background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '8px', outline: 'none',
+                      }}
                     />
-                    <button
-                      className="mod-btn-primary"
-                      onClick={handleAddFile}
-                      disabled={loading}
-                      style={{ whiteSpace: 'nowrap' }}
-                    >
-                      {loading ? 'שומר...' : 'הוסף קישור'}
+                    <button className="prj-btn prj-btn-primary" onClick={handleAddFile} disabled={loading}>
+                      {loading ? '...' : 'הוסף'}
                     </button>
                   </div>
                 </div>
-
                 <div style={{ marginTop: '12px' }}>
-                  <button
-                    className="mod-btn-ghost"
+                  <button className="prj-btn prj-btn-ghost"
                     onClick={() => { setShowFileForm(false); setProjectFileError(null); }}
-                    disabled={loading || uploadingProjectFile}
-                  >
+                    disabled={loading || uploadingProjectFile}>
                     ביטול
                   </button>
                 </div>
@@ -1962,93 +1764,53 @@ export default function BusinessProjectPage() {
             )}
           </div>
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-              gap: '16px',
-            }}
-          >
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
             {(projectClientFiles?.length || 0) === 0 ? (
-              <div
-                style={{
-                  background: 'var(--surface-raised)',
-                  border: `1px solid var(--border)`,
-                  borderRadius: '8px',
-                  padding: '24px',
-                  textAlign: 'center',
-                  gridColumn: 'span 1',
-                }}
-              >
-                <p style={{ color: 'var(--foreground-muted)', margin: 0 }}>
-                  אין קבצים
-                </p>
+              <div className="prj-card" style={{ textAlign: 'center', padding: '40px' }}>
+                <div style={{ fontSize: '32px', marginBottom: '12px', opacity: 0.3 }}>📁</div>
+                <p style={{ color: '#64748b', margin: 0 }}>אין קבצים</p>
               </div>
             ) : (
               (projectClientFiles || []).map((file) => {
                 const uploadDate = file?.createdAt ? new Date(file.createdAt) : null;
-                const categoryLabels: Record<string, string> = {
-                  general: 'כללי',
-                  agreements: 'הסכמים',
-                  branding: 'ברנדינג',
-                  website: 'אתר',
-                };
+                const categoryLabels: Record<string, string> = { general: 'כללי', agreements: 'הסכמים', branding: 'ברנדינג', website: 'אתר' };
+                const isImage = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(file?.fileName || '');
 
                 return (
-                  <a
-                    key={file?.id || ''}
-                    href={file?.fileUrl || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      background: 'var(--surface-raised)',
-                      border: `1px solid var(--border)`,
-                      borderRadius: '8px',
-                      padding: '16px',
-                      textDecoration: 'none',
-                      color: 'inherit',
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)';
-                      (e.currentTarget as HTMLElement).style.background = 'var(--border)';
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)';
-                      (e.currentTarget as HTMLElement).style.background = 'var(--surface-raised)';
-                    }}
+                  <a key={file?.id || ''} href={file?.fileUrl || '#'} target="_blank" rel="noopener noreferrer"
+                    className="prj-card"
+                    style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column', cursor: 'pointer' }}
                   >
-                    <div style={{ fontSize: '20px', marginBottom: '8px' }}>
-                      📄
-                    </div>
-                    <h4
-                      style={{
-                        fontSize: '14px',
-                        fontWeight: '600',
-                        color: 'var(--foreground)',
-                        margin: '0 0 8px 0',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
+                    {isImage && file?.fileUrl ? (
+                      <div style={{
+                        width: '100%', height: '100px', borderRadius: '8px', marginBottom: '10px',
+                        overflow: 'hidden', background: 'rgba(255,255,255,0.03)',
+                      }}>
+                        <img src={file.fileUrl} alt={file.fileName}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      </div>
+                    ) : (
+                      <div style={{
+                        width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'rgba(99,102,241,0.1)', borderRadius: '10px', fontSize: '20px', marginBottom: '10px',
+                      }}>
+                        📄
+                      </div>
+                    )}
+                    <h4 style={{
+                      fontSize: '13px', fontWeight: '600', color: '#e2e8f0', margin: '0 0 6px 0',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
                       {file?.fileName || 'קובץ'}
                     </h4>
-                    <div style={{ marginBottom: '8px' }}>
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          fontSize: '11px',
-                          padding: '2px 8px',
-                          background: 'var(--accent-muted)',
-                          color: 'var(--accent)',
-                          borderRadius: '4px',
-                        }}
-                      >
-                        {categoryLabels[file.category] || file.category}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--foreground-muted)' }}>
+                    <span style={{
+                      display: 'inline-block', fontSize: '10px', padding: '2px 8px',
+                      background: 'rgba(99,102,241,0.1)', color: '#818cf8', borderRadius: '4px', marginBottom: '6px',
+                      alignSelf: 'flex-start',
+                    }}>
+                      {categoryLabels[file.category] || file.category}
+                    </span>
+                    <div style={{ fontSize: '11px', color: '#475569', marginTop: 'auto' }}>
                       {uploadDate?.toLocaleDateString('he-IL') || '-'}
                     </div>
                   </a>
@@ -2059,100 +1821,77 @@ export default function BusinessProjectPage() {
         </div>
       )}
 
+      {/* ══════════ PAYMENTS TAB ══════════ */}
       {activeTab === 'payments' && (
         <div>
           {/* Summary cards */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-              gap: '16px',
-              marginBottom: '24px',
-            }}
-          >
-            <div className="agd-card" style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '8px', padding: '16px' }}>
-              <h4 style={{ fontSize: '12px', color: 'var(--foreground-muted)', margin: '0 0 8px 0' }}>סה&quot;כ</h4>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: 'var(--foreground)' }}>₪{totalAmount.toLocaleString('he-IL')}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+            <div className="prj-card">
+              <h4 style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>סה&quot;כ</h4>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: '#e2e8f0' }}>₪{totalAmount.toLocaleString('he-IL')}</div>
             </div>
-            <div className="agd-card" style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '8px', padding: '16px' }}>
-              <h4 style={{ fontSize: '12px', color: 'var(--foreground-muted)', margin: '0 0 8px 0' }}>שולם</h4>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: '#22c55e' }}>₪{paidAmount.toLocaleString('he-IL')}</div>
+            <div className="prj-card">
+              <h4 style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>שולם</h4>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: '#4ade80' }}>₪{paidAmount.toLocaleString('he-IL')}</div>
             </div>
-            <div className="agd-card" style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '8px', padding: '16px' }}>
-              <h4 style={{ fontSize: '12px', color: 'var(--foreground-muted)', margin: '0 0 8px 0' }}>נותר</h4>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: '#f59e0b' }}>₪{(totalAmount - paidAmount).toLocaleString('he-IL')}</div>
+            <div className="prj-card">
+              <h4 style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>נותר</h4>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: '#fbbf24' }}>₪{(totalAmount - paidAmount).toLocaleString('he-IL')}</div>
             </div>
           </div>
 
-          {/* Add payment button + form */}
           <div style={{ marginBottom: '16px' }}>
             {!showPaymentForm ? (
-              <button
-                className="mod-btn-primary"
-                onClick={() => setShowPaymentForm(true)}
-                style={{ fontSize: '14px', padding: '8px 16px' }}
-              >
+              <button className="prj-btn prj-btn-primary" onClick={() => setShowPaymentForm(true)}>
                 + הוסף תשלום
               </button>
             ) : (
-              <div style={{
-                background: 'var(--surface-raised)', border: '1px solid var(--border)',
-                borderRadius: '8px', padding: '16px', marginBottom: '16px',
-              }}>
-                <h4 style={{ fontSize: '14px', fontWeight: '600', color: 'var(--foreground)', margin: '0 0 12px 0' }}>
-                  תשלום חדש
-                </h4>
+              <div className="prj-card" style={{ marginBottom: '16px' }}>
+                <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#e2e8f0', margin: '0 0 16px 0' }}>תשלום חדש</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                   <div>
-                    <label style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>כותרת *</label>
-                    <input
-                      type="text"
-                      value={paymentFormData.title}
+                    <label style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>כותרת *</label>
+                    <input type="text" value={paymentFormData.title}
                       onChange={(e) => setPaymentFormData((f) => ({ ...f, title: e.target.value }))}
                       placeholder="למשל: תשלום ראשון"
                       style={{
-                        width: '100%', fontSize: '13px', padding: '8px',
-                        background: 'var(--surface)', border: '1px solid var(--border)',
-                        borderRadius: '6px', color: 'var(--foreground)', direction: 'rtl',
+                        width: '100%', fontSize: '13px', padding: '10px 12px', color: '#e2e8f0', direction: 'rtl',
+                        background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '8px', outline: 'none',
                       }}
                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>סכום (₪) *</label>
-                    <input
-                      type="number"
-                      value={paymentFormData.amount}
+                    <label style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>סכום (₪) *</label>
+                    <input type="number" value={paymentFormData.amount}
                       onChange={(e) => setPaymentFormData((f) => ({ ...f, amount: e.target.value }))}
                       placeholder="0"
                       style={{
-                        width: '100%', fontSize: '13px', padding: '8px',
-                        background: 'var(--surface)', border: '1px solid var(--border)',
-                        borderRadius: '6px', color: 'var(--foreground)', direction: 'ltr',
+                        width: '100%', fontSize: '13px', padding: '10px 12px', color: '#e2e8f0', direction: 'ltr',
+                        background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '8px', outline: 'none',
                       }}
                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>תאריך יעד</label>
-                    <input
-                      type="date"
-                      value={paymentFormData.dueDate}
+                    <label style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>תאריך יעד</label>
+                    <input type="date" value={paymentFormData.dueDate}
                       onChange={(e) => setPaymentFormData((f) => ({ ...f, dueDate: e.target.value }))}
                       style={{
-                        width: '100%', fontSize: '13px', padding: '8px',
-                        background: 'var(--surface)', border: '1px solid var(--border)',
-                        borderRadius: '6px', color: 'var(--foreground)',
+                        width: '100%', fontSize: '13px', padding: '10px 12px', color: '#e2e8f0',
+                        background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '8px', outline: 'none',
                       }}
                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>אבן דרך מקושרת</label>
-                    <select
-                      value={paymentFormData.milestoneId}
+                    <label style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>אבן דרך מקושרת</label>
+                    <select value={paymentFormData.milestoneId}
                       onChange={(e) => setPaymentFormData((f) => ({ ...f, milestoneId: e.target.value }))}
                       style={{
-                        width: '100%', fontSize: '13px', padding: '8px',
-                        background: 'var(--surface)', border: '1px solid var(--border)',
-                        borderRadius: '6px', color: 'var(--foreground)', direction: 'rtl',
+                        width: '100%', fontSize: '13px', padding: '10px 12px', color: '#e2e8f0', direction: 'rtl',
+                        background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '8px', outline: 'none',
                       }}
                     >
                       <option value="">ללא</option>
@@ -2163,33 +1902,24 @@ export default function BusinessProjectPage() {
                   </div>
                 </div>
                 <div style={{ marginBottom: '12px' }}>
-                  <label style={{ fontSize: '12px', color: 'var(--foreground-muted)', display: 'block', marginBottom: '4px' }}>תיאור</label>
-                  <textarea
-                    value={paymentFormData.description}
+                  <label style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>תיאור</label>
+                  <textarea value={paymentFormData.description}
                     onChange={(e) => setPaymentFormData((f) => ({ ...f, description: e.target.value }))}
-                    rows={2}
-                    placeholder="הערות לגבי התשלום..."
+                    rows={2} placeholder="הערות לגבי התשלום..."
                     style={{
-                      width: '100%', fontSize: '13px', padding: '8px',
-                      background: 'var(--surface)', border: '1px solid var(--border)',
-                      borderRadius: '6px', color: 'var(--foreground)', direction: 'rtl', resize: 'vertical',
+                      width: '100%', fontSize: '13px', padding: '10px 12px', color: '#e2e8f0', direction: 'rtl', resize: 'vertical',
+                      background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '8px', outline: 'none',
                     }}
                   />
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    className="mod-btn-primary"
-                    onClick={handleAddPayment}
-                    disabled={loading || !paymentFormData.title || !paymentFormData.amount}
-                    style={{ fontSize: '13px', padding: '8px 16px' }}
-                  >
+                  <button className="prj-btn prj-btn-primary" onClick={handleAddPayment}
+                    disabled={loading || !paymentFormData.title || !paymentFormData.amount}>
                     {loading ? '...' : 'שמור תשלום'}
                   </button>
-                  <button
-                    className="mod-btn-ghost"
-                    onClick={() => { setShowPaymentForm(false); setPaymentFormData({ title: '', amount: '', dueDate: '', description: '', milestoneId: '' }); }}
-                    style={{ fontSize: '13px', padding: '8px 16px' }}
-                  >
+                  <button className="prj-btn prj-btn-ghost"
+                    onClick={() => { setShowPaymentForm(false); setPaymentFormData({ title: '', amount: '', dueDate: '', description: '', milestoneId: '' }); }}>
                     ביטול
                   </button>
                 </div>
@@ -2197,78 +1927,57 @@ export default function BusinessProjectPage() {
             )}
           </div>
 
-          {/* Payment list */}
           <div style={{ display: 'grid', gap: '12px' }}>
             {(projectPayments?.length || 0) === 0 ? (
-              <div style={{
-                background: 'var(--surface-raised)', border: '1px solid var(--border)',
-                borderRadius: '8px', padding: '24px', textAlign: 'center',
-              }}>
-                <p style={{ color: 'var(--foreground-muted)', margin: 0 }}>אין תשלומים לפרויקט זה</p>
+              <div className="prj-card" style={{ textAlign: 'center', padding: '40px' }}>
+                <div style={{ fontSize: '32px', marginBottom: '12px', opacity: 0.3 }}>💰</div>
+                <p style={{ color: '#64748b', margin: 0 }}>אין תשלומים לפרויקט זה</p>
               </div>
             ) : (
               (projectPayments || []).map((payment) => {
                 const statusColor =
-                  payment?.status === 'paid' ? '#22c55e'
-                  : payment?.status === 'overdue' ? '#ef4444'
-                  : payment?.status === 'collection_needed' ? '#f97316'
-                  : '#f59e0b';
+                  payment?.status === 'paid' ? '#4ade80'
+                  : payment?.status === 'overdue' ? '#f87171'
+                  : payment?.status === 'collection_needed' ? '#fb923c'
+                  : '#fbbf24';
                 const linkedMilestone = payment?.milestoneId
                   ? (projectMilestones || []).find((m: any) => m.id === payment.milestoneId)
                   : null;
 
                 return (
-                  <div
-                    key={payment?.id || ''}
+                  <div key={payment?.id || ''} className="prj-card"
                     style={{
-                      background: 'var(--surface-raised)', border: '1px solid var(--border)',
-                      borderRadius: '8px', padding: '16px',
                       display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto',
                       alignItems: 'center', gap: '16px',
                     }}
                   >
-                    <div style={{ width: '4px', height: '40px', background: statusColor, borderRadius: '2px' }} />
-
+                    <div style={{ width: '3px', height: '40px', background: statusColor, borderRadius: '2px' }} />
                     <div>
-                      <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--foreground)', marginBottom: '4px' }}>
+                      <div style={{ fontSize: '14px', fontWeight: '600', color: '#e2e8f0', marginBottom: '4px' }}>
                         {payment?.title || payment?.description || 'תשלום'}
                       </div>
-                      <div style={{ fontSize: '12px', color: 'var(--foreground-muted)' }}>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>
                         לתאריך: {formatDate(payment?.dueDate || null)}
                         {linkedMilestone && (
-                          <span style={{ marginRight: '8px' }}>
-                            | אבן דרך: {(linkedMilestone as any).title}
-                          </span>
+                          <span style={{ marginRight: '8px' }}>| אבן דרך: {(linkedMilestone as any).title}</span>
                         )}
                       </div>
-                      {payment?.description && payment?.title && (
-                        <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginTop: '2px' }}>
-                          {payment.description}
-                        </div>
-                      )}
                     </div>
-
                     <div style={{ textAlign: 'left' }}>
-                      <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--foreground)' }}>
+                      <div style={{ fontSize: '18px', fontWeight: '700', color: '#e2e8f0' }}>
                         ₪{(payment?.amount || 0).toLocaleString('he-IL')}
                       </div>
                     </div>
-
-                    <div style={{
-                      display: 'inline-block', padding: '4px 12px', background: statusColor,
-                      color: '#fff', borderRadius: '6px', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap',
+                    <span className="prj-status-badge" style={{
+                      background: `${statusColor}20`, color: statusColor,
+                      border: `1px solid ${statusColor}30`,
                     }}>
                       {paymentStatusLabels[(payment?.status as ProjectPaymentStatus) || 'pending'] || payment?.status}
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                    </span>
+                    <div>
                       {payment?.status !== 'paid' && (
-                        <button
-                          className="mod-btn-primary"
-                          onClick={() => handleUpdatePaymentStatus(payment?.id || '', 'paid')}
-                          disabled={loading}
-                          style={{ fontSize: '12px', padding: '6px 12px' }}
-                        >
+                        <button className="prj-btn prj-btn-success" style={{ fontSize: '12px', padding: '6px 14px' }}
+                          onClick={() => handleUpdatePaymentStatus(payment?.id || '', 'paid')} disabled={loading}>
                           סימון כשולם
                         </button>
                       )}
@@ -2281,41 +1990,24 @@ export default function BusinessProjectPage() {
         </div>
       )}
 
+      {/* ══════════ ACTIVITY TAB ══════════ */}
       {activeTab === 'activity' && (
         <div>
-          <div style={{ display: 'grid', gap: '12px' }}>
-            {/* Always show project creation as first event */}
-            <div
-              style={{
-                background: 'var(--surface-raised)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                padding: '16px',
-                display: 'flex',
-                gap: '16px',
-                alignItems: 'flex-start',
-              }}
-            >
-              <div
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
-                  background: 'rgba(0,181,254,0.12)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '16px',
-                  flexShrink: 0,
-                }}
-              >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {/* Project creation event */}
+            <div className="prj-timeline-item">
+              <div style={{
+                width: '36px', height: '36px', borderRadius: '10px',
+                background: 'rgba(99,102,241,0.12)', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0,
+              }}>
                 ⭐
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--foreground)', marginBottom: '4px' }}>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: '#e2e8f0', marginBottom: '4px' }}>
                   פרויקט נוצר
                 </div>
-                <div style={{ fontSize: '12px', color: 'var(--foreground-muted)' }}>
+                <div style={{ fontSize: '12px', color: '#475569' }}>
                   {new Date(project.createdAt).toLocaleDateString('he-IL', {
                     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
                   })}
@@ -2323,58 +2015,40 @@ export default function BusinessProjectPage() {
               </div>
             </div>
 
-            {/* Timeline events from DB */}
             {projectTimeline.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '16px', color: 'var(--foreground-muted)', fontSize: '14px' }}>
+              <div style={{ textAlign: 'center', padding: '32px', color: '#475569', fontSize: '14px' }}>
                 אין אירועי ציר זמן נוספים עדיין. אירועים ייווצרו אוטומטית כאשר תבוצע פעולה על אבני דרך.
               </div>
             )}
 
-            {projectTimeline.map((event: ProjectTimelineEvent) => {
-              const iconMap: Record<string, { icon: string; color: string }> = {
-                milestone_created: { icon: '📌', color: 'rgba(0,181,254,0.12)' },
-                milestone_status_changed: { icon: '🔄', color: 'rgba(245,158,11,0.12)' },
-                milestone_assigned: { icon: '👤', color: 'rgba(139,92,246,0.12)' },
-                milestone_completed: { icon: '✅', color: 'rgba(34,197,94,0.12)' },
-                file_uploaded: { icon: '📎', color: 'rgba(59,130,246,0.12)' },
-                payment_created: { icon: '💰', color: 'rgba(245,158,11,0.12)' },
-                project_created: { icon: '⭐', color: 'rgba(0,181,254,0.12)' },
+            {projectTimeline.map((event: ProjectTimelineEvent, idx: number) => {
+              const iconMap: Record<string, { icon: string; bg: string }> = {
+                milestone_created: { icon: '📌', bg: 'rgba(99,102,241,0.12)' },
+                milestone_status_changed: { icon: '🔄', bg: 'rgba(245,158,11,0.12)' },
+                milestone_assigned: { icon: '👤', bg: 'rgba(139,92,246,0.12)' },
+                milestone_completed: { icon: '✅', bg: 'rgba(34,197,94,0.12)' },
+                file_uploaded: { icon: '📎', bg: 'rgba(59,130,246,0.12)' },
+                payment_created: { icon: '💰', bg: 'rgba(245,158,11,0.12)' },
+                project_created: { icon: '⭐', bg: 'rgba(99,102,241,0.12)' },
               };
-              const { icon, color } = iconMap[event.actionType] || { icon: '📋', color: 'rgba(107,114,128,0.12)' };
+              const { icon, bg } = iconMap[event.actionType] || { icon: '📋', bg: 'rgba(100,116,139,0.12)' };
 
               return (
-                <div
-                  key={event.id}
-                  style={{
-                    background: 'var(--surface-raised)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '8px',
-                    padding: '16px',
-                    display: 'flex',
-                    gap: '16px',
-                    alignItems: 'flex-start',
-                  }}
+                <div key={event.id} className="prj-timeline-item"
+                  style={{ animationDelay: `${idx * 0.04}s` }}
                 >
-                  <div
-                    style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '50%',
-                      background: color,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '16px',
-                      flexShrink: 0,
-                    }}
-                  >
+                  <div style={{
+                    width: '36px', height: '36px', borderRadius: '10px',
+                    background: bg, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0,
+                  }}>
                     {icon}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '14px', fontWeight: '500', color: 'var(--foreground)', marginBottom: '4px' }}>
+                    <div style={{ fontSize: '14px', fontWeight: '500', color: '#cbd5e1', marginBottom: '4px' }}>
                       {event.description}
                     </div>
-                    <div style={{ fontSize: '12px', color: 'var(--foreground-muted)' }}>
+                    <div style={{ fontSize: '12px', color: '#475569' }}>
                       {new Date(event.createdAt).toLocaleDateString('he-IL', {
                         year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
                       })}
