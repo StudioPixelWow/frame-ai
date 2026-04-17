@@ -6,7 +6,8 @@
  * Expected schema:
  *   id, project_name, client_id, project_type, description,
  *   agreement_signed, project_status, start_date, end_date,
- *   assigned_manager_id, created_at, updated_at
+ *   assigned_manager_id, total_price, progress, contract_signed,
+ *   contract_signed_at, created_at, updated_at
  *
  * Unknown columns are auto-dropped and the request is retried, so partial
  * schemas still succeed. The id returned by POST is the id that the GET
@@ -17,6 +18,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 import { requireRole, getRequestRole, getRequestClientId, getRequestEmployeeId } from '@/lib/auth/api-guard';
 import { insertTimelineEvent } from '@/lib/timeline';
+import { ensureBusinessProjectColumns } from '@/lib/db/ensure-columns';
 
 const TABLE = 'business_projects';
 
@@ -91,6 +93,7 @@ function parseBadColumn(msg: string): string | null {
 }
 
 export async function GET(req: NextRequest) {
+  await ensureBusinessProjectColumns();
   try {
     const sb = getSupabase();
     const role = getRequestRole(req);
@@ -240,6 +243,7 @@ export async function POST(req: NextRequest) {
   const roleErr = requireRole(req, 'admin', 'employee');
   if (roleErr) return roleErr;
 
+  await ensureBusinessProjectColumns();
   try {
     const sb = getSupabase();
     let body: Record<string, unknown> = {};
@@ -279,7 +283,7 @@ export async function POST(req: NextRequest) {
       const code = (lastErr as any)?.code ?? null;
       const hint =
         code === '42P01'
-          ? `Run: CREATE TABLE IF NOT EXISTS ${TABLE} ( id TEXT PRIMARY KEY, project_name TEXT, client_id TEXT, project_type TEXT, description TEXT, agreement_signed BOOLEAN, project_status TEXT, start_date DATE, end_date DATE, assigned_manager_id TEXT, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ );`
+          ? `Run: CREATE TABLE IF NOT EXISTS ${TABLE} ( id TEXT PRIMARY KEY, project_name TEXT, client_id TEXT, project_type TEXT, description TEXT, agreement_signed BOOLEAN, project_status TEXT, start_date DATE, end_date DATE, assigned_manager_id TEXT, total_price NUMERIC DEFAULT 0, progress NUMERIC DEFAULT 0, contract_signed BOOLEAN DEFAULT false, contract_signed_at TIMESTAMPTZ, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ );`
           : null;
       console.error('[API] POST /api/data/business-projects insert error:', lastErr);
       return NextResponse.json({ error: lastErr?.message ?? 'Insert failed', code, hint }, { status: 500 });

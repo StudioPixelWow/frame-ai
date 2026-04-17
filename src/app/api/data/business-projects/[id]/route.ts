@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 import { requireRole, getRequestRole, getRequestClientId, getRequestEmployeeId } from '@/lib/auth/api-guard';
 import { insertTimelineEvent } from '@/lib/timeline';
+import { ensureBusinessProjectColumns } from '@/lib/db/ensure-columns';
 
 const TABLE = 'business_projects';
 
@@ -97,6 +98,7 @@ function parseBadColumn(msg: string): string | null {
 }
 
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  await ensureBusinessProjectColumns();
   try {
     const { id } = await context.params;
     const sb = getSupabase();
@@ -134,6 +136,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
   const roleErr = requireRole(req, 'admin', 'employee');
   if (roleErr) return roleErr;
 
+  await ensureBusinessProjectColumns();
   try {
     const { id } = await context.params;
     let body: Record<string, unknown> = {};
