@@ -436,7 +436,11 @@ export default function BusinessProjectPage() {
     .filter((p: ProjectPayment) => p?.status === 'paid')
     .reduce((sum: number, p: ProjectPayment) => sum + (p?.amount || 0), 0);
 
-  const totalAmount = (projectPayments || []).reduce((sum: number, p: ProjectPayment) => sum + (p?.amount || 0), 0);
+  // scheduledAmount = sum of ALL payment rows (regardless of status)
+  const scheduledAmount = (projectPayments || []).reduce((sum: number, p: ProjectPayment) => sum + (p?.amount || 0), 0);
+
+  // remainingToCollect = budget minus what's already scheduled
+  const remainingToCollect = (project?.budget || 0) - scheduledAmount;
 
   // NOTE: All handlers below use `function` declarations (not `const` arrows)
   // so they are hoisted and cannot cause TDZ "Cannot access before initialization" errors.
@@ -1386,17 +1390,17 @@ export default function BusinessProjectPage() {
                 </>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748b', fontSize: '13px' }}>שולם</span>
-                <span style={{ color: '#4ade80', fontWeight: '600', fontSize: '15px' }}>₪{paidAmount.toLocaleString('he-IL')}</span>
+                <span style={{ color: '#64748b', fontSize: '13px' }}>תשלומים מתוכננים</span>
+                <span style={{ color: '#e2e8f0', fontWeight: '600', fontSize: '15px' }}>₪{scheduledAmount.toLocaleString('he-IL')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748b', fontSize: '13px' }}>סה&quot;כ תשלומים</span>
-                <span style={{ color: '#e2e8f0', fontWeight: '600', fontSize: '15px' }}>₪{totalAmount.toLocaleString('he-IL')}</span>
+                <span style={{ color: '#64748b', fontSize: '13px' }}>שולם</span>
+                <span style={{ color: '#4ade80', fontWeight: '600', fontSize: '15px' }}>₪{paidAmount.toLocaleString('he-IL')}</span>
               </div>
               <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#64748b', fontSize: '13px' }}>נותר לגביה</span>
-                <span style={{ color: '#fbbf24', fontWeight: '600', fontSize: '15px' }}>₪{((project?.budget || totalAmount) - paidAmount).toLocaleString('he-IL')}</span>
+                <span style={{ color: '#fbbf24', fontWeight: '600', fontSize: '15px' }}>₪{remainingToCollect.toLocaleString('he-IL')}</span>
               </div>
             </div>
           </div>
@@ -2125,8 +2129,8 @@ export default function BusinessProjectPage() {
               </div>
             )}
             <div className="prj-card">
-              <h4 style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>סה&quot;כ תשלומים</h4>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: '#e2e8f0' }}>₪{totalAmount.toLocaleString('he-IL')}</div>
+              <h4 style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>תשלומים מתוכננים</h4>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: '#e2e8f0' }}>₪{scheduledAmount.toLocaleString('he-IL')}</div>
             </div>
             <div className="prj-card">
               <h4 style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>שולם</h4>
@@ -2134,7 +2138,7 @@ export default function BusinessProjectPage() {
             </div>
             <div className="prj-card">
               <h4 style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>נותר לגביה</h4>
-              <div style={{ fontSize: '24px', fontWeight: '700', color: '#fbbf24' }}>₪{((project?.budget || totalAmount) - paidAmount).toLocaleString('he-IL')}</div>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: '#fbbf24' }}>₪{remainingToCollect.toLocaleString('he-IL')}</div>
             </div>
           </div>
 
