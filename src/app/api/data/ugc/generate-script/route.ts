@@ -3,11 +3,14 @@
  *
  * Generates a Hebrew UGC video script using OpenAI, based on:
  *   - Creative prompt (free text)
+ *   - Script template (sales, brand, promo, launch, testimonial)
  *   - Structured inputs (brand, offer, audience, etc.)
  *   - Reference file content (extracted text from uploaded files)
  *   - Client knowledge & research context (auto-loaded from DB)
  *
- * Returns: { script: string }
+ * Modes:
+ *   - Single: Returns { script: string }
+ *   - Multi-version (multiVersion: true): Returns { versions: string[] } with 3 distinct scripts
  *
  * This route is used ONLY for script generation.
  * The generated script is then used in the HeyGen video generation flow
@@ -38,6 +41,8 @@ export async function POST(req: NextRequest) {
       // Client context
       clientId,
       clientName,
+      // Multi-version mode
+      multiVersion,
     } = body as {
       creativePrompt?: string;
       scriptTemplate?: string;
@@ -51,6 +56,7 @@ export async function POST(req: NextRequest) {
       referenceTexts?: string[];
       clientId?: string;
       clientName?: string;
+      multiVersion?: boolean;
     };
 
     // Validate — at least one meaningful input must exist
@@ -194,6 +200,74 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const baseUserParts = [...userParts];
+
+    // ── Multi-version mode: generate 3 distinct variations ──
+    if (multiVersion) {
+      console.log('[ugc/generate-script] Multi-version mode for client:', clientName || clientId || 'unknown');
+
+      const VERSION_ANGLES = [
+        {
+          label: 'רגשי / סיפורי',
+          instruction: 'כתוב גרסה רגשית וסיפורית. השתמש בשפה חמה, אנושית, שנוגעת ללב. פנה לרגש הצופה — תחושת שייכות, חלום, כאב, או שאיפה. התחל עם אמירה אישית או תובנה מפתיעה.',
+        },
+        {
+          label: 'מכירתי / ממוקד המרה',
+          instruction: 'כתוב גרסה מכירתית וממוקדת המרה. השתמש בשפה ישירה, בטוחה, עם דגש על תוצאה מוחשית ותועלת ברורה. כלול מספר, עובדה, או תוצאה מדידה. סיים עם CTA חד וברור.',
+        },
+        {
+          label: 'אותנטי / טבעי',
+          instruction: 'כתוב גרסה אותנטית וטבעית בסגנון UGC אמיתי. כתוב כמו מישהו שמדבר לחבר — שפה יומיומית, לא מלוטשת מדי. תן תחושה ספונטנית, כנה, ואמינה. הימנע משפה שיווקית מלאכותית.',
+        },
+      ];
+
+      const versionPromises = VERSION_ANGLES.map(({ label, instruction }) => {
+        const parts = [...baseUserParts];
+        parts.push(`--- זווית כתיבה לגרסה זו ---\nסגנון: ${label}\n${instruction}`);
+        parts.push('\nכתוב תסריט UGC בעברית על סמך כל המידע שלעיל. החזר רק את הטקסט שהאווטאר יגיד, ללא כותרות או הסברים.');
+        const prompt = parts.join('\n\n');
+
+        return generateWithAI(systemPrompt, prompt, {
+          temperature: 0.9,
+          maxTokens: 1000,
+        });
+      });
+
+      const results = await Promise.all(versionPromises);
+      const versions: string[] = [];
+
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        if (r.success && r.data) {
+          let text = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);
+          text = text.replace(/^["'`]+|["'`]+$/g, '').trim();
+          if (text && text.length >= 5) {
+            versions.push(text);
+          } else {
+            versions.push('');
+          }
+        } else {
+          console.error(`[ugc/generate-script] Version ${i + 1} failed:`, r.error);
+          versions.push('');
+        }
+      }
+
+      const validCount = versions.filter((v) => v.length > 0).length;
+      if (validCount === 0) {
+        return NextResponse.json(
+          { error: 'כל שלוש הגרסאות נכשלו. נסה שוב או הוסף פרטים נוספים.' },
+          { status: 500 }
+        );
+      }
+
+      console.log(`[ugc/generate-script] Multi-version done: ${validCount}/3 succeeded`);
+      return NextResponse.json({
+        versions,
+        labels: VERSION_ANGLES.map((v) => v.label),
+      });
+    }
+
+    // ── Single version mode ──
     userParts.push(
       '\nכתוב תסריט UGC בעברית על סמך כל המידע שלעיל. החזר רק את הטקסט שהאווטאר יגיד, ללא כותרות או הסברים.'
     );

@@ -145,6 +145,9 @@ function ClientDetailContent() {
   const [ugcReferenceTexts, setUgcReferenceTexts] = useState<string[]>([]);
   const [ugcScriptGenerating, setUgcScriptGenerating] = useState(false);
   const [ugcScriptReplaceConfirm, setUgcScriptReplaceConfirm] = useState(false);
+  const [ugcMultiVersions, setUgcMultiVersions] = useState<string[]>([]);
+  const [ugcMultiLabels, setUgcMultiLabels] = useState<string[]>([]);
+  const [ugcMultiGenerating, setUgcMultiGenerating] = useState(false);
   const ugcFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Hebrew voice filter — keep only Hebrew-tagged voices (or fallback common Hebrew voice IDs)
@@ -243,6 +246,9 @@ function ClientDetailContent() {
     setUgcReferenceTexts([]);
     setUgcScriptGenerating(false);
     setUgcScriptReplaceConfirm(false);
+    setUgcMultiVersions([]);
+    setUgcMultiLabels([]);
+    setUgcMultiGenerating(false);
 
     setUgcLoadingOptions(true);
     try {
@@ -389,6 +395,56 @@ function ClientDetailContent() {
     }
   }, [
     ugcScriptGenerating, ugcScript, ugcScriptTemplate,
+    ugcCreativePrompt, ugcBrandName, ugcMainOffer, ugcTargetAudience,
+    ugcKeyMessage, ugcCallToAction, ugcVisualStyle, ugcAdditionalInstructions,
+    ugcReferenceTexts, client, toast,
+  ]);
+
+  const handleGenerateMultiVersions = useCallback(async () => {
+    if (ugcMultiGenerating || ugcScriptGenerating) return;
+    setUgcMultiGenerating(true);
+    setUgcMultiVersions([]);
+    setUgcMultiLabels([]);
+
+    try {
+      const res = await fetch("/api/data/ugc/generate-script", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          creativePrompt: ugcCreativePrompt,
+          scriptTemplate: ugcScriptTemplate,
+          brandName: ugcBrandName,
+          mainOffer: ugcMainOffer,
+          targetAudience: ugcTargetAudience,
+          keyMessage: ugcKeyMessage,
+          callToAction: ugcCallToAction,
+          visualStyleNotes: ugcVisualStyle,
+          additionalInstructions: ugcAdditionalInstructions,
+          referenceTexts: ugcReferenceTexts,
+          clientId: client?.id || "",
+          clientName: client?.name || ugcBrandName || "",
+          multiVersion: true,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `שגיאה ${res.status}`);
+
+      if (data.versions && Array.isArray(data.versions)) {
+        setUgcMultiVersions(data.versions);
+        setUgcMultiLabels(data.labels || []);
+        toast("3 גרסאות תסריט נוצרו בהצלחה!", "success");
+      } else {
+        throw new Error("תשובה לא תקינה מהשרת");
+      }
+    } catch (err: any) {
+      console.error("[UGC] Multi-version generation error:", err);
+      toast(`שגיאה ביצירת גרסאות: ${err?.message}`, "error");
+    } finally {
+      setUgcMultiGenerating(false);
+    }
+  }, [
+    ugcMultiGenerating, ugcScriptGenerating, ugcScriptTemplate,
     ugcCreativePrompt, ugcBrandName, ugcMainOffer, ugcTargetAudience,
     ugcKeyMessage, ugcCallToAction, ugcVisualStyle, ugcAdditionalInstructions,
     ugcReferenceTexts, client, toast,
@@ -1511,23 +1567,42 @@ function ClientDetailContent() {
                 ───────────────────────────────────── */}
                 <section style={{ marginBottom: "1.75rem" }}>
                   {!ugcScriptReplaceConfirm ? (
-                    <button
-                      type="button"
-                      onClick={() => handleGenerateScript()}
-                      disabled={ugcScriptGenerating || ugcGenerating || (!ugcCreativePrompt.trim() && !ugcBrandName.trim() && !ugcMainOffer.trim() && !ugcTargetAudience.trim() && !ugcKeyMessage.trim() && ugcReferenceTexts.length === 0)}
-                      style={{
-                        width: "100%", padding: "0.75rem", fontSize: "0.9rem", fontWeight: 700,
-                        borderRadius: "0.5rem", border: "1px solid rgba(139,92,246,0.35)",
-                        background: ugcScriptGenerating
-                          ? "rgba(139,92,246,0.15)"
-                          : "linear-gradient(135deg, rgba(139,92,246,0.18) 0%, rgba(99,102,241,0.18) 100%)",
-                        color: "#c4b5fd", cursor: ugcScriptGenerating ? "wait" : "pointer",
-                        opacity: (ugcScriptGenerating || ugcGenerating || (!ugcCreativePrompt.trim() && !ugcBrandName.trim() && !ugcMainOffer.trim() && !ugcTargetAudience.trim() && !ugcKeyMessage.trim() && ugcReferenceTexts.length === 0)) ? 0.4 : 1,
-                        transition: "all 200ms", letterSpacing: "0.01em",
-                      }}
-                    >
-                      {ugcScriptGenerating ? "מייצר תסריט..." : "צור תסריט עם AI"}
-                    </button>
+                    <div style={{ display: "flex", gap: "0.625rem" }}>
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateScript()}
+                        disabled={ugcScriptGenerating || ugcMultiGenerating || ugcGenerating || (!ugcCreativePrompt.trim() && !ugcBrandName.trim() && !ugcMainOffer.trim() && !ugcTargetAudience.trim() && !ugcKeyMessage.trim() && ugcReferenceTexts.length === 0)}
+                        style={{
+                          flex: 1, padding: "0.75rem", fontSize: "0.9rem", fontWeight: 700,
+                          borderRadius: "0.5rem", border: "1px solid rgba(139,92,246,0.35)",
+                          background: ugcScriptGenerating
+                            ? "rgba(139,92,246,0.15)"
+                            : "linear-gradient(135deg, rgba(139,92,246,0.18) 0%, rgba(99,102,241,0.18) 100%)",
+                          color: "#c4b5fd", cursor: ugcScriptGenerating ? "wait" : "pointer",
+                          opacity: (ugcScriptGenerating || ugcMultiGenerating || ugcGenerating || (!ugcCreativePrompt.trim() && !ugcBrandName.trim() && !ugcMainOffer.trim() && !ugcTargetAudience.trim() && !ugcKeyMessage.trim() && ugcReferenceTexts.length === 0)) ? 0.4 : 1,
+                          transition: "all 200ms", letterSpacing: "0.01em",
+                        }}
+                      >
+                        {ugcScriptGenerating ? "מייצר תסריט..." : "צור תסריט עם AI"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleGenerateMultiVersions}
+                        disabled={ugcScriptGenerating || ugcMultiGenerating || ugcGenerating || (!ugcCreativePrompt.trim() && !ugcBrandName.trim() && !ugcMainOffer.trim() && !ugcTargetAudience.trim() && !ugcKeyMessage.trim() && ugcReferenceTexts.length === 0)}
+                        style={{
+                          flex: 1, padding: "0.75rem", fontSize: "0.9rem", fontWeight: 700,
+                          borderRadius: "0.5rem", border: "1px solid rgba(34,197,94,0.35)",
+                          background: ugcMultiGenerating
+                            ? "rgba(34,197,94,0.15)"
+                            : "linear-gradient(135deg, rgba(34,197,94,0.18) 0%, rgba(16,185,129,0.18) 100%)",
+                          color: "#86efac", cursor: ugcMultiGenerating ? "wait" : "pointer",
+                          opacity: (ugcScriptGenerating || ugcMultiGenerating || ugcGenerating || (!ugcCreativePrompt.trim() && !ugcBrandName.trim() && !ugcMainOffer.trim() && !ugcTargetAudience.trim() && !ugcKeyMessage.trim() && ugcReferenceTexts.length === 0)) ? 0.4 : 1,
+                          transition: "all 200ms", letterSpacing: "0.01em",
+                        }}
+                      >
+                        {ugcMultiGenerating ? "מייצר 3 גרסאות..." : "צור 3 גרסאות"}
+                      </button>
+                    </div>
                   ) : (
                     <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", justifyContent: "center", padding: "0.5rem", background: "rgba(139,92,246,0.06)", borderRadius: "0.5rem", border: "1px solid rgba(139,92,246,0.15)" }}>
                       <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.5)" }}>יש כבר טקסט בתסריט —</span>
@@ -1545,17 +1620,88 @@ function ClientDetailContent() {
                       </button>
                     </div>
                   )}
-                  {ugcScriptGenerating && (
+                  {(ugcScriptGenerating || ugcMultiGenerating) && (
                     <div style={{
                       marginTop: "0.625rem", padding: "0.5rem 0.75rem", borderRadius: "0.375rem",
                       background: "rgba(139,92,246,0.06)", color: "#a78bfa", fontSize: "0.8rem",
                       display: "flex", alignItems: "center", gap: "0.5rem",
                     }}>
                       <span style={{ display: "inline-block", width: 14, height: 14, borderRadius: "50%", border: "2px solid #a78bfa", borderTopColor: "transparent", animation: "ugcSpin 0.8s linear infinite" }} />
-                      מייצר תסריט בעברית על בסיס הבריף והשדות שמילאת...
+                      {ugcMultiGenerating ? "מייצר 3 גרסאות שונות בעברית..." : "מייצר תסריט בעברית על בסיס הבריף והשדות שמילאת..."}
                     </div>
                   )}
                 </section>
+
+                {/* ─────────────────────────────────────
+                   4.5. MULTI-VERSION RESULTS
+                ───────────────────────────────────── */}
+                {ugcMultiVersions.length > 0 && (
+                  <section style={{ marginBottom: "1.75rem" }}>
+                    <h3 style={{ fontSize: "0.8rem", fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.75rem" }}>
+                      בחר גרסה
+                    </h3>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                      {ugcMultiVersions.map((version, idx) => {
+                        if (!version) return null;
+                        const angleLabel = ugcMultiLabels[idx] || `גרסה ${idx + 1}`;
+                        const ANGLE_COLORS = ["#a78bfa", "#38bdf8", "#34d399"];
+                        const accentColor = ANGLE_COLORS[idx] || "#a78bfa";
+                        return (
+                          <div
+                            key={idx}
+                            style={{
+                              padding: "1rem 1.125rem",
+                              background: "rgba(255,255,255,0.03)",
+                              border: `1px solid rgba(255,255,255,0.08)`,
+                              borderRadius: "0.625rem",
+                              position: "relative",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.625rem" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                <span style={{
+                                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                  width: 22, height: 22, borderRadius: "50%",
+                                  background: accentColor, color: "#0f0f1a",
+                                  fontSize: "0.7rem", fontWeight: 800,
+                                }}>
+                                  {idx + 1}
+                                </span>
+                                <span style={{ fontSize: "0.8rem", fontWeight: 700, color: accentColor }}>
+                                  {angleLabel}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setUgcScript(version);
+                                  setUgcMultiVersions([]);
+                                  setUgcMultiLabels([]);
+                                  toast(`גרסה ${idx + 1} נבחרה — ניתן לערוך בשדה התסריט הסופי`, "success");
+                                }}
+                                style={{
+                                  padding: "0.375rem 0.875rem", fontSize: "0.75rem", fontWeight: 700,
+                                  borderRadius: "9999px", border: `1px solid ${accentColor}`,
+                                  background: `${accentColor}22`,
+                                  color: accentColor, cursor: "pointer",
+                                  transition: "all 150ms",
+                                }}
+                              >
+                                השתמש בגרסה זו
+                              </button>
+                            </div>
+                            <p style={{
+                              fontSize: "0.85rem", lineHeight: 1.7, color: "rgba(255,255,255,0.75)",
+                              margin: 0, whiteSpace: "pre-wrap", direction: "rtl",
+                            }}>
+                              {version}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
 
                 {/* Divider */}
                 <div style={{ height: 1, background: "rgba(255,255,255,0.06)", marginBottom: "1.75rem" }} />
