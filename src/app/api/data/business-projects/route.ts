@@ -238,33 +238,138 @@ async function seedMilestonesFromTemplates(
   };
 }
 
-/* ── Default payments via DB function ───────────────────────────────── */
+/* ── Default payments via DB function + direct-insert fallback ──────── */
+
+const PAYMENTS_TABLE = 'business_project_payments';
 
 /**
- * Call public.ensure_business_project_default_payments(project_id)
- * which idempotently creates deposit + final payments (50/50 split).
- * This replaces the old inline seedPayments() approach.
+ * Try to create default payments for a new project.
+ *
+ * Strategy:
+ *  1. Call public.ensure_business_project_default_payments(project_id) via RPC.
+ *  2. If the RPC fails for ANY reason (function missing, wrong params, etc.),
+ *     fall back to a direct INSERT of 2 rows.
+ *  3. Both paths are idempotent — they check for existing rows first.
  */
 async function ensureDefaultPayments(
   sb: ReturnType<typeof getSupabase>,
   projectId: string,
-): Promise<{ ok: boolean; error?: string }> {
-  console.log(`[ensureDefaultPayments] calling RPC for project=${projectId}`);
-  try {
-    const { error } = await sb.rpc('ensure_business_project_default_payments', {
-      project_id: projectId,
-    });
-    if (error) {
-      console.error(`[ensureDefaultPayments] ❌ RPC failed:`, error.message, error);
-      return { ok: false, error: error.message };
-    }
-    console.log(`[ensureDefaultPayments] ✅ RPC succeeded for project=${projectId}`);
-    return { ok: true };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error(`[ensureDefaultPayments] ❌ exception:`, msg);
-    return { ok: false, error: msg };
+  budget: number,
+  clientId: string | null,
+): Promise<{ ok: boolean; method: string; error?: string }> {
+  console.log(`[ensureDefaultPayments] project=${projectId} budget=${budget} client=${clientId}`);
+
+  // ── Guard: skip if no budget ──
+  if (!budget || budget <= 0) {
+    console.log(`[ensureDefaultPayments] ⏭️ budget=${budget}, skipping`);
+    return { ok: false, method: 'skipped', error: 'budget is 0 or missing' };
   }
+
+  // ── Attempt 1: DB function via RPC ──
+  try {
+    console.log(`[ensureDefaultPayments] attempting RPC ensure_business_project_default_payments...`);
+    const { data: rpcData, error: rpcError } = await sb.rpc(
+      'ensure_business_project_default_payments',
+      { project_id: projectId },
+    );
+    if (!rpcError) {
+      console.log(`[ensureDefaultPayments] ✅ RPC succeeded. data=${JSON.stringify(rpcData)}`);
+      return { ok: true, method: 'rpc' };
+    }
+    console.error(`[ensureDefaultPayments] ❌ RPC error: code=${(rpcError as any)?.code} message=${rpcError.message}`);
+    // Fall through to direct insert
+  } catch (e) {
+    console.error(`[ensureDefaultPayments] ❌ RPC exception:`, e instanceof Error ? e.message : e);
+    // Fall through to direct insert
+  }
+
+  // ── Attempt 2: Direct INSERT fallback ──
+  console.log(`[ensureDefaultPayments] falling back to direct INSERT...`);
+
+  // Dedup check
+  const { data: existing, error: dedupErr } = await sb
+    .from(PAYMENTS_TABLE)
+    .select('id')
+    .eq('business_project_id', projectId)
+    .limit(1);
+  if (dedupErr) {
+    console.error(`[ensureDefaultPayments] ❌ dedup query failed:`, dedupErr.message);
+    return { ok: false, method: 'direct-insert', error: `dedup query: ${dedupErr.message}` };
+  }
+  if (existing && existing.length > 0) {
+    console.log(`[ensureDefaultPayments] ⏭️ rows already exist for project=${projectId}`);
+    return { ok: true, method: 'already-exists' };
+  }
+
+  // Build rows — do NOT send id (UUID auto-gen)
+  const depositAmt = Math.round(budget * 50) / 100;
+  const finalAmt = Math.round(budget * 100 - depositAmt * 100) / 100;
+  const now = new Date().toISOString();
+
+  const rows = [
+    {
+      business_project_id: projectId,
+      client_id: clientId ?? '',
+      title: 'מקדמה (50%)',
+      description: 'מקדמה — 50% מתקציב הפרויקט',
+      amount: depositAmt,
+      payment_type: 'deposit',
+      is_due: true,
+      is_paid: false,
+      status: 'pending',
+      due_date: now.slice(0, 10),
+      created_at: now,
+      updated_at: now,
+    },
+    {
+      business_project_id: projectId,
+      client_id: clientId ?? '',
+      title: 'תשלום סופי (50%)',
+      description: 'תשלום סופי — 50% בהגשת הפרויקט',
+      amount: finalAmt,
+      payment_type: 'final',
+      is_due: false,
+      is_paid: false,
+      status: 'pending',
+      due_date: null,
+      created_at: now,
+      updated_at: now,
+    },
+  ];
+
+  console.log(`[ensureDefaultPayments] inserting deposit=₪${depositAmt} final=₪${finalAmt}`);
+
+  // Insert with retry — drop unknown columns on schema mismatch
+  let insertRows: Record<string, unknown>[] = rows;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const { data: ins, error: insErr } = await sb
+      .from(PAYMENTS_TABLE)
+      .insert(insertRows)
+      .select('id, business_project_id, amount, payment_type');
+
+    if (!insErr) {
+      console.log(`[ensureDefaultPayments] ✅ direct INSERT succeeded:`, JSON.stringify(ins));
+      return { ok: true, method: 'direct-insert' };
+    }
+
+    console.error(`[ensureDefaultPayments] INSERT attempt ${attempt + 1} error: code=${(insErr as any)?.code} msg=${insErr.message}`);
+
+    // Auto-drop unknown columns
+    const colMatch = insErr.message.match(
+      /column .*?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i,
+    );
+    const badCol = colMatch?.[1] || colMatch?.[2];
+    if (!badCol) {
+      return { ok: false, method: 'direct-insert', error: insErr.message };
+    }
+    console.warn(`[ensureDefaultPayments] dropping column "${badCol}" and retrying`);
+    insertRows = insertRows.map((r) => {
+      const { [badCol]: _, ...rest } = r;
+      return rest;
+    });
+  }
+
+  return { ok: false, method: 'direct-insert', error: 'exhausted retries' };
 }
 
 export async function POST(req: NextRequest) {
@@ -335,7 +440,10 @@ export async function POST(req: NextRequest) {
     const seed = await seedMilestonesFromTemplates(sb, id, svc, now);
 
     // Auto-create default payments via DB function (idempotent 50/50 split)
-    const paymentResult = await ensureDefaultPayments(sb, id);
+    const budgetVal = Number(verifyRow.budget) || 0;
+    const clientIdVal = (verifyRow.client_id as string) || null;
+    console.log(`[POST business-projects] calling ensureDefaultPayments: project=${id} budget=${budgetVal} client=${clientIdVal}`);
+    const paymentResult = await ensureDefaultPayments(sb, id, budgetVal, clientIdVal);
     if (paymentResult.ok) {
       insertTimelineEvent(id, 'payment_created', `תשלומים נוצרו אוטומטית: מקדמה 50% + תשלום סופי 50%`);
     }
