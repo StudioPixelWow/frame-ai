@@ -132,6 +132,7 @@ function ClientDetailContent() {
   const ugcAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // ── UGC Creative Input State ──
+  const [ugcScriptTemplate, setUgcScriptTemplate] = useState<string>("");
   const [ugcCreativePrompt, setUgcCreativePrompt] = useState("");
   const [ugcBrandName, setUgcBrandName] = useState("");
   const [ugcMainOffer, setUgcMainOffer] = useState("");
@@ -229,6 +230,7 @@ function ClientDetailContent() {
     setUgcProgress("");
     setUgcGenerating(false);
     // Reset creative inputs
+    setUgcScriptTemplate("");
     setUgcCreativePrompt("");
     setUgcBrandName(client?.name || "");
     setUgcMainOffer("");
@@ -351,6 +353,7 @@ function ClientDetailContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           creativePrompt: ugcCreativePrompt,
+          scriptTemplate: ugcScriptTemplate,
           brandName: ugcBrandName,
           mainOffer: ugcMainOffer,
           targetAudience: ugcTargetAudience,
@@ -385,7 +388,7 @@ function ClientDetailContent() {
       setUgcScriptGenerating(false);
     }
   }, [
-    ugcScriptGenerating, ugcScript,
+    ugcScriptGenerating, ugcScript, ugcScriptTemplate,
     ugcCreativePrompt, ugcBrandName, ugcMainOffer, ugcTargetAudience,
     ugcKeyMessage, ugcCallToAction, ugcVisualStyle, ugcAdditionalInstructions,
     ugcReferenceTexts, client, toast,
@@ -1333,6 +1336,58 @@ function ClientDetailContent() {
                   />
                   <p style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.3)", marginTop: "0.375rem" }}>
                     המקור העיקרי ליצירת התסריט. תאר בפירוט מה שאתה מחפש.
+                  </p>
+                </section>
+
+                {/* Divider */}
+                <div style={{ height: 1, background: "rgba(255,255,255,0.06)", marginBottom: "1.75rem" }} />
+
+                {/* ─────────────────────────────────────
+                   1.5. SCRIPT TEMPLATE SELECTOR
+                ───────────────────────────────────── */}
+                <section style={{ marginBottom: "1.75rem" }}>
+                  <h3 style={{ fontSize: "0.8rem", fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.75rem" }}>
+                    תבנית תסריט
+                  </h3>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                    {([
+                      { id: "sales", label: "מכירות / Direct Response", icon: "🎯" },
+                      { id: "brand", label: "מיתוג / תדמית", icon: "✨" },
+                      { id: "promo", label: "מבצע / הטבה", icon: "🔥" },
+                      { id: "launch", label: "השקה / מוצר חדש", icon: "🚀" },
+                      { id: "testimonial", label: "המלצה אישית / UGC", icon: "💬" },
+                    ] as const).map(({ id, label, icon }) => {
+                      const selected = ugcScriptTemplate === id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setUgcScriptTemplate(selected ? "" : id)}
+                          disabled={ugcGenerating || ugcScriptGenerating}
+                          style={{
+                            padding: "0.5rem 1rem",
+                            fontSize: "0.8rem",
+                            fontWeight: selected ? 700 : 500,
+                            borderRadius: "9999px",
+                            border: selected ? "1.5px solid #8b5cf6" : "1px solid rgba(255,255,255,0.1)",
+                            background: selected ? "rgba(139,92,246,0.18)" : "rgba(255,255,255,0.04)",
+                            color: selected ? "#c4b5fd" : "rgba(255,255,255,0.55)",
+                            cursor: (ugcGenerating || ugcScriptGenerating) ? "not-allowed" : "pointer",
+                            transition: "all 0.15s ease",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.375rem",
+                            boxShadow: selected ? "0 0 12px rgba(139,92,246,0.15)" : "none",
+                          }}
+                        >
+                          <span>{icon}</span>
+                          <span>{label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.3)", marginTop: "0.5rem" }}>
+                    בחר תבנית כדי לכוון את הטון, המבנה והסגנון של התסריט שייוצר.
                   </p>
                 </section>
 

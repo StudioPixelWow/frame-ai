@@ -23,6 +23,8 @@ export async function POST(req: NextRequest) {
     const {
       // Core creative prompt
       creativePrompt,
+      // Script template
+      scriptTemplate,
       // Structured inputs
       brandName,
       mainOffer,
@@ -38,6 +40,7 @@ export async function POST(req: NextRequest) {
       clientName,
     } = body as {
       creativePrompt?: string;
+      scriptTemplate?: string;
       brandName?: string;
       mainOffer?: string;
       targetAudience?: string;
@@ -77,8 +80,50 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── Template-specific instructions ──
+    const TEMPLATE_INSTRUCTIONS: Record<string, string> = {
+      sales: `סוג התסריט: מכירות / Direct Response
+- מבנה: התחל בהצגת בעיה או כאב ברור שקהל היעד חווה, ואז הצג את הפתרון (המוצר/שירות) כתשובה ישירה.
+- טון: משכנע, ישיר, בטוח — כמו חבר שממליץ אחרי שניסה בעצמו. לא אגרסיבי אבל ממוקד בתוצאה.
+- חובה: כלול לפחות יתרון מספרי אחד או תוצאה מדידה (למשל: "תוך שבוע", "חסכתי 50%").
+- סיום: קריאה לפעולה חדה ודחופה — מה בדיוק הצופה צריך לעשות עכשיו.
+- אורך: 5-7 משפטים. מהיר וממוקד.`,
+
+      brand: `סוג התסריט: מיתוג / תדמית
+- מבנה: פתח עם אמירה רגשית או תובנה על ערך המותג, בנה חיבור רגשי, סיים עם הצהרת מותג חזקה.
+- טון: חם, אמין, ומעורר השראה. לא מוכר ישירות — יוצר תחושת שייכות וערך.
+- חובה: שזור את שם המותג באופן טבעי, הדגש ערכים, חזון, או סיפור מותג (לא מחיר/מבצע).
+- סיום: אמירת חתימה שמותירה רושם — לא CTA מכירתי, אלא הצהרה שנשארת בראש.
+- אורך: 4-6 משפטים. מדוד ואיכותי.`,
+
+      promo: `סוג התסריט: מבצע / הטבה
+- מבנה: פתח ישר עם ההטבה (מבצע, הנחה, מתנה), הסבר למה זה שווה, צור דחיפות לפעולה מיידית.
+- טון: אנרגטי, נלהב אבל אמין. תחושת "אסור לפספס" — בלי להישמע שקרי.
+- חובה: הזכר את ההטבה הקונקרטית ואת המגבלות (זמן/כמות מוגבלים, תאריך סיום).
+- סיום: CTA ישיר ודחוף עם תחושת מיידיות חזקה — "עכשיו", "רק היום", "לפני שנגמר".
+- אורך: 4-6 משפטים. מהיר ומלהיב.`,
+
+      launch: `סוג התסריט: השקה / מוצר חדש
+- מבנה: בנה ציפייה עם teaser/שאלה, חשוף את המוצר החדש עם אנרגיה, הצג 2-3 יתרונות מרכזיים, סיים עם הזמנה לגלות עוד.
+- טון: מלהיב, חדשני, ומלא ציפייה — כמו מישהו שגילה משהו מדהים ורץ לספר.
+- חובה: השתמש במילים כמו "חדש", "סוף סוף", "לראשונה". הדגש מה ייחודי ושונה.
+- סיום: הזמנה נלהבת לגלות, להצטרף, או להיות מהראשונים — לא רק "קנו עכשיו".
+- אורך: 5-7 משפטים. בונה מומנטום.`,
+
+      testimonial: `סוג התסריט: המלצה אישית / UGC Testimonial
+- מבנה: פתח בהצגה עצמית קצרה ומצב ההתחלה (בעיה/צורך), ספר על הגילוי והחוויה עם המוצר, סיים בתוצאה אמיתית והמלצה.
+- טון: אותנטי, אישי, ספונטני — כמו סטורי של חבר/ה שמספר/ת. לא מלוטש מדי. בגוף ראשון ("אני").
+- חובה: כתוב בגוף ראשון יחיד. כלול פרט אישי אחד לפחות שיוצר אמינות. תאר תוצאה קונקרטית.
+- סיום: המלצה אישית חמה — "אני ממליצ/ה", "שווה לנסות" — ולא קריאה לפעולה שיווקית.
+- אורך: 5-8 משפטים. חם ואמיתי.`,
+    };
+
+    const templateInstruction = scriptTemplate && TEMPLATE_INSTRUCTIONS[scriptTemplate]
+      ? TEMPLATE_INSTRUCTIONS[scriptTemplate]
+      : '';
+
     // ── Build system prompt ──
-    const systemPrompt = `אתה קופירייטר ישראלי מומחה ליצירת תסריטים לסרטוני UGC (User Generated Content).
+    let systemPrompt = `אתה קופירייטר ישראלי מומחה ליצירת תסריטים לסרטוני UGC (User Generated Content).
 תפקידך לכתוב תסריט קצר, ממוקד ומשכנע לסרטון UGC בעברית.
 
 כללים:
@@ -92,6 +137,11 @@ export async function POST(req: NextRequest) {
 - אל תוסיף סימני פיסוק מיוחדים כמו [, ], *, #.
 - החזר רק את הטקסט הסופי שהאווטאר יגיד, ללא כותרת, הסבר, או מטא-דאטה.`;
 
+    // Append template-specific instructions to the system prompt
+    if (templateInstruction) {
+      systemPrompt += `\n\n--- הנחיות תבנית תסריט ---\n${templateInstruction}\n\nחשוב מאוד: עקוב אחרי הנחיות התבנית לעיל. המבנה, הטון, והסגנון של התסריט חייבים לשקף את סוג התסריט שנבחר.`;
+    }
+
     // ── Build user prompt ──
     const userParts: string[] = [];
 
@@ -103,6 +153,18 @@ export async function POST(req: NextRequest) {
     }
     if (creativePrompt && creativePrompt.trim()) {
       userParts.push(`--- פרומפט יצירתי ---\n${creativePrompt.trim()}`);
+    }
+
+    // Script template label in user prompt (reinforces the system-level instruction)
+    const TEMPLATE_LABELS: Record<string, string> = {
+      sales: 'מכירות / Direct Response — ממוקד המרה, משכנע, עם תוצאה מדידה ו-CTA דחוף',
+      brand: 'מיתוג / תדמית — רגשי, ערכי, בונה אמון וזהות מותג',
+      promo: 'מבצע / הטבה — אנרגטי, דחוף, מדגיש הטבה קונקרטית ומגבלת זמן',
+      launch: 'השקה / מוצר חדש — מלהיב, חדשני, בונה ציפייה',
+      testimonial: 'המלצה אישית / UGC Testimonial — אותנטי, גוף ראשון, ספונטני',
+    };
+    if (scriptTemplate && TEMPLATE_LABELS[scriptTemplate]) {
+      userParts.push(`--- תבנית תסריט שנבחרה ---\nסוג: ${TEMPLATE_LABELS[scriptTemplate]}\nכתוב את התסריט בהתאם לסוג התבנית הזו. הטון, המבנה והסגנון חייבים להתאים.`);
     }
 
     // Structured fields
