@@ -20,7 +20,7 @@ const PAYMENT_STATUS_INFO: Record<string, { label: string; color: string; bg: st
   pending: { label: "ממתין", color: "#b45309", bg: "#fef3c7", icon: "⏳" },
   msg_sent: { label: "הודעה נשלחה", color: "#0369a1", bg: "#f0f9ff", icon: "📧" },
   paid: { label: "שולם", color: "#065f46", bg: "#d1fae5", icon: "✅" },
-  overdue: { label: "逾期", color: "#991b1b", bg: "#fee2e2", icon: "⚠️" },
+  overdue: { label: "באיחור", color: "#991b1b", bg: "#fee2e2", icon: "⚠️" },
   write_off: { label: "ביטול", color: "#6b7280", bg: "#f3f4f6", icon: "❌" },
 };
 
@@ -90,7 +90,7 @@ export default function TabAccounting({ client }: TabAccountingProps) {
     : (client.nextPaymentDate || null);
   const computedPaymentStatus = client.retainerAmount > 0
     ? computePaymentStatus(client.retainerAmount, client.retainerDay, payments)
-    : (computedPaymentStatus || "none");
+    : (client.paymentStatus || "none");
   const daysUntilNextPayment = computedNextDate ? daysUntil(computedNextDate) : null;
 
   return (
@@ -111,7 +111,7 @@ export default function TabAccounting({ client }: TabAccountingProps) {
           <div style={{ fontSize: "1.25rem", lineHeight: 1 }}>⚠️</div>
           <div>
             <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "#991b1b", margin: "0 0 0.25rem 0" }}>
-              {overduePayments.length} תשלום{overduePayments.length > 1 ? "ים" : ""}逾期
+              {overduePayments.length} תשלום{overduePayments.length > 1 ? "ים" : ""} באיחור
             </h3>
             <p style={{ fontSize: "0.8rem", color: "#7f1d1d", margin: 0 }}>
               יש תשלומים שעברו את תאריך הגבייה. אנא פעל בהקדם.
@@ -204,7 +204,7 @@ export default function TabAccounting({ client }: TabAccountingProps) {
               {computedPaymentStatus === "current"
                 ? "✅ עדכני"
                 : computedPaymentStatus === "overdue"
-                  ? "⚠️逾期"
+                  ? "⚠️ באיחור"
                   : computedPaymentStatus === "pending"
                     ? "⏳ ממתין"
                     : "⭕ לא קבוע"}

@@ -419,6 +419,141 @@ export default function TabSocial({ client, employees }: TabSocialProps) {
         </div>
       </div>
 
+      {/* Social Feed Embeds */}
+      {(getLinkValue("instagramProfileUrl") || getLinkValue("facebookPageUrl") || getLinkValue("tiktokProfileUrl") || getLinkValue("websiteUrl")) && (
+        <div
+          style={{
+            background: "var(--surface-raised)",
+            border: "1px solid var(--border)",
+            borderRadius: "0.75rem",
+            padding: "1.5rem",
+          }}
+        >
+          <h3
+            style={{
+              fontSize: "0.95rem",
+              fontWeight: 600,
+              color: "var(--foreground)",
+              margin: "0 0 1.5rem 0",
+            }}
+          >
+            🖥️ תצוגה מקדימה של הפידים
+          </h3>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+              gap: "1.5rem",
+            }}
+          >
+            {/* Instagram Embed */}
+            {getLinkValue("instagramProfileUrl") && (() => {
+              const igUrl = getLinkValue("instagramProfileUrl");
+              const fullUrl = igUrl.startsWith("http") ? igUrl : `https://${igUrl}`;
+              // Extract username for embed
+              const usernameMatch = fullUrl.match(/instagram\.com\/([^/?#]+)/);
+              const username = usernameMatch ? usernameMatch[1] : null;
+              return username ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8rem", fontWeight: 600, color: "#E4405F" }}>
+                    📷 Instagram — @{username}
+                  </div>
+                  <div style={{ borderRadius: "0.5rem", overflow: "hidden", border: "1px solid var(--border)", background: "#fafafa" }}>
+                    <iframe
+                      src={`https://www.instagram.com/${username}/embed`}
+                      width="100%"
+                      height="480"
+                      style={{ border: "none" }}
+                      loading="lazy"
+                      title={`Instagram feed — ${username}`}
+                      sandbox="allow-scripts allow-same-origin allow-popups"
+                    />
+                  </div>
+                </div>
+              ) : null;
+            })()}
+
+            {/* Facebook Page Plugin */}
+            {getLinkValue("facebookPageUrl") && (() => {
+              const fbUrl = getLinkValue("facebookPageUrl");
+              const fullUrl = fbUrl.startsWith("http") ? fbUrl : `https://${fbUrl}`;
+              const encodedUrl = encodeURIComponent(fullUrl);
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8rem", fontWeight: 600, color: "#1877F2" }}>
+                    f Facebook
+                  </div>
+                  <div style={{ borderRadius: "0.5rem", overflow: "hidden", border: "1px solid var(--border)", background: "#fafafa" }}>
+                    <iframe
+                      src={`https://www.facebook.com/plugins/page.php?href=${encodedUrl}&tabs=timeline&width=340&height=500&small_header=true&adapt_container_width=true&hide_cover=false&show_facepile=false`}
+                      width="100%"
+                      height="500"
+                      style={{ border: "none", overflow: "hidden" }}
+                      loading="lazy"
+                      title="Facebook page feed"
+                      sandbox="allow-scripts allow-same-origin allow-popups"
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* TikTok Profile Embed */}
+            {getLinkValue("tiktokProfileUrl") && (() => {
+              const ttUrl = getLinkValue("tiktokProfileUrl");
+              const fullUrl = ttUrl.startsWith("http") ? ttUrl : `https://${ttUrl}`;
+              const usernameMatch = fullUrl.match(/tiktok\.com\/@?([^/?#]+)/);
+              const username = usernameMatch ? usernameMatch[1].replace(/^@/, '') : null;
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8rem", fontWeight: 600, color: "#000" }}>
+                    🎵 TikTok {username ? `— @${username}` : ""}
+                  </div>
+                  <div style={{ borderRadius: "0.5rem", overflow: "hidden", border: "1px solid var(--border)", background: "#fafafa" }}>
+                    <iframe
+                      src={`https://www.tiktok.com/embed/@${username || ""}`}
+                      width="100%"
+                      height="480"
+                      style={{ border: "none" }}
+                      loading="lazy"
+                      title={`TikTok profile — ${username || "unknown"}`}
+                      sandbox="allow-scripts allow-same-origin allow-popups"
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Website Preview */}
+            {getLinkValue("websiteUrl") && (() => {
+              const siteUrl = getLinkValue("websiteUrl");
+              const fullUrl = siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8rem", fontWeight: 600, color: "var(--foreground)" }}>
+                    🌐 אתר —{" "}
+                    <a href={fullUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none", fontSize: "0.75rem" }}>
+                      {siteUrl.replace(/^https?:\/\//, "")}
+                    </a>
+                  </div>
+                  <div style={{ borderRadius: "0.5rem", overflow: "hidden", border: "1px solid var(--border)", background: "#fafafa" }}>
+                    <iframe
+                      src={fullUrl}
+                      width="100%"
+                      height="480"
+                      style={{ border: "none" }}
+                      loading="lazy"
+                      title="Website preview"
+                      sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
       {/* Social Stats Overview */}
       <div
         style={{

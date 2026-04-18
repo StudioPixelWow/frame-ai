@@ -58,7 +58,7 @@ export default function HostingPage() {
       case "expiring_soon":
         return "עומד להסתיים"
       case "overdue":
-        return "逾期"
+        return "באיחור"
       case "cancelled":
         return "בוטל"
       default:

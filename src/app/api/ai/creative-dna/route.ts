@@ -163,7 +163,22 @@ export async function GET(req: NextRequest) {
 
     console.log(`[creative-dna] GET: Fetching DNA for clientId=${clientId}`);
 
-    const allDna = await creativeDNA.getAllAsync();
+    let allDna: CreativeDNAType[];
+    try {
+      allDna = await creativeDNA.getAllAsync();
+    } catch (dbError) {
+      // Table may not exist yet — treat as empty (not a 500)
+      const msg = dbError instanceof Error ? dbError.message : '';
+      if (msg.includes('does not exist') || msg.includes('relation')) {
+        console.warn(`[creative-dna] GET: Table not found, returning 404. Run /api/data/migrate-collections to create it.`);
+        return NextResponse.json(
+          { error: 'No CreativeDNA found for this client (table not initialized)' },
+          { status: 404 }
+        );
+      }
+      throw dbError; // re-throw unexpected errors
+    }
+
     const dna = allDna.find(d => d.clientId === clientId);
 
     if (!dna) {
@@ -205,8 +220,14 @@ export async function POST(req: NextRequest) {
     console.log(`[creative-dna] POST: Processing for client=${request.clientId}`);
 
     // Check if DNA already exists (async)
-    const allDna = await creativeDNA.getAllAsync();
-    const existing = allDna.find(d => d.clientId === request.clientId) || null;
+    let existing: CreativeDNAType | null = null;
+    try {
+      const allDna = await creativeDNA.getAllAsync();
+      existing = allDna.find(d => d.clientId === request.clientId) || null;
+    } catch (dbError) {
+      // Table may not exist yet — proceed with create (will auto-create table)
+      console.warn('[creative-dna] POST: getAllAsync failed (table may not exist), will attempt create:', dbError instanceof Error ? dbError.message : dbError);
+    }
 
     // Get API keys
     const apiKeys = getApiKeys();

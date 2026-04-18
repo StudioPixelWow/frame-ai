@@ -416,7 +416,7 @@ export default function ClientsPage() {
               >
                 <option value="all">כל סטטוסי התשלום</option>
                 <option value="current">עדכני</option>
-                <option value="overdue">逾期</option>
+                <option value="overdue">באיחור</option>
                 <option value="pending">בהמתנה</option>
               </select>
             </div>
@@ -669,7 +669,7 @@ export default function ClientsPage() {
                       {ganttIndicator.icon}
                     </div>
                     {client.paymentStatus === "overdue" && (
-                      <div title="תשלום逾期" style={{ fontSize: "1rem", color: "#ef4444" }}>
+                      <div title="תשלום באיחור" style={{ fontSize: "1rem", color: "#ef4444" }}>
                         ⚠️
                       </div>
                     )}
@@ -849,7 +849,7 @@ export default function ClientsPage() {
                       <td style={{ padding: "1rem", display: "flex", gap: "0.4rem" }}>
                         {client.portalEnabled && <span title="פורטל">🟢</span>}
                         {hasSocial && <span title="רשתות חברתיות">📱</span>}
-                        {client.paymentStatus === "overdue" && <span title="תשלום逾期">⚠️</span>}
+                        {client.paymentStatus === "overdue" && <span title="תשלום באיחור">⚠️</span>}
                       </td>
                       <td style={{ padding: "1rem", display: "flex", gap: "0.3rem" }}>
                         <Link href={`/clients/${client.id}`} style={{ textDecoration: "none" }}>
