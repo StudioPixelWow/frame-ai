@@ -29,6 +29,7 @@ const TABLES = [
   'app_podcast_sessions',
   'app_meetings',
   'app_follow_up_reminders',
+  'app_creative_dna',
 ];
 
 export async function GET() {

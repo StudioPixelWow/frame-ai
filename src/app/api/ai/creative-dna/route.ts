@@ -56,6 +56,26 @@ function generateFallbackDNA(clientId: string): Omit<CreativeDNAType, 'id'> {
 }
 
 // ============================================================================
+// HELPER: Save or update DNA (async, SupabaseCrud)
+// ============================================================================
+
+async function saveOrUpdateDNA(
+  clientId: string,
+  dnaData: Omit<CreativeDNAType, 'id'>,
+  existing: CreativeDNAType | null
+): Promise<CreativeDNAType> {
+  if (existing) {
+    console.log(`[creative-dna] Updating existing DNA ${existing.id}`);
+    const updated = await creativeDNA.updateAsync(existing.id, dnaData);
+    if (!updated) throw new Error('Failed to update creative DNA in Supabase');
+    return updated;
+  } else {
+    console.log('[creative-dna] Creating new DNA record');
+    return await creativeDNA.createAsync(dnaData);
+  }
+}
+
+// ============================================================================
 // BUILD AI PROMPTS
 // ============================================================================
 
@@ -143,7 +163,8 @@ export async function GET(req: NextRequest) {
 
     console.log(`[creative-dna] GET: Fetching DNA for clientId=${clientId}`);
 
-    const dna = creativeDNA.getAll().find(d => d.clientId === clientId);
+    const allDna = await creativeDNA.getAllAsync();
+    const dna = allDna.find(d => d.clientId === clientId);
 
     if (!dna) {
       console.log(`[creative-dna] GET: No DNA found for clientId=${clientId}`);
@@ -183,8 +204,9 @@ export async function POST(req: NextRequest) {
 
     console.log(`[creative-dna] POST: Processing for client=${request.clientId}`);
 
-    // Check if DNA already exists
-    const existing = creativeDNA.getAll().find(d => d.clientId === request.clientId);
+    // Check if DNA already exists (async)
+    const allDna = await creativeDNA.getAllAsync();
+    const existing = allDna.find(d => d.clientId === request.clientId) || null;
 
     // Get API keys
     const apiKeys = getApiKeys();
@@ -193,9 +215,7 @@ export async function POST(req: NextRequest) {
     if (!hasOpenAi) {
       console.log('[creative-dna] POST: No OpenAI key, using fallback generator');
       const fallbackData = generateFallbackDNA(request.clientId);
-      const dna = existing
-        ? creativeDNA.update(existing.id, fallbackData) as CreativeDNAType
-        : creativeDNA.create(fallbackData) as CreativeDNAType;
+      const dna = await saveOrUpdateDNA(request.clientId, fallbackData, existing);
       const latency = Date.now() - startTime;
 
       return NextResponse.json({
@@ -239,9 +259,7 @@ export async function POST(req: NextRequest) {
 
       // Fall back to deterministic generation
       const fallbackData = generateFallbackDNA(request.clientId);
-      const dna = existing
-        ? creativeDNA.update(existing.id, fallbackData) as CreativeDNAType
-        : creativeDNA.create(fallbackData) as CreativeDNAType;
+      const dna = await saveOrUpdateDNA(request.clientId, fallbackData, existing);
       const latency = Date.now() - startTime;
 
       return NextResponse.json({
@@ -257,9 +275,7 @@ export async function POST(req: NextRequest) {
     if (!content) {
       console.log('[creative-dna] POST: Empty OpenAI response');
       const fallbackData = generateFallbackDNA(request.clientId);
-      const dna = existing
-        ? creativeDNA.update(existing.id, fallbackData) as CreativeDNAType
-        : creativeDNA.create(fallbackData) as CreativeDNAType;
+      const dna = await saveOrUpdateDNA(request.clientId, fallbackData, existing);
       const latency = Date.now() - startTime;
 
       return NextResponse.json({
@@ -292,9 +308,7 @@ export async function POST(req: NextRequest) {
     } catch (parseError) {
       console.log('[creative-dna] POST: Failed to parse OpenAI response, using fallback');
       const fallbackData = generateFallbackDNA(request.clientId);
-      const dna = existing
-        ? creativeDNA.update(existing.id, fallbackData) as CreativeDNAType
-        : creativeDNA.create(fallbackData) as CreativeDNAType;
+      const dna = await saveOrUpdateDNA(request.clientId, fallbackData, existing);
       const latency = Date.now() - startTime;
 
       return NextResponse.json({
@@ -326,15 +340,8 @@ export async function POST(req: NextRequest) {
       updatedAt: now,
     };
 
-    // Save or update
-    let dna: CreativeDNAType;
-    if (existing) {
-      console.log(`[creative-dna] POST: Updating existing DNA ${existing.id}`);
-      dna = creativeDNA.update(existing.id, dnaData) as CreativeDNAType;
-    } else {
-      console.log('[creative-dna] POST: Creating new DNA record');
-      dna = creativeDNA.create(dnaData) as CreativeDNAType;
-    }
+    // Save or update (async — Supabase-durable)
+    const dna = await saveOrUpdateDNA(request.clientId, dnaData, existing);
 
     const latency = Date.now() - startTime;
     console.log(`[creative-dna] POST: Success (${latency}ms)`);
@@ -372,8 +379,9 @@ export async function PATCH(req: NextRequest) {
 
     console.log(`[creative-dna] PATCH: Processing for client=${request.clientId}`);
 
-    // Find existing DNA
-    const existing = creativeDNA.getAll().find(d => d.clientId === request.clientId);
+    // Find existing DNA (async)
+    const allDna = await creativeDNA.getAllAsync();
+    const existing = allDna.find(d => d.clientId === request.clientId);
 
     if (!existing) {
       console.log(`[creative-dna] PATCH: No DNA found for clientId=${request.clientId}`);
@@ -383,12 +391,19 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    // Merge updates
-    const updated = creativeDNA.update(existing.id, {
+    // Merge updates (async)
+    const updated = await creativeDNA.updateAsync(existing.id, {
       ...request.updates,
       generatedBy: 'manual',
       updatedAt: new Date().toISOString(),
-    }) as CreativeDNAType;
+    });
+
+    if (!updated) {
+      return NextResponse.json(
+        { error: 'Failed to update creative DNA in Supabase' },
+        { status: 500 }
+      );
+    }
 
     const latency = Date.now() - startTime;
     console.log(`[creative-dna] PATCH: Success (${latency}ms)`);

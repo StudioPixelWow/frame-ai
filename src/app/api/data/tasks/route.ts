@@ -49,6 +49,7 @@ function rowToTask(r: Row) {
     milestoneId: milestone,
     status: (r.status as string) ?? 'pending',
     description: (r.description as string) ?? '',
+    priority: (r.priority as string) ?? 'medium',
     dueDate: (r.due_date as string) ?? null,
     createdAt: (r.created_at as string) ?? '',
     updatedAt: (r.updated_at as string) ?? '',
@@ -57,14 +58,22 @@ function rowToTask(r: Row) {
 
 function toInsert(body: Record<string, unknown>, id: string, now: string): Record<string, unknown> {
   const title = (body.title ?? '') as string;
-  const assignee = nullIfEmpty(body.assigneeId ?? body.employeeId ?? body.assignedEmployeeId);
+  // Support both assigneeId (string) and assigneeIds (array) from frontend
+  let assignee = nullIfEmpty(body.assigneeId ?? body.employeeId ?? body.assignedEmployeeId);
+  if (!assignee && Array.isArray(body.assigneeIds) && body.assigneeIds.length > 0) {
+    assignee = nullIfEmpty(body.assigneeIds[0]);
+  }
   // business_project_id and project_id are SEPARATE FK columns.
   // businessProjectId → business_project_id (FK → public.business_projects)
   // projectId         → project_id          (FK → public.projects)
   const businessProject = nullIfEmpty(body.businessProjectId);
   const project = nullIfEmpty(body.projectId);
   const milestone = nullIfEmpty(body.milestoneId);
+  const clientId = nullIfEmpty(body.clientId);
   const status = (body.status ?? 'pending') as string;
+  const description = (body.description ?? '') as string;
+  const priority = nullIfEmpty(body.priority);
+  const dueDate = nullIfEmpty(body.dueDate);
 
   const row: Record<string, unknown> = {
     id,
@@ -72,12 +81,16 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
     assignee_id: assignee,
     milestone_id: milestone,
     status,
+    description,
     created_at: now,
     updated_at: now,
   };
-  // Only set the FK columns that are actually provided — avoids FK violations.
+  // Only set nullable FK/text columns when provided — avoids FK violations or unknown column errors
+  if (clientId) row.client_id = clientId;
   if (businessProject) row.business_project_id = businessProject;
   if (project) row.project_id = project;
+  if (priority) row.priority = priority;
+  if (dueDate) row.due_date = dueDate;
   return row;
 }
 

@@ -534,7 +534,7 @@ export async function POST(req: NextRequest) {
 
     // Gather context
     const knowledgeContext = await getClientKnowledgeContext(clientId);
-    const creativeDNARecord = creativeDNA.query((d) => d.clientId === clientId);
+    const creativeDNARecord = await creativeDNA.queryAsync((d) => d.clientId === clientId);
     const ganttItems = await clientGanttItems.queryAsync((g) => g.clientId === clientId);
 
     const recentTitles = ganttItems

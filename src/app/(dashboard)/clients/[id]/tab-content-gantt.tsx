@@ -1157,8 +1157,8 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                     padding: "1rem",
                     border: itemIsProtected ? `1px solid ${protectionBadge?.color || "#22c55e"}40` : "1px solid var(--border)",
                     borderRadius: "0.5rem",
-                    borderLeft: `4px solid ${ITEM_TYPE_CONFIG[item.itemType]?.color || "#6b7280"}`,
-                    background: editingItemId === item.id ? "var(--accent-muted)" : itemIsProtected ? `${protectionBadge?.color || "#22c55e"}08` : "transparent",
+                    borderLeft: `4px solid ${item.holidayTag ? "#f59e0b" : (ITEM_TYPE_CONFIG[item.itemType]?.color || "#6b7280")}`,
+                    background: editingItemId === item.id ? "var(--accent-muted)" : item.holidayTag ? "rgba(245, 158, 11, 0.06)" : itemIsProtected ? `${protectionBadge?.color || "#22c55e"}08` : "transparent",
                     position: "relative",
                   }}
                 >

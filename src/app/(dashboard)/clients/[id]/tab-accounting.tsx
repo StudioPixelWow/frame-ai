@@ -42,6 +42,37 @@ function daysUntil(dateStr: string | null): number | null {
   return Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+/** Compute the next retainer payment date from the billing day. */
+function computeNextPaymentDate(retainerDay: number): string | null {
+  if (!retainerDay || retainerDay < 1 || retainerDay > 28) return null;
+  const now = new Date();
+  const thisMonth = new Date(now.getFullYear(), now.getMonth(), retainerDay);
+  // If today is past the billing day this month, next is next month
+  if (now.getTime() > thisMonth.getTime()) {
+    const next = new Date(now.getFullYear(), now.getMonth() + 1, retainerDay);
+    return next.toISOString().split('T')[0];
+  }
+  return thisMonth.toISOString().split('T')[0];
+}
+
+/** Compute payment status from retainer and payment history. */
+function computePaymentStatus(
+  retainerAmount: number,
+  retainerDay: number,
+  payments: Payment[]
+): "current" | "overdue" | "pending" | "none" {
+  if (!retainerAmount || retainerAmount <= 0) return "none";
+  // Check if there's a pending/overdue retainer payment
+  const now = new Date();
+  const thisMonth = new Date(now.getFullYear(), now.getMonth(), retainerDay || 1);
+  const paidThisMonth = payments.some(
+    (p) => p.status === "paid" && p.paidAt && new Date(p.paidAt).getMonth() === now.getMonth() && new Date(p.paidAt).getFullYear() === now.getFullYear()
+  );
+  if (paidThisMonth) return "current";
+  if (now.getTime() > thisMonth.getTime()) return "overdue";
+  return "pending";
+}
+
 export default function TabAccounting({ client }: TabAccountingProps) {
   const { data: allPayments, loading } = usePayments();
   const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
@@ -52,8 +83,15 @@ export default function TabAccounting({ client }: TabAccountingProps) {
     .sort((a, b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime());
 
   const overduePayments = payments.filter((p) => p.status === "overdue");
-  const nextPaymentDate = client.nextPaymentDate ? new Date(client.nextPaymentDate) : null;
-  const daysUntilNextPayment = nextPaymentDate ? daysUntil(client.nextPaymentDate) : null;
+
+  // Compute next payment date and status from retainer fields
+  const computedNextDate = client.retainerAmount > 0
+    ? computeNextPaymentDate(client.retainerDay)
+    : (client.nextPaymentDate || null);
+  const computedPaymentStatus = client.retainerAmount > 0
+    ? computePaymentStatus(client.retainerAmount, client.retainerDay, payments)
+    : (computedPaymentStatus || "none");
+  const daysUntilNextPayment = computedNextDate ? daysUntil(computedNextDate) : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
@@ -124,7 +162,7 @@ export default function TabAccounting({ client }: TabAccountingProps) {
               התשלום הבא
             </div>
             <div style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.5rem" }}>
-              {client.nextPaymentDate ? formatDate(client.nextPaymentDate) : "לא נקבע"}
+              {computedNextDate ? formatDate(computedNextDate) : "לא נקבע"}
             </div>
             {daysUntilNextPayment !== null && daysUntilNextPayment > 0 && (
               <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)" }}>
@@ -143,19 +181,19 @@ export default function TabAccounting({ client }: TabAccountingProps) {
                 fontSize: "0.875rem",
                 padding: "0.5rem 0.75rem",
                 background:
-                  client.paymentStatus === "current"
+                  computedPaymentStatus === "current"
                     ? "#d1fae5"
-                    : client.paymentStatus === "overdue"
+                    : computedPaymentStatus === "overdue"
                       ? "#fee2e2"
-                      : client.paymentStatus === "pending"
+                      : computedPaymentStatus === "pending"
                         ? "#fef3c7"
                         : "#f3f4f6",
                 color:
-                  client.paymentStatus === "current"
+                  computedPaymentStatus === "current"
                     ? "#065f46"
-                    : client.paymentStatus === "overdue"
+                    : computedPaymentStatus === "overdue"
                       ? "#991b1b"
-                      : client.paymentStatus === "pending"
+                      : computedPaymentStatus === "pending"
                         ? "#b45309"
                         : "#6b7280",
                 borderRadius: "0.375rem",
@@ -163,11 +201,11 @@ export default function TabAccounting({ client }: TabAccountingProps) {
                 width: "fit-content",
               }}
             >
-              {client.paymentStatus === "current"
+              {computedPaymentStatus === "current"
                 ? "✅ עדכני"
-                : client.paymentStatus === "overdue"
+                : computedPaymentStatus === "overdue"
                   ? "⚠️逾期"
-                  : client.paymentStatus === "pending"
+                  : computedPaymentStatus === "pending"
                     ? "⏳ ממתין"
                     : "⭕ לא קבוע"}
             </div>
@@ -194,7 +232,7 @@ export default function TabAccounting({ client }: TabAccountingProps) {
                 תאריך חידוש
               </div>
               <div style={{ fontSize: "1rem", fontWeight: 600, color: "#1e293b" }}>
-                {client.nextPaymentDate ? formatDate(client.nextPaymentDate) : "לא נקבע"}
+                {computedNextDate ? formatDate(computedNextDate) : "לא נקבע"}
               </div>
             </div>
             <div>

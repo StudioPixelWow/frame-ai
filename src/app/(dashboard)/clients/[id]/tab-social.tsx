@@ -324,17 +324,15 @@ export default function TabSocial({ client, employees }: TabSocialProps) {
                     />
                   ) : currentValue ? (
                     <a
-                      href={currentValue}
+                      href={currentValue.startsWith("http") ? currentValue : `https://${currentValue}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       title={currentValue}
                       style={{
-                        fontSize: "0.75rem",
+                        fontSize: "0.8rem",
                         color: "var(--accent)",
                         textDecoration: "none",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
+                        wordBreak: "break-all",
                         cursor: "pointer",
                       }}
                     >

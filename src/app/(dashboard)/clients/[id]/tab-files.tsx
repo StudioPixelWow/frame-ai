@@ -106,13 +106,18 @@ function triggerDownload(url: string, fileName: string) {
 }
 
 export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
-  const { data: allFiles, loading } = useClientFiles();
+  const { data: allFiles, loading, create: createFileRecord, refetch: refetchFileRecords } = useClientFiles();
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [videoModalFile, setVideoModalFile] = useState<ClientFile | null>(null);
   const [imageModalFile, setImageModalFile] = useState<ClientFile | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadCategory, setUploadCategory] = useState<CategoryFilter>("general");
+  const [uploadNotes, setUploadNotes] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
 
   const files = (allFiles || [])
     .filter((f) => f.clientId === client.id)
@@ -679,31 +684,64 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
             {/* File Drop Zone */}
             <div
               style={{
-                border: "2px dashed var(--border)",
+                border: `2px dashed ${uploadFile ? "var(--accent)" : "var(--border)"}`,
                 borderRadius: "0.5rem",
                 padding: "2rem",
                 textAlign: "center",
                 marginBottom: "1.5rem",
                 cursor: "pointer",
                 transition: "all 150ms",
-                background: "var(--surface-raised)",
+                background: uploadFile ? "rgba(0, 181, 254, 0.08)" : "var(--surface-raised)",
               }}
+              onClick={() => fileInputRef.current?.click()}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = "var(--accent)";
                 e.currentTarget.style.background = "rgba(0, 181, 254, 0.05)";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = "var(--border)";
-                e.currentTarget.style.background = "var(--surface-raised)";
+                if (!uploadFile) {
+                  e.currentTarget.style.borderColor = "var(--border)";
+                  e.currentTarget.style.background = "var(--surface-raised)";
+                }
+              }}
+              onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = "var(--accent)"; }}
+              onDragLeave={(e) => { e.currentTarget.style.borderColor = uploadFile ? "var(--accent)" : "var(--border)"; }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const dropped = e.dataTransfer.files?.[0];
+                if (dropped) setUploadFile(dropped);
               }}
             >
-              <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>📁</div>
-              <div style={{ fontSize: "0.875rem", color: "var(--foreground)", marginBottom: "0.25rem" }}>
-                גרור קובץ או לחץ להעלאה
-              </div>
-              <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
-                עד 100MB
-              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const selected = e.target.files?.[0];
+                  if (selected) setUploadFile(selected);
+                }}
+              />
+              {uploadFile ? (
+                <>
+                  <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>✅</div>
+                  <div style={{ fontSize: "0.875rem", color: "var(--foreground)", marginBottom: "0.25rem" }}>
+                    {uploadFile.name}
+                  </div>
+                  <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
+                    {formatFileSize(uploadFile.size)} — לחץ לבחירת קובץ אחר
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>📁</div>
+                  <div style={{ fontSize: "0.875rem", color: "var(--foreground)", marginBottom: "0.25rem" }}>
+                    גרור קובץ או לחץ להעלאה
+                  </div>
+                  <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
+                    עד 100MB
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Category Selector */}
@@ -714,6 +752,8 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
               <select
                 className="form-select"
                 style={{ width: "100%", padding: "0.625rem", fontSize: "0.875rem" }}
+                value={uploadCategory}
+                onChange={(e) => setUploadCategory(e.target.value as CategoryFilter)}
               >
                 {CATEGORY_OPTIONS.filter((c) => c.id !== "all").map((cat) => (
                   <option key={cat.id} value={cat.id}>
@@ -731,6 +771,8 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
               <textarea
                 className="form-input"
                 placeholder="הוסף הערות על הקובץ..."
+                value={uploadNotes}
+                onChange={(e) => setUploadNotes(e.target.value)}
                 style={{ width: "100%", padding: "0.625rem", fontSize: "0.875rem", minHeight: "100px", resize: "vertical" }}
               />
             </div>
@@ -738,7 +780,13 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
             {/* Buttons */}
             <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
               <button
-                onClick={() => setShowUploadModal(false)}
+                onClick={() => {
+                  setShowUploadModal(false);
+                  setUploadFile(null);
+                  setUploadNotes("");
+                  setUploadCategory("general");
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
                 className="mod-btn-ghost"
                 style={{ padding: "0.625rem 1.125rem", fontSize: "0.875rem" }}
               >
@@ -746,9 +794,48 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
               </button>
               <button
                 className="mod-btn-primary"
-                style={{ padding: "0.625rem 1.125rem", fontSize: "0.875rem" }}
+                disabled={!uploadFile || isUploading}
+                style={{
+                  padding: "0.625rem 1.125rem",
+                  fontSize: "0.875rem",
+                  opacity: !uploadFile || isUploading ? 0.5 : 1,
+                  cursor: !uploadFile || isUploading ? "not-allowed" : "pointer",
+                }}
+                onClick={async () => {
+                  if (!uploadFile) return;
+                  setIsUploading(true);
+                  try {
+                    const ext = uploadFile.name.split('.').pop()?.toLowerCase() || '';
+                    const fileType = ['mp4','webm','mov','avi'].includes(ext) ? 'video'
+                      : ['png','jpg','jpeg','gif','webp','svg'].includes(ext) ? 'image'
+                      : ['pdf'].includes(ext) ? 'pdf'
+                      : ['doc','docx','xls','xlsx','pptx','txt'].includes(ext) ? 'document'
+                      : 'other';
+                    await createFileRecord({
+                      clientId: client.id,
+                      fileName: uploadFile.name,
+                      fileUrl: '',
+                      fileType,
+                      category: uploadCategory,
+                      description: uploadNotes,
+                      fileSize: uploadFile.size,
+                      createdAt: new Date().toISOString(),
+                      updatedAt: new Date().toISOString(),
+                    } as any);
+                    setUploadFile(null);
+                    setUploadNotes("");
+                    setUploadCategory("general");
+                    setShowUploadModal(false);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                    await refetchFileRecords();
+                  } catch (err) {
+                    console.error("Upload error:", err);
+                  } finally {
+                    setIsUploading(false);
+                  }
+                }}
               >
-                📤 העלה
+                {isUploading ? "⏳ מעלה..." : "📤 העלה"}
               </button>
             </div>
           </div>

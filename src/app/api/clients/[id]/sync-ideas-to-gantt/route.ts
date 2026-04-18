@@ -216,8 +216,13 @@ export async function POST(
 
         const itemDate = new Date(body.year, body.month - 1, holiday.approximateDay).toISOString().split('T')[0];
 
+        // Override title to include the holiday name prominently
+        const holidayCreative = {
+          ...creative,
+          title: `🎉 ${holiday.hebrewName} | ${creative.title}`,
+        };
         const ganttItem = createGanttItem(
-          id, creative, body.month, body.year, itemDate,
+          id, holidayCreative, body.month, body.year, itemDate,
           'holiday', holiday.hebrewName,
           holiday.hebrewName, 'social_post', creative.platform || 'instagram', (creative.format || 'image') as ContentFormat,
           client
@@ -244,12 +249,30 @@ export async function POST(
 
     console.log(`[SyncToGantt] Syncing ${body.ideas.length} ideas to gantt for ${client.name}, month: ${body.month}/${body.year}`);
 
+    // Dedup: fetch existing items for this client/month/year
+    const existingGanttItems = (await clientGanttItems.getAllAsync()).filter(
+      (item) => item.clientId === id && item.month === body.month && item.year === body.year
+    );
+
     const totalDays = daysInMonth(body.month, body.year);
     const daysBetween = Math.max(1, Math.floor(totalDays / body.ideas.length));
     const newItems: ClientGanttItem[] = [];
+    let skippedCount = 0;
 
     for (let i = 0; i < body.ideas.length; i++) {
       const idea = body.ideas[i];
+
+      // Dedup check: skip if item with same researchIdeaId or title already exists
+      const alreadyExists = existingGanttItems.some(
+        (item) =>
+          (idea.id && (item as any).researchIdeaId === idea.id) ||
+          (item.researchReason === idea.title && item.researchSource === 'research-selection')
+      );
+      if (alreadyExists) {
+        console.log(`[SyncToGantt] Idea "${idea.title}" already exists in gantt, skipping`);
+        skippedCount++;
+        continue;
+      }
       console.log(`[SyncToGantt] Generating creative ${i + 1}/${body.ideas.length}: "${idea.title}"`);
 
       const creative = await generateCreativeForIdea(
@@ -278,9 +301,10 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: `${newItems.length} רעיונות נוספו לגאנט ונבנה עבורם תוכן`,
+      message: `${newItems.length} רעיונות נוספו לגאנט ונבנה עבורם תוכן${skippedCount > 0 ? ` (${skippedCount} כפולים דולגו)` : ''}`,
       items: newItems,
       source: 'research-selection',
+      skipped: skippedCount,
     });
 
   } catch (error) {
