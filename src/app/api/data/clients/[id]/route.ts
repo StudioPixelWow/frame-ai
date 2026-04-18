@@ -75,8 +75,7 @@ function toDbUpdate(body: Record<string, unknown>): Record<string, unknown> {
   set('color', 'color');
   set('convertedFromLead', 'converted_from_lead');
   set('assignedManagerId', 'assigned_manager_id');
-  set('logoUrl', 'logo_url');
-  // Social & marketing fields intentionally omitted — schema cache issue
+  // logo_url, social & marketing fields intentionally omitted — schema cache issue
 
   out.updated_at = new Date().toISOString();
   return out;

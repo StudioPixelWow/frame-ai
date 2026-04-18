@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
       retainer_day:        body.retainerDay ?? 1,
       color:               body.color ?? '#00B5FE',
       converted_from_lead: body.convertedFromLead ?? null,
-      logo_url:            body.logoUrl ?? '',
+      // logo_url excluded — not in schema cache
       created_at:          now,
       updated_at:          now,
     };

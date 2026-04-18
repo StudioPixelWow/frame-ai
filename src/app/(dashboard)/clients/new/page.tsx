@@ -131,7 +131,6 @@ export default function NewClientPage() {
         contactPerson: form.contactPerson,
         email: form.email,
         phone: form.phone,
-        logoUrl: form.logoUrl,
         color: form.color,
         clientType: form.clientType,
         businessField: form.businessField,
