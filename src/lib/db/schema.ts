@@ -161,6 +161,22 @@ export interface CreativeDNA {
   updatedAt: string;
 }
 
+// Client Insight — persisted AI insight results per section
+export type InsightSection = 'client_brain' | 'brand_weakness' | 'customer_profile' | 'trend_engine' | 'competitor_insights' | 'creative_dna';
+export type InsightStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+export interface ClientInsight {
+  id: string;
+  clientId: string;
+  section: InsightSection;
+  payload: unknown; // section-specific data
+  status: InsightStatus;
+  error?: string;
+  generatedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Client Research — deep AI analysis of client business, competitors, opportunities
 export interface ClientResearch {
   id: string;

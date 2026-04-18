@@ -265,13 +265,23 @@ export const PERSISTENCE_MAP: PersistenceEntry[] = [
   // ═══════════════════════════════════════════════════════════════════════
   {
     module: 'client_knowledge',
-    description: 'AI client brain analysis cache',
+    description: 'AI client brain analysis — persistent',
     apiRoute: '/api/ai/client-brain',
-    storage: 'jsonstore',
-    table: 'client-knowledge.json',
+    storage: 'supabase',
+    table: 'app_client_knowledge',
     operations: ['select', 'insert', 'update'],
-    risk: 'low',
-    notes: 'Can be regenerated from AI. Loss means user must re-generate.',
+    risk: 'ok',
+    notes: 'Migrated from JsonStore to SupabaseCrud. Persists across deploys.',
+  },
+  {
+    module: 'client_insights',
+    description: 'Persisted AI insight sections (brand weakness, customer profile, etc.)',
+    apiRoute: '/api/ai/client-insights',
+    storage: 'supabase',
+    table: 'app_client_insights',
+    operations: ['select', 'insert', 'update'],
+    risk: 'ok',
+    notes: 'New. Uses SupabaseCrud JSONB pattern. Auto-generated when research exists.',
   },
   {
     module: 'creative_dna',

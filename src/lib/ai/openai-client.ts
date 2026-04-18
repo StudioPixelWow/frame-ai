@@ -23,7 +23,14 @@ async function getSettings() {
 
 export async function getClientKnowledgeContext(clientId: string): Promise<string> {
   await ensureSeeded();
-  const knowledge = clientKnowledge.getAll().find(k => k.clientId === clientId);
+  let knowledge: Awaited<ReturnType<typeof clientKnowledge.getAllAsync>>[number] | undefined;
+  try {
+    const allKnowledge = await clientKnowledge.getAllAsync();
+    knowledge = allKnowledge.find(k => k.clientId === clientId);
+  } catch {
+    // Table may not exist yet
+    return '';
+  }
   if (!knowledge) return '';
 
   const parts: string[] = [];

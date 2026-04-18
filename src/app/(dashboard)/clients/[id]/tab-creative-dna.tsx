@@ -18,28 +18,65 @@ export default function TabCreativeDNA({ client, employees }: TabCreativeDNAProp
   const [editForm, setEditForm] = useState<Partial<CreativeDNA>>({});
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
-  // Load existing DNA
+  // Load existing DNA — auto-generate if research exists but DNA doesn't
   useEffect(() => {
+    let cancelled = false;
+
     const fetchDNA = async () => {
       try {
         setLoading(true);
         const res = await fetch(`/api/ai/creative-dna?clientId=${client.id}`);
         if (res.ok) {
           const result = await res.json();
-          setDna(result.data);
+          if (!cancelled) setDna(result.data ?? null);
         } else {
-          setDna(null);
+          if (!cancelled) setDna(null);
+
+          // DNA doesn't exist — check if research exists, and if so auto-generate
+          try {
+            const researchRes = await fetch(`/api/ai/client-research?clientId=${client.id}`);
+            if (researchRes.ok && !cancelled) {
+              console.log(`[CreativeDNA] No DNA but research exists for ${client.id} — auto-generating`);
+              setIsGenerating(true);
+              const genRes = await fetch("/api/ai/creative-dna", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  clientId: client.id,
+                  clientData: {
+                    name: client.name,
+                    businessField: client.businessField,
+                    clientType: client.clientType,
+                    brandVoice: client.keyMarketingMessages,
+                    targetAudience: client.marketingGoals,
+                    keyMarketingMessages: client.keyMarketingMessages,
+                    platforms: ["facebook", "instagram", "tiktok"],
+                  },
+                }),
+              });
+              if (genRes.ok && !cancelled) {
+                const genResult = await genRes.json();
+                setDna(genResult.data ?? null);
+                console.log(`[CreativeDNA] Auto-generated DNA for ${client.id}`);
+              }
+              if (!cancelled) setIsGenerating(false);
+            }
+          } catch (autoErr) {
+            console.warn('[CreativeDNA] Auto-generation check failed:', autoErr);
+            if (!cancelled) setIsGenerating(false);
+          }
         }
       } catch (error) {
         console.error("Failed to fetch creative DNA:", error);
-        toast("שגיאה בטעינת DNA יצירתי", "error");
+        if (!cancelled) toast("שגיאה בטעינת DNA יצירתי", "error");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchDNA();
-  }, [client.id, toast]);
+    return () => { cancelled = true; };
+  }, [client.id, client.name, client.businessField, client.clientType, client.keyMarketingMessages, client.marketingGoals, toast]);
 
   // Generate or regenerate DNA
   const handleGenerateDNA = async () => {

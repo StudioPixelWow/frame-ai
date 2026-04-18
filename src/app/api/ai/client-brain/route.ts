@@ -207,7 +207,22 @@ export async function GET(req: NextRequest) {
 
     console.log(`[client-brain] GET: Fetching knowledge for clientId=${clientId}`);
 
-    const knowledge = clientKnowledge.getAll().find(k => k.clientId === clientId);
+    let allKnowledge: ClientKnowledgeType[];
+    try {
+      allKnowledge = await clientKnowledge.getAllAsync();
+    } catch (dbError) {
+      const msg = dbError instanceof Error ? dbError.message : '';
+      if (msg.includes('does not exist') || msg.includes('relation')) {
+        console.warn('[client-brain] GET: Table not found, returning 404. Run /api/data/migrate-collections.');
+        return NextResponse.json(
+          { error: 'No ClientKnowledge found (table not initialized)' },
+          { status: 404 }
+        );
+      }
+      throw dbError;
+    }
+
+    const knowledge = allKnowledge.find(k => k.clientId === clientId);
 
     if (!knowledge) {
       console.log(`[client-brain] GET: No knowledge found for clientId=${clientId}`);
@@ -259,8 +274,14 @@ export async function POST(req: NextRequest) {
 
     console.log(`[client-brain] POST: Processing for client=${request.clientId} (${request.clientName})`);
 
-    // Check if knowledge already exists
-    const existing = clientKnowledge.getAll().find(k => k.clientId === request.clientId);
+    // Check if knowledge already exists (async — Supabase)
+    let existing: ClientKnowledgeType | null = null;
+    try {
+      const allKnowledge = await clientKnowledge.getAllAsync();
+      existing = allKnowledge.find(k => k.clientId === request.clientId) || null;
+    } catch (dbError) {
+      console.warn('[client-brain] POST: getAllAsync failed (table may not exist), will attempt create:', dbError instanceof Error ? dbError.message : dbError);
+    }
 
     // Get API keys
     const apiKeys = getApiKeys();
@@ -269,7 +290,7 @@ export async function POST(req: NextRequest) {
     if (!hasOpenAi) {
       console.log('[client-brain] POST: No OpenAI key, using fallback generator');
       const fallbackData = generateFallbackProfile(request);
-      const knowledge = clientKnowledge.create(fallbackData);
+      const knowledge = await clientKnowledge.createAsync(fallbackData);
       const latency = Date.now() - startTime;
 
       return NextResponse.json({
@@ -313,7 +334,7 @@ export async function POST(req: NextRequest) {
 
       // Fall back to deterministic generation
       const fallbackData = generateFallbackProfile(request);
-      const knowledge = clientKnowledge.create(fallbackData);
+      const knowledge = await clientKnowledge.createAsync(fallbackData);
       const latency = Date.now() - startTime;
 
       return NextResponse.json({
@@ -329,7 +350,7 @@ export async function POST(req: NextRequest) {
     if (!content) {
       console.log('[client-brain] POST: Empty OpenAI response');
       const fallbackData = generateFallbackProfile(request);
-      const knowledge = clientKnowledge.create(fallbackData);
+      const knowledge = await clientKnowledge.createAsync(fallbackData);
       const latency = Date.now() - startTime;
 
       return NextResponse.json({
@@ -361,7 +382,7 @@ export async function POST(req: NextRequest) {
     } catch (parseError) {
       console.log('[client-brain] POST: Failed to parse OpenAI response, using fallback');
       const fallbackData = generateFallbackProfile(request);
-      const knowledge = clientKnowledge.create(fallbackData);
+      const knowledge = await clientKnowledge.createAsync(fallbackData);
       const latency = Date.now() - startTime;
 
       return NextResponse.json({
@@ -409,17 +430,19 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date().toISOString(),
     };
 
-    // Save or update
+    // Save or update (async — Supabase-durable)
     let knowledge: ClientKnowledgeType;
     if (existing) {
       console.log(`[client-brain] POST: Updating existing knowledge ${existing.id}`);
-      knowledge = clientKnowledge.update(existing.id, {
+      const updated = await clientKnowledge.updateAsync(existing.id, {
         ...knowledgeData,
         updatedAt: new Date().toISOString(),
-      }) as ClientKnowledgeType;
+      });
+      if (!updated) throw new Error('Failed to update client knowledge in Supabase');
+      knowledge = updated;
     } else {
       console.log('[client-brain] POST: Creating new knowledge record');
-      knowledge = clientKnowledge.create(knowledgeData) as ClientKnowledgeType;
+      knowledge = await clientKnowledge.createAsync(knowledgeData);
     }
 
     const latency = Date.now() - startTime;

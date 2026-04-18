@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { Client, Employee } from "@/lib/db/schema";
 
 interface TabInsightsProps {
@@ -12,42 +12,63 @@ interface TabInsightsProps {
 // ============================================================================
 
 interface ClientBrainData {
-  businessSummary: string;
-  toneOfVoice: string;
-  audienceProfile: string;
-  keySellingPoints: string[];
-  weaknesses: string[];
+  businessSummary?: string;
+  toneOfVoice?: string;
+  audienceProfile?: string;
+  keySellingPoints?: string[];
+  weaknesses?: Array<string | { description?: string }>;
 }
 
 interface BrandWeakness {
-  title: string;
-  description: string;
-  severity: "high" | "medium" | "low";
-  fixSuggestions: string[];
-  messagingImprovement: string;
+  title?: string;
+  area?: string;
+  description?: string;
+  severity?: "high" | "medium" | "low";
+  fixSuggestions?: string[];
+  messagingImprovement?: string;
 }
 
 interface CustomerSegment {
-  name: string;
-  ageRange: string;
-  interests: string[];
-  behaviors: string[];
-  painPoints: string[];
-  color: string;
+  name?: string;
+  ageRange?: string;
+  interests?: string[];
+  behaviors?: string[];
+  painPoints?: string[];
+  color?: string;
 }
 
 interface TrendSuggestion {
-  title: string;
-  relevanceScore: number;
-  urgency: "high" | "medium" | "low";
-  contentIdeas: string[];
+  title?: string;
+  trendName?: string;
+  relevanceScore?: number;
+  urgency?: "high" | "medium" | "low";
+  contentIdeas?: string[];
 }
 
 interface CompetitorInsight {
-  doMoreOf: string[];
-  avoid: string[];
-  opportunities: string[];
+  doMoreOf?: string[];
+  avoid?: string[];
+  opportunities?: string[];
 }
+
+// Safe array helper — never crashes on null/undefined
+function safeArray<T>(val: T[] | null | undefined): T[] {
+  return Array.isArray(val) ? val : [];
+}
+
+function safeString(val: unknown): string {
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object' && val !== null && 'description' in val) {
+    return (val as { description?: string }).description || '';
+  }
+  return String(val ?? '');
+}
+
+// ============================================================================
+// STATUS TYPES
+// ============================================================================
+
+type SectionStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 
 // ============================================================================
 // LOADING SKELETON & ERROR COMPONENTS
@@ -70,13 +91,7 @@ function LoadingSkeleton() {
         לומד את העסק שלך...
       </span>
       <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
     </div>
   );
@@ -151,50 +166,68 @@ function EmptyState({ message, actionLabel, onAction }: { message: string; actio
   );
 }
 
+const sectionStyle = {
+  padding: "2rem",
+  backgroundColor: "var(--surface-raised)",
+  border: "1px solid var(--border)",
+  borderRadius: "0.75rem",
+};
+
+// ============================================================================
+// HELPER: Persist insight to DB
+// ============================================================================
+
+async function saveInsight(clientId: string, section: string, payload: unknown) {
+  try {
+    await fetch('/api/ai/client-insights', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId, section, payload }),
+    });
+    console.log(`[Insights] Saved ${section} for ${clientId}`);
+  } catch (err) {
+    console.warn(`[Insights] Failed to save ${section}:`, err);
+  }
+}
+
 // ============================================================================
 // SECTION: CLIENT BRAIN
 // ============================================================================
 
-function ClientBrainSection({ client }: { client: Client }) {
+function ClientBrainSection({ client, persisted }: { client: Client; persisted?: unknown }) {
   const [data, setData] = useState<ClientBrainData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isEmpty, setIsEmpty] = useState(false);
+  const [status, setStatus] = useState<SectionStatus>('idle');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const fetchClientBrain = async () => {
-    setLoading(true);
-    setError(null);
-    setIsEmpty(false);
+  const fetchClientBrain = useCallback(async () => {
+    setStatus('loading');
+    setErrorMsg(null);
     try {
-      console.log(`[Insights] ClientBrain GET /api/ai/client-brain?clientId=${client.id}`);
+      console.log(`[Insights] ClientBrain GET for ${client.id}`);
       const response = await fetch(`/api/ai/client-brain?clientId=${client.id}`);
-      console.log(`[Insights] ClientBrain response: ${response.status}`);
       if (response.status === 404) {
-        // No data yet — not an error
-        setIsEmpty(true);
+        setStatus('empty');
         return;
       }
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        console.error('[Insights] ClientBrain server error:', body);
         throw new Error(body?.error || `Server error (${response.status})`);
       }
       const result = await response.json();
-      console.log('[Insights] ClientBrain data received:', Object.keys(result));
-      // API wraps in { success, data } or returns flat object
       const brainData = result?.data || result;
       setData(brainData);
+      setStatus('ready');
+      // Persist to insights store
+      saveInsight(client.id, 'client_brain', brainData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
+      setErrorMsg(err instanceof Error ? err.message : "Unknown error");
+      setStatus('error');
     }
-  };
+  }, [client.id]);
 
-  const handleGenerate = async () => {
-    setLoading(true);
-    setError(null);
-    setIsEmpty(false);
+  const handleGenerate = useCallback(async () => {
+    setStatus('loading');
+    setErrorMsg(null);
     try {
       console.log(`[Insights] ClientBrain POST generate for ${client.id}`);
       const response = await fetch("/api/ai/client-brain", {
@@ -206,53 +239,48 @@ function ClientBrainSection({ client }: { client: Client }) {
           businessField: client.businessField,
           businessType: client.clientType,
           industryType: client.businessField,
-          keyMarketingMessages: client.keyMarketingMessages || '',
-          marketingGoals: client.marketingGoals || '',
           websiteUrl: client.websiteUrl || '',
           facebookUrl: client.facebookPageUrl || '',
           instagramUrl: client.instagramProfileUrl || '',
         }),
       });
-      console.log(`[Insights] ClientBrain POST response: ${response.status}`);
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        console.error('[Insights] ClientBrain POST error:', body);
         throw new Error(body?.error || "Failed to generate");
       }
       const result = await response.json();
       const brainData = result?.data || result;
       setData(brainData);
+      setStatus('ready');
+      saveInsight(client.id, 'client_brain', brainData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
+      setErrorMsg(err instanceof Error ? err.message : "Unknown error");
+      setStatus('error');
     }
-  };
+  }, [client.id, client.name, client.businessField, client.clientType, client.websiteUrl, client.facebookPageUrl, client.instagramProfileUrl]);
 
   useEffect(() => {
+    // If persisted data exists, use it immediately
+    if (persisted && typeof persisted === 'object') {
+      setData(persisted as ClientBrainData);
+      setStatus('ready');
+      return;
+    }
     fetchClientBrain();
-  }, [client.id]);
+  }, [client.id, persisted, fetchClientBrain]);
 
-  const sectionStyle = {
-    padding: "2rem",
-    backgroundColor: "var(--surface-raised)",
-    border: "1px solid var(--border)",
-    borderRadius: "0.75rem",
-    background: "linear-gradient(135deg, var(--surface-raised) 0%, rgba(0, 181, 254, 0.03) 100%)",
-  };
-
-  if (error) {
+  if (status === 'error') {
     return (
       <div style={sectionStyle}>
         <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem", color: "var(--foreground)" }}>
           🧠 ניתוח עסקי AI
         </h3>
-        <ErrorState message={error} onRetry={fetchClientBrain} />
+        <ErrorState message={errorMsg || 'שגיאה בלתי צפויה'} onRetry={fetchClientBrain} />
       </div>
     );
   }
 
-  if (loading) {
+  if (status === 'loading' || status === 'idle') {
     return (
       <div style={sectionStyle}>
         <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem", color: "var(--foreground)" }}>
@@ -263,7 +291,7 @@ function ClientBrainSection({ client }: { client: Client }) {
     );
   }
 
-  if (isEmpty || !data) {
+  if (status === 'empty' || !data) {
     return (
       <div style={sectionStyle}>
         <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem", color: "var(--foreground)" }}>
@@ -275,46 +303,23 @@ function ClientBrainSection({ client }: { client: Client }) {
   }
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        backgroundColor: "var(--surface-raised)",
-        border: "1px solid var(--border)",
-        borderRadius: "0.75rem",
-        background: "linear-gradient(135deg, var(--surface-raised) 0%, rgba(0, 181, 254, 0.03) 100%)",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: "1.5rem",
-        }}
-      >
-        <h3
-          style={{
-            fontSize: "1.125rem",
-            fontWeight: 600,
-            color: "var(--foreground)",
-            margin: 0,
-          }}
-        >
+    <div style={{ ...sectionStyle, background: "linear-gradient(135deg, var(--surface-raised) 0%, rgba(0, 181, 254, 0.03) 100%)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
+        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--foreground)", margin: 0 }}>
           🧠 ניתוח עסקי AI
         </h3>
         <button
           onClick={handleGenerate}
-          disabled={loading}
+          disabled={status === 'loading'}
           style={{
             padding: "0.5rem 1rem",
             backgroundColor: "var(--accent)",
             color: "white",
             border: "none",
             borderRadius: "0.375rem",
-            cursor: loading ? "not-allowed" : "pointer",
+            cursor: "pointer",
             fontSize: "0.875rem",
             fontWeight: 500,
-            opacity: loading ? 0.6 : 1,
           }}
         >
           רענן ניתוח
@@ -322,167 +327,65 @@ function ClientBrainSection({ client }: { client: Client }) {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-        <div>
-          <h4
-            style={{
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              color: "var(--foreground-muted)",
-              marginBottom: "0.5rem",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-            }}
-          >
-            סיכום עסקי
-          </h4>
-          <p
-            style={{
-              fontSize: "0.9375rem",
-              color: "var(--foreground)",
-              margin: 0,
-              lineHeight: "1.5",
-            }}
-          >
-            {data.businessSummary}
-          </p>
-        </div>
-
-        <div>
-          <h4
-            style={{
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              color: "var(--foreground-muted)",
-              marginBottom: "0.5rem",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-            }}
-          >
-            טון קול
-          </h4>
-          <p
-            style={{
-              fontSize: "0.9375rem",
-              color: "var(--foreground)",
-              margin: 0,
-            }}
-          >
-            {data.toneOfVoice}
-          </p>
-        </div>
-
-        <div>
-          <h4
-            style={{
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              color: "var(--foreground-muted)",
-              marginBottom: "0.5rem",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-            }}
-          >
-            פרופיל קהל
-          </h4>
-          <p
-            style={{
-              fontSize: "0.9375rem",
-              color: "var(--foreground)",
-              margin: 0,
-            }}
-          >
-            {data.audienceProfile}
-          </p>
-        </div>
-
-        <div>
-          <h4
-            style={{
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              color: "var(--foreground-muted)",
-              marginBottom: "0.75rem",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-            }}
-          >
-            נקודות מכירה עיקריות
-          </h4>
-          <ul
-            style={{
-              listStyle: "none",
-              padding: 0,
-              margin: 0,
-              display: "flex",
-              flexDirection: "column",
-              gap: "0.5rem",
-            }}
-          >
-            {data.keySellingPoints.map((point, idx) => (
-              <li
-                key={idx}
-                style={{
-                  fontSize: "0.9375rem",
-                  color: "var(--foreground)",
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "0.75rem",
-                }}
-              >
-                <span
-                  style={{
-                    display: "inline-block",
-                    width: "0.375rem",
-                    height: "0.375rem",
-                    backgroundColor: "var(--accent)",
-                    borderRadius: "50%",
-                    marginTop: "0.4rem",
-                    flexShrink: 0,
-                  }}
-                />
-                {point}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {data.weaknesses && data.weaknesses.length > 0 && (
+        {data.businessSummary && (
           <div>
-            <h4
-              style={{
-                fontSize: "0.875rem",
-                fontWeight: 600,
-                color: "var(--foreground-muted)",
-                marginBottom: "0.75rem",
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-              }}
-            >
+            <h4 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              סיכום עסקי
+            </h4>
+            <p style={{ fontSize: "0.9375rem", color: "var(--foreground)", margin: 0, lineHeight: "1.5" }}>
+              {data.businessSummary}
+            </p>
+          </div>
+        )}
+
+        {data.toneOfVoice && (
+          <div>
+            <h4 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              טון קול
+            </h4>
+            <p style={{ fontSize: "0.9375rem", color: "var(--foreground)", margin: 0 }}>
+              {data.toneOfVoice}
+            </p>
+          </div>
+        )}
+
+        {data.audienceProfile && (
+          <div>
+            <h4 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              פרופיל קהל
+            </h4>
+            <p style={{ fontSize: "0.9375rem", color: "var(--foreground)", margin: 0 }}>
+              {data.audienceProfile}
+            </p>
+          </div>
+        )}
+
+        {safeArray(data.keySellingPoints).length > 0 && (
+          <div>
+            <h4 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              נקודות מכירה עיקריות
+            </h4>
+            <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              {safeArray(data.keySellingPoints).map((point, idx) => (
+                <li key={idx} style={{ fontSize: "0.9375rem", color: "var(--foreground)", display: "flex", alignItems: "flex-start", gap: "0.75rem" }}>
+                  <span style={{ display: "inline-block", width: "0.375rem", height: "0.375rem", backgroundColor: "var(--accent)", borderRadius: "50%", marginTop: "0.4rem", flexShrink: 0 }} />
+                  {safeString(point)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {safeArray(data.weaknesses).length > 0 && (
+          <div>
+            <h4 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               אתגרים
             </h4>
-            <ul
-              style={{
-                listStyle: "none",
-                padding: 0,
-                margin: 0,
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.5rem",
-              }}
-            >
-              {data.weaknesses.map((weakness, idx) => (
-                <li
-                  key={idx}
-                  style={{
-                    fontSize: "0.9375rem",
-                    color: "#ef4444",
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: "0.75rem",
-                  }}
-                >
+            <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              {safeArray(data.weaknesses).map((weakness, idx) => (
+                <li key={idx} style={{ fontSize: "0.9375rem", color: "#ef4444", display: "flex", alignItems: "flex-start", gap: "0.75rem" }}>
                   <span style={{ marginTop: "0.2rem" }}>⚠️</span>
-                  {weakness}
+                  {safeString(weakness)}
                 </li>
               ))}
             </ul>
@@ -497,16 +400,15 @@ function ClientBrainSection({ client }: { client: Client }) {
 // SECTION: BRAND WEAKNESSES
 // ============================================================================
 
-function BrandWeaknessSection({ client }: { client: Client }) {
+function BrandWeaknessSection({ client, persisted, autoGenerate }: { client: Client; persisted?: unknown; autoGenerate?: boolean }) {
   const [weaknesses, setWeaknesses] = useState<BrandWeakness[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<SectionStatus>('idle');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
-  const [generated, setGenerated] = useState(false);
 
-  const fetchWeaknesses = async () => {
-    setLoading(true);
-    setError(null);
+  const fetchWeaknesses = useCallback(async () => {
+    setStatus('loading');
+    setErrorMsg(null);
     try {
       console.log(`[Insights] BrandWeakness POST for ${client.id}`);
       const response = await fetch("/api/ai/brand-weakness", {
@@ -520,259 +422,134 @@ function BrandWeaknessSection({ client }: { client: Client }) {
           keyMarketingMessages: client.keyMarketingMessages || '',
         }),
       });
-      console.log(`[Insights] BrandWeakness response: ${response.status}`);
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        console.error('[Insights] BrandWeakness error:', body);
         throw new Error(body?.error || `Server error (${response.status})`);
       }
       const result = await response.json();
-      console.log('[Insights] BrandWeakness data received');
-      setWeaknesses(Array.isArray(result) ? result : result.weaknesses || []);
-      setGenerated(true);
+      const items = Array.isArray(result) ? result : safeArray(result?.weaknesses);
+      setWeaknesses(items);
+      setStatus(items.length > 0 ? 'ready' : 'empty');
+      saveInsight(client.id, 'brand_weakness', items);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
+      setErrorMsg(err instanceof Error ? err.message : "Unknown error");
+      setStatus('error');
     }
-  };
+  }, [client.id, client.name, client.businessField, client.clientType, client.keyMarketingMessages]);
+
+  useEffect(() => {
+    if (persisted && Array.isArray(persisted) && persisted.length > 0) {
+      setWeaknesses(persisted as BrandWeakness[]);
+      setStatus('ready');
+      return;
+    }
+    // Auto-generate if research exists and no persisted data
+    if (autoGenerate && status === 'idle') {
+      console.log('[Insights] Auto-generating brand weakness (research exists)');
+      fetchWeaknesses();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persisted, autoGenerate]);
 
   const toggleExpand = (idx: number) => {
-    const newExpanded = new Set(expanded);
-    if (newExpanded.has(idx)) {
-      newExpanded.delete(idx);
-    } else {
-      newExpanded.add(idx);
-    }
-    setExpanded(newExpanded);
+    const n = new Set(expanded);
+    n.has(idx) ? n.delete(idx) : n.add(idx);
+    setExpanded(n);
   };
 
-  const getSeverityColor = (severity: string) => {
+  const getSeverityColor = (severity?: string) => {
     switch (severity) {
-      case "high":
-        return { bg: "rgba(239, 68, 68, 0.1)", border: "#ef4444", label: "חמור" };
-      case "medium":
-        return { bg: "rgba(245, 158, 11, 0.1)", border: "#f59e0b", label: "בינוני" };
-      case "low":
-        return { bg: "rgba(34, 197, 94, 0.1)", border: "#22c55e", label: "נמוך" };
-      default:
-        return { bg: "rgba(107, 114, 128, 0.1)", border: "#6b7280", label: "לא ידוע" };
+      case "high": return { bg: "rgba(239, 68, 68, 0.1)", border: "#ef4444", label: "חמור" };
+      case "medium": return { bg: "rgba(245, 158, 11, 0.1)", border: "#f59e0b", label: "בינוני" };
+      case "low": return { bg: "rgba(34, 197, 94, 0.1)", border: "#22c55e", label: "נמוך" };
+      default: return { bg: "rgba(107, 114, 128, 0.1)", border: "#6b7280", label: "לא ידוע" };
     }
   };
 
-  if (error) {
-    return (
-      <div
-        style={{
-          padding: "2rem",
-          backgroundColor: "var(--surface-raised)",
-          border: "1px solid var(--border)",
-          borderRadius: "0.75rem",
-        }}
-      >
-        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>
-          🔍 חוזקות ותחומי הגדלה
-        </h3>
-        <ErrorState message={error} onRetry={fetchWeaknesses} />
-      </div>
-    );
+  if (status === 'error') {
+    return (<div style={sectionStyle}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔍 חוזקות ותחומי הגדלה</h3>
+      <ErrorState message={errorMsg || 'שגיאה'} onRetry={fetchWeaknesses} />
+    </div>);
   }
-
-  if (loading) {
-    return (
-      <div
-        style={{
-          padding: "2rem",
-          backgroundColor: "var(--surface-raised)",
-          border: "1px solid var(--border)",
-          borderRadius: "0.75rem",
-        }}
-      >
-        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>
-          🔍 חוזקות ותחומי הגדלה
-        </h3>
-        <LoadingSkeleton />
-      </div>
-    );
+  if (status === 'loading') {
+    return (<div style={sectionStyle}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔍 חוזקות ותחומי הגדלה</h3>
+      <LoadingSkeleton />
+    </div>);
   }
-
-  if (!generated && weaknesses.length === 0) {
-    return (
-      <div
-        style={{
-          padding: "2rem",
-          backgroundColor: "var(--surface-raised)",
-          border: "1px solid var(--border)",
-          borderRadius: "0.75rem",
-        }}
-      >
-        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>
-          🔍 חוזקות ותחומי הגדלה
-        </h3>
-        <EmptyState message="עדיין לא נוצר ניתוח חוזקות וחולשות." actionLabel="צור ניתוח" onAction={fetchWeaknesses} />
-      </div>
-    );
+  if ((status === 'idle' || status === 'empty') && weaknesses.length === 0) {
+    return (<div style={sectionStyle}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔍 חוזקות ותחומי הגדלה</h3>
+      <EmptyState message="עדיין לא נוצר ניתוח חוזקות וחולשות." actionLabel="צור ניתוח" onAction={fetchWeaknesses} />
+    </div>);
   }
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        backgroundColor: "var(--surface-raised)",
-        border: "1px solid var(--border)",
-        borderRadius: "0.75rem",
-      }}
-    >
-      <h3
-        style={{
-          fontSize: "1.125rem",
-          fontWeight: 600,
-          marginBottom: "1.5rem",
-          color: "var(--foreground)",
-        }}
-      >
-        🔍 חוזקות ותחומי הגדלה
-      </h3>
-
-      {weaknesses.length === 0 ? (
-        <p style={{ color: "var(--foreground-muted)", textAlign: "center" }}>
-          אין נתונים זמינים כרגע
-        </p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          {weaknesses.map((weakness, idx) => {
-            const severity = getSeverityColor(weakness.severity);
-            const isExpanded = expanded.has(idx);
-            return (
-              <div
-                key={idx}
-                style={{
-                  padding: "1.25rem",
-                  backgroundColor: severity.bg,
-                  border: `1px solid ${severity.border}`,
-                  borderRadius: "0.5rem",
-                  cursor: "pointer",
-                }}
-                onClick={() => toggleExpand(idx)}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <div>
-                    <h4
-                      style={{
-                        fontSize: "0.9375rem",
-                        fontWeight: 600,
-                        color: "var(--foreground)",
-                        margin: "0 0 0.5rem 0",
-                      }}
-                    >
-                      {weakness.title}
-                    </h4>
-                    <span
-                      style={{
-                        display: "inline-block",
-                        padding: "0.25rem 0.75rem",
-                        backgroundColor: severity.border,
-                        color: "white",
-                        borderRadius: "0.25rem",
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {severity.label}
-                    </span>
-                  </div>
-                  <span style={{ fontSize: "1.25rem" }}>
-                    {isExpanded ? "▼" : "▶"}
+    <div style={sectionStyle}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
+        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--foreground)", margin: 0 }}>🔍 חוזקות ותחומי הגדלה</h3>
+        <button onClick={fetchWeaknesses} style={{ padding: "0.5rem 1rem", backgroundColor: "var(--accent)", color: "white", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: 500 }}>
+          רענן
+        </button>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        {weaknesses.map((weakness, idx) => {
+          const severity = getSeverityColor(weakness?.severity);
+          const isExpanded = expanded.has(idx);
+          const title = weakness?.title || weakness?.area || `נקודה ${idx + 1}`;
+          const suggestions = safeArray(weakness?.fixSuggestions);
+          return (
+            <div
+              key={idx}
+              style={{ padding: "1.25rem", backgroundColor: severity.bg, border: `1px solid ${severity.border}`, borderRadius: "0.5rem", cursor: "pointer" }}
+              onClick={() => toggleExpand(idx)}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <h4 style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", margin: "0 0 0.5rem 0" }}>
+                    {title}
+                  </h4>
+                  <span style={{ display: "inline-block", padding: "0.25rem 0.75rem", backgroundColor: severity.border, color: "white", borderRadius: "0.25rem", fontSize: "0.75rem", fontWeight: 600 }}>
+                    {severity.label}
                   </span>
                 </div>
-
-                {isExpanded && (
-                  <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: `1px solid ${severity.border}` }}>
-                    <p
-                      style={{
-                        fontSize: "0.875rem",
-                        color: "var(--foreground)",
-                        margin: "0 0 1rem 0",
-                      }}
-                    >
+                <span style={{ fontSize: "1.25rem" }}>{isExpanded ? "▼" : "▶"}</span>
+              </div>
+              {isExpanded && (
+                <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: `1px solid ${severity.border}` }}>
+                  {weakness?.description && (
+                    <p style={{ fontSize: "0.875rem", color: "var(--foreground)", margin: "0 0 1rem 0" }}>
                       {weakness.description}
                     </p>
-
+                  )}
+                  {suggestions.length > 0 && (
                     <div style={{ marginBottom: "1rem" }}>
-                      <h5
-                        style={{
-                          fontSize: "0.8125rem",
-                          fontWeight: 600,
-                          color: "var(--foreground-muted)",
-                          marginBottom: "0.5rem",
-                          textTransform: "uppercase",
-                        }}
-                      >
+                      <h5 style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.5rem", textTransform: "uppercase" }}>
                         הצעות לתיקון
                       </h5>
-                      <ul
-                        style={{
-                          listStyle: "none",
-                          padding: 0,
-                          margin: 0,
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "0.5rem",
-                        }}
-                      >
-                        {weakness.fixSuggestions.map((suggestion, sidx) => (
-                          <li
-                            key={sidx}
-                            style={{
-                              fontSize: "0.8125rem",
-                              color: "var(--foreground)",
-                              display: "flex",
-                              alignItems: "flex-start",
-                              gap: "0.5rem",
-                            }}
-                          >
+                      <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                        {suggestions.map((s, sidx) => (
+                          <li key={sidx} style={{ fontSize: "0.8125rem", color: "var(--foreground)", display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
                             <span style={{ marginTop: "0.2rem", flexShrink: 0 }}>✓</span>
-                            {suggestion}
+                            {safeString(s)}
                           </li>
                         ))}
                       </ul>
                     </div>
-
+                  )}
+                  {weakness?.messagingImprovement && (
                     <div>
-                      <h5
-                        style={{
-                          fontSize: "0.8125rem",
-                          fontWeight: 600,
-                          color: "var(--foreground-muted)",
-                          marginBottom: "0.5rem",
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        שיפור ההודעות
-                      </h5>
-                      <p
-                        style={{
-                          fontSize: "0.8125rem",
-                          color: "var(--foreground)",
-                          margin: 0,
-                        }}
-                      >
-                        {weakness.messagingImprovement}
-                      </p>
+                      <h5 style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.5rem", textTransform: "uppercase" }}>שיפור ההודעות</h5>
+                      <p style={{ fontSize: "0.8125rem", color: "var(--foreground)", margin: 0 }}>{weakness.messagingImprovement}</p>
                     </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -781,17 +558,15 @@ function BrandWeaknessSection({ client }: { client: Client }) {
 // SECTION: CUSTOMER PROFILE
 // ============================================================================
 
-function CustomerProfileSection({ client }: { client: Client }) {
+function CustomerProfileSection({ client, persisted, autoGenerate }: { client: Client; persisted?: unknown; autoGenerate?: boolean }) {
   const [segments, setSegments] = useState<CustomerSegment[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [generated, setGenerated] = useState(false);
+  const [status, setStatus] = useState<SectionStatus>('idle');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const fetchCustomerProfile = async () => {
-    setLoading(true);
-    setError(null);
+  const fetchCustomerProfile = useCallback(async () => {
+    setStatus('loading');
+    setErrorMsg(null);
     try {
-      console.log(`[Insights] CustomerProfile POST for ${client.id}`);
       const response = await fetch("/api/ai/customer-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -803,260 +578,115 @@ function CustomerProfileSection({ client }: { client: Client }) {
           platforms: [client.facebookPageUrl ? 'facebook' : '', client.instagramProfileUrl ? 'instagram' : '', client.tiktokProfileUrl ? 'tiktok' : ''].filter(Boolean),
         }),
       });
-      console.log(`[Insights] CustomerProfile response: ${response.status}`);
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        console.error('[Insights] CustomerProfile error:', body);
         throw new Error(body?.error || `Server error (${response.status})`);
       }
       const result = await response.json();
-      console.log('[Insights] CustomerProfile data received');
-      setSegments(Array.isArray(result) ? result : result.segments || []);
-      setGenerated(true);
+      const items = Array.isArray(result) ? result : safeArray(result?.segments);
+      setSegments(items);
+      setStatus(items.length > 0 ? 'ready' : 'empty');
+      saveInsight(client.id, 'customer_profile', items);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
+      setErrorMsg(err instanceof Error ? err.message : "Unknown error");
+      setStatus('error');
     }
-  };
+  }, [client.id, client.name, client.businessField, client.marketingGoals, client.facebookPageUrl, client.instagramProfileUrl, client.tiktokProfileUrl]);
 
-  if (error) {
-    return (
-      <div
-        style={{
-          padding: "2rem",
-          backgroundColor: "var(--surface-raised)",
-          border: "1px solid var(--border)",
-          borderRadius: "0.75rem",
-        }}
-      >
-        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>
-          👥 פרופיל לקוח
-        </h3>
-        <ErrorState message={error} onRetry={fetchCustomerProfile} />
-      </div>
-    );
+  useEffect(() => {
+    if (persisted && Array.isArray(persisted) && persisted.length > 0) {
+      setSegments(persisted as CustomerSegment[]);
+      setStatus('ready');
+      return;
+    }
+    if (autoGenerate && status === 'idle') {
+      console.log('[Insights] Auto-generating customer profile (research exists)');
+      fetchCustomerProfile();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persisted, autoGenerate]);
+
+  if (status === 'error') {
+    return (<div style={sectionStyle}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>👥 פרופיל לקוח</h3>
+      <ErrorState message={errorMsg || 'שגיאה'} onRetry={fetchCustomerProfile} />
+    </div>);
   }
-
-  if (loading) {
-    return (
-      <div
-        style={{
-          padding: "2rem",
-          backgroundColor: "var(--surface-raised)",
-          border: "1px solid var(--border)",
-          borderRadius: "0.75rem",
-        }}
-      >
-        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>
-          👥 פרופיל לקוח
-        </h3>
-        <LoadingSkeleton />
-      </div>
-    );
+  if (status === 'loading') {
+    return (<div style={sectionStyle}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>👥 פרופיל לקוח</h3>
+      <LoadingSkeleton />
+    </div>);
   }
-
-  if (!generated && segments.length === 0) {
-    return (
-      <div
-        style={{
-          padding: "2rem",
-          backgroundColor: "var(--surface-raised)",
-          border: "1px solid var(--border)",
-          borderRadius: "0.75rem",
-        }}
-      >
-        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>
-          👥 פרופיל לקוח
-        </h3>
-        <EmptyState message="עדיין לא נוצר פרופיל קהל יעד." actionLabel="צור פרופיל" onAction={fetchCustomerProfile} />
-      </div>
-    );
+  if ((status === 'idle' || status === 'empty') && segments.length === 0) {
+    return (<div style={sectionStyle}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>👥 פרופיל לקוח</h3>
+      <EmptyState message="עדיין לא נוצר פרופיל קהל יעד." actionLabel="צור פרופיל" onAction={fetchCustomerProfile} />
+    </div>);
   }
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        backgroundColor: "var(--surface-raised)",
-        border: "1px solid var(--border)",
-        borderRadius: "0.75rem",
-      }}
-    >
-      <h3
-        style={{
-          fontSize: "1.125rem",
-          fontWeight: 600,
-          marginBottom: "1.5rem",
-          color: "var(--foreground)",
-        }}
-      >
-        👥 פרופיל לקוח
-      </h3>
-
-      {segments.length === 0 ? (
-        <p style={{ color: "var(--foreground-muted)", textAlign: "center" }}>
-          אין נתונים זמינים כרגע
-        </p>
-      ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-            gap: "1.5rem",
-          }}
-        >
-          {segments.map((segment, idx) => (
-            <div
-              key={idx}
-              style={{
-                padding: "1.5rem",
-                backgroundColor: "var(--surface-raised)",
-                border: `2px solid ${segment.color}`,
-                borderRadius: "0.5rem",
-              }}
-            >
-              <h4
-                style={{
-                  fontSize: "0.9375rem",
-                  fontWeight: 600,
-                  marginBottom: "1rem",
-                  color: "var(--foreground)",
-                }}
-              >
-                {segment.name}
+    <div style={sectionStyle}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
+        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--foreground)", margin: 0 }}>👥 פרופיל לקוח</h3>
+        <button onClick={fetchCustomerProfile} style={{ padding: "0.5rem 1rem", backgroundColor: "var(--accent)", color: "white", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: 500 }}>רענן</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.5rem" }}>
+        {segments.map((segment, idx) => {
+          const color = segment?.color || '#6b7280';
+          return (
+            <div key={idx} style={{ padding: "1.5rem", backgroundColor: "var(--surface-raised)", border: `2px solid ${color}`, borderRadius: "0.5rem" }}>
+              <h4 style={{ fontSize: "0.9375rem", fontWeight: 600, marginBottom: "1rem", color: "var(--foreground)" }}>
+                {segment?.name || `סגמנט ${idx + 1}`}
               </h4>
-
               <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                <div>
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                      color: "var(--foreground-muted)",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    גיל
-                  </span>
-                  <p style={{ fontSize: "0.875rem", color: "var(--foreground)", margin: "0.25rem 0 0 0" }}>
-                    {segment.ageRange}
-                  </p>
-                </div>
-
-                <div>
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                      color: "var(--foreground-muted)",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    תחומי עניין
-                  </span>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.5rem" }}>
-                    {segment.interests.map((interest, iidx) => (
-                      <span
-                        key={iidx}
-                        style={{
-                          display: "inline-block",
-                          padding: "0.25rem 0.75rem",
-                          backgroundColor: segment.color,
-                          color: "white",
-                          borderRadius: "999px",
-                          fontSize: "0.75rem",
-                          fontWeight: 500,
-                        }}
-                      >
-                        {interest}
-                      </span>
-                    ))}
+                {segment?.ageRange && (
+                  <div>
+                    <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", textTransform: "uppercase" }}>גיל</span>
+                    <p style={{ fontSize: "0.875rem", color: "var(--foreground)", margin: "0.25rem 0 0 0" }}>{segment.ageRange}</p>
                   </div>
-                </div>
-
-                <div>
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                      color: "var(--foreground-muted)",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    התנהגויות
-                  </span>
-                  <ul
-                    style={{
-                      listStyle: "none",
-                      padding: 0,
-                      margin: "0.5rem 0 0 0",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "0.25rem",
-                    }}
-                  >
-                    {segment.behaviors.map((behavior, bidx) => (
-                      <li
-                        key={bidx}
-                        style={{
-                          fontSize: "0.8125rem",
-                          color: "var(--foreground)",
-                          display: "flex",
-                          alignItems: "flex-start",
-                          gap: "0.5rem",
-                        }}
-                      >
-                        <span style={{ marginTop: "0.1rem" }}>•</span>
-                        {behavior}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div style={{ paddingTop: "0.75rem", borderTop: `1px solid ${segment.color}` }}>
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                      color: "var(--foreground-muted)",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    נקודות כאב
-                  </span>
-                  <ul
-                    style={{
-                      listStyle: "none",
-                      padding: 0,
-                      margin: "0.5rem 0 0 0",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "0.25rem",
-                    }}
-                  >
-                    {segment.painPoints.map((point, pidx) => (
-                      <li
-                        key={pidx}
-                        style={{
-                          fontSize: "0.8125rem",
-                          color: "#ef4444",
-                          display: "flex",
-                          alignItems: "flex-start",
-                          gap: "0.5rem",
-                        }}
-                      >
-                        <span style={{ marginTop: "0.1rem" }}>⚠️</span>
-                        {point}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                )}
+                {safeArray(segment?.interests).length > 0 && (
+                  <div>
+                    <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", textTransform: "uppercase" }}>תחומי עניין</span>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.5rem" }}>
+                      {safeArray(segment?.interests).map((interest, iidx) => (
+                        <span key={iidx} style={{ display: "inline-block", padding: "0.25rem 0.75rem", backgroundColor: color, color: "white", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 500 }}>
+                          {safeString(interest)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {safeArray(segment?.behaviors).length > 0 && (
+                  <div>
+                    <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", textTransform: "uppercase" }}>התנהגויות</span>
+                    <ul style={{ listStyle: "none", padding: 0, margin: "0.5rem 0 0 0", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                      {safeArray(segment?.behaviors).map((b, bidx) => (
+                        <li key={bidx} style={{ fontSize: "0.8125rem", color: "var(--foreground)", display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+                          <span style={{ marginTop: "0.1rem" }}>•</span>{safeString(b)}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {safeArray(segment?.painPoints).length > 0 && (
+                  <div style={{ paddingTop: "0.75rem", borderTop: `1px solid ${color}` }}>
+                    <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", textTransform: "uppercase" }}>נקודות כאב</span>
+                    <ul style={{ listStyle: "none", padding: 0, margin: "0.5rem 0 0 0", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                      {safeArray(segment?.painPoints).map((p, pidx) => (
+                        <li key={pidx} style={{ fontSize: "0.8125rem", color: "#ef4444", display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+                          <span style={{ marginTop: "0.1rem" }}>⚠️</span>{safeString(p)}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
-          ))}
-        </div>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1065,17 +695,15 @@ function CustomerProfileSection({ client }: { client: Client }) {
 // SECTION: TREND ENGINE
 // ============================================================================
 
-function TrendEngineSection({ client }: { client: Client }) {
+function TrendEngineSection({ client, persisted, autoGenerate }: { client: Client; persisted?: unknown; autoGenerate?: boolean }) {
   const [trends, setTrends] = useState<TrendSuggestion[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [generated, setGenerated] = useState(false);
+  const [status, setStatus] = useState<SectionStatus>('idle');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const fetchTrends = async () => {
-    setLoading(true);
-    setError(null);
+  const fetchTrends = useCallback(async () => {
+    setStatus('loading');
+    setErrorMsg(null);
     try {
-      console.log(`[Insights] TrendEngine POST for ${client.id}`);
       const response = await fetch("/api/ai/trend-engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1085,266 +713,106 @@ function TrendEngineSection({ client }: { client: Client }) {
           platforms: [client.facebookPageUrl ? 'facebook' : '', client.instagramProfileUrl ? 'instagram' : '', client.tiktokProfileUrl ? 'tiktok' : ''].filter(Boolean),
         }),
       });
-      console.log(`[Insights] TrendEngine response: ${response.status}`);
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        console.error('[Insights] TrendEngine error:', body);
         throw new Error(body?.error || `Server error (${response.status})`);
       }
       const result = await response.json();
-      console.log('[Insights] TrendEngine data received');
-      setTrends(Array.isArray(result) ? result : result.trendSuggestions || []);
-      setGenerated(true);
+      const items = Array.isArray(result) ? result : safeArray(result?.trendSuggestions);
+      setTrends(items);
+      setStatus(items.length > 0 ? 'ready' : 'empty');
+      saveInsight(client.id, 'trend_engine', items);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
+      setErrorMsg(err instanceof Error ? err.message : "Unknown error");
+      setStatus('error');
     }
+  }, [client.id, client.businessField, client.facebookPageUrl, client.instagramProfileUrl, client.tiktokProfileUrl]);
+
+  useEffect(() => {
+    if (persisted && Array.isArray(persisted) && persisted.length > 0) {
+      setTrends(persisted as TrendSuggestion[]);
+      setStatus('ready');
+      return;
+    }
+    if (autoGenerate && status === 'idle') {
+      console.log('[Insights] Auto-generating trend engine (research exists)');
+      fetchTrends();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persisted, autoGenerate]);
+
+  const getUrgencyColor = (urgency?: string) => {
+    switch (urgency) { case "high": return "#ef4444"; case "medium": return "#f59e0b"; case "low": return "#22c55e"; default: return "#6b7280"; }
+  };
+  const getUrgencyLabel = (urgency?: string) => {
+    switch (urgency) { case "high": return "דחוף"; case "medium": return "בינוני"; case "low": return "נמוך"; default: return "—"; }
   };
 
-  const getUrgencyColor = (urgency: string) => {
-    switch (urgency) {
-      case "high":
-        return "#ef4444";
-      case "medium":
-        return "#f59e0b";
-      case "low":
-        return "#22c55e";
-      default:
-        return "#6b7280";
-    }
-  };
-
-  const getUrgencyLabel = (urgency: string) => {
-    switch (urgency) {
-      case "high":
-        return "דחוף";
-      case "medium":
-        return "בינוני";
-      case "low":
-        return "נמוך";
-      default:
-        return "לא ידוע";
-    }
-  };
-
-  if (error) {
-    return (
-      <div
-        style={{
-          padding: "2rem",
-          backgroundColor: "var(--surface-raised)",
-          border: "1px solid var(--border)",
-          borderRadius: "0.75rem",
-        }}
-      >
-        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>
-          🔥 מה חם השבוע
-        </h3>
-        <ErrorState message={error} onRetry={fetchTrends} />
-      </div>
-    );
+  if (status === 'error') {
+    return (<div style={sectionStyle}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔥 מה חם השבוע</h3>
+      <ErrorState message={errorMsg || 'שגיאה'} onRetry={fetchTrends} />
+    </div>);
   }
-
-  if (loading) {
-    return (
-      <div
-        style={{
-          padding: "2rem",
-          backgroundColor: "var(--surface-raised)",
-          border: "1px solid var(--border)",
-          borderRadius: "0.75rem",
-        }}
-      >
-        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>
-          🔥 מה חם השבוע
-        </h3>
-        <LoadingSkeleton />
-      </div>
-    );
+  if (status === 'loading') {
+    return (<div style={sectionStyle}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔥 מה חם השבוע</h3>
+      <LoadingSkeleton />
+    </div>);
   }
-
-  if (!generated && trends.length === 0) {
-    return (
-      <div
-        style={{
-          padding: "2rem",
-          backgroundColor: "var(--surface-raised)",
-          border: "1px solid var(--border)",
-          borderRadius: "0.75rem",
-        }}
-      >
-        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>
-          🔥 מה חם השבוע
-        </h3>
-        <EmptyState message="עדיין לא נוצר ניתוח טרנדים." actionLabel="צור ניתוח" onAction={fetchTrends} />
-      </div>
-    );
+  if ((status === 'idle' || status === 'empty') && trends.length === 0) {
+    return (<div style={sectionStyle}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔥 מה חם השבוע</h3>
+      <EmptyState message="עדיין לא נוצר ניתוח טרנדים." actionLabel="צור ניתוח" onAction={fetchTrends} />
+    </div>);
   }
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        backgroundColor: "var(--surface-raised)",
-        border: "1px solid var(--border)",
-        borderRadius: "0.75rem",
-      }}
-    >
-      <h3
-        style={{
-          fontSize: "1.125rem",
-          fontWeight: 600,
-          marginBottom: "1.5rem",
-          color: "var(--foreground)",
-        }}
-      >
-        🔥 מה חם השבוע
-      </h3>
-
-      {trends.length === 0 ? (
-        <p style={{ color: "var(--foreground-muted)", textAlign: "center" }}>
-          אין נתונים זמינים כרגע
-        </p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          {trends.map((trend, idx) => (
-            <div
-              key={idx}
-              style={{
-                padding: "1.5rem",
-                backgroundColor: "var(--surface-raised)",
-                border: "1px solid var(--border)",
-                borderRadius: "0.5rem",
-              }}
-            >
-              <div style={{ marginBottom: "1rem" }}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    marginBottom: "0.75rem",
-                  }}
-                >
-                  <h4
-                    style={{
-                      fontSize: "0.9375rem",
-                      fontWeight: 600,
-                      color: "var(--foreground)",
-                      margin: 0,
-                    }}
-                  >
-                    {trend.title}
-                  </h4>
-                  <span
-                    style={{
-                      display: "inline-block",
-                      padding: "0.25rem 0.75rem",
-                      backgroundColor: getUrgencyColor(trend.urgency),
-                      color: "white",
-                      borderRadius: "0.25rem",
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {getUrgencyLabel(trend.urgency)}
-                  </span>
+    <div style={sectionStyle}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
+        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--foreground)", margin: 0 }}>🔥 מה חם השבוע</h3>
+        <button onClick={fetchTrends} style={{ padding: "0.5rem 1rem", backgroundColor: "var(--accent)", color: "white", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: 500 }}>רענן</button>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+        {trends.map((trend, idx) => {
+          const title = trend?.title || trend?.trendName || `טרנד ${idx + 1}`;
+          const score = typeof trend?.relevanceScore === 'number' ? trend.relevanceScore : 0;
+          // Score might be 0-1 or 0-100
+          const pct = score > 1 ? score : Math.round(score * 100);
+          return (
+            <div key={idx} style={{ padding: "1.5rem", backgroundColor: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.5rem" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
+                <h4 style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", margin: 0 }}>{title}</h4>
+                <span style={{ display: "inline-block", padding: "0.25rem 0.75rem", backgroundColor: getUrgencyColor(trend?.urgency), color: "white", borderRadius: "0.25rem", fontSize: "0.75rem", fontWeight: 600 }}>
+                  {getUrgencyLabel(trend?.urgency)}
+                </span>
+              </div>
+              <div style={{ marginBottom: "0.5rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", textTransform: "uppercase" }}>ניקוד רלוונטיות</span>
+                  <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--accent)" }}>{pct}%</span>
                 </div>
-
-                <div style={{ marginBottom: "0.5rem" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: "0.5rem",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                        color: "var(--foreground-muted)",
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      ניקוד רלוונטיות
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "0.875rem",
-                        fontWeight: 600,
-                        color: "var(--accent)",
-                      }}
-                    >
-                      {Math.round(trend.relevanceScore * 100)}%
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      width: "100%",
-                      height: "0.5rem",
-                      backgroundColor: "var(--border)",
-                      borderRadius: "0.25rem",
-                      overflow: "hidden",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: `${trend.relevanceScore * 100}%`,
-                        height: "100%",
-                        backgroundColor: "var(--accent)",
-                        transition: "width 300ms ease",
-                      }}
-                    />
-                  </div>
+                <div style={{ width: "100%", height: "0.5rem", backgroundColor: "var(--border)", borderRadius: "0.25rem", overflow: "hidden" }}>
+                  <div style={{ width: `${pct}%`, height: "100%", backgroundColor: "var(--accent)", transition: "width 300ms ease" }} />
                 </div>
               </div>
-
-              <div>
-                <h5
-                  style={{
-                    fontSize: "0.8125rem",
-                    fontWeight: 600,
-                    color: "var(--foreground-muted)",
-                    marginBottom: "0.5rem",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  רעיונות תוכן
-                </h5>
-                <ul
-                  style={{
-                    listStyle: "none",
-                    padding: 0,
-                    margin: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "0.5rem",
-                  }}
-                >
-                  {trend.contentIdeas.map((idea, iidx) => (
-                    <li
-                      key={iidx}
-                      style={{
-                        fontSize: "0.8125rem",
-                        color: "var(--foreground)",
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: "0.5rem",
-                      }}
-                    >
-                      <span style={{ marginTop: "0.2rem", flexShrink: 0 }}>💡</span>
-                      {idea}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {safeArray(trend?.contentIdeas).length > 0 && (
+                <div>
+                  <h5 style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.5rem", textTransform: "uppercase" }}>רעיונות תוכן</h5>
+                  <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    {safeArray(trend?.contentIdeas).map((idea, iidx) => (
+                      <li key={iidx} style={{ fontSize: "0.8125rem", color: "var(--foreground)", display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+                        <span style={{ marginTop: "0.2rem", flexShrink: 0 }}>💡</span>
+                        {safeString(idea)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
-          ))}
-        </div>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1353,17 +821,15 @@ function TrendEngineSection({ client }: { client: Client }) {
 // SECTION: COMPETITOR INSIGHTS
 // ============================================================================
 
-function CompetitorInsightsSection({ client }: { client: Client }) {
+function CompetitorInsightsSection({ client, persisted, autoGenerate }: { client: Client; persisted?: unknown; autoGenerate?: boolean }) {
   const [insights, setInsights] = useState<CompetitorInsight | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [generated, setGenerated] = useState(false);
+  const [status, setStatus] = useState<SectionStatus>('idle');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const fetchCompetitorAnalysis = async () => {
-    setLoading(true);
-    setError(null);
+  const fetchCompetitorAnalysis = useCallback(async () => {
+    setStatus('loading');
+    setErrorMsg(null);
     try {
-      console.log(`[Insights] CompetitorAnalysis POST for ${client.id}`);
       const response = await fetch("/api/ai/competitor-analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1373,409 +839,145 @@ function CompetitorInsightsSection({ client }: { client: Client }) {
           platforms: [client.facebookPageUrl ? 'facebook' : '', client.instagramProfileUrl ? 'instagram' : '', client.tiktokProfileUrl ? 'tiktok' : ''].filter(Boolean),
         }),
       });
-      console.log(`[Insights] CompetitorAnalysis response: ${response.status}`);
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        console.error('[Insights] CompetitorAnalysis error:', body);
         throw new Error(body?.error || `Server error (${response.status})`);
       }
       const result = await response.json();
-      console.log('[Insights] CompetitorAnalysis data received');
-      setInsights(result);
-      setGenerated(true);
+      // Response might be { insights: {...} } or { doMoreOf, avoid, opportunities }
+      const data = result?.insights || result;
+      setInsights(data);
+      setStatus('ready');
+      saveInsight(client.id, 'competitor_insights', data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
+      setErrorMsg(err instanceof Error ? err.message : "Unknown error");
+      setStatus('error');
     }
-  };
+  }, [client.id, client.businessField, client.facebookPageUrl, client.instagramProfileUrl, client.tiktokProfileUrl]);
 
-  if (error) {
-    return (
-      <div
-        style={{
-          padding: "2rem",
-          backgroundColor: "var(--surface-raised)",
-          border: "1px solid var(--border)",
-          borderRadius: "0.75rem",
-        }}
-      >
-        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>
-          🎯 תובנות תחרותיות
-        </h3>
-        <ErrorState message={error} onRetry={fetchCompetitorAnalysis} />
-      </div>
-    );
+  useEffect(() => {
+    if (persisted && typeof persisted === 'object' && persisted !== null) {
+      const p = persisted as CompetitorInsight;
+      if (safeArray(p?.doMoreOf).length > 0 || safeArray(p?.avoid).length > 0 || safeArray(p?.opportunities).length > 0) {
+        setInsights(p);
+        setStatus('ready');
+        return;
+      }
+    }
+    if (autoGenerate && status === 'idle') {
+      console.log('[Insights] Auto-generating competitor insights (research exists)');
+      fetchCompetitorAnalysis();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persisted, autoGenerate]);
+
+  if (status === 'error') {
+    return (<div style={sectionStyle}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🎯 תובנות תחרותיות</h3>
+      <ErrorState message={errorMsg || 'שגיאה'} onRetry={fetchCompetitorAnalysis} />
+    </div>);
+  }
+  if (status === 'loading') {
+    return (<div style={sectionStyle}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🎯 תובנות תחרותיות</h3>
+      <LoadingSkeleton />
+    </div>);
+  }
+  if ((status === 'idle' || status === 'empty') && !insights) {
+    return (<div style={sectionStyle}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🎯 תובנות תחרותיות</h3>
+      <EmptyState message="עדיין לא נוצר ניתוח תחרותי." actionLabel="צור ניתוח" onAction={fetchCompetitorAnalysis} />
+    </div>);
   }
 
-  if (loading) {
-    return (
-      <div
-        style={{
-          padding: "2rem",
-          backgroundColor: "var(--surface-raised)",
-          border: "1px solid var(--border)",
-          borderRadius: "0.75rem",
-        }}
-      >
-        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>
-          🎯 תובנות תחרותיות
-        </h3>
-        <LoadingSkeleton />
-      </div>
-    );
+  const doMore = safeArray(insights?.doMoreOf);
+  const avoid = safeArray(insights?.avoid);
+  const opps = safeArray(insights?.opportunities);
+
+  if (doMore.length === 0 && avoid.length === 0 && opps.length === 0) {
+    return (<div style={sectionStyle}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🎯 תובנות תחרותיות</h3>
+      <EmptyState message="עדיין לא נוצר ניתוח תחרותי." actionLabel="צור ניתוח" onAction={fetchCompetitorAnalysis} />
+    </div>);
   }
 
-  if (!generated && !insights) {
-    return (
-      <div
-        style={{
-          padding: "2rem",
-          backgroundColor: "var(--surface-raised)",
-          border: "1px solid var(--border)",
-          borderRadius: "0.75rem",
-        }}
-      >
-        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>
-          🎯 תובנות תחרותיות
-        </h3>
-        <EmptyState message="עדיין לא נוצר ניתוח תחרותי." actionLabel="צור ניתוח" onAction={fetchCompetitorAnalysis} />
-      </div>
-    );
-  }
-
-  if (!insights) return null;
+  const renderList = (items: string[], icon: string) => (
+    <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+      {items.map((item, idx) => (
+        <li key={idx} style={{ fontSize: "0.875rem", color: "var(--foreground)", display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+          <span style={{ marginTop: "0.2rem", flexShrink: 0 }}>{icon}</span>
+          {safeString(item)}
+        </li>
+      ))}
+    </ul>
+  );
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        backgroundColor: "var(--surface-raised)",
-        border: "1px solid var(--border)",
-        borderRadius: "0.75rem",
-      }}
-    >
-      <h3
-        style={{
-          fontSize: "1.125rem",
-          fontWeight: 600,
-          marginBottom: "1.5rem",
-          color: "var(--foreground)",
-        }}
-      >
-        🎯 תובנות תחרותיות
-      </h3>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-          gap: "1.5rem",
-        }}
-      >
-        {/* Do More Of */}
-        <div
-          style={{
-            padding: "1.5rem",
-            backgroundColor: "rgba(34, 197, 94, 0.1)",
-            border: "1px solid #22c55e",
-            borderRadius: "0.5rem",
-          }}
-        >
-          <h4
-            style={{
-              fontSize: "0.9375rem",
-              fontWeight: 600,
-              color: "#22c55e",
-              marginBottom: "1rem",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-            }}
-          >
-            ✅ יותר מזה
-          </h4>
-          <ul
-            style={{
-              listStyle: "none",
-              padding: 0,
-              margin: 0,
-              display: "flex",
-              flexDirection: "column",
-              gap: "0.5rem",
-            }}
-          >
-            {insights.doMoreOf.map((item, idx) => (
-              <li
-                key={idx}
-                style={{
-                  fontSize: "0.875rem",
-                  color: "var(--foreground)",
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "0.5rem",
-                }}
-              >
-                <span style={{ marginTop: "0.2rem", flexShrink: 0 }}>→</span>
-                {item}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Avoid */}
-        <div
-          style={{
-            padding: "1.5rem",
-            backgroundColor: "rgba(239, 68, 68, 0.1)",
-            border: "1px solid #ef4444",
-            borderRadius: "0.5rem",
-          }}
-        >
-          <h4
-            style={{
-              fontSize: "0.9375rem",
-              fontWeight: 600,
-              color: "#ef4444",
-              marginBottom: "1rem",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-            }}
-          >
-            ❌ הימנע מזה
-          </h4>
-          <ul
-            style={{
-              listStyle: "none",
-              padding: 0,
-              margin: 0,
-              display: "flex",
-              flexDirection: "column",
-              gap: "0.5rem",
-            }}
-          >
-            {insights.avoid.map((item, idx) => (
-              <li
-                key={idx}
-                style={{
-                  fontSize: "0.875rem",
-                  color: "var(--foreground)",
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "0.5rem",
-                }}
-              >
-                <span style={{ marginTop: "0.2rem", flexShrink: 0 }}>⊘</span>
-                {item}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Opportunities */}
-        <div
-          style={{
-            padding: "1.5rem",
-            backgroundColor: "rgba(0, 181, 254, 0.1)",
-            border: "1px solid var(--accent)",
-            borderRadius: "0.5rem",
-          }}
-        >
-          <h4
-            style={{
-              fontSize: "0.9375rem",
-              fontWeight: 600,
-              color: "var(--accent)",
-              marginBottom: "1rem",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-            }}
-          >
-            💎 הזדמנויות
-          </h4>
-          <ul
-            style={{
-              listStyle: "none",
-              padding: 0,
-              margin: 0,
-              display: "flex",
-              flexDirection: "column",
-              gap: "0.5rem",
-            }}
-          >
-            {insights.opportunities.map((item, idx) => (
-              <li
-                key={idx}
-                style={{
-                  fontSize: "0.875rem",
-                  color: "var(--foreground)",
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "0.5rem",
-                }}
-              >
-                <span style={{ marginTop: "0.2rem", flexShrink: 0 }}>◆</span>
-                {item}
-              </li>
-            ))}
-          </ul>
-        </div>
+    <div style={sectionStyle}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
+        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--foreground)", margin: 0 }}>🎯 תובנות תחרותיות</h3>
+        <button onClick={fetchCompetitorAnalysis} style={{ padding: "0.5rem 1rem", backgroundColor: "var(--accent)", color: "white", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: 500 }}>רענן</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.5rem" }}>
+        {doMore.length > 0 && (
+          <div style={{ padding: "1.5rem", backgroundColor: "rgba(34, 197, 94, 0.1)", border: "1px solid #22c55e", borderRadius: "0.5rem" }}>
+            <h4 style={{ fontSize: "0.9375rem", fontWeight: 600, color: "#22c55e", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>✅ יותר מזה</h4>
+            {renderList(doMore, "→")}
+          </div>
+        )}
+        {avoid.length > 0 && (
+          <div style={{ padding: "1.5rem", backgroundColor: "rgba(239, 68, 68, 0.1)", border: "1px solid #ef4444", borderRadius: "0.5rem" }}>
+            <h4 style={{ fontSize: "0.9375rem", fontWeight: 600, color: "#ef4444", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>❌ הימנע מזה</h4>
+            {renderList(avoid, "⊘")}
+          </div>
+        )}
+        {opps.length > 0 && (
+          <div style={{ padding: "1.5rem", backgroundColor: "rgba(0, 181, 254, 0.1)", border: "1px solid var(--accent)", borderRadius: "0.5rem" }}>
+            <h4 style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--accent)", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>💎 הזדמנויות</h4>
+            {renderList(opps, "◆")}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 // ============================================================================
-// WEEKLY RECOMMENDATIONS (Fallback + Trend Integration)
+// WEEKLY RECOMMENDATIONS (Fallback)
 // ============================================================================
 
 function WeeklyRecommendationsWidget({ client }: { client: Client }) {
-  const [recommendations, setRecommendations] = useState<
-    Array<{ emoji: string; title: string; description: string; format: string }>
-  >([]);
-  const [loading, setLoading] = useState(false);
-
-  // Fallback recommendations
-  const fallbackRecommendations: Record<string, any[]> = {
+  const fallbackRecommendations: Record<string, Array<{ emoji: string; title: string; description: string; format: string }>> = {
     marketing: [
-      {
-        emoji: "📚",
-        title: "מדריך שימושי",
-        description: "טיפים חדשים במקצוע שלך או בתחום העיסוק",
-        format: "קרוסלה",
-      },
-      {
-        emoji: "😊",
-        title: "סיפור לקוח",
-        description: "חוויה חיובית של לקוח או מקרה של הצלחה",
-        format: "ריל או סטורי",
-      },
-      {
-        emoji: "🎯",
-        title: "הצעה מיוחדת",
-        description: "קדיחה או הצעה זמנית לעידוד קנייה",
-        format: "ריל או אינפוגרפיקה",
-      },
+      { emoji: "📚", title: "מדריך שימושי", description: "טיפים חדשים במקצוע שלך או בתחום העיסוק", format: "קרוסלה" },
+      { emoji: "😊", title: "סיפור לקוח", description: "חוויה חיובית של לקוח או מקרה של הצלחה", format: "ריל או סטורי" },
+      { emoji: "🎯", title: "הצעה מיוחדת", description: "קידוח או הצעה זמנית לעידוד קנייה", format: "ריל או אינפוגרפיקה" },
     ],
     branding: [
-      {
-        emoji: "🏆",
-        title: "הישגי מותג",
-        description: "פרויקט או הישג שמשקף את ערכי המותג",
-        format: "ריל",
-      },
-      {
-        emoji: "👥",
-        title: "מאחורי הקלעים",
-        description: "תהליך העבודה או צוות החברה",
-        format: "סטורי או ריל",
-      },
-      {
-        emoji: "💡",
-        title: "טיפ מקצועי",
-        description: "ידע או בחינה בתחום המומחיות",
-        format: "קרוסלה או פוסט",
-      },
+      { emoji: "🏆", title: "הישגי מותג", description: "פרויקט או הישג שמשקף את ערכי המותג", format: "ריל" },
+      { emoji: "👥", title: "מאחורי הקלעים", description: "תהליך העבודה או צוות החברה", format: "סטורי או ריל" },
+      { emoji: "💡", title: "טיפ מקצועי", description: "ידע או בחינה בתחום המומחיות", format: "קרוסלה או פוסט" },
     ],
   };
 
-  useEffect(() => {
-    const fallback = fallbackRecommendations[client.clientType] || fallbackRecommendations.marketing;
-    setRecommendations(fallback);
-  }, [client.clientType]);
+  const recommendations = fallbackRecommendations[client.clientType] || fallbackRecommendations.marketing;
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        backgroundColor: "var(--accent)",
-        border: "1px solid var(--accent)",
-        borderRadius: "0.75rem",
-        background: `linear-gradient(135deg, var(--accent) 0%, rgba(0, 181, 254, 0.8) 100%)`,
-        color: "white",
-      }}
-    >
-      <h3
-        style={{
-          fontSize: "1.125rem",
-          fontWeight: 600,
-          marginBottom: "1.5rem",
-          color: "white",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.75rem",
-        }}
-      >
+    <div style={{ padding: "2rem", borderRadius: "0.75rem", background: "linear-gradient(135deg, var(--accent) 0%, rgba(0, 181, 254, 0.8) 100%)", color: "white" }}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem", color: "white", display: "flex", alignItems: "center", gap: "0.75rem" }}>
         📅 מה כדאי לפרסם השבוע
       </h3>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: "1rem",
-          marginBottom: "1rem",
-        }}
-      >
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
         {recommendations.map((rec, idx) => (
-          <div
-            key={idx}
-            style={{
-              padding: "1rem",
-              backgroundColor: "rgba(255, 255, 255, 0.1)",
-              borderRadius: "0.5rem",
-              backdropFilter: "blur(10px)",
-            }}
-          >
-            <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>
-              {rec.emoji}
-            </div>
-            <h4
-              style={{
-                fontSize: "0.9375rem",
-                fontWeight: 600,
-                margin: "0 0 0.25rem 0",
-                color: "white",
-              }}
-            >
-              {rec.title}
-            </h4>
-            <p
-              style={{
-                fontSize: "0.8125rem",
-                margin: "0 0 0.5rem 0",
-                color: "rgba(255, 255, 255, 0.85)",
-                lineHeight: "1.4",
-              }}
-            >
-              {rec.description}
-            </p>
-            <span
-              style={{
-                display: "inline-block",
-                padding: "0.25rem 0.5rem",
-                backgroundColor: "rgba(255, 255, 255, 0.2)",
-                borderRadius: "0.25rem",
-                fontSize: "0.75rem",
-                fontWeight: 600,
-              }}
-            >
-              {rec.format}
-            </span>
+          <div key={idx} style={{ padding: "1rem", backgroundColor: "rgba(255, 255, 255, 0.1)", borderRadius: "0.5rem", backdropFilter: "blur(10px)" }}>
+            <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>{rec.emoji}</div>
+            <h4 style={{ fontSize: "0.9375rem", fontWeight: 600, margin: "0 0 0.25rem 0", color: "white" }}>{rec.title}</h4>
+            <p style={{ fontSize: "0.8125rem", margin: "0 0 0.5rem 0", color: "rgba(255, 255, 255, 0.85)", lineHeight: "1.4" }}>{rec.description}</p>
+            <span style={{ display: "inline-block", padding: "0.25rem 0.5rem", backgroundColor: "rgba(255, 255, 255, 0.2)", borderRadius: "0.25rem", fontSize: "0.75rem", fontWeight: 600 }}>{rec.format}</span>
           </div>
         ))}
       </div>
-
-      <p
-        style={{
-          fontSize: "0.75rem",
-          color: "rgba(255, 255, 255, 0.7)",
-          margin: 0,
-          fontStyle: "italic",
-        }}
-      >
+      <p style={{ fontSize: "0.75rem", color: "rgba(255, 255, 255, 0.7)", margin: 0, fontStyle: "italic" }}>
         (מבוסס על ניתוח AI — מתעדכן אוטומטית)
       </p>
     </div>
@@ -1783,17 +985,74 @@ function WeeklyRecommendationsWidget({ client }: { client: Client }) {
 }
 
 // ============================================================================
-// MAIN COMPONENT
+// MAIN COMPONENT — loads persisted insights, passes to sections
 // ============================================================================
 
 export default function TabInsights({ client, employees }: TabInsightsProps) {
+  const [persistedInsights, setPersistedInsights] = useState<Record<string, unknown>>({});
+  const [loadingPersisted, setLoadingPersisted] = useState(true);
+  const [researchExists, setResearchExists] = useState(false);
+
+  // Load all persisted insights + check if research exists
+  useEffect(() => {
+    let cancelled = false;
+    const loadPersisted = async () => {
+      try {
+        console.log(`[Insights] Loading persisted insights for ${client.id}`);
+        const [insightsRes, researchRes] = await Promise.all([
+          fetch(`/api/ai/client-insights?clientId=${client.id}`),
+          fetch(`/api/ai/client-research?clientId=${client.id}`),
+        ]);
+
+        // Parse persisted insights
+        if (insightsRes.ok) {
+          const result = await insightsRes.json();
+          if (!cancelled && result?.insights) {
+            const map: Record<string, unknown> = {};
+            for (const [section, record] of Object.entries(result.insights)) {
+              const r = record as { payload?: unknown; status?: string };
+              if (r?.payload && r?.status === 'ready') {
+                map[section] = r.payload;
+              }
+            }
+            console.log(`[Insights] Loaded persisted sections: ${Object.keys(map).join(', ') || 'none'}`);
+            setPersistedInsights(map);
+          }
+        }
+
+        // Check if research exists for this client
+        // GET /api/ai/client-research returns { success: true, data: { status: 'complete', ... } }
+        if (!cancelled && researchRes.ok) {
+          const researchData = await researchRes.json();
+          const hasResearch = !!(researchData?.data && researchData.data.status === 'complete');
+          console.log(`[Insights] Research exists: ${hasResearch}`);
+          setResearchExists(hasResearch);
+        }
+      } catch (err) {
+        console.warn('[Insights] Failed to load persisted insights:', err);
+      } finally {
+        if (!cancelled) setLoadingPersisted(false);
+      }
+    };
+    loadPersisted();
+    return () => { cancelled = true; };
+  }, [client.id]);
+
+  if (loadingPersisted) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+        <div style={sectionStyle}><LoadingSkeleton /></div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-      <ClientBrainSection client={client} />
-      <BrandWeaknessSection client={client} />
-      <CustomerProfileSection client={client} />
-      <TrendEngineSection client={client} />
-      <CompetitorInsightsSection client={client} />
+      <ClientBrainSection client={client} persisted={persistedInsights['client_brain']} />
+      <BrandWeaknessSection client={client} persisted={persistedInsights['brand_weakness']} autoGenerate={researchExists} />
+      <CustomerProfileSection client={client} persisted={persistedInsights['customer_profile']} autoGenerate={researchExists} />
+      <TrendEngineSection client={client} persisted={persistedInsights['trend_engine']} autoGenerate={researchExists} />
+      <CompetitorInsightsSection client={client} persisted={persistedInsights['competitor_insights']} autoGenerate={researchExists} />
       <WeeklyRecommendationsWidget client={client} />
     </div>
   );

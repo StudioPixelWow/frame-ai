@@ -30,6 +30,8 @@ const TABLES = [
   'app_meetings',
   'app_follow_up_reminders',
   'app_creative_dna',
+  'app_client_knowledge',
+  'app_client_insights',
 ];
 
 export async function GET() {

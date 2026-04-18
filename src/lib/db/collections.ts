@@ -28,6 +28,7 @@ import type {
   ClientKnowledge,
   CreativeDNA,
   ClientResearch,
+  ClientInsight,
   AutomationRule,
   WhatsAppMessage,
   EmailTemplate,
@@ -61,7 +62,8 @@ export const hostingRecords = new JsonStore<HostingRecord>('hosting-records', 'h
 export const accountantDocuments = new JsonStore<AccountantDocument>('accountant-documents', 'acd');
 export const podcastSessions = new SupabaseCrud<PodcastSession>('app_podcast_sessions', 'pcs');
 export const aiSettings = new JsonStore<AISettings>('ai-settings', 'ais');
-export const clientKnowledge = new JsonStore<ClientKnowledge>('client-knowledge', 'ckn');
+export const clientKnowledge = new SupabaseCrud<ClientKnowledge>('app_client_knowledge', 'ckn');
+export const clientInsights = new SupabaseCrud<ClientInsight>('app_client_insights', 'cin');
 export const creativeDNA = new SupabaseCrud<CreativeDNA>('app_creative_dna', 'cdna');
 export const clientResearch = new JsonStore<ClientResearch>('client-research', 'crs');
 export const employeeTasks = new SupabaseCrud<EmployeeTask>('app_employee_tasks', 'etk');
