@@ -232,17 +232,26 @@ function ClientDetailContent() {
   };
 
   const handleSaveEdit = async () => {
+    console.log('[EDIT] handleSaveEdit called');
+    console.log('[EDIT] editForm:', JSON.stringify(editForm));
+    console.log('[EDIT] client:', client?.id, client?.name);
+    console.log('[EDIT] isSavingEdit:', isSavingEdit);
+
     if (!editForm.name?.trim()) {
+      console.log('[EDIT] BLOCKED: name is empty');
       toast("אנא הזן שם לקוח", "error");
       return;
     }
 
     setIsSavingEdit(true);
     try {
-      await updateClient(client!.id, editForm);
+      console.log('[EDIT] calling updateClient with id:', client!.id);
+      const result = await updateClient(client!.id, editForm);
+      console.log('[EDIT] updateClient returned:', result);
       toast("לקוח עודכן בהצלחה", "success");
       setIsEditModalOpen(false);
     } catch (error) {
+      console.error('[EDIT] updateClient FAILED:', error);
       toast("שגיאה בעדכון לקוח", "error");
     } finally {
       setIsSavingEdit(false);
@@ -1450,7 +1459,8 @@ function ClientDetailContent() {
               {/* Buttons */}
               <div style={{ display: "flex", gap: "1rem", marginTop: "1.5rem" }}>
                 <button
-                  onClick={handleSaveEdit}
+                  type="button"
+                  onClick={() => { console.log('[EDIT] Save button clicked'); handleSaveEdit(); }}
                   disabled={isSavingEdit}
                   className="mod-btn-primary"
                   style={{

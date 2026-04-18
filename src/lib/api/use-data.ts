@@ -115,11 +115,13 @@ export function useData<T extends { id: string }>(endpoint: string): UseDataResu
   };
 
   const update = async (id: string, item: Partial<T>): Promise<T> => {
+    console.log(`[useData] update called: PUT /api/data/${endpoint}/${id}`, JSON.stringify(item).slice(0, 200));
     const res = await fetch(`/api/data/${endpoint}/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...getRoleHeaders() },
       body: JSON.stringify(item),
     });
+    console.log(`[useData] update response: ${res.status} ${res.statusText}`);
     if (!res.ok) {
       let msg = `Failed to update (${res.status})`;
       try { const body = await res.json(); if (body?.error) msg = body.error; } catch {}
