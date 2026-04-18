@@ -170,8 +170,7 @@ export async function POST(
       const themeParts = monthTheme.split(' — ');
       const title = `${monthName} 📅 | ${themeParts[0]}`;
 
-      const ganttItem: ClientGanttItem = {
-        id: 'cgi_' + Date.now() + '_' + month + '_' + Math.random().toString(36).slice(2, 8),
+      const ganttItem: Omit<ClientGanttItem, 'id'> & { id?: string } = {
         clientId: id,
         ganttType: 'annual',
         month,
@@ -205,8 +204,8 @@ export async function POST(
         updatedAt: new Date().toISOString(),
       };
 
-      newItems.push(ganttItem);
-      await clientGanttItems.createAsync(ganttItem);
+      const created = await clientGanttItems.createAsync(ganttItem as Omit<ClientGanttItem, 'id'>);
+      newItems.push(created);
     }
 
     return NextResponse.json({

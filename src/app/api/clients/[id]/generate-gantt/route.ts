@@ -1483,8 +1483,7 @@ ${hasResearch ? `חובה: researchSource ו-researchReason בכל פריט. פ�
 
       // Create gantt item with content type, hook style, and research snapshot
       const ganttGeneratedAt = new Date().toISOString();
-      const ganttItem: ClientGanttItem = {
-        id: 'cgi_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
+      const ganttItem: Omit<ClientGanttItem, 'id'> & { id?: string } = {
         clientId: id,
         ganttType: 'monthly',
         month: body.month,
@@ -1521,8 +1520,8 @@ ${hasResearch ? `חובה: researchSource ו-researchReason בכל פריט. פ�
         updatedAt: ganttGeneratedAt,
       };
 
-      newItems.push(ganttItem);
-      await clientGanttItems.createAsync(ganttItem);
+      const created = await clientGanttItems.createAsync(ganttItem as Omit<ClientGanttItem, 'id'>);
+      newItems.push(created);
 
       dayCounter += daysBetweenItems;
     }

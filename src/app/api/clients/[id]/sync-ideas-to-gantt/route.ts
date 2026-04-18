@@ -169,12 +169,12 @@ export async function POST(
         undefined, itemType, creative.platform || 'instagram', format as ContentFormat,
         client
       );
-      await clientGanttItems.createAsync(ganttItem);
+      const createdItem = await clientGanttItems.createAsync(ganttItem);
 
       return NextResponse.json({
         success: true,
         message: 'רשומה ידנית נוצרה והושלמה על ידי AI',
-        items: [ganttItem],
+        items: [createdItem],
         source: 'manual',
       });
     }
@@ -222,8 +222,8 @@ export async function POST(
           holiday.hebrewName, 'social_post', creative.platform || 'instagram', (creative.format || 'image') as ContentFormat,
           client
         );
-        await clientGanttItems.createAsync(ganttItem);
-        holidayItems.push(ganttItem);
+        const createdHoliday = await clientGanttItems.createAsync(ganttItem);
+        holidayItems.push(createdHoliday);
       }
 
       return NextResponse.json({
@@ -270,8 +270,8 @@ export async function POST(
         client,
         idea.id, idea.title, body.researchId
       );
-      await clientGanttItems.createAsync(ganttItem);
-      newItems.push(ganttItem);
+      const createdItem = await clientGanttItems.createAsync(ganttItem);
+      newItems.push(createdItem);
     }
 
     console.log(`[SyncToGantt] ✅ Created ${newItems.length} gantt items from research ideas`);
@@ -443,10 +443,9 @@ function createGanttItem(
   researchIdeaId?: string,
   researchTitle?: string,
   researchId?: string
-): ClientGanttItem {
+): Omit<ClientGanttItem, 'id'> {
   const now = new Date().toISOString();
   return {
-    id: 'cgi_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
     clientId,
     ganttType: 'monthly',
     month,
@@ -480,5 +479,5 @@ function createGanttItem(
     ganttGeneratedAt: now,
     createdAt: now,
     updatedAt: now,
-  } as ClientGanttItem;
+  } as Omit<ClientGanttItem, 'id'>;
 }

@@ -38,7 +38,7 @@ export async function GET() {
   for (const table of TABLES) {
     const ddl = `
       CREATE TABLE IF NOT EXISTS public.${table} (
-        id TEXT PRIMARY KEY,
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         data JSONB NOT NULL DEFAULT '{}',
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -79,7 +79,7 @@ export async function GET() {
     summary: `${created} created, ${existing} already exist, ${errors} errors`,
     tables: results,
     manualDDL: errors > 0 || results.some(r => r.status === 'skip_no_rpc')
-      ? TABLES.map(t => `CREATE TABLE IF NOT EXISTS public.${t} (id TEXT PRIMARY KEY, data JSONB NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());`).join('\n')
+      ? TABLES.map(t => `CREATE TABLE IF NOT EXISTS public.${t} (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), data JSONB NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());`).join('\n')
       : null,
   });
 }

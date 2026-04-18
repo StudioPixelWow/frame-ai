@@ -216,9 +216,7 @@ const _tableInitPromises = new Map<string, Promise<void>>();
 
 export class SupabaseCrud<T extends { id: string }> {
   private tableName: string;
-  private prefix: string;
-  private seq = 0;
-  private seqInitialized = false;
+  private prefix: string; // kept for backward compat, no longer used for ID generation
 
   constructor(tableName: string, prefix: string) {
     this.tableName = tableName;
@@ -227,7 +225,8 @@ export class SupabaseCrud<T extends { id: string }> {
     this.ensureTableExists();
   }
 
-  /** Create the table if it doesn't exist */
+  /** Create the table if it doesn't exist.
+   *  Uses UUID for new tables; pre-existing tables keep their schema. */
   private ensureTableExists(): Promise<void> {
     if (_tableInitPromises.has(this.tableName)) {
       return _tableInitPromises.get(this.tableName)!;
@@ -235,7 +234,7 @@ export class SupabaseCrud<T extends { id: string }> {
 
     const ddl = `
       CREATE TABLE IF NOT EXISTS public.${this.tableName} (
-        id TEXT PRIMARY KEY,
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         data JSONB NOT NULL DEFAULT '{}',
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -245,37 +244,6 @@ export class SupabaseCrud<T extends { id: string }> {
     const promise = ensureTable(this.tableName, ddl);
     _tableInitPromises.set(this.tableName, promise);
     return promise;
-  }
-
-  /** Initialize the ID sequence from existing data */
-  private async initSeq(): Promise<void> {
-    if (this.seqInitialized) return;
-    this.seqInitialized = true;
-    try {
-      const sb = getSupabase();
-      const { data: rows } = await sb
-        .from(this.tableName)
-        .select('id')
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (rows && rows.length > 0) {
-        const sequences = rows
-          .map((r: { id: string }) => {
-            const match = r.id.match(new RegExp(`^${this.prefix}_(\\d+)$`));
-            return match ? parseInt(match[1], 10) : 0;
-          })
-          .filter((num: number) => !isNaN(num));
-        this.seq = sequences.length > 0 ? Math.max(...sequences) : 0;
-      }
-    } catch {
-      // Table may not exist yet — will be created on first write
-    }
-  }
-
-  private generateId(): string {
-    this.seq += 1;
-    return `${this.prefix}_${this.seq}`;
   }
 
   /** Convert a DB row {id, data, created_at, updated_at} back to T */
@@ -343,28 +311,38 @@ export class SupabaseCrud<T extends { id: string }> {
 
   async createAsync(item: Omit<T, 'id'>): Promise<T> {
     await this.ensureTableExists();
-    await this.initSeq();
 
-    const id = this.generateId();
     const now = new Date().toISOString();
-    const entity = { ...item, id, createdAt: now, updatedAt: now } as unknown as T;
+    // Build entity without id — DB will generate UUID
+    const entityWithoutId = { ...item, createdAt: now, updatedAt: now };
 
     const sb = getSupabase();
-    const { error } = await sb
+    const { data: inserted, error } = await sb
       .from(this.tableName)
       .insert({
-        id,
-        data: JSON.parse(JSON.stringify(entity)), // clean serialization
+        // Do NOT send id — let Postgres gen_random_uuid() handle it
+        data: JSON.parse(JSON.stringify(entityWithoutId)),
         created_at: now,
         updated_at: now,
-      });
+      })
+      .select('id')
+      .single();
 
-    if (error) {
-      console.error(`[SupabaseCrud][${this.tableName}] createAsync error:`, error.message);
-      throw new Error(`Failed to create in ${this.tableName}: ${error.message}`);
+    if (error || !inserted) {
+      console.error(`[SupabaseCrud][${this.tableName}] createAsync error:`, error?.message);
+      throw new Error(`Failed to create in ${this.tableName}: ${error?.message ?? 'no row returned'}`);
     }
 
-    console.log(`[SupabaseCrud][${this.tableName}] INSERT id=${id} ✅ DURABLE`);
+    const id = (inserted as { id: string }).id;
+    const entity = { ...entityWithoutId, id } as unknown as T;
+
+    // Also store the id inside the data JSONB so rowToEntity works consistently
+    await sb
+      .from(this.tableName)
+      .update({ data: JSON.parse(JSON.stringify(entity)) })
+      .eq('id', id);
+
+    console.log(`[SupabaseCrud][${this.tableName}] INSERT id=${id} ✅ DURABLE (DB-generated UUID)`);
     return entity;
   }
 
