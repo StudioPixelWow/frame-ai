@@ -27,18 +27,10 @@ interface FormData {
   color: string;
   clientType: 'marketing' | 'branding' | 'websites' | 'hosting' | 'podcast' | 'lead';
   businessField: string;
-  marketingGoals: string;
-  keyMarketingMessages: string;
   retainerAmount: number;
   retainerDay: number;
   assignedManagerId: string | null;
   portalEnabled: boolean;
-  websiteUrl: string;
-  facebookPageUrl: string;
-  instagramProfileUrl: string;
-  tiktokProfileUrl: string;
-  linkedinUrl: string;
-  youtubeUrl: string;
 }
 
 export default function NewClientPage() {
@@ -58,18 +50,10 @@ export default function NewClientPage() {
     color: '#00B5FE',
     clientType: 'marketing',
     businessField: '',
-    marketingGoals: '',
-    keyMarketingMessages: '',
     retainerAmount: 0,
     retainerDay: 1,
     assignedManagerId: null,
     portalEnabled: false,
-    websiteUrl: '',
-    facebookPageUrl: '',
-    instagramProfileUrl: '',
-    tiktokProfileUrl: '',
-    linkedinUrl: '',
-    youtubeUrl: '',
   });
 
   const [uploading, setUploading] = useState(false);
@@ -140,29 +124,23 @@ export default function NewClientPage() {
     setSubmitting(true);
     try {
       const now = new Date().toISOString();
+      // Only send safe fields — social/marketing columns excluded (schema cache issue)
       const created = await create({
-        ...form,
-        paymentStatus: 'none',
-        nextPaymentDate: null,
-        convertedFromLead: null,
-        portalUserId: null,
-        lastPortalLoginAt: null,
-        facebookPageId: '',
-        facebookPageName: '',
-        instagramAccountId: '',
-        instagramUsername: '',
-        tiktokAccountId: '',
-        tiktokUsername: '',
-        monthlyGanttStatus: 'none',
-        annualGanttStatus: 'none',
+        name: form.name,
+        company: form.company,
+        contactPerson: form.contactPerson,
+        email: form.email,
+        phone: form.phone,
+        logoUrl: form.logoUrl,
+        color: form.color,
+        clientType: form.clientType,
+        businessField: form.businessField,
+        retainerAmount: form.retainerAmount,
+        retainerDay: form.retainerDay,
+        assignedManagerId: form.assignedManagerId,
         status: 'active',
         notes: '',
-        websiteUrl: form.websiteUrl,
-        facebookPageUrl: form.facebookPageUrl,
-        instagramProfileUrl: form.instagramProfileUrl,
-        tiktokProfileUrl: form.tiktokProfileUrl,
-        linkedinUrl: form.linkedinUrl,
-        youtubeUrl: form.youtubeUrl,
+        convertedFromLead: null,
         createdAt: now,
         updatedAt: now,
       } as any);
@@ -455,122 +433,10 @@ export default function NewClientPage() {
             />
           </div>
         </div>
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--foreground)' }}>
-            יעדי שיווק
-          </label>
-          <textarea
-            className="form-input"
-            value={form.marketingGoals}
-            onChange={(e) => setForm(prev => ({ ...prev, marketingGoals: e.target.value }))}
-            placeholder="יעדי השיווק של הלקוח"
-            rows={3}
-            style={{ height: 'auto', padding: '0.75rem', fontFamily: 'inherit', resize: 'vertical' }}
-          />
-        </div>
-        <div>
-          <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--foreground)' }}>
-            הודעות שיווק עיקריות
-          </label>
-          <textarea
-            className="form-input"
-            value={form.keyMarketingMessages}
-            onChange={(e) => setForm(prev => ({ ...prev, keyMarketingMessages: e.target.value }))}
-            placeholder="הודעות חיוניות לשיווק"
-            rows={3}
-            style={{ height: 'auto', padding: '0.75rem', fontFamily: 'inherit', resize: 'vertical' }}
-          />
-        </div>
+        {/* Marketing goals & messages temporarily removed — schema cache issue */}
       </div>
 
-      {/* Section 5: Web & Social URLs */}
-      <div
-        style={{
-          background: 'var(--surface-raised)',
-          border: '1px solid var(--border)',
-          borderRadius: '0.75rem',
-          padding: '1.5rem',
-          marginBottom: '1.25rem',
-        }}
-      >
-        <h2 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          🔗 אתר וכתובות חברתיות
-        </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--foreground)' }}>
-              כתובת אתר
-            </label>
-            <input
-              type="text"
-              className="form-input"
-              value={form.websiteUrl}
-              onChange={(e) => setForm(prev => ({ ...prev, websiteUrl: e.target.value }))}
-              placeholder="https://example.com"
-            />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--foreground)' }}>
-              עמוד פייסבוק
-            </label>
-            <input
-              type="text"
-              className="form-input"
-              value={form.facebookPageUrl}
-              onChange={(e) => setForm(prev => ({ ...prev, facebookPageUrl: e.target.value }))}
-              placeholder="https://facebook.com/..."
-            />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--foreground)' }}>
-              פרופיל אינסטגרם
-            </label>
-            <input
-              type="text"
-              className="form-input"
-              value={form.instagramProfileUrl}
-              onChange={(e) => setForm(prev => ({ ...prev, instagramProfileUrl: e.target.value }))}
-              placeholder="https://instagram.com/..."
-            />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--foreground)' }}>
-              טיקטוק
-            </label>
-            <input
-              type="text"
-              className="form-input"
-              value={form.tiktokProfileUrl}
-              onChange={(e) => setForm(prev => ({ ...prev, tiktokProfileUrl: e.target.value }))}
-              placeholder="https://tiktok.com/@..."
-            />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--foreground)' }}>
-              לינקדאין
-            </label>
-            <input
-              type="text"
-              className="form-input"
-              value={form.linkedinUrl}
-              onChange={(e) => setForm(prev => ({ ...prev, linkedinUrl: e.target.value }))}
-              placeholder="https://linkedin.com/company/..."
-            />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--foreground)' }}>
-              יוטיוב
-            </label>
-            <input
-              type="text"
-              className="form-input"
-              value={form.youtubeUrl}
-              onChange={(e) => setForm(prev => ({ ...prev, youtubeUrl: e.target.value }))}
-              placeholder="https://youtube.com/..."
-            />
-          </div>
-        </div>
-      </div>
+      {/* Section 5: Web & Social URLs — temporarily removed (schema cache issue) */}
 
       {/* Section 6: Financial */}
       <div

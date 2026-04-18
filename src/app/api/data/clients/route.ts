@@ -6,11 +6,11 @@
  * The frontend uses camelCase field names; this route maps between
  * camelCase (API contract) and snake_case (DB columns).
  *
- * DB social columns: website, facebook, instagram, tiktok, linkedin, youtube
- * DB marketing columns: marketing_goals, key_marketing_messages
- *
- * If PostgREST's schema cache is stale (columns exist in DB but PostgREST
- * doesn't know about them), we issue NOTIFY pgrst,'reload schema' and retry.
+ * NOTE: Social columns (website, facebook, instagram, tiktok, linkedin,
+ * youtube) and marketing columns (marketing_goals, key_marketing_messages)
+ * are temporarily EXCLUDED from write payloads because PostgREST's schema
+ * cache does not recognise them yet.  They are still read from SELECT *
+ * responses when present so existing data is not lost.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -27,7 +27,11 @@ function generateId(): string {
 
 type ClientRow = Record<string, unknown> & { id: string };
 
-/** Map a raw DB row → camelCase API object. */
+/**
+ * Map a raw DB row → camelCase API object.
+ * Reads social/marketing columns if they happen to be in the SELECT *
+ * result — harmless when they're absent (defaults to '').
+ */
 function rowToClient(r: ClientRow) {
   return {
     id:                  r.id,
@@ -45,115 +49,20 @@ function rowToClient(r: ClientRow) {
     color:              (r.color as string) ?? '#00B5FE',
     convertedFromLead:  (r.converted_from_lead as string) ?? null,
     assignedManagerId:  (r.assigned_manager_id as string) ?? null,
-    // Social — DB columns are: website, facebook, instagram, tiktok, linkedin, youtube
+    // Social — read-only from DB; NOT written to DB for now
     websiteUrl:          (r.website as string) ?? '',
     facebookPageUrl:     (r.facebook as string) ?? '',
     instagramProfileUrl: (r.instagram as string) ?? '',
     tiktokProfileUrl:    (r.tiktok as string) ?? '',
     linkedinUrl:         (r.linkedin as string) ?? '',
     youtubeUrl:          (r.youtube as string) ?? '',
-    // Marketing
+    // Marketing — read-only from DB; NOT written to DB for now
     marketingGoals:      (r.marketing_goals as string) ?? '',
     keyMarketingMessages:(r.key_marketing_messages as string) ?? '',
     logoUrl:             (r.logo_url as string) ?? '',
     createdAt:           (r.created_at as string) ?? '',
     updatedAt:           (r.updated_at as string) ?? '',
   };
-}
-
-/**
- * Refresh PostgREST schema cache via NOTIFY.
- * Returns true if the call succeeded, false if exec_sql RPC is unavailable.
- */
-async function refreshSchemaCache(sb: ReturnType<typeof getSupabase>): Promise<boolean> {
-  try {
-    await sb.rpc('exec_sql', { query: `NOTIFY pgrst, 'reload schema';` });
-    console.log('[clients] ✅ PostgREST schema cache reload requested');
-    return true;
-  } catch (e) {
-    console.warn('[clients] ⚠️ could not reload schema cache:', e);
-    return false;
-  }
-}
-
-/**
- * Insert a row into `clients`.
- *
- * Retry strategy:
- *   - "schema cache" errors: refresh cache, then retry same payload up to
- *     MAX_SCHEMA_RETRIES times per column.  Only drop the column as a last resort.
- *   - "does not exist" errors (no "schema cache"): genuine missing column — drop immediately.
- */
-async function safeInsert(
-  sb: ReturnType<typeof getSupabase>,
-  payload: Record<string, unknown>,
-): Promise<{ row: ClientRow | null; error: { message: string; code?: string } | null; droppedColumns: string[] }> {
-  let current = { ...payload };
-  let lastError: { message: string; code?: string } | null = null;
-  const droppedColumns: string[] = [];
-  let schemaCacheRetries = 0;
-  const MAX_SCHEMA_RETRIES = 3;
-  let refreshAttempted = false;
-
-  for (let attempt = 0; attempt < 25; attempt++) {
-    const { data, error } = await sb
-      .from('clients')
-      .insert(current)
-      .select('*')
-      .single();
-
-    if (!error) return { row: data as ClientRow, error: null, droppedColumns };
-
-    lastError = error as { message: string; code?: string };
-    const msg = error.message;
-
-    // Extract column name from error
-    const m = msg.match(
-      /Could not find the '([^']+)' column|column .*?['"]?([a-z_]+)['"]? (?:does not exist|of relation)/i,
-    );
-    const badCol = m?.[1] || m?.[2];
-
-    // ── Schema cache stale ──
-    if (msg.includes('schema cache')) {
-      schemaCacheRetries++;
-      if (!refreshAttempted) {
-        console.warn(`[clients] schema cache miss — refreshing: ${msg}`);
-        await refreshSchemaCache(sb);
-        refreshAttempted = true;
-      }
-      if (schemaCacheRetries <= MAX_SCHEMA_RETRIES) {
-        // Retry SAME payload — don't drop the column yet
-        console.log(`[clients] schema cache retry ${schemaCacheRetries}/${MAX_SCHEMA_RETRIES}`);
-        continue;
-      }
-      // Exhausted schema cache retries — reluctantly drop this column
-      if (badCol && badCol in current) {
-        console.warn(`[clients] schema cache persists for "${badCol}" after ${MAX_SCHEMA_RETRIES} retries — dropping column`);
-        const { [badCol]: _dropped, ...rest } = current;
-        void _dropped;
-        current = rest;
-        droppedColumns.push(badCol);
-        schemaCacheRetries = 0; // reset for next column
-        continue;
-      }
-      break;
-    }
-
-    // ── Genuine missing column ──
-    if (badCol && badCol in current) {
-      console.warn(`[clients] column "${badCol}" does not exist — dropping (attempt ${attempt + 1})`);
-      const { [badCol]: _dropped, ...rest } = current;
-      void _dropped;
-      current = rest;
-      droppedColumns.push(badCol);
-      continue;
-    }
-
-    // Unknown error
-    console.error(`[clients] insert error (attempt ${attempt + 1}):`, msg);
-    break;
-  }
-  return { row: null, error: lastError, droppedColumns };
 }
 
 /* ── GET ──────────────────────────────────────────────────────────────── */
@@ -199,6 +108,7 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     const id = generateId();
 
+    // Only safe, known-good columns — no social/marketing fields
     const insertRow: Record<string, unknown> = {
       id,
       name:                body.name ?? '',
@@ -214,19 +124,9 @@ export async function POST(req: NextRequest) {
       retainer_day:        body.retainerDay ?? 1,
       color:               body.color ?? '#00B5FE',
       converted_from_lead: body.convertedFromLead ?? null,
-      // Social — always include, even if empty string
-      website:             body.websiteUrl ?? '',
-      facebook:            body.facebookPageUrl ?? '',
-      instagram:           body.instagramProfileUrl ?? '',
-      tiktok:              body.tiktokProfileUrl ?? '',
-      linkedin:            body.linkedinUrl ?? '',
-      youtube:             body.youtubeUrl ?? '',
-      // Marketing
-      marketing_goals:         body.marketingGoals ?? '',
-      key_marketing_messages:  body.keyMarketingMessages ?? '',
-      logo_url:                body.logoUrl ?? '',
-      created_at:              now,
-      updated_at:              now,
+      logo_url:            body.logoUrl ?? '',
+      created_at:          now,
+      updated_at:          now,
     };
 
     if (body.assignedManagerId != null && body.assignedManagerId !== '') {
@@ -235,22 +135,22 @@ export async function POST(req: NextRequest) {
 
     console.log('[API] POST /api/data/clients payload:', JSON.stringify(insertRow));
 
-    const { row: inserted, error: insertErr, droppedColumns } = await safeInsert(sb, insertRow);
+    const { data: inserted, error: insertErr } = await sb
+      .from('clients')
+      .insert(insertRow)
+      .select('*')
+      .single();
 
-    if (droppedColumns.length > 0) {
-      console.warn(`[API] POST /api/data/clients ⚠️ dropped columns: ${droppedColumns.join(', ')}`);
-    }
-
-    if (!inserted) {
+    if (insertErr) {
       console.error('[API] POST /api/data/clients FAILED:', insertErr);
       return NextResponse.json(
-        { error: insertErr?.message ?? 'Insert failed' },
+        { error: (insertErr as { message: string }).message ?? 'Insert failed' },
         { status: 400 },
       );
     }
 
-    console.log(`[API] POST /api/data/clients ✅ id=${inserted.id} keys=${Object.keys(inserted).join(',')}`);
-    return NextResponse.json(rowToClient(inserted), { status: 201 });
+    console.log(`[API] POST /api/data/clients ✅ id=${(inserted as ClientRow).id} keys=${Object.keys(inserted as object).join(',')}`);
+    return NextResponse.json(rowToClient(inserted as ClientRow), { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] POST /api/data/clients error:', msg);
