@@ -25,6 +25,8 @@ export interface Client {
   facebookPageUrl: string;
   instagramProfileUrl: string;
   tiktokProfileUrl: string;
+  linkedinUrl: string;
+  youtubeUrl: string;
   // Financial
   retainerAmount: number;
   retainerDay: number;

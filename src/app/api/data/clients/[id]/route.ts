@@ -29,11 +29,13 @@ function rowToClient(r: ClientRow) {
     color: (r.color as string) ?? '#00B5FE',
     convertedFromLead: (r.converted_from_lead as string) ?? null,
     assignedManagerId: (r.assigned_manager_id as string) ?? null,
-    // Social & marketing fields
-    websiteUrl: (r.website_url as string) ?? '',
-    facebookPageUrl: (r.facebook_page_url as string) ?? '',
-    instagramProfileUrl: (r.instagram_profile_url as string) ?? '',
-    tiktokProfileUrl: (r.tiktok_profile_url as string) ?? '',
+    // Social & marketing fields — DB columns: website, facebook, instagram, tiktok, linkedin, youtube
+    websiteUrl: (r.website as string) ?? '',
+    facebookPageUrl: (r.facebook as string) ?? '',
+    instagramProfileUrl: (r.instagram as string) ?? '',
+    tiktokProfileUrl: (r.tiktok as string) ?? '',
+    linkedinUrl: (r.linkedin as string) ?? '',
+    youtubeUrl: (r.youtube as string) ?? '',
     marketingGoals: (r.marketing_goals as string) ?? '',
     keyMarketingMessages: (r.key_marketing_messages as string) ?? '',
     logoUrl: (r.logo_url as string) ?? '',
@@ -62,11 +64,13 @@ function toDbUpdate(body: Record<string, unknown>): Record<string, unknown> {
   setIfPresent('color', 'color');
   setIfPresent('convertedFromLead', 'converted_from_lead');
   setIfPresent('assignedManagerId', 'assigned_manager_id');
-  // Social & marketing fields
-  setIfPresent('websiteUrl', 'website_url');
-  setIfPresent('facebookPageUrl', 'facebook_page_url');
-  setIfPresent('instagramProfileUrl', 'instagram_profile_url');
-  setIfPresent('tiktokProfileUrl', 'tiktok_profile_url');
+  // Social & marketing fields — DB columns: website, facebook, instagram, tiktok, linkedin, youtube
+  setIfPresent('websiteUrl', 'website');
+  setIfPresent('facebookPageUrl', 'facebook');
+  setIfPresent('instagramProfileUrl', 'instagram');
+  setIfPresent('tiktokProfileUrl', 'tiktok');
+  setIfPresent('linkedinUrl', 'linkedin');
+  setIfPresent('youtubeUrl', 'youtube');
   setIfPresent('marketingGoals', 'marketing_goals');
   setIfPresent('keyMarketingMessages', 'key_marketing_messages');
   setIfPresent('logoUrl', 'logo_url');
@@ -99,7 +103,7 @@ export async function GET(
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
     const client = rowToClient(data as ClientRow);
-    console.log(`[API] GET /api/data/clients/${id} loaded: marketing_goals="${(data as any).marketing_goals ?? '(null)'}" website_url="${(data as any).website_url ?? '(null)'}"`);
+    console.log(`[API] GET /api/data/clients/${id} loaded: marketing_goals="${(data as any).marketing_goals ?? '(null)'}" website="${(data as any).website ?? '(null)'}" facebook="${(data as any).facebook ?? '(null)'}" instagram="${(data as any).instagram ?? '(null)'}"`);
     return NextResponse.json(client);
   } catch (error) {
     console.error('[API] GET /api/data/clients/[id] error:', error);

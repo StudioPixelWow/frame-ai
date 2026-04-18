@@ -19,53 +19,7 @@ function generateId(): string {
   return `cli_${ts}_${rand}`;
 }
 
-/* ── Auto-add missing columns (runs once per process) ────────────────── */
-
-const EXTRA_COLUMNS = [
-  { name: 'assigned_manager_id', def: 'TEXT' },
-  { name: 'website_url', def: 'TEXT' },
-  { name: 'facebook_page_url', def: 'TEXT' },
-  { name: 'instagram_profile_url', def: 'TEXT' },
-  { name: 'tiktok_profile_url', def: 'TEXT' },
-  { name: 'marketing_goals', def: 'TEXT' },
-  { name: 'key_marketing_messages', def: 'TEXT' },
-  { name: 'logo_url', def: 'TEXT' },
-];
-
-let _columnsEnsured = false;
-
-async function ensureClientColumns() {
-  if (_columnsEnsured) return;
-  _columnsEnsured = true;
-  try {
-    const sb = getSupabase();
-    // Quick probe — if marketing_goals exists, all extra columns likely exist
-    const { error } = await sb.from('clients').select('marketing_goals').limit(1);
-    if (!error) return;
-    console.warn('[ensureClientColumns] missing columns detected — adding via exec_sql');
-    for (const col of EXTRA_COLUMNS) {
-      const ddl = `ALTER TABLE clients ADD COLUMN IF NOT EXISTS ${col.name} ${col.def};`;
-      const { error: rpcErr } = await sb.rpc('exec_sql', { query: ddl });
-      if (rpcErr && !rpcErr.message.includes('already exists')) {
-        console.warn(`[ensureClientColumns] failed to add ${col.name}:`, rpcErr.message);
-      }
-    }
-    // Verify
-    const { error: verifyErr } = await sb.from('clients').select('marketing_goals').limit(1);
-    if (verifyErr) {
-      console.error('[ensureClientColumns] STILL cannot access marketing_goals. Run manually:\n' +
-        EXTRA_COLUMNS.map(c => `  ALTER TABLE clients ADD COLUMN IF NOT EXISTS ${c.name} ${c.def};`).join('\n'));
-      _columnsEnsured = false;
-    } else {
-      console.log('[ensureClientColumns] ✓ all columns verified');
-    }
-  } catch (err) {
-    console.warn('[ensureClientColumns] error:', err);
-    _columnsEnsured = false;
-  }
-}
-
-/* ── Row → API object (snake_case → camelCase) ────────────────────────── */
+/* ── Row → API object (DB columns → camelCase) ──────────────────────── */
 
 type ClientRow = Record<string, unknown> & { id: string };
 
@@ -86,11 +40,13 @@ function rowToClient(r: ClientRow) {
     color: (r.color as string) ?? '#00B5FE',
     convertedFromLead: (r.converted_from_lead as string) ?? null,
     assignedManagerId: (r.assigned_manager_id as string) ?? null,
-    // Social & marketing fields
-    websiteUrl: (r.website_url as string) ?? '',
-    facebookPageUrl: (r.facebook_page_url as string) ?? '',
-    instagramProfileUrl: (r.instagram_profile_url as string) ?? '',
-    tiktokProfileUrl: (r.tiktok_profile_url as string) ?? '',
+    // Social & marketing fields — DB columns: website, facebook, instagram, tiktok, linkedin, youtube
+    websiteUrl: (r.website as string) ?? '',
+    facebookPageUrl: (r.facebook as string) ?? '',
+    instagramProfileUrl: (r.instagram as string) ?? '',
+    tiktokProfileUrl: (r.tiktok as string) ?? '',
+    linkedinUrl: (r.linkedin as string) ?? '',
+    youtubeUrl: (r.youtube as string) ?? '',
     marketingGoals: (r.marketing_goals as string) ?? '',
     keyMarketingMessages: (r.key_marketing_messages as string) ?? '',
     logoUrl: (r.logo_url as string) ?? '',
@@ -105,8 +61,6 @@ export async function GET(req: NextRequest) {
   // Only admin and employee can list clients
   const roleErr = requireRole(req, 'admin', 'employee');
   if (roleErr) return roleErr;
-
-  await ensureClientColumns();
 
   try {
     const sb = getSupabase();
@@ -140,8 +94,6 @@ export async function POST(req: NextRequest) {
   const roleErr = requireRole(req, 'admin');
   if (roleErr) return roleErr;
 
-  await ensureClientColumns();
-
   try {
     const sb = getSupabase();
     const body = await req.json();
@@ -164,11 +116,13 @@ export async function POST(req: NextRequest) {
       retainer_day: body.retainerDay ?? 1,
       color: body.color ?? '#00B5FE',
       converted_from_lead: body.convertedFromLead ?? null,
-      // Social & marketing fields
-      website_url: body.websiteUrl ?? '',
-      facebook_page_url: body.facebookPageUrl ?? '',
-      instagram_profile_url: body.instagramProfileUrl ?? '',
-      tiktok_profile_url: body.tiktokProfileUrl ?? '',
+      // Social & marketing fields — DB columns: website, facebook, instagram, tiktok, linkedin, youtube
+      website: body.websiteUrl ?? '',
+      facebook: body.facebookPageUrl ?? '',
+      instagram: body.instagramProfileUrl ?? '',
+      tiktok: body.tiktokProfileUrl ?? '',
+      linkedin: body.linkedinUrl ?? '',
+      youtube: body.youtubeUrl ?? '',
       marketing_goals: body.marketingGoals ?? '',
       key_marketing_messages: body.keyMarketingMessages ?? '',
       logo_url: body.logoUrl ?? '',

@@ -53,11 +53,13 @@ async function fetchClientFromSupabase(clientId: string): Promise<Client | null>
     color: (d.color as string) ?? '#00B5FE',
     convertedFromLead: (d.converted_from_lead as string) ?? null,
     assignedManagerId: (d.assigned_manager_id as string) ?? null,
-    // Social & marketing fields — used in AI prompt context
-    websiteUrl: (d.website_url as string) ?? '',
-    facebookPageUrl: (d.facebook_page_url as string) ?? '',
-    instagramProfileUrl: (d.instagram_profile_url as string) ?? '',
-    tiktokProfileUrl: (d.tiktok_profile_url as string) ?? '',
+    // Social & marketing fields — DB columns: website, facebook, instagram, tiktok, linkedin, youtube
+    websiteUrl: (d.website as string) ?? '',
+    facebookPageUrl: (d.facebook as string) ?? '',
+    instagramProfileUrl: (d.instagram as string) ?? '',
+    tiktokProfileUrl: (d.tiktok as string) ?? '',
+    linkedinUrl: (d.linkedin as string) ?? '',
+    youtubeUrl: (d.youtube as string) ?? '',
     marketingGoals: (d.marketing_goals as string) ?? '',
     keyMarketingMessages: (d.key_marketing_messages as string) ?? '',
     logoUrl: (d.logo_url as string) ?? '',

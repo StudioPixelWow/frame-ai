@@ -223,6 +223,8 @@ function ClientDetailContent() {
         facebookPageUrl: client.facebookPageUrl,
         instagramProfileUrl: client.instagramProfileUrl,
         tiktokProfileUrl: client.tiktokProfileUrl,
+        linkedinUrl: (client as any).linkedinUrl ?? '',
+        youtubeUrl: (client as any).youtubeUrl ?? '',
         notes: client.notes,
       });
       setIsEditModalOpen(true);
@@ -1433,6 +1435,30 @@ function ClientDetailContent() {
                   value={editForm.tiktokProfileUrl || ""}
                   onChange={(e) => setEditForm({ ...editForm, tiktokProfileUrl: e.target.value })}
                   placeholder="https://tiktok.com/@..."
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
+                  פרופיל LinkedIn
+                </label>
+                <input
+                  className="form-input"
+                  value={editForm.linkedinUrl || ""}
+                  onChange={(e) => setEditForm({ ...editForm, linkedinUrl: e.target.value })}
+                  placeholder="https://linkedin.com/company/..."
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
+                  ערוץ YouTube
+                </label>
+                <input
+                  className="form-input"
+                  value={editForm.youtubeUrl || ""}
+                  onChange={(e) => setEditForm({ ...editForm, youtubeUrl: e.target.value })}
+                  placeholder="https://youtube.com/@..."
                 />
               </div>
 
