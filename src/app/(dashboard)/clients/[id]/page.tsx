@@ -206,6 +206,7 @@ function ClientDetailContent() {
 
   const handleOpenEditModal = () => {
     if (client) {
+      // Stable fields only — no social/marketing/logo
       setEditForm({
         name: client.name,
         company: client.company,
@@ -218,13 +219,6 @@ function ClientDetailContent() {
         retainerDay: client.retainerDay,
         status: client.status,
         notes: client.notes,
-        // Social — confirmed DB columns
-        websiteUrl: client.websiteUrl ?? '',
-        facebookPageUrl: client.facebookPageUrl ?? '',
-        instagramProfileUrl: client.instagramProfileUrl ?? '',
-        tiktokProfileUrl: client.tiktokProfileUrl ?? '',
-        linkedinUrl: client.linkedinUrl ?? '',
-        youtubeUrl: client.youtubeUrl ?? '',
       });
       setIsEditModalOpen(true);
     }
@@ -1363,81 +1357,7 @@ function ClientDetailContent() {
                 </div>
               </div>
 
-              {/* Row 8: Social URLs */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                <div>
-                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
-                    אתר אינטרנט
-                  </label>
-                  <input
-                    className="form-input"
-                    value={editForm.websiteUrl || ""}
-                    onChange={(e) => setEditForm({ ...editForm, websiteUrl: e.target.value })}
-                    placeholder="https://..."
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
-                    דף Facebook
-                  </label>
-                  <input
-                    className="form-input"
-                    value={editForm.facebookPageUrl || ""}
-                    onChange={(e) => setEditForm({ ...editForm, facebookPageUrl: e.target.value })}
-                    placeholder="https://facebook.com/..."
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                <div>
-                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
-                    פרופיל Instagram
-                  </label>
-                  <input
-                    className="form-input"
-                    value={editForm.instagramProfileUrl || ""}
-                    onChange={(e) => setEditForm({ ...editForm, instagramProfileUrl: e.target.value })}
-                    placeholder="https://instagram.com/..."
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
-                    פרופיל TikTok
-                  </label>
-                  <input
-                    className="form-input"
-                    value={editForm.tiktokProfileUrl || ""}
-                    onChange={(e) => setEditForm({ ...editForm, tiktokProfileUrl: e.target.value })}
-                    placeholder="https://tiktok.com/@..."
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                <div>
-                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
-                    פרופיל LinkedIn
-                  </label>
-                  <input
-                    className="form-input"
-                    value={editForm.linkedinUrl || ""}
-                    onChange={(e) => setEditForm({ ...editForm, linkedinUrl: e.target.value })}
-                    placeholder="https://linkedin.com/company/..."
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
-                    ערוץ YouTube
-                  </label>
-                  <input
-                    className="form-input"
-                    value={editForm.youtubeUrl || ""}
-                    onChange={(e) => setEditForm({ ...editForm, youtubeUrl: e.target.value })}
-                    placeholder="https://youtube.com/@..."
-                  />
-                </div>
-              </div>
+              {/* Social URLs excluded from writes until schema cache stable */}
 
               {/* Row 9: Notes */}
               <div>

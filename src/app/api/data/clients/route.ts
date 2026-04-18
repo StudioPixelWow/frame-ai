@@ -6,12 +6,10 @@
  * The frontend uses camelCase field names; this route maps between
  * camelCase (API contract) and snake_case (DB columns).
  *
- * Social columns (website, facebook, instagram, tiktok, linkedin, youtube)
- * are confirmed in the DB and included in reads AND writes.
- *
- * marketing_goals, key_marketing_messages, logo_url do NOT exist in the
- * public.clients table — read-only fallback (harmless default when absent),
- * never written.
+ * Social/extra columns (website, facebook, instagram, tiktok, linkedin,
+ * youtube, marketing_goals, key_marketing_messages, logo_url) are
+ * EXCLUDED from all write payloads until the PostgREST schema cache is
+ * confirmed stable.  They are still read from SELECT * when present.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -50,14 +48,13 @@ function rowToClient(r: ClientRow) {
     color:              (r.color as string) ?? '#00B5FE',
     convertedFromLead:  (r.converted_from_lead as string) ?? null,
     assignedManagerId:  (r.assigned_manager_id as string) ?? null,
-    // Social — confirmed DB columns, read + write
+    // Extra fields — read-only from SELECT *, never written
     websiteUrl:          (r.website as string) ?? '',
     facebookPageUrl:     (r.facebook as string) ?? '',
     instagramProfileUrl: (r.instagram as string) ?? '',
     tiktokProfileUrl:    (r.tiktok as string) ?? '',
     linkedinUrl:         (r.linkedin as string) ?? '',
     youtubeUrl:          (r.youtube as string) ?? '',
-    // marketing_goals, key_marketing_messages, logo_url — NOT in DB, read-only fallback
     marketingGoals:      (r.marketing_goals as string) ?? '',
     keyMarketingMessages:(r.key_marketing_messages as string) ?? '',
     logoUrl:             (r.logo_url as string) ?? '',
@@ -109,7 +106,7 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     const id = generateId();
 
-    // Known-good columns only — logo_url, marketing_goals, key_marketing_messages do NOT exist
+    // Stable columns only — no social/marketing/logo fields
     const insertRow: Record<string, unknown> = {
       id,
       name:                body.name ?? '',
@@ -125,13 +122,6 @@ export async function POST(req: NextRequest) {
       retainer_day:        body.retainerDay ?? 1,
       color:               body.color ?? '#00B5FE',
       converted_from_lead: body.convertedFromLead ?? null,
-      // Social — confirmed DB columns
-      website:             body.websiteUrl ?? '',
-      facebook:            body.facebookPageUrl ?? '',
-      instagram:           body.instagramProfileUrl ?? '',
-      tiktok:              body.tiktokProfileUrl ?? '',
-      linkedin:            body.linkedinUrl ?? '',
-      youtube:             body.youtubeUrl ?? '',
       created_at:          now,
       updated_at:          now,
     };
