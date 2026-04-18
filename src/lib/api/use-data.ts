@@ -2,6 +2,23 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+// ── Persistence Logging ───────────────────────────────────────────
+// Structured client-side logs for every write operation.
+// Visible in browser console with [Persist] prefix for easy filtering.
+function logPersistence(
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'FETCH',
+  endpoint: string,
+  url: string,
+  status: number,
+  ok: boolean,
+  error?: string,
+) {
+  const icon = ok ? '✅' : '❌';
+  const method = action === 'CREATE' ? 'POST' : action === 'UPDATE' ? 'PUT' : action === 'DELETE' ? 'DELETE' : 'GET';
+  const level = ok ? 'log' : 'error';
+  console[level](`${icon} [Persist] ${method} ${url} → ${status}${error ? ` | ${error}` : ''} [${endpoint}]`);
+}
+
 /** Build role headers from localStorage for API calls */
 function getRoleHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
@@ -60,19 +77,22 @@ export function useData<T extends { id: string }>(endpoint: string): UseDataResu
   }, []);
 
   const fetchData = useCallback(async () => {
+    const url = `/api/data/${endpoint}`;
     try {
       setLoading(true);
-      const res = await fetch(`/api/data/${endpoint}`, { cache: 'no-store', headers: getRoleHeaders() });
-      if (!res.ok) throw new Error('Failed to fetch');
+      const res = await fetch(url, { cache: 'no-store', headers: getRoleHeaders() });
+      logPersistence('FETCH', endpoint, url, res.status, res.ok);
+      if (!res.ok) throw new Error(`Failed to fetch (${res.status})`);
       const json = await res.json();
       if (isMounted.current) {
-        // Guard: if the API returns a non-array (e.g. error object), keep data empty
         setData(Array.isArray(json) ? json : []);
         setError(null);
       }
     } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      logPersistence('FETCH', endpoint, url, 0, false, msg);
       if (isMounted.current) {
-        setError(e instanceof Error ? e.message : 'Unknown error');
+        setError(msg);
       }
     } finally {
       if (isMounted.current) {
@@ -95,7 +115,8 @@ export function useData<T extends { id: string }>(endpoint: string): UseDataResu
   }, [endpoint, fetchData]);
 
   const create = async (item: Partial<T>): Promise<T> => {
-    const res = await fetch(`/api/data/${endpoint}`, {
+    const url = `/api/data/${endpoint}`;
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...getRoleHeaders() },
       body: JSON.stringify(item),
@@ -103,31 +124,34 @@ export function useData<T extends { id: string }>(endpoint: string): UseDataResu
     if (!res.ok) {
       let msg = `Failed to create (${res.status})`;
       try { const body = await res.json(); if (body?.error) msg = body.error; } catch {}
+      logPersistence('CREATE', endpoint, url, res.status, false, msg);
       throw new Error(msg);
     }
     const created = await res.json();
+    logPersistence('CREATE', endpoint, url, res.status, true);
     if (isMounted.current) {
       setData(prev => [...prev, created]);
     }
-    // Notify other instances of the same hook
     emitDataChange(endpoint);
     return created;
   };
 
   const update = async (id: string, item: Partial<T>): Promise<T> => {
-    console.log(`[useData] update called: PUT /api/data/${endpoint}/${id}`, JSON.stringify(item).slice(0, 200));
-    const res = await fetch(`/api/data/${endpoint}/${id}`, {
+    const url = `/api/data/${endpoint}/${id}`;
+    console.log(`[useData] update called: PUT ${url}`, JSON.stringify(item).slice(0, 200));
+    const res = await fetch(url, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...getRoleHeaders() },
       body: JSON.stringify(item),
     });
-    console.log(`[useData] update response: ${res.status} ${res.statusText}`);
     if (!res.ok) {
       let msg = `Failed to update (${res.status})`;
       try { const body = await res.json(); if (body?.error) msg = body.error; } catch {}
+      logPersistence('UPDATE', endpoint, url, res.status, false, msg);
       throw new Error(msg);
     }
     const updated = await res.json();
+    logPersistence('UPDATE', endpoint, url, res.status, true);
     if (isMounted.current) {
       setData(prev => prev.map(d => d.id === id ? updated : d));
     }
@@ -136,12 +160,15 @@ export function useData<T extends { id: string }>(endpoint: string): UseDataResu
   };
 
   const remove = async (id: string): Promise<void> => {
-    const res = await fetch(`/api/data/${endpoint}/${id}`, { method: 'DELETE', headers: getRoleHeaders() });
+    const url = `/api/data/${endpoint}/${id}`;
+    const res = await fetch(url, { method: 'DELETE', headers: getRoleHeaders() });
     if (!res.ok) {
       let msg = `Failed to delete (${res.status})`;
       try { const body = await res.json(); if (body?.error) msg = body.error; } catch {}
+      logPersistence('DELETE', endpoint, url, res.status, false, msg);
       throw new Error(msg);
     }
+    logPersistence('DELETE', endpoint, url, res.status, true);
     if (isMounted.current) {
       setData(prev => prev.filter(d => d.id !== id));
     }

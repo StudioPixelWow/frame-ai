@@ -83,7 +83,10 @@ export class JsonStore<T extends { id: string }> {
   private prefix: string;
   private seq = 0;
 
+  private collection: string;
+
   constructor(collection: string, prefix: string) {
+    this.collection = collection;
     this.filePath = path.join(RUNTIME_DATA_DIR, `${collection}.json`);
     this.prefix = prefix;
     this.initializeSequence();
@@ -153,6 +156,7 @@ export class JsonStore<T extends { id: string }> {
     const all = this.read();
     all.push(newItem);
     this.write(all);
+    console.log(`[JsonStore][${this.collection}] CREATE id=${id} (total: ${all.length}) ⚠️ EPHEMERAL on Vercel`);
     return newItem;
   }
 
@@ -161,12 +165,14 @@ export class JsonStore<T extends { id: string }> {
     const index = all.findIndex((item) => item.id === id);
 
     if (index === -1) {
+      console.warn(`[JsonStore][${this.collection}] UPDATE id=${id} NOT FOUND`);
       return null;
     }
 
     const updated = { ...all[index], ...data };
     all[index] = updated;
     this.write(all);
+    console.log(`[JsonStore][${this.collection}] UPDATE id=${id} keys=[${Object.keys(data).join(',')}] ⚠️ EPHEMERAL on Vercel`);
     return updated;
   }
 
@@ -175,11 +181,13 @@ export class JsonStore<T extends { id: string }> {
     const index = all.findIndex((item) => item.id === id);
 
     if (index === -1) {
+      console.warn(`[JsonStore][${this.collection}] DELETE id=${id} NOT FOUND`);
       return false;
     }
 
     all.splice(index, 1);
     this.write(all);
+    console.log(`[JsonStore][${this.collection}] DELETE id=${id} (remaining: ${all.length}) ⚠️ EPHEMERAL on Vercel`);
     return true;
   }
 
