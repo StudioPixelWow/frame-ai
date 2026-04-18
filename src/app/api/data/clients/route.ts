@@ -62,37 +62,38 @@ function rowToClient(r: ClientRow) {
 }
 
 /**
- * Refresh PostgREST schema cache.  Call this when we get a
- * "Could not find column … in the schema cache" error —
- * it means the column exists in Postgres but PostgREST hasn't
- * picked it up yet.
+ * Refresh PostgREST schema cache via NOTIFY.
+ * Returns true if the call succeeded, false if exec_sql RPC is unavailable.
  */
-let _cacheRefreshed = false;
-async function refreshSchemaCache(sb: ReturnType<typeof getSupabase>): Promise<void> {
-  if (_cacheRefreshed) return;           // only once per process
-  _cacheRefreshed = true;
+async function refreshSchemaCache(sb: ReturnType<typeof getSupabase>): Promise<boolean> {
   try {
     await sb.rpc('exec_sql', { query: `NOTIFY pgrst, 'reload schema';` });
     console.log('[clients] ✅ PostgREST schema cache reload requested');
+    return true;
   } catch (e) {
     console.warn('[clients] ⚠️ could not reload schema cache:', e);
+    return false;
   }
 }
 
 /**
  * Insert a row into `clients`.
- * If PostgREST complains about a missing column in the schema cache:
- *   1) Refresh the schema cache (NOTIFY pgrst)
- *   2) Retry the exact same insert
- * If a column genuinely doesn't exist (not a cache issue), drop it and retry.
+ *
+ * Retry strategy:
+ *   - "schema cache" errors: refresh cache, then retry same payload up to
+ *     MAX_SCHEMA_RETRIES times per column.  Only drop the column as a last resort.
+ *   - "does not exist" errors (no "schema cache"): genuine missing column — drop immediately.
  */
 async function safeInsert(
   sb: ReturnType<typeof getSupabase>,
   payload: Record<string, unknown>,
-): Promise<{ row: ClientRow | null; error: { message: string; code?: string } | null }> {
+): Promise<{ row: ClientRow | null; error: { message: string; code?: string } | null; droppedColumns: string[] }> {
   let current = { ...payload };
   let lastError: { message: string; code?: string } | null = null;
-  let cacheReloaded = false;
+  const droppedColumns: string[] = [];
+  let schemaCacheRetries = 0;
+  const MAX_SCHEMA_RETRIES = 3;
+  let refreshAttempted = false;
 
   for (let attempt = 0; attempt < 25; attempt++) {
     const { data, error } = await sb
@@ -101,39 +102,58 @@ async function safeInsert(
       .select('*')
       .single();
 
-    if (!error) return { row: data as ClientRow, error: null };
+    if (!error) return { row: data as ClientRow, error: null, droppedColumns };
 
     lastError = error as { message: string; code?: string };
     const msg = error.message;
 
-    // Schema cache error — column exists in DB but PostgREST doesn't know it
-    if (msg.includes('schema cache') && !cacheReloaded) {
-      console.warn(`[clients] schema cache miss — refreshing (attempt ${attempt + 1}): ${msg}`);
-      await refreshSchemaCache(sb);
-      cacheReloaded = true;
-      // Retry the same payload after cache refresh — don't drop the column
-      continue;
-    }
-
-    // Actual missing column — drop it
+    // Extract column name from error
     const m = msg.match(
       /Could not find the '([^']+)' column|column .*?['"]?([a-z_]+)['"]? (?:does not exist|of relation)/i,
     );
     const badCol = m?.[1] || m?.[2];
-    if (!badCol) {
-      console.error(`[clients] insert error (attempt ${attempt + 1}):`, msg);
+
+    // ── Schema cache stale ──
+    if (msg.includes('schema cache')) {
+      schemaCacheRetries++;
+      if (!refreshAttempted) {
+        console.warn(`[clients] schema cache miss — refreshing: ${msg}`);
+        await refreshSchemaCache(sb);
+        refreshAttempted = true;
+      }
+      if (schemaCacheRetries <= MAX_SCHEMA_RETRIES) {
+        // Retry SAME payload — don't drop the column yet
+        console.log(`[clients] schema cache retry ${schemaCacheRetries}/${MAX_SCHEMA_RETRIES}`);
+        continue;
+      }
+      // Exhausted schema cache retries — reluctantly drop this column
+      if (badCol && badCol in current) {
+        console.warn(`[clients] schema cache persists for "${badCol}" after ${MAX_SCHEMA_RETRIES} retries — dropping column`);
+        const { [badCol]: _dropped, ...rest } = current;
+        void _dropped;
+        current = rest;
+        droppedColumns.push(badCol);
+        schemaCacheRetries = 0; // reset for next column
+        continue;
+      }
       break;
     }
-    if (badCol in current) {
-      console.warn(`[clients] dropping column "${badCol}" (attempt ${attempt + 1})`);
+
+    // ── Genuine missing column ──
+    if (badCol && badCol in current) {
+      console.warn(`[clients] column "${badCol}" does not exist — dropping (attempt ${attempt + 1})`);
       const { [badCol]: _dropped, ...rest } = current;
       void _dropped;
       current = rest;
-    } else {
-      break;
+      droppedColumns.push(badCol);
+      continue;
     }
+
+    // Unknown error
+    console.error(`[clients] insert error (attempt ${attempt + 1}):`, msg);
+    break;
   }
-  return { row: null, error: lastError };
+  return { row: null, error: lastError, droppedColumns };
 }
 
 /* ── GET ──────────────────────────────────────────────────────────────── */
@@ -215,7 +235,11 @@ export async function POST(req: NextRequest) {
 
     console.log('[API] POST /api/data/clients payload:', JSON.stringify(insertRow));
 
-    const { row: inserted, error: insertErr } = await safeInsert(sb, insertRow);
+    const { row: inserted, error: insertErr, droppedColumns } = await safeInsert(sb, insertRow);
+
+    if (droppedColumns.length > 0) {
+      console.warn(`[API] POST /api/data/clients ⚠️ dropped columns: ${droppedColumns.join(', ')}`);
+    }
 
     if (!inserted) {
       console.error('[API] POST /api/data/clients FAILED:', insertErr);

@@ -36,6 +36,9 @@ interface FormData {
   websiteUrl: string;
   facebookPageUrl: string;
   instagramProfileUrl: string;
+  tiktokProfileUrl: string;
+  linkedinUrl: string;
+  youtubeUrl: string;
 }
 
 export default function NewClientPage() {
@@ -64,6 +67,9 @@ export default function NewClientPage() {
     websiteUrl: '',
     facebookPageUrl: '',
     instagramProfileUrl: '',
+    tiktokProfileUrl: '',
+    linkedinUrl: '',
+    youtubeUrl: '',
   });
 
   const [uploading, setUploading] = useState(false);
@@ -154,6 +160,9 @@ export default function NewClientPage() {
         websiteUrl: form.websiteUrl,
         facebookPageUrl: form.facebookPageUrl,
         instagramProfileUrl: form.instagramProfileUrl,
+        tiktokProfileUrl: form.tiktokProfileUrl,
+        linkedinUrl: form.linkedinUrl,
+        youtubeUrl: form.youtubeUrl,
         createdAt: now,
         updatedAt: now,
       } as any);
@@ -522,6 +531,42 @@ export default function NewClientPage() {
               value={form.instagramProfileUrl}
               onChange={(e) => setForm(prev => ({ ...prev, instagramProfileUrl: e.target.value }))}
               placeholder="https://instagram.com/..."
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--foreground)' }}>
+              טיקטוק
+            </label>
+            <input
+              type="text"
+              className="form-input"
+              value={form.tiktokProfileUrl}
+              onChange={(e) => setForm(prev => ({ ...prev, tiktokProfileUrl: e.target.value }))}
+              placeholder="https://tiktok.com/@..."
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--foreground)' }}>
+              לינקדאין
+            </label>
+            <input
+              type="text"
+              className="form-input"
+              value={form.linkedinUrl}
+              onChange={(e) => setForm(prev => ({ ...prev, linkedinUrl: e.target.value }))}
+              placeholder="https://linkedin.com/company/..."
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--foreground)' }}>
+              יוטיוב
+            </label>
+            <input
+              type="text"
+              className="form-input"
+              value={form.youtubeUrl}
+              onChange={(e) => setForm(prev => ({ ...prev, youtubeUrl: e.target.value }))}
+              placeholder="https://youtube.com/..."
             />
           </div>
         </div>

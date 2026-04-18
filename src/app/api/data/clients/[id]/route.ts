@@ -93,15 +93,14 @@ function toDbUpdate(body: Record<string, unknown>): Record<string, unknown> {
 
 /* ── Schema cache refresh ────────────────────────────────────────────── */
 
-let _cacheRefreshed = false;
-async function refreshSchemaCache(sb: ReturnType<typeof getSupabase>): Promise<void> {
-  if (_cacheRefreshed) return;
-  _cacheRefreshed = true;
+async function refreshSchemaCache(sb: ReturnType<typeof getSupabase>): Promise<boolean> {
   try {
     await sb.rpc('exec_sql', { query: `NOTIFY pgrst, 'reload schema';` });
     console.log('[clients/[id]] ✅ PostgREST schema cache reload requested');
+    return true;
   } catch (e) {
     console.warn('[clients/[id]] ⚠️ could not reload schema cache:', e);
+    return false;
   }
 }
 
@@ -162,7 +161,10 @@ export async function PUT(
     const sb = getSupabase();
     let updated: ClientRow | null = null;
     let lastError: { code?: string; message: string } | null = null;
-    let cacheReloaded = false;
+    const droppedColumns: string[] = [];
+    let schemaCacheRetries = 0;
+    const MAX_SCHEMA_RETRIES = 3;
+    let refreshAttempted = false;
 
     for (let attempt = 0; attempt < 25; attempt++) {
       const { data, error } = await sb
@@ -177,31 +179,53 @@ export async function PUT(
       lastError = error as { code?: string; message: string };
       const msg = error.message;
 
-      // Schema cache stale — refresh and retry same payload
-      if (msg.includes('schema cache') && !cacheReloaded) {
-        console.warn(`[clients/[id]] schema cache miss — refreshing (attempt ${attempt + 1}): ${msg}`);
-        await refreshSchemaCache(sb);
-        cacheReloaded = true;
-        continue;
-      }
-
-      // Actual missing column — drop it
+      // Extract column name from error
       const m = msg.match(
         /Could not find the '([^']+)' column|column .*?['"]?([a-z_]+)['"]? (?:does not exist|of relation)/i,
       );
       const badCol = m?.[1] || m?.[2];
-      if (!badCol) {
-        console.error(`[API] PUT /clients/${id} error (attempt ${attempt + 1}):`, msg);
+
+      // ── Schema cache stale ──
+      if (msg.includes('schema cache')) {
+        schemaCacheRetries++;
+        if (!refreshAttempted) {
+          console.warn(`[clients/[id]] schema cache miss — refreshing: ${msg}`);
+          await refreshSchemaCache(sb);
+          refreshAttempted = true;
+        }
+        if (schemaCacheRetries <= MAX_SCHEMA_RETRIES) {
+          console.log(`[clients/[id]] schema cache retry ${schemaCacheRetries}/${MAX_SCHEMA_RETRIES}`);
+          continue;
+        }
+        // Exhausted retries — drop the problematic column
+        if (badCol && badCol in updatePayload) {
+          console.warn(`[clients/[id]] schema cache persists for "${badCol}" — dropping`);
+          const { [badCol]: _dropped, ...rest } = updatePayload;
+          void _dropped;
+          updatePayload = rest;
+          droppedColumns.push(badCol);
+          schemaCacheRetries = 0;
+          continue;
+        }
         break;
       }
-      if (badCol in updatePayload) {
-        console.warn(`[API] PUT /clients/${id} dropping column "${badCol}" (attempt ${attempt + 1})`);
+
+      // ── Genuine missing column ──
+      if (badCol && badCol in updatePayload) {
+        console.warn(`[API] PUT /clients/${id} column "${badCol}" does not exist — dropping`);
         const { [badCol]: _dropped, ...rest } = updatePayload;
         void _dropped;
         updatePayload = rest;
-      } else {
-        break;
+        droppedColumns.push(badCol);
+        continue;
       }
+
+      console.error(`[API] PUT /clients/${id} error (attempt ${attempt + 1}):`, msg);
+      break;
+    }
+
+    if (droppedColumns.length > 0) {
+      console.warn(`[API] PUT /clients/${id} ⚠️ dropped columns: ${droppedColumns.join(', ')}`);
     }
 
     if (lastError && !updated) {
