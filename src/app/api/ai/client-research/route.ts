@@ -13,9 +13,25 @@ import {
   creativeDNA,
 } from '@/lib/db/collections';
 import { ensureSeeded } from '@/lib/db/seed';
-import { getSupabase } from '@/lib/db/store';
+import { getSupabase, ensureTable } from '@/lib/db/store';
 import { generateWithAI, getClientKnowledgeContext } from '@/lib/ai/openai-client';
 import type { ClientResearch, Client } from '@/lib/db/schema';
+
+// DDL for auto-creating client_research table if missing
+const CLIENT_RESEARCH_DDL = `
+  CREATE TABLE IF NOT EXISTS public.client_research (
+    id text PRIMARY KEY,
+    client_id text NOT NULL,
+    summary text DEFAULT '',
+    customer_profile text DEFAULT '',
+    trend_engine text DEFAULT '',
+    competitor_analysis text DEFAULT '',
+    brand_weakness text DEFAULT '',
+    client_brain text DEFAULT '',
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+  );
+`;
 
 // ============================================================================
 // SUPABASE PERSISTENCE — public.client_research
@@ -25,6 +41,9 @@ import type { ClientResearch, Client } from '@/lib/db/schema';
 
 async function saveResearchToSupabase(research: ClientResearch): Promise<boolean> {
   try {
+    // Auto-create table if it doesn't exist
+    await ensureTable('client_research', CLIENT_RESEARCH_DDL);
+
     const sb = getSupabase();
     const now = new Date().toISOString();
 
@@ -64,6 +83,8 @@ async function saveResearchToSupabase(research: ClientResearch): Promise<boolean
 
 async function loadResearchFromSupabase(clientId: string): Promise<ClientResearch | null> {
   try {
+    await ensureTable('client_research', CLIENT_RESEARCH_DDL);
+
     const sb = getSupabase();
     console.log(`[client-research] Supabase load for client_id=${clientId}`);
 
@@ -501,10 +522,18 @@ export async function POST(req: NextRequest) {
     };
 
     // Save initial "analyzing" state to Supabase
-    await saveResearchToSupabase(initialResearch);
+    const initialSaved = await saveResearchToSupabase(initialResearch);
+    if (!initialSaved) {
+      console.error(`[client-research] POST: Failed to save initial research state to Supabase`);
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to initialize research in database. Check Supabase connection and client_research table.',
+      }, { status: 500 });
+    }
+    console.log(`[client-research] POST: Initial research state saved to Supabase`);
 
     // Gather context
-    const knowledgeContext = getClientKnowledgeContext(clientId);
+    const knowledgeContext = await getClientKnowledgeContext(clientId);
     const creativeDNARecord = creativeDNA.query((d) => d.clientId === clientId);
     const ganttItems = await clientGanttItems.queryAsync((g) => g.clientId === clientId);
 

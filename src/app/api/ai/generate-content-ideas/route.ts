@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { ensureSeeded } from '@/lib/db/seed';
-import { getSupabase } from '@/lib/db/store';
+import { getSupabase, ensureTable } from '@/lib/db/store';
 import { generateWithAI } from '@/lib/ai/openai-client';
 import { getClientById } from '@/lib/db/client-helpers';
 import type { ClientResearch } from '@/lib/db';
@@ -27,7 +27,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Client not found' }, { status: 400 });
     }
 
-    // Load research from Supabase (single source of truth)
+    // Ensure table exists, then load research from Supabase
+    await ensureTable('client_research', `
+      CREATE TABLE IF NOT EXISTS public.client_research (
+        id text PRIMARY KEY,
+        client_id text NOT NULL,
+        summary text DEFAULT '',
+        customer_profile text DEFAULT '',
+        trend_engine text DEFAULT '',
+        competitor_analysis text DEFAULT '',
+        brand_weakness text DEFAULT '',
+        client_brain text DEFAULT '',
+        created_at timestamptz DEFAULT now(),
+        updated_at timestamptz DEFAULT now()
+      );
+    `);
     let research: ClientResearch | null = null;
     const sb = getSupabase();
     const { data: sbRow, error: sbError } = await sb

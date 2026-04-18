@@ -1097,7 +1097,7 @@ export async function POST(
     // ============================================================
     // STEP 3: BUILD PROMPTS — RESEARCH IS THE STRATEGIC BRIEF
     // ============================================================
-    const knowledgeContext = getClientKnowledgeContext(id);
+    const knowledgeContext = await getClientKnowledgeContext(id);
     const holidaysList = getRelevantHolidays(body.month, client.clientType, body.year);
     const holidaysSection = holidaysList.length > 0
       ? `\n\nחגים ואירועים בחודש זה:\n${holidaysList

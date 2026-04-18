@@ -133,7 +133,7 @@ export async function POST(
 
     // Build client context for AI
     const researchContext = latestResearch ? buildResearchContext(latestResearch) : '';
-    const knowledgeContext = getClientKnowledgeContext(id);
+    const knowledgeContext = await getClientKnowledgeContext(id);
 
     // ============================================================
     // MODE 1: Manual topic entry

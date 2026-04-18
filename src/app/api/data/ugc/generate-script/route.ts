@@ -77,8 +77,8 @@ export async function POST(req: NextRequest) {
     let clientContext = '';
     if (clientId) {
       try {
-        const knowledge = getClientKnowledgeContext(clientId);
-        const research = getClientResearchContext(clientId);
+        const knowledge = await getClientKnowledgeContext(clientId);
+        const research = await getClientResearchContext(clientId);
         if (knowledge) clientContext += knowledge + '\n';
         if (research) clientContext += research + '\n';
       } catch (e) {
