@@ -116,6 +116,41 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
   );
 }
 
+function EmptyState({ message, actionLabel, onAction }: { message: string; actionLabel: string; onAction: () => void }) {
+  return (
+    <div
+      style={{
+        padding: "1.5rem",
+        backgroundColor: "rgba(0, 181, 254, 0.04)",
+        border: "1px dashed var(--border)",
+        borderRadius: "0.5rem",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: "0.75rem",
+        textAlign: "center",
+      }}
+    >
+      <span style={{ color: "var(--foreground-muted)", fontSize: "0.875rem" }}>{message}</span>
+      <button
+        onClick={onAction}
+        style={{
+          padding: "0.5rem 1.25rem",
+          backgroundColor: "var(--accent)",
+          color: "white",
+          border: "none",
+          borderRadius: "0.375rem",
+          cursor: "pointer",
+          fontSize: "0.875rem",
+          fontWeight: 500,
+        }}
+      >
+        {actionLabel}
+      </button>
+    </div>
+  );
+}
+
 // ============================================================================
 // SECTION: CLIENT BRAIN
 // ============================================================================
@@ -124,15 +159,31 @@ function ClientBrainSection({ client }: { client: Client }) {
   const [data, setData] = useState<ClientBrainData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isEmpty, setIsEmpty] = useState(false);
 
   const fetchClientBrain = async () => {
     setLoading(true);
     setError(null);
+    setIsEmpty(false);
     try {
+      console.log(`[Insights] ClientBrain GET /api/ai/client-brain?clientId=${client.id}`);
       const response = await fetch(`/api/ai/client-brain?clientId=${client.id}`);
-      if (!response.ok) throw new Error("Failed to fetch client brain");
+      console.log(`[Insights] ClientBrain response: ${response.status}`);
+      if (response.status === 404) {
+        // No data yet — not an error
+        setIsEmpty(true);
+        return;
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        console.error('[Insights] ClientBrain server error:', body);
+        throw new Error(body?.error || `Server error (${response.status})`);
+      }
       const result = await response.json();
-      setData(result);
+      console.log('[Insights] ClientBrain data received:', Object.keys(result));
+      // API wraps in { success, data } or returns flat object
+      const brainData = result?.data || result;
+      setData(brainData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -140,26 +191,37 @@ function ClientBrainSection({ client }: { client: Client }) {
     }
   };
 
-  const handleRefresh = async () => {
+  const handleGenerate = async () => {
     setLoading(true);
     setError(null);
+    setIsEmpty(false);
     try {
+      console.log(`[Insights] ClientBrain POST generate for ${client.id}`);
       const response = await fetch("/api/ai/client-brain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientId: client.id,
-          name: client.name,
+          clientName: client.name,
           businessField: client.businessField,
-          clientType: client.clientType,
-          keyMarketingMessages: client.keyMarketingMessages,
-          marketingGoals: client.marketingGoals,
-          platforms: [client.facebookPageUrl ? 'facebook' : '', client.instagramProfileUrl ? 'instagram' : '', client.tiktokProfileUrl ? 'tiktok' : ''].filter(Boolean),
+          businessType: client.clientType,
+          industryType: client.businessField,
+          keyMarketingMessages: client.keyMarketingMessages || '',
+          marketingGoals: client.marketingGoals || '',
+          websiteUrl: client.websiteUrl || '',
+          facebookUrl: client.facebookPageUrl || '',
+          instagramUrl: client.instagramProfileUrl || '',
         }),
       });
-      if (!response.ok) throw new Error("Failed to refresh");
+      console.log(`[Insights] ClientBrain POST response: ${response.status}`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        console.error('[Insights] ClientBrain POST error:', body);
+        throw new Error(body?.error || "Failed to generate");
+      }
       const result = await response.json();
-      setData(result);
+      const brainData = result?.data || result;
+      setData(brainData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -171,51 +233,29 @@ function ClientBrainSection({ client }: { client: Client }) {
     fetchClientBrain();
   }, [client.id]);
 
+  const sectionStyle = {
+    padding: "2rem",
+    backgroundColor: "var(--surface-raised)",
+    border: "1px solid var(--border)",
+    borderRadius: "0.75rem",
+    background: "linear-gradient(135deg, var(--surface-raised) 0%, rgba(0, 181, 254, 0.03) 100%)",
+  };
+
   if (error) {
     return (
-      <div
-        style={{
-          padding: "2rem",
-          backgroundColor: "var(--surface-raised)",
-          border: "1px solid var(--border)",
-          borderRadius: "0.75rem",
-          background: "linear-gradient(135deg, var(--surface-raised) 0%, rgba(0, 181, 254, 0.03) 100%)",
-        }}
-      >
-        <h3
-          style={{
-            fontSize: "1.125rem",
-            fontWeight: 600,
-            marginBottom: "1.5rem",
-            color: "var(--foreground)",
-          }}
-        >
+      <div style={sectionStyle}>
+        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem", color: "var(--foreground)" }}>
           🧠 ניתוח עסקי AI
         </h3>
-        <ErrorState message={error} onRetry={handleRefresh} />
+        <ErrorState message={error} onRetry={fetchClientBrain} />
       </div>
     );
   }
 
   if (loading) {
     return (
-      <div
-        style={{
-          padding: "2rem",
-          backgroundColor: "var(--surface-raised)",
-          border: "1px solid var(--border)",
-          borderRadius: "0.75rem",
-          background: "linear-gradient(135deg, var(--surface-raised) 0%, rgba(0, 181, 254, 0.03) 100%)",
-        }}
-      >
-        <h3
-          style={{
-            fontSize: "1.125rem",
-            fontWeight: 600,
-            marginBottom: "1.5rem",
-            color: "var(--foreground)",
-          }}
-        >
+      <div style={sectionStyle}>
+        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem", color: "var(--foreground)" }}>
           🧠 ניתוח עסקי AI
         </h3>
         <LoadingSkeleton />
@@ -223,7 +263,16 @@ function ClientBrainSection({ client }: { client: Client }) {
     );
   }
 
-  if (!data) return null;
+  if (isEmpty || !data) {
+    return (
+      <div style={sectionStyle}>
+        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem", color: "var(--foreground)" }}>
+          🧠 ניתוח עסקי AI
+        </h3>
+        <EmptyState message="עדיין לא נוצר ניתוח עסקי עבור לקוח זה." actionLabel="צור ניתוח" onAction={handleGenerate} />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -254,7 +303,7 @@ function ClientBrainSection({ client }: { client: Client }) {
           🧠 ניתוח עסקי AI
         </h3>
         <button
-          onClick={handleRefresh}
+          onClick={handleGenerate}
           disabled={loading}
           style={{
             padding: "0.5rem 1rem",
@@ -450,14 +499,16 @@ function ClientBrainSection({ client }: { client: Client }) {
 
 function BrandWeaknessSection({ client }: { client: Client }) {
   const [weaknesses, setWeaknesses] = useState<BrandWeakness[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [generated, setGenerated] = useState(false);
 
   const fetchWeaknesses = async () => {
     setLoading(true);
     setError(null);
     try {
+      console.log(`[Insights] BrandWeakness POST for ${client.id}`);
       const response = await fetch("/api/ai/brand-weakness", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -466,22 +517,25 @@ function BrandWeaknessSection({ client }: { client: Client }) {
           name: client.name,
           businessField: client.businessField,
           clientType: client.clientType,
-          keyMarketingMessages: client.keyMarketingMessages,
+          keyMarketingMessages: client.keyMarketingMessages || '',
         }),
       });
-      if (!response.ok) throw new Error("Failed to fetch weaknesses");
+      console.log(`[Insights] BrandWeakness response: ${response.status}`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        console.error('[Insights] BrandWeakness error:', body);
+        throw new Error(body?.error || `Server error (${response.status})`);
+      }
       const result = await response.json();
+      console.log('[Insights] BrandWeakness data received');
       setWeaknesses(Array.isArray(result) ? result : result.weaknesses || []);
+      setGenerated(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    fetchWeaknesses();
-  }, [client.id]);
 
   const toggleExpand = (idx: number) => {
     const newExpanded = new Set(expanded);
@@ -538,6 +592,24 @@ function BrandWeaknessSection({ client }: { client: Client }) {
           🔍 חוזקות ותחומי הגדלה
         </h3>
         <LoadingSkeleton />
+      </div>
+    );
+  }
+
+  if (!generated && weaknesses.length === 0) {
+    return (
+      <div
+        style={{
+          padding: "2rem",
+          backgroundColor: "var(--surface-raised)",
+          border: "1px solid var(--border)",
+          borderRadius: "0.75rem",
+        }}
+      >
+        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>
+          🔍 חוזקות ותחומי הגדלה
+        </h3>
+        <EmptyState message="עדיין לא נוצר ניתוח חוזקות וחולשות." actionLabel="צור ניתוח" onAction={fetchWeaknesses} />
       </div>
     );
   }
@@ -711,13 +783,15 @@ function BrandWeaknessSection({ client }: { client: Client }) {
 
 function CustomerProfileSection({ client }: { client: Client }) {
   const [segments, setSegments] = useState<CustomerSegment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [generated, setGenerated] = useState(false);
 
   const fetchCustomerProfile = async () => {
     setLoading(true);
     setError(null);
     try {
+      console.log(`[Insights] CustomerProfile POST for ${client.id}`);
       const response = await fetch("/api/ai/customer-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -725,23 +799,26 @@ function CustomerProfileSection({ client }: { client: Client }) {
           clientId: client.id,
           name: client.name,
           businessField: client.businessField,
-          marketingGoals: client.marketingGoals,
+          marketingGoals: client.marketingGoals || '',
           platforms: [client.facebookPageUrl ? 'facebook' : '', client.instagramProfileUrl ? 'instagram' : '', client.tiktokProfileUrl ? 'tiktok' : ''].filter(Boolean),
         }),
       });
-      if (!response.ok) throw new Error("Failed to fetch customer profile");
+      console.log(`[Insights] CustomerProfile response: ${response.status}`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        console.error('[Insights] CustomerProfile error:', body);
+        throw new Error(body?.error || `Server error (${response.status})`);
+      }
       const result = await response.json();
+      console.log('[Insights] CustomerProfile data received');
       setSegments(Array.isArray(result) ? result : result.segments || []);
+      setGenerated(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    fetchCustomerProfile();
-  }, [client.id]);
 
   if (error) {
     return (
@@ -775,6 +852,24 @@ function CustomerProfileSection({ client }: { client: Client }) {
           👥 פרופיל לקוח
         </h3>
         <LoadingSkeleton />
+      </div>
+    );
+  }
+
+  if (!generated && segments.length === 0) {
+    return (
+      <div
+        style={{
+          padding: "2rem",
+          backgroundColor: "var(--surface-raised)",
+          border: "1px solid var(--border)",
+          borderRadius: "0.75rem",
+        }}
+      >
+        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>
+          👥 פרופיל לקוח
+        </h3>
+        <EmptyState message="עדיין לא נוצר פרופיל קהל יעד." actionLabel="צור פרופיל" onAction={fetchCustomerProfile} />
       </div>
     );
   }
@@ -972,13 +1067,15 @@ function CustomerProfileSection({ client }: { client: Client }) {
 
 function TrendEngineSection({ client }: { client: Client }) {
   const [trends, setTrends] = useState<TrendSuggestion[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [generated, setGenerated] = useState(false);
 
   const fetchTrends = async () => {
     setLoading(true);
     setError(null);
     try {
+      console.log(`[Insights] TrendEngine POST for ${client.id}`);
       const response = await fetch("/api/ai/trend-engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -988,19 +1085,22 @@ function TrendEngineSection({ client }: { client: Client }) {
           platforms: [client.facebookPageUrl ? 'facebook' : '', client.instagramProfileUrl ? 'instagram' : '', client.tiktokProfileUrl ? 'tiktok' : ''].filter(Boolean),
         }),
       });
-      if (!response.ok) throw new Error("Failed to fetch trends");
+      console.log(`[Insights] TrendEngine response: ${response.status}`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        console.error('[Insights] TrendEngine error:', body);
+        throw new Error(body?.error || `Server error (${response.status})`);
+      }
       const result = await response.json();
+      console.log('[Insights] TrendEngine data received');
       setTrends(Array.isArray(result) ? result : result.trendSuggestions || []);
+      setGenerated(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    fetchTrends();
-  }, [client.id]);
 
   const getUrgencyColor = (urgency: string) => {
     switch (urgency) {
@@ -1060,6 +1160,24 @@ function TrendEngineSection({ client }: { client: Client }) {
           🔥 מה חם השבוע
         </h3>
         <LoadingSkeleton />
+      </div>
+    );
+  }
+
+  if (!generated && trends.length === 0) {
+    return (
+      <div
+        style={{
+          padding: "2rem",
+          backgroundColor: "var(--surface-raised)",
+          border: "1px solid var(--border)",
+          borderRadius: "0.75rem",
+        }}
+      >
+        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>
+          🔥 מה חם השבוע
+        </h3>
+        <EmptyState message="עדיין לא נוצר ניתוח טרנדים." actionLabel="צור ניתוח" onAction={fetchTrends} />
       </div>
     );
   }
@@ -1237,13 +1355,15 @@ function TrendEngineSection({ client }: { client: Client }) {
 
 function CompetitorInsightsSection({ client }: { client: Client }) {
   const [insights, setInsights] = useState<CompetitorInsight | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [generated, setGenerated] = useState(false);
 
   const fetchCompetitorAnalysis = async () => {
     setLoading(true);
     setError(null);
     try {
+      console.log(`[Insights] CompetitorAnalysis POST for ${client.id}`);
       const response = await fetch("/api/ai/competitor-analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1253,19 +1373,22 @@ function CompetitorInsightsSection({ client }: { client: Client }) {
           platforms: [client.facebookPageUrl ? 'facebook' : '', client.instagramProfileUrl ? 'instagram' : '', client.tiktokProfileUrl ? 'tiktok' : ''].filter(Boolean),
         }),
       });
-      if (!response.ok) throw new Error("Failed to fetch competitor analysis");
+      console.log(`[Insights] CompetitorAnalysis response: ${response.status}`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        console.error('[Insights] CompetitorAnalysis error:', body);
+        throw new Error(body?.error || `Server error (${response.status})`);
+      }
       const result = await response.json();
+      console.log('[Insights] CompetitorAnalysis data received');
       setInsights(result);
+      setGenerated(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    fetchCompetitorAnalysis();
-  }, [client.id]);
 
   if (error) {
     return (
@@ -1299,6 +1422,24 @@ function CompetitorInsightsSection({ client }: { client: Client }) {
           🎯 תובנות תחרותיות
         </h3>
         <LoadingSkeleton />
+      </div>
+    );
+  }
+
+  if (!generated && !insights) {
+    return (
+      <div
+        style={{
+          padding: "2rem",
+          backgroundColor: "var(--surface-raised)",
+          border: "1px solid var(--border)",
+          borderRadius: "0.75rem",
+        }}
+      >
+        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>
+          🎯 תובנות תחרותיות
+        </h3>
+        <EmptyState message="עדיין לא נוצר ניתוח תחרותי." actionLabel="צור ניתוח" onAction={fetchCompetitorAnalysis} />
       </div>
     );
   }
