@@ -4,63 +4,41 @@
  * DELETE /api/data/clients/[id] - Delete a client
  *
  * Storage: Supabase "clients" table (same source of truth as /api/data/clients).
- *
- * Required column (run once in Supabase SQL editor):
- *   ALTER TABLE clients ADD COLUMN IF NOT EXISTS assigned_manager_id TEXT;
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 import { requireRole } from '@/lib/auth/api-guard';
 
-// Keep this list in sync with src/app/api/data/clients/route.ts COLUMNS.
-// If a listed column doesn't exist in the DB the select itself will fail, so
-// after adding a new column in code, run the corresponding ALTER TABLE in Supabase.
-const COLUMNS =
-  'id, name, company, contact_person, email, phone, notes, business_field, client_type, status, retainer_amount, retainer_day, color, converted_from_lead, assigned_manager_id, created_at, updated_at';
-
-const COLUMNS_FALLBACK =
-  'id, name, company, contact_person, email, phone, notes, business_field, client_type, status, retainer_amount, retainer_day, color, converted_from_lead, created_at, updated_at';
-
-type ClientRow = {
-  id: string;
-  name: string | null;
-  company: string | null;
-  contact_person: string | null;
-  email: string | null;
-  phone: string | null;
-  notes: string | null;
-  business_field: string | null;
-  client_type: string | null;
-  status: string | null;
-  retainer_amount: number | null;
-  retainer_day: number | null;
-  color: string | null;
-  converted_from_lead: string | null;
-  assigned_manager_id: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-};
+type ClientRow = Record<string, unknown> & { id: string };
 
 function rowToClient(r: ClientRow) {
   return {
     id: r.id,
-    name: r.name ?? '',
-    company: r.company ?? '',
-    contactPerson: r.contact_person ?? '',
-    email: r.email ?? '',
-    phone: r.phone ?? '',
-    notes: r.notes ?? '',
-    businessField: r.business_field ?? '',
-    clientType: r.client_type ?? 'marketing',
-    status: r.status ?? 'active',
-    retainerAmount: r.retainer_amount ?? 0,
-    retainerDay: r.retainer_day ?? 1,
-    color: r.color ?? '#00B5FE',
-    convertedFromLead: r.converted_from_lead ?? null,
-    assignedManagerId: r.assigned_manager_id ?? null,
-    createdAt: r.created_at ?? '',
-    updatedAt: r.updated_at ?? '',
+    name: (r.name as string) ?? '',
+    company: (r.company as string) ?? '',
+    contactPerson: (r.contact_person as string) ?? '',
+    email: (r.email as string) ?? '',
+    phone: (r.phone as string) ?? '',
+    notes: (r.notes as string) ?? '',
+    businessField: (r.business_field as string) ?? '',
+    clientType: (r.client_type as string) ?? 'marketing',
+    status: (r.status as string) ?? 'active',
+    retainerAmount: Number(r.retainer_amount) || 0,
+    retainerDay: Number(r.retainer_day) || 1,
+    color: (r.color as string) ?? '#00B5FE',
+    convertedFromLead: (r.converted_from_lead as string) ?? null,
+    assignedManagerId: (r.assigned_manager_id as string) ?? null,
+    // Social & marketing fields
+    websiteUrl: (r.website_url as string) ?? '',
+    facebookPageUrl: (r.facebook_page_url as string) ?? '',
+    instagramProfileUrl: (r.instagram_profile_url as string) ?? '',
+    tiktokProfileUrl: (r.tiktok_profile_url as string) ?? '',
+    marketingGoals: (r.marketing_goals as string) ?? '',
+    keyMarketingMessages: (r.key_marketing_messages as string) ?? '',
+    logoUrl: (r.logo_url as string) ?? '',
+    createdAt: (r.created_at as string) ?? '',
+    updatedAt: (r.updated_at as string) ?? '',
   };
 }
 
@@ -84,6 +62,14 @@ function toDbUpdate(body: Record<string, unknown>): Record<string, unknown> {
   setIfPresent('color', 'color');
   setIfPresent('convertedFromLead', 'converted_from_lead');
   setIfPresent('assignedManagerId', 'assigned_manager_id');
+  // Social & marketing fields
+  setIfPresent('websiteUrl', 'website_url');
+  setIfPresent('facebookPageUrl', 'facebook_page_url');
+  setIfPresent('instagramProfileUrl', 'instagram_profile_url');
+  setIfPresent('tiktokProfileUrl', 'tiktok_profile_url');
+  setIfPresent('marketingGoals', 'marketing_goals');
+  setIfPresent('keyMarketingMessages', 'key_marketing_messages');
+  setIfPresent('logoUrl', 'logo_url');
   out.updated_at = new Date().toISOString();
   return out;
 }
@@ -101,7 +87,7 @@ export async function GET(
     const sb = getSupabase();
     const { data, error } = await sb
       .from('clients')
-      .select(COLUMNS)
+      .select('*')
       .eq('id', id)
       .maybeSingle();
 
@@ -112,7 +98,9 @@ export async function GET(
     if (!data) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
-    return NextResponse.json(rowToClient(data as ClientRow));
+    const client = rowToClient(data as ClientRow);
+    console.log(`[API] GET /api/data/clients/${id} loaded: marketing_goals="${(data as any).marketing_goals ?? '(null)'}" website_url="${(data as any).website_url ?? '(null)'}"`);
+    return NextResponse.json(client);
   } catch (error) {
     console.error('[API] GET /api/data/clients/[id] error:', error);
     return NextResponse.json({ error: 'Failed to fetch client' }, { status: 500 });
@@ -132,76 +120,50 @@ export async function PUT(
     let body: Record<string, unknown> = {};
     try { body = (await req.json()) as Record<string, unknown>; } catch { /* noop */ }
 
-    const update = toDbUpdate(body);
-    console.log(`[API] PUT /api/data/clients/${id} fields=${Object.keys(update).join(',')}`);
+    let updatePayload = toDbUpdate(body);
+    console.log(`[API] PUT /api/data/clients/${id} fields=${Object.keys(updatePayload).join(',')}`, JSON.stringify(updatePayload));
 
     const sb = getSupabase();
 
-    // Attempt update. If the DB rejects because of an unknown column
-    // (e.g. assigned_manager_id not yet added), drop that column and retry
-    // so the rest of the update still persists.
-    async function tryUpdate(
-      payload: Record<string, unknown>
-    ): Promise<{ data: ClientRow | null; error: { code?: string; message: string } | null }> {
-      // Try with the full column list; fall back to the minimal list if select fails
-      // because a column we try to read back doesn't exist yet.
-      let { data, error } = await sb
+    // Update with column-drop retry
+    let updated: ClientRow | null = null;
+    let lastError: { code?: string; message: string } | null = null;
+
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const { data, error } = await sb
         .from('clients')
-        .update(payload)
+        .update(updatePayload)
         .eq('id', id)
-        .select(COLUMNS)
+        .select('*')
         .maybeSingle();
-      if (error && /Could not find the '([^']+)' column/i.test(error.message)) {
-        const retry = await sb
-          .from('clients')
-          .update(payload)
-          .eq('id', id)
-          .select(COLUMNS_FALLBACK)
-          .maybeSingle();
-        data = retry.data as any;
-        error = retry.error as any;
-      }
-      return { data: (data as ClientRow) ?? null, error: error as any };
-    }
-
-    let { data, error } = await tryUpdate(update);
-
-    // PostgREST returns PGRST204 / "Could not find the 'X' column" for unknown columns.
-    if (error && /Could not find the '([^']+)' column/i.test(error.message)) {
-      const match = error.message.match(/Could not find the '([^']+)' column/i);
-      const badCol = match?.[1];
-      if (badCol && badCol in update) {
-        console.warn(`[API] PUT /api/data/clients/${id} dropping unknown column "${badCol}" and retrying`);
-        const { [badCol]: _dropped, ...rest } = update;
-        void _dropped;
-        const retry = await tryUpdate(rest);
-        data = retry.data;
-        error = retry.error;
-        // Also try a SELECT to return the latest row without updated columns
-        if (!error && !data) {
-          const { data: row } = await sb.from('clients').select(COLUMNS).eq('id', id).maybeSingle();
-          data = (row as ClientRow) ?? null;
-        }
-        if (!error) {
-          return NextResponse.json({
-            ...(data ? rowToClient(data) : { id }),
-            _warning: `Column "${badCol}" missing in DB. Run: ALTER TABLE clients ADD COLUMN IF NOT EXISTS ${badCol} TEXT;`,
-          });
-        }
+      if (!error) { updated = (data as ClientRow) ?? null; break; }
+      lastError = error as any;
+      const m = error.message.match(/Could not find the '([^']+)' column|column .*?['"]?([a-z_]+)['"]? (?:does not exist)/i);
+      const badCol = m?.[1] || m?.[2];
+      if (!badCol) break;
+      if (badCol in updatePayload) {
+        console.warn(`[API] PUT /api/data/clients/${id} dropping column "${badCol}" (attempt ${attempt + 1})`);
+        const { [badCol]: _d, ...rest } = updatePayload;
+        void _d;
+        updatePayload = rest;
+      } else {
+        break;
       }
     }
 
-    if (error) {
-      console.error('[API] PUT /api/data/clients/[id] supabase error:', error);
+    if (lastError && !updated) {
+      console.error('[API] PUT /api/data/clients/[id] supabase error:', lastError);
       return NextResponse.json(
-        { error: error.message, code: (error as any).code ?? null, hint: 'If this mentions a missing column, run the corresponding ALTER TABLE in Supabase.' },
+        { error: lastError.message, code: lastError.code ?? null },
         { status: 400 }
       );
     }
-    if (!data) {
+    if (!updated) {
       return NextResponse.json({ error: 'Client not found', clientId: id }, { status: 404 });
     }
-    return NextResponse.json(rowToClient(data));
+    const result = rowToClient(updated);
+    console.log(`[API] PUT /api/data/clients/${id} ✅ saved. marketingGoals="${result.marketingGoals}" websiteUrl="${result.websiteUrl}"`);
+    return NextResponse.json(result);
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] PUT /api/data/clients/[id] fatal:', msg);

@@ -26,9 +26,7 @@ async function fetchClientFromSupabase(clientId: string): Promise<Client | null>
   const sb = getSupabase();
   const { data, error } = await sb
     .from('clients')
-    .select(
-      'id, name, company, contact_person, email, phone, notes, business_field, client_type, status, retainer_amount, retainer_day, color, converted_from_lead, created_at, updated_at'
-    )
+    .select('*')
     .eq('id', clientId)
     .maybeSingle();
 
@@ -38,23 +36,33 @@ async function fetchClientFromSupabase(clientId: string): Promise<Client | null>
   }
   if (!data) return null;
 
+  const d = data as Record<string, unknown>;
   return {
-    id: data.id,
-    name: data.name ?? '',
-    company: data.company ?? '',
-    contactPerson: data.contact_person ?? '',
-    email: data.email ?? '',
-    phone: data.phone ?? '',
-    notes: data.notes ?? '',
-    businessField: data.business_field ?? '',
-    clientType: data.client_type ?? 'marketing',
-    status: data.status ?? 'active',
-    retainerAmount: data.retainer_amount ?? 0,
-    retainerDay: data.retainer_day ?? 1,
-    color: data.color ?? '#00B5FE',
-    convertedFromLead: data.converted_from_lead ?? null,
-    createdAt: data.created_at ?? '',
-    updatedAt: data.updated_at ?? '',
+    id: d.id as string,
+    name: (d.name as string) ?? '',
+    company: (d.company as string) ?? '',
+    contactPerson: (d.contact_person as string) ?? '',
+    email: (d.email as string) ?? '',
+    phone: (d.phone as string) ?? '',
+    notes: (d.notes as string) ?? '',
+    businessField: (d.business_field as string) ?? '',
+    clientType: (d.client_type as string) ?? 'marketing',
+    status: (d.status as string) ?? 'active',
+    retainerAmount: Number(d.retainer_amount) || 0,
+    retainerDay: Number(d.retainer_day) || 1,
+    color: (d.color as string) ?? '#00B5FE',
+    convertedFromLead: (d.converted_from_lead as string) ?? null,
+    assignedManagerId: (d.assigned_manager_id as string) ?? null,
+    // Social & marketing fields — used in AI prompt context
+    websiteUrl: (d.website_url as string) ?? '',
+    facebookPageUrl: (d.facebook_page_url as string) ?? '',
+    instagramProfileUrl: (d.instagram_profile_url as string) ?? '',
+    tiktokProfileUrl: (d.tiktok_profile_url as string) ?? '',
+    marketingGoals: (d.marketing_goals as string) ?? '',
+    keyMarketingMessages: (d.key_marketing_messages as string) ?? '',
+    logoUrl: (d.logo_url as string) ?? '',
+    createdAt: (d.created_at as string) ?? '',
+    updatedAt: (d.updated_at as string) ?? '',
   } as unknown as Client;
 }
 

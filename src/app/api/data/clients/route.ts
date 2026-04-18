@@ -2,11 +2,7 @@
  * GET  /api/data/clients — Get all clients
  * POST /api/data/clients — Create a new client
  *
- * Storage: Supabase "clients" table with normal columns:
- *   id, name, company, contact_person, email, phone, notes,
- *   business_field, client_type, status, retainer_amount, retainer_day,
- *   color, converted_from_lead, created_at, updated_at
- *
+ * Storage: Supabase "clients" table.
  * The frontend uses camelCase field names; this route maps between
  * camelCase (API contract) and snake_case (DB columns).
  */
@@ -23,55 +19,85 @@ function generateId(): string {
   return `cli_${ts}_${rand}`;
 }
 
+/* ── Auto-add missing columns (runs once per process) ────────────────── */
+
+const EXTRA_COLUMNS = [
+  { name: 'assigned_manager_id', def: 'TEXT' },
+  { name: 'website_url', def: 'TEXT' },
+  { name: 'facebook_page_url', def: 'TEXT' },
+  { name: 'instagram_profile_url', def: 'TEXT' },
+  { name: 'tiktok_profile_url', def: 'TEXT' },
+  { name: 'marketing_goals', def: 'TEXT' },
+  { name: 'key_marketing_messages', def: 'TEXT' },
+  { name: 'logo_url', def: 'TEXT' },
+];
+
+let _columnsEnsured = false;
+
+async function ensureClientColumns() {
+  if (_columnsEnsured) return;
+  _columnsEnsured = true;
+  try {
+    const sb = getSupabase();
+    // Quick probe — if marketing_goals exists, all extra columns likely exist
+    const { error } = await sb.from('clients').select('marketing_goals').limit(1);
+    if (!error) return;
+    console.warn('[ensureClientColumns] missing columns detected — adding via exec_sql');
+    for (const col of EXTRA_COLUMNS) {
+      const ddl = `ALTER TABLE clients ADD COLUMN IF NOT EXISTS ${col.name} ${col.def};`;
+      const { error: rpcErr } = await sb.rpc('exec_sql', { query: ddl });
+      if (rpcErr && !rpcErr.message.includes('already exists')) {
+        console.warn(`[ensureClientColumns] failed to add ${col.name}:`, rpcErr.message);
+      }
+    }
+    // Verify
+    const { error: verifyErr } = await sb.from('clients').select('marketing_goals').limit(1);
+    if (verifyErr) {
+      console.error('[ensureClientColumns] STILL cannot access marketing_goals. Run manually:\n' +
+        EXTRA_COLUMNS.map(c => `  ALTER TABLE clients ADD COLUMN IF NOT EXISTS ${c.name} ${c.def};`).join('\n'));
+      _columnsEnsured = false;
+    } else {
+      console.log('[ensureClientColumns] ✓ all columns verified');
+    }
+  } catch (err) {
+    console.warn('[ensureClientColumns] error:', err);
+    _columnsEnsured = false;
+  }
+}
+
 /* ── Row → API object (snake_case → camelCase) ────────────────────────── */
 
-type ClientRow = {
-  id: string;
-  name: string | null;
-  company: string | null;
-  contact_person: string | null;
-  email: string | null;
-  phone: string | null;
-  notes: string | null;
-  business_field: string | null;
-  client_type: string | null;
-  status: string | null;
-  retainer_amount: number | null;
-  retainer_day: number | null;
-  color: string | null;
-  converted_from_lead: string | null;
-  assigned_manager_id: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-};
+type ClientRow = Record<string, unknown> & { id: string };
 
 function rowToClient(r: ClientRow) {
   return {
     id: r.id,
-    name: r.name ?? '',
-    company: r.company ?? '',
-    contactPerson: r.contact_person ?? '',
-    email: r.email ?? '',
-    phone: r.phone ?? '',
-    notes: r.notes ?? '',
-    businessField: r.business_field ?? '',
-    clientType: r.client_type ?? 'marketing',
-    status: r.status ?? 'active',
-    retainerAmount: r.retainer_amount ?? 0,
-    retainerDay: r.retainer_day ?? 1,
-    color: r.color ?? '#00B5FE',
-    convertedFromLead: r.converted_from_lead ?? null,
-    assignedManagerId: r.assigned_manager_id ?? null,
-    createdAt: r.created_at ?? '',
-    updatedAt: r.updated_at ?? '',
+    name: (r.name as string) ?? '',
+    company: (r.company as string) ?? '',
+    contactPerson: (r.contact_person as string) ?? '',
+    email: (r.email as string) ?? '',
+    phone: (r.phone as string) ?? '',
+    notes: (r.notes as string) ?? '',
+    businessField: (r.business_field as string) ?? '',
+    clientType: (r.client_type as string) ?? 'marketing',
+    status: (r.status as string) ?? 'active',
+    retainerAmount: Number(r.retainer_amount) || 0,
+    retainerDay: Number(r.retainer_day) || 1,
+    color: (r.color as string) ?? '#00B5FE',
+    convertedFromLead: (r.converted_from_lead as string) ?? null,
+    assignedManagerId: (r.assigned_manager_id as string) ?? null,
+    // Social & marketing fields
+    websiteUrl: (r.website_url as string) ?? '',
+    facebookPageUrl: (r.facebook_page_url as string) ?? '',
+    instagramProfileUrl: (r.instagram_profile_url as string) ?? '',
+    tiktokProfileUrl: (r.tiktok_profile_url as string) ?? '',
+    marketingGoals: (r.marketing_goals as string) ?? '',
+    keyMarketingMessages: (r.key_marketing_messages as string) ?? '',
+    logoUrl: (r.logo_url as string) ?? '',
+    createdAt: (r.created_at as string) ?? '',
+    updatedAt: (r.updated_at as string) ?? '',
   };
 }
-
-const COLUMNS =
-  'id, name, company, contact_person, email, phone, notes, business_field, client_type, status, retainer_amount, retainer_day, color, converted_from_lead, assigned_manager_id, created_at, updated_at';
-
-const COLUMNS_FALLBACK =
-  'id, name, company, contact_person, email, phone, notes, business_field, client_type, status, retainer_amount, retainer_day, color, converted_from_lead, created_at, updated_at';
 
 /* ── GET ──────────────────────────────────────────────────────────────── */
 
@@ -80,22 +106,15 @@ export async function GET(req: NextRequest) {
   const roleErr = requireRole(req, 'admin', 'employee');
   if (roleErr) return roleErr;
 
+  await ensureClientColumns();
+
   try {
     const sb = getSupabase();
 
-    // Try full column list; fall back if a column (e.g. assigned_manager_id)
-    // hasn't been added to the DB yet.
-    let { data: rows, error } = await sb
+    const { data: rows, error } = await sb
       .from('clients')
-      .select(COLUMNS)
+      .select('*')
       .order('id');
-
-    if (error && /column .* does not exist|Could not find the '([^']+)' column/i.test(error.message)) {
-      console.warn(`[API] GET /api/data/clients falling back to minimal column set: ${error.message}`);
-      const retry = await sb.from('clients').select(COLUMNS_FALLBACK).order('id');
-      rows = retry.data as any;
-      error = retry.error as any;
-    }
 
     if (error) {
       console.error('[API] GET /api/data/clients supabase error:', error);
@@ -121,6 +140,8 @@ export async function POST(req: NextRequest) {
   const roleErr = requireRole(req, 'admin');
   if (roleErr) return roleErr;
 
+  await ensureClientColumns();
+
   try {
     const sb = getSupabase();
     const body = await req.json();
@@ -128,8 +149,7 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     const id = generateId();
 
-    // Base row — only columns that are always required/present.
-    const baseRow: Record<string, unknown> = {
+    const insertRow: Record<string, unknown> = {
       id,
       name: body.name ?? '',
       company: body.company ?? '',
@@ -144,68 +164,59 @@ export async function POST(req: NextRequest) {
       retainer_day: body.retainerDay ?? 1,
       color: body.color ?? '#00B5FE',
       converted_from_lead: body.convertedFromLead ?? null,
+      // Social & marketing fields
+      website_url: body.websiteUrl ?? '',
+      facebook_page_url: body.facebookPageUrl ?? '',
+      instagram_profile_url: body.instagramProfileUrl ?? '',
+      tiktok_profile_url: body.tiktokProfileUrl ?? '',
+      marketing_goals: body.marketingGoals ?? '',
+      key_marketing_messages: body.keyMarketingMessages ?? '',
+      logo_url: body.logoUrl ?? '',
       created_at: now,
       updated_at: now,
     };
-
-    // Only include assigned_manager_id if the caller actually provided a value.
-    // This way creation doesn't fail when the column doesn't exist yet, and
-    // a newly assigned client can still be created atomically when it does.
-    const insertRow: Record<string, unknown> = { ...baseRow };
     if (body.assignedManagerId != null && body.assignedManagerId !== '') {
       insertRow.assigned_manager_id = body.assignedManagerId;
     }
 
-    // Auto-fallback helper: try full select, retry with minimal select if DB
-    // doesn't know a requested column. Also strips unknown columns on retry.
-    const COLUMNS_FALLBACK =
-      'id, name, company, contact_person, email, phone, notes, business_field, client_type, status, retainer_amount, retainer_day, color, converted_from_lead, created_at, updated_at';
+    console.log(`[API] POST /api/data/clients payload keys=${Object.keys(insertRow).join(',')}`);
 
-    async function doInsert(payload: Record<string, unknown>) {
-      let { data, error } = await sb
+    // Insert with column-drop retry
+    let currentRow = { ...insertRow };
+    let inserted: ClientRow | null = null;
+    let lastError: { message: string; code?: string } | null = null;
+
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const { data, error } = await sb
         .from('clients')
-        .insert(payload)
-        .select(COLUMNS)
+        .insert(currentRow)
+        .select('*')
         .single();
-      if (error && /Could not find the '([^']+)' column/i.test(error.message)) {
-        const m = error.message.match(/Could not find the '([^']+)' column/i);
-        const badCol = m?.[1];
-        if (badCol && badCol in payload) {
-          console.warn(`[API] POST /api/data/clients dropping unknown column "${badCol}" and retrying`);
-          const { [badCol]: _dropped, ...rest } = payload;
-          void _dropped;
-          const retry = await sb
-            .from('clients')
-            .insert(rest)
-            .select(COLUMNS_FALLBACK)
-            .single();
-          data = retry.data as any;
-          error = retry.error as any;
-        } else {
-          // unknown column in select only — retry select with fallback
-          const retry = await sb
-            .from('clients')
-            .insert(payload)
-            .select(COLUMNS_FALLBACK)
-            .single();
-          data = retry.data as any;
-          error = retry.error as any;
-        }
+      if (!error) { inserted = data as ClientRow; break; }
+      lastError = error as any;
+      const m = error.message.match(/Could not find the '([^']+)' column|column .*?['"]?([a-z_]+)['"]? (?:does not exist)/i);
+      const badCol = m?.[1] || m?.[2];
+      if (!badCol) break;
+      console.warn(`[API] POST /api/data/clients dropping column "${badCol}" (attempt ${attempt + 1})`);
+      if (badCol in currentRow) {
+        const { [badCol]: _d, ...rest } = currentRow;
+        void _d;
+        currentRow = rest;
+      } else {
+        break;
       }
-      return { data, error };
     }
 
-    const { data: inserted, error } = await doInsert(insertRow);
-
-    if (error) {
-      console.error('[API] POST /api/data/clients supabase error:', error);
+    if (!inserted) {
+      console.error('[API] POST /api/data/clients supabase error:', lastError);
       return NextResponse.json(
-        { error: error.message, code: (error as any).code ?? null },
+        { error: lastError?.message ?? 'Insert failed', code: (lastError as any)?.code ?? null },
         { status: 400 }
       );
     }
 
-    return NextResponse.json(rowToClient(inserted as ClientRow), { status: 201 });
+    console.log(`[API] POST /api/data/clients ✅ created id=${inserted.id}`);
+    return NextResponse.json(rowToClient(inserted), { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] POST /api/data/clients error:', msg);
