@@ -5,6 +5,7 @@ import { useTasks, useEmployees, useClients, useEmployeeTasks } from "@/lib/api/
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import type { Task } from "@/lib/db/schema";
+import { fireConfetti } from "@/lib/confetti";
 
 const COLUMNS = [
   { id: "new", label: "חדש", color: "#3b82f6" },
@@ -193,6 +194,7 @@ export default function TasksPage() {
     try {
       await update(editingTask.id, { status: "completed" });
       toast("המשימה הושלמה", "success");
+      fireConfetti(35);
       setEditingTask({ ...editingTask, status: "completed" });
       setForm(prev => ({ ...prev, status: "completed" }));
     } catch {

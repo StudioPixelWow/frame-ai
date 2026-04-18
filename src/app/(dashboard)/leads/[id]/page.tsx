@@ -7,6 +7,7 @@ import { useLeads } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import type { Lead, LeadInterestType, LeadStatus } from "@/lib/db/schema";
+import { fireConfetti } from "@/lib/confetti";
 
 const INTEREST_TYPE_LABELS: Record<LeadInterestType, string> = {
   marketing: "מרקטינג",
@@ -184,14 +185,15 @@ export default function LeadDetailPage() {
 
       const data = await res.json();
       toast("הליד הומר בהצלחה", "success");
+      fireConfetti(40);
       setShowConversionModal(false);
       await refetch();
 
       // Navigate to the new entity
       if (data.entityType === "client") {
-        router.push(`/clients/${data.entityId}`);
+        router.push(`/clients/${data.entity?.id || data.entityId}`);
       } else if (data.entityType === "project") {
-        router.push(`/business-projects/${data.entityId}`);
+        router.push(`/business-projects/${data.entity?.id || data.entityId}`);
       }
     } catch (error) {
       toast("שגיאה בהמרת הליד", "error");

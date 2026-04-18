@@ -81,9 +81,9 @@ export default function PaymentsPage() {
         combined.push({
           id: `podcast-${session.id}`,
           type: "podcast",
-          clientName: session.name || "LOUD",
+          clientName: session.clientName || "LOUD",
           amount: session.price || 0,
-          dueDate: session.paymentDate || new Date().toISOString(),
+          dueDate: session.sessionDate || new Date().toISOString(),
           status: session.paymentStatus || "pending",
           rawData: session,
         });

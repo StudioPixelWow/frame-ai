@@ -491,6 +491,85 @@ function TaskStatusBar({
   );
 }
 
+// Horizontal bar chart for employee workload / payment breakdown
+function HorizontalBarChart({
+  title,
+  data,
+}: {
+  title: string;
+  data: Array<{ label: string; value: number; pct: number; color: string }>;
+}) {
+  const [animated, setAnimated] = useState(false);
+  useEffect(() => { setAnimated(true); }, []);
+
+  return (
+    <div
+      style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: '1rem',
+        padding: '2rem',
+        boxShadow: '0 0 20px rgba(0, 181, 254, 0.1)',
+      }}
+    >
+      <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--foreground)' }}>
+        {title}
+      </h3>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {data.map((item) => (
+          <div key={item.label}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+              <span style={{ fontSize: '0.8125rem', color: 'var(--foreground-muted)' }}>{item.label}</span>
+              <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--foreground)' }}>{item.value}</span>
+            </div>
+            <div style={{ height: '8px', background: 'var(--surface-raised)', borderRadius: '4px', overflow: 'hidden' }}>
+              <div
+                style={{
+                  height: '100%',
+                  width: animated ? `${Math.max(item.pct, 4)}%` : '0%',
+                  background: `linear-gradient(90deg, ${item.color}, ${item.color}cc)`,
+                  borderRadius: '4px',
+                  boxShadow: `0 0 8px ${item.color}40`,
+                  transition: 'width 800ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+                }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Mini sparkline for KPI cards
+function MiniSparkline({ values, color }: { values: number[]; color: string }) {
+  if (values.length < 2) return null;
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const range = max - min || 1;
+  const w = 80;
+  const h = 28;
+  const points = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * w;
+    const y = h - ((v - min) / range) * (h - 4) - 2;
+    return `${x},${y}`;
+  });
+  const areaPoints = [...points, `${w},${h}`, `0,${h}`];
+
+  return (
+    <svg width={w} height={h} style={{ display: 'block', marginTop: '0.5rem', opacity: 0.7 }}>
+      <defs>
+        <linearGradient id={`spark-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon points={areaPoints.join(' ')} fill={`url(#spark-${color.replace('#', '')})`} />
+      <polyline points={points.join(' ')} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 // Campaign performance card
 function CampaignCard({
   name,
@@ -1359,6 +1438,63 @@ export default function AnalyticsDashboard() {
           }}
         >
           <TaskStatusBar statuses={taskStatusData} />
+        </div>
+
+        {/* SECTION 3.5: Secondary KPI Row */}
+        <div style={{ animation: 'fadeIn 1100ms ease-out' }}>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            📈 מדדים נוספים
+          </h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+            <ModernKPICard
+              icon="🎯"
+              label="לידים החודש"
+              value={analytics.leadsThisMonth}
+              subtitle={analytics.leadsLastMonth > 0 ? `לעומת ${analytics.leadsLastMonth} בחודש שעבר` : 'חודש ראשון'}
+              color="#F59E0B"
+              trend={{
+                direction: analytics.leadssTrend > 0 ? 'up' : analytics.leadssTrend < 0 ? 'down' : 'neutral',
+                pct: Math.abs(analytics.leadssTrend),
+              }}
+            />
+            <ModernKPICard
+              icon="⚠️"
+              label="תשלומים באיחור"
+              value={analytics.overduePayments}
+              subtitle={analytics.overdueAmount > 0 ? `סה"כ ${formatCurrency(analytics.overdueAmount)}` : 'הכל בסדר'}
+              color="#EF4444"
+            />
+            <ModernKPICard
+              icon="⏳"
+              label="ממתין לאישור"
+              value={analytics.pendingApprovals}
+              subtitle="אישורים פתוחים"
+              color="#8b5cf6"
+            />
+            <ModernKPICard
+              icon="📋"
+              label="משימות פתוחות"
+              value={analytics.openTasks}
+              subtitle={`עומס עובד: ${analytics.busiestEmployeeName} (${analytics.busiestEmployeeCount})`}
+              color="#3B82F6"
+            />
+          </div>
+        </div>
+
+        {/* SECTION 3.7: Employee & Payment Charts */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '2rem', animation: 'fadeIn 1300ms ease-out' }}>
+          {analytics.tasksByEmployee.length > 0 && (
+            <HorizontalBarChart
+              title="עומס עבודה לפי עובד"
+              data={analytics.tasksByEmployee}
+            />
+          )}
+          {analytics.paymentsByType.length > 0 && (
+            <HorizontalBarChart
+              title="תשלומים לפי סוג"
+              data={analytics.paymentsByType}
+            />
+          )}
         </div>
 
         {/* SECTION 4: Campaign Performance */}

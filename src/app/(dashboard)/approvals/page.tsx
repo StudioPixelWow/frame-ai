@@ -5,6 +5,7 @@ import { useApprovals } from '@/lib/api/use-entity';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import type { Approval } from '@/lib/db/schema';
+import { fireConfetti } from '@/lib/confetti';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'טיוטה',
@@ -12,14 +13,6 @@ const STATUS_LABELS: Record<string, string> = {
   approved: 'אושר',
   rejected: 'נדחה',
   needs_changes: 'דורש שינויים',
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  draft: '#6b7280',
-  pending_approval: '#fbbf24',
-  approved: '#22c55e',
-  rejected: '#f87171',
-  needs_changes: '#f59e0b',
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -130,6 +123,7 @@ export default function ApprovalsPage() {
     try {
       await update(id, { status: 'approved' });
       toast('האישור אושר בהצלחה', 'success');
+      fireConfetti(30);
     } catch (error) {
       toast('שגיאה בעדכון הסטטוס', 'error');
     }
@@ -167,17 +161,11 @@ export default function ApprovalsPage() {
       {/* KPI Row */}
       <div className="apr-kpi-row">
         {kpis.map((kpi) => (
-          <div key={kpi.label} className="apr-kpi" style={{
-            padding: '1.5rem',
-            backgroundColor: '#f3f4f6',
-            borderRadius: '0.5rem',
-            textAlign: 'center',
-            minWidth: '120px',
-          }}>
-            <div className="apr-kpi-val" style={{ fontSize: '2rem', fontWeight: 'bold', color: '#1f2937' }}>
+          <div key={kpi.label} className="apr-kpi">
+            <div className="apr-kpi-val">
               {kpi.value}
             </div>
-            <div className="apr-kpi-label" style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.5rem' }}>
+            <div className="apr-kpi-label">
               {kpi.label}
             </div>
           </div>
@@ -186,109 +174,63 @@ export default function ApprovalsPage() {
 
       {/* Approvals Grid */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
+        <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--foreground-muted)' }}>
           טוען אישורים...
         </div>
       ) : approvals.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
+        <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--foreground-muted)' }}>
           אין אישורים להצגה
         </div>
       ) : (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-          gap: '1.5rem',
-          marginTop: '2rem',
-        }}>
+        <div className="apr-board" style={{ marginTop: '1rem' }}>
           {approvals.map((approval) => (
-            <div
-              key={approval.id}
-              className="agd-card"
-              style={{
-                border: '1px solid #e5e7eb',
-                borderRadius: '0.5rem',
-                padding: '1.5rem',
-                backgroundColor: '#fff',
-                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-              }}
-            >
+            <div key={approval.id} className="apr-card wow-lift">
               {/* Card Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                <span
-                  style={{
-                    backgroundColor: '#e5e7eb',
-                    color: '#374151',
-                    padding: '0.25rem 0.75rem',
-                    borderRadius: '0.25rem',
-                    fontSize: '0.75rem',
-                    fontWeight: '600',
-                  }}
-                >
+              <div className="apr-card-header" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                <span className={`apr-type-badge apr-st-${approval.status}`}>
                   {TYPE_LABELS[approval.type] || approval.type}
                 </span>
-                <span
-                  style={{
-                    backgroundColor: STATUS_COLORS[approval.status],
-                    color: '#fff',
-                    padding: '0.25rem 0.75rem',
-                    borderRadius: '0.25rem',
-                    fontSize: '0.75rem',
-                    fontWeight: '600',
-                  }}
-                >
+                <span className={`apr-type-badge apr-st-${approval.status}`}>
                   {STATUS_LABELS[approval.status]}
                 </span>
               </div>
 
               {/* Card Title */}
-              <h3 style={{
-                fontSize: '1.125rem',
-                fontWeight: '600',
-                color: '#1f2937',
-                marginBottom: '0.5rem',
-              }}>
+              <h3 className="apr-card-title" style={{ marginBottom: '0.35rem' }}>
                 {approval.title}
               </h3>
 
               {/* Client Name */}
-              <p style={{
-                fontSize: '0.875rem',
-                color: '#6b7280',
-                marginBottom: '1rem',
-              }}>
+              <p className="apr-card-desc" style={{ marginBottom: '0.75rem' }}>
                 {approval.clientName}
               </p>
 
               {/* Meta Info */}
               <div style={{
-                fontSize: '0.75rem',
-                color: '#9ca3af',
-                marginBottom: '1rem',
-                borderTop: '1px solid #e5e7eb',
-                paddingTop: '0.75rem',
+                fontSize: '0.72rem',
+                color: 'var(--foreground-subtle)',
+                marginBottom: '0.75rem',
+                borderTop: '1px solid var(--border)',
+                paddingTop: '0.6rem',
               }}>
                 <div>עדכון אחרון: {new Date(approval.updatedAt).toLocaleDateString('he-IL')}</div>
               </div>
 
               {/* Action Buttons */}
-              <div style={{
-                display: 'flex',
-                gap: '0.5rem',
-                flexWrap: 'wrap',
-              }}>
+              <div className="apr-actions" style={{ justifyContent: 'flex-start' }}>
                 {approval.status === 'pending_approval' && (
                   <>
                     <button
                       className="mod-btn-primary"
                       onClick={() => handleApprove(approval.id)}
-                      style={{ flex: '1', minWidth: '80px', fontSize: '0.875rem', padding: '0.5rem' }}
+                      style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
                     >
                       אישור
                     </button>
                     <button
                       className="mod-btn-ghost"
                       onClick={() => handleReject(approval.id)}
-                      style={{ flex: '1', minWidth: '80px', fontSize: '0.875rem', padding: '0.5rem', color: '#ef4444', borderColor: '#fecaca' }}
+                      style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', color: '#ef4444' }}
                     >
                       דחייה
                     </button>
@@ -297,14 +239,14 @@ export default function ApprovalsPage() {
                 <button
                   className="mod-btn-ghost"
                   onClick={() => openEditModal(approval)}
-                  style={{ flex: '1', minWidth: '80px', fontSize: '0.875rem', padding: '0.5rem' }}
+                  style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
                 >
                   עריכה
                 </button>
                 <button
                   className="mod-btn-ghost"
                   onClick={() => handleDelete(approval.id)}
-                  style={{ flex: '1', minWidth: '80px', fontSize: '0.875rem', padding: '0.5rem', color: '#ef4444', borderColor: '#fecaca' }}
+                  style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', color: '#ef4444' }}
                 >
                   מחיקה
                 </button>
@@ -320,7 +262,7 @@ export default function ApprovalsPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {/* Type Select */}
             <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: 'var(--foreground)' }}>
                 סוג
               </label>
               <select
@@ -330,9 +272,11 @@ export default function ApprovalsPage() {
                 style={{
                   width: '100%',
                   padding: '0.5rem',
-                  border: '1px solid #d1d5db',
+                  border: '1px solid var(--border)',
                   borderRadius: '0.375rem',
                   fontFamily: 'inherit',
+                  background: 'var(--surface)',
+                  color: 'var(--foreground)',
                 }}
               >
                 <option value="">בחר סוג</option>
@@ -346,7 +290,7 @@ export default function ApprovalsPage() {
 
             {/* Title Input */}
             <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: 'var(--foreground)' }}>
                 כותרת
               </label>
               <input
@@ -358,16 +302,18 @@ export default function ApprovalsPage() {
                 style={{
                   width: '100%',
                   padding: '0.5rem',
-                  border: '1px solid #d1d5db',
+                  border: '1px solid var(--border)',
                   borderRadius: '0.375rem',
                   fontFamily: 'inherit',
+                  background: 'var(--surface)',
+                  color: 'var(--foreground)',
                 }}
               />
             </div>
 
             {/* Client Name Input */}
             <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: 'var(--foreground)' }}>
                 שם לקוח
               </label>
               <input
@@ -379,16 +325,18 @@ export default function ApprovalsPage() {
                 style={{
                   width: '100%',
                   padding: '0.5rem',
-                  border: '1px solid #d1d5db',
+                  border: '1px solid var(--border)',
                   borderRadius: '0.375rem',
                   fontFamily: 'inherit',
+                  background: 'var(--surface)',
+                  color: 'var(--foreground)',
                 }}
               />
             </div>
 
             {/* Status Select */}
             <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: 'var(--foreground)' }}>
                 סטטוס
               </label>
               <select
@@ -398,9 +346,11 @@ export default function ApprovalsPage() {
                 style={{
                   width: '100%',
                   padding: '0.5rem',
-                  border: '1px solid #d1d5db',
+                  border: '1px solid var(--border)',
                   borderRadius: '0.375rem',
                   fontFamily: 'inherit',
+                  background: 'var(--surface)',
+                  color: 'var(--foreground)',
                 }}
               >
                 <option value="">בחר סטטוס</option>
