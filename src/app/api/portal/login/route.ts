@@ -13,7 +13,7 @@ import { portalUsers } from '@/lib/db';
 import { ensureSeeded } from '@/lib/db/seed';
 
 export async function POST(req: NextRequest) {
-  ensureSeeded();
+  await ensureSeeded();
   try {
     const body = await req.json();
     const { email } = body;

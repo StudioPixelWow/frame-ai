@@ -15,7 +15,7 @@ export async function GET(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const meeting = meetings.getById(id);
+    const meeting = await meetings.getByIdAsync(id);
     if (!meeting) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
     return NextResponse.json(meeting);
   } catch (error) {
@@ -31,7 +31,7 @@ export async function PUT(
   try {
     const { id } = await context.params;
     const body = await req.json();
-    const updated = meetings.update(id, body);
+    const updated = await meetings.updateAsync(id, body);
     if (!updated) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
     return NextResponse.json(updated);
   } catch (error) {
@@ -46,7 +46,7 @@ export async function DELETE(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const deleted = meetings.delete(id);
+    const deleted = await meetings.deleteAsync(id);
     if (!deleted) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (error) {

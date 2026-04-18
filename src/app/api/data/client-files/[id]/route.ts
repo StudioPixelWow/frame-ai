@@ -15,7 +15,7 @@ export async function GET(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const clientFile = clientFiles.getById(id);
+    const clientFile = await clientFiles.getByIdAsync(id);
     if (!clientFile) {
       return NextResponse.json({ error: 'Client file not found' }, { status: 404 });
     }
@@ -36,7 +36,7 @@ export async function PUT(
   try {
     const { id } = await context.params;
     const body = await req.json();
-    const updated = clientFiles.update(id, body);
+    const updated = await clientFiles.updateAsync(id, body);
     if (!updated) {
       return NextResponse.json({ error: 'Client file not found' }, { status: 404 });
     }
@@ -56,7 +56,7 @@ export async function DELETE(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const deleted = clientFiles.delete(id);
+    const deleted = await clientFiles.deleteAsync(id);
     if (!deleted) {
       return NextResponse.json({ error: 'Client file not found' }, { status: 404 });
     }

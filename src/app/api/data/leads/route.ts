@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   const log = persistenceLog('leads', 'select', '/api/data/leads', 'leads.json');
   try {
     log.start();
-    const data = leads.getAll();
+    const data = await leads.getAllAsync();
     log.ok(data);
     return NextResponse.json(data);
   } catch (error) {
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     log.start(body as Record<string, unknown>);
-    const created = leads.create(body);
+    const created = await leads.createAsync(body);
     log.ok(created);
     return NextResponse.json(created, { status: 201 });
   } catch (error) {

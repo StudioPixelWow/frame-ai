@@ -15,7 +15,7 @@ export async function POST(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const payment = payments.getById(id);
+    const payment = await payments.getByIdAsync(id);
     if (!payment) {
       return NextResponse.json(
         { error: 'Payment not found' },
@@ -23,7 +23,7 @@ export async function POST(
       );
     }
 
-    const updated = payments.update(payment.id, {
+    const updated = await payments.updateAsync(payment.id, {
       status: 'paid',
       paidAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

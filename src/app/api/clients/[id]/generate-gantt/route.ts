@@ -253,9 +253,9 @@ interface PreviousGanttFingerprint {
   researchSources: string[];
 }
 
-function loadPreviousGantts(clientId: string, currentMonth: number, currentYear: number): PreviousGanttFingerprint[] {
+async function loadPreviousGantts(clientId: string, currentMonth: number, currentYear: number): Promise<PreviousGanttFingerprint[]> {
   try {
-    const allItems = clientGanttItems.getAll();
+    const allItems = await clientGanttItems.getAllAsync();
     const clientItems = allItems.filter((item: ClientGanttItem) =>
       item.clientId === clientId &&
       item.ganttType === 'monthly' &&
@@ -902,7 +902,7 @@ export async function POST(
           continue;
         }
         try {
-          clientGanttItems.delete(deleteId);
+          await clientGanttItems.deleteAsync(deleteId);
           console.log(`[Gantt Regen] 🗑️ Deleted unprotected item: ${deleteId}`);
         } catch (err) {
           console.warn(`[Gantt Regen] ⚠️ Failed to delete item ${deleteId}:`, err);
@@ -930,7 +930,7 @@ export async function POST(
     // ============================================================
     // STEP 0: LOAD PREVIOUS GANTTS FOR ANTI-REPETITION
     // ============================================================
-    const previousGantts = loadPreviousGantts(id, body.month, body.year);
+    const previousGantts = await loadPreviousGantts(id, body.month, body.year);
     let antiRepetitionBrief = buildAntiRepetitionBrief(previousGantts);
     const monthSeasonality = getMonthSeasonality(body.month);
     const pillarEmphasis = getMonthlyPillarEmphasis(body.month);
@@ -1526,7 +1526,7 @@ ${hasResearch ? `חובה: researchSource ו-researchReason בכל פריט. פ�
       };
 
       newItems.push(ganttItem);
-      clientGanttItems.create(ganttItem);
+      await clientGanttItems.createAsync(ganttItem);
 
       dayCounter += daysBetweenItems;
     }

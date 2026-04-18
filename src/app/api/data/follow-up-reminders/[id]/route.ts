@@ -15,7 +15,7 @@ export async function GET(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const reminder = followUpReminders.getById(id);
+    const reminder = await followUpReminders.getByIdAsync(id);
     if (!reminder) {
       return NextResponse.json({ error: 'Follow-up reminder not found' }, { status: 404 });
     }
@@ -36,7 +36,7 @@ export async function PUT(
   try {
     const { id } = await context.params;
     const body = await req.json();
-    const updated = followUpReminders.update(id, body);
+    const updated = await followUpReminders.updateAsync(id, body);
     if (!updated) {
       return NextResponse.json({ error: 'Follow-up reminder not found' }, { status: 404 });
     }
@@ -56,7 +56,7 @@ export async function DELETE(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const deleted = followUpReminders.delete(id);
+    const deleted = await followUpReminders.deleteAsync(id);
     if (!deleted) {
       return NextResponse.json({ error: 'Follow-up reminder not found' }, { status: 404 });
     }

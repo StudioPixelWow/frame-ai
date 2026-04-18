@@ -15,7 +15,7 @@ export async function GET(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const approval = approvals.getById(id);
+    const approval = await approvals.getByIdAsync(id);
     if (!approval) {
       return NextResponse.json(
         { error: 'Approval not found' },
@@ -39,7 +39,7 @@ export async function PUT(
   try {
     const { id } = await context.params;
     const body = await req.json();
-    const updated = approvals.update(id, body);
+    const updated = await approvals.updateAsync(id, body);
     if (!updated) {
       return NextResponse.json(
         { error: 'Approval not found' },
@@ -62,7 +62,7 @@ export async function DELETE(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const deleted = approvals.delete(id);
+    const deleted = await approvals.deleteAsync(id);
     if (!deleted) {
       return NextResponse.json(
         { error: 'Approval not found' },

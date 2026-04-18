@@ -10,7 +10,7 @@ import { ensureSeeded } from '@/lib/db/seed';
 export async function GET() {
   ensureSeeded();
   try {
-    return NextResponse.json(followUpReminders.getAll());
+    return NextResponse.json(await followUpReminders.getAllAsync());
   } catch (error) {
     return NextResponse.json(
       { error: 'Failed to fetch follow-up reminders' },
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   ensureSeeded();
   try {
     const body = await req.json();
-    const created = followUpReminders.create(body);
+    const created = await followUpReminders.createAsync(body);
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
     return NextResponse.json(

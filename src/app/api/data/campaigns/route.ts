@@ -13,7 +13,7 @@ export async function GET() {
   const log = persistenceLog('campaigns', 'select', '/api/data/campaigns', 'campaigns.json');
   try {
     log.start();
-    const data = campaigns.getAll();
+    const data = await campaigns.getAllAsync();
     log.ok(data);
     return NextResponse.json(data);
   } catch (error) {
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     log.start(body as Record<string, unknown>);
-    const created = campaigns.create(body);
+    const created = await campaigns.createAsync(body);
     log.ok(created);
     return NextResponse.json(created, { status: 201 });
   } catch (error) {

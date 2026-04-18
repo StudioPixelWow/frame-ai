@@ -13,7 +13,7 @@ import { generateWithAI } from '@/lib/ai/openai-client';
 import type { ClientResearch } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
-  ensureSeeded();
+  await ensureSeeded();
 
   try {
     const body = await req.json();

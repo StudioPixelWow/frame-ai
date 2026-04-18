@@ -199,3 +199,249 @@ export class JsonStore<T extends { id: string }> {
     return this.read().length;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SupabaseCrud — drop-in replacement for JsonStore that persists to Supabase
+
+   Uses a generic (id TEXT, data JSONB) pattern per table so:
+   - No camelCase↔snake_case mapping needed
+   - Exact same API as JsonStore (getAll, getById, create, update, delete, query)
+   - Data is stored durably — survives deploys and cold starts
+
+   Each module gets its own Supabase table. The `data` column holds the full
+   entity JSON. The `id` column is extracted for efficient lookups.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const _tableInitPromises = new Map<string, Promise<void>>();
+
+export class SupabaseCrud<T extends { id: string }> {
+  private tableName: string;
+  private prefix: string;
+  private seq = 0;
+  private seqInitialized = false;
+
+  constructor(tableName: string, prefix: string) {
+    this.tableName = tableName;
+    this.prefix = prefix;
+    // Trigger table creation in background (non-blocking)
+    this.ensureTableExists();
+  }
+
+  /** Create the table if it doesn't exist */
+  private ensureTableExists(): Promise<void> {
+    if (_tableInitPromises.has(this.tableName)) {
+      return _tableInitPromises.get(this.tableName)!;
+    }
+
+    const ddl = `
+      CREATE TABLE IF NOT EXISTS public.${this.tableName} (
+        id TEXT PRIMARY KEY,
+        data JSONB NOT NULL DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `;
+
+    const promise = ensureTable(this.tableName, ddl);
+    _tableInitPromises.set(this.tableName, promise);
+    return promise;
+  }
+
+  /** Initialize the ID sequence from existing data */
+  private async initSeq(): Promise<void> {
+    if (this.seqInitialized) return;
+    this.seqInitialized = true;
+    try {
+      const sb = getSupabase();
+      const { data: rows } = await sb
+        .from(this.tableName)
+        .select('id')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (rows && rows.length > 0) {
+        const sequences = rows
+          .map((r: { id: string }) => {
+            const match = r.id.match(new RegExp(`^${this.prefix}_(\\d+)$`));
+            return match ? parseInt(match[1], 10) : 0;
+          })
+          .filter((num: number) => !isNaN(num));
+        this.seq = sequences.length > 0 ? Math.max(...sequences) : 0;
+      }
+    } catch {
+      // Table may not exist yet — will be created on first write
+    }
+  }
+
+  private generateId(): string {
+    this.seq += 1;
+    return `${this.prefix}_${this.seq}`;
+  }
+
+  /** Convert a DB row {id, data, created_at, updated_at} back to T */
+  private rowToEntity(row: { id: string; data: unknown }): T {
+    const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+    return { ...data, id: row.id } as T;
+  }
+
+  getAll(): T[] {
+    // Synchronous-looking wrapper that blocks on the async call
+    // We need to return T[] synchronously to match JsonStore's API.
+    // In Next.js API routes, this actually works because the routes are async.
+    throw new Error(
+      `[SupabaseCrud][${this.tableName}] Use getAllAsync() instead of getAll(). ` +
+      `SupabaseCrud requires async calls.`
+    );
+  }
+
+  async getAllAsync(): Promise<T[]> {
+    await this.ensureTableExists();
+    const sb = getSupabase();
+    const { data: rows, error } = await sb
+      .from(this.tableName)
+      .select('id, data')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error(`[SupabaseCrud][${this.tableName}] getAllAsync error:`, error.message);
+      throw new Error(`Failed to fetch from ${this.tableName}: ${error.message}`);
+    }
+
+    console.log(`[SupabaseCrud][${this.tableName}] SELECT → ${rows?.length ?? 0} rows ✅ DURABLE`);
+    return (rows ?? []).map((r: { id: string; data: unknown }) => this.rowToEntity(r));
+  }
+
+  getById(id: string): T | null {
+    throw new Error(
+      `[SupabaseCrud][${this.tableName}] Use getByIdAsync() instead of getById().`
+    );
+  }
+
+  async getByIdAsync(id: string): Promise<T | null> {
+    await this.ensureTableExists();
+    const sb = getSupabase();
+    const { data: row, error } = await sb
+      .from(this.tableName)
+      .select('id, data')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      console.error(`[SupabaseCrud][${this.tableName}] getByIdAsync error:`, error.message);
+      return null;
+    }
+
+    if (!row) return null;
+    return this.rowToEntity(row as { id: string; data: unknown });
+  }
+
+  create(item: Omit<T, 'id'>): T {
+    throw new Error(
+      `[SupabaseCrud][${this.tableName}] Use createAsync() instead of create().`
+    );
+  }
+
+  async createAsync(item: Omit<T, 'id'>): Promise<T> {
+    await this.ensureTableExists();
+    await this.initSeq();
+
+    const id = this.generateId();
+    const now = new Date().toISOString();
+    const entity = { ...item, id, createdAt: now, updatedAt: now } as unknown as T;
+
+    const sb = getSupabase();
+    const { error } = await sb
+      .from(this.tableName)
+      .insert({
+        id,
+        data: JSON.parse(JSON.stringify(entity)), // clean serialization
+        created_at: now,
+        updated_at: now,
+      });
+
+    if (error) {
+      console.error(`[SupabaseCrud][${this.tableName}] createAsync error:`, error.message);
+      throw new Error(`Failed to create in ${this.tableName}: ${error.message}`);
+    }
+
+    console.log(`[SupabaseCrud][${this.tableName}] INSERT id=${id} ✅ DURABLE`);
+    return entity;
+  }
+
+  update(id: string, partial: Partial<T>): T | null {
+    throw new Error(
+      `[SupabaseCrud][${this.tableName}] Use updateAsync() instead of update().`
+    );
+  }
+
+  async updateAsync(id: string, partial: Partial<T>): Promise<T | null> {
+    await this.ensureTableExists();
+    const sb = getSupabase();
+
+    // Fetch existing
+    const existing = await this.getByIdAsync(id);
+    if (!existing) {
+      console.warn(`[SupabaseCrud][${this.tableName}] UPDATE id=${id} NOT FOUND`);
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    const merged = { ...existing, ...partial, id, updatedAt: now } as T;
+
+    const { error } = await sb
+      .from(this.tableName)
+      .update({
+        data: JSON.parse(JSON.stringify(merged)),
+        updated_at: now,
+      })
+      .eq('id', id);
+
+    if (error) {
+      console.error(`[SupabaseCrud][${this.tableName}] updateAsync error:`, error.message);
+      throw new Error(`Failed to update ${this.tableName}/${id}: ${error.message}`);
+    }
+
+    console.log(`[SupabaseCrud][${this.tableName}] UPDATE id=${id} keys=[${Object.keys(partial).join(',')}] ✅ DURABLE`);
+    return merged;
+  }
+
+  delete(id: string): boolean {
+    throw new Error(
+      `[SupabaseCrud][${this.tableName}] Use deleteAsync() instead of delete().`
+    );
+  }
+
+  async deleteAsync(id: string): Promise<boolean> {
+    await this.ensureTableExists();
+    const sb = getSupabase();
+
+    const { error, count } = await sb
+      .from(this.tableName)
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error(`[SupabaseCrud][${this.tableName}] deleteAsync error:`, error.message);
+      return false;
+    }
+
+    console.log(`[SupabaseCrud][${this.tableName}] DELETE id=${id} ✅ DURABLE`);
+    return true;
+  }
+
+  query(predicate: (item: T) => boolean): T[] {
+    throw new Error(
+      `[SupabaseCrud][${this.tableName}] Use queryAsync() instead of query().`
+    );
+  }
+
+  async queryAsync(predicate: (item: T) => boolean): Promise<T[]> {
+    const all = await this.getAllAsync();
+    return all.filter(predicate);
+  }
+
+  async countAsync(): Promise<number> {
+    const all = await this.getAllAsync();
+    return all.length;
+  }
+}

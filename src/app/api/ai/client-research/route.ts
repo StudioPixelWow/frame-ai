@@ -520,7 +520,7 @@ export async function POST(req: NextRequest) {
     // Gather context
     const knowledgeContext = getClientKnowledgeContext(clientId);
     const creativeDNARecord = creativeDNA.query((d) => d.clientId === clientId);
-    const ganttItems = clientGanttItems.query((g) => g.clientId === clientId);
+    const ganttItems = await clientGanttItems.queryAsync((g) => g.clientId === clientId);
 
     const recentTitles = ganttItems
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())

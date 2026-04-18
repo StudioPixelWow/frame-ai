@@ -13,14 +13,14 @@ export interface AIGenerationResult {
   errorType?: 'missing_api_key' | 'network_error' | 'invalid_payload' | 'provider_failure' | 'parse_error';
 }
 
-function getSettings() {
-  ensureSeeded();
+async function getSettings() {
+  await ensureSeeded();
   const all = aiSettings.getAll();
   return all.length > 0 ? all[0] : null;
 }
 
-export function getClientKnowledgeContext(clientId: string): string {
-  ensureSeeded();
+export async function getClientKnowledgeContext(clientId: string): Promise<string> {
+  await ensureSeeded();
   const knowledge = clientKnowledge.getAll().find(k => k.clientId === clientId);
   if (!knowledge) return '';
 
@@ -38,7 +38,7 @@ export function getClientKnowledgeContext(clientId: string): string {
   if (knowledge.seasonalPatterns) parts.push(`דפוסים עונתיים: ${knowledge.seasonalPatterns}`);
 
   // Automatically append research context if available
-  const researchCtx = getClientResearchContext(clientId);
+  const researchCtx = await getClientResearchContext(clientId);
   if (researchCtx) {
     parts.push(researchCtx);
   }
@@ -46,8 +46,8 @@ export function getClientKnowledgeContext(clientId: string): string {
   return parts.join('\n');
 }
 
-export function getClientResearchContext(clientId: string): string {
-  ensureSeeded();
+export async function getClientResearchContext(clientId: string): Promise<string> {
+  await ensureSeeded();
   const research = clientResearch.query(r => r.clientId === clientId);
   const latest = research.length > 0 ? research[research.length - 1] : null;
   if (!latest || latest.status !== 'complete') return '';
@@ -121,7 +121,7 @@ export async function generateWithAI(
   // Prefer env var (server-side, works on Vercel). Fall back to DB-stored settings for local dev.
   console.log("OPENAI KEY EXISTS:", !!process.env.OPENAI_API_KEY);
   const envKey = process.env.OPENAI_API_KEY || '';
-  const settings = getSettings();
+  const settings = await getSettings();
   const apiKey = envKey || settings?.apiKey || '';
   const model = settings?.defaultModel || 'gpt-4.1';
 

@@ -20,7 +20,7 @@ export async function POST(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const lead = leads.getById(id);
+    const lead = await leads.getByIdAsync(id);
     if (!lead) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
     }
@@ -114,7 +114,7 @@ export async function POST(
     }
 
     // Update the lead to mark it as converted
-    const updatedLead = leads.update(id, {
+    const updatedLead = await leads.updateAsync(id, {
       status: 'won',
       convertedAt: now,
       convertedEntityType: entityType,

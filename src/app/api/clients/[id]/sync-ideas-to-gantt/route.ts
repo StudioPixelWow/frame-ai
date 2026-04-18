@@ -174,7 +174,7 @@ export async function POST(
         undefined, itemType, creative.platform || 'instagram', format as ContentFormat,
         client
       );
-      clientGanttItems.create(ganttItem);
+      await clientGanttItems.createAsync(ganttItem);
 
       return NextResponse.json({
         success: true,
@@ -190,7 +190,7 @@ export async function POST(
     if (body.injectHolidays) {
       console.log(`[SyncToGantt] Holiday injection for ${HEBREW_MONTHS[body.month]} ${body.year}`);
       const holidays = getHolidaysForMonth(body.month, body.year);
-      const existingItems = clientGanttItems.getAll().filter(
+      const existingItems = (await clientGanttItems.getAllAsync()).filter(
         (item) => item.clientId === id && item.month === body.month && item.year === body.year
       );
 
@@ -227,7 +227,7 @@ export async function POST(
           holiday.hebrewName, 'social_post', creative.platform || 'instagram', (creative.format || 'image') as ContentFormat,
           client
         );
-        clientGanttItems.create(ganttItem);
+        await clientGanttItems.createAsync(ganttItem);
         holidayItems.push(ganttItem);
       }
 
@@ -275,7 +275,7 @@ export async function POST(
         client,
         idea.id, idea.title, body.researchId
       );
-      clientGanttItems.create(ganttItem);
+      await clientGanttItems.createAsync(ganttItem);
       newItems.push(ganttItem);
     }
 

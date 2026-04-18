@@ -5,7 +5,7 @@ import { ensureSeeded } from '@/lib/db/seed';
 export async function GET() {
   ensureSeeded();
   try {
-    return NextResponse.json(podcastSessions.getAll());
+    return NextResponse.json(await podcastSessions.getAllAsync());
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
   }
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
       price: sessionData.price,
     });
 
-    const created = podcastSessions.create(sessionData);
+    const created = await podcastSessions.createAsync(sessionData);
 
     console.log('[Podcast] Session created:', created.id);
 

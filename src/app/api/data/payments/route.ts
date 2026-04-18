@@ -13,7 +13,7 @@ export async function GET() {
   const log = persistenceLog('payments', 'select', '/api/data/payments', 'payments.json');
   try {
     log.start();
-    const data = payments.getAll();
+    const data = await payments.getAllAsync();
     log.ok(data);
     return NextResponse.json(data);
   } catch (error) {
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     log.start(body as Record<string, unknown>);
-    const created = payments.create(body);
+    const created = await payments.createAsync(body);
     log.ok(created);
     return NextResponse.json(created, { status: 201 });
   } catch (error) {

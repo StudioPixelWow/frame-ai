@@ -6,7 +6,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const item = podcastSessions.getById(id);
+    const item = await podcastSessions.getByIdAsync(id);
     if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(item);
   } catch (error) {
@@ -19,7 +19,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
   try {
     const { id } = await context.params;
     const body = await req.json();
-    const updated = podcastSessions.update(id, body);
+    const updated = await podcastSessions.updateAsync(id, body);
     if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(updated);
   } catch (error) {
@@ -31,7 +31,7 @@ export async function DELETE(_req: NextRequest, context: { params: Promise<{ id:
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const deleted = podcastSessions.delete(id);
+    const deleted = await podcastSessions.deleteAsync(id);
     if (!deleted) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (error) {

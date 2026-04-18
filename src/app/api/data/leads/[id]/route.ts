@@ -21,7 +21,7 @@ export async function GET(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const lead = leads.getById(id);
+    const lead = await leads.getByIdAsync(id);
     if (!lead) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
     }
@@ -47,7 +47,7 @@ export async function PUT(
     const log = persistenceLog('leads', 'update', `/api/data/leads/${id}`, 'leads.json');
     const body = await req.json();
     log.start(body as Record<string, unknown>);
-    const updated = leads.update(id, body);
+    const updated = await leads.updateAsync(id, body);
     if (!updated) {
       log.fail('Lead not found');
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
@@ -72,7 +72,7 @@ export async function DELETE(
     const { id } = await context.params;
     const log = persistenceLog('leads', 'delete', `/api/data/leads/${id}`, 'leads.json');
     log.start();
-    const deleted = leads.delete(id);
+    const deleted = await leads.deleteAsync(id);
     if (!deleted) {
       log.fail('Lead not found');
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });

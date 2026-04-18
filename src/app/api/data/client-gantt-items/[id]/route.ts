@@ -16,7 +16,7 @@ export async function GET(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const item = clientGanttItems.getById(id);
+    const item = await clientGanttItems.getByIdAsync(id);
     if (!item) {
       return NextResponse.json({ error: 'Client gantt item not found' }, { status: 404 });
     }
@@ -42,8 +42,8 @@ export async function PUT(
     const body = await req.json();
 
     // Read current item BEFORE update to detect status transition
-    const before = clientGanttItems.getById(id) as ClientGanttItem | null;
-    const updated = clientGanttItems.update(id, body);
+    const before = await clientGanttItems.getByIdAsync(id) as ClientGanttItem | null;
+    const updated = await clientGanttItems.updateAsync(id, body);
     if (!updated) {
       return NextResponse.json({ error: 'Client gantt item not found' }, { status: 404 });
     }
@@ -59,7 +59,7 @@ export async function PUT(
     ) {
       const gantt = updated as ClientGanttItem;
       // Check if a task already exists for this gantt item
-      const allTasks = employeeTasks.getAll() as EmployeeTask[];
+      const allTasks = await employeeTasks.getAllAsync() as EmployeeTask[];
       const existingTask = allTasks.find(t => t.ganttItemId === gantt.id);
 
       if (!existingTask) {
@@ -98,7 +98,7 @@ export async function PUT(
           updatedAt: new Date().toISOString(),
         };
 
-        const created = employeeTasks.create(newTask);
+        const created = await employeeTasks.createAsync(newTask);
         console.log('[Gantt→Task Sync] Created employee task:', created.id, 'for gantt:', gantt.id, 'assignee:', assigneeId, 'due:', dueDate);
       }
     }
@@ -119,7 +119,7 @@ export async function DELETE(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const deleted = clientGanttItems.delete(id);
+    const deleted = await clientGanttItems.deleteAsync(id);
     if (!deleted) {
       return NextResponse.json({ error: 'Client gantt item not found' }, { status: 404 });
     }

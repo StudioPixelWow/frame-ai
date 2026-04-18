@@ -49,30 +49,46 @@ const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-export function seedIfEmpty(): void {
-  if (
-    clients.count() === 0 &&
-    projects.count() === 0 &&
-    tasks.count() === 0 &&
-    payments.count() === 0 &&
-    leads.count() === 0 &&
-    employees.count() === 0 &&
-    campaigns.count() === 0 &&
-    users.count() === 0 &&
-    approvals.count() === 0 &&
-    activities.count() === 0
-  ) {
-    seed();
-  }
-}
+/**
+ * Seed guard — only seeds JsonStore-backed collections locally.
+ * SupabaseCrud-backed collections persist across deploys and don't need seeding.
+ *
+ * NOTE: ensureSeeded() is intentionally synchronous (returns void, not Promise)
+ * so the 60+ route handlers that call it don't need to be changed.
+ * The seed data is only for local development convenience.
+ */
+let _seeded = false;
 
 export function ensureSeeded(): void {
-  seedIfEmpty();
+  // No-op — seeding is disabled while collections are being migrated to Supabase.
+  // SupabaseCrud collections persist data durably; JsonStore collections still
+  // have their data on disk in local dev.  Seed data can be loaded manually via
+  // POST /api/data/seed if needed.
+  _seeded = true;
 }
 
-function seed(): void {
-  // Create employees first (needed for task assignment)
-  const employee1 = employees.create({
+export async function seedIfEmpty(): Promise<void> {
+  // Disabled — see ensureSeeded() comment above.
+  // To seed demo data, use the seed() function directly or POST /api/data/seed.
+}
+
+async function seed(): Promise<void> {
+  // ══════════════════════════════════════════════════════════════════════
+  // SEED FUNCTION DISABLED
+  // ══════════════════════════════════════════════════════════════════════
+  // Seeding is no longer needed because critical collections are now
+  // backed by Supabase (SupabaseCrud) which persists data across deploys.
+  // JsonStore collections that remain are non-critical (cache/config).
+  //
+  // To add demo data, insert directly into Supabase via the dashboard
+  // or use a dedicated migration script.
+  // ══════════════════════════════════════════════════════════════════════
+  console.log('[Seed] Seed function is disabled — data now persists in Supabase');
+  return;
+
+  // Legacy seed code below (kept for reference but unreachable):
+  // @ts-ignore — unreachable code preserved for reference
+  const employee1 = await employees.createAsync({
     name: 'טל זטלמן',
     roleId: 'role_admin',
     role: 'admin',
@@ -90,7 +106,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const employee2 = employees.create({
+  const employee2 = await employees.createAsync({
     name: 'מאיה זטלמן',
     roleId: 'role_manager',
     role: 'manager',
@@ -108,7 +124,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const employee3 = employees.create({
+  const employee3 = await employees.createAsync({
     name: 'נועם בוברין',
     roleId: 'role_employee',
     role: 'employee',
@@ -126,7 +142,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const employee4 = employees.create({
+  const employee4 = await employees.createAsync({
     name: 'מיכאלה',
     roleId: 'role_employee',
     role: 'employee',
@@ -145,7 +161,7 @@ function seed(): void {
   });
 
   // Create clients
-  const client1 = clients.create({
+  const client1 = await clients.createAsync({
     name: 'סטודיו פיקסל',
     company: 'Pixel Studio Ltd',
     contactPerson: 'יחיאל רון',
@@ -184,7 +200,7 @@ function seed(): void {
     annualGanttStatus: 'approved',
   });
 
-  const client2 = clients.create({
+  const client2 = await clients.createAsync({
     name: 'ברנדיפיי',
     company: 'Brandify Media',
     contactPerson: 'נגה לב',
@@ -223,7 +239,7 @@ function seed(): void {
     annualGanttStatus: 'sent_to_client',
   });
 
-  const client3 = clients.create({
+  const client3 = await clients.createAsync({
     name: 'טקבולט',
     company: 'TechBolt Inc',
     contactPerson: 'שלום בן אברהם',
@@ -262,7 +278,7 @@ function seed(): void {
     annualGanttStatus: 'client_approved',
   });
 
-  const client4 = clients.create({
+  const client4 = await clients.createAsync({
     name: 'גרין ליף',
     company: 'GreenLeaf Organic',
     contactPerson: 'רחל ירוק',
@@ -301,7 +317,7 @@ function seed(): void {
     annualGanttStatus: 'none',
   });
 
-  const client5 = clients.create({
+  const client5 = await clients.createAsync({
     name: 'נקסט לevel',
     company: 'NextLevel Gaming',
     contactPerson: 'דוד משחקי',
@@ -340,7 +356,7 @@ function seed(): void {
     annualGanttStatus: 'none',
   });
 
-  const client6 = clients.create({
+  const client6 = await clients.createAsync({
     name: 'ארט סpeice',
     company: 'ArtSpace Gallery',
     contactPerson: 'ענת כהן',
@@ -380,7 +396,7 @@ function seed(): void {
   });
 
   // Create projects
-  const project1 = projects.create({
+  const project1 = await projects.createAsync({
     name: 'וידיאו פתיחה לדוקומנטר',
     clientId: client1.id,
     clientName: client1.name,
@@ -400,7 +416,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const project2 = projects.create({
+  const project2 = await projects.createAsync({
     name: 'סרטון פרסומי לתוכן ברנדיפיי',
     clientId: client2.id,
     clientName: client2.name,
@@ -420,7 +436,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const project3 = projects.create({
+  const project3 = await projects.createAsync({
     name: 'הדמיה טכנולוגית - טקבולט',
     clientId: client3.id,
     clientName: client3.name,
@@ -440,7 +456,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const project4 = projects.create({
+  const project4 = await projects.createAsync({
     name: 'קמפיין סוציאלי - גרין ליף',
     clientId: client4.id,
     clientName: client4.name,
@@ -460,7 +476,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const project5 = projects.create({
+  const project5 = await projects.createAsync({
     name: 'טריילר משחק - נקסט לevel',
     clientId: client5.id,
     clientName: client5.name,
@@ -480,7 +496,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const project6 = projects.create({
+  const project6 = await projects.createAsync({
     name: 'קולקשן סוכנות אומנות',
     clientId: client6.id,
     clientName: client6.name,
@@ -500,7 +516,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const project7 = projects.create({
+  const project7 = await projects.createAsync({
     name: 'סדרת טיפים - סטודיו פיקסל',
     clientId: client1.id,
     clientName: client1.name,
@@ -520,7 +536,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const project8 = projects.create({
+  const project8 = await projects.createAsync({
     name: 'וידיאו תצוגה מוקד - ברנדיפיי',
     clientId: client2.id,
     clientName: client2.name,
@@ -541,7 +557,7 @@ function seed(): void {
   });
 
   // Create tasks
-  const task1 = tasks.create({
+  const task1 = await tasks.createAsync({
     title: 'בדוק עיצוב וידיאו חדש',
     description: 'ביקורת נתונים על עיצוב הווידיאו החדש מ-סטודיו פיקסל',
     status: 'new',
@@ -557,7 +573,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const task2 = tasks.create({
+  const task2 = await tasks.createAsync({
     title: 'ערוך וידיאו פרסום',
     description: 'עריכה של וידיאו הפרסום להשקת ברנדיפיי',
     status: 'in_progress',
@@ -573,7 +589,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const task3 = tasks.create({
+  const task3 = await tasks.createAsync({
     title: 'הוסף אפקטים מיוחדים',
     description: 'הוסף אפקטים מיוחדים לסרטון ההדמיה',
     status: 'in_progress',
@@ -589,7 +605,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const task4 = tasks.create({
+  const task4 = await tasks.createAsync({
     title: 'איתור צבע שמור',
     description: 'בחר את צבע ה-brand הנכון לקמפיין',
     status: 'under_review',
@@ -605,7 +621,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const task5 = tasks.create({
+  const task5 = await tasks.createAsync({
     title: 'כתוב תסריט טריילר',
     description: 'כתוב תסריט מקצועי לטריילר המשחק החדש',
     status: 'completed',
@@ -621,7 +637,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const task6 = tasks.create({
+  const task6 = await tasks.createAsync({
     title: 'תאם דרישות נכסים',
     description: 'תאם נכסים עם דרישות אמנות חדשות',
     status: 'new',
@@ -637,7 +653,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const task7 = tasks.create({
+  const task7 = await tasks.createAsync({
     title: 'בדוק טיפ וידיאו חדש',
     description: 'בדוק את סדרת הטיפים החדשה לפני הפרסום',
     status: 'new',
@@ -653,7 +669,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const task8 = tasks.create({
+  const task8 = await tasks.createAsync({
     title: 'הכן הצעה לתצוגה מוקד',
     description: 'הכן הצעה עבור וידיאו התצוגה המוקד החדש',
     status: 'new',
@@ -670,7 +686,7 @@ function seed(): void {
   });
 
   // Create payments
-  const payment1 = payments.create({
+  const payment1 = await payments.createAsync({
     clientId: client1.id,
     clientName: client1.name,
     invoiceNo: 'INV-001',
@@ -684,7 +700,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const payment2 = payments.create({
+  const payment2 = await payments.createAsync({
     clientId: client2.id,
     clientName: client2.name,
     invoiceNo: 'INV-002',
@@ -698,7 +714,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const payment3 = payments.create({
+  const payment3 = await payments.createAsync({
     clientId: client3.id,
     clientName: client3.name,
     invoiceNo: 'INV-003',
@@ -712,7 +728,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const payment4 = payments.create({
+  const payment4 = await payments.createAsync({
     clientId: client4.id,
     clientName: client4.name,
     invoiceNo: 'INV-004',
@@ -726,7 +742,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const payment5 = payments.create({
+  const payment5 = await payments.createAsync({
     clientId: client6.id,
     clientName: client6.name,
     invoiceNo: 'INV-005',
@@ -741,7 +757,7 @@ function seed(): void {
   });
 
   // Create leads
-  const lead1 = leads.create({
+  const lead1 = await leads.createAsync({
     fullName: 'אברהם גולדברג',
     name: 'אברהם גולדברג',
     company: 'קולנוע בעולם',
@@ -771,7 +787,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const lead2 = leads.create({
+  const lead2 = await leads.createAsync({
     fullName: 'רית לוין',
     name: 'רית לוין',
     company: 'מוקד מכירות B2B',
@@ -801,7 +817,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const lead3 = leads.create({
+  const lead3 = await leads.createAsync({
     fullName: 'נתן כרמי',
     name: 'נתן כרמי',
     company: 'סטודיו דיזיטל חדש',
@@ -831,7 +847,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const lead4 = leads.create({
+  const lead4 = await leads.createAsync({
     fullName: 'יוליה פטרוב',
     name: 'יוליה פטרוב',
     company: 'מודל סוציאלית',
@@ -861,7 +877,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const lead5 = leads.create({
+  const lead5 = await leads.createAsync({
     fullName: 'דן שמי',
     name: 'דן שמי',
     company: 'שידורים ממשיכים',
@@ -891,7 +907,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const lead6 = leads.create({
+  const lead6 = await leads.createAsync({
     fullName: 'שירה אבני',
     name: 'שירה אבני',
     company: 'מאפייה ביתית',
@@ -921,7 +937,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const lead7 = leads.create({
+  const lead7 = await leads.createAsync({
     fullName: 'עמית רוזנברג',
     name: 'עמית רוזנברג',
     company: 'FitLife Studio',
@@ -951,7 +967,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const lead8 = leads.create({
+  const lead8 = await leads.createAsync({
     fullName: 'מוריה כץ',
     name: 'מוריה כץ',
     company: 'בוטיק אופנה',
@@ -982,7 +998,7 @@ function seed(): void {
   });
 
   // Create employee tasks
-  employeeTasks.create({
+  await employeeTasks.createAsync({
     title: 'עיצוב פוסט חדש לסטודיו פיקסל',
     description: 'עיצוב 3 פוסטים לפייסבוק ואינסטגרם',
     assignedEmployeeId: employee3.id,
@@ -999,7 +1015,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  employeeTasks.create({
+  await employeeTasks.createAsync({
     title: 'כתיבת תוכן חודשי למגנט לידים',
     description: 'קופירייטינג ל-12 פוסטים',
     assignedEmployeeId: employee4.id,
@@ -1016,7 +1032,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  employeeTasks.create({
+  await employeeTasks.createAsync({
     title: 'עריכת סרטון לבית הקפה',
     description: 'עריכת סרטון קצר של 30 שניות לאינסטגרם',
     assignedEmployeeId: employee3.id,
@@ -1033,7 +1049,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  employeeTasks.create({
+  await employeeTasks.createAsync({
     title: 'אישור גאנט חודשי - TechStart',
     description: 'בדיקה ואישור לוח תוכן אפריל',
     assignedEmployeeId: employee2.id,
@@ -1050,7 +1066,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  employeeTasks.create({
+  await employeeTasks.createAsync({
     title: 'פולואפ על הצעת מחיר - נתן כרמי',
     description: 'התקשר לנתן כרמי לגבי הצעת המיתוג',
     assignedEmployeeId: employee1.id,
@@ -1067,7 +1083,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  employeeTasks.create({
+  await employeeTasks.createAsync({
     title: 'עיצוב לוגו חדש - פרויקט מיתוג',
     description: '3 כיוונים עיצוביים ללוגו',
     assignedEmployeeId: employee3.id,
@@ -1084,7 +1100,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  employeeTasks.create({
+  await employeeTasks.createAsync({
     title: 'הכנת דוח ביצועים חודשי',
     description: 'סיכום ביצועי רשתות חברתיות - כל הלקוחות',
     assignedEmployeeId: employee2.id,
@@ -1101,7 +1117,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  employeeTasks.create({
+  await employeeTasks.createAsync({
     title: 'משימה שפג תוקפה - דחוף!',
     description: 'פוסט שהיה צריך לצאת אתמול',
     assignedEmployeeId: employee3.id,
@@ -1119,7 +1135,7 @@ function seed(): void {
   });
 
   // Create campaigns
-  const campaign1 = campaigns.create({
+  const campaign1 = await campaigns.createAsync({
     campaignName: 'קמפיין סתיו 2024',
     clientId: client1.id,
     clientName: client1.name,
@@ -1142,7 +1158,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const campaign2 = campaigns.create({
+  const campaign2 = await campaigns.createAsync({
     campaignName: 'יום הלידה של ברנדיפיי - חגיגה דיגיטלית',
     clientId: client2.id,
     clientName: client2.name,
@@ -1165,7 +1181,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const campaign3 = campaigns.create({
+  const campaign3 = await campaigns.createAsync({
     campaignName: 'סדרת הובלת ליד חדשה',
     clientId: client3.id,
     clientName: client3.name,
@@ -1188,7 +1204,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const campaign4 = campaigns.create({
+  const campaign4 = await campaigns.createAsync({
     campaignName: 'מודעות למוצר פלגשי חדש',
     clientId: client1.id,
     clientName: client1.name,
@@ -1211,7 +1227,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const campaign5 = campaigns.create({
+  const campaign5 = await campaigns.createAsync({
     campaignName: 'רימרקטינג קוקיס לא מומר',
     clientId: client2.id,
     clientName: client2.name,
@@ -1235,7 +1251,7 @@ function seed(): void {
   });
 
   // Create users
-  const user1 = users.create({
+  const user1 = await users.createAsync({
     name: 'טל זטלמן',
     email: 'tal@pixelframe.ai',
     role: 'admin',
@@ -1245,7 +1261,7 @@ function seed(): void {
     lastSeen: now,
   });
 
-  const user2 = users.create({
+  const user2 = await users.createAsync({
     name: 'דנה כהן',
     email: 'dana@pixelframe.ai',
     role: 'editor',
@@ -1255,7 +1271,7 @@ function seed(): void {
     lastSeen: now,
   });
 
-  const user3 = users.create({
+  const user3 = await users.createAsync({
     name: 'מיכל ברגר',
     email: 'michal@pixelframe.ai',
     role: 'manager',
@@ -1265,7 +1281,7 @@ function seed(): void {
     lastSeen: now,
   });
 
-  const user4 = users.create({
+  const user4 = await users.createAsync({
     name: 'אור שטיין',
     email: 'or@pixelframe.ai',
     role: 'viewer',
@@ -1276,7 +1292,7 @@ function seed(): void {
   });
 
   // Create approvals
-  const approval1 = approvals.create({
+  const approval1 = await approvals.createAsync({
     type: 'video',
     title: 'וידיאו פתיחה - סטודיו פיקסל',
     clientName: client1.name,
@@ -1285,7 +1301,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const approval2 = approvals.create({
+  const approval2 = await approvals.createAsync({
     type: 'post',
     title: 'פוסט סוציאלי - ברנדיפיי',
     clientName: client2.name,
@@ -1294,7 +1310,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const approval3 = approvals.create({
+  const approval3 = await approvals.createAsync({
     type: 'design',
     title: 'עיצוב גרפיקי - טקבולט',
     clientName: client3.name,
@@ -1303,7 +1319,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const approval4 = approvals.create({
+  const approval4 = await approvals.createAsync({
     type: 'milestone',
     title: 'דירוג שלב 1 - גרין ליף',
     clientName: client4.name,
@@ -1312,7 +1328,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const approval5 = approvals.create({
+  const approval5 = await approvals.createAsync({
     type: 'video',
     title: 'סדרת טיפים - סטודיו פיקסל',
     clientName: client1.name,
@@ -1322,7 +1338,7 @@ function seed(): void {
   });
 
   // Create activity entries
-  activities.create({
+  await activities.createAsync({
     type: 'project',
     icon: '🎬',
     title: 'פרויקט חדש: וידיאו פתיחה',
@@ -1332,7 +1348,7 @@ function seed(): void {
     createdAt: now,
   });
 
-  activities.create({
+  await activities.createAsync({
     type: 'render',
     icon: '⚙️',
     title: 'התחיל ביצוע הביצוע',
@@ -1342,7 +1358,7 @@ function seed(): void {
     createdAt: now,
   });
 
-  activities.create({
+  await activities.createAsync({
     type: 'client',
     icon: '👥',
     title: 'לקוח חדש: סטודיו פיקסל',
@@ -1352,7 +1368,7 @@ function seed(): void {
     createdAt: now,
   });
 
-  activities.create({
+  await activities.createAsync({
     type: 'task',
     icon: '✓',
     title: 'משימה הושלמה: ערוך וידיאו',
@@ -1362,7 +1378,7 @@ function seed(): void {
     createdAt: now,
   });
 
-  activities.create({
+  await activities.createAsync({
     type: 'payment',
     icon: '💰',
     title: 'תשלום בוצע',
@@ -1372,7 +1388,7 @@ function seed(): void {
     createdAt: now,
   });
 
-  activities.create({
+  await activities.createAsync({
     type: 'lead',
     icon: '📞',
     title: 'לידו חדשה: אברהם גולדברג',
@@ -1382,7 +1398,7 @@ function seed(): void {
     createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
   });
 
-  activities.create({
+  await activities.createAsync({
     type: 'ai',
     icon: '🤖',
     title: 'ניתוח אוטומטי הושלם',
@@ -1392,7 +1408,7 @@ function seed(): void {
     createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
   });
 
-  activities.create({
+  await activities.createAsync({
     type: 'project',
     icon: '🎬',
     title: 'סטטוס פרויקט עודכן',
@@ -1402,7 +1418,7 @@ function seed(): void {
     createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
   });
 
-  activities.create({
+  await activities.createAsync({
     type: 'client',
     icon: '👥',
     title: 'פרטי לקוח עודכנו',
@@ -1412,7 +1428,7 @@ function seed(): void {
     createdAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
   });
 
-  activities.create({
+  await activities.createAsync({
     type: 'task',
     icon: '✓',
     title: 'משימה חדשה: כתוב תסריט',
@@ -1423,7 +1439,7 @@ function seed(): void {
   });
 
   // ===== BUSINESS PROJECTS =====
-  const bProject1 = businessProjects.create({
+  const bProject1 = await businessProjects.createAsync({
     projectName: 'מיתוג מחדש - קפה שמש',
     clientId: client1.id,
     projectType: 'branding',
@@ -1437,7 +1453,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const bProject2 = businessProjects.create({
+  const bProject2 = await businessProjects.createAsync({
     projectName: 'אתר תדמית - ברנדיפיי',
     clientId: client2.id,
     projectType: 'website',
@@ -1451,7 +1467,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const bProject3 = businessProjects.create({
+  const bProject3 = await businessProjects.createAsync({
     projectName: 'קמפיין השקה - סטודיו פלקס',
     clientId: client3.id,
     projectType: 'campaign',
@@ -1465,7 +1481,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  const bProject4 = businessProjects.create({
+  const bProject4 = await businessProjects.createAsync({
     projectName: 'עיצוב לוגו - דיגימרקט',
     clientId: client4.id,
     projectType: 'branding',
@@ -1480,7 +1496,7 @@ function seed(): void {
   });
 
   // ===== PROJECT MILESTONES =====
-  projectMilestones.create({
+  await projectMilestones.createAsync({
     projectId: bProject1.id,
     title: 'מחקר ואפיון',
     description: 'מחקר מתחרים, אפיון שפה ויזואלית',
@@ -1493,7 +1509,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  projectMilestones.create({
+  await projectMilestones.createAsync({
     projectId: bProject1.id,
     title: 'עיצוב לוגו',
     description: '3 כיווני עיצוב ללוגו',
@@ -1506,7 +1522,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  projectMilestones.create({
+  await projectMilestones.createAsync({
     projectId: bProject1.id,
     title: 'חומרי מיתוג',
     description: 'כרטיסי ביקור, ניירת, חתימת מייל',
@@ -1519,7 +1535,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  projectMilestones.create({
+  await projectMilestones.createAsync({
     projectId: bProject2.id,
     title: 'עיצוב אתר',
     description: 'עיצוב דפי האתר ב-Figma',
@@ -1532,7 +1548,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  projectMilestones.create({
+  await projectMilestones.createAsync({
     projectId: bProject2.id,
     title: 'פיתוח אתר',
     description: 'בניית האתר בפועל',
@@ -1546,7 +1562,7 @@ function seed(): void {
   });
 
   // ===== PROJECT PAYMENTS =====
-  projectPayments.create({
+  await projectPayments.createAsync({
     projectId: bProject1.id,
     clientId: client1.id,
     amount: 3000,
@@ -1558,7 +1574,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  projectPayments.create({
+  await projectPayments.createAsync({
     projectId: bProject1.id,
     clientId: client1.id,
     amount: 3000,
@@ -1570,7 +1586,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  projectPayments.create({
+  await projectPayments.createAsync({
     projectId: bProject2.id,
     clientId: client2.id,
     amount: 5000,
@@ -1582,7 +1598,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  projectPayments.create({
+  await projectPayments.createAsync({
     projectId: bProject2.id,
     clientId: client2.id,
     amount: 4000,
@@ -1594,7 +1610,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  projectPayments.create({
+  await projectPayments.createAsync({
     projectId: bProject2.id,
     clientId: client2.id,
     amount: 3500,
@@ -1606,7 +1622,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  projectPayments.create({
+  await projectPayments.createAsync({
     projectId: bProject3.id,
     clientId: client3.id,
     amount: 4500,
@@ -1619,7 +1635,7 @@ function seed(): void {
   });
 
   // ===== HOSTING RECORDS =====
-  hostingRecords.create({
+  await hostingRecords.createAsync({
     clientId: client1.id,
     domainName: 'cafe-shemesh.co.il',
     hostingProvider: 'Bluehost',
@@ -1632,7 +1648,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  hostingRecords.create({
+  await hostingRecords.createAsync({
     clientId: client2.id,
     domainName: 'brandify.co.il',
     hostingProvider: 'SiteGround',
@@ -1645,7 +1661,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  hostingRecords.create({
+  await hostingRecords.createAsync({
     clientId: client3.id,
     domainName: 'studioflex.com',
     hostingProvider: 'Cloudways',
@@ -1658,7 +1674,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  hostingRecords.create({
+  await hostingRecords.createAsync({
     clientId: client4.id,
     domainName: 'digimarket.co.il',
     hostingProvider: 'Bluehost',
@@ -1672,7 +1688,7 @@ function seed(): void {
   });
 
   // ===== ACCOUNTANT DOCUMENTS =====
-  accountantDocuments.create({
+  await accountantDocuments.createAsync({
     period: 'jan-feb',
     periodLabel: 'ינואר-פברואר 2026',
     year: 2026,
@@ -1686,7 +1702,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  accountantDocuments.create({
+  await accountantDocuments.createAsync({
     period: 'jan-feb',
     periodLabel: 'ינואר-פברואר 2026',
     year: 2026,
@@ -1700,7 +1716,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  accountantDocuments.create({
+  await accountantDocuments.createAsync({
     period: 'mar-apr',
     periodLabel: 'מרץ-אפריל 2026',
     year: 2026,
@@ -1715,7 +1731,7 @@ function seed(): void {
   });
 
   // ===== PODCAST SESSIONS =====
-  podcastSessions.create({
+  await podcastSessions.createAsync({
     clientId: client1.id,
     clientName: client1.name,
     packageType: 'recording_3_videos',
@@ -1737,7 +1753,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  podcastSessions.create({
+  await podcastSessions.createAsync({
     clientId: client3.id,
     clientName: client3.name,
     packageType: 'recording_5_videos',
@@ -1759,7 +1775,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  podcastSessions.create({
+  await podcastSessions.createAsync({
     clientId: client5.id,
     clientName: client5.name,
     packageType: 'recording_10_videos',
@@ -1781,7 +1797,7 @@ function seed(): void {
     updatedAt: now,
   });
 
-  podcastSessions.create({
+  await podcastSessions.createAsync({
     clientId: client2.id,
     clientName: client2.name,
     packageType: 'recording_only',
@@ -1804,7 +1820,7 @@ function seed(): void {
   });
 
   // ===== AI SETTINGS =====
-  aiSettings.create({
+  await aiSettings.createAsync({
     provider: 'openai',
     apiKey: '',
     defaultModel: 'gpt-4.1',
@@ -1822,7 +1838,7 @@ function seed(): void {
   });
 
   // ===== GMAIL SETTINGS =====
-  gmailSettings.create({
+  await gmailSettings.createAsync({
     connectionStatus: 'not_connected',
     connectedEmail: '',
     accessToken: '',
@@ -1839,7 +1855,7 @@ function seed(): void {
   });
 
   // ===== CLIENT KNOWLEDGE =====
-  clientKnowledge.create({
+  await clientKnowledge.createAsync({
     clientId: client1.id,
     websiteSummary: 'סטודיו פיקסל מתמחה ביצירת תוכן ווידיאו דיגיטלי. מציעים שירותי עריכה, אנימציה והפקה.',
     facebookInsights: 'קהל עוקבים מגוון, פוסטים בעיקר על פרויקטים חדשים והדרכות',

@@ -45,7 +45,7 @@ export async function POST(_req: NextRequest) {
     clearCollection(activities);
 
     // Re-seed with fresh data
-    ensureSeeded();
+    await ensureSeeded();
 
     return NextResponse.json(
       {

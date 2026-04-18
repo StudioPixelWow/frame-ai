@@ -205,7 +205,7 @@ export async function POST(
       };
 
       newItems.push(ganttItem);
-      clientGanttItems.create(ganttItem);
+      await clientGanttItems.createAsync(ganttItem);
     }
 
     return NextResponse.json({

@@ -15,7 +15,7 @@ export async function GET(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const campaign = campaigns.getById(id);
+    const campaign = await campaigns.getByIdAsync(id);
     if (!campaign) {
       return NextResponse.json(
         { error: 'Campaign not found' },
@@ -39,7 +39,7 @@ export async function PUT(
   try {
     const { id } = await context.params;
     const body = await req.json();
-    const updated = campaigns.update(id, body);
+    const updated = await campaigns.updateAsync(id, body);
     if (!updated) {
       return NextResponse.json(
         { error: 'Campaign not found' },
@@ -62,7 +62,7 @@ export async function DELETE(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const deleted = campaigns.delete(id);
+    const deleted = await campaigns.deleteAsync(id);
     if (!deleted) {
       return NextResponse.json(
         { error: 'Campaign not found' },

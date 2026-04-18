@@ -15,7 +15,7 @@ export async function GET(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const message = whatsappMessages.getById(id);
+    const message = await whatsappMessages.getByIdAsync(id);
     if (!message) {
       return NextResponse.json(
         { error: 'WhatsApp message not found' },
@@ -39,7 +39,7 @@ export async function PUT(
   try {
     const { id } = await context.params;
     const body = await req.json();
-    const updated = whatsappMessages.update(id, body);
+    const updated = await whatsappMessages.updateAsync(id, body);
     if (!updated) {
       return NextResponse.json(
         { error: 'WhatsApp message not found' },
@@ -62,7 +62,7 @@ export async function DELETE(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const deleted = whatsappMessages.delete(id);
+    const deleted = await whatsappMessages.deleteAsync(id);
     if (!deleted) {
       return NextResponse.json(
         { error: 'WhatsApp message not found' },

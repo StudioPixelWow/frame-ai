@@ -15,7 +15,7 @@ export async function GET(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const mailing = mailings.getById(id);
+    const mailing = await mailings.getByIdAsync(id);
     if (!mailing) {
       return NextResponse.json(
         { error: 'Mailing not found' },
@@ -39,7 +39,7 @@ export async function PUT(
   try {
     const { id } = await context.params;
     const body = await req.json();
-    const updated = mailings.update(id, body);
+    const updated = await mailings.updateAsync(id, body);
     if (!updated) {
       return NextResponse.json(
         { error: 'Mailing not found' },
@@ -62,7 +62,7 @@ export async function DELETE(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const deleted = mailings.delete(id);
+    const deleted = await mailings.deleteAsync(id);
     if (!deleted) {
       return NextResponse.json(
         { error: 'Mailing not found' },

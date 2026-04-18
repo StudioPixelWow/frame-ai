@@ -15,7 +15,7 @@ export async function GET(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const task = clientTasks.getById(id);
+    const task = await clientTasks.getByIdAsync(id);
     if (!task) {
       return NextResponse.json({ error: 'Client task not found' }, { status: 404 });
     }
@@ -36,7 +36,7 @@ export async function PUT(
   try {
     const { id } = await context.params;
     const body = await req.json();
-    const updated = clientTasks.update(id, body);
+    const updated = await clientTasks.updateAsync(id, body);
     if (!updated) {
       return NextResponse.json({ error: 'Client task not found' }, { status: 404 });
     }
@@ -56,7 +56,7 @@ export async function DELETE(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const deleted = clientTasks.delete(id);
+    const deleted = await clientTasks.deleteAsync(id);
     if (!deleted) {
       return NextResponse.json({ error: 'Client task not found' }, { status: 404 });
     }

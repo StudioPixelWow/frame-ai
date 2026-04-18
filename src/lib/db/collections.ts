@@ -1,4 +1,4 @@
-import { JsonStore } from './store';
+import { JsonStore, SupabaseCrud } from './store';
 import type {
   Client,
   Project,
@@ -41,16 +41,16 @@ import type {
 export const clients = new JsonStore<Client>('clients', 'cli');
 export const projects = new JsonStore<Project>('projects', 'prj');
 export const tasks = new JsonStore<Task>('tasks', 'tsk');
-export const payments = new JsonStore<Payment>('payments', 'pay');
-export const leads = new JsonStore<Lead>('leads', 'led');
+export const payments = new SupabaseCrud<Payment>('app_payments', 'pay');
+export const leads = new SupabaseCrud<Lead>('app_leads', 'led');
 export const employees = new JsonStore<Employee>('employees', 'emp');
-export const campaigns = new JsonStore<Campaign>('campaigns', 'cmp');
+export const campaigns = new SupabaseCrud<Campaign>('app_campaigns', 'cmp');
 export const users = new JsonStore<User>('users', 'usr');
-export const approvals = new JsonStore<Approval>('approvals', 'apr');
+export const approvals = new SupabaseCrud<Approval>('app_approvals', 'apr');
 export const activities = new JsonStore<ActivityEntry>('activities', 'act');
-export const clientGanttItems = new JsonStore<ClientGanttItem>('client-gantt-items', 'cgi');
-export const clientTasks = new JsonStore<ClientTask>('client-tasks', 'ctk');
-export const clientFiles = new JsonStore<ClientFile>('client-files', 'cfl');
+export const clientGanttItems = new SupabaseCrud<ClientGanttItem>('app_client_gantt_items', 'cgi');
+export const clientTasks = new SupabaseCrud<ClientTask>('app_client_tasks', 'ctk');
+export const clientFiles = new SupabaseCrud<ClientFile>('app_client_files', 'cfl');
 export const portalUsers = new JsonStore<PortalUser>('portal-users', 'pru');
 export const socialPosts = new JsonStore<SocialPost>('social-posts', 'spo');
 export const clientEmailLogs = new JsonStore<ClientEmailLog>('client-email-logs', 'cel');
@@ -59,18 +59,18 @@ export const projectMilestones = new JsonStore<ProjectMilestone>('project-milest
 export const projectPayments = new JsonStore<ProjectPayment>('project-payments', 'ppy');
 export const hostingRecords = new JsonStore<HostingRecord>('hosting-records', 'hst');
 export const accountantDocuments = new JsonStore<AccountantDocument>('accountant-documents', 'acd');
-export const podcastSessions = new JsonStore<PodcastSession>('podcast-sessions', 'pcs');
+export const podcastSessions = new SupabaseCrud<PodcastSession>('app_podcast_sessions', 'pcs');
 export const aiSettings = new JsonStore<AISettings>('ai-settings', 'ais');
 export const clientKnowledge = new JsonStore<ClientKnowledge>('client-knowledge', 'ckn');
 export const creativeDNA = new JsonStore<CreativeDNA>('creative-dna', 'cdna');
 export const clientResearch = new JsonStore<ClientResearch>('client-research', 'crs');
-export const employeeTasks = new JsonStore<EmployeeTask>('employee-tasks', 'etk');
-export const followUpReminders = new JsonStore<FollowUpReminder>('follow-up-reminders', 'fur');
+export const employeeTasks = new SupabaseCrud<EmployeeTask>('app_employee_tasks', 'etk');
+export const followUpReminders = new SupabaseCrud<FollowUpReminder>('app_follow_up_reminders', 'fur');
 export const portalComments = new JsonStore<PortalComment>('portal-comments', 'pcm');
 export const automationRules = new JsonStore<AutomationRule>('automation-rules', 'atr');
-export const whatsappMessages = new JsonStore<WhatsAppMessage>('whatsapp-messages', 'wam');
+export const whatsappMessages = new SupabaseCrud<WhatsAppMessage>('app_whatsapp_messages', 'wam');
 export const emailTemplates = new JsonStore<EmailTemplate>('email-templates', 'emt');
-export const mailings = new JsonStore<Mailing>('mailings', 'mai');
+export const mailings = new SupabaseCrud<Mailing>('app_mailings', 'mai');
 export const gmailSettings = new JsonStore<GmailSettings>('gmail-settings', 'gml');
-export const meetings = new JsonStore<Meeting>('meetings', 'mtg');
+export const meetings = new SupabaseCrud<Meeting>('app_meetings', 'mtg');
 export const projectNotifications = new JsonStore<ProjectNotification>('project-notifications', 'pno');

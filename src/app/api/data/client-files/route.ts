@@ -10,7 +10,7 @@ import { ensureSeeded } from '@/lib/db/seed';
 export async function GET() {
   ensureSeeded();
   try {
-    return NextResponse.json(clientFiles.getAll());
+    return NextResponse.json(await clientFiles.getAllAsync());
   } catch (error) {
     return NextResponse.json(
       { error: 'Failed to fetch client files' },
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     if (!body.createdAt) body.createdAt = now;
     if (!body.updatedAt) body.updatedAt = now;
-    const created = clientFiles.create(body);
+    const created = await clientFiles.createAsync(body);
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
     return NextResponse.json(

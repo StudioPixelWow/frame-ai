@@ -15,7 +15,7 @@ export async function GET(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const payment = payments.getById(id);
+    const payment = await payments.getByIdAsync(id);
     if (!payment) {
       return NextResponse.json(
         { error: 'Payment not found' },
@@ -39,7 +39,7 @@ export async function PUT(
   try {
     const { id } = await context.params;
     const body = await req.json();
-    const updated = payments.update(id, body);
+    const updated = await payments.updateAsync(id, body);
     if (!updated) {
       return NextResponse.json(
         { error: 'Payment not found' },
@@ -62,7 +62,7 @@ export async function DELETE(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const deleted = payments.delete(id);
+    const deleted = await payments.deleteAsync(id);
     if (!deleted) {
       return NextResponse.json(
         { error: 'Payment not found' },

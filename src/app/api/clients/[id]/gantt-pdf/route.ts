@@ -33,12 +33,12 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
   let title: string;
 
   if (type === "annual") {
-    items = clientGanttItems.getAll().filter(
+    items = (await clientGanttItems.getAllAsync()).filter(
       (g) => g.clientId === client.id && g.ganttType === "annual" && g.year === year
     );
     title = `תכנון שנתי — ${year}`;
   } else {
-    items = clientGanttItems.getAll().filter(
+    items = (await clientGanttItems.getAllAsync()).filter(
       (g) => g.clientId === client.id && g.month === month && g.year === year && g.ganttType !== "annual"
     );
     title = `גאנט חודשי — ${monthName} ${year}`;

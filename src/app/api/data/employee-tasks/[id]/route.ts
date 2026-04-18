@@ -16,7 +16,7 @@ export async function GET(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const employeeTask = employeeTasks.getById(id);
+    const employeeTask = await employeeTasks.getByIdAsync(id);
     if (!employeeTask) {
       return NextResponse.json({ error: 'Employee task not found' }, { status: 404 });
     }
@@ -36,9 +36,9 @@ export async function PUT(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const before = employeeTasks.getById(id) as EmployeeTask | null;
+    const before = await employeeTasks.getByIdAsync(id) as EmployeeTask | null;
     const body = await req.json();
-    const updated = employeeTasks.update(id, body);
+    const updated = await employeeTasks.updateAsync(id, body);
     if (!updated) {
       return NextResponse.json({ error: 'Employee task not found' }, { status: 404 });
     }
@@ -47,7 +47,7 @@ export async function PUT(
     const task = updated as EmployeeTask;
     if (task.ganttItemId && task.status === 'completed' && before?.status !== 'completed') {
       try {
-        clientGanttItems.update(task.ganttItemId, { status: 'published' });
+        await clientGanttItems.updateAsync(task.ganttItemId, { status: 'published' });
         console.log('[Task→Gantt Sync] Gantt item', task.ganttItemId, 'marked published (task completed)');
       } catch { /* gantt item may not exist — safe to ignore */ }
     }
@@ -68,7 +68,7 @@ export async function DELETE(
   ensureSeeded();
   try {
     const { id } = await context.params;
-    const deleted = employeeTasks.delete(id);
+    const deleted = await employeeTasks.deleteAsync(id);
     if (!deleted) {
       return NextResponse.json({ error: 'Employee task not found' }, { status: 404 });
     }
