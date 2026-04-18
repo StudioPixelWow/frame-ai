@@ -5,8 +5,9 @@
  *
  * Storage: Supabase "clients" table (same source of truth as /api/data/clients).
  *
- * IMPORTANT: Uses runtime schema discovery so it never sends columns
- * that don't exist in the actual DB.
+ * Social / marketing columns may or may not exist in the production DB.
+ * The code includes them in the update payload, and the column-drop
+ * retry loop strips any that PostgREST rejects.  No schema DDL is run.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -15,147 +16,78 @@ import { requireRole } from '@/lib/auth/api-guard';
 
 type ClientRow = Record<string, unknown> & { id: string };
 
-/* ── Schema discovery (cached per process) ───────────────────────────── */
-
-let _knownColumns: Set<string> | null = null;
-
-async function discoverColumns(): Promise<Set<string> | null> {
-  if (_knownColumns) return _knownColumns;
-  try {
-    const sb = getSupabase();
-    const { data: rpcData, error: rpcErr } = await sb.rpc('exec_sql', {
-      query: `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'clients' ORDER BY ordinal_position;`,
-    });
-    if (!rpcErr && rpcData) {
-      let cols: string[] = [];
-      if (typeof rpcData === 'string') {
-        try {
-          const parsed = JSON.parse(rpcData);
-          if (Array.isArray(parsed)) {
-            cols = parsed.map((row: Record<string, unknown>) => (row.column_name as string) ?? '').filter(Boolean);
-          }
-        } catch { /* fall through */ }
-      } else if (Array.isArray(rpcData)) {
-        cols = rpcData.map((row: Record<string, unknown>) => (row.column_name as string) ?? '').filter(Boolean);
-      }
-      if (cols.length > 0) {
-        _knownColumns = new Set(cols);
-        console.log(`[clients/[id]] ✅ schema discovered: ${cols.join(', ')}`);
-        return _knownColumns;
-      }
-    }
-    // Fallback: probe with SELECT *
-    const { data: probeRows, error: probeErr } = await sb.from('clients').select('*').limit(1);
-    if (!probeErr && probeRows && probeRows.length > 0) {
-      const cols = Object.keys(probeRows[0]);
-      _knownColumns = new Set(cols);
-      console.log(`[clients/[id]] ✅ schema via SELECT * probe: ${cols.join(', ')}`);
-      return _knownColumns;
-    }
-    console.warn('[clients/[id]] ⚠️ could not discover schema');
-    return null;
-  } catch (err) {
-    console.warn('[clients/[id]] schema discovery error:', err);
-    return null;
-  }
-}
-
-function filterToKnownColumns(
-  payload: Record<string, unknown>,
-  known: Set<string> | null,
-): Record<string, unknown> {
-  if (!known) return payload;
-  const filtered: Record<string, unknown> = {};
-  const dropped: string[] = [];
-  for (const [k, v] of Object.entries(payload)) {
-    if (known.has(k)) {
-      filtered[k] = v;
-    } else {
-      dropped.push(k);
-    }
-  }
-  if (dropped.length > 0) {
-    console.log(`[clients/[id]] filterToKnownColumns dropped: ${dropped.join(', ')}`);
-  }
-  return filtered;
-}
-
 /* ── Row → API object ────────────────────────────────────────────────── */
 
 function rowToClient(r: ClientRow) {
   return {
     id: r.id,
-    name: (r.name as string) ?? '',
-    company: (r.company as string) ?? '',
-    contactPerson: (r.contact_person as string) ?? '',
-    email: (r.email as string) ?? '',
-    phone: (r.phone as string) ?? '',
-    notes: (r.notes as string) ?? '',
-    businessField: (r.business_field as string) ?? '',
-    clientType: (r.client_type as string) ?? 'marketing',
-    status: (r.status as string) ?? 'active',
-    retainerAmount: Number(r.retainer_amount) || 0,
-    retainerDay: Number(r.retainer_day) || 1,
-    color: (r.color as string) ?? '#00B5FE',
-    convertedFromLead: (r.converted_from_lead as string) ?? null,
-    assignedManagerId: (r.assigned_manager_id as string) ?? null,
-    // Social & marketing — try BOTH possible column naming conventions
-    websiteUrl:            (r.website as string) || (r.website_url as string) || '',
-    facebookPageUrl:       (r.facebook as string) || (r.facebook_page_url as string) || '',
-    instagramProfileUrl:   (r.instagram as string) || (r.instagram_profile_url as string) || '',
-    tiktokProfileUrl:      (r.tiktok as string) || (r.tiktok_profile_url as string) || '',
-    linkedinUrl:           (r.linkedin as string) || (r.linkedin_url as string) || '',
-    youtubeUrl:            (r.youtube as string) || (r.youtube_url as string) || '',
-    marketingGoals:        (r.marketing_goals as string) ?? '',
-    keyMarketingMessages:  (r.key_marketing_messages as string) ?? '',
-    logoUrl:               (r.logo_url as string) ?? '',
-    createdAt: (r.created_at as string) ?? '',
-    updatedAt: (r.updated_at as string) ?? '',
+    name:               (r.name as string) ?? '',
+    company:            (r.company as string) ?? '',
+    contactPerson:      (r.contact_person as string) ?? '',
+    email:              (r.email as string) ?? '',
+    phone:              (r.phone as string) ?? '',
+    notes:              (r.notes as string) ?? '',
+    businessField:      (r.business_field as string) ?? '',
+    clientType:         (r.client_type as string) ?? 'marketing',
+    status:             (r.status as string) ?? 'active',
+    retainerAmount:     Number(r.retainer_amount) || 0,
+    retainerDay:        Number(r.retainer_day) || 1,
+    color:              (r.color as string) ?? '#00B5FE',
+    convertedFromLead:  (r.converted_from_lead as string) ?? null,
+    assignedManagerId:  (r.assigned_manager_id as string) ?? null,
+    // Social & marketing — read whichever column name exists
+    websiteUrl:          (r.website as string) || (r.website_url as string) || '',
+    facebookPageUrl:     (r.facebook as string) || (r.facebook_page_url as string) || '',
+    instagramProfileUrl: (r.instagram as string) || (r.instagram_profile_url as string) || '',
+    tiktokProfileUrl:    (r.tiktok as string) || (r.tiktok_profile_url as string) || '',
+    linkedinUrl:         (r.linkedin as string) || (r.linkedin_url as string) || '',
+    youtubeUrl:          (r.youtube as string) || (r.youtube_url as string) || '',
+    marketingGoals:      (r.marketing_goals as string) ?? '',
+    keyMarketingMessages:(r.key_marketing_messages as string) ?? '',
+    logoUrl:             (r.logo_url as string) ?? '',
+    createdAt:           (r.created_at as string) ?? '',
+    updatedAt:           (r.updated_at as string) ?? '',
   };
 }
 
-/** Map incoming camelCase partial update → all possible DB column names.
- *  The caller will filter to only known columns before sending to Supabase. */
+/* ── camelCase body → snake_case DB payload ───────────────────────────── */
+
 function toDbUpdate(body: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  const setIfPresent = (bodyKey: string, dbKey: string) => {
+  const set = (bodyKey: string, dbKey: string) => {
     if (body[bodyKey] !== undefined) out[dbKey] = body[bodyKey];
   };
-  // Also set both possible column name conventions for social fields
-  const setIfPresentDual = (bodyKey: string, shortKey: string, longKey: string) => {
-    if (body[bodyKey] !== undefined) {
-      out[shortKey] = body[bodyKey];
-      out[longKey]  = body[bodyKey];
-    }
-  };
 
-  setIfPresent('name', 'name');
-  setIfPresent('company', 'company');
-  setIfPresent('contactPerson', 'contact_person');
-  setIfPresent('email', 'email');
-  setIfPresent('phone', 'phone');
-  setIfPresent('notes', 'notes');
-  setIfPresent('businessField', 'business_field');
-  setIfPresent('clientType', 'client_type');
-  setIfPresent('status', 'status');
-  setIfPresent('retainerAmount', 'retainer_amount');
-  setIfPresent('retainerDay', 'retainer_day');
-  setIfPresent('color', 'color');
-  setIfPresent('convertedFromLead', 'converted_from_lead');
-  setIfPresent('assignedManagerId', 'assigned_manager_id');
-  // Social & marketing — emit both naming conventions; schema filter removes wrong ones
-  setIfPresentDual('websiteUrl',          'website',   'website_url');
-  setIfPresentDual('facebookPageUrl',     'facebook',  'facebook_page_url');
-  setIfPresentDual('instagramProfileUrl', 'instagram', 'instagram_profile_url');
-  setIfPresentDual('tiktokProfileUrl',    'tiktok',    'tiktok_profile_url');
-  setIfPresentDual('linkedinUrl',         'linkedin',  'linkedin_url');
-  setIfPresentDual('youtubeUrl',          'youtube',   'youtube_url');
-  setIfPresent('marketingGoals', 'marketing_goals');
-  setIfPresent('keyMarketingMessages', 'key_marketing_messages');
-  setIfPresent('logoUrl', 'logo_url');
+  set('name', 'name');
+  set('company', 'company');
+  set('contactPerson', 'contact_person');
+  set('email', 'email');
+  set('phone', 'phone');
+  set('notes', 'notes');
+  set('businessField', 'business_field');
+  set('clientType', 'client_type');
+  set('status', 'status');
+  set('retainerAmount', 'retainer_amount');
+  set('retainerDay', 'retainer_day');
+  set('color', 'color');
+  set('convertedFromLead', 'converted_from_lead');
+  set('assignedManagerId', 'assigned_manager_id');
+  // Social / marketing — ONE name per field; column-drop retry strips unknown ones
+  set('websiteUrl', 'website');
+  set('facebookPageUrl', 'facebook');
+  set('instagramProfileUrl', 'instagram');
+  set('tiktokProfileUrl', 'tiktok');
+  set('linkedinUrl', 'linkedin');
+  set('youtubeUrl', 'youtube');
+  set('marketingGoals', 'marketing_goals');
+  set('keyMarketingMessages', 'key_marketing_messages');
+  set('logoUrl', 'logo_url');
+
   out.updated_at = new Date().toISOString();
   return out;
 }
+
+/* ── GET ──────────────────────────────────────────────────────────────── */
 
 export async function GET(
   req: NextRequest,
@@ -167,10 +99,6 @@ export async function GET(
   try {
     const { id } = await context.params;
     const sb = getSupabase();
-
-    // Discover schema on first call
-    await discoverColumns();
-
     const { data, error } = await sb
       .from('clients')
       .select('*')
@@ -185,17 +113,19 @@ export async function GET(
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
 
-    // Debug: log actual keys returned from DB
+    // Debug log
     console.log(`[API] GET /api/data/clients/${id} DB keys: ${Object.keys(data).join(', ')}`);
+    console.log(`[API] GET /api/data/clients/${id} raw row:`, JSON.stringify(data));
 
     const client = rowToClient(data as ClientRow);
-    console.log(`[API] GET /api/data/clients/${id} mapped: websiteUrl="${client.websiteUrl}" facebookPageUrl="${client.facebookPageUrl}" instagramProfileUrl="${client.instagramProfileUrl}" marketingGoals="${client.marketingGoals}"`);
     return NextResponse.json(client);
   } catch (error) {
     console.error('[API] GET /api/data/clients/[id] error:', error);
     return NextResponse.json({ error: 'Failed to fetch client' }, { status: 500 });
   }
 }
+
+/* ── PUT ──────────────────────────────────────────────────────────────── */
 
 export async function PUT(
   req: NextRequest,
@@ -209,39 +139,38 @@ export async function PUT(
     let body: Record<string, unknown> = {};
     try { body = (await req.json()) as Record<string, unknown>; } catch { /* noop */ }
 
-    const known = await discoverColumns();
-    const rawUpdate = toDbUpdate(body);
-    let updatePayload = filterToKnownColumns(rawUpdate, known);
-
-    console.log(`[API] PUT /api/data/clients/${id} raw fields=${Object.keys(rawUpdate).join(',')} filtered fields=${Object.keys(updatePayload).join(',')}`, JSON.stringify(updatePayload));
+    let updatePayload = toDbUpdate(body);
+    console.log(`[API] PUT /api/data/clients/${id} payload:`, JSON.stringify(updatePayload));
 
     const sb = getSupabase();
 
-    // Update with column-drop retry (safety net)
+    // Column-drop retry
     let updated: ClientRow | null = null;
     let lastError: { code?: string; message: string } | null = null;
 
-    for (let attempt = 0; attempt < 20; attempt++) {
+    for (let attempt = 0; attempt < 25; attempt++) {
       const { data, error } = await sb
         .from('clients')
         .update(updatePayload)
         .eq('id', id)
         .select('*')
         .maybeSingle();
+
       if (!error) { updated = (data as ClientRow) ?? null; break; }
-      lastError = error as any;
+
+      lastError = error as { code?: string; message: string };
       const m = error.message.match(
-        /Could not find the '([^']+)' column|column .*?['"]?([a-z_]+)['"]? (?:does not exist)/i,
+        /Could not find the '([^']+)' column|column .*?['"]?([a-z_]+)['"]? (?:does not exist|of relation)/i,
       );
       const badCol = m?.[1] || m?.[2];
       if (!badCol) {
-        console.error(`[API] PUT /api/data/clients/${id} non-column error (attempt ${attempt + 1}):`, error.message);
+        console.error(`[API] PUT /clients/${id} non-column error (attempt ${attempt + 1}):`, error.message);
         break;
       }
       if (badCol in updatePayload) {
-        console.warn(`[API] PUT /api/data/clients/${id} dropping column "${badCol}" (attempt ${attempt + 1})`);
-        const { [badCol]: _d, ...rest } = updatePayload;
-        void _d;
+        console.warn(`[API] PUT /clients/${id} dropping unknown column "${badCol}" (attempt ${attempt + 1})`);
+        const { [badCol]: _dropped, ...rest } = updatePayload;
+        void _dropped;
         updatePayload = rest;
       } else {
         break;
@@ -258,8 +187,9 @@ export async function PUT(
     if (!updated) {
       return NextResponse.json({ error: 'Client not found', clientId: id }, { status: 404 });
     }
+
     const result = rowToClient(updated);
-    console.log(`[API] PUT /api/data/clients/${id} ✅ saved. websiteUrl="${result.websiteUrl}" marketingGoals="${result.marketingGoals}"`);
+    console.log(`[API] PUT /api/data/clients/${id} ✅ saved. returned_keys=${Object.keys(updated).join(',')}`);
     return NextResponse.json(result);
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -267,6 +197,8 @@ export async function PUT(
     return NextResponse.json({ error: `Failed to update client: ${msg}` }, { status: 500 });
   }
 }
+
+/* ── DELETE ───────────────────────────────────────────────────────────── */
 
 export async function DELETE(
   req: NextRequest,
