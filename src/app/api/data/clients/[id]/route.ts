@@ -5,11 +5,12 @@
  *
  * Storage: Supabase "clients" table.
  *
- * NOTE: Social columns (website, facebook, instagram, tiktok, linkedin,
- * youtube) and marketing columns (marketing_goals, key_marketing_messages)
- * are temporarily EXCLUDED from write payloads because PostgREST's schema
- * cache does not recognise them yet.  They are still read from SELECT *
- * responses when present so existing data is not lost.
+ * Social columns (website, facebook, instagram, tiktok, linkedin, youtube)
+ * are confirmed in the DB and included in reads AND writes.
+ *
+ * marketing_goals, key_marketing_messages, logo_url do NOT exist in the
+ * public.clients table — read-only fallback (harmless default when absent),
+ * never written.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -37,14 +38,14 @@ function rowToClient(r: ClientRow) {
     color:              (r.color as string) ?? '#00B5FE',
     convertedFromLead:  (r.converted_from_lead as string) ?? null,
     assignedManagerId:  (r.assigned_manager_id as string) ?? null,
-    // Social — read-only from DB; NOT written for now
+    // Social — confirmed DB columns, read + write
     websiteUrl:          (r.website as string) ?? '',
     facebookPageUrl:     (r.facebook as string) ?? '',
     instagramProfileUrl: (r.instagram as string) ?? '',
     tiktokProfileUrl:    (r.tiktok as string) ?? '',
     linkedinUrl:         (r.linkedin as string) ?? '',
     youtubeUrl:          (r.youtube as string) ?? '',
-    // Marketing — read-only from DB; NOT written for now
+    // marketing_goals, key_marketing_messages, logo_url — NOT in DB, read-only fallback
     marketingGoals:      (r.marketing_goals as string) ?? '',
     keyMarketingMessages:(r.key_marketing_messages as string) ?? '',
     logoUrl:             (r.logo_url as string) ?? '',
@@ -75,7 +76,14 @@ function toDbUpdate(body: Record<string, unknown>): Record<string, unknown> {
   set('color', 'color');
   set('convertedFromLead', 'converted_from_lead');
   set('assignedManagerId', 'assigned_manager_id');
-  // logo_url, social & marketing fields intentionally omitted — schema cache issue
+  // Social — confirmed DB columns
+  set('websiteUrl', 'website');
+  set('facebookPageUrl', 'facebook');
+  set('instagramProfileUrl', 'instagram');
+  set('tiktokProfileUrl', 'tiktok');
+  set('linkedinUrl', 'linkedin');
+  set('youtubeUrl', 'youtube');
+  // logo_url, marketing_goals, key_marketing_messages — NOT in DB, never written
 
   out.updated_at = new Date().toISOString();
   return out;
