@@ -165,10 +165,12 @@ export async function POST(req: NextRequest) {
     const ctxResult = await buildClientInsightContext(clientId);
     if (!ctxResult.valid) {
       console.error(`[orchestrate] Context build failed: ${ctxResult.error}`);
-      return NextResponse.json({
-        error: ctxResult.error,
-        missingFields: ctxResult.missingFields,
-      }, { status: 400 });
+      // Return 200 with all sections marked as error — don't block the frontend
+      const errorResults: Record<string, SectionResult> = {};
+      for (const s of requestedSections) {
+        errorResults[s] = { status: 'error', error: ctxResult.error };
+      }
+      return NextResponse.json({ success: false, results: errorResults, contextError: ctxResult.error }, { status: 200 });
     }
 
     const ctx = ctxResult.data;

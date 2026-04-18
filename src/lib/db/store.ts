@@ -51,45 +51,58 @@ export function getSupabase(): SupabaseClient {
 
 const _ensuredTables = new Set<string>();
 
+/** Whether exec_sql RPC is known-unavailable (skip future attempts) */
+let _execSqlAvailable: boolean | null = null;
+
 export async function ensureTable(table: string, ddl: string): Promise<void> {
   if (_ensuredTables.has(table)) return;
+
+  // Skip RPC if we already know it doesn't exist
+  if (_execSqlAvailable === false) {
+    _ensuredTables.add(table); // Mark as "attempted" to avoid repeat logs
+    return;
+  }
+
   const sb = getSupabase();
 
   try {
     const { error } = await sb.rpc('exec_sql', { query: ddl });
-    if (error && !error.message.includes('already exists')) {
-      console.warn(`[ensureTable] Could not auto-create "${table}":`, error.message);
-      console.warn(`[ensureTable] Create it manually:\n${ddl}`);
+    if (error) {
+      if (error.message.includes('function') || error.message.includes('could not find')) {
+        // exec_sql RPC doesn't exist at all — flag it so we never retry
+        _execSqlAvailable = false;
+        console.warn(`[ensureTable] exec_sql RPC not available. Tables must be created via Supabase SQL editor or /api/data/migrate-collections.`);
+      } else if (!error.message.includes('already exists')) {
+        console.warn(`[ensureTable] Could not auto-create "${table}":`, error.message);
+      }
     } else {
-      // Notify PostgREST to reload its schema cache so the new table is immediately visible
+      _execSqlAvailable = true;
+      // Notify PostgREST to reload schema cache
       try {
         await sb.rpc('exec_sql', { query: "NOTIFY pgrst, 'reload schema';" });
-      } catch {
-        // Non-fatal — schema cache will refresh on its own eventually
-      }
+      } catch { /* non-fatal */ }
     }
   } catch {
-    // rpc function doesn't exist — non-fatal
+    _execSqlAvailable = false;
   }
 
   _ensuredTables.add(table);
 }
 
-/**
- * Check if a table exists in Supabase by attempting a lightweight query.
- * Returns true if the table is accessible, false if schema cache miss or table missing.
- */
-export async function tableExistsInCache(tableName: string): Promise<boolean> {
+/** Returns true if a table is queryable via PostgREST right now. */
+export async function tableAccessible(tableName: string): Promise<boolean> {
   try {
     const sb = getSupabase();
     const { error } = await sb.from(tableName).select('id').limit(0);
-    if (error && (error.message.includes('schema cache') || error.message.includes('does not exist') || error.message.includes('relation'))) {
-      return false;
-    }
     return !error;
   } catch {
     return false;
   }
+}
+
+/** Returns true if the error indicates the table simply doesn't exist. */
+export function isTableMissingError(msg: string): boolean {
+  return msg.includes('schema cache') || msg.includes('does not exist') || msg.includes('relation');
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -295,20 +308,21 @@ export class SupabaseCrud<T extends { id: string }> {
       .order('created_at', { ascending: true });
 
     if (error) {
-      // Schema cache miss — force table re-creation and retry once
-      if (error.message.includes('schema cache') || error.message.includes('does not exist') || error.message.includes('relation')) {
-        console.warn(`[SupabaseCrud][${this.tableName}] Schema cache miss, forcing re-create and retry...`);
+      if (isTableMissingError(error.message)) {
+        // Table doesn't exist in PostgREST schema cache.
+        // Try re-creating once, then retry.
+        console.warn(`[SupabaseCrud][${this.tableName}] Table missing/schema cache stale — attempting re-create...`);
         _tableInitPromises.delete(this.tableName);
         _ensuredTables.delete(this.tableName);
         await this.ensureTableExists();
-        // Brief delay for schema cache to propagate
         await new Promise(r => setTimeout(r, 500));
         const retry = await sb.from(this.tableName).select('id, data').order('created_at', { ascending: true });
         if (retry.error) {
-          console.error(`[SupabaseCrud][${this.tableName}] getAllAsync retry still failed:`, retry.error.message);
-          throw new Error(`Failed to fetch from ${this.tableName}: ${retry.error.message}`);
+          // Table still doesn't exist — return empty instead of crashing.
+          // The table needs to be created via SQL editor or /api/data/migrate-collections.
+          console.warn(`[SupabaseCrud][${this.tableName}] Table still not accessible after retry. Returning empty. Run migration or create table manually.`);
+          return [];
         }
-        console.log(`[SupabaseCrud][${this.tableName}] SELECT (retry) → ${retry.data?.length ?? 0} rows ✅ DURABLE`);
         return (retry.data ?? []).map((r: { id: string; data: unknown }) => this.rowToEntity(r));
       }
 
@@ -316,7 +330,6 @@ export class SupabaseCrud<T extends { id: string }> {
       throw new Error(`Failed to fetch from ${this.tableName}: ${error.message}`);
     }
 
-    console.log(`[SupabaseCrud][${this.tableName}] SELECT → ${rows?.length ?? 0} rows ✅ DURABLE`);
     return (rows ?? []).map((r: { id: string; data: unknown }) => this.rowToEntity(r));
   }
 
@@ -370,6 +383,12 @@ export class SupabaseCrud<T extends { id: string }> {
       .single();
 
     if (error || !inserted) {
+      if (error && isTableMissingError(error.message)) {
+        console.warn(`[SupabaseCrud][${this.tableName}] createAsync: table not accessible. Persistence skipped. Run migration.`);
+        // Return a fake entity so callers don't crash — data is lost but the flow continues
+        const fakeId = `temp-${Date.now()}`;
+        return { ...entityWithoutId, id: fakeId } as unknown as T;
+      }
       console.error(`[SupabaseCrud][${this.tableName}] createAsync error:`, error?.message);
       throw new Error(`Failed to create in ${this.tableName}: ${error?.message ?? 'no row returned'}`);
     }
@@ -416,11 +435,14 @@ export class SupabaseCrud<T extends { id: string }> {
       .eq('id', id);
 
     if (error) {
+      if (isTableMissingError(error.message)) {
+        console.warn(`[SupabaseCrud][${this.tableName}] updateAsync: table not accessible. Update skipped.`);
+        return merged; // Return merged data even though it wasn't persisted
+      }
       console.error(`[SupabaseCrud][${this.tableName}] updateAsync error:`, error.message);
       throw new Error(`Failed to update ${this.tableName}/${id}: ${error.message}`);
     }
 
-    console.log(`[SupabaseCrud][${this.tableName}] UPDATE id=${id} keys=[${Object.keys(partial).join(',')}] ✅ DURABLE`);
     return merged;
   }
 

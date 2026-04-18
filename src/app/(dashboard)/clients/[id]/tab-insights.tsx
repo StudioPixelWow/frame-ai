@@ -69,6 +69,7 @@ function safeString(val: unknown): string {
 // ============================================================================
 
 type SectionStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
+type TerminalStatus = 'idle' | 'ready' | 'error' | 'missing_prerequisites';
 
 // ============================================================================
 // LOADING SKELETON & ERROR COMPONENTS
@@ -400,35 +401,34 @@ function ClientBrainSection({ client, persisted }: { client: Client; persisted?:
 // SECTION: BRAND WEAKNESSES
 // ============================================================================
 
-function BrandWeaknessSection({ client, persisted, autoGenerate, onRegenerate }: { client: Client; persisted?: unknown; autoGenerate?: boolean; onRegenerate?: () => Promise<boolean> }) {
+function BrandWeaknessSection({ client, persisted, onRegenerate, terminalStatus, errorMessage, isOrchestrating }: { client: Client; persisted?: unknown; onRegenerate?: () => Promise<boolean>; terminalStatus?: TerminalStatus; errorMessage?: string; isOrchestrating?: boolean }) {
   const [weaknesses, setWeaknesses] = useState<BrandWeakness[]>([]);
-  const [status, setStatus] = useState<SectionStatus>('idle');
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [localStatus, setLocalStatus] = useState<SectionStatus>('idle');
+  const [localError, setLocalError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   const handleRegenerate = useCallback(async () => {
-    setStatus('loading');
-    setErrorMsg(null);
+    setLocalStatus('loading');
+    setLocalError(null);
     try {
       if (onRegenerate) {
         const ok = await onRegenerate();
         if (!ok) throw new Error('הייצור נכשל');
-        // Parent will update persisted prop — we don't need to do anything else
       }
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'שגיאה בלתי צפויה');
-      setStatus('error');
+      setLocalError(err instanceof Error ? err.message : 'שגיאה בלתי צפויה');
+      setLocalStatus('error');
     }
   }, [onRegenerate]);
 
   useEffect(() => {
     if (persisted && Array.isArray(persisted) && persisted.length > 0) {
       setWeaknesses(persisted as BrandWeakness[]);
-      setStatus('ready');
+      setLocalStatus('ready');
       return;
     }
-    if (status === 'loading') return; // don't reset during regeneration
-    setStatus('idle');
+    if (localStatus === 'loading') return;
+    setLocalStatus('idle');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persisted]);
 
@@ -447,19 +447,31 @@ function BrandWeaknessSection({ client, persisted, autoGenerate, onRegenerate }:
     }
   };
 
-  if (status === 'error') {
+  // Determine effective display status — parent orchestration state takes priority
+  const displayError = localError || errorMessage;
+  const isError = localStatus === 'error' || terminalStatus === 'error';
+  const isLoading = localStatus === 'loading' || (isOrchestrating && !weaknesses.length && terminalStatus === 'idle');
+  const isMissing = terminalStatus === 'missing_prerequisites' && weaknesses.length === 0;
+
+  if (isError && weaknesses.length === 0) {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔍 חוזקות ותחומי הגדלה</h3>
-      <ErrorState message={errorMsg || 'שגיאה בייצור ניתוח'} onRetry={handleRegenerate} />
+      <ErrorState message={displayError || 'שגיאה בייצור ניתוח'} onRetry={handleRegenerate} />
     </div>);
   }
-  if (status === 'loading') {
+  if (isLoading) {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔍 חוזקות ותחומי הגדלה</h3>
       <LoadingSkeleton />
     </div>);
   }
-  if ((status === 'idle' || status === 'empty') && weaknesses.length === 0) {
+  if (isMissing) {
+    return (<div style={sectionStyle}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔍 חוזקות ותחומי הגדלה</h3>
+      <EmptyState message="יש להשלים חקר לקוח לפני ייצור תובנות." actionLabel="צור ניתוח" onAction={handleRegenerate} />
+    </div>);
+  }
+  if (weaknesses.length === 0) {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔍 חוזקות ותחומי הגדלה</h3>
       <EmptyState message="יש ליצור חקר לקוח קודם, או ללחוץ לייצור ידני." actionLabel="צור ניתוח" onAction={handleRegenerate} />
@@ -539,49 +551,60 @@ function BrandWeaknessSection({ client, persisted, autoGenerate, onRegenerate }:
 // SECTION: CUSTOMER PROFILE
 // ============================================================================
 
-function CustomerProfileSection({ client, persisted, autoGenerate, onRegenerate }: { client: Client; persisted?: unknown; autoGenerate?: boolean; onRegenerate?: () => Promise<boolean> }) {
+function CustomerProfileSection({ client, persisted, onRegenerate, terminalStatus, errorMessage, isOrchestrating }: { client: Client; persisted?: unknown; onRegenerate?: () => Promise<boolean>; terminalStatus?: TerminalStatus; errorMessage?: string; isOrchestrating?: boolean }) {
   const [segments, setSegments] = useState<CustomerSegment[]>([]);
-  const [status, setStatus] = useState<SectionStatus>('idle');
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [localStatus, setLocalStatus] = useState<SectionStatus>('idle');
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const handleRegenerate = useCallback(async () => {
-    setStatus('loading');
-    setErrorMsg(null);
+    setLocalStatus('loading');
+    setLocalError(null);
     try {
       if (onRegenerate) {
         const ok = await onRegenerate();
         if (!ok) throw new Error('הייצור נכשל');
       }
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'שגיאה בלתי צפויה');
-      setStatus('error');
+      setLocalError(err instanceof Error ? err.message : 'שגיאה בלתי צפויה');
+      setLocalStatus('error');
     }
   }, [onRegenerate]);
 
   useEffect(() => {
     if (persisted && Array.isArray(persisted) && persisted.length > 0) {
       setSegments(persisted as CustomerSegment[]);
-      setStatus('ready');
+      setLocalStatus('ready');
       return;
     }
-    if (status === 'loading') return;
-    setStatus('idle');
+    if (localStatus === 'loading') return;
+    setLocalStatus('idle');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persisted]);
 
-  if (status === 'error') {
+  const displayError = localError || errorMessage;
+  const isError = localStatus === 'error' || terminalStatus === 'error';
+  const isLoading = localStatus === 'loading' || (isOrchestrating && !segments.length && terminalStatus === 'idle');
+  const isMissing = terminalStatus === 'missing_prerequisites' && segments.length === 0;
+
+  if (isError && segments.length === 0) {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>👥 פרופיל לקוח</h3>
-      <ErrorState message={errorMsg || 'שגיאה בייצור פרופיל'} onRetry={handleRegenerate} />
+      <ErrorState message={displayError || 'שגיאה בייצור פרופיל'} onRetry={handleRegenerate} />
     </div>);
   }
-  if (status === 'loading') {
+  if (isLoading) {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>👥 פרופיל לקוח</h3>
       <LoadingSkeleton />
     </div>);
   }
-  if ((status === 'idle' || status === 'empty') && segments.length === 0) {
+  if (isMissing) {
+    return (<div style={sectionStyle}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>👥 פרופיל לקוח</h3>
+      <EmptyState message="יש להשלים חקר לקוח לפני ייצור תובנות." actionLabel="צור פרופיל" onAction={handleRegenerate} />
+    </div>);
+  }
+  if (segments.length === 0) {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>👥 פרופיל לקוח</h3>
       <EmptyState message="יש ליצור חקר לקוח קודם, או ללחוץ לייצור ידני." actionLabel="צור פרופיל" onAction={handleRegenerate} />
@@ -658,33 +681,33 @@ function CustomerProfileSection({ client, persisted, autoGenerate, onRegenerate 
 // SECTION: TREND ENGINE
 // ============================================================================
 
-function TrendEngineSection({ client, persisted, autoGenerate, onRegenerate }: { client: Client; persisted?: unknown; autoGenerate?: boolean; onRegenerate?: () => Promise<boolean> }) {
+function TrendEngineSection({ client, persisted, onRegenerate, terminalStatus, errorMessage, isOrchestrating }: { client: Client; persisted?: unknown; onRegenerate?: () => Promise<boolean>; terminalStatus?: TerminalStatus; errorMessage?: string; isOrchestrating?: boolean }) {
   const [trends, setTrends] = useState<TrendSuggestion[]>([]);
-  const [status, setStatus] = useState<SectionStatus>('idle');
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [localStatus, setLocalStatus] = useState<SectionStatus>('idle');
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const handleRegenerate = useCallback(async () => {
-    setStatus('loading');
-    setErrorMsg(null);
+    setLocalStatus('loading');
+    setLocalError(null);
     try {
       if (onRegenerate) {
         const ok = await onRegenerate();
         if (!ok) throw new Error('הייצור נכשל');
       }
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'שגיאה בלתי צפויה');
-      setStatus('error');
+      setLocalError(err instanceof Error ? err.message : 'שגיאה בלתי צפויה');
+      setLocalStatus('error');
     }
   }, [onRegenerate]);
 
   useEffect(() => {
     if (persisted && Array.isArray(persisted) && persisted.length > 0) {
       setTrends(persisted as TrendSuggestion[]);
-      setStatus('ready');
+      setLocalStatus('ready');
       return;
     }
-    if (status === 'loading') return;
-    setStatus('idle');
+    if (localStatus === 'loading') return;
+    setLocalStatus('idle');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persisted]);
 
@@ -695,19 +718,30 @@ function TrendEngineSection({ client, persisted, autoGenerate, onRegenerate }: {
     switch (urgency) { case "high": return "דחוף"; case "medium": return "בינוני"; case "low": return "נמוך"; default: return "—"; }
   };
 
-  if (status === 'error') {
+  const displayError = localError || errorMessage;
+  const isError = localStatus === 'error' || terminalStatus === 'error';
+  const isLoading = localStatus === 'loading' || (isOrchestrating && !trends.length && terminalStatus === 'idle');
+  const isMissing = terminalStatus === 'missing_prerequisites' && trends.length === 0;
+
+  if (isError && trends.length === 0) {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔥 מה חם השבוע</h3>
-      <ErrorState message={errorMsg || 'שגיאה בייצור טרנדים'} onRetry={handleRegenerate} />
+      <ErrorState message={displayError || 'שגיאה בייצור טרנדים'} onRetry={handleRegenerate} />
     </div>);
   }
-  if (status === 'loading') {
+  if (isLoading) {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔥 מה חם השבוע</h3>
       <LoadingSkeleton />
     </div>);
   }
-  if ((status === 'idle' || status === 'empty') && trends.length === 0) {
+  if (isMissing) {
+    return (<div style={sectionStyle}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔥 מה חם השבוע</h3>
+      <EmptyState message="יש להשלים חקר לקוח לפני ייצור תובנות." actionLabel="צור ניתוח" onAction={handleRegenerate} />
+    </div>);
+  }
+  if (trends.length === 0) {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔥 מה חם השבוע</h3>
       <EmptyState message="יש ליצור חקר לקוח קודם, או ללחוץ לייצור ידני." actionLabel="צור ניתוח" onAction={handleRegenerate} />
@@ -768,22 +802,22 @@ function TrendEngineSection({ client, persisted, autoGenerate, onRegenerate }: {
 // SECTION: COMPETITOR INSIGHTS
 // ============================================================================
 
-function CompetitorInsightsSection({ client, persisted, autoGenerate, onRegenerate }: { client: Client; persisted?: unknown; autoGenerate?: boolean; onRegenerate?: () => Promise<boolean> }) {
+function CompetitorInsightsSection({ client, persisted, onRegenerate, terminalStatus, errorMessage, isOrchestrating }: { client: Client; persisted?: unknown; onRegenerate?: () => Promise<boolean>; terminalStatus?: TerminalStatus; errorMessage?: string; isOrchestrating?: boolean }) {
   const [insights, setInsights] = useState<CompetitorInsight | null>(null);
-  const [status, setStatus] = useState<SectionStatus>('idle');
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [localStatus, setLocalStatus] = useState<SectionStatus>('idle');
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const handleRegenerate = useCallback(async () => {
-    setStatus('loading');
-    setErrorMsg(null);
+    setLocalStatus('loading');
+    setLocalError(null);
     try {
       if (onRegenerate) {
         const ok = await onRegenerate();
         if (!ok) throw new Error('הייצור נכשל');
       }
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'שגיאה בלתי צפויה');
-      setStatus('error');
+      setLocalError(err instanceof Error ? err.message : 'שגיאה בלתי צפויה');
+      setLocalStatus('error');
     }
   }, [onRegenerate]);
 
@@ -792,28 +826,39 @@ function CompetitorInsightsSection({ client, persisted, autoGenerate, onRegenera
       const p = persisted as CompetitorInsight;
       if (safeArray(p?.doMoreOf).length > 0 || safeArray(p?.avoid).length > 0 || safeArray(p?.opportunities).length > 0) {
         setInsights(p);
-        setStatus('ready');
+        setLocalStatus('ready');
         return;
       }
     }
-    if (status === 'loading') return;
-    setStatus('idle');
+    if (localStatus === 'loading') return;
+    setLocalStatus('idle');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persisted]);
 
-  if (status === 'error') {
+  const displayError = localError || errorMessage;
+  const isError = localStatus === 'error' || terminalStatus === 'error';
+  const isLoading = localStatus === 'loading' || (isOrchestrating && !insights && terminalStatus === 'idle');
+  const isMissing = terminalStatus === 'missing_prerequisites' && !insights;
+
+  if (isError && !insights) {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🎯 תובנות תחרותיות</h3>
-      <ErrorState message={errorMsg || 'שגיאה בייצור ניתוח תחרותי'} onRetry={handleRegenerate} />
+      <ErrorState message={displayError || 'שגיאה בייצור ניתוח תחרותי'} onRetry={handleRegenerate} />
     </div>);
   }
-  if (status === 'loading') {
+  if (isLoading) {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🎯 תובנות תחרותיות</h3>
       <LoadingSkeleton />
     </div>);
   }
-  if ((status === 'idle' || status === 'empty') && !insights) {
+  if (isMissing) {
+    return (<div style={sectionStyle}>
+      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🎯 תובנות תחרותיות</h3>
+      <EmptyState message="יש להשלים חקר לקוח לפני ייצור תובנות." actionLabel="צור ניתוח" onAction={handleRegenerate} />
+    </div>);
+  }
+  if (!insights) {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🎯 תובנות תחרותיות</h3>
       <EmptyState message="יש ליצור חקר לקוח קודם, או ללחוץ לייצור ידני." actionLabel="צור ניתוח" onAction={handleRegenerate} />
@@ -918,138 +963,211 @@ function WeeklyRecommendationsWidget({ client }: { client: Client }) {
 // MAIN COMPONENT — loads persisted insights, passes to sections
 // ============================================================================
 
-export default function TabInsights({ client, employees }: TabInsightsProps) {
-  const [persistedInsights, setPersistedInsights] = useState<Record<string, unknown>>({});
-  const [loadingPersisted, setLoadingPersisted] = useState(true);
-  const [orchestrating, setOrchestrating] = useState(false);
+// ============================================================================
+// HELPER: Fetch persisted insights from DB
+// ============================================================================
 
-  // Load persisted insights, then auto-orchestrate missing sections server-side
-  useEffect(() => {
-    let cancelled = false;
-    const loadAndOrchestrate = async () => {
-      try {
-        console.log(`[Insights] Loading persisted insights for ${client.id}`);
-
-        // Step 1: Load persisted insights
-        const insightsRes = await fetch(`/api/ai/client-insights?clientId=${client.id}`);
-        let map: Record<string, unknown> = {};
-        if (insightsRes.ok) {
-          const result = await insightsRes.json();
-          if (!cancelled && result?.insights) {
-            for (const [section, record] of Object.entries(result.insights)) {
-              const r = record as { payload?: unknown; status?: string };
-              if (r?.payload && r?.status === 'ready') {
-                map[section] = r.payload;
-              }
-            }
-            console.log(`[Insights] Loaded persisted sections: ${Object.keys(map).join(', ') || 'none'}`);
-            setPersistedInsights(map);
-          }
-        }
-        if (cancelled) return;
-        setLoadingPersisted(false);
-
-        // Step 2: Check which sections are missing
-        const allSections = ['brand_weakness', 'customer_profile', 'trend_engine', 'competitor_insights', 'creative_dna'];
-        const missing = allSections.filter(s => !map[s]);
-        if (missing.length === 0) {
-          console.log('[Insights] All sections already persisted — skipping orchestration');
-          return;
-        }
-
-        // Step 3: Check if research exists first
-        const researchRes = await fetch(`/api/ai/client-research?clientId=${client.id}`);
-        if (cancelled) return;
-        let hasResearch = false;
-        if (researchRes.ok) {
-          const researchData = await researchRes.json();
-          hasResearch = !!(researchData?.data && researchData.data.status === 'complete');
-        }
-
-        if (!hasResearch) {
-          console.log('[Insights] No complete research — skipping auto-orchestration');
-          return;
-        }
-
-        // Step 4: Trigger server-side orchestration for missing sections only
-        console.log(`[Insights] Auto-orchestrating missing sections: ${missing.join(', ')}`);
-        if (!cancelled) setOrchestrating(true);
-
-        const orchRes = await fetch('/api/ai/orchestrate-insights', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            clientId: client.id,
-            sections: missing,
-          }),
-        });
-
-        if (cancelled) return;
-        setOrchestrating(false);
-
-        if (orchRes.ok) {
-          // Reload persisted insights after orchestration
-          const refreshRes = await fetch(`/api/ai/client-insights?clientId=${client.id}`);
-          if (refreshRes.ok && !cancelled) {
-            const refreshResult = await refreshRes.json();
-            if (refreshResult?.insights) {
-              const newMap: Record<string, unknown> = {};
-              for (const [section, record] of Object.entries(refreshResult.insights)) {
-                const r = record as { payload?: unknown; status?: string };
-                if (r?.payload && r?.status === 'ready') {
-                  newMap[section] = r.payload;
-                }
-              }
-              console.log(`[Insights] Post-orchestration sections: ${Object.keys(newMap).join(', ')}`);
-              setPersistedInsights(newMap);
-            }
-          }
-        } else {
-          console.warn('[Insights] Orchestration returned non-OK:', orchRes.status);
-        }
-      } catch (err) {
-        console.warn('[Insights] Failed during load/orchestrate:', err);
-        if (!cancelled) {
-          setLoadingPersisted(false);
-          setOrchestrating(false);
-        }
-      }
-    };
-    loadAndOrchestrate();
-    return () => { cancelled = true; };
-  }, [client.id]);
-
-  // Handler for individual section regeneration — calls orchestrate for just that section
-  const regenerateSection = useCallback(async (section: string) => {
-    console.log(`[Insights] Manual regeneration: ${section}`);
-    const res = await fetch('/api/ai/orchestrate-insights', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clientId: client.id,
-        sections: [section],
-        force: true,
-      }),
-    });
-    if (res.ok) {
-      // Reload just the persisted data
-      const refreshRes = await fetch(`/api/ai/client-insights?clientId=${client.id}`);
-      if (refreshRes.ok) {
-        const result = await refreshRes.json();
-        if (result?.insights) {
-          const map: Record<string, unknown> = {};
-          for (const [s, record] of Object.entries(result.insights)) {
-            const r = record as { payload?: unknown; status?: string };
-            if (r?.payload && r?.status === 'ready') {
-              map[s] = r.payload;
-            }
-          }
-          setPersistedInsights(map);
+async function loadPersistedMap(clientId: string): Promise<Record<string, unknown>> {
+  try {
+    const res = await fetch(`/api/ai/client-insights?clientId=${clientId}`);
+    if (!res.ok) return {};
+    const result = await res.json();
+    const map: Record<string, unknown> = {};
+    if (result?.insights) {
+      for (const [section, record] of Object.entries(result.insights)) {
+        const r = record as { payload?: unknown; status?: string };
+        if (r?.payload && r?.status === 'ready') {
+          map[section] = r.payload;
         }
       }
     }
-    return res.ok;
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+// ============================================================================
+// SECTION STATUS MODEL — every section MUST reach one of these terminal states
+// ============================================================================
+// 'idle'                → no data, no attempt yet
+// 'loading'             → generation in progress (NOT terminal)
+// 'ready'               → data available
+// 'error'               → generation failed, retry possible
+// 'missing_prerequisites' → cannot generate (no research, etc.)
+// (TerminalStatus type defined near top of file with SectionStatus)
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
+
+export default function TabInsights({ client, employees }: TabInsightsProps) {
+  const [persistedInsights, setPersistedInsights] = useState<Record<string, unknown>>({});
+  const [sectionErrors, setSectionErrors] = useState<Record<string, string>>({});
+  const [loadingPersisted, setLoadingPersisted] = useState(true);
+  const [orchestrating, setOrchestrating] = useState(false);
+  const [hasResearch, setHasResearch] = useState(false);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+
+  // ── PHASE 1: Load persisted data + check research ──
+  useEffect(() => {
+    let cancelled = false;
+
+    const init = async () => {
+      console.log(`[Insights] Init for ${client.id}`);
+      let map: Record<string, unknown> = {};
+
+      try {
+        map = await loadPersistedMap(client.id);
+        if (!cancelled) {
+          console.log(`[Insights] Persisted sections: ${Object.keys(map).join(', ') || 'none'}`);
+          setPersistedInsights(map);
+        }
+      } catch { /* already handled */ }
+
+      // Check research
+      let research = false;
+      try {
+        const researchRes = await fetch(`/api/ai/client-research?clientId=${client.id}`);
+        if (researchRes.ok) {
+          const rd = await researchRes.json();
+          research = !!(rd?.data && rd.data.status === 'complete');
+        }
+      } catch { /* research check failed — not fatal */ }
+
+      if (!cancelled) {
+        setHasResearch(research);
+        setLoadingPersisted(false);
+        setInitialLoadDone(true);
+        console.log(`[Insights] Init complete. research=${research}, persisted=${Object.keys(map).length}`);
+      }
+    };
+
+    init();
+    return () => { cancelled = true; };
   }, [client.id]);
+
+  // ── PHASE 2: Auto-orchestrate missing sections (only runs once after init) ──
+  useEffect(() => {
+    if (!initialLoadDone || !hasResearch) return;
+
+    const allSections = ['brand_weakness', 'customer_profile', 'trend_engine', 'competitor_insights', 'creative_dna'];
+    const missing = allSections.filter(s => !persistedInsights[s]);
+    if (missing.length === 0) {
+      console.log('[Insights] All sections already persisted');
+      return;
+    }
+
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const orchestrate = async () => {
+      console.log(`[Insights] Orchestrating missing: ${missing.join(', ')}`);
+      setOrchestrating(true);
+
+      // Safety timeout — ALWAYS exit loading after 90s
+      timeoutId = setTimeout(() => {
+        if (!cancelled) {
+          console.warn('[Insights] Orchestration timeout (90s)');
+          setOrchestrating(false);
+          const errors: Record<string, string> = {};
+          for (const s of missing) { errors[s] = 'הזמן הקצוב לייצור חלף. נסו שוב.'; }
+          setSectionErrors(prev => ({ ...prev, ...errors }));
+        }
+      }, 90_000);
+
+      try {
+        const res = await fetch('/api/ai/orchestrate-insights', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId: client.id, sections: missing }),
+        });
+
+        if (cancelled) return;
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const orchResult = await res.json();
+          // Check per-section results for errors
+          if (orchResult?.results) {
+            const errors: Record<string, string> = {};
+            for (const [sec, result] of Object.entries(orchResult.results)) {
+              const r = result as { status: string; error?: string };
+              if (r.status === 'error') {
+                errors[sec] = r.error || 'ייצור נכשל';
+              }
+            }
+            if (Object.keys(errors).length > 0) {
+              setSectionErrors(prev => ({ ...prev, ...errors }));
+            }
+          }
+
+          // Reload persisted data
+          const newMap = await loadPersistedMap(client.id);
+          if (!cancelled) setPersistedInsights(newMap);
+        } else {
+          console.warn(`[Insights] Orchestration failed: ${res.status}`);
+          const errors: Record<string, string> = {};
+          for (const s of missing) { errors[s] = 'שגיאה בייצור תובנות. נסו שוב מאוחר יותר.'; }
+          if (!cancelled) setSectionErrors(prev => ({ ...prev, ...errors }));
+        }
+      } catch (err) {
+        console.error('[Insights] Orchestration error:', err);
+        if (!cancelled) {
+          const errors: Record<string, string> = {};
+          for (const s of missing) { errors[s] = 'שגיאת רשת. נסו שוב.'; }
+          setSectionErrors(prev => ({ ...prev, ...errors }));
+        }
+      } finally {
+        clearTimeout(timeoutId);
+        if (!cancelled) setOrchestrating(false);
+      }
+    };
+
+    orchestrate();
+    return () => { cancelled = true; clearTimeout(timeoutId); };
+    // Only run once after initial load — do NOT re-run when persistedInsights changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialLoadDone, hasResearch, client.id]);
+
+  // ── Handler for manual section regeneration ──
+  const regenerateSection = useCallback(async (section: string): Promise<boolean> => {
+    console.log(`[Insights] Manual regen: ${section}`);
+    // Clear any previous error for this section
+    setSectionErrors(prev => { const n = { ...prev }; delete n[section]; return n; });
+
+    try {
+      const res = await fetch('/api/ai/orchestrate-insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: client.id, sections: [section], force: true }),
+      });
+
+      if (res.ok) {
+        const orchResult = await res.json();
+        if (orchResult?.results?.[section]?.status === 'error') {
+          setSectionErrors(prev => ({ ...prev, [section]: orchResult.results[section].error || 'ייצור נכשל' }));
+          return false;
+        }
+        const newMap = await loadPersistedMap(client.id);
+        setPersistedInsights(newMap);
+        return true;
+      }
+      setSectionErrors(prev => ({ ...prev, [section]: 'שגיאה בייצור. נסו שוב.' }));
+      return false;
+    } catch {
+      setSectionErrors(prev => ({ ...prev, [section]: 'שגיאת רשת. נסו שוב.' }));
+      return false;
+    }
+  }, [client.id]);
+
+  // ── Determine each section's terminal status ──
+  const getSectionTerminalStatus = (section: string): TerminalStatus => {
+    if (persistedInsights[section]) return 'ready';
+    if (sectionErrors[section]) return 'error';
+    if (!hasResearch && !orchestrating) return 'missing_prerequisites';
+    return 'idle';
+  };
 
   if (loadingPersisted) {
     return (
@@ -1077,16 +1195,44 @@ export default function TabInsights({ client, employees }: TabInsightsProps) {
             animation: "spin 1s linear infinite",
           }} />
           <span style={{ fontSize: "0.875rem", color: "var(--accent)" }}>
-            מייצר תובנות AI... זה עלול לקחת כמה שניות
+            מייצר תובנות AI... זה עלול לקחת עד דקה
           </span>
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
       <ClientBrainSection client={client} persisted={persistedInsights['client_brain']} />
-      <BrandWeaknessSection client={client} persisted={persistedInsights['brand_weakness']} autoGenerate={false} onRegenerate={() => regenerateSection('brand_weakness')} />
-      <CustomerProfileSection client={client} persisted={persistedInsights['customer_profile']} autoGenerate={false} onRegenerate={() => regenerateSection('customer_profile')} />
-      <TrendEngineSection client={client} persisted={persistedInsights['trend_engine']} autoGenerate={false} onRegenerate={() => regenerateSection('trend_engine')} />
-      <CompetitorInsightsSection client={client} persisted={persistedInsights['competitor_insights']} autoGenerate={false} onRegenerate={() => regenerateSection('competitor_insights')} />
+      <BrandWeaknessSection
+        client={client}
+        persisted={persistedInsights['brand_weakness']}
+        onRegenerate={() => regenerateSection('brand_weakness')}
+        terminalStatus={getSectionTerminalStatus('brand_weakness')}
+        errorMessage={sectionErrors['brand_weakness']}
+        isOrchestrating={orchestrating}
+      />
+      <CustomerProfileSection
+        client={client}
+        persisted={persistedInsights['customer_profile']}
+        onRegenerate={() => regenerateSection('customer_profile')}
+        terminalStatus={getSectionTerminalStatus('customer_profile')}
+        errorMessage={sectionErrors['customer_profile']}
+        isOrchestrating={orchestrating}
+      />
+      <TrendEngineSection
+        client={client}
+        persisted={persistedInsights['trend_engine']}
+        onRegenerate={() => regenerateSection('trend_engine')}
+        terminalStatus={getSectionTerminalStatus('trend_engine')}
+        errorMessage={sectionErrors['trend_engine']}
+        isOrchestrating={orchestrating}
+      />
+      <CompetitorInsightsSection
+        client={client}
+        persisted={persistedInsights['competitor_insights']}
+        onRegenerate={() => regenerateSection('competitor_insights')}
+        terminalStatus={getSectionTerminalStatus('competitor_insights')}
+        errorMessage={sectionErrors['competitor_insights']}
+        isOrchestrating={orchestrating}
+      />
       <WeeklyRecommendationsWidget client={client} />
     </div>
   );
