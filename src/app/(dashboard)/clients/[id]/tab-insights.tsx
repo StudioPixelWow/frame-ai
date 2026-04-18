@@ -400,42 +400,26 @@ function ClientBrainSection({ client, persisted }: { client: Client; persisted?:
 // SECTION: BRAND WEAKNESSES
 // ============================================================================
 
-function BrandWeaknessSection({ client, persisted, autoGenerate }: { client: Client; persisted?: unknown; autoGenerate?: boolean }) {
+function BrandWeaknessSection({ client, persisted, autoGenerate, onRegenerate }: { client: Client; persisted?: unknown; autoGenerate?: boolean; onRegenerate?: () => Promise<boolean> }) {
   const [weaknesses, setWeaknesses] = useState<BrandWeakness[]>([]);
   const [status, setStatus] = useState<SectionStatus>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
-  const fetchWeaknesses = useCallback(async () => {
+  const handleRegenerate = useCallback(async () => {
     setStatus('loading');
     setErrorMsg(null);
     try {
-      console.log(`[Insights] BrandWeakness POST for ${client.id}`);
-      const response = await fetch("/api/ai/brand-weakness", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId: client.id,
-          name: client.name,
-          businessField: client.businessField,
-          clientType: client.clientType,
-          keyMarketingMessages: client.keyMarketingMessages || '',
-        }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body?.error || `Server error (${response.status})`);
+      if (onRegenerate) {
+        const ok = await onRegenerate();
+        if (!ok) throw new Error('הייצור נכשל');
+        // Parent will update persisted prop — we don't need to do anything else
       }
-      const result = await response.json();
-      const items = Array.isArray(result) ? result : safeArray(result?.weaknesses);
-      setWeaknesses(items);
-      setStatus(items.length > 0 ? 'ready' : 'empty');
-      saveInsight(client.id, 'brand_weakness', items);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Unknown error");
+      setErrorMsg(err instanceof Error ? err.message : 'שגיאה בלתי צפויה');
       setStatus('error');
     }
-  }, [client.id, client.name, client.businessField, client.clientType, client.keyMarketingMessages]);
+  }, [onRegenerate]);
 
   useEffect(() => {
     if (persisted && Array.isArray(persisted) && persisted.length > 0) {
@@ -443,13 +427,10 @@ function BrandWeaknessSection({ client, persisted, autoGenerate }: { client: Cli
       setStatus('ready');
       return;
     }
-    // Auto-generate if research exists and no persisted data
-    if (autoGenerate && status === 'idle') {
-      console.log('[Insights] Auto-generating brand weakness (research exists)');
-      fetchWeaknesses();
-    }
+    if (status === 'loading') return; // don't reset during regeneration
+    setStatus('idle');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [persisted, autoGenerate]);
+  }, [persisted]);
 
   const toggleExpand = (idx: number) => {
     const n = new Set(expanded);
@@ -469,7 +450,7 @@ function BrandWeaknessSection({ client, persisted, autoGenerate }: { client: Cli
   if (status === 'error') {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔍 חוזקות ותחומי הגדלה</h3>
-      <ErrorState message={errorMsg || 'שגיאה'} onRetry={fetchWeaknesses} />
+      <ErrorState message={errorMsg || 'שגיאה בייצור ניתוח'} onRetry={handleRegenerate} />
     </div>);
   }
   if (status === 'loading') {
@@ -481,7 +462,7 @@ function BrandWeaknessSection({ client, persisted, autoGenerate }: { client: Cli
   if ((status === 'idle' || status === 'empty') && weaknesses.length === 0) {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔍 חוזקות ותחומי הגדלה</h3>
-      <EmptyState message="עדיין לא נוצר ניתוח חוזקות וחולשות." actionLabel="צור ניתוח" onAction={fetchWeaknesses} />
+      <EmptyState message="יש ליצור חקר לקוח קודם, או ללחוץ לייצור ידני." actionLabel="צור ניתוח" onAction={handleRegenerate} />
     </div>);
   }
 
@@ -489,7 +470,7 @@ function BrandWeaknessSection({ client, persisted, autoGenerate }: { client: Cli
     <div style={sectionStyle}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
         <h3 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--foreground)", margin: 0 }}>🔍 חוזקות ותחומי הגדלה</h3>
-        <button onClick={fetchWeaknesses} style={{ padding: "0.5rem 1rem", backgroundColor: "var(--accent)", color: "white", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: 500 }}>
+        <button onClick={handleRegenerate} style={{ padding: "0.5rem 1rem", backgroundColor: "var(--accent)", color: "white", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: 500 }}>
           רענן
         </button>
       </div>
@@ -558,40 +539,24 @@ function BrandWeaknessSection({ client, persisted, autoGenerate }: { client: Cli
 // SECTION: CUSTOMER PROFILE
 // ============================================================================
 
-function CustomerProfileSection({ client, persisted, autoGenerate }: { client: Client; persisted?: unknown; autoGenerate?: boolean }) {
+function CustomerProfileSection({ client, persisted, autoGenerate, onRegenerate }: { client: Client; persisted?: unknown; autoGenerate?: boolean; onRegenerate?: () => Promise<boolean> }) {
   const [segments, setSegments] = useState<CustomerSegment[]>([]);
   const [status, setStatus] = useState<SectionStatus>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const fetchCustomerProfile = useCallback(async () => {
+  const handleRegenerate = useCallback(async () => {
     setStatus('loading');
     setErrorMsg(null);
     try {
-      const response = await fetch("/api/ai/customer-profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId: client.id,
-          name: client.name,
-          businessField: client.businessField,
-          marketingGoals: client.marketingGoals || '',
-          platforms: [client.facebookPageUrl ? 'facebook' : '', client.instagramProfileUrl ? 'instagram' : '', client.tiktokProfileUrl ? 'tiktok' : ''].filter(Boolean),
-        }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body?.error || `Server error (${response.status})`);
+      if (onRegenerate) {
+        const ok = await onRegenerate();
+        if (!ok) throw new Error('הייצור נכשל');
       }
-      const result = await response.json();
-      const items = Array.isArray(result) ? result : safeArray(result?.segments);
-      setSegments(items);
-      setStatus(items.length > 0 ? 'ready' : 'empty');
-      saveInsight(client.id, 'customer_profile', items);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Unknown error");
+      setErrorMsg(err instanceof Error ? err.message : 'שגיאה בלתי צפויה');
       setStatus('error');
     }
-  }, [client.id, client.name, client.businessField, client.marketingGoals, client.facebookPageUrl, client.instagramProfileUrl, client.tiktokProfileUrl]);
+  }, [onRegenerate]);
 
   useEffect(() => {
     if (persisted && Array.isArray(persisted) && persisted.length > 0) {
@@ -599,17 +564,15 @@ function CustomerProfileSection({ client, persisted, autoGenerate }: { client: C
       setStatus('ready');
       return;
     }
-    if (autoGenerate && status === 'idle') {
-      console.log('[Insights] Auto-generating customer profile (research exists)');
-      fetchCustomerProfile();
-    }
+    if (status === 'loading') return;
+    setStatus('idle');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [persisted, autoGenerate]);
+  }, [persisted]);
 
   if (status === 'error') {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>👥 פרופיל לקוח</h3>
-      <ErrorState message={errorMsg || 'שגיאה'} onRetry={fetchCustomerProfile} />
+      <ErrorState message={errorMsg || 'שגיאה בייצור פרופיל'} onRetry={handleRegenerate} />
     </div>);
   }
   if (status === 'loading') {
@@ -621,7 +584,7 @@ function CustomerProfileSection({ client, persisted, autoGenerate }: { client: C
   if ((status === 'idle' || status === 'empty') && segments.length === 0) {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>👥 פרופיל לקוח</h3>
-      <EmptyState message="עדיין לא נוצר פרופיל קהל יעד." actionLabel="צור פרופיל" onAction={fetchCustomerProfile} />
+      <EmptyState message="יש ליצור חקר לקוח קודם, או ללחוץ לייצור ידני." actionLabel="צור פרופיל" onAction={handleRegenerate} />
     </div>);
   }
 
@@ -629,7 +592,7 @@ function CustomerProfileSection({ client, persisted, autoGenerate }: { client: C
     <div style={sectionStyle}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
         <h3 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--foreground)", margin: 0 }}>👥 פרופיל לקוח</h3>
-        <button onClick={fetchCustomerProfile} style={{ padding: "0.5rem 1rem", backgroundColor: "var(--accent)", color: "white", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: 500 }}>רענן</button>
+        <button onClick={handleRegenerate} style={{ padding: "0.5rem 1rem", backgroundColor: "var(--accent)", color: "white", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: 500 }}>רענן</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.5rem" }}>
         {segments.map((segment, idx) => {
@@ -695,38 +658,24 @@ function CustomerProfileSection({ client, persisted, autoGenerate }: { client: C
 // SECTION: TREND ENGINE
 // ============================================================================
 
-function TrendEngineSection({ client, persisted, autoGenerate }: { client: Client; persisted?: unknown; autoGenerate?: boolean }) {
+function TrendEngineSection({ client, persisted, autoGenerate, onRegenerate }: { client: Client; persisted?: unknown; autoGenerate?: boolean; onRegenerate?: () => Promise<boolean> }) {
   const [trends, setTrends] = useState<TrendSuggestion[]>([]);
   const [status, setStatus] = useState<SectionStatus>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const fetchTrends = useCallback(async () => {
+  const handleRegenerate = useCallback(async () => {
     setStatus('loading');
     setErrorMsg(null);
     try {
-      const response = await fetch("/api/ai/trend-engine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId: client.id,
-          businessField: client.businessField,
-          platforms: [client.facebookPageUrl ? 'facebook' : '', client.instagramProfileUrl ? 'instagram' : '', client.tiktokProfileUrl ? 'tiktok' : ''].filter(Boolean),
-        }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body?.error || `Server error (${response.status})`);
+      if (onRegenerate) {
+        const ok = await onRegenerate();
+        if (!ok) throw new Error('הייצור נכשל');
       }
-      const result = await response.json();
-      const items = Array.isArray(result) ? result : safeArray(result?.trendSuggestions);
-      setTrends(items);
-      setStatus(items.length > 0 ? 'ready' : 'empty');
-      saveInsight(client.id, 'trend_engine', items);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Unknown error");
+      setErrorMsg(err instanceof Error ? err.message : 'שגיאה בלתי צפויה');
       setStatus('error');
     }
-  }, [client.id, client.businessField, client.facebookPageUrl, client.instagramProfileUrl, client.tiktokProfileUrl]);
+  }, [onRegenerate]);
 
   useEffect(() => {
     if (persisted && Array.isArray(persisted) && persisted.length > 0) {
@@ -734,12 +683,10 @@ function TrendEngineSection({ client, persisted, autoGenerate }: { client: Clien
       setStatus('ready');
       return;
     }
-    if (autoGenerate && status === 'idle') {
-      console.log('[Insights] Auto-generating trend engine (research exists)');
-      fetchTrends();
-    }
+    if (status === 'loading') return;
+    setStatus('idle');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [persisted, autoGenerate]);
+  }, [persisted]);
 
   const getUrgencyColor = (urgency?: string) => {
     switch (urgency) { case "high": return "#ef4444"; case "medium": return "#f59e0b"; case "low": return "#22c55e"; default: return "#6b7280"; }
@@ -751,7 +698,7 @@ function TrendEngineSection({ client, persisted, autoGenerate }: { client: Clien
   if (status === 'error') {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔥 מה חם השבוע</h3>
-      <ErrorState message={errorMsg || 'שגיאה'} onRetry={fetchTrends} />
+      <ErrorState message={errorMsg || 'שגיאה בייצור טרנדים'} onRetry={handleRegenerate} />
     </div>);
   }
   if (status === 'loading') {
@@ -763,7 +710,7 @@ function TrendEngineSection({ client, persisted, autoGenerate }: { client: Clien
   if ((status === 'idle' || status === 'empty') && trends.length === 0) {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🔥 מה חם השבוע</h3>
-      <EmptyState message="עדיין לא נוצר ניתוח טרנדים." actionLabel="צור ניתוח" onAction={fetchTrends} />
+      <EmptyState message="יש ליצור חקר לקוח קודם, או ללחוץ לייצור ידני." actionLabel="צור ניתוח" onAction={handleRegenerate} />
     </div>);
   }
 
@@ -771,7 +718,7 @@ function TrendEngineSection({ client, persisted, autoGenerate }: { client: Clien
     <div style={sectionStyle}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
         <h3 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--foreground)", margin: 0 }}>🔥 מה חם השבוע</h3>
-        <button onClick={fetchTrends} style={{ padding: "0.5rem 1rem", backgroundColor: "var(--accent)", color: "white", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: 500 }}>רענן</button>
+        <button onClick={handleRegenerate} style={{ padding: "0.5rem 1rem", backgroundColor: "var(--accent)", color: "white", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: 500 }}>רענן</button>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
         {trends.map((trend, idx) => {
@@ -821,39 +768,24 @@ function TrendEngineSection({ client, persisted, autoGenerate }: { client: Clien
 // SECTION: COMPETITOR INSIGHTS
 // ============================================================================
 
-function CompetitorInsightsSection({ client, persisted, autoGenerate }: { client: Client; persisted?: unknown; autoGenerate?: boolean }) {
+function CompetitorInsightsSection({ client, persisted, autoGenerate, onRegenerate }: { client: Client; persisted?: unknown; autoGenerate?: boolean; onRegenerate?: () => Promise<boolean> }) {
   const [insights, setInsights] = useState<CompetitorInsight | null>(null);
   const [status, setStatus] = useState<SectionStatus>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const fetchCompetitorAnalysis = useCallback(async () => {
+  const handleRegenerate = useCallback(async () => {
     setStatus('loading');
     setErrorMsg(null);
     try {
-      const response = await fetch("/api/ai/competitor-analysis", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId: client.id,
-          businessField: client.businessField,
-          platforms: [client.facebookPageUrl ? 'facebook' : '', client.instagramProfileUrl ? 'instagram' : '', client.tiktokProfileUrl ? 'tiktok' : ''].filter(Boolean),
-        }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body?.error || `Server error (${response.status})`);
+      if (onRegenerate) {
+        const ok = await onRegenerate();
+        if (!ok) throw new Error('הייצור נכשל');
       }
-      const result = await response.json();
-      // Response might be { insights: {...} } or { doMoreOf, avoid, opportunities }
-      const data = result?.insights || result;
-      setInsights(data);
-      setStatus('ready');
-      saveInsight(client.id, 'competitor_insights', data);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Unknown error");
+      setErrorMsg(err instanceof Error ? err.message : 'שגיאה בלתי צפויה');
       setStatus('error');
     }
-  }, [client.id, client.businessField, client.facebookPageUrl, client.instagramProfileUrl, client.tiktokProfileUrl]);
+  }, [onRegenerate]);
 
   useEffect(() => {
     if (persisted && typeof persisted === 'object' && persisted !== null) {
@@ -864,17 +796,15 @@ function CompetitorInsightsSection({ client, persisted, autoGenerate }: { client
         return;
       }
     }
-    if (autoGenerate && status === 'idle') {
-      console.log('[Insights] Auto-generating competitor insights (research exists)');
-      fetchCompetitorAnalysis();
-    }
+    if (status === 'loading') return;
+    setStatus('idle');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [persisted, autoGenerate]);
+  }, [persisted]);
 
   if (status === 'error') {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🎯 תובנות תחרותיות</h3>
-      <ErrorState message={errorMsg || 'שגיאה'} onRetry={fetchCompetitorAnalysis} />
+      <ErrorState message={errorMsg || 'שגיאה בייצור ניתוח תחרותי'} onRetry={handleRegenerate} />
     </div>);
   }
   if (status === 'loading') {
@@ -886,7 +816,7 @@ function CompetitorInsightsSection({ client, persisted, autoGenerate }: { client
   if ((status === 'idle' || status === 'empty') && !insights) {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🎯 תובנות תחרותיות</h3>
-      <EmptyState message="עדיין לא נוצר ניתוח תחרותי." actionLabel="צור ניתוח" onAction={fetchCompetitorAnalysis} />
+      <EmptyState message="יש ליצור חקר לקוח קודם, או ללחוץ לייצור ידני." actionLabel="צור ניתוח" onAction={handleRegenerate} />
     </div>);
   }
 
@@ -897,7 +827,7 @@ function CompetitorInsightsSection({ client, persisted, autoGenerate }: { client
   if (doMore.length === 0 && avoid.length === 0 && opps.length === 0) {
     return (<div style={sectionStyle}>
       <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem" }}>🎯 תובנות תחרותיות</h3>
-      <EmptyState message="עדיין לא נוצר ניתוח תחרותי." actionLabel="צור ניתוח" onAction={fetchCompetitorAnalysis} />
+      <EmptyState message="יש ליצור חקר לקוח קודם, או ללחוץ לייצור ידני." actionLabel="צור ניתוח" onAction={handleRegenerate} />
     </div>);
   }
 
@@ -916,7 +846,7 @@ function CompetitorInsightsSection({ client, persisted, autoGenerate }: { client
     <div style={sectionStyle}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
         <h3 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--foreground)", margin: 0 }}>🎯 תובנות תחרותיות</h3>
-        <button onClick={fetchCompetitorAnalysis} style={{ padding: "0.5rem 1rem", backgroundColor: "var(--accent)", color: "white", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: 500 }}>רענן</button>
+        <button onClick={handleRegenerate} style={{ padding: "0.5rem 1rem", backgroundColor: "var(--accent)", color: "white", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: 500 }}>רענן</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.5rem" }}>
         {doMore.length > 0 && (
@@ -991,24 +921,21 @@ function WeeklyRecommendationsWidget({ client }: { client: Client }) {
 export default function TabInsights({ client, employees }: TabInsightsProps) {
   const [persistedInsights, setPersistedInsights] = useState<Record<string, unknown>>({});
   const [loadingPersisted, setLoadingPersisted] = useState(true);
-  const [researchExists, setResearchExists] = useState(false);
+  const [orchestrating, setOrchestrating] = useState(false);
 
-  // Load all persisted insights + check if research exists
+  // Load persisted insights, then auto-orchestrate missing sections server-side
   useEffect(() => {
     let cancelled = false;
-    const loadPersisted = async () => {
+    const loadAndOrchestrate = async () => {
       try {
         console.log(`[Insights] Loading persisted insights for ${client.id}`);
-        const [insightsRes, researchRes] = await Promise.all([
-          fetch(`/api/ai/client-insights?clientId=${client.id}`),
-          fetch(`/api/ai/client-research?clientId=${client.id}`),
-        ]);
 
-        // Parse persisted insights
+        // Step 1: Load persisted insights
+        const insightsRes = await fetch(`/api/ai/client-insights?clientId=${client.id}`);
+        let map: Record<string, unknown> = {};
         if (insightsRes.ok) {
           const result = await insightsRes.json();
           if (!cancelled && result?.insights) {
-            const map: Record<string, unknown> = {};
             for (const [section, record] of Object.entries(result.insights)) {
               const r = record as { payload?: unknown; status?: string };
               if (r?.payload && r?.status === 'ready') {
@@ -1019,23 +946,109 @@ export default function TabInsights({ client, employees }: TabInsightsProps) {
             setPersistedInsights(map);
           }
         }
+        if (cancelled) return;
+        setLoadingPersisted(false);
 
-        // Check if research exists for this client
-        // GET /api/ai/client-research returns { success: true, data: { status: 'complete', ... } }
-        if (!cancelled && researchRes.ok) {
+        // Step 2: Check which sections are missing
+        const allSections = ['brand_weakness', 'customer_profile', 'trend_engine', 'competitor_insights', 'creative_dna'];
+        const missing = allSections.filter(s => !map[s]);
+        if (missing.length === 0) {
+          console.log('[Insights] All sections already persisted — skipping orchestration');
+          return;
+        }
+
+        // Step 3: Check if research exists first
+        const researchRes = await fetch(`/api/ai/client-research?clientId=${client.id}`);
+        if (cancelled) return;
+        let hasResearch = false;
+        if (researchRes.ok) {
           const researchData = await researchRes.json();
-          const hasResearch = !!(researchData?.data && researchData.data.status === 'complete');
-          console.log(`[Insights] Research exists: ${hasResearch}`);
-          setResearchExists(hasResearch);
+          hasResearch = !!(researchData?.data && researchData.data.status === 'complete');
+        }
+
+        if (!hasResearch) {
+          console.log('[Insights] No complete research — skipping auto-orchestration');
+          return;
+        }
+
+        // Step 4: Trigger server-side orchestration for missing sections only
+        console.log(`[Insights] Auto-orchestrating missing sections: ${missing.join(', ')}`);
+        if (!cancelled) setOrchestrating(true);
+
+        const orchRes = await fetch('/api/ai/orchestrate-insights', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clientId: client.id,
+            sections: missing,
+          }),
+        });
+
+        if (cancelled) return;
+        setOrchestrating(false);
+
+        if (orchRes.ok) {
+          // Reload persisted insights after orchestration
+          const refreshRes = await fetch(`/api/ai/client-insights?clientId=${client.id}`);
+          if (refreshRes.ok && !cancelled) {
+            const refreshResult = await refreshRes.json();
+            if (refreshResult?.insights) {
+              const newMap: Record<string, unknown> = {};
+              for (const [section, record] of Object.entries(refreshResult.insights)) {
+                const r = record as { payload?: unknown; status?: string };
+                if (r?.payload && r?.status === 'ready') {
+                  newMap[section] = r.payload;
+                }
+              }
+              console.log(`[Insights] Post-orchestration sections: ${Object.keys(newMap).join(', ')}`);
+              setPersistedInsights(newMap);
+            }
+          }
+        } else {
+          console.warn('[Insights] Orchestration returned non-OK:', orchRes.status);
         }
       } catch (err) {
-        console.warn('[Insights] Failed to load persisted insights:', err);
-      } finally {
-        if (!cancelled) setLoadingPersisted(false);
+        console.warn('[Insights] Failed during load/orchestrate:', err);
+        if (!cancelled) {
+          setLoadingPersisted(false);
+          setOrchestrating(false);
+        }
       }
     };
-    loadPersisted();
+    loadAndOrchestrate();
     return () => { cancelled = true; };
+  }, [client.id]);
+
+  // Handler for individual section regeneration — calls orchestrate for just that section
+  const regenerateSection = useCallback(async (section: string) => {
+    console.log(`[Insights] Manual regeneration: ${section}`);
+    const res = await fetch('/api/ai/orchestrate-insights', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clientId: client.id,
+        sections: [section],
+        force: true,
+      }),
+    });
+    if (res.ok) {
+      // Reload just the persisted data
+      const refreshRes = await fetch(`/api/ai/client-insights?clientId=${client.id}`);
+      if (refreshRes.ok) {
+        const result = await refreshRes.json();
+        if (result?.insights) {
+          const map: Record<string, unknown> = {};
+          for (const [s, record] of Object.entries(result.insights)) {
+            const r = record as { payload?: unknown; status?: string };
+            if (r?.payload && r?.status === 'ready') {
+              map[s] = r.payload;
+            }
+          }
+          setPersistedInsights(map);
+        }
+      }
+    }
+    return res.ok;
   }, [client.id]);
 
   if (loadingPersisted) {
@@ -1048,11 +1061,32 @@ export default function TabInsights({ client, employees }: TabInsightsProps) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+      {orchestrating && (
+        <div style={{
+          padding: "1rem 1.5rem",
+          backgroundColor: "rgba(0, 181, 254, 0.08)",
+          border: "1px solid rgba(0, 181, 254, 0.2)",
+          borderRadius: "0.5rem",
+          display: "flex",
+          alignItems: "center",
+          gap: "0.75rem",
+        }}>
+          <div style={{
+            width: "1rem", height: "1rem", borderRadius: "50%",
+            border: "2px solid var(--accent)", borderTopColor: "transparent",
+            animation: "spin 1s linear infinite",
+          }} />
+          <span style={{ fontSize: "0.875rem", color: "var(--accent)" }}>
+            מייצר תובנות AI... זה עלול לקחת כמה שניות
+          </span>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
       <ClientBrainSection client={client} persisted={persistedInsights['client_brain']} />
-      <BrandWeaknessSection client={client} persisted={persistedInsights['brand_weakness']} autoGenerate={researchExists} />
-      <CustomerProfileSection client={client} persisted={persistedInsights['customer_profile']} autoGenerate={researchExists} />
-      <TrendEngineSection client={client} persisted={persistedInsights['trend_engine']} autoGenerate={researchExists} />
-      <CompetitorInsightsSection client={client} persisted={persistedInsights['competitor_insights']} autoGenerate={researchExists} />
+      <BrandWeaknessSection client={client} persisted={persistedInsights['brand_weakness']} autoGenerate={false} onRegenerate={() => regenerateSection('brand_weakness')} />
+      <CustomerProfileSection client={client} persisted={persistedInsights['customer_profile']} autoGenerate={false} onRegenerate={() => regenerateSection('customer_profile')} />
+      <TrendEngineSection client={client} persisted={persistedInsights['trend_engine']} autoGenerate={false} onRegenerate={() => regenerateSection('trend_engine')} />
+      <CompetitorInsightsSection client={client} persisted={persistedInsights['competitor_insights']} autoGenerate={false} onRegenerate={() => regenerateSection('competitor_insights')} />
       <WeeklyRecommendationsWidget client={client} />
     </div>
   );

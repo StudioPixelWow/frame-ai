@@ -60,12 +60,36 @@ export async function ensureTable(table: string, ddl: string): Promise<void> {
     if (error && !error.message.includes('already exists')) {
       console.warn(`[ensureTable] Could not auto-create "${table}":`, error.message);
       console.warn(`[ensureTable] Create it manually:\n${ddl}`);
+    } else {
+      // Notify PostgREST to reload its schema cache so the new table is immediately visible
+      try {
+        await sb.rpc('exec_sql', { query: "NOTIFY pgrst, 'reload schema';" });
+      } catch {
+        // Non-fatal — schema cache will refresh on its own eventually
+      }
     }
   } catch {
     // rpc function doesn't exist — non-fatal
   }
 
   _ensuredTables.add(table);
+}
+
+/**
+ * Check if a table exists in Supabase by attempting a lightweight query.
+ * Returns true if the table is accessible, false if schema cache miss or table missing.
+ */
+export async function tableExistsInCache(tableName: string): Promise<boolean> {
+  try {
+    const sb = getSupabase();
+    const { error } = await sb.from(tableName).select('id').limit(0);
+    if (error && (error.message.includes('schema cache') || error.message.includes('does not exist') || error.message.includes('relation'))) {
+      return false;
+    }
+    return !error;
+  } catch {
+    return false;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -271,6 +295,23 @@ export class SupabaseCrud<T extends { id: string }> {
       .order('created_at', { ascending: true });
 
     if (error) {
+      // Schema cache miss — force table re-creation and retry once
+      if (error.message.includes('schema cache') || error.message.includes('does not exist') || error.message.includes('relation')) {
+        console.warn(`[SupabaseCrud][${this.tableName}] Schema cache miss, forcing re-create and retry...`);
+        _tableInitPromises.delete(this.tableName);
+        _ensuredTables.delete(this.tableName);
+        await this.ensureTableExists();
+        // Brief delay for schema cache to propagate
+        await new Promise(r => setTimeout(r, 500));
+        const retry = await sb.from(this.tableName).select('id, data').order('created_at', { ascending: true });
+        if (retry.error) {
+          console.error(`[SupabaseCrud][${this.tableName}] getAllAsync retry still failed:`, retry.error.message);
+          throw new Error(`Failed to fetch from ${this.tableName}: ${retry.error.message}`);
+        }
+        console.log(`[SupabaseCrud][${this.tableName}] SELECT (retry) → ${retry.data?.length ?? 0} rows ✅ DURABLE`);
+        return (retry.data ?? []).map((r: { id: string; data: unknown }) => this.rowToEntity(r));
+      }
+
       console.error(`[SupabaseCrud][${this.tableName}] getAllAsync error:`, error.message);
       throw new Error(`Failed to fetch from ${this.tableName}: ${error.message}`);
     }

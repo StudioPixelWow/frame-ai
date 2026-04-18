@@ -32,34 +32,31 @@ export default function TabCreativeDNA({ client, employees }: TabCreativeDNAProp
         } else {
           if (!cancelled) setDna(null);
 
-          // DNA doesn't exist — check if research exists, and if so auto-generate
+          // DNA doesn't exist — use orchestration endpoint to generate (it builds context server-side)
           try {
             const researchRes = await fetch(`/api/ai/client-research?clientId=${client.id}`);
-            if (researchRes.ok && !cancelled) {
-              console.log(`[CreativeDNA] No DNA but research exists for ${client.id} — auto-generating`);
-              setIsGenerating(true);
-              const genRes = await fetch("/api/ai/creative-dna", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  clientId: client.id,
-                  clientData: {
-                    name: client.name,
-                    businessField: client.businessField,
-                    clientType: client.clientType,
-                    brandVoice: client.keyMarketingMessages,
-                    targetAudience: client.marketingGoals,
-                    keyMarketingMessages: client.keyMarketingMessages,
-                    platforms: ["facebook", "instagram", "tiktok"],
-                  },
-                }),
-              });
-              if (genRes.ok && !cancelled) {
-                const genResult = await genRes.json();
-                setDna(genResult.data ?? null);
-                console.log(`[CreativeDNA] Auto-generated DNA for ${client.id}`);
+            if (!cancelled && researchRes.ok) {
+              const researchData = await researchRes.json();
+              const hasResearch = !!(researchData?.data && researchData.data.status === 'complete');
+              if (hasResearch) {
+                console.log(`[CreativeDNA] No DNA but research exists for ${client.id} — auto-generating via orchestration`);
+                setIsGenerating(true);
+                const genRes = await fetch('/api/ai/orchestrate-insights', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ clientId: client.id, sections: ['creative_dna'] }),
+                });
+                if (genRes.ok && !cancelled) {
+                  // Reload DNA after orchestration persisted it
+                  const reloadRes = await fetch(`/api/ai/creative-dna?clientId=${client.id}`);
+                  if (reloadRes.ok) {
+                    const reloadResult = await reloadRes.json();
+                    setDna(reloadResult.data ?? null);
+                  }
+                  console.log(`[CreativeDNA] Auto-generated DNA for ${client.id}`);
+                }
+                if (!cancelled) setIsGenerating(false);
               }
-              if (!cancelled) setIsGenerating(false);
             }
           } catch (autoErr) {
             console.warn('[CreativeDNA] Auto-generation check failed:', autoErr);
