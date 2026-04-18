@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 import { requireRole, getRequestRole, getRequestEmployeeId, getRequestClientId } from '@/lib/auth/api-guard';
+import { ensureTaskColumns, filterByPresent } from '@/lib/db/ensure-task-columns';
 
 const TABLE = 'tasks';
 
@@ -107,6 +108,7 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
 
 export async function GET(req: NextRequest) {
   try {
+    await ensureTaskColumns();
     const sb = getSupabase();
     const role = getRequestRole(req);
     const url = new URL(req.url);
@@ -164,6 +166,7 @@ export async function POST(req: NextRequest) {
   if (roleErr) return roleErr;
 
   try {
+    const presentCols = await ensureTaskColumns();
     const sb = getSupabase();
     let body: Record<string, unknown> = {};
     try { body = (await req.json()) as Record<string, unknown>; } catch { /* noop */ }
@@ -185,7 +188,9 @@ export async function POST(req: NextRequest) {
 
     const now = new Date().toISOString();
     const id = generateId();
-    const insertRow = toInsert(body, id, now);
+    const rawRow = toInsert(body, id, now);
+    // Filter out columns that don't exist yet (migration may have failed)
+    const insertRow = filterByPresent(rawRow, presentCols);
     console.log('Creating task:', JSON.stringify(insertRow));
 
     const { data: inserted, error } = await sb.from(TABLE).insert(insertRow).select('*').single();

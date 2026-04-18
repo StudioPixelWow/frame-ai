@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 import { requireRole, getRequestRole, getRequestEmployeeId } from '@/lib/auth/api-guard';
+import { ensureTaskColumns, filterByPresent } from '@/lib/db/ensure-task-columns';
 
 const TABLE = 'tasks';
 
@@ -79,6 +80,7 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
 
 export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    await ensureTaskColumns();
     const { id } = await context.params;
     const sb = getSupabase();
     const { data, error } = await sb.from(TABLE).select('*').eq('id', id).maybeSingle();
@@ -97,6 +99,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
   if (roleErr) return roleErr;
 
   try {
+    const presentCols = await ensureTaskColumns();
     const { id } = await context.params;
     const role = getRequestRole(req);
 
@@ -114,7 +117,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     try { body = (await req.json()) as Record<string, unknown>; } catch { /* noop */ }
 
     const sb = getSupabase();
-    const updateRow = toUpdate(body);
+    const rawUpdate = toUpdate(body);
+    // Filter out columns that don't exist yet (migration may have failed)
+    const updateRow = filterByPresent(rawUpdate, presentCols);
     const { data, error } = await sb.from(TABLE).update(updateRow).eq('id', id).select('*').maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     if (!data) return NextResponse.json({ error: 'Not found', taskId: id }, { status: 404 });
