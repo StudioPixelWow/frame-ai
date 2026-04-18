@@ -206,7 +206,6 @@ function ClientDetailContent() {
 
   const handleOpenEditModal = () => {
     if (client) {
-      // Stable fields only — no social/marketing/logo
       setEditForm({
         name: client.name,
         company: client.company,
@@ -215,10 +214,18 @@ function ClientDetailContent() {
         email: client.email,
         clientType: client.clientType,
         businessField: client.businessField,
+        marketingGoals: client.marketingGoals ?? '',
+        keyMarketingMessages: client.keyMarketingMessages ?? '',
         retainerAmount: client.retainerAmount,
         retainerDay: client.retainerDay,
         status: client.status,
         notes: client.notes,
+        websiteUrl: client.websiteUrl ?? '',
+        facebookPageUrl: client.facebookPageUrl ?? '',
+        instagramProfileUrl: client.instagramProfileUrl ?? '',
+        tiktokProfileUrl: client.tiktokProfileUrl ?? '',
+        linkedinUrl: client.linkedinUrl ?? '',
+        youtubeUrl: client.youtubeUrl ?? '',
       });
       setIsEditModalOpen(true);
     }
@@ -1325,7 +1332,32 @@ function ClientDetailContent() {
                 />
               </div>
 
-              {/* Marketing goals & key messages temporarily removed — schema cache issue */}
+              {/* Row 6: Marketing Goals & Key Messages */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
+                    יעדי שיווק
+                  </label>
+                  <input
+                    className="form-input"
+                    value={editForm.marketingGoals || ""}
+                    onChange={(e) => setEditForm({ ...editForm, marketingGoals: e.target.value })}
+                    placeholder="יעדי שיווק"
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
+                    מסרים שיווקיים עיקריים
+                  </label>
+                  <textarea
+                    className="form-input"
+                    value={editForm.keyMarketingMessages || ""}
+                    onChange={(e) => setEditForm({ ...editForm, keyMarketingMessages: e.target.value })}
+                    placeholder="מסרים שיווקיים עיקריים"
+                    style={{ minHeight: "60px", fontFamily: "inherit" }}
+                  />
+                </div>
+              </div>
 
               {/* Row 7: Retainer Amount and Day */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
@@ -1357,7 +1389,49 @@ function ClientDetailContent() {
                 </div>
               </div>
 
-              {/* Social URLs excluded from writes until schema cache stable */}
+              {/* Row 8: Social URLs */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
+                    אתר אינטרנט
+                  </label>
+                  <input className="form-input" value={editForm.websiteUrl || ""} onChange={(e) => setEditForm({ ...editForm, websiteUrl: e.target.value })} placeholder="https://..." />
+                </div>
+                <div>
+                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
+                    דף Facebook
+                  </label>
+                  <input className="form-input" value={editForm.facebookPageUrl || ""} onChange={(e) => setEditForm({ ...editForm, facebookPageUrl: e.target.value })} placeholder="https://facebook.com/..." />
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
+                    פרופיל Instagram
+                  </label>
+                  <input className="form-input" value={editForm.instagramProfileUrl || ""} onChange={(e) => setEditForm({ ...editForm, instagramProfileUrl: e.target.value })} placeholder="https://instagram.com/..." />
+                </div>
+                <div>
+                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
+                    פרופיל TikTok
+                  </label>
+                  <input className="form-input" value={editForm.tiktokProfileUrl || ""} onChange={(e) => setEditForm({ ...editForm, tiktokProfileUrl: e.target.value })} placeholder="https://tiktok.com/@..." />
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
+                    פרופיל LinkedIn
+                  </label>
+                  <input className="form-input" value={editForm.linkedinUrl || ""} onChange={(e) => setEditForm({ ...editForm, linkedinUrl: e.target.value })} placeholder="https://linkedin.com/company/..." />
+                </div>
+                <div>
+                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
+                    ערוץ YouTube
+                  </label>
+                  <input className="form-input" value={editForm.youtubeUrl || ""} onChange={(e) => setEditForm({ ...editForm, youtubeUrl: e.target.value })} placeholder="https://youtube.com/@..." />
+                </div>
+              </div>
 
               {/* Row 9: Notes */}
               <div>

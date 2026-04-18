@@ -6,10 +6,10 @@
  * The frontend uses camelCase field names; this route maps between
  * camelCase (API contract) and snake_case (DB columns).
  *
- * Social/extra columns (website, facebook, instagram, tiktok, linkedin,
+ * All extra columns (website, facebook, instagram, tiktok, linkedin,
  * youtube, marketing_goals, key_marketing_messages, logo_url) are
- * EXCLUDED from all write payloads until the PostgREST schema cache is
- * confirmed stable.  They are still read from SELECT * when present.
+ * included in reads AND writes.  Run GET /api/data/clients/schema
+ * once after deploy to ensure columns + schema cache are up to date.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -48,7 +48,7 @@ function rowToClient(r: ClientRow) {
     color:              (r.color as string) ?? '#00B5FE',
     convertedFromLead:  (r.converted_from_lead as string) ?? null,
     assignedManagerId:  (r.assigned_manager_id as string) ?? null,
-    // Extra fields — read-only from SELECT *, never written
+    // Extra fields — read + write
     websiteUrl:          (r.website as string) ?? '',
     facebookPageUrl:     (r.facebook as string) ?? '',
     instagramProfileUrl: (r.instagram as string) ?? '',
@@ -106,24 +106,32 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     const id = generateId();
 
-    // Stable columns only — no social/marketing/logo fields
     const insertRow: Record<string, unknown> = {
       id,
-      name:                body.name ?? '',
-      company:             body.company ?? '',
-      contact_person:      body.contactPerson ?? '',
-      email:               body.email ?? '',
-      phone:               body.phone ?? '',
-      notes:               body.notes ?? '',
-      business_field:      body.businessField ?? '',
-      client_type:         body.clientType ?? 'marketing',
-      status:              body.status ?? 'active',
-      retainer_amount:     body.retainerAmount ?? 0,
-      retainer_day:        body.retainerDay ?? 1,
-      color:               body.color ?? '#00B5FE',
-      converted_from_lead: body.convertedFromLead ?? null,
-      created_at:          now,
-      updated_at:          now,
+      name:                  body.name ?? '',
+      company:               body.company ?? '',
+      contact_person:        body.contactPerson ?? '',
+      email:                 body.email ?? '',
+      phone:                 body.phone ?? '',
+      notes:                 body.notes ?? '',
+      business_field:        body.businessField ?? '',
+      client_type:           body.clientType ?? 'marketing',
+      status:                body.status ?? 'active',
+      retainer_amount:       body.retainerAmount ?? 0,
+      retainer_day:          body.retainerDay ?? 1,
+      color:                 body.color ?? '#00B5FE',
+      converted_from_lead:   body.convertedFromLead ?? null,
+      website:               body.websiteUrl ?? '',
+      facebook:              body.facebookPageUrl ?? '',
+      instagram:             body.instagramProfileUrl ?? '',
+      tiktok:                body.tiktokProfileUrl ?? '',
+      linkedin:              body.linkedinUrl ?? '',
+      youtube:               body.youtubeUrl ?? '',
+      marketing_goals:       body.marketingGoals ?? '',
+      key_marketing_messages:body.keyMarketingMessages ?? '',
+      logo_url:              body.logoUrl ?? '',
+      created_at:            now,
+      updated_at:            now,
     };
 
     if (body.assignedManagerId != null && body.assignedManagerId !== '') {

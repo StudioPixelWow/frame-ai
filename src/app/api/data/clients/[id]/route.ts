@@ -5,10 +5,10 @@
  *
  * Storage: Supabase "clients" table.
  *
- * Social/extra columns (website, facebook, instagram, tiktok, linkedin,
+ * All extra columns (website, facebook, instagram, tiktok, linkedin,
  * youtube, marketing_goals, key_marketing_messages, logo_url) are
- * EXCLUDED from all write payloads until the PostgREST schema cache is
- * confirmed stable.  They are still read from SELECT * when present.
+ * included in reads AND writes.  Run GET /api/data/clients/schema
+ * once after deploy to ensure columns + schema cache are up to date.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -36,7 +36,7 @@ function rowToClient(r: ClientRow) {
     color:              (r.color as string) ?? '#00B5FE',
     convertedFromLead:  (r.converted_from_lead as string) ?? null,
     assignedManagerId:  (r.assigned_manager_id as string) ?? null,
-    // Extra fields — read-only from SELECT *, never written
+    // Extra fields — read + write
     websiteUrl:          (r.website as string) ?? '',
     facebookPageUrl:     (r.facebook as string) ?? '',
     instagramProfileUrl: (r.instagram as string) ?? '',
@@ -73,7 +73,15 @@ function toDbUpdate(body: Record<string, unknown>): Record<string, unknown> {
   set('color', 'color');
   set('convertedFromLead', 'converted_from_lead');
   set('assignedManagerId', 'assigned_manager_id');
-  // social, marketing, logo fields excluded from writes
+  set('websiteUrl', 'website');
+  set('facebookPageUrl', 'facebook');
+  set('instagramProfileUrl', 'instagram');
+  set('tiktokProfileUrl', 'tiktok');
+  set('linkedinUrl', 'linkedin');
+  set('youtubeUrl', 'youtube');
+  set('marketingGoals', 'marketing_goals');
+  set('keyMarketingMessages', 'key_marketing_messages');
+  set('logoUrl', 'logo_url');
 
   out.updated_at = new Date().toISOString();
   return out;
