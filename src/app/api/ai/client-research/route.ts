@@ -18,6 +18,89 @@ import { getSupabase } from '@/lib/db/store';
 import { generateWithAI, getClientKnowledgeContext } from '@/lib/ai/openai-client';
 import type { ClientResearch, Client } from '@/lib/db/schema';
 
+// ============================================================================
+// SUPABASE PERSISTENCE — public.client_research
+// Stores the full research JSON in `client_brain` column. Individual section
+// columns (summary, customer_profile, etc.) hold section excerpts for queries.
+// ============================================================================
+
+async function saveResearchToSupabase(research: ClientResearch): Promise<boolean> {
+  try {
+    const sb = getSupabase();
+    const now = new Date().toISOString();
+
+    const row = {
+      id: research.id,
+      client_id: research.clientId,
+      client_brain: JSON.stringify(research),
+      summary: JSON.stringify(research.identity ?? {}),
+      customer_profile: JSON.stringify(research.audience ?? {}),
+      trend_engine: JSON.stringify(research.opportunities ?? []),
+      competitor_analysis: JSON.stringify({
+        competitors: research.competitors ?? [],
+        competitorSummary: research.competitorSummary ?? {},
+      }),
+      brand_weakness: JSON.stringify(research.weaknesses ?? []),
+      updated_at: now,
+    };
+
+    console.log(`[client-research] Supabase upsert for client_id=${research.clientId}, id=${research.id}`);
+
+    const { error } = await sb
+      .from('client_research')
+      .upsert(row, { onConflict: 'id' });
+
+    if (error) {
+      console.error('[client-research] Supabase upsert FAILED:', error.message, error.code);
+      return false;
+    }
+
+    console.log(`[client-research] Supabase upsert OK for ${research.clientId}`);
+    return true;
+  } catch (err) {
+    console.error('[client-research] Supabase save exception:', err);
+    return false;
+  }
+}
+
+async function loadResearchFromSupabase(clientId: string): Promise<ClientResearch | null> {
+  try {
+    const sb = getSupabase();
+    console.log(`[client-research] Supabase load for client_id=${clientId}`);
+
+    const { data, error } = await sb
+      .from('client_research')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[client-research] Supabase load error:', error.message);
+      return null;
+    }
+    if (!data) {
+      console.log(`[client-research] Supabase: no research for client_id=${clientId}`);
+      return null;
+    }
+
+    // Reconstruct full research object from client_brain JSON
+    const raw = (data as Record<string, unknown>).client_brain as string;
+    if (!raw) {
+      console.warn('[client-research] Supabase row has empty client_brain');
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as ClientResearch;
+    console.log(`[client-research] Supabase loaded research id=${parsed.id}, status=${parsed.status}`);
+    return parsed;
+  } catch (err) {
+    console.error('[client-research] Supabase load exception:', err);
+    return null;
+  }
+}
+
 /**
  * Fetch a client by id from Supabase (the real source of truth).
  * Maps snake_case DB columns → camelCase Client shape expected by this route.
@@ -342,16 +425,25 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const existing = clientResearch.query((r) => r.clientId === clientId);
-
-    if (existing.length === 0) {
-      return NextResponse.json({ data: null }, { status: 200 });
+    // 1. Try Supabase first (persistent storage)
+    const supabaseData = await loadResearchFromSupabase(clientId);
+    if (supabaseData) {
+      console.log(`[client-research] GET: serving from Supabase for ${clientId}`);
+      return NextResponse.json({ success: true, data: supabaseData });
     }
 
-    return NextResponse.json({
-      success: true,
-      data: existing[0],
-    });
+    // 2. Fallback to JsonStore (ephemeral)
+    const existing = clientResearch.query((r) => r.clientId === clientId);
+    if (existing.length > 0) {
+      console.log(`[client-research] GET: serving from JsonStore for ${clientId} (not in Supabase)`);
+      // Migrate to Supabase in background
+      saveResearchToSupabase(existing[0]).catch(() => {});
+      return NextResponse.json({ success: true, data: existing[0] });
+    }
+
+    // 3. No data anywhere
+    console.log(`[client-research] GET: no research found for ${clientId}`);
+    return NextResponse.json({ data: null }, { status: 200 });
   } catch (error) {
     console.error('Error fetching client research:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -548,11 +640,18 @@ export async function POST(req: NextRequest) {
 
       clientResearch.update(researchId, finalResearch);
 
-      console.log(`✅ Research saved successfully for ${client.name} on attempt ${attempt + 1}. contentIdeas25: ${finalResearch.contentIdeas25?.length ?? 0} ideas saved.`);
+      // ── Persist to Supabase (the durable store) ──
+      const sbSaved = await saveResearchToSupabase(finalResearch);
+      if (!sbSaved) {
+        console.error(`[client-research] ⚠️ Supabase persistence FAILED for ${client.name} — data is in JsonStore only`);
+      }
+
+      console.log(`✅ Research saved for ${client.name} attempt ${attempt + 1}. ideas=${finalResearch.contentIdeas25?.length ?? 0}, supabase=${sbSaved}`);
 
       return NextResponse.json({
         success: true,
         data: finalResearch,
+        persisted: sbSaved,
         message: `Client research generated successfully (attempt ${attempt + 1})`,
       });
     }
@@ -600,24 +699,33 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Missing clientId', missing: ['clientId'] }, { status: 400 });
     }
 
-    const existing = clientResearch.query((r) => r.clientId === clientId);
+    // Try JsonStore first, fallback to Supabase
+    const jsonStoreRecords = clientResearch.query((r) => r.clientId === clientId);
+    let researchToSave: ClientResearch | null = jsonStoreRecords.length > 0 ? jsonStoreRecords[0] : null;
 
-    if (existing.length === 0) {
+    if (!researchToSave) {
+      researchToSave = await loadResearchFromSupabase(clientId);
+    }
+
+    if (!researchToSave) {
       return NextResponse.json({ error: 'No research found to save' }, { status: 404 });
     }
 
     const now = new Date().toISOString();
-    const updated = clientResearch.update(existing[0].id, {
-      ...existing[0],
-      savedAt: now,
-      updatedAt: now,
-    });
+    const updatedResearch = { ...researchToSave, savedAt: now, updatedAt: now };
 
-    console.log(`[Research] Explicit save for client ${clientId} at ${now}`);
+    // Save to both stores
+    if (jsonStoreRecords.length > 0) {
+      clientResearch.update(researchToSave.id, updatedResearch);
+    }
+    const sbSaved = await saveResearchToSupabase(updatedResearch);
+
+    console.log(`[Research] Explicit save for client ${clientId} at ${now}, supabase=${sbSaved}`);
 
     return NextResponse.json({
       success: true,
-      data: updated,
+      data: updatedResearch,
+      persisted: sbSaved,
       message: 'Research saved successfully',
     });
   } catch (error) {
@@ -651,9 +759,15 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'strategicNotes must be a string' }, { status: 400 });
     }
 
-    const existing = clientResearch.query((r) => r.clientId === clientId);
+    // Try JsonStore first, then Supabase
+    const jsonStoreRecords = clientResearch.query((r) => r.clientId === clientId);
+    let existingRecord: ClientResearch | null = jsonStoreRecords.length > 0 ? jsonStoreRecords[0] : null;
 
-    if (existing.length === 0) {
+    if (!existingRecord) {
+      existingRecord = await loadResearchFromSupabase(clientId);
+    }
+
+    if (!existingRecord) {
       // Create a minimal record to hold the notes
       const researchId = 'crs_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
       const now = new Date().toISOString();
@@ -677,16 +791,22 @@ export async function PATCH(req: NextRequest) {
         updatedAt: now,
       };
       clientResearch.create(record);
+      await saveResearchToSupabase(record);
       return NextResponse.json({ success: true, data: record });
     }
 
-    const updated = clientResearch.update(existing[0].id, {
-      ...existing[0],
+    const updatedRecord = {
+      ...existingRecord,
       strategicNotes,
       updatedAt: new Date().toISOString(),
-    });
+    };
 
-    return NextResponse.json({ success: true, data: updated });
+    if (jsonStoreRecords.length > 0) {
+      clientResearch.update(existingRecord.id, updatedRecord);
+    }
+    await saveResearchToSupabase(updatedRecord);
+
+    return NextResponse.json({ success: true, data: updatedRecord });
   } catch (error) {
     console.error('Error saving strategic notes:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

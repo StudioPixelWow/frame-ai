@@ -109,9 +109,32 @@ export async function POST(
       return NextResponse.json({ error: 'Client not found', clientId: id }, { status: 400 });
     }
 
-    // Load research for context
-    const researchRecords = clientResearch.query((r: ClientResearch) => r.clientId === id);
-    const latestResearch = researchRecords.length > 0 ? researchRecords[researchRecords.length - 1] : null;
+    // Load research for context — try Supabase first (persistent), fallback to JsonStore
+    let latestResearch: ClientResearch | null = null;
+    try {
+      const sb = getSupabase();
+      const { data: sbRow } = await sb
+        .from('client_research')
+        .select('client_brain')
+        .eq('client_id', id)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (sbRow && (sbRow as Record<string, unknown>).client_brain) {
+        latestResearch = JSON.parse((sbRow as Record<string, unknown>).client_brain as string) as ClientResearch;
+        console.log(`[sync-ideas-to-gantt] Research loaded from Supabase for ${id}`);
+      }
+    } catch (err) {
+      console.warn('[sync-ideas-to-gantt] Supabase research load failed, trying JsonStore:', err);
+    }
+    if (!latestResearch) {
+      const researchRecords = clientResearch.query((r: ClientResearch) => r.clientId === id);
+      latestResearch = researchRecords.length > 0 ? researchRecords[researchRecords.length - 1] : null;
+      if (latestResearch) console.log(`[sync-ideas-to-gantt] Research loaded from JsonStore for ${id}`);
+    }
+    if (!latestResearch) {
+      console.warn(`[sync-ideas-to-gantt] No research found for ${id} — gantt will use limited context`);
+    }
 
     // Build client context for AI
     const researchContext = latestResearch ? buildResearchContext(latestResearch) : '';

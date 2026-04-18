@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { clients } from '@/lib/db';
 import { clientResearch } from '@/lib/db/collections';
 import { ensureSeeded } from '@/lib/db/seed';
+import { getSupabase } from '@/lib/db/store';
 import { generateWithAI } from '@/lib/ai/openai-client';
 import type { ClientResearch } from '@/lib/db';
 
@@ -27,12 +28,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Client not found' }, { status: 400 });
     }
 
-    const existing = clientResearch.query((r: ClientResearch) => r.clientId === clientId);
-    if (existing.length === 0) {
+    // Try Supabase first (persistent), fallback to JsonStore
+    let research: ClientResearch | null = null;
+    try {
+      const sb = getSupabase();
+      const { data: sbRow } = await sb
+        .from('client_research')
+        .select('client_brain')
+        .eq('client_id', clientId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (sbRow && (sbRow as Record<string, unknown>).client_brain) {
+        research = JSON.parse((sbRow as Record<string, unknown>).client_brain as string) as ClientResearch;
+        console.log(`[GenerateIdeas] Research loaded from Supabase for ${clientId}`);
+      }
+    } catch (err) {
+      console.warn('[GenerateIdeas] Supabase load failed, trying JsonStore:', err);
+    }
+    if (!research) {
+      const existing = clientResearch.query((r: ClientResearch) => r.clientId === clientId);
+      if (existing.length > 0) {
+        research = existing[existing.length - 1];
+        console.log(`[GenerateIdeas] Research loaded from JsonStore for ${clientId}`);
+      }
+    }
+    if (!research) {
       return NextResponse.json({ error: 'No research found — run full research first' }, { status: 404 });
     }
-
-    const research = existing[existing.length - 1];
 
     // Build context from existing research
     const contextParts: string[] = [];
@@ -207,18 +230,50 @@ ${client.keyMarketingMessages || '(לא הוגדר)'}
     }
 
     // Patch the ideas into existing research
-    const updated = clientResearch.update(research.id, {
+    const updatedResearch: ClientResearch = {
       ...research,
       contentIdeas25: ideas as ClientResearch['contentIdeas25'],
       updatedAt: new Date().toISOString(),
-    });
+    };
 
-    console.log(`[GenerateIdeas] ✅ Saved ${ideas.length} ideas to research ${research.id}`);
+    // Save to JsonStore
+    try {
+      clientResearch.update(research.id, updatedResearch);
+    } catch { /* JsonStore may not have this record */ }
+
+    // Save to Supabase (persistent)
+    let sbSaved = false;
+    try {
+      const sb = getSupabase();
+      const { error } = await sb
+        .from('client_research')
+        .upsert({
+          id: updatedResearch.id,
+          client_id: updatedResearch.clientId,
+          client_brain: JSON.stringify(updatedResearch),
+          summary: JSON.stringify(updatedResearch.identity ?? {}),
+          customer_profile: JSON.stringify(updatedResearch.audience ?? {}),
+          trend_engine: JSON.stringify(updatedResearch.opportunities ?? []),
+          competitor_analysis: JSON.stringify({
+            competitors: updatedResearch.competitors ?? [],
+            competitorSummary: updatedResearch.competitorSummary ?? {},
+          }),
+          brand_weakness: JSON.stringify(updatedResearch.weaknesses ?? []),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
+      sbSaved = !error;
+      if (error) console.error('[GenerateIdeas] Supabase save failed:', error.message);
+    } catch (err) {
+      console.error('[GenerateIdeas] Supabase save exception:', err);
+    }
+
+    console.log(`[GenerateIdeas] ✅ Saved ${ideas.length} ideas to research ${research.id}, supabase=${sbSaved}`);
 
     return NextResponse.json({
       success: true,
-      data: updated,
+      data: updatedResearch,
       ideasCount: ideas.length,
+      persisted: sbSaved,
     });
 
   } catch (error) {

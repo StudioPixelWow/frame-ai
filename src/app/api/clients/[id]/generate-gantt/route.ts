@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { clients, clientGanttItems } from '@/lib/db';
 import { creativeDNA as creativeDNAStore, clientResearch } from '@/lib/db/collections';
 import { ensureSeeded } from '@/lib/db/seed';
+import { getSupabase } from '@/lib/db/store';
 import { getRelevantHolidays, getHolidaysForMonth } from '@/lib/israeli-holidays';
 import { generateWithAI, getClientKnowledgeContext } from '@/lib/ai/openai-client';
 import type { ClientGanttItem, GanttItemType, ContentFormat, ClientResearch } from '@/lib/db';
@@ -948,9 +949,30 @@ export async function POST(
 
     // ============================================================
     // STEP 1: LOAD SAVED CLIENT RESEARCH — PRIMARY SOURCE OF TRUTH
+    // Try Supabase first (persistent), fallback to JsonStore
     // ============================================================
-    const researchRecords = clientResearch.query((r: ClientResearch) => r.clientId === id);
-    const latestResearch = researchRecords.length > 0 ? researchRecords[researchRecords.length - 1] : null;
+    let latestResearch: ClientResearch | null = null;
+    try {
+      const sb = getSupabase();
+      const { data: sbRow } = await sb
+        .from('client_research')
+        .select('client_brain')
+        .eq('client_id', id)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (sbRow && (sbRow as Record<string, unknown>).client_brain) {
+        latestResearch = JSON.parse((sbRow as Record<string, unknown>).client_brain as string) as ClientResearch;
+        console.log(`[Gantt] Research loaded from Supabase for ${id}`);
+      }
+    } catch (err) {
+      console.warn('[Gantt] Supabase research load failed, trying JsonStore:', err);
+    }
+    if (!latestResearch) {
+      const researchRecords = clientResearch.query((r: ClientResearch) => r.clientId === id);
+      latestResearch = researchRecords.length > 0 ? researchRecords[researchRecords.length - 1] : null;
+      if (latestResearch) console.log(`[Gantt] Research loaded from JsonStore for ${id}`);
+    }
     const hasResearch = !!(latestResearch && latestResearch.status === 'complete');
 
     // Extract structured insights from research
