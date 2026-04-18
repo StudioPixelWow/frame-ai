@@ -43,12 +43,25 @@ export async function PUT(
       return NextResponse.json({ error: 'Employee task not found' }, { status: 404 });
     }
 
-    // ── Reverse sync: Task completed → update linked gantt item ──
+    // ── Reverse sync: Task status → update linked gantt item ──
     const task = updated as EmployeeTask;
-    if (task.ganttItemId && task.status === 'completed' && before?.status !== 'completed') {
+    if (task.ganttItemId && task.status !== before?.status) {
       try {
-        await clientGanttItems.updateAsync(task.ganttItemId, { status: 'published' });
-        console.log('[Task→Gantt Sync] Gantt item', task.ganttItemId, 'marked published (task completed)');
+        if (task.status === 'completed' && before?.status !== 'completed') {
+          await clientGanttItems.updateAsync(task.ganttItemId, { status: 'published' });
+          console.log('[Task→Gantt Sync] Gantt item', task.ganttItemId, 'marked published (task completed)');
+        } else if (task.status === 'approved' && before?.status !== 'approved') {
+          // Sync approved status + any files/description to gantt item
+          const ganttUpdate: Record<string, unknown> = { status: 'approved' };
+          if (body.files && Array.isArray(body.files) && body.files.length > 0) {
+            ganttUpdate.attachedFiles = body.files;
+          }
+          if (body.description) {
+            ganttUpdate.approvedContent = body.description;
+          }
+          await clientGanttItems.updateAsync(task.ganttItemId, ganttUpdate);
+          console.log('[Task→Gantt Sync] Gantt item', task.ganttItemId, 'marked approved (task approved)');
+        }
       } catch { /* gantt item may not exist — safe to ignore */ }
     }
 

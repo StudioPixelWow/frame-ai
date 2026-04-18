@@ -10,6 +10,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 import { requireRole, getRequestRole, getRequestEmployeeId } from '@/lib/auth/api-guard';
 import { ensureTaskColumns, filterByPresent } from '@/lib/db/ensure-task-columns';
+import { employeeTasks, clientGanttItems } from '@/lib/db';
+import type { EmployeeTask } from '@/lib/db/schema';
 
 const TABLE = 'tasks';
 
@@ -33,6 +35,7 @@ function rowToTask(r: Row) {
     description: (r.description as string) ?? '',
     priority: (r.priority as string) ?? 'medium',
     dueDate: (r.due_date as string) ?? null,
+    ganttItemId: (r.gantt_item_id as string) ?? null,
     tags: [] as string[],
     files: [] as string[],
     notes: (r.notes as string) ?? '',
@@ -64,6 +67,7 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
     ['projectId', 'project_id', true],                  // FK → public.projects
     ['businessProjectId', 'business_project_id', true],  // FK → public.business_projects
     ['milestoneId', 'milestone_id', true],
+    ['ganttItemId', 'gantt_item_id', true],
   ];
   // Support assigneeIds array → assignee_id (first entry)
   if (Array.isArray(body.assigneeIds) && body.assigneeIds.length > 0 && body.assigneeId === undefined) {
@@ -123,7 +127,54 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     const { data, error } = await sb.from(TABLE).update(updateRow).eq('id', id).select('*').maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     if (!data) return NextResponse.json({ error: 'Not found', taskId: id }, { status: 404 });
-    return NextResponse.json(rowToTask(data as Row));
+
+    const result = rowToTask(data as Row);
+
+    // ── Cross-sync: approved/completed → gantt item + employee task ──
+    const newStatus = result.status;
+    if (newStatus === 'approved' || newStatus === 'completed') {
+      try {
+        const ganttItemId = result.ganttItemId;
+        const ganttStatus = newStatus === 'completed' ? 'published' : 'approved';
+
+        // 1. Direct gantt sync if global task has gantt_item_id
+        if (ganttItemId) {
+          const ganttUpdate: Record<string, unknown> = { status: ganttStatus };
+          if (body.files && Array.isArray(body.files) && body.files.length > 0) {
+            ganttUpdate.attachedFiles = body.files;
+          }
+          if (result.description) {
+            ganttUpdate.approvedContent = result.description;
+          }
+          await clientGanttItems.updateAsync(ganttItemId, ganttUpdate);
+          console.log(`[Global→Gantt Sync] Gantt item ${ganttItemId} → ${ganttStatus}`);
+        }
+
+        // 2. Sync to matching employee task (by ganttItemId or title+client)
+        const allEmpTasks = await employeeTasks.getAllAsync() as EmployeeTask[];
+        const match = ganttItemId
+          ? allEmpTasks.find(et => et.ganttItemId === ganttItemId)
+          : allEmpTasks.find(et => et.title === result.title && et.clientId === result.clientId);
+        if (match) {
+          const empUpdate: Record<string, unknown> = { status: newStatus };
+          if (body.files) empUpdate.files = body.files;
+          await employeeTasks.updateAsync(match.id, empUpdate);
+          console.log(`[Global→EmpTask Sync] Employee task ${match.id} → ${newStatus}`);
+
+          // If global task had no ganttItemId but employee task does, sync gantt too
+          if (!ganttItemId && match.ganttItemId) {
+            const ganttUpdate: Record<string, unknown> = { status: ganttStatus };
+            if (result.description) ganttUpdate.approvedContent = result.description;
+            await clientGanttItems.updateAsync(match.ganttItemId, ganttUpdate);
+            console.log(`[Global→Gantt Sync] via empTask: Gantt ${match.ganttItemId} → ${ganttStatus}`);
+          }
+        }
+      } catch (syncErr) {
+        console.warn('[Global→Gantt Sync] Non-critical sync error:', syncErr);
+      }
+    }
+
+    return NextResponse.json(result);
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: `Failed to update: ${msg}` }, { status: 400 });

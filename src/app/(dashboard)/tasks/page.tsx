@@ -188,6 +188,18 @@ export default function TasksPage() {
     }
   };
 
+  const handleMarkCompleted = async () => {
+    if (!editingTask) return;
+    try {
+      await update(editingTask.id, { status: "completed" });
+      toast("המשימה הושלמה", "success");
+      setEditingTask({ ...editingTask, status: "completed" });
+      setForm(prev => ({ ...prev, status: "completed" }));
+    } catch {
+      toast("שגיאה בסימון כהושלם", "error");
+    }
+  };
+
   const handleAddFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -987,6 +999,15 @@ export default function TasksPage() {
                   אשר משימה
                 </button>
               </>
+            )}
+            {editingTask && form.status === "approved" && !showReviewNotes && (
+              <button
+                className="mod-btn-primary"
+                onClick={handleMarkCompleted}
+                style={{ fontSize: "0.85rem", background: "#10b981", fontWeight: 700, padding: "0.5rem 1.25rem" }}
+              >
+                העבר להושלם
+              </button>
             )}
             {editingTask && form.status === "returned" && (
               <button

@@ -4,11 +4,12 @@
  * Runs once per process lifetime — safe to call from multiple routes.
  *
  * Required columns that may be missing:
- *   - notes        TEXT DEFAULT ''
- *   - client_name  TEXT DEFAULT ''
- *   - priority     TEXT DEFAULT 'medium'
- *   - due_date     TEXT
- *   - description  TEXT DEFAULT ''
+ *   - notes          TEXT DEFAULT ''
+ *   - client_name    TEXT DEFAULT ''
+ *   - priority       TEXT DEFAULT 'medium'
+ *   - due_date       TEXT
+ *   - description    TEXT DEFAULT ''
+ *   - gantt_item_id  TEXT
  */
 
 import { getSupabase } from './store';
@@ -18,11 +19,12 @@ let _done = false;
 
 /** Columns that the tasks API reads/writes but may not exist in the DB yet. */
 const REQUIRED_COLUMNS = [
-  { name: 'notes',       def: "TEXT DEFAULT ''" },
-  { name: 'client_name', def: "TEXT DEFAULT ''" },
-  { name: 'priority',    def: "TEXT DEFAULT 'medium'" },
-  { name: 'due_date',    def: 'TEXT' },
-  { name: 'description', def: "TEXT DEFAULT ''" },
+  { name: 'notes',          def: "TEXT DEFAULT ''" },
+  { name: 'client_name',    def: "TEXT DEFAULT ''" },
+  { name: 'priority',       def: "TEXT DEFAULT 'medium'" },
+  { name: 'due_date',       def: 'TEXT' },
+  { name: 'description',    def: "TEXT DEFAULT ''" },
+  { name: 'gantt_item_id',  def: 'TEXT' },
 ];
 
 /** Probe which columns actually exist in the table right now. */

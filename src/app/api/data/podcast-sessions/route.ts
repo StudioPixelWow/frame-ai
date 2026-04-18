@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { podcastSessions } from '@/lib/db';
 import { ensureSeeded } from '@/lib/db/seed';
+import { getSupabase } from '@/lib/db/store';
 
 export async function GET() {
   ensureSeeded();
@@ -59,6 +60,35 @@ export async function POST(req: NextRequest) {
     const created = await podcastSessions.createAsync(sessionData);
 
     console.log('[Podcast] Session created:', created.id);
+
+    // ── Sync to accounting: create a project-payment record ──
+    if (sessionData.price > 0) {
+      try {
+        const sb = getSupabase();
+        const paymentRow: Record<string, unknown> = {
+          client_id: sessionData.clientId || '',
+          title: `הקלטת פודקאסט — ${sessionData.clientName}`,
+          description: `חבילה: ${sessionData.packageType}, תאריך: ${sessionData.sessionDate}`,
+          amount: sessionData.price,
+          due_date: sessionData.sessionDate,
+          status: sessionData.paymentStatus || 'pending',
+          payment_type: 'custom',
+          is_due: true,
+          is_paid: sessionData.paymentStatus === 'paid',
+          paid_at: sessionData.paymentStatus === 'paid' ? now : null,
+          created_at: now,
+          updated_at: now,
+        };
+        const { error: payErr } = await sb.from('business_project_payments').insert(paymentRow);
+        if (payErr) {
+          console.warn('[Podcast] Accounting sync failed:', payErr.message);
+        } else {
+          console.log('[Podcast] Accounting payment created for session:', created.id);
+        }
+      } catch (accErr) {
+        console.warn('[Podcast] Accounting sync error (non-critical):', accErr);
+      }
+    }
 
     return NextResponse.json(created, { status: 201 });
   } catch (error) {

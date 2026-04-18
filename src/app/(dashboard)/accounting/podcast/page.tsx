@@ -56,26 +56,48 @@ export default function PodcastPage() {
   const [modalOpen, setModalOpen] = useState(false)
 
   const stats = useMemo(() => {
-    if (!sessions) return { totalSessions: 0, activeSessions: 0, completedSessions: 0, upcomingSessions: 0 }
+    if (!sessions) return { totalSessions: 0, todaySessions: 0, completedSessions: 0, upcomingSessions: 0 }
 
     const now = new Date()
+    const todayStr = now.toISOString().split("T")[0]
+
+    // Current week boundaries (Sunday–Saturday)
+    const dayOfWeek = now.getDay() // 0=Sun
+    const weekStart = new Date(now)
+    weekStart.setDate(now.getDate() - dayOfWeek)
+    weekStart.setHours(0, 0, 0, 0)
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekStart.getDate() + 6)
+    weekEnd.setHours(23, 59, 59, 999)
+
     let totalSessions = 0
     let completedSessions = 0
     let upcomingSessions = 0
+    let todaySessions = 0
 
     sessions.forEach((session) => {
       totalSessions++
       const sessionDate = new Date(session.sessionDate)
+      const sessionDateStr = session.sessionDate?.split("T")[0] || ""
+
       if (session.sessionStatus === "completed") {
         completedSessions++
-      } else if (sessionDate > now && session.sessionStatus !== "cancelled") {
+      }
+
+      // Today's sessions: scheduled for today, not cancelled
+      if (sessionDateStr === todayStr && session.sessionStatus !== "cancelled") {
+        todaySessions++
+      }
+
+      // Upcoming: scheduled within current week, not cancelled, today or later
+      if (sessionDate >= weekStart && sessionDate <= weekEnd && sessionDate >= now && session.sessionStatus !== "cancelled") {
         upcomingSessions++
       }
     })
 
     return {
       totalSessions,
-      activeSessions: totalSessions - completedSessions,
+      todaySessions,
       completedSessions,
       upcomingSessions,
     }
@@ -154,9 +176,9 @@ export default function PodcastPage() {
       >
         {[
           { label: "סה״כ הקלטות", value: stats.totalSessions, icon: "📊" },
-          { label: "הקלטות פעילות", value: stats.activeSessions, icon: "🔴" },
+          { label: "הקלטות היום", value: stats.todaySessions, icon: "🔴" },
           { label: "הקלטות הושלמו", value: stats.completedSessions, icon: "✅" },
-          { label: "הקלטות קרובות", value: stats.upcomingSessions, icon: "📅" },
+          { label: "הקלטות השבוע", value: stats.upcomingSessions, icon: "📅" },
         ].map((stat, idx) => (
           <div
             key={idx}
@@ -204,7 +226,7 @@ export default function PodcastPage() {
         >
           {[
             { icon: "📅", label: "יומן הקלטות", desc: "צפה בלוח הקלטות", href: "/accounting/podcast/calendar" },
-            { icon: "👥", label: "לקוחות פודקאסט", desc: "ניהול לקוחות", href: "/accounting/podcast" },
+            { icon: "👥", label: "לקוחות פודקאסט", desc: "ניהול לקוחות", href: "/accounting/podcast/clients" },
             { icon: "➕", label: "הזמן הקלטה", desc: "צור הקלטה חדשה", href: "/accounting/podcast/calendar" },
             { icon: "📊", label: "מעקב תוכן", desc: "ניהול תוכן וסטטוס", href: "/accounting/podcast/tracking" },
           ].map((nav, idx) => (

@@ -55,6 +55,7 @@ function rowToTask(r: Row) {
     description: (r.description as string) ?? '',
     priority: (r.priority as string) ?? 'medium',
     dueDate: (r.due_date as string) ?? null,
+    ganttItemId: (r.gantt_item_id as string) ?? null,
     tags: [] as string[],                      // no DB column yet — return empty
     files: [] as string[],                     // no DB column yet — return empty
     notes: (r.notes as string) ?? '',
@@ -84,6 +85,7 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
 
   const notes = (body.notes ?? '') as string;
   const clientName = (body.clientName ?? '') as string;
+  const ganttItemId = nullIfEmpty(body.ganttItemId);
 
   const row: Record<string, unknown> = {
     id,
@@ -103,6 +105,7 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
   if (project) row.project_id = project;
   if (priority) row.priority = priority;
   if (dueDate) row.due_date = dueDate;
+  if (ganttItemId) row.gantt_item_id = ganttItemId;
   return row;
 }
 

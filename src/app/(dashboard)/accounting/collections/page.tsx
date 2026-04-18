@@ -88,9 +88,9 @@ export default function CollectionsPage() {
       podcastSessions.forEach((session: any) => {
         events.push({
           id: `podcast-${session.id}`,
-          clientName: session.name || "LOUD",
+          clientName: session.clientName || "LOUD",
           amount: session.price || 0,
-          date: new Date(session.paymentDate),
+          date: new Date(session.sessionDate),
           type: "podcast",
           status: session.paymentStatus || "pending",
         });
