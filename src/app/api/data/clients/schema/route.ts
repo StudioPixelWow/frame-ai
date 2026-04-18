@@ -1,12 +1,13 @@
 /**
- * GET /api/data/clients/schema — One-shot migration: ensure all extra columns
- * exist on public.clients, then reload the PostgREST schema cache.
+ * GET /api/data/clients/schema
+ *
+ * One-shot migration: ensure all extra columns exist on public.clients,
+ * then reload the PostgREST schema cache.
  *
  * Safe to call repeatedly (uses ADD COLUMN IF NOT EXISTS).
  * DELETE THIS FILE after migration is confirmed.
  */
 
-import { NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 
 const COLUMNS_TO_ENSURE = [
@@ -20,6 +21,8 @@ const COLUMNS_TO_ENSURE = [
   'key_marketing_messages',
   'logo_url',
 ];
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const sb = getSupabase();
@@ -55,7 +58,7 @@ export async function GET() {
     const { error } = await sb.rpc('exec_sql', { query: ddl });
     if (error) {
       errors.push(`${col}: ${error.message}`);
-      log.push(`ADD COLUMN ${col}: FAILED — ${error.message}`);
+      log.push(`ADD COLUMN ${col}: FAILED - ${error.message}`);
     } else {
       log.push(`ADD COLUMN ${col}: OK`);
     }
@@ -88,13 +91,13 @@ export async function GET() {
     query: "NOTIFY pgrst, 'reload schema';",
   });
   if (notifyErr) {
-    log.push(`Schema cache reload: FAILED — ${notifyErr.message}`);
+    log.push(`Schema cache reload: FAILED - ${notifyErr.message}`);
     errors.push(`NOTIFY: ${notifyErr.message}`);
   } else {
     log.push('Schema cache reload: NOTIFY pgrst sent');
   }
 
-  // Step 5: Verify — re-probe after migration
+  // Step 5: Verify - re-probe after migration
   const { data: verify } = await sb
     .from('clients')
     .select('*')
@@ -105,12 +108,12 @@ export async function GET() {
 
   const stillMissing = COLUMNS_TO_ENSURE.filter((c) => !finalCols.includes(c));
   if (stillMissing.length > 0) {
-    log.push(`⚠️ Still missing from schema cache: ${stillMissing.join(', ')} — may need a few seconds for cache reload`);
+    log.push(`Still missing from schema cache: ${stillMissing.join(', ')} - may need a few seconds for cache reload`);
   } else {
-    log.push('✅ All 9 columns confirmed in schema cache');
+    log.push('All 9 columns confirmed in schema cache');
   }
 
-  return NextResponse.json({
+  return Response.json({
     success: errors.length === 0,
     alreadyExisted: alreadyExist,
     created: needCreation,
