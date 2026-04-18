@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { clientGanttItems } from '@/lib/db';
-import { clientResearch } from '@/lib/db/collections';
+// clientResearch removed — Supabase is the single source of truth
 import { ensureSeeded } from '@/lib/db/seed';
 import { getSupabase } from '@/lib/db/store';
 import { generateWithAI, getClientKnowledgeContext } from '@/lib/ai/openai-client';
@@ -125,12 +125,7 @@ export async function POST(
         console.log(`[sync-ideas-to-gantt] Research loaded from Supabase for ${id}`);
       }
     } catch (err) {
-      console.warn('[sync-ideas-to-gantt] Supabase research load failed, trying JsonStore:', err);
-    }
-    if (!latestResearch) {
-      const researchRecords = clientResearch.query((r: ClientResearch) => r.clientId === id);
-      latestResearch = researchRecords.length > 0 ? researchRecords[researchRecords.length - 1] : null;
-      if (latestResearch) console.log(`[sync-ideas-to-gantt] Research loaded from JsonStore for ${id}`);
+      console.error('[sync-ideas-to-gantt] Supabase research load failed:', err);
     }
     if (!latestResearch) {
       console.warn(`[sync-ideas-to-gantt] No research found for ${id} — gantt will use limited context`);

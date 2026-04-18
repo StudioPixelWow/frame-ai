@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { creativeDNA, clients } from '@/lib/db/collections';
+import { creativeDNA } from '@/lib/db/collections';
 import { getApiKeys } from '@/lib/db/api-keys';
 import type { CreativeDNA as CreativeDNAType } from '@/lib/db/schema';
 

@@ -5,12 +5,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { clients, clientGanttItems } from '@/lib/db';
-import { creativeDNA as creativeDNAStore, clientResearch } from '@/lib/db/collections';
+import { clientGanttItems } from '@/lib/db';
+import { creativeDNA as creativeDNAStore } from '@/lib/db/collections';
 import { ensureSeeded } from '@/lib/db/seed';
 import { getSupabase } from '@/lib/db/store';
 import { getRelevantHolidays, getHolidaysForMonth } from '@/lib/israeli-holidays';
 import { generateWithAI, getClientKnowledgeContext } from '@/lib/ai/openai-client';
+import { getClientById } from '@/lib/db/client-helpers';
 import type { ClientGanttItem, GanttItemType, ContentFormat, ClientResearch } from '@/lib/db';
 
 interface GenerateGanttRequest {
@@ -866,7 +867,7 @@ export async function POST(
     }
 
     // Load and validate client
-    const client = clients.getById(id);
+    const client = await getClientById(id);
     if (!client) {
       return NextResponse.json(
         { error: 'Client not found', field: 'clientId' },
@@ -949,7 +950,7 @@ export async function POST(
 
     // ============================================================
     // STEP 1: LOAD SAVED CLIENT RESEARCH — PRIMARY SOURCE OF TRUTH
-    // Try Supabase first (persistent), fallback to JsonStore
+    // Load from Supabase (single source of truth)
     // ============================================================
     let latestResearch: ClientResearch | null = null;
     try {
@@ -966,12 +967,7 @@ export async function POST(
         console.log(`[Gantt] Research loaded from Supabase for ${id}`);
       }
     } catch (err) {
-      console.warn('[Gantt] Supabase research load failed, trying JsonStore:', err);
-    }
-    if (!latestResearch) {
-      const researchRecords = clientResearch.query((r: ClientResearch) => r.clientId === id);
-      latestResearch = researchRecords.length > 0 ? researchRecords[researchRecords.length - 1] : null;
-      if (latestResearch) console.log(`[Gantt] Research loaded from JsonStore for ${id}`);
+      console.error('[Gantt] Supabase research load failed:', err);
     }
     const hasResearch = !!(latestResearch && latestResearch.status === 'complete');
 

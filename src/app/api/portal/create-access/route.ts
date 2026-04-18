@@ -7,8 +7,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { portalUsers, clients } from '@/lib/db';
+import { portalUsers } from '@/lib/db';
 import { ensureSeeded } from '@/lib/db/seed';
+import { getClientById, updateClientById } from '@/lib/db/client-helpers';
 
 export async function POST(req: NextRequest) {
   ensureSeeded();
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if client exists
-    const client = clients.getById(clientId);
+    const client = await getClientById(clientId);
     if (!client) {
       return NextResponse.json(
         { error: 'Client not found' },
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Update client
-    clients.update(clientId, {
+    await updateClientById(clientId, {
       portalEnabled: true,
       portalUserId: newPortalUser.id,
     });

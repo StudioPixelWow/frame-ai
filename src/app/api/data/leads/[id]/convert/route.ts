@@ -8,7 +8,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { leads, clients, businessProjects } from '@/lib/db';
+import { leads } from '@/lib/db';
+import { getSupabase } from '@/lib/db/store';
 import { ensureSeeded } from '@/lib/db/seed';
 
 type ConvertToType = 'marketing_client' | 'podcast_client' | 'branding_project' | 'website_project' | 'hosting_client';
@@ -43,74 +44,87 @@ export async function POST(
     }
 
     const now = new Date().toISOString();
-    let createdEntity: any;
+    const sb = getSupabase();
+    let createdEntity: Record<string, unknown>;
     let entityType: 'client' | 'project';
 
     if (convertTo === 'marketing_client' || convertTo === 'podcast_client' || convertTo === 'hosting_client') {
-      // Create a Client
+      // Create a Client — write directly to Supabase (single source of truth)
       const clientTypeMap = {
         'marketing_client': 'marketing',
         'podcast_client': 'podcast',
         'hosting_client': 'hosting',
       } as const;
       const clientType = clientTypeMap[convertTo];
-      createdEntity = clients.create({
-        name: lead.fullName,
-        company: lead.company,
-        contactPerson: lead.fullName,
-        email: lead.email,
-        phone: lead.phone,
-        notes: lead.notes,
-        businessField: '',
+      const clientId = `cli_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+
+      const insertRow = {
+        id: clientId,
+        name: lead.fullName || '',
+        company: lead.company || '',
+        contact_person: lead.fullName || '',
+        email: lead.email || '',
+        phone: lead.phone || '',
+        notes: lead.notes || '',
+        business_field: '',
+        client_type: clientType,
         status: 'active',
-        retainerAmount: 0,
-        retainerDay: 1,
+        retainer_amount: 0,
+        retainer_day: 1,
         color: '#8B5CF6',
-        convertedFromLead: lead.id,
-        createdAt: now,
-        updatedAt: now,
-        // Required Client fields with sensible defaults
-        logoUrl: '',
-        clientType: clientType,
-        marketingGoals: '',
-        keyMarketingMessages: '',
-        assignedManagerId: null,
-        websiteUrl: '',
-        facebookPageUrl: '',
-        instagramProfileUrl: '',
-        tiktokProfileUrl: '',
-        paymentStatus: 'none',
-        nextPaymentDate: null,
-        portalEnabled: false,
-        portalUserId: null,
-        lastPortalLoginAt: null,
-        facebookPageId: '',
-        facebookPageName: '',
-        instagramAccountId: '',
-        instagramUsername: '',
-        tiktokAccountId: '',
-        tiktokUsername: '',
-        monthlyGanttStatus: 'none',
-        annualGanttStatus: 'none',
-      });
+        converted_from_lead: lead.id,
+        created_at: now,
+        updated_at: now,
+      };
+
+      const { data: inserted, error: insertErr } = await sb
+        .from('clients')
+        .insert(insertRow)
+        .select('*')
+        .single();
+
+      if (insertErr) {
+        console.error('[convert] Failed to create client in Supabase:', insertErr.message);
+        return NextResponse.json({ error: `Failed to create client: ${insertErr.message}` }, { status: 500 });
+      }
+
+      createdEntity = inserted as Record<string, unknown>;
       entityType = 'client';
+      console.log(`[convert] Created client ${clientId} in Supabase from lead ${id}`);
     } else {
-      // Create a BusinessProject
+      // Create a BusinessProject — write directly to Supabase
       const projectType = convertTo === 'branding_project' ? 'branding' : 'website';
-      createdEntity = businessProjects.create({
-        projectName: `${lead.fullName} - ${projectType} Project`,
-        clientId: '', // Will be linked later
-        projectType: projectType,
-        description: lead.notes,
-        agreementSigned: false,
-        projectStatus: 'not_started',
-        startDate: null,
-        endDate: null,
-        assignedManagerId: null,
-        createdAt: now,
-        updatedAt: now,
-      });
+      const projectId = `bpr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+
+      const insertRow = {
+        id: projectId,
+        project_name: `${lead.fullName} - ${projectType} Project`,
+        client_id: '',
+        project_type: projectType,
+        description: lead.notes || '',
+        agreement_signed: false,
+        project_status: 'not_started',
+        start_date: null,
+        end_date: null,
+        assigned_manager_id: null,
+        created_at: now,
+        updated_at: now,
+      };
+
+      const { data: inserted, error: insertErr } = await sb
+        .from('business_projects')
+        .insert(insertRow)
+        .select('*')
+        .single();
+
+      if (insertErr) {
+        console.error('[convert] Failed to create business project in Supabase:', insertErr.message);
+        return NextResponse.json({ error: `Failed to create project: ${insertErr.message}` }, { status: 500 });
+      }
+
+      createdEntity = inserted as Record<string, unknown>;
       entityType = 'project';
+      console.log(`[convert] Created business project ${projectId} in Supabase from lead ${id}`);
     }
 
     // Update the lead to mark it as converted

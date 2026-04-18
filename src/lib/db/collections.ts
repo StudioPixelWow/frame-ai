@@ -1,6 +1,5 @@
 import { JsonStore, SupabaseCrud } from './store';
 import type {
-  Client,
   Project,
   Task,
   Payment,
@@ -38,7 +37,8 @@ import type {
   ProjectNotification,
 } from './schema';
 
-export const clients = new JsonStore<Client>('clients', 'cli');
+// clients — removed from JsonStore. All client reads/writes go through Supabase
+// directly (via route handlers in /api/data/clients/ and via getClientById/updateClientById helpers).
 export const projects = new JsonStore<Project>('projects', 'prj');
 export const tasks = new JsonStore<Task>('tasks', 'tsk');
 export const payments = new SupabaseCrud<Payment>('app_payments', 'pay');

@@ -4,7 +4,8 @@
  */
 
 import { NextResponse } from 'next/server';
-import { clients, clientGanttItems } from '@/lib/db';
+import { clientGanttItems } from '@/lib/db';
+import { getClientById } from '@/lib/db/client-helpers';
 import type { ClientGanttItem } from '@/lib/db';
 
 interface GenerateAnnualGanttRequest {
@@ -139,7 +140,7 @@ export async function POST(
       );
     }
 
-    const client = clients.getById(id);
+    const client = await getClientById(id);
     if (!client) {
       return NextResponse.json(
         { error: 'Client not found' },

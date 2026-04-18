@@ -5,9 +5,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { clientGanttItems, employeeTasks, clients } from '@/lib/db';
+import { clientGanttItems, employeeTasks } from '@/lib/db';
 import type { EmployeeTask, ClientGanttItem } from '@/lib/db/schema';
 import { ensureSeeded } from '@/lib/db/seed';
+import { getClientById } from '@/lib/db/client-helpers';
 
 export async function GET(
   _req: NextRequest,
@@ -69,7 +70,7 @@ export async function PUT(
         // Resolve client name
         let clientName = '';
         if (gantt.clientId) {
-          const client = clients.getById(gantt.clientId);
+          const client = await getClientById(gantt.clientId);
           clientName = (client as any)?.name || '';
         }
 

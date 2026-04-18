@@ -3,7 +3,9 @@
  * Uses the OpenAI Chat Completions API
  */
 
-import { aiSettings, clientKnowledge, clientResearch } from '@/lib/db/collections';
+import { aiSettings, clientKnowledge } from '@/lib/db/collections';
+import { getSupabase } from '@/lib/db/store';
+import type { ClientResearch } from '@/lib/db/schema';
 import { ensureSeeded } from '@/lib/db/seed';
 
 export interface AIGenerationResult {
@@ -47,9 +49,23 @@ export async function getClientKnowledgeContext(clientId: string): Promise<strin
 }
 
 export async function getClientResearchContext(clientId: string): Promise<string> {
-  await ensureSeeded();
-  const research = clientResearch.query(r => r.clientId === clientId);
-  const latest = research.length > 0 ? research[research.length - 1] : null;
+  // Load from Supabase (single source of truth)
+  let latest: ClientResearch | null = null;
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from('client_research')
+      .select('client_brain')
+      .eq('client_id', clientId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!error && data && (data as Record<string, unknown>).client_brain) {
+      latest = JSON.parse((data as Record<string, unknown>).client_brain as string) as ClientResearch;
+    }
+  } catch (err) {
+    console.error('[openai-client] Failed to load research from Supabase:', err);
+  }
   if (!latest || latest.status !== 'complete') return '';
 
   const parts: string[] = [];

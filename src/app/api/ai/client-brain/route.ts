@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { clientKnowledge, clients } from '@/lib/db/collections';
+import { clientKnowledge } from '@/lib/db/collections';
 import { getApiKeys } from '@/lib/db/api-keys';
 import type { ClientKnowledge as ClientKnowledgeType } from '@/lib/db/schema';
 

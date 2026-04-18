@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { clients, clientGanttItems } from "@/lib/db";
+import { clientGanttItems } from "@/lib/db";
 import { ensureSeeded } from "@/lib/db/seed";
+import { getClientById } from "@/lib/db/client-helpers";
 
 const HEB_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 
@@ -19,7 +20,7 @@ const STATUS_MAP: Record<string, string> = {
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   ensureSeeded();
   const { id } = await context.params;
-  const client = clients.getById(id);
+  const client = await getClientById(id);
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 
   const now = new Date();

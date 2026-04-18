@@ -5,11 +5,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { clients } from '@/lib/db';
-import { clientResearch } from '@/lib/db/collections';
 import { ensureSeeded } from '@/lib/db/seed';
 import { getSupabase } from '@/lib/db/store';
 import { generateWithAI } from '@/lib/ai/openai-client';
+import { getClientById } from '@/lib/db/client-helpers';
 import type { ClientResearch } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
@@ -23,35 +22,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing clientId' }, { status: 400 });
     }
 
-    const client = clients.getById(clientId);
+    const client = await getClientById(clientId);
     if (!client) {
       return NextResponse.json({ error: 'Client not found' }, { status: 400 });
     }
 
-    // Try Supabase first (persistent), fallback to JsonStore
+    // Load research from Supabase (single source of truth)
     let research: ClientResearch | null = null;
-    try {
-      const sb = getSupabase();
-      const { data: sbRow } = await sb
-        .from('client_research')
-        .select('client_brain')
-        .eq('client_id', clientId)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (sbRow && (sbRow as Record<string, unknown>).client_brain) {
-        research = JSON.parse((sbRow as Record<string, unknown>).client_brain as string) as ClientResearch;
-        console.log(`[GenerateIdeas] Research loaded from Supabase for ${clientId}`);
-      }
-    } catch (err) {
-      console.warn('[GenerateIdeas] Supabase load failed, trying JsonStore:', err);
+    const sb = getSupabase();
+    const { data: sbRow, error: sbError } = await sb
+      .from('client_research')
+      .select('client_brain')
+      .eq('client_id', clientId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (sbError) {
+      console.error('[GenerateIdeas] Supabase load failed:', sbError.message);
+      return NextResponse.json({ error: 'Failed to load research from database' }, { status: 500 });
     }
-    if (!research) {
-      const existing = clientResearch.query((r: ClientResearch) => r.clientId === clientId);
-      if (existing.length > 0) {
-        research = existing[existing.length - 1];
-        console.log(`[GenerateIdeas] Research loaded from JsonStore for ${clientId}`);
-      }
+    if (sbRow && (sbRow as Record<string, unknown>).client_brain) {
+      research = JSON.parse((sbRow as Record<string, unknown>).client_brain as string) as ClientResearch;
+      console.log(`[GenerateIdeas] Research loaded from Supabase for ${clientId}`);
     }
     if (!research) {
       return NextResponse.json({ error: 'No research found — run full research first' }, { status: 404 });
@@ -236,15 +229,9 @@ ${client.keyMarketingMessages || '(לא הוגדר)'}
       updatedAt: new Date().toISOString(),
     };
 
-    // Save to JsonStore
-    try {
-      clientResearch.update(research.id, updatedResearch);
-    } catch { /* JsonStore may not have this record */ }
-
-    // Save to Supabase (persistent)
+    // Save to Supabase (single source of truth)
     let sbSaved = false;
     try {
-      const sb = getSupabase();
       const { error } = await sb
         .from('client_research')
         .upsert({
@@ -267,13 +254,20 @@ ${client.keyMarketingMessages || '(לא הוגדר)'}
       console.error('[GenerateIdeas] Supabase save exception:', err);
     }
 
-    console.log(`[GenerateIdeas] ✅ Saved ${ideas.length} ideas to research ${research.id}, supabase=${sbSaved}`);
+    if (!sbSaved) {
+      console.error(`[GenerateIdeas] ⚠️ Supabase persistence FAILED for research ${research.id}`);
+      return NextResponse.json({
+        error: 'Ideas generated but failed to persist to database',
+      }, { status: 500 });
+    }
+
+    console.log(`[GenerateIdeas] ✅ Saved ${ideas.length} ideas to research ${research.id}`);
 
     return NextResponse.json({
       success: true,
       data: updatedResearch,
       ideasCount: ideas.length,
-      persisted: sbSaved,
+      persisted: true,
     });
 
   } catch (error) {

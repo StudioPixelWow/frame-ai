@@ -9,7 +9,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  clientResearch,
   clientGanttItems,
   creativeDNA,
 } from '@/lib/db/collections';
@@ -425,23 +424,14 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 1. Try Supabase first (persistent storage)
-    const supabaseData = await loadResearchFromSupabase(clientId);
-    if (supabaseData) {
+    // Load from Supabase (single source of truth)
+    const research = await loadResearchFromSupabase(clientId);
+    if (research) {
       console.log(`[client-research] GET: serving from Supabase for ${clientId}`);
-      return NextResponse.json({ success: true, data: supabaseData });
+      return NextResponse.json({ success: true, data: research });
     }
 
-    // 2. Fallback to JsonStore (ephemeral)
-    const existing = clientResearch.query((r) => r.clientId === clientId);
-    if (existing.length > 0) {
-      console.log(`[client-research] GET: serving from JsonStore for ${clientId} (not in Supabase)`);
-      // Migrate to Supabase in background
-      saveResearchToSupabase(existing[0]).catch(() => {});
-      return NextResponse.json({ success: true, data: existing[0] });
-    }
-
-    // 3. No data anywhere
+    // No data — return empty state
     console.log(`[client-research] GET: no research found for ${clientId}`);
     return NextResponse.json({ data: null }, { status: 200 });
   } catch (error) {
@@ -479,9 +469,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
 
-    // Check for existing research (to preserve notes and create vs update)
-    const existingRecords = clientResearch.query((r) => r.clientId === clientId);
-    const existingResearch = existingRecords.length > 0 ? existingRecords[0] : null;
+    // Check for existing research in Supabase (to preserve notes and reuse ID)
+    const existingResearch = await loadResearchFromSupabase(clientId);
 
     // Resolve strategic notes: incoming notes override, else use existing
     const strategicNotes = incomingNotes || existingResearch?.strategicNotes || '';
@@ -511,11 +500,8 @@ export async function POST(req: NextRequest) {
       updatedAt: now,
     };
 
-    if (existingResearch) {
-      clientResearch.update(researchId, initialResearch);
-    } else {
-      clientResearch.create(initialResearch);
-    }
+    // Save initial "analyzing" state to Supabase
+    await saveResearchToSupabase(initialResearch);
 
     // Gather context
     const knowledgeContext = getClientKnowledgeContext(clientId);
@@ -558,7 +544,7 @@ export async function POST(req: NextRequest) {
 
         // If missing API key, no point retrying
         if (aiResult.errorType === 'missing_api_key') {
-          clientResearch.update(researchId, {
+          await saveResearchToSupabase({
             ...initialResearch,
             status: 'failed',
             error: 'חסר מפתח OpenAI API. הגדר בהגדרות → AI.',
@@ -638,15 +624,17 @@ export async function POST(req: NextRequest) {
         updatedAt: new Date().toISOString(),
       };
 
-      clientResearch.update(researchId, finalResearch);
-
-      // ── Persist to Supabase (the durable store) ──
+      // ── Persist to Supabase (single source of truth) ──
       const sbSaved = await saveResearchToSupabase(finalResearch);
       if (!sbSaved) {
-        console.error(`[client-research] ⚠️ Supabase persistence FAILED for ${client.name} — data is in JsonStore only`);
+        console.error(`[client-research] ⚠️ Supabase persistence FAILED for ${client.name}`);
+        return NextResponse.json({
+          success: false,
+          error: 'Research generated but failed to persist to database',
+        }, { status: 500 });
       }
 
-      console.log(`✅ Research saved for ${client.name} attempt ${attempt + 1}. ideas=${finalResearch.contentIdeas25?.length ?? 0}, supabase=${sbSaved}`);
+      console.log(`✅ Research saved for ${client.name} attempt ${attempt + 1}. ideas=${finalResearch.contentIdeas25?.length ?? 0}`);
 
       return NextResponse.json({
         success: true,
@@ -659,7 +647,7 @@ export async function POST(req: NextRequest) {
     // All attempts exhausted
     console.error(`❌ All ${MAX_ATTEMPTS} attempts failed for ${client.name}. Last error: ${lastError}`);
 
-    clientResearch.update(researchId, {
+    await saveResearchToSupabase({
       ...initialResearch,
       status: 'failed',
       error: `נכשל לאחר ${MAX_ATTEMPTS} ניסיונות: ${lastError}. שדות חסרים: ${lastMissing.join(', ')}`,
@@ -699,13 +687,8 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Missing clientId', missing: ['clientId'] }, { status: 400 });
     }
 
-    // Try JsonStore first, fallback to Supabase
-    const jsonStoreRecords = clientResearch.query((r) => r.clientId === clientId);
-    let researchToSave: ClientResearch | null = jsonStoreRecords.length > 0 ? jsonStoreRecords[0] : null;
-
-    if (!researchToSave) {
-      researchToSave = await loadResearchFromSupabase(clientId);
-    }
+    // Load from Supabase (single source of truth)
+    const researchToSave = await loadResearchFromSupabase(clientId);
 
     if (!researchToSave) {
       return NextResponse.json({ error: 'No research found to save' }, { status: 404 });
@@ -714,18 +697,19 @@ export async function PUT(req: NextRequest) {
     const now = new Date().toISOString();
     const updatedResearch = { ...researchToSave, savedAt: now, updatedAt: now };
 
-    // Save to both stores
-    if (jsonStoreRecords.length > 0) {
-      clientResearch.update(researchToSave.id, updatedResearch);
-    }
     const sbSaved = await saveResearchToSupabase(updatedResearch);
 
-    console.log(`[Research] Explicit save for client ${clientId} at ${now}, supabase=${sbSaved}`);
+    if (!sbSaved) {
+      console.error(`[Research] Explicit save FAILED for client ${clientId}`);
+      return NextResponse.json({ error: 'Failed to persist research to database' }, { status: 500 });
+    }
+
+    console.log(`[Research] Explicit save for client ${clientId} at ${now}`);
 
     return NextResponse.json({
       success: true,
       data: updatedResearch,
-      persisted: sbSaved,
+      persisted: true,
       message: 'Research saved successfully',
     });
   } catch (error) {
@@ -759,13 +743,8 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'strategicNotes must be a string' }, { status: 400 });
     }
 
-    // Try JsonStore first, then Supabase
-    const jsonStoreRecords = clientResearch.query((r) => r.clientId === clientId);
-    let existingRecord: ClientResearch | null = jsonStoreRecords.length > 0 ? jsonStoreRecords[0] : null;
-
-    if (!existingRecord) {
-      existingRecord = await loadResearchFromSupabase(clientId);
-    }
+    // Load from Supabase (single source of truth)
+    const existingRecord = await loadResearchFromSupabase(clientId);
 
     if (!existingRecord) {
       // Create a minimal record to hold the notes
@@ -790,8 +769,10 @@ export async function PATCH(req: NextRequest) {
         createdAt: now,
         updatedAt: now,
       };
-      clientResearch.create(record);
-      await saveResearchToSupabase(record);
+      const saved = await saveResearchToSupabase(record);
+      if (!saved) {
+        return NextResponse.json({ error: 'Failed to save notes to database' }, { status: 500 });
+      }
       return NextResponse.json({ success: true, data: record });
     }
 
@@ -801,9 +782,6 @@ export async function PATCH(req: NextRequest) {
       updatedAt: new Date().toISOString(),
     };
 
-    if (jsonStoreRecords.length > 0) {
-      clientResearch.update(existingRecord.id, updatedRecord);
-    }
     await saveResearchToSupabase(updatedRecord);
 
     return NextResponse.json({ success: true, data: updatedRecord });
