@@ -43,14 +43,20 @@ function rowToTask(r: Row) {
     assigneeId: assignee,
     employeeId: assignee,                      // legacy alias
     assignedEmployeeId: assignee,              // legacy alias
+    // Array form for frontend compatibility (Task interface uses assigneeIds: string[])
+    assigneeIds: assignee ? [assignee] : [],
     projectId: project,                        // FK → public.projects
     businessProjectId: businessProject,        // FK → public.business_projects
     clientId: client,
+    clientName: (r.client_name as string) ?? '',
     milestoneId: milestone,
     status: (r.status as string) ?? 'pending',
     description: (r.description as string) ?? '',
     priority: (r.priority as string) ?? 'medium',
     dueDate: (r.due_date as string) ?? null,
+    tags: [] as string[],                      // no DB column yet — return empty
+    files: [] as string[],                     // no DB column yet — return empty
+    notes: (r.notes as string) ?? '',
     createdAt: (r.created_at as string) ?? '',
     updatedAt: (r.updated_at as string) ?? '',
   };
@@ -75,6 +81,9 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
   const priority = nullIfEmpty(body.priority);
   const dueDate = nullIfEmpty(body.dueDate);
 
+  const notes = (body.notes ?? '') as string;
+  const clientName = (body.clientName ?? '') as string;
+
   const row: Record<string, unknown> = {
     id,
     title,
@@ -82,11 +91,13 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
     milestone_id: milestone,
     status,
     description,
+    notes,
     created_at: now,
     updated_at: now,
   };
   // Only set nullable FK/text columns when provided — avoids FK violations or unknown column errors
   if (clientId) row.client_id = clientId;
+  if (clientName) row.client_name = clientName;
   if (businessProject) row.business_project_id = businessProject;
   if (project) row.project_id = project;
   if (priority) row.priority = priority;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useTasks, useEmployees, useClients, useEmployeeTasks } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
@@ -84,15 +84,35 @@ export default function TasksPage() {
     setModalOpen(true);
   };
 
+  // Helper: derive client name from clients array (API may not return clientName)
+  const getClientName = (task: Task): string => {
+    if (task.clientName) return task.clientName;
+    if (task.clientId) {
+      const c = clients.find(cl => cl.id === task.clientId);
+      return c?.name || '';
+    }
+    return '';
+  };
+
   const openEdit = (task: Task) => {
     setEditingTask(task);
+    // Defensive: task.tags / task.assigneeIds may be undefined if API doesn't return them
+    const tags = Array.isArray(task.tags) ? task.tags : [];
+    const assigneeIds = Array.isArray(task.assigneeIds)
+      ? task.assigneeIds
+      : ((task as any).assigneeId ? [(task as any).assigneeId] : []);
     setForm({
-      title: task.title, description: task.description, status: task.status,
-      priority: task.priority, clientId: task.clientId || "",
-      clientName: task.clientName, dueDate: task.dueDate || "",
-      tags: task.tags.join(", "), assigneeIds: task.assigneeIds,
-      files: (task as any).files || [],
-      notes: (task as any).notes || "",
+      title: task.title || '',
+      description: task.description || '',
+      status: task.status,
+      priority: task.priority || 'medium',
+      clientId: task.clientId || '',
+      clientName: getClientName(task),
+      dueDate: task.dueDate || '',
+      tags: tags.join(', '),
+      assigneeIds,
+      files: Array.isArray((task as any).files) ? (task as any).files : [],
+      notes: (task as any).notes || '',
     });
     setModalOpen(true);
   };
@@ -104,7 +124,7 @@ export default function TasksPage() {
       ...form,
       clientName: client?.name || form.clientName,
       dueDate: form.dueDate || null,
-      tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
+      tags: form.tags ? form.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
       files: form.files,
       notes: form.notes,
     };
@@ -133,6 +153,7 @@ export default function TasksPage() {
       await update(editingTask.id, { status: "under_review" });
       toast("המשימה נשלחה לבדיקה", "success");
       setEditingTask({ ...editingTask, status: "under_review" });
+      setForm(prev => ({ ...prev, status: "under_review" }));
     } catch {
       toast("שגיאה בשליחה לבדיקה", "error");
     }
@@ -147,6 +168,7 @@ export default function TasksPage() {
       await update(editingTask.id, { status: "returned", notes: reviewNotes });
       toast("המשימה הוחזרה לעובד", "success");
       setEditingTask({ ...editingTask, status: "returned", notes: reviewNotes } as any);
+      setForm(prev => ({ ...prev, status: "returned", notes: reviewNotes }));
       setShowReviewNotes(false);
       setReviewNotes("");
     } catch {
@@ -160,6 +182,7 @@ export default function TasksPage() {
       await update(editingTask.id, { status: "approved" });
       toast("המשימה אושרה", "success");
       setEditingTask({ ...editingTask, status: "approved" });
+      setForm(prev => ({ ...prev, status: "approved" }));
     } catch {
       toast("שגיאה באישור", "error");
     }
@@ -223,9 +246,11 @@ export default function TasksPage() {
         }
       }
 
-      // Employee filter
+      // Employee filter — handle both assigneeIds (array) and assigneeId (string)
       if (filterEmployee) {
-        if (!t.assigneeIds || !t.assigneeIds.includes(filterEmployee)) {
+        const ids = Array.isArray(t.assigneeIds) ? t.assigneeIds : [];
+        const singleId = t.assigneeId || t.assignedEmployeeId || '';
+        if (!ids.includes(filterEmployee) && singleId !== filterEmployee) {
           return false;
         }
       }
@@ -262,6 +287,20 @@ export default function TasksPage() {
     });
   };
 
+  // Build client name lookup map for rendering
+  const clientNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    clients.forEach(c => map.set(c.id, c.name));
+    return map;
+  }, [clients]);
+
+  // Helper to resolve clientName (may not come from API)
+  const resolveClientName = (task: any): string => {
+    if (task.clientName) return task.clientName;
+    if (task.clientId) return clientNameMap.get(task.clientId) || '';
+    return '';
+  };
+
   const filtered = applyFilters(tasks);
   const filteredEmployeeTasks = applyFilters(employeeTasks || []);
 
@@ -279,9 +318,12 @@ export default function TasksPage() {
   };
 
   const getEmployeeTaskCount = (employeeId: string) => {
-    const employeeTasks = filtered.filter((t: any) => t.assigneeIds && t.assigneeIds.includes(employeeId));
-    const employeeTasksFromOther = filteredEmployeeTasks.filter((t: any) => t.assignedEmployeeId === employeeId);
-    return employeeTasks.length + employeeTasksFromOther.length;
+    const empTasks = filtered.filter((t: any) => {
+      const ids = Array.isArray(t.assigneeIds) ? t.assigneeIds : [];
+      return ids.includes(employeeId) || t.assigneeId === employeeId;
+    });
+    const empTasksFromOther = filteredEmployeeTasks.filter((t: any) => t.assignedEmployeeId === employeeId);
+    return empTasks.length + empTasksFromOther.length;
   };
 
   return (
@@ -471,7 +513,7 @@ export default function TasksPage() {
                     ⚠️ {task.title}
                   </div>
                   <div style={{ fontSize: "0.75rem", display: "flex", gap: "0.5rem", alignItems: "center", color: "var(--foreground-muted)" }}>
-                    {task.clientName && <span>{task.clientName}</span>}
+                    {resolveClientName(task) && <span>{resolveClientName(task)}</span>}
                     <span style={{ display: "inline-block", padding: "0.125rem 0.375rem", background: pri?.color || "#6b7280", borderRadius: "2px", color: "#fff", fontSize: "0.65rem" }}>
                       {PRIORITIES.find(p => p.id === task.priority)?.label}
                     </span>
@@ -503,7 +545,7 @@ export default function TasksPage() {
                     {task.title}
                   </div>
                   <div style={{ fontSize: "0.75rem", display: "flex", gap: "0.5rem", alignItems: "center", color: "var(--foreground-muted)" }}>
-                    {task.clientName && <span>{task.clientName}</span>}
+                    {resolveClientName(task) && <span>{resolveClientName(task)}</span>}
                     <span style={{ display: "inline-block", padding: "0.125rem 0.375rem", background: pri?.color || "#6b7280", borderRadius: "2px", color: "#fff", fontSize: "0.65rem" }}>
                       {PRIORITIES.find(p => p.id === task.priority)?.label}
                     </span>
@@ -543,22 +585,39 @@ export default function TasksPage() {
                       {colTasks.map((task) => {
                         const pri = PRIORITIES.find((p) => p.id === task.priority);
                         const isUploading = uploadingTaskId === task.id;
+                        const taskClientName = resolveClientName(task);
+                        const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed" && task.status !== "approved";
+                        const assigneeNames = (Array.isArray(task.assigneeIds) ? task.assigneeIds : [])
+                          .map(id => teamEmployees.find(e => e.id === id)?.name)
+                          .filter(Boolean);
                         return (
                           <div key={task.id} style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                            <div className="task-card" onClick={() => openEdit(task)}>
-                              <div className="task-card-title">{task.title}</div>
+                            <div
+                              className="task-card"
+                              onClick={() => openEdit(task)}
+                              style={isOverdue ? { borderRight: '3px solid #f87171' } : undefined}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.2rem" }}>
+                                <span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: pri?.color || "#6b7280", flexShrink: 0 }} />
+                                <span className="task-card-title" style={{ margin: 0, flex: 1 }}>{task.title}</span>
+                              </div>
                               <div className="task-card-meta">
-                                <span className="task-priority-dot" style={{ background: pri?.color || "#6b7280" }} />
-                                {task.clientName && <span>{task.clientName}</span>}
+                                {taskClientName && <span>{taskClientName}</span>}
                                 {task.dueDate && (
-                                  <span style={{ color: new Date(task.dueDate) < new Date() && task.status !== "completed" ? "#f87171" : "inherit" }}>
+                                  <span style={{ color: isOverdue ? "#f87171" : "inherit", fontWeight: isOverdue ? 600 : 400 }}>
+                                    {isOverdue ? '⚠ ' : ''}
                                     {new Date(task.dueDate).toLocaleDateString("he-IL", { day: "numeric", month: "short" })}
                                   </span>
                                 )}
                               </div>
-                              {(task.tags || []).length > 0 && (
+                              {assigneeNames.length > 0 && (
+                                <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)", marginTop: "0.2rem" }}>
+                                  👤 {assigneeNames.join(', ')}
+                                </div>
+                              )}
+                              {Array.isArray(task.tags) && task.tags.length > 0 && (
                                 <div style={{ display: "flex", gap: "0.25rem", flexWrap: "wrap", marginTop: "0.3rem" }}>
-                                  {(task.tags || []).slice(0, 3).map((tag: string) => (
+                                  {task.tags.slice(0, 3).map((tag: string) => (
                                     <span key={tag} className="task-tag">{tag}</span>
                                   ))}
                                 </div>
@@ -662,7 +721,7 @@ export default function TasksPage() {
 
               <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                 {/* Unassigned Tasks Section */}
-                {filtered.filter(t => !t.assigneeIds || t.assigneeIds.length === 0).length > 0 && (
+                {filtered.filter(t => (!Array.isArray(t.assigneeIds) || t.assigneeIds.length === 0) && !t.assigneeId).length > 0 && (
                   <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", overflow: "hidden" }}>
                     <div
                       onClick={() => toggleEmployeeExpand('unassigned')}
@@ -683,14 +742,14 @@ export default function TasksPage() {
                       <span>{expandedEmployees.has('unassigned') ? '▼' : '▶'}</span>
                       <span style={{ fontSize: "0.875rem" }}>👤 משימות ללא הקצאה</span>
                       <span style={{ marginLeft: "auto", fontSize: "0.75rem", background: "var(--accent)", color: "white", padding: "0.2rem 0.5rem", borderRadius: "2px" }}>
-                        {filtered.filter(t => !t.assigneeIds || t.assigneeIds.length === 0).length}
+                        {filtered.filter(t => (!Array.isArray(t.assigneeIds) || t.assigneeIds.length === 0) && !t.assigneeId).length}
                       </span>
                     </div>
                     {expandedEmployees.has('unassigned') && (
                       <div style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
                         {/* Status Groups */}
                         {["today_tasks", "in_progress", "under_review", "returned", "approved", "completed"].map((statusGroup) => {
-                          let statusTasks = filtered.filter(t => !t.assigneeIds || t.assigneeIds.length === 0);
+                          let statusTasks = filtered.filter(t => (!Array.isArray(t.assigneeIds) || t.assigneeIds.length === 0) && !t.assigneeId);
 
                           if (statusGroup === "today_tasks") {
                             statusTasks = statusTasks.filter(t => t.dueDate === today && t.status !== 'completed' && t.status !== 'approved');
@@ -730,9 +789,9 @@ export default function TasksPage() {
                                       <div style={{ fontSize: "0.8rem", fontWeight: 700, marginBottom: "0.25rem" }}>
                                         {task.title}
                                       </div>
-                                      {task.clientName && (
+                                      {resolveClientName(task) && (
                                         <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", marginBottom: "0.25rem" }}>
-                                          {task.clientName}
+                                          {resolveClientName(task)}
                                         </div>
                                       )}
                                       <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.7rem" }}>
@@ -757,7 +816,10 @@ export default function TasksPage() {
 
                 {/* Employee Sections */}
                 {teamEmployees.map((employee) => {
-                  const empTasks = filtered.filter((t: any) => t.assigneeIds && t.assigneeIds.includes(employee.id));
+                  const empTasks = filtered.filter((t: any) => {
+                    const ids = Array.isArray(t.assigneeIds) ? t.assigneeIds : [];
+                    return ids.includes(employee.id) || t.assigneeId === employee.id;
+                  });
                   const empTasksFromOther = filteredEmployeeTasks.filter((t: any) => t.assignedEmployeeId === employee.id);
                   const allEmpTasks = [...empTasks, ...empTasksFromOther];
 
@@ -836,7 +898,7 @@ export default function TasksPage() {
                                     const pri = PRIORITIES.find((p) => p.id === (task as any).priority);
                                     const taskDueDate = (task as any).dueDate;
                                     const taskTitle = (task as any).title;
-                                    const clientName = (task as any).clientName;
+                                    const clientName = resolveClientName(task as any);
                                     return (
                                       <div
                                         key={task.id}
@@ -889,7 +951,7 @@ export default function TasksPage() {
       )}
 
       {/* Task Modal */}
-      <Modal open={modalOpen} onClose={() => { setModalOpen(false); setReviewNotes(""); setShowReviewNotes(false); }} title={editingTask ? "עריכת משימה" : "משימה חדשה"} footer={
+      <Modal open={modalOpen} onClose={() => { setModalOpen(false); setReviewNotes(""); setShowReviewNotes(false); }} title={editingTask ? `עריכת משימה — ${COLUMNS.find(c => c.id === form.status)?.label || ''}` : "משימה חדשה"} footer={
         <div style={{ display: "flex", gap: "0.5rem", justifyContent: "space-between", flexWrap: "wrap" }}>
           <div>
             {editingTask && (
@@ -903,17 +965,12 @@ export default function TasksPage() {
             )}
           </div>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            {editingTask && (editingTask as any).status === "in_progress" && (
+            {editingTask && (form.status === "in_progress" || form.status === "new") && (
               <button className="mod-btn-primary" onClick={handleSendForReview} style={{ fontSize: "0.75rem" }}>
                 שלח לבדיקה
               </button>
             )}
-            {editingTask && (editingTask as any).status === "new" && (
-              <button className="mod-btn-primary" onClick={handleSendForReview} style={{ fontSize: "0.75rem" }}>
-                שלח לבדיקה
-              </button>
-            )}
-            {editingTask && (editingTask as any).status === "under_review" && !showReviewNotes && (
+            {editingTask && form.status === "under_review" && !showReviewNotes && (
               <>
                 <button
                   className="mod-btn-ghost"
@@ -931,7 +988,7 @@ export default function TasksPage() {
                 </button>
               </>
             )}
-            {editingTask && (editingTask as any).status === "returned" && (
+            {editingTask && form.status === "returned" && (
               <button
                 className="mod-btn-primary"
                 onClick={async () => {
@@ -940,6 +997,7 @@ export default function TasksPage() {
                     await update(editingTask.id, { status: "under_review" });
                     toast("המשימה נשלחה לבדיקה מחדש", "success");
                     setEditingTask({ ...editingTask, status: "under_review" });
+                    setForm(prev => ({ ...prev, status: "under_review" }));
                   } catch {
                     toast("שגיאה בשליחה לבדיקה", "error");
                   }

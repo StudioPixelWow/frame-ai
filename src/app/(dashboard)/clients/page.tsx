@@ -332,133 +332,131 @@ export default function ClientsPage() {
           </div>
         </div>
 
-        {/* Filters Bar */}
+        {/* Filters Bar — compact single row with sort integrated */}
         <div
           style={{
             display: "flex",
-            flexDirection: "column",
-            gap: "1rem",
-            padding: "1.25rem",
+            gap: "0.75rem",
+            flexWrap: "wrap",
+            alignItems: "center",
+            padding: "0.75rem 1rem",
             backgroundColor: "var(--surface-raised)",
             borderRadius: "0.5rem",
             border: "1px solid var(--border)",
           }}
         >
-          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
-            {/* Search */}
-            <div style={{ flex: "1 1 250px", minWidth: "200px" }}>
-              <input
-                className="mod-search"
-                type="text"
-                placeholder="🔍 חיפוש לקוח..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{ width: "100%" }}
-              />
-            </div>
-
-            {/* Client Type Filter */}
-            <div style={{ minWidth: "150px" }}>
-              <select
-                className="form-select"
-                value={filterClientType}
-                onChange={(e) => setFilterClientType(e.target.value)}
-                style={{ width: "100%" }}
-              >
-                <option value="all">כל סוגי הלקוחות</option>
-                <option value="marketing">פרסום ושיווק</option>
-                <option value="branding">מיתוג</option>
-                <option value="websites">בניית אתרים</option>
-                <option value="podcast">פודקאסט</option>
-                <option value="hosting">אחסון</option>
-              </select>
-            </div>
-
-            {/* Status Filter */}
-            <div style={{ minWidth: "140px" }}>
-              <select
-                className="form-select"
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                style={{ width: "100%" }}
-              >
-                <option value="all">כל הסטטוסים</option>
-                <option value="active">פעיל</option>
-                <option value="inactive">לא פעיל</option>
-                <option value="prospect">פוטנציאלי</option>
-              </select>
-            </div>
-
-            {/* Manager Filter */}
-            <div style={{ minWidth: "140px" }}>
-              <select
-                className="form-select"
-                value={filterManager}
-                onChange={(e) => setFilterManager(e.target.value)}
-                style={{ width: "100%" }}
-              >
-                <option value="all">כל המנהלים</option>
-                {employees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.name || emp.email}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Payment Status Filter */}
-            <div style={{ minWidth: "140px" }}>
-              <select
-                className="form-select"
-                value={filterPaymentStatus}
-                onChange={(e) => setFilterPaymentStatus(e.target.value as FilterPaymentStatus)}
-                style={{ width: "100%" }}
-              >
-                <option value="all">כל סטטוסי התשלום</option>
-                <option value="current">עדכני</option>
-                <option value="overdue">באיחור</option>
-                <option value="pending">בהמתנה</option>
-              </select>
-            </div>
-
-            {/* Portal Filter */}
-            <div style={{ minWidth: "130px" }}>
-              <select
-                className="form-select"
-                value={filterPortal}
-                onChange={(e) => setFilterPortal(e.target.value as FilterPortal)}
-                style={{ width: "100%" }}
-              >
-                <option value="all">כל הפורטלים</option>
-                <option value="yes">פורטל מאופשר</option>
-                <option value="no">ללא פורטל</option>
-              </select>
-            </div>
+          {/* Search */}
+          <div style={{ flex: "1 1 220px", minWidth: "180px" }}>
+            <input
+              className="mod-search"
+              type="text"
+              placeholder="🔍 חיפוש..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ width: "100%" }}
+            />
           </div>
 
-          {/* Sorting */}
-          <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
-            <span style={{ fontSize: "0.875rem", color: "var(--foreground-muted)", fontWeight: 500 }}>
-              מיון:
-            </span>
-            <select
-              className="form-select"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortOption)}
-              style={{ minWidth: "140px" }}
+          {/* Client Type Filter */}
+          <select
+            className="form-select"
+            value={filterClientType}
+            onChange={(e) => setFilterClientType(e.target.value)}
+            style={{ minWidth: "130px", fontSize: "0.8rem", padding: "0.4rem 0.5rem" }}
+          >
+            <option value="all">סוג</option>
+            <option value="marketing">פרסום ושיווק</option>
+            <option value="branding">מיתוג</option>
+            <option value="websites">אתרים</option>
+            <option value="podcast">פודקאסט</option>
+            <option value="hosting">אחסון</option>
+          </select>
+
+          {/* Status Filter */}
+          <select
+            className="form-select"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            style={{ minWidth: "100px", fontSize: "0.8rem", padding: "0.4rem 0.5rem" }}
+          >
+            <option value="all">סטטוס</option>
+            <option value="active">פעיל</option>
+            <option value="inactive">לא פעיל</option>
+            <option value="prospect">פוטנציאלי</option>
+          </select>
+
+          {/* Manager Filter */}
+          <select
+            className="form-select"
+            value={filterManager}
+            onChange={(e) => setFilterManager(e.target.value)}
+            style={{ minWidth: "110px", fontSize: "0.8rem", padding: "0.4rem 0.5rem" }}
+          >
+            <option value="all">מנהל</option>
+            {employees.map((emp) => (
+              <option key={emp.id} value={emp.id}>{emp.name || emp.email}</option>
+            ))}
+          </select>
+
+          {/* Sort */}
+          <select
+            className="form-select"
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortOption)}
+            style={{ minWidth: "120px", fontSize: "0.8rem", padding: "0.4rem 0.5rem" }}
+          >
+            <option value="newest">חדש ביותר</option>
+            <option value="activity">פעילות אחרונה</option>
+            <option value="name">שם (א-ז)</option>
+            <option value="retainer">ריטיינר ↓</option>
+          </select>
+
+          {/* Clear filters */}
+          {(search || filterClientType !== "all" || filterStatus !== "all" || filterManager !== "all" || filterPaymentStatus !== "all" || filterPortal !== "all") && (
+            <button
+              onClick={() => {
+                setSearch("");
+                setFilterClientType("all");
+                setFilterStatus("all");
+                setFilterManager("all");
+                setFilterPaymentStatus("all");
+                setFilterPortal("all");
+              }}
+              style={{
+                padding: "0.35rem 0.6rem",
+                background: "transparent",
+                border: "1px solid var(--border)",
+                borderRadius: "0.375rem",
+                color: "var(--foreground-muted)",
+                fontSize: "0.8rem",
+                cursor: "pointer",
+              }}
             >
-              <option value="newest">חדש ביותר</option>
-              <option value="activity">פעילות אחרונה</option>
-              <option value="name">שם (א-ז)</option>
-              <option value="retainer">ריטיינר (גבוה לנמוך)</option>
-            </select>
-          </div>
+              ✕ נקה
+            </button>
+          )}
         </div>
 
         {/* Content Area */}
         {loading ? (
-          <div className="mod-empty" style={{ minHeight: "300px" }}>
-            <div>טוען...</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "1.25rem" }}>
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <div key={i} className="agd-card" style={{ padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+                  <div style={{ width: 48, height: 48, borderRadius: "50%", background: "var(--border)", animation: "pulse 1.5s infinite" }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ width: "60%", height: "0.9rem", background: "var(--border)", borderRadius: "0.25rem", marginBottom: "0.4rem", animation: "pulse 1.5s infinite" }} />
+                    <div style={{ width: "40%", height: "0.7rem", background: "var(--border)", borderRadius: "0.25rem", animation: "pulse 1.5s infinite" }} />
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <div style={{ width: "5rem", height: "1.3rem", background: "var(--border)", borderRadius: "0.25rem", animation: "pulse 1.5s infinite" }} />
+                  <div style={{ width: "3rem", height: "1.3rem", background: "var(--border)", borderRadius: "0.25rem", animation: "pulse 1.5s infinite" }} />
+                </div>
+                <div style={{ width: "100%", height: "0.7rem", background: "var(--border)", borderRadius: "0.25rem", animation: "pulse 1.5s infinite" }} />
+              </div>
+            ))}
+            <style>{`@keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }`}</style>
           </div>
         ) : filtered.length === 0 ? (
           <div className="mod-empty" style={{ minHeight: "300px" }}>
@@ -644,103 +642,49 @@ export default function ClientsPage() {
                     {campaignCount > 0 && <span>📣 {campaignCount} קמפיינים</span>}
                   </div>
 
-                  {/* Status indicators */}
+                  {/* Footer: actions + status indicators combined */}
                   <div
                     style={{
                       display: "flex",
-                      gap: "0.5rem",
                       alignItems: "center",
+                      justifyContent: "space-between",
                       paddingTop: "0.75rem",
                       borderTop: "1px solid var(--border)",
-                      flexWrap: "wrap",
+                      gap: "0.5rem",
                     }}
                   >
-                    {client.portalEnabled && (
-                      <div title="פורטל מאופשר" style={{ fontSize: "1rem" }}>
-                        🟢
-                      </div>
-                    )}
-                    {hasSocial && (
-                      <div title="חיבור לרשתות חברתיות" style={{ fontSize: "1rem" }}>
-                        📱
-                      </div>
-                    )}
-                    <div title={ganttIndicator.title} style={{ fontSize: "1rem", opacity: 0.7 }}>
-                      {ganttIndicator.icon}
+                    {/* Status indicators — compact */}
+                    <div style={{ display: "flex", gap: "0.35rem", alignItems: "center", fontSize: "0.85rem" }}>
+                      {client.paymentStatus === "overdue" && (
+                        <span title="תשלום באיחור" style={{ color: "#ef4444" }}>⚠️</span>
+                      )}
+                      {client.portalEnabled && <span title="פורטל מאופשר">🟢</span>}
+                      {hasSocial && <span title="רשתות חברתיות">📱</span>}
                     </div>
-                    {client.paymentStatus === "overdue" && (
-                      <div title="תשלום באיחור" style={{ fontSize: "1rem", color: "#ef4444" }}>
-                        ⚠️
-                      </div>
-                    )}
-                  </div>
 
-                  {/* Action buttons */}
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "0.4rem",
-                      paddingTop: "0.75rem",
-                      borderTop: "1px solid var(--border)",
-                    }}
-                  >
-                    <Link href={`/clients/${client.id}`} style={{ flex: 1, textDecoration: "none" }}>
+                    {/* Actions — 3 primary buttons only */}
+                    <div style={{ display: "flex", gap: "0.35rem" }}>
+                      <Link href={`/clients/${client.id}`} style={{ textDecoration: "none" }}>
+                        <button className="mod-btn-primary" style={{ fontSize: "0.72rem", padding: "0.35rem 0.75rem" }}>
+                          פתח
+                        </button>
+                      </Link>
                       <button
                         className="mod-btn-ghost"
-                        style={{ fontSize: "0.75rem", width: "100%" }}
+                        style={{ fontSize: "0.72rem", padding: "0.35rem 0.6rem" }}
+                        onClick={(e) => { e.stopPropagation(); openEdit(client); }}
                       >
-                        פתח
+                        ערוך
                       </button>
-                    </Link>
-                    <button
-                      className="mod-btn-ghost"
-                      style={{ fontSize: "0.75rem", flex: 1 }}
-                      onClick={() => openEdit(client)}
-                    >
-                      ערוך
-                    </button>
-                    <button
-                      className="mod-btn-ghost"
-                      style={{ fontSize: "0.75rem", flex: 1 }}
-                      onClick={() => router.push(`/clients/${client.id}?tab=content`)}
-                    >
-                      תוכן
-                    </button>
-                    <button
-                      className="mod-btn-ghost"
-                      style={{ fontSize: "0.75rem", flex: 1 }}
-                      onClick={() => router.push(`/clients/${client.id}?tab=content`)}
-                    >
-                      גאנט
-                    </button>
-                    <button
-                      className="mod-btn-ghost"
-                      style={{
-                        fontSize: "0.75rem",
-                        flex: 1,
-                        color: "#ef4444",
-                        borderColor: "rgba(239,68,68,0.3)",
-                      }}
-                      onClick={() => handleDelete(client.id, client.name)}
-                    >
-                      מחיקה
-                    </button>
+                      <button
+                        className="mod-btn-ghost"
+                        style={{ fontSize: "0.72rem", padding: "0.35rem 0.6rem" }}
+                        onClick={() => router.push(`/clients/${client.id}?tab=content`)}
+                      >
+                        גאנט
+                      </button>
+                    </div>
                   </div>
-                  {/* UGC Video Button — navigates to client detail page with UGC modal */}
-                  <button
-                    className="mod-btn-ghost"
-                    style={{
-                      fontSize: "0.75rem",
-                      width: "100%",
-                      marginTop: "0.4rem",
-                      color: "#8b5cf6",
-                      borderColor: "rgba(139,92,246,0.3)",
-                      background: "rgba(139,92,246,0.06)",
-                    }}
-                    onClick={() => router.push(`/clients/${client.id}?ugc=1`)}
-                  >
-                    🎬 צור סרטון UGC
-                  </button>
                 </div>
               );
             })}
