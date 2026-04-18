@@ -3,11 +3,13 @@
  * PUT    /api/data/clients/[id] - Update a client (partial)
  * DELETE /api/data/clients/[id] - Delete a client
  *
- * Storage: Supabase "clients" table (same source of truth as /api/data/clients).
+ * Storage: Supabase "clients" table.
  *
- * Social / marketing columns may or may not exist in the production DB.
- * The code includes them in the update payload, and the column-drop
- * retry loop strips any that PostgREST rejects.  No schema DDL is run.
+ * DB social columns: website, facebook, instagram, tiktok, linkedin, youtube
+ * DB marketing columns: marketing_goals, key_marketing_messages
+ *
+ * If PostgREST's schema cache is stale we issue NOTIFY pgrst,'reload schema'
+ * and retry.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -20,7 +22,7 @@ type ClientRow = Record<string, unknown> & { id: string };
 
 function rowToClient(r: ClientRow) {
   return {
-    id: r.id,
+    id:                  r.id,
     name:               (r.name as string) ?? '',
     company:            (r.company as string) ?? '',
     contactPerson:      (r.contact_person as string) ?? '',
@@ -35,13 +37,14 @@ function rowToClient(r: ClientRow) {
     color:              (r.color as string) ?? '#00B5FE',
     convertedFromLead:  (r.converted_from_lead as string) ?? null,
     assignedManagerId:  (r.assigned_manager_id as string) ?? null,
-    // Social & marketing — read whichever column name exists
-    websiteUrl:          (r.website as string) || (r.website_url as string) || '',
-    facebookPageUrl:     (r.facebook as string) || (r.facebook_page_url as string) || '',
-    instagramProfileUrl: (r.instagram as string) || (r.instagram_profile_url as string) || '',
-    tiktokProfileUrl:    (r.tiktok as string) || (r.tiktok_profile_url as string) || '',
-    linkedinUrl:         (r.linkedin as string) || (r.linkedin_url as string) || '',
-    youtubeUrl:          (r.youtube as string) || (r.youtube_url as string) || '',
+    // Social — DB columns: website, facebook, instagram, tiktok, linkedin, youtube
+    websiteUrl:          (r.website as string) ?? '',
+    facebookPageUrl:     (r.facebook as string) ?? '',
+    instagramProfileUrl: (r.instagram as string) ?? '',
+    tiktokProfileUrl:    (r.tiktok as string) ?? '',
+    linkedinUrl:         (r.linkedin as string) ?? '',
+    youtubeUrl:          (r.youtube as string) ?? '',
+    // Marketing
     marketingGoals:      (r.marketing_goals as string) ?? '',
     keyMarketingMessages:(r.key_marketing_messages as string) ?? '',
     logoUrl:             (r.logo_url as string) ?? '',
@@ -72,19 +75,34 @@ function toDbUpdate(body: Record<string, unknown>): Record<string, unknown> {
   set('color', 'color');
   set('convertedFromLead', 'converted_from_lead');
   set('assignedManagerId', 'assigned_manager_id');
-  // Social / marketing — ONE name per field; column-drop retry strips unknown ones
+  // Social — DB columns: website, facebook, instagram, tiktok, linkedin, youtube
   set('websiteUrl', 'website');
   set('facebookPageUrl', 'facebook');
   set('instagramProfileUrl', 'instagram');
   set('tiktokProfileUrl', 'tiktok');
   set('linkedinUrl', 'linkedin');
   set('youtubeUrl', 'youtube');
+  // Marketing
   set('marketingGoals', 'marketing_goals');
   set('keyMarketingMessages', 'key_marketing_messages');
   set('logoUrl', 'logo_url');
 
   out.updated_at = new Date().toISOString();
   return out;
+}
+
+/* ── Schema cache refresh ────────────────────────────────────────────── */
+
+let _cacheRefreshed = false;
+async function refreshSchemaCache(sb: ReturnType<typeof getSupabase>): Promise<void> {
+  if (_cacheRefreshed) return;
+  _cacheRefreshed = true;
+  try {
+    await sb.rpc('exec_sql', { query: `NOTIFY pgrst, 'reload schema';` });
+    console.log('[clients/[id]] ✅ PostgREST schema cache reload requested');
+  } catch (e) {
+    console.warn('[clients/[id]] ⚠️ could not reload schema cache:', e);
+  }
 }
 
 /* ── GET ──────────────────────────────────────────────────────────────── */
@@ -113,9 +131,8 @@ export async function GET(
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
 
-    // Debug log
     console.log(`[API] GET /api/data/clients/${id} DB keys: ${Object.keys(data).join(', ')}`);
-    console.log(`[API] GET /api/data/clients/${id} raw row:`, JSON.stringify(data));
+    console.log(`[API] GET /api/data/clients/${id} raw:`, JSON.stringify(data));
 
     const client = rowToClient(data as ClientRow);
     return NextResponse.json(client);
@@ -143,10 +160,9 @@ export async function PUT(
     console.log(`[API] PUT /api/data/clients/${id} payload:`, JSON.stringify(updatePayload));
 
     const sb = getSupabase();
-
-    // Column-drop retry
     let updated: ClientRow | null = null;
     let lastError: { code?: string; message: string } | null = null;
+    let cacheReloaded = false;
 
     for (let attempt = 0; attempt < 25; attempt++) {
       const { data, error } = await sb
@@ -159,16 +175,27 @@ export async function PUT(
       if (!error) { updated = (data as ClientRow) ?? null; break; }
 
       lastError = error as { code?: string; message: string };
-      const m = error.message.match(
+      const msg = error.message;
+
+      // Schema cache stale — refresh and retry same payload
+      if (msg.includes('schema cache') && !cacheReloaded) {
+        console.warn(`[clients/[id]] schema cache miss — refreshing (attempt ${attempt + 1}): ${msg}`);
+        await refreshSchemaCache(sb);
+        cacheReloaded = true;
+        continue;
+      }
+
+      // Actual missing column — drop it
+      const m = msg.match(
         /Could not find the '([^']+)' column|column .*?['"]?([a-z_]+)['"]? (?:does not exist|of relation)/i,
       );
       const badCol = m?.[1] || m?.[2];
       if (!badCol) {
-        console.error(`[API] PUT /clients/${id} non-column error (attempt ${attempt + 1}):`, error.message);
+        console.error(`[API] PUT /clients/${id} error (attempt ${attempt + 1}):`, msg);
         break;
       }
       if (badCol in updatePayload) {
-        console.warn(`[API] PUT /clients/${id} dropping unknown column "${badCol}" (attempt ${attempt + 1})`);
+        console.warn(`[API] PUT /clients/${id} dropping column "${badCol}" (attempt ${attempt + 1})`);
         const { [badCol]: _dropped, ...rest } = updatePayload;
         void _dropped;
         updatePayload = rest;
@@ -189,7 +216,7 @@ export async function PUT(
     }
 
     const result = rowToClient(updated);
-    console.log(`[API] PUT /api/data/clients/${id} ✅ saved. returned_keys=${Object.keys(updated).join(',')}`);
+    console.log(`[API] PUT /api/data/clients/${id} ✅ saved keys=${Object.keys(updated).join(',')}`);
     return NextResponse.json(result);
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';

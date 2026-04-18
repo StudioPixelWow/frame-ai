@@ -223,8 +223,8 @@ function ClientDetailContent() {
         facebookPageUrl: client.facebookPageUrl,
         instagramProfileUrl: client.instagramProfileUrl,
         tiktokProfileUrl: client.tiktokProfileUrl,
-        linkedinUrl: (client as any).linkedinUrl ?? '',
-        youtubeUrl: (client as any).youtubeUrl ?? '',
+        linkedinUrl: client.linkedinUrl ?? '',
+        youtubeUrl: client.youtubeUrl ?? '',
         notes: client.notes,
       });
       setIsEditModalOpen(true);
