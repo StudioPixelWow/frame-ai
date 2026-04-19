@@ -2,9 +2,13 @@
  * PixelFrameAI — Render Worker
  * Standalone background process that performs real Remotion video rendering.
  * Run with: npx tsx src/lib/render-worker/worker.ts
+ *
+ * PERSISTENCE: Every status update is written to BOTH local file AND Supabase
+ * so the polling endpoint can always find the job regardless of source.
  */
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import path from "path";
 import fs from "fs";
 
@@ -24,14 +28,60 @@ const BUNDLE_CACHE_DIR = path.join(PROJECT_ROOT, ".frameai/remotion-bundle");
 let bundlePath: string | null = null;
 let isRendering = false;
 
-/** Update job status on disk */
+/* ── Supabase client (standalone — worker runs outside Next.js) ──────────── */
+
+let _sb: SupabaseClient | null = null;
+
+function getWorkerSupabase(): SupabaseClient | null {
+  if (_sb) return _sb;
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
+    "https://uaruggdabeyiuppcvbbi.supabase.co";
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    console.warn("[Worker] Supabase env vars missing — DB updates will be skipped");
+    return null;
+  }
+  _sb = createClient(url, key, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  console.log("[Worker] Supabase client initialized");
+  return _sb;
+}
+
+/** Persist job state to Supabase render_jobs table (non-blocking, never throws) */
+async function dbSyncJob(jobId: string, job: Record<string, unknown>): Promise<void> {
+  try {
+    const sb = getWorkerSupabase();
+    if (!sb) return;
+    const row = {
+      id: jobId,
+      project_id: job.projectId as string,
+      status: job.status as string,
+      data: job,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await sb.from("render_jobs").upsert(row, { onConflict: "id" });
+    if (error) {
+      console.warn(`[Worker] DB sync failed for ${jobId}: ${error.message}`);
+    }
+  } catch (err) {
+    console.warn("[Worker] DB sync error:", err instanceof Error ? err.message : err);
+  }
+}
+
+/** Update job status on disk AND Supabase */
 function updateJobFile(jobId: string, updates: Record<string, unknown>): void {
   const jobPath = path.join(RENDER_JOBS_DIR, `${jobId}.json`);
   if (!fs.existsSync(jobPath)) return;
   const job = JSON.parse(fs.readFileSync(jobPath, "utf-8"));
   Object.assign(job, updates);
+  // 1. Write to file (synchronous, always reliable)
   fs.writeFileSync(jobPath, JSON.stringify(job, null, 2));
   console.log(`[Worker] Job ${jobId}: ${updates.status || ""} ${updates.progress || ""}% — ${updates.currentStage || ""}`);
+  // 2. Sync to Supabase (async, fire-and-forget, never blocks render)
+  dbSyncJob(jobId, job).catch(() => {});
 }
 
 /** Bundle the Remotion project (cached) */

@@ -1,11 +1,10 @@
 /**
  * PixelFrameAI — Render Job Manager
  *
- * Primary storage: Supabase "render_jobs" table (survives across requests/processes).
- * Secondary: local JSON files in .frameai/data/render-jobs/ (worker cache).
+ * Dual storage: local JSON files (fast, synchronous) + Supabase "render_jobs" table (durable).
  *
- * Every write goes to BOTH Supabase and file system.
- * Every read tries Supabase first, falls back to file.
+ * Every write goes to BOTH file system and Supabase.
+ * Every read tries file first (fast, no network), falls back to Supabase.
  */
 import fs from "fs";
 import path from "path";
@@ -225,29 +224,41 @@ function fileList(): RenderJobData[] {
 
 /* ── Public API (write to both, read DB-first) ──────────────────────────── */
 
-/** Create a new render job — writes to DB + file */
+/** Create a new render job — writes to file + DB */
 export async function createRenderJobFile(data: Omit<RenderJobData, "id">): Promise<RenderJobData> {
   const id = `rj_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const job: RenderJobData = { id, ...data };
 
-  // Write to file (synchronous — always works locally)
+  // 1. Write to file (synchronous — always works locally)
   fileWrite(job);
-  console.log(`[JobManager] Created render job: ${id} (file: ${path.join(DATA_DIR, id + ".json")})`);
+  const filePath = path.join(DATA_DIR, `${id}.json`);
+  const fileExists = fs.existsSync(filePath);
+  console.log(`[JobManager] Saving job to DB: id=${id} projectId=${data.projectId} status=queued`);
+  console.log(`[JobManager] File written: ${filePath} (exists=${fileExists})`);
 
-  // Write to DB (await — ensures job is in DB before first poll arrives)
+  // 2. Write to Supabase (await — ensures job is in DB before first poll arrives)
   await dbUpsert(job);
-  console.log(`[JobManager] Render job ${id} persisted to Supabase`);
+  console.log(`[JobManager] Render job ${id} persisted to Supabase ✅`);
 
   return job;
 }
 
 /** Read a render job — tries file first (fast, reliable), then DB */
 export async function readRenderJobAsync(jobId: string): Promise<RenderJobData | null> {
+  console.log(`[JobManager] Fetching jobId from DB: ${jobId}`);
   // Try file first (synchronous, always reliable, no Supabase dependency)
   const fileJob = fileRead(jobId);
-  if (fileJob) return fileJob;
+  if (fileJob) {
+    console.log(`[JobManager] Job found (file): ${jobId} status=${fileJob.status} progress=${fileJob.progress}%`);
+    return fileJob;
+  }
   // Fall back to DB (handles case where file was lost but DB has it)
   const dbJob = await dbRead(jobId);
+  if (dbJob) {
+    console.log(`[JobManager] Job found (supabase): ${jobId} status=${dbJob.status} progress=${dbJob.progress}%`);
+  } else {
+    console.warn(`[JobManager] Job not found: ${jobId} (checked file + supabase)`);
+  }
   return dbJob;
 }
 
@@ -256,19 +267,25 @@ export function readRenderJob(jobId: string): RenderJobData | null {
   return fileRead(jobId);
 }
 
-/** Update a render job — writes to both DB + file */
+/** Update a render job — writes to both file + DB */
 export function updateRenderJobFile(jobId: string, updates: Partial<RenderJobData>): RenderJobData | null {
   // Read from file (worker uses this synchronously)
   let job = fileRead(jobId);
-  if (!job) return null;
+  if (!job) {
+    console.warn(`[JobManager] updateRenderJobFile: job ${jobId} not found in file`);
+    return null;
+  }
 
   Object.assign(job, updates);
 
   // Write to file
   fileWrite(job);
 
-  // Write to DB (async)
+  // Write to DB (async, fire-and-forget)
   dbUpsert(job).catch(() => {});
+
+  const keys = Object.keys(updates).join(",");
+  console.log(`[JobManager] Job updated: ${jobId} keys=[${keys}] status=${job.status} progress=${job.progress}%`);
 
   return job;
 }
