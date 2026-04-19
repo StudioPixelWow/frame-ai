@@ -129,19 +129,71 @@ export async function GET(
   req: NextRequest,
   context: { params: Promise<{ jobId: string }> }
 ) {
-  const { jobId } = await context.params;
-  let job = await readRenderJobAsync(jobId);
-
-  if (!job) {
-    console.warn(`${tag} GET ${jobId} — not found in DB or file`);
-    return NextResponse.json({ error: "Render job not found" }, { status: 404 });
+  let jobId = "(unknown)";
+  try {
+    jobId = (await context.params).jobId;
+  } catch (paramErr) {
+    console.error(`${tag} ❌ Failed to extract jobId from params:`, paramErr);
+    return NextResponse.json({ error: "Invalid route params" }, { status: 400 });
   }
-  console.log(`${tag} GET ${jobId} — status=${job.status} progress=${job.progress}%`);
 
-  // Ensure completed jobs are persisted to durable storage + DB
-  job = await ensurePersisted(jobId, job) || job;
+  console.log(`${tag} ── GET /api/render/${jobId} ──`);
 
-  return NextResponse.json({ job });
+  try {
+    // ── 1. Synchronous file read FIRST (fastest, no Supabase dependency) ──
+    let job = readRenderJob(jobId);
+    let source = job ? "file" : null;
+
+    // ── 2. If not in file, try Supabase DB ──
+    if (!job) {
+      try {
+        job = await readRenderJobAsync(jobId);
+        if (job) source = "supabase";
+      } catch (dbErr) {
+        console.warn(`${tag} Supabase read threw (non-fatal):`, dbErr instanceof Error ? dbErr.message : dbErr);
+      }
+    }
+
+    // ── 3. Last resort: brute-force file scan (different DATA_DIR) ──
+    if (!job) {
+      console.warn(`${tag} Not found via file or DB — trying direct file scan`);
+      try {
+        const { DATA_DIR: FRAMEAI_DATA_DIR } = await import("@/lib/db/paths");
+        const jobDir = path.join(FRAMEAI_DATA_DIR, "render-jobs");
+        const jobFile = path.join(jobDir, `${jobId}.json`);
+        console.log(`${tag}   checking: ${jobFile} exists=${fs.existsSync(jobFile)}`);
+        if (fs.existsSync(jobDir)) {
+          const files = fs.readdirSync(jobDir).filter(f => f.endsWith(".json"));
+          console.log(`${tag}   dir has ${files.length} files: ${files.slice(0, 5).join(", ")}${files.length > 5 ? "..." : ""}`);
+        }
+        if (fs.existsSync(jobFile)) {
+          job = JSON.parse(fs.readFileSync(jobFile, "utf-8"));
+          source = "direct-file";
+        }
+      } catch (scanErr) {
+        console.error(`${tag}   direct scan error:`, scanErr instanceof Error ? scanErr.message : scanErr);
+      }
+    }
+
+    if (!job) {
+      console.warn(`${tag} ❌ Job ${jobId} not found anywhere (file, supabase, direct-scan)`);
+      return NextResponse.json({ error: "Render job not found", jobId }, { status: 404 });
+    }
+
+    console.log(`${tag} ✅ GET ${jobId} — status=${job.status} progress=${job.progress}% (source=${source})`);
+
+    // Ensure completed jobs are persisted to durable storage + DB
+    job = await ensurePersisted(jobId, job) || job;
+
+    return NextResponse.json({ job });
+  } catch (err) {
+    // Top-level catch: prevents any uncaught error from producing an opaque 404/500
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error(`${tag} ❌ Uncaught error in GET /api/render/${jobId}:`, msg);
+    if (stack) console.error(`${tag}   stack:`, stack);
+    return NextResponse.json({ error: msg, jobId }, { status: 500 });
+  }
 }
 
 export async function PUT(

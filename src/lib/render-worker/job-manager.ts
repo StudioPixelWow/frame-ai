@@ -241,13 +241,14 @@ export async function createRenderJobFile(data: Omit<RenderJobData, "id">): Prom
   return job;
 }
 
-/** Read a render job — tries DB first, then file */
+/** Read a render job — tries file first (fast, reliable), then DB */
 export async function readRenderJobAsync(jobId: string): Promise<RenderJobData | null> {
-  // Try DB first
+  // Try file first (synchronous, always reliable, no Supabase dependency)
+  const fileJob = fileRead(jobId);
+  if (fileJob) return fileJob;
+  // Fall back to DB (handles case where file was lost but DB has it)
   const dbJob = await dbRead(jobId);
-  if (dbJob) return dbJob;
-  // Fall back to file
-  return fileRead(jobId);
+  return dbJob;
 }
 
 /** Synchronous read (for worker process) — file only */

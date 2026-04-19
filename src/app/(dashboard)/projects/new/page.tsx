@@ -1104,10 +1104,12 @@ export default function NewProjectWizard() {
             const pollUrl = `/api/render/${jobId}`;
             const statusRes = await fetch(pollUrl);
             if (!statusRes.ok) {
-              if (statusRes.status === 404 && notFoundCount < 5) {
-                // Job may not be in DB yet — retry a few times before giving up
+              if ((statusRes.status === 404 || statusRes.status === 500) && notFoundCount < 8) {
+                // Job may not be ready yet, or route had a transient error — retry
                 notFoundCount++;
-                console.warn(`[render-poll] ⚠️ Poll #${pollCount} 404 (attempt ${notFoundCount}/5) — jobId=${jobId} url=${pollUrl}`);
+                let errBody = "";
+                try { errBody = JSON.stringify(await statusRes.json()); } catch {}
+                console.warn(`[render-poll] ⚠️ Poll #${pollCount} HTTP ${statusRes.status} (attempt ${notFoundCount}/8) — jobId=${jobId} body=${errBody}`);
                 return; // Don't clearInterval — keep retrying
               }
               console.error(`[render-poll] ❌ Poll #${pollCount} failed: HTTP ${statusRes.status} jobId=${jobId} url=${pollUrl}`);
@@ -1165,8 +1167,13 @@ export default function NewProjectWizard() {
               console.error(`[render-poll] ❌ Render failed: ${updatedJob.error}`);
               toast(updatedJob.error || "שגיאה ברינדור", "error");
             }
-          } catch {
-            clearInterval(pollInterval);
+          } catch (pollErr) {
+            console.error(`[render-poll] ❌ Poll #${pollCount} exception:`, pollErr);
+            // Only kill poll after 3 consecutive exceptions (network glitches are transient)
+            notFoundCount++;
+            if (notFoundCount >= 3) {
+              clearInterval(pollInterval);
+            }
           }
         }, 1200);
       } catch (renderErr) {
