@@ -84,21 +84,18 @@ export default function NewClientPage() {
       reader.onload = (e) => setLogoPreview(e.target?.result as string);
       reader.readAsDataURL(file);
 
-      // Upload directly to Supabase Storage via signed URL
-      const signedRes = await fetch('/api/upload/signed-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileName: file.name, fileSize: file.size, contentType: file.type }),
-      });
-      if (!signedRes.ok) throw new Error('Failed to get upload URL');
-      const { signedUrl, publicUrl } = await signedRes.json();
-
-      const putRes = await fetch(signedUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type || 'application/octet-stream' },
-        body: file,
-      });
-      if (!putRes.ok) throw new Error('Upload failed');
+      // Upload to Supabase Storage via /api/upload
+      const uploadForm = new FormData();
+      uploadForm.append('file', file);
+      uploadForm.append('bucket', 'videos');
+      uploadForm.append('prefix', 'logos');
+      const uploadRes = await fetch('/api/upload', { method: 'POST', body: uploadForm });
+      if (!uploadRes.ok) {
+        let errMsg = 'Upload failed';
+        try { const b = await uploadRes.json(); if (b.error) errMsg = b.error; } catch {}
+        throw new Error(errMsg);
+      }
+      const { publicUrl } = await uploadRes.json();
 
       setForm(prev => ({ ...prev, logoUrl: publicUrl }));
       toast('הלוגו הועלה בהצלחה', 'success');

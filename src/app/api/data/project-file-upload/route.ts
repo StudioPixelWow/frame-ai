@@ -10,7 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabase } from '@/lib/db/store';
+import { uploadToStorage, makeStoragePath } from '@/lib/storage/upload';
 
 const BUCKET = 'project-files';
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -23,16 +23,6 @@ const ALLOWED_TYPES = new Set([
   'image/webp',
 ]);
 const ALLOWED_EXTENSIONS = new Set(['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp']);
-
-async function ensureBucket(sb: ReturnType<typeof getSupabase>) {
-  const { error } = await sb.storage.createBucket(BUCKET, {
-    public: true,
-    fileSizeLimit: MAX_SIZE,
-  });
-  if (error && !error.message?.includes('already exists')) {
-    console.warn('[project-file-upload] bucket creation warning:', error.message);
-  }
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -64,9 +54,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const sb = getSupabase();
-    await ensureBucket(sb);
-
     // Build a safe storage path: projectId/timestamp-filename
     const safeName = file.name.replace(/[^a-zA-Z0-9._\u0590-\u05FF-]/g, '_');
     const storagePath = `${projectId}/${Date.now()}-${safeName}`;
@@ -74,25 +61,19 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const { error: uploadErr } = await sb.storage
-      .from(BUCKET)
-      .upload(storagePath, buffer, {
-        contentType: file.type || 'application/octet-stream',
-        upsert: false,
-      });
+    const result = await uploadToStorage({
+      bucket: BUCKET,
+      storagePath,
+      buffer,
+      contentType: file.type || 'application/octet-stream',
+      maxSize: MAX_SIZE,
+      upsert: false,
+    });
 
-    if (uploadErr) {
-      console.error('[project-file-upload] storage error:', uploadErr);
-      return NextResponse.json({ error: `העלאה נכשלה: ${uploadErr.message}` }, { status: 500 });
-    }
-
-    const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(storagePath);
-    const publicUrl = urlData?.publicUrl ?? '';
-
-    console.log(`[project-file-upload] ✅ uploaded project=${projectId} name="${file.name}" size=${buffer.length} url=${publicUrl}`);
+    console.log(`[project-file-upload] ✅ uploaded project=${projectId} name="${file.name}" size=${buffer.length} url=${result.publicUrl}`);
 
     return NextResponse.json({
-      url: publicUrl,
+      url: result.publicUrl,
       fileName: file.name,
       fileSize: buffer.length,
       contentType: file.type,

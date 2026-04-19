@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 import { insertTimelineEvent } from '@/lib/timeline';
+import { uploadToStorage } from '@/lib/storage/upload';
 
 const TABLE = 'business_project_milestone_files';
 const BUCKET = 'milestone-files';
@@ -52,19 +53,7 @@ function rowToFile(r: Row) {
   };
 }
 
-/**
- * Ensure the storage bucket exists. Supabase returns an error if
- * the bucket already exists — we simply ignore that.
- */
-async function ensureBucket(sb: ReturnType<typeof getSupabase>) {
-  const { error } = await sb.storage.createBucket(BUCKET, {
-    public: true,
-    fileSizeLimit: 50 * 1024 * 1024, // 50 MB
-  });
-  if (error && !error.message?.includes('already exists')) {
-    console.warn('[milestone-files] bucket creation warning:', error.message);
-  }
-}
+// Bucket creation is handled by the shared uploadToStorage() utility.
 
 /**
  * Ensure the DB table exists.
@@ -198,10 +187,8 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
-    log('3b/7 ensureBucket');
-    await ensureBucket(sb);
+    log('3b/7 uploading file via shared utility');
 
-    // 1. Upload file bytes to Supabase Storage.
     const slug = storageSlug();
     const ext = file.name.includes('.') ? '.' + file.name.split('.').pop() : '';
     const storagePath = `${milestoneId}/${slug}${ext}`;
@@ -212,22 +199,23 @@ export async function POST(req: NextRequest) {
     log('4/7 buffer ready', { bytes: buffer.length });
 
     log('5/7 storage upload', { bucket: BUCKET, path: storagePath, contentType: file.type });
-    const { error: uploadErr } = await sb.storage
-      .from(BUCKET)
-      .upload(storagePath, buffer, {
+    let uploadResult;
+    try {
+      uploadResult = await uploadToStorage({
+        bucket: BUCKET,
+        storagePath,
+        buffer,
         contentType: file.type || 'application/octet-stream',
+        maxSize: 50 * 1024 * 1024,
         upsert: false,
       });
-
-    if (uploadErr) {
+    } catch (uploadErr: any) {
       log('5/7 ❌ storage upload FAILED', { error: uploadErr.message });
       return NextResponse.json({ error: `Upload failed: ${uploadErr.message}` }, { status: 500 });
     }
     log('5/7 ✅ storage upload OK');
 
-    // 2. Get the public URL.
-    const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(storagePath);
-    const publicUrl = urlData?.publicUrl ?? '';
+    const publicUrl = uploadResult.publicUrl;
     log('6/7 publicUrl', { url: publicUrl.slice(0, 80) });
 
     // 3. Insert metadata row into the DB table.

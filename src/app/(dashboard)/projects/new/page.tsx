@@ -837,24 +837,19 @@ export default function NewProjectWizard() {
       if (!data.uploadedVideoUrl && data.videoFile) {
         try {
           console.log("[createProject] Uploading video to Supabase Storage before save...");
-          const signedRes = await fetch("/api/upload/signed-url", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fileName: data.videoFile.name, fileSize: data.videoFile.size, contentType: data.videoFile.type }),
-          });
-          if (signedRes.ok) {
-            const { signedUrl, publicUrl } = await signedRes.json();
-            const putRes = await fetch(signedUrl, {
-              method: "PUT",
-              headers: { "Content-Type": data.videoFile.type || "application/octet-stream" },
-              body: data.videoFile,
-            });
-            if (putRes.ok) {
-              patch({ uploadedVideoUrl: publicUrl, videoUrl: publicUrl });
-              data.uploadedVideoUrl = publicUrl;
-              data.videoUrl = publicUrl;
-              console.log("[createProject] Video uploaded:", publicUrl);
-            }
+          const form = new FormData();
+          form.append("file", data.videoFile);
+          form.append("bucket", "videos");
+          form.append("prefix", "uploads");
+          const uploadRes = await fetch("/api/upload", { method: "POST", body: form });
+          if (uploadRes.ok) {
+            const { publicUrl } = await uploadRes.json();
+            patch({ uploadedVideoUrl: publicUrl, videoUrl: publicUrl });
+            data.uploadedVideoUrl = publicUrl;
+            data.videoUrl = publicUrl;
+            console.log("[createProject] Video uploaded:", publicUrl);
+          } else {
+            console.warn("[createProject] Upload failed:", uploadRes.status);
           }
         } catch (e) {
           console.warn("Video upload during project creation failed:", e);
@@ -1797,12 +1792,8 @@ function StepUpload({ data, patch }: { data: WizardData; patch: (p: Partial<Wiza
   const xhrRef = useRef<XMLHttpRequest | null>(null);
 
   /**
-   * Direct-to-Supabase upload flow:
-   * 1. POST /api/upload/signed-url → get signed upload URL (tiny JSON, no file body)
-   * 2. PUT file directly to Supabase Storage using signed URL (bypasses Next.js)
-   * 3. Store the public URL in wizard state
-   *
-   * This eliminates 413 errors because the video NEVER passes through a Next.js API route.
+   * Upload flow — POST FormData to /api/upload with XHR for progress.
+   * Server uploads to Supabase Storage "videos" bucket via service role.
    */
   const handleFile = async (file: File) => {
     if (!file.type.startsWith("video/")) return;
@@ -1817,75 +1808,47 @@ function StepUpload({ data, patch }: { data: WizardData; patch: (p: Partial<Wiza
     console.log(`[StepUpload] Upload started: name=${file.name} size=${fileSizeMB}MB type=${file.type}`);
 
     try {
-      // ── Step 1: Get signed upload URL from our API (tiny JSON request, no file) ──
-      console.log(`[StepUpload] Requesting signed URL...`);
-      const signedRes = await fetch("/api/upload/signed-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: file.name,
-          fileSize: file.size,
-          contentType: file.type,
-        }),
-      });
+      const form = new FormData();
+      form.append("file", file);
+      form.append("bucket", "videos");
+      form.append("prefix", "uploads");
 
-      if (!signedRes.ok) {
-        let errMsg = `שגיאה בקבלת קישור העלאה (${signedRes.status})`;
-        try { const errBody = await signedRes.json(); if (errBody.error) errMsg = errBody.error; } catch {}
-        throw new Error(errMsg);
-      }
-
-      const { signedUrl, token, publicUrl, storagePath } = await signedRes.json();
-      console.log(`[StepUpload] Signed URL received: path=${storagePath}`);
-
-      // ── Step 2: Upload file DIRECTLY to Supabase Storage (bypasses Next.js) ──
       const xhr = new XMLHttpRequest();
       xhrRef.current = xhr;
 
-      await new Promise<void>((resolve, reject) => {
+      const finalPublicUrl = await new Promise<string>((resolve, reject) => {
         xhr.upload.addEventListener("progress", (e) => {
           if (e.lengthComputable) {
             const pct = Math.round((e.loaded / e.total) * 100);
             setUploadProgress(pct);
-            if (pct % 25 === 0) console.log(`[StepUpload] Upload progress: ${pct}% (${(e.loaded / 1048576).toFixed(1)}/${fileSizeMB}MB)`);
+            if (pct % 25 === 0) console.log(`[StepUpload] Progress: ${pct}% (${(e.loaded / 1048576).toFixed(1)}/${fileSizeMB}MB)`);
           }
         });
-
         xhr.addEventListener("load", () => {
           xhrRef.current = null;
           if (xhr.status >= 200 && xhr.status < 300) {
-            console.log(`[StepUpload] Upload to Supabase SUCCESS: publicUrl=${publicUrl}`);
-            resolve();
+            try {
+              const resp = JSON.parse(xhr.responseText);
+              resolve(resp.publicUrl || "");
+            } catch {
+              resolve("");
+            }
           } else {
-            let msg = `שגיאה בהעלאה לאחסון (${xhr.status})`;
-            try { const errBody = JSON.parse(xhr.responseText); if (errBody.error || errBody.message) msg = errBody.error || errBody.message; } catch {}
-            console.error(`[StepUpload] Supabase upload FAILED: status=${xhr.status} ${msg}`);
+            let msg = `שגיאה בהעלאה (${xhr.status})`;
+            try { const b = JSON.parse(xhr.responseText); if (b.error) msg = b.error; } catch {}
             reject(new Error(msg));
           }
         });
+        xhr.addEventListener("error", () => { xhrRef.current = null; reject(new Error("שגיאת רשת")); });
+        xhr.addEventListener("abort", () => { xhrRef.current = null; reject(new Error("__ABORT__")); });
 
-        xhr.addEventListener("error", () => {
-          xhrRef.current = null;
-          console.error(`[StepUpload] Supabase upload NETWORK ERROR`);
-          reject(new Error("שגיאת רשת — לא ניתן להתחבר לאחסון"));
-        });
-
-        xhr.addEventListener("abort", () => {
-          xhrRef.current = null;
-          console.log(`[StepUpload] Upload aborted`);
-          reject(new Error("__ABORT__"));
-        });
-
-        // PUT directly to Supabase Storage signed URL
-        xhr.open("PUT", signedUrl);
-        xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
-        xhr.send(file);
+        xhr.open("POST", "/api/upload");
+        xhr.send(form);
       });
 
-      // ── Step 3: Success — store the public URL ──
-      patch({ uploadedVideoUrl: publicUrl, videoUrl: publicUrl });
+      patch({ uploadedVideoUrl: finalPublicUrl, videoUrl: finalPublicUrl });
       setUploadProgress(100);
-      console.log(`[StepUpload] Complete: ${publicUrl}`);
+      console.log(`[StepUpload] Complete: ${finalPublicUrl}`);
 
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -2812,43 +2775,23 @@ function StepTranscriptReview({ data, patch, videoSrc: parentVideoSrc }: { data:
         transcriptionUrl = data.uploadedVideoUrl;
         console.debug("[runTranscription] Reusing uploadedVideoUrl for transcription:", transcriptionUrl);
       } else if (data.videoFile) {
-        // Fallback: upload directly to Supabase Storage via signed URL
-        console.log(`[runTranscription] Fallback upload via Supabase: ${data.videoFile.name} (${(data.videoFile.size / 1048576).toFixed(1)}MB)`);
+        // Fallback: upload to Supabase Storage via /api/upload
+        console.log(`[runTranscription] Fallback upload: ${data.videoFile.name} (${(data.videoFile.size / 1048576).toFixed(1)}MB)`);
 
-        // Step 1: Get signed upload URL
-        const signedRes = await fetch("/api/upload/signed-url", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            fileName: data.videoFile.name,
-            fileSize: data.videoFile.size,
-            contentType: data.videoFile.type,
-          }),
-        });
-        if (!signedRes.ok) {
-          let errDetail = `שגיאה בקבלת קישור העלאה (${signedRes.status})`;
-          try { const errBody = await signedRes.json(); if (errBody.error) errDetail = errBody.error; } catch {}
-          console.error(`[runTranscription] Signed URL FAILED: ${errDetail}`);
+        const form = new FormData();
+        form.append("file", data.videoFile);
+        form.append("bucket", "videos");
+        form.append("prefix", "uploads");
+        const uploadRes = await fetch("/api/upload", { method: "POST", body: form });
+        if (!uploadRes.ok) {
+          let errDetail = `שגיאה בהעלאה (${uploadRes.status})`;
+          try { const b = await uploadRes.json(); if (b.error) errDetail = b.error; } catch {}
           throw new Error(errDetail);
         }
-        const { signedUrl, publicUrl: fallbackPublicUrl } = await signedRes.json();
+        const { publicUrl: finalUrl } = await uploadRes.json();
 
-        // Step 2: Upload directly to Supabase Storage
-        const putRes = await fetch(signedUrl, {
-          method: "PUT",
-          headers: { "Content-Type": data.videoFile.type || "application/octet-stream" },
-          body: data.videoFile,
-        });
-        if (!putRes.ok) {
-          let errDetail = `שגיאה בהעלאה לאחסון (${putRes.status})`;
-          try { const errBody = await putRes.json(); if (errBody.error || errBody.message) errDetail = errBody.error || errBody.message; } catch {}
-          console.error(`[runTranscription] Supabase upload FAILED: ${errDetail}`);
-          throw new Error(errDetail);
-        }
-
-        transcriptionUrl = fallbackPublicUrl;
-        // Persist the URL so subsequent operations don't need to re-upload
-        patch({ uploadedVideoUrl: fallbackPublicUrl, videoUrl: fallbackPublicUrl });
+        transcriptionUrl = finalUrl;
+        patch({ uploadedVideoUrl: finalUrl, videoUrl: finalUrl });
         console.log(`[runTranscription] Fallback upload SUCCESS: ${transcriptionUrl}`);
       } else if (data.videoUrl && !data.videoUrl.startsWith("blob:")) {
         transcriptionUrl = data.videoUrl;
