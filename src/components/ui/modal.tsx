@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 interface ModalProps {
   open: boolean;
@@ -11,137 +11,169 @@ interface ModalProps {
 }
 
 export function Modal({ open, onClose, title, children, footer }: ModalProps) {
-  // Prevent body scroll when open
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
   useEffect(() => {
+    if (!dialogRef.current) return;
+
     if (open) {
+      dialogRef.current.showModal();
+      // Trap focus and prevent scroll
       document.body.style.overflow = 'hidden';
     } else {
+      dialogRef.current.close();
       document.body.style.overflow = '';
     }
+
     return () => {
       document.body.style.overflow = '';
     };
   }, [open]);
 
-  // Close on Escape
   useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open, onClose]);
+    const dialog = dialogRef.current;
+    if (!dialog) return;
 
-  if (!open) return null;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    const handleBackdropClick = (e: MouseEvent) => {
+      if (e.target === dialog) {
+        onClose();
+      }
+    };
+
+    dialog.addEventListener('keydown', handleKeyDown);
+    dialog.addEventListener('click', handleBackdropClick);
+
+    return () => {
+      dialog.removeEventListener('keydown', handleKeyDown);
+      dialog.removeEventListener('click', handleBackdropClick);
+    };
+  }, [onClose]);
 
   return (
-    <div
+    <dialog
+      ref={dialogRef}
       style={{
+        display: open ? 'block' : 'none',
         position: 'fixed',
         inset: 0,
-        zIndex: 1000,
+        width: '100vw',
+        height: '100vh',
+        padding: 0,
+        margin: 0,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         backdropFilter: 'blur(4px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '1rem',
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        border: 'none',
+        zIndex: 1000,
       }}
     >
       <div
-        onClick={(e) => e.stopPropagation()}
         style={{
-          backgroundColor: 'var(--surface-raised)',
-          borderRadius: '0.75rem',
-          border: '1px solid var(--border)',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
-          maxWidth: '32rem',
-          width: '100%',
-          maxHeight: '90vh',
+          position: 'fixed',
+          inset: 0,
           display: 'flex',
-          flexDirection: 'column',
-          backdropFilter: 'blur(20px)',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '1rem',
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
         }}
       >
-        {/* Header */}
         <div
           style={{
+            backgroundColor: 'var(--surface-raised)',
+            borderRadius: '0.75rem',
+            border: `1px solid var(--border)`,
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+            maxWidth: '32rem',
+            width: '100%',
+            maxHeight: '90vh',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '1.5rem',
-            borderBottom: '1px solid var(--border)',
+            flexDirection: 'column',
+            backdropFilter: 'blur(20px)',
           }}
         >
-          <h2
-            style={{
-              margin: 0,
-              fontSize: '1.25rem',
-              fontWeight: 600,
-              color: 'var(--foreground)',
-            }}
-          >
-            {title}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: '0.25rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--foreground-muted)',
-              transition: 'color 150ms ease',
-              fontSize: '1.5rem',
-              lineHeight: 1,
-            }}
-            onMouseEnter={(e) => {
-              (e.target as HTMLElement).style.color = 'var(--foreground)';
-            }}
-            onMouseLeave={(e) => {
-              (e.target as HTMLElement).style.color = 'var(--foreground-muted)';
-            }}
-            aria-label="Close modal"
-          >
-            ×
-          </button>
-        </div>
-
-        {/* Content */}
-        <div
-          style={{
-            flex: 1,
-            overflow: 'auto',
-            padding: '1.5rem',
-            color: 'var(--foreground)',
-          }}
-        >
-          {children}
-        </div>
-
-        {/* Footer */}
-        {footer && (
+          {/* Header */}
           <div
             style={{
               display: 'flex',
-              gap: '1rem',
+              alignItems: 'center',
+              justifyContent: 'space-between',
               padding: '1.5rem',
-              borderTop: '1px solid var(--border)',
-              justifyContent: 'flex-end',
+              borderBottom: `1px solid var(--border)`,
             }}
           >
-            {footer}
+            <h2
+              style={{
+                margin: 0,
+                fontSize: '1.25rem',
+                fontWeight: 600,
+                color: 'var(--foreground)',
+              }}
+            >
+              {title}
+            </h2>
+            <button
+              onClick={onClose}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '0.25rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--foreground-muted)',
+                transition: 'color 150ms ease',
+                fontSize: '1.5rem',
+                lineHeight: 1,
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLElement).style.color = 'var(--foreground)';
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLElement).style.color = 'var(--foreground-muted)';
+              }}
+              aria-label="Close modal"
+            >
+              ×
+            </button>
           </div>
-        )}
+
+          {/* Content */}
+          <div
+            style={{
+              flex: 1,
+              overflow: 'auto',
+              padding: '1.5rem',
+              color: 'var(--foreground)',
+            }}
+          >
+            {children}
+          </div>
+
+          {/* Footer */}
+          {footer && (
+            <div
+              style={{
+                display: 'flex',
+                gap: '1rem',
+                padding: '1.5rem',
+                borderTop: `1px solid var(--border)`,
+                justifyContent: 'flex-end',
+              }}
+            >
+              {footer}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </dialog>
   );
 }
