@@ -78,6 +78,7 @@ async function ensurePersisted(jobId: string, job: ReturnType<typeof readRenderJ
         .from("video_projects")
         .update({
           render_output_key: publicUrl,
+          video_url: publicUrl,
           status: "complete",
           updated_at: new Date().toISOString(),
         })

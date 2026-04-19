@@ -24,6 +24,9 @@ type ProjectRow = {
   source_video_key?: string | null;
   render_output_key?: string | null;
   thumbnail_key?: string | null;
+  video_url?: string | null;
+  thumbnail_url?: string | null;
+  duration?: number | null;
   wizard_state?: Record<string, unknown> | null;
   render_payload?: Record<string, unknown> | null;
   start_date?: string | null;
@@ -51,6 +54,9 @@ function rowToProject(r: ProjectRow) {
     sourceVideoKey: r.source_video_key ?? null,
     renderOutputKey: r.render_output_key ?? null,
     thumbnailKey: r.thumbnail_key ?? null,
+    videoUrl: r.video_url ?? null,
+    thumbnailUrl: r.thumbnail_url ?? null,
+    duration: r.duration ?? 0,
     wizardState: r.wizard_state ?? null,
     renderPayload: r.render_payload ?? null,
     startDate: r.start_date ?? null,
@@ -79,6 +85,9 @@ function toDbUpdate(body: Record<string, unknown>): Record<string, unknown> {
     ['sourceVideoKey', 'source_video_key'],
     ['renderOutputKey', 'render_output_key'],
     ['thumbnailKey', 'thumbnail_key'],
+    ['videoUrl', 'video_url'],
+    ['thumbnailUrl', 'thumbnail_url'],
+    ['duration', 'duration'],
     ['startDate', 'start_date'],
     ['endDate', 'end_date'],
     ['assignedManagerId', 'assigned_manager_id'],
@@ -95,7 +104,7 @@ function toDbUpdate(body: Record<string, unknown>): Record<string, unknown> {
 }
 
 const SELECT_COLUMNS =
-  'id, name, client_id, client_name, status, description, project_type, format, preset, duration_sec, segments, source_video_key, render_output_key, thumbnail_key, wizard_state, render_payload, start_date, end_date, assigned_manager_id, created_at, updated_at';
+  'id, name, client_id, client_name, status, description, project_type, format, preset, duration_sec, segments, source_video_key, render_output_key, thumbnail_key, video_url, thumbnail_url, duration, wizard_state, render_payload, start_date, end_date, assigned_manager_id, created_at, updated_at';
 
 function parseBadColumn(msg: string): string | null {
   const m = msg.match(/column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);

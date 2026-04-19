@@ -275,6 +275,9 @@ export interface Project {
   sourceVideoKey: string | null;
   renderOutputKey: string | null;
   thumbnailKey: string | null;
+  videoUrl: string | null;
+  thumbnailUrl: string | null;
+  duration: number;
   wizardState: Record<string, unknown> | null;
   renderPayload: Record<string, unknown> | null;
   sentToClientAt: string | null;

@@ -42,6 +42,9 @@ type ProjectRow = {
   source_video_key?: string | null;
   render_output_key?: string | null;
   thumbnail_key?: string | null;
+  video_url?: string | null;
+  thumbnail_url?: string | null;
+  duration?: number | null;
   wizard_state?: Record<string, unknown> | null;
   render_payload?: Record<string, unknown> | null;
   start_date?: string | null;
@@ -69,6 +72,9 @@ function rowToProject(r: ProjectRow) {
     sourceVideoKey: r.source_video_key ?? null,
     renderOutputKey: r.render_output_key ?? null,
     thumbnailKey: r.thumbnail_key ?? null,
+    videoUrl: r.video_url ?? null,
+    thumbnailUrl: r.thumbnail_url ?? null,
+    duration: r.duration ?? 0,
     wizardState: r.wizard_state ?? null,
     renderPayload: r.render_payload ?? null,
     startDate: r.start_date ?? null,
@@ -97,6 +103,9 @@ export function toDbInsert(body: Record<string, unknown>, id: string, now: strin
     source_video_key: (body.sourceVideoKey ?? null) as string | null,
     render_output_key: (body.renderOutputKey ?? null) as string | null,
     thumbnail_key: (body.thumbnailKey ?? null) as string | null,
+    video_url: (body.videoUrl ?? null) as string | null,
+    thumbnail_url: (body.thumbnailUrl ?? null) as string | null,
+    duration: (body.duration ?? body.durationSec ?? null) as number | null,
     wizard_state: body.wizardState ? JSON.parse(JSON.stringify(body.wizardState)) : null,
     render_payload: body.renderPayload ? JSON.parse(JSON.stringify(body.renderPayload)) : null,
     start_date: (body.startDate ?? null) as string | null,
@@ -110,7 +119,7 @@ export function toDbInsert(body: Record<string, unknown>, id: string, now: strin
 /* ── Column lists ─────────────────────────────────────────────────────── */
 
 const SELECT_COLUMNS =
-  'id, name, client_id, client_name, status, description, project_type, format, preset, duration_sec, segments, source_video_key, render_output_key, thumbnail_key, wizard_state, render_payload, start_date, end_date, assigned_manager_id, created_at, updated_at';
+  'id, name, client_id, client_name, status, description, project_type, format, preset, duration_sec, segments, source_video_key, render_output_key, thumbnail_key, video_url, thumbnail_url, duration, wizard_state, render_payload, start_date, end_date, assigned_manager_id, created_at, updated_at';
 
 /* ── GET ──────────────────────────────────────────────────────────────── */
 
@@ -132,7 +141,8 @@ export async function GET() {
         console.error('[API] GET /api/data/projects supabase error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
-      console.warn(`[API] GET /api/data/projects dropping unknown column "${bad}" from select. Add it via: ALTER TABLE video_projects ADD COLUMN ${bad} ${bad.endsWith('_state') || bad.endsWith('_payload') || bad === 'segments' ? 'JSONB' : bad.endsWith('_sec') ? 'INTEGER' : 'TEXT'};`);
+      const colType = bad.endsWith('_state') || bad.endsWith('_payload') || bad === 'segments' ? 'JSONB' : bad === 'duration' || bad.endsWith('_sec') ? 'INTEGER' : 'TEXT';
+      console.warn(`[API] GET /api/data/projects dropping unknown column "${bad}" from select. Add it via: ALTER TABLE video_projects ADD COLUMN ${bad} ${colType};`);
       selectList = selectList
         .split(',')
         .map((s) => s.trim())
