@@ -86,15 +86,34 @@ async function renderJob(jobId: string): Promise<void> {
     // Stage 2: Select composition
     const inputProps = job.inputProps || {};
     const compositionId = job.compositionId || "PixelFrameEdit";
-    console.log(`[Worker] Selecting composition ${compositionId} with props:`, JSON.stringify(inputProps).slice(0, 200));
+    console.log(`[Worker] ── Composition Details ──`);
+    console.log(`[Worker]   compositionId: ${compositionId}`);
+    console.log(`[Worker]   inputProps keys: ${Object.keys(inputProps).join(", ")}`);
+    console.log(`[Worker]   videoUrl: ${inputProps.videoUrl?.substring(0, 120) || "(empty)"}`);
+    console.log(`[Worker]   format: ${inputProps.format || "(none)"}`);
+    console.log(`[Worker]   durationSec: ${inputProps.durationSec || "(none)"}`);
+    console.log(`[Worker]   segments: ${inputProps.segments?.length || 0}`);
+    console.log(`[Worker]   brollPlacements: ${inputProps.brollPlacements?.length || 0}`);
+    console.log(`[Worker]   music.enabled: ${inputProps.music?.enabled}`);
+    console.log(`[Worker]   music.trackUrl: ${inputProps.music?.trackUrl?.substring(0, 80) || "(none)"}`);
+    console.log(`[Worker]   premium.enabled: ${inputProps.premium?.enabled}`);
 
-    const composition = await selectComposition({
-      serveUrl,
-      id: compositionId,
-      inputProps,
-    });
+    let composition;
+    try {
+      composition = await selectComposition({
+        serveUrl,
+        id: compositionId,
+        inputProps,
+      });
+    } catch (compErr) {
+      const msg = compErr instanceof Error ? compErr.message : String(compErr);
+      const stack = compErr instanceof Error ? compErr.stack : undefined;
+      console.error(`[Worker] ❌ selectComposition FAILED: ${msg}`);
+      if (stack) console.error(`[Worker]   stack: ${stack}`);
+      throw compErr;
+    }
 
-    console.log(`[Worker] Composition selected: ${composition.width}x${composition.height}, ${composition.durationInFrames} frames @ ${composition.fps}fps`);
+    console.log(`[Worker] ✅ Composition selected: ${composition.width}x${composition.height}, ${composition.durationInFrames} frames @ ${composition.fps}fps`);
 
     updateJobFile(jobId, {
       status: "rendering",
@@ -103,30 +122,41 @@ async function renderJob(jobId: string): Promise<void> {
     });
 
     // Stage 3: Render
-    await renderMedia({
-      composition,
-      serveUrl,
-      codec: "h264",
-      outputLocation: outputPath,
-      inputProps,
-      onProgress: ({ progress }) => {
-        const pct = Math.round(20 + progress * 75);
-        const stage =
-          progress < 0.15 ? "מעבד קטעי וידאו" :
-          progress < 0.3 ? "מוסיף כתוביות" :
-          progress < 0.45 ? "משלב B-Roll" :
-          progress < 0.6 ? "מחיל מעברים ואפקטים" :
-          progress < 0.75 ? "מוסיף מוזיקה ואודיו" :
-          progress < 0.9 ? "מחיל שיפורים פרימיום" :
-          "רינדור סופי";
+    console.log(`[Worker] ── Starting renderMedia ──`);
+    console.log(`[Worker]   codec: h264`);
+    console.log(`[Worker]   outputLocation: ${outputPath}`);
+    try {
+      await renderMedia({
+        composition,
+        serveUrl,
+        codec: "h264",
+        outputLocation: outputPath,
+        inputProps,
+        onProgress: ({ progress }) => {
+          const pct = Math.round(20 + progress * 75);
+          const stage =
+            progress < 0.15 ? "מעבד קטעי וידאו" :
+            progress < 0.3 ? "מוסיף כתוביות" :
+            progress < 0.45 ? "משלב B-Roll" :
+            progress < 0.6 ? "מחיל מעברים ואפקטים" :
+            progress < 0.75 ? "מוסיף מוזיקה ואודיו" :
+            progress < 0.9 ? "מחיל שיפורים פרימיום" :
+            "רינדור סופי";
 
-        updateJobFile(jobId, {
-          status: "rendering",
-          progress: pct,
-          currentStage: stage,
-        });
-      },
-    });
+          updateJobFile(jobId, {
+            status: "rendering",
+            progress: pct,
+            currentStage: stage,
+          });
+        },
+      });
+    } catch (renderErr) {
+      const msg = renderErr instanceof Error ? renderErr.message : String(renderErr);
+      const stack = renderErr instanceof Error ? renderErr.stack : undefined;
+      console.error(`[Worker] ❌ renderMedia FAILED: ${msg}`);
+      if (stack) console.error(`[Worker]   stack: ${stack}`);
+      throw renderErr;
+    }
 
     // Stage 4: Finalize
     updateJobFile(jobId, {
@@ -161,7 +191,11 @@ async function renderJob(jobId: string): Promise<void> {
     });
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : "Unknown render error";
-    console.error(`[Worker] Render failed for job ${jobId}:`, errorMsg);
+    const errorStack = err instanceof Error ? err.stack : undefined;
+    console.error(`[Worker] ═══ RENDER FAILED ═══`);
+    console.error(`[Worker]   Job ID:    ${jobId}`);
+    console.error(`[Worker]   Error:     ${errorMsg}`);
+    if (errorStack) console.error(`[Worker]   Stack:     ${errorStack}`);
     updateJobFile(jobId, {
       status: "failed",
       error: errorMsg,

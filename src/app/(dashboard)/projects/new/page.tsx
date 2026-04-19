@@ -1056,6 +1056,15 @@ export default function NewProjectWizard() {
 
       // POST to render API with composition data
       const renderBody = compositionData || renderPayload || {};
+      console.log("[render] 📦 Render request payload:", {
+        projectId,
+        projectName: data.title,
+        hasCompositionData: !!compositionData,
+        hasRenderPayload: !!renderPayload,
+        renderBodyKeys: Object.keys(renderBody),
+        videoUrl: (renderBody as any)?.source?.videoUrl?.substring(0, 80) || "(none in body)",
+        quality: data.premiumLevel || "premium",
+      });
       try {
         const renderRes = await fetch("/api/render", {
           method: "POST",
@@ -1068,7 +1077,15 @@ export default function NewProjectWizard() {
           }),
         });
 
-        if (!renderRes.ok) throw new Error("Render API returned error");
+        if (!renderRes.ok) {
+          let serverError = `HTTP ${renderRes.status}`;
+          try {
+            const errBody = await renderRes.json();
+            serverError = errBody.error || errBody.message || JSON.stringify(errBody);
+            console.error("[render] ❌ Render API response:", renderRes.status, errBody);
+          } catch { /* noop */ }
+          throw new Error(`Render API failed: ${serverError}`);
+        }
 
         const { job } = await renderRes.json();
         const jobId = job.id;

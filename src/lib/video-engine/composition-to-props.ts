@@ -103,11 +103,22 @@ export interface RemotionInputProps {
  * Convert FinalCompositionData → Remotion CompositionProps
  */
 export function compositionToProps(data: FinalCompositionData): RemotionInputProps {
-  if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
-    console.debug("[compositionToProps] videoUrl:", data.source.videoUrl?.substring(0, 80) || "(empty)",
-      "| tracks:", data.timeline.tracks.map(t => t.type).join(","),
-      "| duration:", data.timeline.durationSec);
+  // Validate required structure exists
+  if (!data?.source || !data?.timeline || !data?.subtitles || !data?.audio || !data?.visual || !data?.premium) {
+    const missing = [
+      !data?.source && "source",
+      !data?.timeline && "timeline",
+      !data?.subtitles && "subtitles",
+      !data?.audio && "audio",
+      !data?.visual && "visual",
+      !data?.premium && "premium",
+    ].filter(Boolean).join(", ");
+    throw new Error(`compositionToProps: FinalCompositionData is missing required sections: ${missing}. Got keys: ${data ? Object.keys(data).join(", ") : "(null)"}`);
   }
+
+  console.log("[compositionToProps] videoUrl:", data.source.videoUrl?.substring(0, 80) || "(empty)",
+    "| tracks:", data.timeline.tracks?.map(t => t.type).join(",") || "(none)",
+    "| duration:", data.timeline.durationSec);
   // Extract subtitle segments from timeline
   const subtitleTrack = data.timeline.tracks.find(t => t.type === "subtitle");
   const segments = subtitleTrack
