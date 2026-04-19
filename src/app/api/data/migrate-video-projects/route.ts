@@ -69,15 +69,29 @@ export async function GET() {
     }
   }
 
+  // Reload PostgREST schema cache so new columns are immediately visible
+  let schemaReload = 'skipped';
+  for (const paramName of ['sql_text', 'query', 'sql']) {
+    const { error } = await sb.rpc('exec_sql', { [paramName]: "NOTIFY pgrst, 'reload schema';" });
+    if (!error) { schemaReload = 'ok'; break; }
+  }
+
   // Also provide raw SQL the user can run in the Supabase SQL Editor
-  const rawSql = COLUMNS.map((col) => {
-    const defaultClause = col.defaultVal ? ` DEFAULT ${col.defaultVal}` : '';
-    return `ALTER TABLE public.video_projects ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}${defaultClause};`;
-  }).join('\n');
+  const rawSql = [
+    '-- Run in Supabase SQL Editor:',
+    ...COLUMNS.map((col) => {
+      const defaultClause = col.defaultVal ? ` DEFAULT ${col.defaultVal}` : '';
+      return `ALTER TABLE public.video_projects ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}${defaultClause};`;
+    }),
+    '',
+    "-- Reload schema cache:",
+    "NOTIFY pgrst, 'reload schema';",
+  ].join('\n');
 
   return NextResponse.json({
     message: 'Migration complete. Results below. If RPC errors, run the raw SQL in Supabase SQL Editor.',
     results,
+    schemaReload,
     rawSql,
   });
 }

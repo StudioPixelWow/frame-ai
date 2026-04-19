@@ -174,13 +174,26 @@ export async function PUT(
     }
 
     if (lastErr && !updated) {
-      console.error('[API] PUT /api/data/projects/[id] supabase error:', lastErr);
-      return NextResponse.json({ error: lastErr.message, code: (lastErr as any).code ?? null }, { status: 400 });
+      const code = (lastErr as any)?.code ?? null;
+      const hint = (lastErr as any)?.hint ?? null;
+      console.error('[API] PUT /api/data/projects/[id] ❌ UPDATE FAILED', {
+        id,
+        errorMessage: lastErr.message,
+        code,
+        hint,
+        remainingCols: Object.keys(updateRow),
+      });
+      return NextResponse.json(
+        { error: lastErr.message, code, hint: hint ?? 'Run GET /api/data/migrate-video-projects to add missing columns.' },
+        { status: 400 },
+      );
     }
     if (!updated) {
       return NextResponse.json({ error: 'Project not found', projectId: id }, { status: 404 });
     }
-    return NextResponse.json(rowToProject(updated));
+    const result = rowToProject(updated);
+    console.log(`[API] PUT /api/data/projects/${id} ✅ updated status=${result.status} segments=${Array.isArray(result.segments) ? result.segments.length : 0}`);
+    return NextResponse.json(result);
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] PUT /api/data/projects/[id] error:', msg);

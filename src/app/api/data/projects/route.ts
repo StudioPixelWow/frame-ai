@@ -196,24 +196,51 @@ export async function POST(req: NextRequest) {
 
     if (!inserted) {
       const code = (lastErr as any)?.code ?? null;
-      console.error('[API] POST /api/data/projects insert error:', lastErr);
+      const hint = (lastErr as any)?.hint ?? null;
+      const details = (lastErr as any)?.details ?? null;
+      console.error('[API] POST /api/data/projects ❌ INSERT FAILED', {
+        id,
+        errorMessage: lastErr?.message,
+        code,
+        hint,
+        details,
+        droppedCols: Object.keys(toDbInsert(body, id, now)).filter((k) => !(k in insertRow)),
+        remainingCols: Object.keys(insertRow),
+      });
       return NextResponse.json(
-        { error: lastErr?.message ?? 'Insert failed', code },
+        {
+          error: lastErr?.message ?? 'Insert failed',
+          code,
+          hint: hint ?? 'Run GET /api/data/migrate-video-projects to add missing columns, then retry.',
+          projectId: id,
+        },
         { status: 500 }
       );
     }
 
     // Verify by reading back.
-    const { data: verify, error: verifyErr } = await sb
-      .from('video_projects')
-      .select(selectList)
-      .eq('id', id)
-      .maybeSingle();
+    let verify: Record<string, unknown> | null = null;
+    let verifyErr: { message: string } | null = null;
+    try {
+      const result = await sb
+        .from('video_projects')
+        .select(selectList)
+        .eq('id', id)
+        .maybeSingle();
+      verify = result.data as Record<string, unknown> | null;
+      verifyErr = result.error as { message: string } | null;
+    } catch (e) {
+      verifyErr = { message: e instanceof Error ? e.message : String(e) };
+    }
 
     if (verifyErr || !verify) {
-      console.error('[API] POST /api/data/projects verify failed', verifyErr);
+      console.error('[API] POST /api/data/projects ❌ VERIFY FAILED', {
+        id,
+        verifyError: verifyErr?.message,
+        insertedId: inserted.id,
+      });
       return NextResponse.json(
-        { error: verifyErr?.message ?? 'Project not persisted', projectId: id },
+        { error: verifyErr?.message ?? 'Project not persisted — row inserted but read-back failed', projectId: id },
         { status: 500 }
       );
     }
