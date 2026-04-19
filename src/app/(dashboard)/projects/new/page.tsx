@@ -1781,25 +1781,97 @@ function StepUpload({ data, patch }: { data: WizardData; patch: (p: Partial<Wiza
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState("");
+  const xhrRef = useRef<XMLHttpRequest | null>(null);
 
   const handleFile = (file: File) => {
     if (!file.type.startsWith("video/")) return;
     if (data.videoUrl) URL.revokeObjectURL(data.videoUrl);
     const blobUrl = URL.createObjectURL(file);
     patch({ videoFile: file, videoUrl: blobUrl, uploadedVideoUrl: "", trimMode: "full", trimStart: 0, trimEnd: 0, segments: [] });
+    setUploadError("");
+    setUploadProgress(0);
 
-    // Early upload — get server URL ASAP so all downstream steps have a real URL
+    // Early upload using XHR for real progress tracking
     setUploading(true);
     const form = new FormData();
     form.append("file", file);
-    fetch("/api/upload", { method: "POST", body: form })
-      .then(res => res.ok ? res.json() : Promise.reject(res.statusText))
-      .then(json => {
-        console.debug("[StepUpload] Early upload complete:", json.url);
-        patch({ uploadedVideoUrl: json.url, videoUrl: json.url });
-      })
-      .catch(err => console.warn("[StepUpload] Early upload failed (will retry at transcription):", err))
-      .finally(() => setUploading(false));
+
+    const fileSizeMB = (file.size / 1048576).toFixed(1);
+    console.log(`[StepUpload] Upload started: name=${file.name} size=${fileSizeMB}MB type=${file.type}`);
+
+    const xhr = new XMLHttpRequest();
+    xhrRef.current = xhr;
+
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        setUploadProgress(pct);
+        if (pct % 25 === 0) console.log(`[StepUpload] Upload progress: ${pct}% (${(e.loaded / 1048576).toFixed(1)}/${fileSizeMB}MB)`);
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      xhrRef.current = null;
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const json = JSON.parse(xhr.responseText);
+          console.log(`[StepUpload] Upload SUCCESS: url=${json.url} size=${json.size} bytes`);
+          patch({ uploadedVideoUrl: json.url, videoUrl: json.url });
+          setUploadProgress(100);
+        } catch (e) {
+          const msg = "שגיאה בתגובת השרת";
+          console.error(`[StepUpload] Upload response parse error:`, e);
+          setUploadError(msg);
+          patch({ uploadedVideoUrl: "" });
+        }
+      } else {
+        // Server error — parse error message
+        let msg = `שגיאה בהעלאה (${xhr.status})`;
+        try {
+          const errJson = JSON.parse(xhr.responseText);
+          if (errJson.error) msg = errJson.error;
+          if (errJson.details) msg += ` — ${errJson.details}`;
+        } catch {}
+        console.error(`[StepUpload] Upload FAILED: status=${xhr.status} ${msg}`);
+        setUploadError(msg);
+        patch({ uploadedVideoUrl: "" });
+      }
+      setUploading(false);
+    });
+
+    xhr.addEventListener("error", () => {
+      xhrRef.current = null;
+      const msg = "שגיאת רשת — לא ניתן להתחבר לשרת";
+      console.error(`[StepUpload] Upload NETWORK ERROR`);
+      setUploadError(msg);
+      patch({ uploadedVideoUrl: "" });
+      setUploading(false);
+    });
+
+    xhr.addEventListener("abort", () => {
+      xhrRef.current = null;
+      console.log(`[StepUpload] Upload aborted`);
+      setUploadError("");
+      setUploading(false);
+    });
+
+    xhr.open("POST", "/api/upload");
+    xhr.send(form);
+  };
+
+  const cancelUpload = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (xhrRef.current) {
+      xhrRef.current.abort();
+      xhrRef.current = null;
+    }
+  };
+
+  const retryUpload = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (data.videoFile) handleFile(data.videoFile);
   };
 
   return (
@@ -1809,7 +1881,7 @@ function StepUpload({ data, patch }: { data: WizardData; patch: (p: Partial<Wiza
       <div className={`wiz-upload-zone ${dragging ? "dragging" : ""} ${data.videoFile ? "has-file" : ""}`}
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)}
         onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
-        onClick={() => fileRef.current?.click()}>
+        onClick={() => !uploading && fileRef.current?.click()}>
         <input ref={fileRef} type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
         {data.videoFile ? (
           <div className="wiz-upload-done">
@@ -1817,9 +1889,36 @@ function StepUpload({ data, patch }: { data: WizardData; patch: (p: Partial<Wiza
             <div className="wiz-upload-info">
               <div className="wiz-upload-name">{data.videoFile.name}</div>
               <div className="wiz-upload-size">{(data.videoFile.size / 1024 / 1024).toFixed(1)} MB</div>
-              {uploading && <div style={{ fontSize: "0.72rem", color: "#a78bfa" }}>⏳ מעלה לשרת...</div>}
-              {!uploading && data.uploadedVideoUrl && <div style={{ fontSize: "0.72rem", color: "#22c55e" }}>✓ הועלה לשרת</div>}
-              <button className="wiz-btn wiz-btn-ghost wiz-btn-sm" onClick={(e) => { e.stopPropagation(); if (data.videoUrl) URL.revokeObjectURL(data.videoUrl); patch({ videoFile: null, videoUrl: "", uploadedVideoUrl: "", segments: [] }); }}>🗑 החלף וידאו</button>
+
+              {/* Upload progress bar */}
+              {uploading && (
+                <div style={{ width: "100%", marginTop: 4 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.72rem", color: "#a78bfa", marginBottom: 3 }}>
+                    <span>⏳ מעלה לשרת... {uploadProgress}%</span>
+                    <button className="wiz-btn wiz-btn-ghost wiz-btn-sm" onClick={cancelUpload} style={{ fontSize: "0.65rem", padding: "0 4px" }}>ביטול</button>
+                  </div>
+                  <div style={{ width: "100%", height: 4, borderRadius: 2, background: "rgba(167,139,250,0.15)", overflow: "hidden" }}>
+                    <div style={{ width: `${uploadProgress}%`, height: "100%", borderRadius: 2, background: "linear-gradient(90deg, #a78bfa, #7c3aed)", transition: "width 200ms ease" }} />
+                  </div>
+                </div>
+              )}
+
+              {/* Upload success */}
+              {!uploading && !uploadError && data.uploadedVideoUrl && (
+                <div style={{ fontSize: "0.72rem", color: "#22c55e" }}>✓ הועלה לשרת</div>
+              )}
+
+              {/* Upload error with retry */}
+              {!uploading && uploadError && (
+                <div style={{ marginTop: 4 }}>
+                  <div style={{ fontSize: "0.72rem", color: "#ef4444", marginBottom: 4 }}>✗ {uploadError}</div>
+                  <button className="wiz-btn wiz-btn-ghost wiz-btn-sm" onClick={retryUpload} style={{ fontSize: "0.68rem", color: "#a78bfa" }}>🔄 נסה שוב</button>
+                </div>
+              )}
+
+              {!uploading && (
+                <button className="wiz-btn wiz-btn-ghost wiz-btn-sm" onClick={(e) => { e.stopPropagation(); if (xhrRef.current) xhrRef.current.abort(); if (data.videoUrl) URL.revokeObjectURL(data.videoUrl); patch({ videoFile: null, videoUrl: "", uploadedVideoUrl: "", segments: [] }); setUploadError(""); setUploadProgress(0); }}>🗑 החלף וידאו</button>
+              )}
             </div>
           </div>
         ) : (
@@ -2603,12 +2702,24 @@ function StepTranscriptReview({ data, patch, videoSrc: parentVideoSrc }: { data:
   }, []);
 
   // Auto-generate transcription when entering this step with no segments
+  // GATE: Only auto-trigger if we have a server-uploaded URL (not just a blob)
   const autoTriggered = useRef(false);
   useEffect(() => {
-    if (!autoTriggered.current && data.segments.length === 0 && (data.videoFile || data.uploadedVideoUrl || data.videoUrl) && !transcribing) {
-      autoTriggered.current = true;
-      console.log("[StepTranscriptReview] Auto-triggering transcription");
-      runTranscription();
+    if (!autoTriggered.current && data.segments.length === 0 && !transcribing) {
+      // Must have a real server URL — do NOT proceed with just a blob or videoFile
+      if (data.uploadedVideoUrl) {
+        autoTriggered.current = true;
+        console.log("[StepTranscriptReview] Auto-triggering transcription (uploadedVideoUrl ready)");
+        runTranscription();
+      } else if (data.videoFile && !data.uploadedVideoUrl) {
+        // Upload didn't succeed yet — show clear error instead of silently failing
+        autoTriggered.current = true;
+        console.warn("[StepTranscriptReview] No uploadedVideoUrl — upload may have failed. Will attempt upload before transcription.");
+        runTranscription();
+      } else {
+        console.warn("[StepTranscriptReview] No video source available for transcription");
+        setTranscribeError("לא נמצא קובץ וידאו — חזור לשלב ההעלאה וודא שהקובץ הועלה בהצלחה");
+      }
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2662,15 +2773,25 @@ function StepTranscriptReview({ data, patch, videoSrc: parentVideoSrc }: { data:
         console.debug("[runTranscription] Reusing uploadedVideoUrl for transcription:", transcriptionUrl);
       } else if (data.videoFile) {
         // Fallback: upload the file for transcription purposes only
+        console.log(`[runTranscription] Fallback upload: ${data.videoFile.name} (${(data.videoFile.size / 1048576).toFixed(1)}MB)`);
         const uploadForm = new FormData();
         uploadForm.append("file", data.videoFile);
         const uploadRes = await fetch("/api/upload", { method: "POST", body: uploadForm });
-        if (!uploadRes.ok) throw new Error("שגיאה בהעלאת הקובץ לשרת");
+        if (!uploadRes.ok) {
+          let errDetail = `שגיאה בהעלאת הקובץ לשרת (${uploadRes.status})`;
+          try {
+            const errBody = await uploadRes.json();
+            if (errBody.error) errDetail = errBody.error;
+            if (errBody.details) errDetail += ` — ${errBody.details}`;
+          } catch {}
+          console.error(`[runTranscription] Fallback upload FAILED: ${errDetail}`);
+          throw new Error(errDetail);
+        }
         const uploadData = await uploadRes.json();
         transcriptionUrl = uploadData.url;
-        console.debug("[runTranscription] Fresh upload for transcription only:", transcriptionUrl,
-          "| uploadedVideoUrl UNCHANGED:", data.uploadedVideoUrl,
-          "| videoUrl UNCHANGED:", data.videoUrl);
+        // Also persist the URL so subsequent operations don't need to re-upload
+        patch({ uploadedVideoUrl: uploadData.url, videoUrl: uploadData.url });
+        console.log(`[runTranscription] Fallback upload SUCCESS: ${transcriptionUrl} (${uploadData.size} bytes)`);
 
         // Check if the uploaded file has an audio stream
         if (uploadData.probe && uploadData.probe.hasAudio === false) {

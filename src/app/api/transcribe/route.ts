@@ -11,6 +11,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiKeys, getApiKeyStatus } from "@/lib/db/api-keys";
 import { DATA_DIR as FRAMEAI_DATA_DIR } from "@/lib/db/paths";
 
+// ── Force Node.js runtime for filesystem access ──
+export const runtime = "nodejs";
+export const maxDuration = 120; // transcription can take up to 2 minutes
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Types
    ═══════════════════════════════════════════════════════════════════════════ */
