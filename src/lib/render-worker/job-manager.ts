@@ -13,6 +13,9 @@ import { getSupabase } from "@/lib/db/store";
 
 const DATA_DIR = path.join(FRAMEAI_DATA_DIR, "render-jobs");
 
+// Log the resolved path on module load so we can diagnose path mismatches
+console.log(`[JobManager] DATA_DIR resolved to: ${DATA_DIR} (NODE_ENV=${process.env.NODE_ENV}, cwd=${process.cwd()})`);
+
 // Ensure directory exists
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -85,14 +88,16 @@ async function dbUpsert(job: RenderJobData): Promise<void> {
         await ensureRenderJobsTable();
         // Retry once
         const { error: retryErr } = await sb.from("render_jobs").upsert(row, { onConflict: "id" });
-        if (retryErr) console.error("[JobManager] DB upsert retry failed:", retryErr.message);
-        else console.log(`[JobManager] DB upsert OK (after table create): ${job.id}`);
+        if (retryErr) console.error(`[JobManager] ❌ DB upsert retry FAILED: ${retryErr.message}`);
+        else console.log(`[JobManager] ✅ DB upsert OK (after table create): ${job.id}`);
       } else {
-        console.error("[JobManager] DB upsert failed:", error.message);
+        console.error(`[JobManager] ❌ DB upsert FAILED: ${error.message}`);
       }
+    } else {
+      console.log(`[JobManager] ✅ DB upsert OK: ${job.id} status=${job.status}`);
     }
   } catch (err) {
-    console.error("[JobManager] DB upsert error:", err instanceof Error ? err.message : err);
+    console.error("[JobManager] ❌ DB upsert exception:", err instanceof Error ? err.message : err);
   }
 }
 
@@ -230,15 +235,21 @@ export async function createRenderJobFile(data: Omit<RenderJobData, "id">): Prom
   const job: RenderJobData = { id, ...data };
 
   // 1. Write to file (synchronous — always works locally)
-  fileWrite(job);
   const filePath = path.join(DATA_DIR, `${id}.json`);
+  console.log(`[JobManager] Creating render job: id=${id} projectId=${data.projectId}`);
+  console.log(`[JobManager]   DATA_DIR=${DATA_DIR}`);
+  console.log(`[JobManager]   filePath=${filePath}`);
+  fileWrite(job);
   const fileExists = fs.existsSync(filePath);
-  console.log(`[JobManager] Saving job to DB: id=${id} projectId=${data.projectId} status=queued`);
-  console.log(`[JobManager] File written: ${filePath} (exists=${fileExists})`);
+  console.log(`[JobManager]   file written: exists=${fileExists}`);
+  if (!fileExists) {
+    console.error(`[JobManager] ❌ CRITICAL: File was NOT written! DIR exists=${fs.existsSync(DATA_DIR)}`);
+  }
 
   // 2. Write to Supabase (await — ensures job is in DB before first poll arrives)
+  console.log(`[JobManager]   Upserting to Supabase render_jobs...`);
   await dbUpsert(job);
-  console.log(`[JobManager] Render job ${id} persisted to Supabase ✅`);
+  console.log(`[JobManager] ✅ Render job ${id} created (file=${fileExists ? "OK" : "FAILED"}, supabase=attempted)`);
 
   return job;
 }

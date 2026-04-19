@@ -22,6 +22,32 @@ import { getSupabase } from "@/lib/db/store";
 
 const tag = "[render/jobId]";
 
+/* ── Compute render-jobs directory from MULTIPLE strategies ──────────── */
+
+/** All possible render-jobs directories — checked in order */
+function getRenderJobsDirs(): string[] {
+  const dirs: string[] = [];
+  // Strategy 1: cwd-based (standard dev)
+  dirs.push(path.join(process.cwd(), ".frameai", "data", "render-jobs"));
+  // Strategy 2: /tmp-based (production / Vercel)
+  dirs.push(path.join("/tmp", ".frameai", "data", "render-jobs"));
+  return [...new Set(dirs)]; // dedupe
+}
+
+/** Try to read a job JSON file from any known directory */
+function readJobFileAnywhere(jobId: string): { job: Record<string, unknown>; dir: string } | null {
+  for (const dir of getRenderJobsDirs()) {
+    const filePath = path.join(dir, `${jobId}.json`);
+    try {
+      if (fs.existsSync(filePath)) {
+        const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+        return { job: data, dir };
+      }
+    } catch { /* skip */ }
+  }
+  return null;
+}
+
 /**
  * When a render job is completed with a local outputPath but no publicUrl,
  * upload the output to Supabase Storage and update the project record.
@@ -138,56 +164,81 @@ export async function GET(
   }
 
   console.log(`${tag} ── GET /api/render/${jobId} ──`);
+  console.log(`${tag}   cwd=${process.cwd()} NODE_ENV=${process.env.NODE_ENV}`);
 
   try {
-    // ── 1. Synchronous file read FIRST (fastest, no Supabase dependency) ──
-    let job = readRenderJob(jobId);
-    let source = job ? "file" : null;
+    let job: Record<string, unknown> | null = null;
+    let source = "(none)";
 
-    // ── 2. If not in file, try Supabase DB ──
+    // ── 1. Direct file read from ALL known directories (no imports needed) ──
+    const fileResult = readJobFileAnywhere(jobId);
+    if (fileResult) {
+      job = fileResult.job;
+      source = `file:${fileResult.dir}`;
+      console.log(`${tag} ✅ Found in file: ${fileResult.dir}/${jobId}.json`);
+    } else {
+      // Log what directories we checked and what files exist
+      for (const dir of getRenderJobsDirs()) {
+        const dirExists = fs.existsSync(dir);
+        let fileCount = 0;
+        let sample: string[] = [];
+        if (dirExists) {
+          const files = fs.readdirSync(dir).filter(f => f.endsWith(".json"));
+          fileCount = files.length;
+          sample = files.slice(0, 5);
+        }
+        console.warn(`${tag}   dir=${dir} exists=${dirExists} files=${fileCount} sample=[${sample.join(",")}]`);
+      }
+    }
+
+    // ── 2. Also try via job-manager (uses its own DATA_DIR) ──
+    if (!job) {
+      const mgrJob = readRenderJob(jobId);
+      if (mgrJob) {
+        job = mgrJob as unknown as Record<string, unknown>;
+        source = "job-manager-file";
+        console.log(`${tag} ✅ Found via job-manager readRenderJob`);
+      }
+    }
+
+    // ── 3. Try Supabase ──
     if (!job) {
       try {
-        job = await readRenderJobAsync(jobId);
-        if (job) source = "supabase";
+        const sb = getSupabase();
+        console.log(`${tag}   Querying Supabase: SELECT data FROM render_jobs WHERE id = '${jobId}'`);
+        const { data, error } = await sb
+          .from("render_jobs")
+          .select("data")
+          .eq("id", jobId)
+          .maybeSingle();
+        if (error) {
+          console.warn(`${tag}   Supabase query error: ${error.message}`);
+        } else if (data?.data) {
+          job = data.data as Record<string, unknown>;
+          source = "supabase";
+          console.log(`${tag} ✅ Found in Supabase`);
+        } else {
+          console.warn(`${tag}   Supabase: no row found for id=${jobId}`);
+        }
       } catch (dbErr) {
-        console.warn(`${tag} Supabase read threw (non-fatal):`, dbErr instanceof Error ? dbErr.message : dbErr);
-      }
-    }
-
-    // ── 3. Last resort: brute-force file scan (different DATA_DIR) ──
-    if (!job) {
-      console.warn(`${tag} Not found via file or DB — trying direct file scan`);
-      try {
-        const { DATA_DIR: FRAMEAI_DATA_DIR } = await import("@/lib/db/paths");
-        const jobDir = path.join(FRAMEAI_DATA_DIR, "render-jobs");
-        const jobFile = path.join(jobDir, `${jobId}.json`);
-        console.log(`${tag}   checking: ${jobFile} exists=${fs.existsSync(jobFile)}`);
-        if (fs.existsSync(jobDir)) {
-          const files = fs.readdirSync(jobDir).filter(f => f.endsWith(".json"));
-          console.log(`${tag}   dir has ${files.length} files: ${files.slice(0, 5).join(", ")}${files.length > 5 ? "..." : ""}`);
-        }
-        if (fs.existsSync(jobFile)) {
-          job = JSON.parse(fs.readFileSync(jobFile, "utf-8"));
-          source = "direct-file";
-        }
-      } catch (scanErr) {
-        console.error(`${tag}   direct scan error:`, scanErr instanceof Error ? scanErr.message : scanErr);
+        console.warn(`${tag}   Supabase threw:`, dbErr instanceof Error ? dbErr.message : dbErr);
       }
     }
 
     if (!job) {
-      console.warn(`${tag} ❌ Job ${jobId} not found anywhere (file, supabase, direct-scan)`);
+      console.error(`${tag} ❌ Job ${jobId} NOT FOUND in any source (file dirs, job-manager, supabase)`);
       return NextResponse.json({ error: "Render job not found", jobId }, { status: 404 });
     }
 
-    console.log(`${tag} ✅ GET ${jobId} — status=${job.status} progress=${job.progress}% (source=${source})`);
+    console.log(`${tag} ✅ GET ${jobId} — status=${(job as any).status} progress=${(job as any).progress}% (source=${source})`);
 
     // Ensure completed jobs are persisted to durable storage + DB
-    job = await ensurePersisted(jobId, job) || job;
+    const typedJob = job as ReturnType<typeof readRenderJob>;
+    const persisted = await ensurePersisted(jobId, typedJob);
+    const finalJob = persisted || typedJob;
 
-    return NextResponse.json({ job });
+    return NextResponse.json({ job: finalJob });
   } catch (err) {
-    // Top-level catch: prevents any uncaught error from producing an opaque 404/500
     const msg = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack : undefined;
     console.error(`${tag} ❌ Uncaught error in GET /api/render/${jobId}:`, msg);

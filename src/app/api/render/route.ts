@@ -188,7 +188,7 @@ export async function POST(req: NextRequest) {
     console.log("[Render API]   segments:", inputProps?.segments?.length || 0);
     console.log("[Render API]   music.trackUrl:", inputProps?.music?.trackUrl || "(none)");
 
-    // Create the render job (Supabase + file)
+    // Create the render job (file + Supabase)
     const job = await createRenderJobFile({
       projectId,
       projectName: projectName || "Untitled",
@@ -219,7 +219,18 @@ export async function POST(req: NextRequest) {
       premiumMode: compositionData.premium?.enabled ?? true,
     });
 
-    console.log("[Render API] Job created:", job.id);
+    console.log("[Render API] ✅ Saved render job:", job.id);
+    // Verify the file was actually written — log exact path
+    const verifyDir = path.join(process.cwd(), ".frameai", "data", "render-jobs");
+    const verifyFile = path.join(verifyDir, `${job.id}.json`);
+    const fileExists = fs.existsSync(verifyFile);
+    console.log(`[Render API]   verify: ${verifyFile} exists=${fileExists}`);
+    console.log(`[Render API]   cwd=${process.cwd()} NODE_ENV=${process.env.NODE_ENV}`);
+    if (!fileExists) {
+      // Also check /tmp path
+      const tmpFile = path.join("/tmp", ".frameai", "data", "render-jobs", `${job.id}.json`);
+      console.log(`[Render API]   /tmp check: ${tmpFile} exists=${fs.existsSync(tmpFile)}`);
+    }
 
     // Ensure the render worker is running
     const workerResult = ensureWorkerRunning();
