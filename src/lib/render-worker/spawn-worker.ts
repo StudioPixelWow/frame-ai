@@ -45,10 +45,14 @@ export function ensureWorkerRunning(): { pid: number | null; started: boolean } 
 
   workerProcess = spawn("npx", ["tsx", path.join(process.cwd(), "src/lib/render-worker/worker.ts")], {
     cwd: process.cwd(),
-    stdio: ["ignore", logStream, logStream],
+    stdio: ["ignore", "pipe", "pipe"],
     detached: true,
     env: { ...process.env, NODE_ENV: "production" },
   });
+
+  // Pipe stdout/stderr to the log file (passing WriteStream directly to stdio is invalid)
+  workerProcess.stdout?.pipe(logStream);
+  workerProcess.stderr?.pipe(logStream);
 
   workerProcess.unref();
   workerStartedAt = new Date();
@@ -58,6 +62,7 @@ export function ensureWorkerRunning(): { pid: number | null; started: boolean } 
 
   workerProcess.on("exit", (code) => {
     console.log(`[Spawner] Worker exited with code: ${code}`);
+    logStream.end();
     workerProcess = null;
   });
 
