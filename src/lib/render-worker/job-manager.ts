@@ -26,6 +26,8 @@ export interface RenderJobData {
   inputProps: Record<string, unknown>;
 
   outputPath: string | null;
+  /** Supabase Storage public URL — set when the render output is persisted to durable storage */
+  publicUrl?: string | null;
   outputFormat: string;
   outputDuration: number;
   outputWidth: number;

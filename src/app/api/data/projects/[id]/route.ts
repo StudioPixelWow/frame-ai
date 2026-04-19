@@ -3,7 +3,7 @@
  * PUT    /api/data/projects/[id] — partial update
  * DELETE /api/data/projects/[id] — delete one project
  *
- * Storage: Supabase "projects" table with FLAT columns (no JSONB "data").
+ * Storage: Supabase "video_projects" table with FLAT columns + JSONB for wizard_state/render_payload.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -13,9 +13,19 @@ type ProjectRow = {
   id: string;
   name?: string | null;
   client_id?: string | null;
+  client_name?: string | null;
   status?: string | null;
   description?: string | null;
   project_type?: string | null;
+  format?: string | null;
+  preset?: string | null;
+  duration_sec?: number | null;
+  segments?: number | null;
+  source_video_key?: string | null;
+  render_output_key?: string | null;
+  thumbnail_key?: string | null;
+  wizard_state?: Record<string, unknown> | null;
+  render_payload?: Record<string, unknown> | null;
   start_date?: string | null;
   end_date?: string | null;
   assigned_manager_id?: string | null;
@@ -29,10 +39,20 @@ function rowToProject(r: ProjectRow) {
     name: r.name ?? '',
     projectName: r.name ?? '',
     clientId: r.client_id ?? '',
+    clientName: r.client_name ?? '',
     status: r.status ?? 'draft',
     projectStatus: r.status ?? 'not_started',
     description: r.description ?? '',
     projectType: r.project_type ?? 'general',
+    format: r.format ?? '9:16',
+    preset: r.preset ?? '',
+    durationSec: r.duration_sec ?? 0,
+    segments: r.segments ?? 0,
+    sourceVideoKey: r.source_video_key ?? null,
+    renderOutputKey: r.render_output_key ?? null,
+    thumbnailKey: r.thumbnail_key ?? null,
+    wizardState: r.wizard_state ?? null,
+    renderPayload: r.render_payload ?? null,
     startDate: r.start_date ?? null,
     endDate: r.end_date ?? null,
     assignedManagerId: r.assigned_manager_id ?? null,
@@ -48,10 +68,18 @@ function toDbUpdate(body: Record<string, unknown>): Record<string, unknown> {
     ['name', 'name'],
     ['projectName', 'name'],
     ['clientId', 'client_id'],
+    ['clientName', 'client_name'],
     ['status', 'status'],
     ['projectStatus', 'status'],
     ['description', 'description'],
     ['projectType', 'project_type'],
+    ['format', 'format'],
+    ['preset', 'preset'],
+    ['durationSec', 'duration_sec'],
+    ['segments', 'segments'],
+    ['sourceVideoKey', 'source_video_key'],
+    ['renderOutputKey', 'render_output_key'],
+    ['thumbnailKey', 'thumbnail_key'],
     ['startDate', 'start_date'],
     ['endDate', 'end_date'],
     ['assignedManagerId', 'assigned_manager_id'],
@@ -59,12 +87,15 @@ function toDbUpdate(body: Record<string, unknown>): Record<string, unknown> {
   for (const [bodyKey, dbKey] of map) {
     if (body[bodyKey] !== undefined) out[dbKey] = body[bodyKey];
   }
+  // JSONB fields — deep-clone to avoid reference issues
+  if (body.wizardState !== undefined) out.wizard_state = body.wizardState ? JSON.parse(JSON.stringify(body.wizardState)) : null;
+  if (body.renderPayload !== undefined) out.render_payload = body.renderPayload ? JSON.parse(JSON.stringify(body.renderPayload)) : null;
   out.updated_at = new Date().toISOString();
   return out;
 }
 
 const SELECT_COLUMNS =
-  'id, name, client_id, status, description, project_type, start_date, end_date, assigned_manager_id, created_at, updated_at';
+  'id, name, client_id, client_name, status, description, project_type, format, preset, duration_sec, segments, source_video_key, render_output_key, thumbnail_key, wizard_state, render_payload, start_date, end_date, assigned_manager_id, created_at, updated_at';
 
 function parseBadColumn(msg: string): string | null {
   const m = msg.match(/column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);

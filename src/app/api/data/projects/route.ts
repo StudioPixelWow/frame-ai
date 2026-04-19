@@ -5,8 +5,11 @@
  * Storage: Supabase "projects" table with FLAT columns (no JSONB "data").
  *
  * Expected columns (DB owns the schema; code adapts to it):
- *   id, name, client_id, status, description,
- *   project_type, start_date, end_date, assigned_manager_id,
+ *   id, name, client_id, client_name, status, description,
+ *   project_type, format, preset, duration_sec, segments,
+ *   source_video_key, render_output_key, thumbnail_key,
+ *   wizard_state (JSONB), render_payload (JSONB),
+ *   start_date, end_date, assigned_manager_id,
  *   created_at, updated_at
  *
  * Any column that doesn't exist is automatically dropped and the request
@@ -28,9 +31,19 @@ type ProjectRow = {
   id: string;
   name?: string | null;
   client_id?: string | null;
+  client_name?: string | null;
   status?: string | null;
   description?: string | null;
   project_type?: string | null;
+  format?: string | null;
+  preset?: string | null;
+  duration_sec?: number | null;
+  segments?: number | null;
+  source_video_key?: string | null;
+  render_output_key?: string | null;
+  thumbnail_key?: string | null;
+  wizard_state?: Record<string, unknown> | null;
+  render_payload?: Record<string, unknown> | null;
   start_date?: string | null;
   end_date?: string | null;
   assigned_manager_id?: string | null;
@@ -44,10 +57,20 @@ function rowToProject(r: ProjectRow) {
     name: r.name ?? '',
     projectName: r.name ?? '', // alias for business-project UIs
     clientId: r.client_id ?? '',
+    clientName: r.client_name ?? '',
     status: r.status ?? 'draft',
     projectStatus: r.status ?? 'not_started', // alias
     description: r.description ?? '',
     projectType: r.project_type ?? 'general',
+    format: r.format ?? '9:16',
+    preset: r.preset ?? '',
+    durationSec: r.duration_sec ?? 0,
+    segments: r.segments ?? 0,
+    sourceVideoKey: r.source_video_key ?? null,
+    renderOutputKey: r.render_output_key ?? null,
+    thumbnailKey: r.thumbnail_key ?? null,
+    wizardState: r.wizard_state ?? null,
+    renderPayload: r.render_payload ?? null,
     startDate: r.start_date ?? null,
     endDate: r.end_date ?? null,
     assignedManagerId: r.assigned_manager_id ?? null,
@@ -63,9 +86,19 @@ export function toDbInsert(body: Record<string, unknown>, id: string, now: strin
     id,
     name: (body.name ?? body.projectName ?? '') as string,
     client_id: (body.clientId ?? null) as string | null,
+    client_name: (body.clientName ?? '') as string,
     status: (body.status ?? body.projectStatus ?? 'draft') as string,
     description: (body.description ?? '') as string,
     project_type: (body.projectType ?? null) as string | null,
+    format: (body.format ?? null) as string | null,
+    preset: (body.preset ?? null) as string | null,
+    duration_sec: (body.durationSec ?? null) as number | null,
+    segments: (body.segments ?? null) as number | null,
+    source_video_key: (body.sourceVideoKey ?? null) as string | null,
+    render_output_key: (body.renderOutputKey ?? null) as string | null,
+    thumbnail_key: (body.thumbnailKey ?? null) as string | null,
+    wizard_state: body.wizardState ? JSON.parse(JSON.stringify(body.wizardState)) : null,
+    render_payload: body.renderPayload ? JSON.parse(JSON.stringify(body.renderPayload)) : null,
     start_date: (body.startDate ?? null) as string | null,
     end_date: (body.endDate ?? null) as string | null,
     assigned_manager_id: (body.assignedManagerId ?? null) as string | null,
@@ -77,7 +110,7 @@ export function toDbInsert(body: Record<string, unknown>, id: string, now: strin
 /* ── Column lists ─────────────────────────────────────────────────────── */
 
 const SELECT_COLUMNS =
-  'id, name, client_id, status, description, project_type, start_date, end_date, assigned_manager_id, created_at, updated_at';
+  'id, name, client_id, client_name, status, description, project_type, format, preset, duration_sec, segments, source_video_key, render_output_key, thumbnail_key, wizard_state, render_payload, start_date, end_date, assigned_manager_id, created_at, updated_at';
 
 /* ── GET ──────────────────────────────────────────────────────────────── */
 
@@ -99,7 +132,7 @@ export async function GET() {
         console.error('[API] GET /api/data/projects supabase error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
-      console.warn(`[API] GET /api/data/projects dropping unknown column "${bad}" from select`);
+      console.warn(`[API] GET /api/data/projects dropping unknown column "${bad}" from select. Add it via: ALTER TABLE video_projects ADD COLUMN ${bad} ${bad.endsWith('_state') || bad.endsWith('_payload') ? 'JSONB' : bad.endsWith('_sec') || bad === 'segments' ? 'INTEGER' : 'TEXT'};`);
       selectList = selectList
         .split(',')
         .map((s) => s.trim())

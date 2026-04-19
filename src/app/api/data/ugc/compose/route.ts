@@ -133,11 +133,10 @@ export async function GET(req: NextRequest) {
 
     const job = JSON.parse(fs.readFileSync(jobPath, 'utf-8'));
 
-    // If completed, build the full video URL
+    // If completed, use Supabase public URL if available, else fall back to local path
     let videoUrl: string | null = null;
-    if (job.status === 'completed' && job.outputPath) {
-      // outputPath is like /renders/render-ugc_xxx.mp4
-      videoUrl = job.outputPath;
+    if (job.status === 'completed') {
+      videoUrl = job.publicUrl || job.outputPath || null;
     }
 
     return NextResponse.json({

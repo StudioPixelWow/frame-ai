@@ -62,6 +62,11 @@ async function renderJob(jobId: string): Promise<void> {
   const outputFileName = `render-${jobId}.mp4`;
   const outputPath = path.join(OUTPUT_DIR, outputFileName);
 
+  console.log(`[Worker] ═══ RENDER STARTED ═══`);
+  console.log(`[Worker]   Job ID:    ${jobId}`);
+  console.log(`[Worker]   Project:   ${job.projectId}`);
+  console.log(`[Worker]   Output:    ${outputPath}`);
+
   try {
     // Stage 1: Preparing
     updateJobFile(jobId, {
@@ -136,7 +141,14 @@ async function renderJob(jobId: string): Promise<void> {
     }
 
     const stats = fs.statSync(outputPath);
-    console.log(`[Worker] Render complete: ${outputPath} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+    const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
+    const elapsedSec = Math.round((Date.now() - new Date(job.startedAt || job.createdAt).getTime()) / 1000);
+    console.log(`[Worker] ═══ RENDER FINISHED ═══`);
+    console.log(`[Worker]   Output path:  ${outputPath}`);
+    console.log(`[Worker]   File size:    ${sizeMB} MB`);
+    console.log(`[Worker]   Duration:     ${elapsedSec}s`);
+    console.log(`[Worker]   Project ID:   ${job.projectId}`);
+    console.log(`[Worker]   → Render file saved locally. Upload + DB persist happens via GET /api/render/${jobId} on next poll.`);
 
     updateJobFile(jobId, {
       status: "completed",
@@ -144,7 +156,7 @@ async function renderJob(jobId: string): Promise<void> {
       currentStage: "הושלם",
       outputPath: `/renders/${outputFileName}`,
       completedAt: new Date().toISOString(),
-      actualDurationSec: Math.round((Date.now() - new Date(job.startedAt || job.createdAt).getTime()) / 1000),
+      actualDurationSec: elapsedSec,
       outputFileSizeBytes: stats.size,
     });
   } catch (err) {

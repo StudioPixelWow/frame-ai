@@ -1098,46 +1098,43 @@ export default function NewProjectWizard() {
               setRenderProgress(100);
               setRenderStage(5);
               setRenderStageLabel("הושלם");
-              // Update project with render output path and mark as complete
-              if (savedProject?.id && updatedJob.outputPath) {
+              // Use Supabase public URL (set by server) or fall back to outputPath
+              const renderUrl = updatedJob.publicUrl || updatedJob.outputPath;
+              console.log(`[render-poll] ✅ Render complete: publicUrl=${updatedJob.publicUrl || "(none)"} outputPath=${updatedJob.outputPath || "(none)"}`);
+              // Update project with render output URL and mark as complete
+              // (server-side route also does this, but we do it client-side too as backup)
+              if (savedProject?.id && renderUrl) {
                 try {
                   await updateProject(savedProject.id, {
                     status: "complete",
-                    renderOutputKey: updatedJob.outputPath,
+                    renderOutputKey: renderUrl,
                   });
+                  console.log(`[render-poll] ✅ Project ${savedProject.id} updated: renderOutputKey=${renderUrl.slice(0, 80)}`);
                 } catch (e) {
-                  console.warn("Failed to update project with render output:", e);
+                  // Not fatal — the server route already persisted this
+                  console.warn("[render-poll] ⚠️ Client-side project update failed (server already handled it):", e);
                 }
+              } else {
+                console.warn(`[render-poll] ⚠️ Could not update project: savedProject.id=${savedProject?.id} renderUrl=${renderUrl}`);
               }
               await new Promise(r => setTimeout(r, 500));
               setRenderComplete(true);
             } else if (updatedJob.status === "failed") {
               clearInterval(pollInterval);
               setRenderModalOpen(false);
+              console.error(`[render-poll] ❌ Render failed: ${updatedJob.error}`);
               toast(updatedJob.error || "שגיאה ברינדור", "error");
             }
           } catch {
             clearInterval(pollInterval);
           }
         }, 1200);
-      } catch {
-        // Fallback: simulate progress if render API is unavailable
-        console.warn("Render API unavailable, simulating progress");
-        const stages = [
-          { delay: 800, progress: 15 },
-          { delay: 2200, progress: 35 },
-          { delay: 3800, progress: 55 },
-          { delay: 5200, progress: 75 },
-          { delay: 7000, progress: 95 },
-          { delay: 8500, progress: 100 },
-        ];
-        for (let i = 0; i < stages.length; i++) {
-          await new Promise(r => setTimeout(r, i === 0 ? stages[i].delay : stages[i].delay - stages[i-1].delay));
-          setRenderStage(i);
-          setRenderProgress(stages[i].progress);
-        }
-        await new Promise(r => setTimeout(r, 800));
-        setRenderComplete(true);
+      } catch (renderErr) {
+        // Render API failed — show real error, do NOT fake success
+        const msg = renderErr instanceof Error ? renderErr.message : "שגיאה בהפעלת הרינדור";
+        console.error("[render] ❌ Render API error:", msg);
+        setRenderModalOpen(false);
+        toast(msg, "error");
       }
     } catch {
       toast("שגיאה ביצירת הפרויקט", "error");
