@@ -20,7 +20,7 @@ type ProjectRow = {
   format?: string | null;
   preset?: string | null;
   duration_sec?: number | null;
-  segments?: number | null;
+  segments?: unknown[] | Record<string, unknown> | null;
   source_video_key?: string | null;
   render_output_key?: string | null;
   thumbnail_key?: string | null;
@@ -47,7 +47,7 @@ function rowToProject(r: ProjectRow) {
     format: r.format ?? '9:16',
     preset: r.preset ?? '',
     durationSec: r.duration_sec ?? 0,
-    segments: r.segments ?? 0,
+    segments: r.segments ?? [],
     sourceVideoKey: r.source_video_key ?? null,
     renderOutputKey: r.render_output_key ?? null,
     thumbnailKey: r.thumbnail_key ?? null,
@@ -76,7 +76,6 @@ function toDbUpdate(body: Record<string, unknown>): Record<string, unknown> {
     ['format', 'format'],
     ['preset', 'preset'],
     ['durationSec', 'duration_sec'],
-    ['segments', 'segments'],
     ['sourceVideoKey', 'source_video_key'],
     ['renderOutputKey', 'render_output_key'],
     ['thumbnailKey', 'thumbnail_key'],
@@ -88,6 +87,7 @@ function toDbUpdate(body: Record<string, unknown>): Record<string, unknown> {
     if (body[bodyKey] !== undefined) out[dbKey] = body[bodyKey];
   }
   // JSONB fields — deep-clone to avoid reference issues
+  if (body.segments !== undefined) out.segments = body.segments ? JSON.parse(JSON.stringify(body.segments)) : null;
   if (body.wizardState !== undefined) out.wizard_state = body.wizardState ? JSON.parse(JSON.stringify(body.wizardState)) : null;
   if (body.renderPayload !== undefined) out.render_payload = body.renderPayload ? JSON.parse(JSON.stringify(body.renderPayload)) : null;
   out.updated_at = new Date().toISOString();

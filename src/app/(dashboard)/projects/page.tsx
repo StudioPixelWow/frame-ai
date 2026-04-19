@@ -425,7 +425,7 @@ export default function ProjectsPage() {
                         </>
                       )}
                     </div>
-                    {(dateLabel || p?.segments) && (
+                    {(dateLabel || (Array.isArray(p?.segments) && p.segments.length > 0)) && (
                       <div className="proj-card-info-row">
                         <span style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
                           {dateLabel && (
@@ -435,9 +435,9 @@ export default function ProjectsPage() {
                           )}
                         </span>
                         <span style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                          {p?.segments && (
+                          {Array.isArray(p?.segments) && p.segments.length > 0 && (
                             <>
-                              <span style={{ opacity: 0.5, fontSize: "0.7rem" }}>✂</span> {p.segments} קטעים
+                              <span style={{ opacity: 0.5, fontSize: "0.7rem" }}>✂</span> {p.segments.length} קטעים
                             </>
                           )}
                         </span>

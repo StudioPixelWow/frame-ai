@@ -733,7 +733,7 @@ export default function ProjectDetailPage() {
                   קטעים
                 </span>
                 <span className="proj-detail-value" style={{ fontWeight: 600 }}>
-                  {project.segments || "—"}
+                  {Array.isArray(project.segments) ? project.segments.length : "—"}
                 </span>
               </div>
               <div className="proj-detail-row" style={{ display: "flex", justifyContent: "space-between" }}>

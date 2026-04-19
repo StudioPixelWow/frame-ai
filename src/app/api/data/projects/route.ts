@@ -38,7 +38,7 @@ type ProjectRow = {
   format?: string | null;
   preset?: string | null;
   duration_sec?: number | null;
-  segments?: number | null;
+  segments?: unknown[] | Record<string, unknown> | null;
   source_video_key?: string | null;
   render_output_key?: string | null;
   thumbnail_key?: string | null;
@@ -65,7 +65,7 @@ function rowToProject(r: ProjectRow) {
     format: r.format ?? '9:16',
     preset: r.preset ?? '',
     durationSec: r.duration_sec ?? 0,
-    segments: r.segments ?? 0,
+    segments: r.segments ?? [],
     sourceVideoKey: r.source_video_key ?? null,
     renderOutputKey: r.render_output_key ?? null,
     thumbnailKey: r.thumbnail_key ?? null,
@@ -93,7 +93,7 @@ export function toDbInsert(body: Record<string, unknown>, id: string, now: strin
     format: (body.format ?? null) as string | null,
     preset: (body.preset ?? null) as string | null,
     duration_sec: (body.durationSec ?? null) as number | null,
-    segments: (body.segments ?? null) as number | null,
+    segments: body.segments ? JSON.parse(JSON.stringify(body.segments)) : null,
     source_video_key: (body.sourceVideoKey ?? null) as string | null,
     render_output_key: (body.renderOutputKey ?? null) as string | null,
     thumbnail_key: (body.thumbnailKey ?? null) as string | null,
@@ -132,7 +132,7 @@ export async function GET() {
         console.error('[API] GET /api/data/projects supabase error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
-      console.warn(`[API] GET /api/data/projects dropping unknown column "${bad}" from select. Add it via: ALTER TABLE video_projects ADD COLUMN ${bad} ${bad.endsWith('_state') || bad.endsWith('_payload') ? 'JSONB' : bad.endsWith('_sec') || bad === 'segments' ? 'INTEGER' : 'TEXT'};`);
+      console.warn(`[API] GET /api/data/projects dropping unknown column "${bad}" from select. Add it via: ALTER TABLE video_projects ADD COLUMN ${bad} ${bad.endsWith('_state') || bad.endsWith('_payload') || bad === 'segments' ? 'JSONB' : bad.endsWith('_sec') ? 'INTEGER' : 'TEXT'};`);
       selectList = selectList
         .split(',')
         .map((s) => s.trim())
@@ -218,8 +218,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`[API] POST /api/data/projects ✅ persisted id=${id}`);
-    return NextResponse.json(rowToProject(verify as ProjectRow), { status: 201 });
+    const project = rowToProject(verify as ProjectRow);
+    console.log(`[API] POST /api/data/projects ✅ persisted id=${id} name="${project.name}" status=${project.status} segments=${Array.isArray(project.segments) ? project.segments.length : 0} cols=${Object.keys(verify).join(',')}`);
+    return NextResponse.json(project, { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] POST /api/data/projects fatal:', msg);

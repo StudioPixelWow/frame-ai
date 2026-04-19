@@ -1008,7 +1008,7 @@ export default function NewProjectWizard() {
         name: data.title, clientId: data.clientId, clientName: client?.name || "",
         status: "approved", format: data.format, preset: data.preset,
         durationSec: videoDurationSec,
-        segments: data.segments.length, sourceVideoKey: data.uploadedVideoUrl || data.videoUrl || null,
+        segments: data.segments, sourceVideoKey: data.uploadedVideoUrl || data.videoUrl || null,
         renderOutputKey: null, thumbnailKey: null,
         wizardState: {
           videoUrl: data.uploadedVideoUrl || data.videoUrl || "",
@@ -1151,7 +1151,7 @@ export default function NewProjectWizard() {
         name: data.title, clientId: data.clientId, clientName: client?.name || "",
         status: "draft", format: data.format, preset: data.preset,
         durationSec: data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : 0,
-        segments: data.segments.length, sourceVideoKey: data.uploadedVideoUrl || data.videoUrl || null,
+        segments: data.segments, sourceVideoKey: data.uploadedVideoUrl || data.videoUrl || null,
         renderOutputKey: null, thumbnailKey: null,
         wizardState: {
           creativePrompt: data.creativePrompt,

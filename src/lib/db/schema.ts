@@ -271,7 +271,7 @@ export interface Project {
   format: '9:16' | '16:9' | '1:1' | '4:5';
   preset: string;
   durationSec: number;
-  segments: number;
+  segments: unknown[] | Record<string, unknown> | null;
   sourceVideoKey: string | null;
   renderOutputKey: string | null;
   thumbnailKey: string | null;
