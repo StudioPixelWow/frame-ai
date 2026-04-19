@@ -55,6 +55,13 @@ export function emitMultiDataChange(...endpoints: string[]) {
 }
 
 // ── Core Data Hook ─────────────────────────────────────────────────
+interface UseDataOptions {
+  /** Poll interval in ms. 0 = no polling (default). 30000 = every 30s. */
+  pollInterval?: number;
+  /** Refetch when window regains focus (default: true) */
+  refetchOnFocus?: boolean;
+}
+
 interface UseDataResult<T> {
   data: T[];
   loading: boolean;
@@ -65,7 +72,9 @@ interface UseDataResult<T> {
   remove: (id: string) => Promise<void>;
 }
 
-export function useData<T extends { id: string }>(endpoint: string): UseDataResult<T> {
+export function useData<T extends { id: string }>(endpoint: string, options?: UseDataOptions): UseDataResult<T> {
+  const pollInterval = options?.pollInterval ?? 0;
+  const refetchOnFocus = options?.refetchOnFocus ?? true;
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -113,6 +122,23 @@ export function useData<T extends { id: string }>(endpoint: string): UseDataResu
     });
     return unsub;
   }, [endpoint, fetchData]);
+
+  // Polling — silent background refresh at interval
+  useEffect(() => {
+    if (!pollInterval || pollInterval <= 0) return;
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchData();
+    }, pollInterval);
+    return () => clearInterval(id);
+  }, [pollInterval, fetchData]);
+
+  // Refetch on window focus (tab switch back)
+  useEffect(() => {
+    if (!refetchOnFocus) return;
+    const onFocus = () => { fetchData(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [refetchOnFocus, fetchData]);
 
   const create = async (item: Partial<T>): Promise<T> => {
     const url = `/api/data/${endpoint}`;

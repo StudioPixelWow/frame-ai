@@ -1008,9 +1008,163 @@
   animation: successFlash 600ms ease-out;
 }
 
-/* Button press feedback */
+/* Button press feedback — spring feel */
+.mod-btn-primary { transition: transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms ease; }
 .mod-btn-primary:active { transform: scale(0.96); }
+.mod-btn-primary:hover  { box-shadow: 0 4px 16px rgba(0,181,254,0.25); }
+.mod-btn-ghost { transition: transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1), background 150ms ease; }
 .mod-btn-ghost:active  { transform: scale(0.97); }
+
+/* ── Skeleton shimmer loader ─────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg,
+    var(--surface-raised) 25%,
+    var(--border) 37%,
+    var(--surface-raised) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+.skeleton-text { height: 0.875rem; border-radius: 0.25rem; }
+.skeleton-title { height: 1.25rem; width: 60%; border-radius: 0.25rem; }
+.skeleton-circle { border-radius: 50%; }
+.skeleton-card {
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* ── Glass blur (glassmorphism) ──────────────────────────────────────────── */
+.glass {
+  background: rgba(17,17,19,0.6);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+[data-theme="light"] .glass {
+  background: rgba(255,255,255,0.65);
+  border: 1px solid rgba(0,0,0,0.06);
+}
+
+/* ── Premium card ────────────────────────────────────────────────────────── */
+.premium-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  padding: 1.5rem;
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 250ms ease,
+              border-color 200ms ease;
+}
+.premium-card:hover {
+  transform: translateY(-2px) scale(1.005);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.15), 0 0 0 1px var(--border-muted);
+  border-color: var(--border-muted);
+}
+
+/* ── Subtle glow on hover ────────────────────────────────────────────────── */
+.glow-hover {
+  transition: box-shadow 250ms ease;
+}
+.glow-hover:hover {
+  box-shadow: 0 0 20px var(--accent-muted), 0 4px 16px rgba(0,0,0,0.1);
+}
+
+/* ── Ripple effect container ─────────────────────────────────────────────── */
+@keyframes ripple-expand {
+  0%   { transform: scale(0); opacity: 0.35; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+/* ── Smooth page section entrance ────────────────────────────────────────── */
+.stagger-in > * {
+  opacity: 0;
+  animation: fadeInUp 500ms ease-out forwards;
+}
+.stagger-in > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-in > *:nth-child(2) { animation-delay: 60ms; }
+.stagger-in > *:nth-child(3) { animation-delay: 120ms; }
+.stagger-in > *:nth-child(4) { animation-delay: 180ms; }
+.stagger-in > *:nth-child(5) { animation-delay: 240ms; }
+.stagger-in > *:nth-child(6) { animation-delay: 300ms; }
+.stagger-in > *:nth-child(7) { animation-delay: 360ms; }
+.stagger-in > *:nth-child(8) { animation-delay: 420ms; }
+
+/* ── Green glow pulse (payment success) ──────────────────────────────────── */
+@keyframes greenGlowPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+  50%  { box-shadow: 0 0 20px 4px rgba(34,197,94,0.2); }
+  100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+}
+.wow-green-pulse {
+  animation: greenGlowPulse 800ms ease-out;
+}
+
+/* ── Quick action button ─────────────────────────────────────────────────── */
+.quick-action-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 0.6rem;
+  padding: 1.25rem 1rem; border-radius: 0.875rem;
+  background: var(--surface); border: 1px solid var(--border);
+  cursor: pointer; text-decoration: none; color: var(--foreground);
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 250ms ease, border-color 200ms ease;
+}
+.quick-action-btn:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  border-color: var(--accent-border);
+}
+.quick-action-btn:active {
+  transform: translateY(-1px) scale(0.98);
+}
+.quick-action-icon {
+  font-size: 1.75rem; line-height: 1;
+}
+.quick-action-label {
+  font-size: 0.8rem; font-weight: 600; color: var(--foreground-muted);
+}
+
+/* ── Insight card (AI) ───────────────────────────────────────────────────── */
+.insight-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  padding: 1.25rem;
+  border-right: 3px solid var(--accent);
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+.insight-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+}
+.insight-card[data-priority="high"]   { border-right-color: var(--error); }
+.insight-card[data-priority="medium"] { border-right-color: var(--warning); }
+.insight-card[data-priority="low"]    { border-right-color: var(--success); }
+
+/* ── Timeline item ───────────────────────────────────────────────────────── */
+.timeline-item {
+  display: flex; gap: 1rem; padding: 0.75rem 0;
+  position: relative;
+}
+.timeline-item::before {
+  content: ''; position: absolute; right: 15px; top: 2.5rem; bottom: -0.75rem;
+  width: 1px; background: var(--border);
+}
+.timeline-item:last-child::before { display: none; }
+.timeline-dot {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.875rem; flex-shrink: 0; z-index: 1;
+  background: var(--surface-raised); border: 2px solid var(--border);
+}
 
 /* ─────────────────────────────────────────────────────────────────────────────
    Automations Page

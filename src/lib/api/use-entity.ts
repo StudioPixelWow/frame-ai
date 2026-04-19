@@ -40,15 +40,16 @@ import type {
   ProjectNotification,
 } from '@/lib/db/schema';
 
-export const useClients = () => useData<Client>('clients');
+// Core entities with realtime polling (30s) + focus refetch
+export const useClients = () => useData<Client>('clients', { pollInterval: 30000 });
 export const useProjects = () => useData<Project>('projects');
-export const useTasks = () => useData<Task>('tasks');
-export const usePayments = () => useData<Payment>('payments');
-export const useLeads = () => useData<Lead>('leads');
+export const useTasks = () => useData<Task>('tasks', { pollInterval: 30000 });
+export const usePayments = () => useData<Payment>('payments', { pollInterval: 30000 });
+export const useLeads = () => useData<Lead>('leads', { pollInterval: 60000 });
 export const useEmployees = () => useData<Employee>('employees');
 export const useCampaigns = () => useData<Campaign>('campaigns');
 export const useUsers = () => useData<User>('users');
-export const useApprovals = () => useData<Approval>('approvals');
+export const useApprovals = () => useData<Approval>('approvals', { pollInterval: 30000 });
 export const useActivities = () => useData<ActivityEntry>('activities');
 export const useClientGanttItems = () => useData<ClientGanttItem>('client-gantt-items');
 export const useClientTasks = () => useData<ClientTask>('client-tasks');
