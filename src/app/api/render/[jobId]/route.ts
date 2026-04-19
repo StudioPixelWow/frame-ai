@@ -35,6 +35,8 @@ async function ensurePersisted(jobId: string, job: ReturnType<typeof readRenderJ
   if (!job.outputPath) return job;
 
   console.log(`${tag} ⚡ Job ${jobId} completed but not persisted — starting upload+DB update`);
+  console.log(`${tag}   projectId: ${job.projectId}`);
+  console.log(`${tag}   outputPath: ${job.outputPath}`);
 
   // Resolve local file path: outputPath is like "/renders/render-xxx.mp4"
   const localPath = path.join(process.cwd(), "public", job.outputPath.replace(/^\//, ""));

@@ -1055,9 +1055,12 @@ export default function NewProjectWizard() {
       setCreating(false);
 
       // POST to render API with composition data
+      // IMPORTANT: use savedProject.id (the DB-generated ID) — NOT the local projectId
+      const dbProjectId = savedProject.id;
       const renderBody = compositionData || renderPayload || {};
-      console.log("[render] 📦 Render request payload:", {
-        projectId,
+      console.log("[render] 📦 Render request:", {
+        dbProjectId,
+        localProjectId: projectId,
         projectName: data.title,
         hasCompositionData: !!compositionData,
         hasRenderPayload: !!renderPayload,
@@ -1070,7 +1073,7 @@ export default function NewProjectWizard() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            projectId,
+            projectId: dbProjectId,
             projectName: data.title,
             compositionData: renderBody,
             quality: data.premiumLevel || "premium",
@@ -1090,13 +1093,23 @@ export default function NewProjectWizard() {
         const { job } = await renderRes.json();
         const jobId = job.id;
         setRenderJobId(jobId);
+        console.log(`[render] ✅ Render job created: jobId=${jobId} projectId=${dbProjectId} status=${job.status}`);
 
         // Poll render job for real progress
+        let pollCount = 0;
         const pollInterval = setInterval(async () => {
           try {
+            pollCount++;
             const statusRes = await fetch(`/api/render/${jobId}`);
-            if (!statusRes.ok) { clearInterval(pollInterval); return; }
+            if (!statusRes.ok) {
+              console.error(`[render-poll] ❌ Poll #${pollCount} failed: HTTP ${statusRes.status}`);
+              clearInterval(pollInterval);
+              return;
+            }
             const { job: updatedJob } = await statusRes.json();
+            if (pollCount <= 3 || pollCount % 5 === 0 || updatedJob.status === "completed" || updatedJob.status === "failed") {
+              console.log(`[render-poll] #${pollCount} status=${updatedJob.status} progress=${updatedJob.progress}% stage="${updatedJob.currentStage}" publicUrl=${updatedJob.publicUrl || "(none)"}`);
+            }
 
             setRenderProgress(updatedJob.progress || 0);
             setRenderStageLabel(updatedJob.currentStage || "");
@@ -1125,8 +1138,9 @@ export default function NewProjectWizard() {
                   await updateProject(savedProject.id, {
                     status: "complete",
                     renderOutputKey: renderUrl,
+                    videoUrl: renderUrl,
                   });
-                  console.log(`[render-poll] ✅ Project ${savedProject.id} updated: renderOutputKey=${renderUrl.slice(0, 80)}`);
+                  console.log(`[render-poll] ✅ Project ${savedProject.id} updated: renderOutputKey+videoUrl=${renderUrl.slice(0, 80)}`);
                 } catch (e) {
                   // Not fatal — the server route already persisted this
                   console.warn("[render-poll] ⚠️ Client-side project update failed (server already handled it):", e);
