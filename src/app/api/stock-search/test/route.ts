@@ -13,7 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { testProviderConnection } from "@/lib/stock-media/providers";
+import { testProviderConnection, getPexelsApiKey } from "@/lib/stock-media/providers";
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,10 +24,18 @@ export async function POST(req: NextRequest) {
       apiSecret?: string;
     };
 
+    // For Pexels, prefer the server-side env key
+    const resolvedApiKey = provider === "pexels"
+      ? (getPexelsApiKey() || apiKey)
+      : apiKey;
+
     // Validate input
-    if (!provider || !apiKey) {
+    if (!provider || !resolvedApiKey) {
+      const hint = provider === "pexels"
+        ? "PEXELS_API_KEY env var is not set and no apiKey was provided"
+        : "provider and apiKey are required";
       return NextResponse.json(
-        { error: "provider and apiKey are required" },
+        { error: hint },
         { status: 400 }
       );
     }
@@ -47,7 +55,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Test the connection
-    const result = await testProviderConnection(provider, apiKey, apiSecret);
+    const result = await testProviderConnection(provider, resolvedApiKey, apiSecret);
 
     return NextResponse.json({
       provider,

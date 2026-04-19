@@ -16,7 +16,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
-import { StockProviderConfig } from "@/lib/stock-media/providers";
+import { StockProviderConfig, getPexelsApiKey } from "@/lib/stock-media/providers";
 
 import { DATA_DIR } from "@/lib/db/paths";
 const STOCK_SETTINGS_FILE = join(DATA_DIR, "stock-settings.json");
@@ -86,11 +86,13 @@ function maskKey(key: string): string {
 export async function GET() {
   try {
     const settings = readStockSettings();
+    const envKey = getPexelsApiKey();
 
     return NextResponse.json({
       pexels: {
-        apiKey: maskKey(settings.pexels?.apiKey || ""),
-        enabled: settings.pexels?.enabled || false,
+        apiKey: envKey ? maskKey(envKey) : maskKey(settings.pexels?.apiKey || ""),
+        enabled: envKey ? true : (settings.pexels?.enabled || false),
+        source: envKey ? "env" : "settings-file",
       },
       pixabay: {
         apiKey: maskKey(settings.pixabay?.apiKey || ""),
@@ -128,20 +130,25 @@ export async function POST(req: NextRequest) {
     // Read current settings
     const current = readStockSettings();
 
+    // If PEXELS_API_KEY env var is set, ignore file-based pexels key writes.
+    const envKey = getPexelsApiKey();
+
     // Merge with updates (only update fields that are explicitly provided)
     const updated: StockProviderConfig = {
-      pexels: pexels
-        ? {
-            apiKey:
-              pexels.apiKey !== undefined
-                ? pexels.apiKey
-                : current.pexels?.apiKey || "",
-            enabled:
-              pexels.enabled !== undefined
-                ? pexels.enabled
-                : current.pexels?.enabled || false,
-          }
-        : current.pexels || DEFAULT_SETTINGS.pexels,
+      pexels: envKey
+        ? { apiKey: envKey, enabled: true } // env always wins
+        : pexels
+          ? {
+              apiKey:
+                pexels.apiKey !== undefined
+                  ? pexels.apiKey
+                  : current.pexels?.apiKey || "",
+              enabled:
+                pexels.enabled !== undefined
+                  ? pexels.enabled
+                  : current.pexels?.enabled || false,
+            }
+          : current.pexels || DEFAULT_SETTINGS.pexels,
       pixabay: pixabay
         ? {
             apiKey:
@@ -180,6 +187,7 @@ export async function POST(req: NextRequest) {
       pexels: {
         apiKey: maskKey(updated.pexels?.apiKey || ""),
         enabled: updated.pexels?.enabled || false,
+        source: envKey ? "env" : "settings-file",
       },
       pixabay: {
         apiKey: maskKey(updated.pixabay?.apiKey || ""),

@@ -6,6 +6,25 @@
  */
 
 // ============================================================================
+// Environment
+// ============================================================================
+
+/**
+ * Read the Pexels API key from the server-side environment variable.
+ * Never expose this via NEXT_PUBLIC — it must stay server-only.
+ */
+export function getPexelsApiKey(): string {
+  const key = process.env.PEXELS_API_KEY ?? "";
+  if (!key) {
+    console.warn(
+      "[stock-media] ⚠️ PEXELS_API_KEY is not set. " +
+      "Add it to your .env.local (server-side, no NEXT_PUBLIC_ prefix)."
+    );
+  }
+  return key;
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 

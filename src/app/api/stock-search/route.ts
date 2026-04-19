@@ -22,6 +22,7 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import {
   searchAllProviders,
+  getPexelsApiKey,
   StockProviderConfig,
   StockSearchOptions,
   StockVideoResult,
@@ -38,24 +39,35 @@ const DEFAULT_SETTINGS: StockProviderConfig = {
 };
 
 /**
- * Read stock media settings from file
+ * Read stock media settings from file, then overlay Pexels key from env.
+ * The env variable PEXELS_API_KEY always takes precedence over the JSON file.
  */
 function readStockSettings(): StockProviderConfig {
+  let base: StockProviderConfig;
   try {
     if (!existsSync(STOCK_SETTINGS_FILE)) {
-      return DEFAULT_SETTINGS;
+      base = DEFAULT_SETTINGS;
+    } else {
+      const raw = readFileSync(STOCK_SETTINGS_FILE, "utf8");
+      const data = JSON.parse(raw) as Partial<StockProviderConfig>;
+      base = {
+        pexels: data.pexels || DEFAULT_SETTINGS.pexels,
+        pixabay: data.pixabay || DEFAULT_SETTINGS.pixabay,
+        shutterstock: data.shutterstock || DEFAULT_SETTINGS.shutterstock,
+      };
     }
-    const raw = readFileSync(STOCK_SETTINGS_FILE, "utf8");
-    const data = JSON.parse(raw) as Partial<StockProviderConfig>;
-    return {
-      pexels: data.pexels || DEFAULT_SETTINGS.pexels,
-      pixabay: data.pixabay || DEFAULT_SETTINGS.pixabay,
-      shutterstock: data.shutterstock || DEFAULT_SETTINGS.shutterstock,
-    };
   } catch (error) {
     console.error("[stock-search] Error reading settings:", error);
-    return DEFAULT_SETTINGS;
+    base = DEFAULT_SETTINGS;
   }
+
+  // ── Pexels: env variable overrides file-based key ──
+  const envKey = getPexelsApiKey();
+  if (envKey) {
+    base.pexels = { apiKey: envKey, enabled: true };
+  }
+
+  return base;
 }
 
 /**
@@ -64,10 +76,12 @@ function readStockSettings(): StockProviderConfig {
 export async function GET() {
   try {
     const settings = readStockSettings();
+    const envKey = getPexelsApiKey();
     const status = {
       pexels: {
         enabled: settings.pexels?.enabled || false,
         configured: !!(settings.pexels?.apiKey && settings.pexels.enabled),
+        source: envKey ? "env" : "settings-file",
       },
       pixabay: {
         enabled: settings.pixabay?.enabled || false,
