@@ -3,7 +3,7 @@
  * POST /api/data/milestone-files          — upload file to Supabase Storage + insert metadata row
  *
  * Storage:
- *   - File bytes → Supabase Storage bucket "milestone-files"
+ *   - File bytes → Supabase Storage bucket "project-files"
  *   - Metadata   → public.business_project_milestone_files
  *
  * Table columns: id, milestone_id, file_name, file_url, file_size, content_type,
@@ -16,7 +16,7 @@ import { insertTimelineEvent } from '@/lib/timeline';
 import { uploadToStorage } from '@/lib/storage/upload';
 
 const TABLE = 'business_project_milestone_files';
-const BUCKET = 'milestone-files';
+const BUCKET = 'project-files';
 
 const TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS ${TABLE} (
@@ -202,11 +202,10 @@ export async function POST(req: NextRequest) {
     let uploadResult;
     try {
       uploadResult = await uploadToStorage({
-        bucket: BUCKET,
         storagePath,
         buffer,
         contentType: file.type || 'application/octet-stream',
-        maxSize: 50 * 1024 * 1024,
+        maxSize: 100 * 1024 * 1024,
         upsert: false,
       });
     } catch (uploadErr: any) {

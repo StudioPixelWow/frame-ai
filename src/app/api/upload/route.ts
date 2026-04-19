@@ -52,7 +52,6 @@ export async function POST(req: NextRequest) {
       fileName,
       contentType,
       fileSize,
-      bucket: "videos",
     });
 
     const latencyMs = Date.now() - t0;

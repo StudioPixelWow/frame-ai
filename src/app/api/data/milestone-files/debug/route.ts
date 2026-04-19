@@ -14,7 +14,7 @@ import { NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 
 const TABLE = 'business_project_milestone_files';
-const BUCKET = 'milestone-files';
+const BUCKET = 'project-files';
 
 export const dynamic = 'force-dynamic';
 

@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 
 const TABLE = 'business_project_milestone_files';
-const BUCKET = 'milestone-files';
+const BUCKET = 'project-files';
 
 type Row = Record<string, unknown> & { id: string };
 
@@ -54,7 +54,7 @@ export async function DELETE(_req: NextRequest, context: { params: Promise<{ id:
     const fileUrl = (row as any).file_url as string;
     if (fileUrl) {
       // Extract the storage path from the public URL.
-      // Public URLs look like: https://<project>.supabase.co/storage/v1/object/public/milestone-files/<path>
+      // Public URLs look like: https://<project>.supabase.co/storage/v1/object/public/project-files/<path>
       const marker = `/storage/v1/object/public/${BUCKET}/`;
       const idx = fileUrl.indexOf(marker);
       if (idx >= 0) {

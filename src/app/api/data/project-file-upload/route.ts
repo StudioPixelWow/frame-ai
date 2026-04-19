@@ -5,7 +5,7 @@
  * bucket "project-files", returns the public URL.
  *
  * Validations:
- *   - max 10 MB
+ *   - max 100 MB
  *   - allowed types: pdf, png, jpg, jpeg, gif, webp
  */
 
@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { uploadToStorage } from '@/lib/storage/upload';
 
 const BUCKET = 'project-files';
-const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_SIZE = 100 * 1024 * 1024; // 100 MB
 const ALLOWED_TYPES = new Set([
   'application/pdf',
   'image/png',
@@ -62,7 +62,6 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
 
     const result = await uploadToStorage({
-      bucket: BUCKET,
       storagePath,
       buffer,
       contentType: file.type || 'application/octet-stream',
