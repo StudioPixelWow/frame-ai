@@ -1,72 +1,79 @@
 /**
  * POST /api/upload
  *
- * Universal file upload endpoint. Receives a file via FormData and uploads
- * it to Supabase Storage using the service role key.
+ * Returns a signed upload URL so the client can PUT the file
+ * DIRECTLY to Supabase Storage — the file never touches this server.
  *
- * Body: FormData with:
- *   - "file"   (required) — the file to upload
- *   - "bucket" (optional) — Supabase Storage bucket, defaults to "videos"
- *   - "prefix" (optional) — path prefix inside bucket, defaults to "uploads"
+ * This bypasses Vercel's 4.5MB serverless body limit entirely.
  *
- * Returns: { publicUrl, storagePath, size, bucket }
+ * Request body (JSON, ~100 bytes):
+ *   { fileName: string, contentType?: string, fileSize?: number }
+ *
+ * Response:
+ *   { uploadUrl, publicUrl, storagePath, bucket, token }
+ *
+ * Client flow:
+ *   1. POST /api/upload { fileName: "video.mp4" }        ← tiny JSON
+ *   2. PUT  uploadUrl   body=file                         ← direct to Supabase CDN
+ *   3. Use  publicUrl   to reference the uploaded file
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { uploadToStorage, makeStoragePath } from "@/lib/storage/upload";
+import { getSignedUploadUrl } from "@/lib/storage/upload";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
-
-const DEFAULT_BUCKET = "videos";
-const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
 
 export async function POST(req: NextRequest) {
   const t0 = Date.now();
+  const tag = "[/api/upload]";
 
   try {
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    const bucket = (formData.get("bucket") as string) || DEFAULT_BUCKET;
-    const prefix = (formData.get("prefix") as string) || "uploads";
+    // Parse the tiny JSON body (fileName only, NO file blob)
+    const body = await req.json().catch(() => null);
 
-    if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
-    }
-
-    const sizeMB = (file.size / 1048576).toFixed(1);
-    console.log(`[upload] Received: name=${file.name} size=${sizeMB}MB type=${file.type} bucket=${bucket}`);
-
-    if (file.size > MAX_FILE_SIZE) {
+    if (!body || !body.fileName) {
+      console.error(`${tag} ❌ Missing fileName in request body`);
       return NextResponse.json(
-        { error: `File too large (${sizeMB}MB). Maximum is ${MAX_FILE_SIZE / 1048576}MB.` },
-        { status: 413 },
+        { error: "fileName is required", code: "MISSING_FILENAME" },
+        { status: 400 },
       );
     }
 
-    // Build storage path
-    const storagePath = makeStoragePath(file.name, prefix);
+    const { fileName, contentType, fileSize } = body as {
+      fileName: string;
+      contentType?: string;
+      fileSize?: number;
+    };
 
-    // Read file into buffer
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    console.log(`${tag} 📥 Request: fileName="${fileName}" contentType=${contentType || "auto"} fileSize=${fileSize ? (fileSize / 1048576).toFixed(1) + "MB" : "unknown"}`);
 
-    // Upload via shared utility
-    const result = await uploadToStorage({
-      bucket,
-      storagePath,
-      buffer,
-      contentType: file.type || "application/octet-stream",
-      maxSize: MAX_FILE_SIZE,
+    // Get signed upload URL (ensures bucket exists, creates URL, retries once on failure)
+    const result = await getSignedUploadUrl({
+      fileName,
+      contentType,
+      fileSize,
+      bucket: "videos",
     });
 
     const latencyMs = Date.now() - t0;
-    console.log(`[upload] SUCCESS: ${result.publicUrl.slice(0, 80)}... (${latencyMs}ms)`);
+    console.log(`${tag} ✅ Signed URL ready (${latencyMs}ms): path=${result.storagePath}`);
 
-    return NextResponse.json(result);
+    return NextResponse.json({
+      uploadUrl: result.uploadUrl,
+      publicUrl: result.publicUrl,
+      storagePath: result.storagePath,
+      bucket: result.bucket,
+      token: result.token,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[upload] ERROR: ${msg}`);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    const latencyMs = Date.now() - t0;
+    console.error(`${tag} ❌ FAILED (${latencyMs}ms): ${msg}`);
+
+    const status = msg.includes("too large") ? 413 : 500;
+    return NextResponse.json(
+      { error: msg, code: status === 413 ? "FILE_TOO_LARGE" : "UPLOAD_INIT_FAILED" },
+      { status },
+    );
   }
 }

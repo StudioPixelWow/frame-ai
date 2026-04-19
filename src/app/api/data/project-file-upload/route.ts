@@ -10,7 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { uploadToStorage, makeStoragePath } from '@/lib/storage/upload';
+import { uploadToStorage } from '@/lib/storage/upload';
 
 const BUCKET = 'project-files';
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB

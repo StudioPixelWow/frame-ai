@@ -1,9 +1,19 @@
 /**
  * Shared Supabase Storage upload utility.
  *
- * Every upload flow in the app (video, project files, milestone files, logos)
- * should funnel through this module so bucket creation, error handling, and
- * logging are consistent.
+ * TWO upload patterns:
+ *
+ * 1. DIRECT (client → Supabase, bypasses Vercel):
+ *    Server: getSignedUploadUrl() → returns { uploadUrl, publicUrl, storagePath }
+ *    Client: PUT file directly to uploadUrl (XHR for progress)
+ *    Use for: video uploads, any file > 4MB
+ *
+ * 2. SERVER-SIDE (for small files only, < 4MB):
+ *    uploadToStorage() — receives buffer, uploads via service role
+ *    Use for: project-files, milestone-files (already small)
+ *
+ * Bucket: "videos" — auto-created if missing, public.
+ * Path format: uploads/${Date.now()}.mp4
  */
 
 import { getSupabase } from "@/lib/db/store";
@@ -11,17 +21,12 @@ import { getSupabase } from "@/lib/db/store";
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
 export interface UploadOptions {
-  /** Supabase Storage bucket name (created if missing). */
-  bucket: string;
-  /** Path inside the bucket, e.g. "uploads/1713500000000.mp4". */
-  storagePath: string;
-  /** Raw file bytes. */
+  bucket?: string;
+  storagePath?: string;
+  fileName?: string;
   buffer: Buffer;
-  /** MIME type. Defaults to "application/octet-stream". */
   contentType?: string;
-  /** Max allowed file size in bytes. Default: 500 MB. */
   maxSize?: number;
-  /** If true, overwrite existing file at storagePath. Default: true. */
   upsert?: boolean;
 }
 
@@ -32,110 +37,237 @@ export interface UploadResult {
   bucket: string;
 }
 
+export interface SignedUploadUrlResult {
+  /** The URL the client should PUT the file to (direct to Supabase CDN). */
+  uploadUrl: string;
+  /** The public URL the file will be available at after upload. */
+  publicUrl: string;
+  /** The path inside the bucket. */
+  storagePath: string;
+  /** The bucket name. */
+  bucket: string;
+  /** The token for the signed upload. */
+  token: string;
+}
+
+/* ── Constants ──────────────────────────────────────────────────────────── */
+
+const DEFAULT_BUCKET = "videos";
+const DEFAULT_MAX_SIZE = 500 * 1024 * 1024; // 500 MB
+const RETRY_DELAY_MS = 1500;
+
 /* ── Bucket cache ───────────────────────────────────────────────────────── */
 
 const _bucketReady = new Set<string>();
 
 /**
  * Ensure a Supabase Storage bucket exists and is public.
- * Caches per bucket name so we only check once per cold start.
+ * Caches per bucket name so we only check once per process lifetime.
  */
-export async function ensureBucket(
-  bucket: string,
-  fileSizeLimit = 500 * 1024 * 1024,
-): Promise<void> {
+export async function ensureBucket(bucket: string, fileSizeLimit: number = DEFAULT_MAX_SIZE): Promise<void> {
   if (_bucketReady.has(bucket)) return;
 
   const sb = getSupabase();
+  const tag = `[storage:ensureBucket]`;
 
-  // Check if it exists first
-  const { data: buckets } = await sb.storage.listBuckets();
-  const exists = buckets?.some((b: any) => b.name === bucket || b.id === bucket);
-  if (exists) {
-    console.log(`[storage] Bucket "${bucket}" exists`);
+  try {
+    const { data: buckets, error: listErr } = await sb.storage.listBuckets();
+    if (listErr) {
+      console.warn(`${tag} listBuckets failed: ${listErr.message} — will try createBucket anyway`);
+    }
+
+    const exists = buckets?.some((b: any) => b.name === bucket || b.id === bucket);
+    if (exists) {
+      console.log(`${tag} ✅ Bucket "${bucket}" exists`);
+      _bucketReady.add(bucket);
+      return;
+    }
+
+    console.log(`${tag} Creating bucket "${bucket}" (public, limit=${(fileSizeLimit / 1048576).toFixed(0)}MB)...`);
+    const { error: createErr } = await sb.storage.createBucket(bucket, {
+      public: true,
+      fileSizeLimit,
+    });
+
+    if (createErr) {
+      if (createErr.message?.includes("already exists")) {
+        console.log(`${tag} ✅ Bucket "${bucket}" already exists (race condition — OK)`);
+        _bucketReady.add(bucket);
+        return;
+      }
+      console.error(`${tag} ❌ Failed to create bucket "${bucket}": ${createErr.message}`);
+      throw new Error(`Bucket creation failed: ${createErr.message}`);
+    }
+
+    console.log(`${tag} ✅ Bucket "${bucket}" created successfully`);
     _bucketReady.add(bucket);
-    return;
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("Bucket creation failed")) throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`${tag} ❌ Unexpected error: ${msg}`);
+    throw new Error(`Bucket setup error: ${msg}`);
   }
-
-  // Create it
-  console.log(`[storage] Creating bucket "${bucket}"...`);
-  const { error } = await sb.storage.createBucket(bucket, {
-    public: true,
-    fileSizeLimit,
-  });
-
-  if (error && !error.message?.includes("already exists")) {
-    console.error(`[storage] Failed to create bucket "${bucket}":`, error.message);
-    throw new Error(`Bucket creation failed: ${error.message}`);
-  }
-
-  console.log(`[storage] Bucket "${bucket}" ready`);
-  _bucketReady.add(bucket);
 }
 
-/* ── Main upload function ───────────────────────────────────────────────── */
+/* ── Path generation ────────────────────────────────────────────────────── */
 
 /**
- * Upload a file to Supabase Storage.
- *
- * 1. Validates file size
- * 2. Ensures bucket exists (creates if missing, public)
- * 3. Uploads via service role `.upload()`
- * 4. Returns the public URL
+ * Generate storage path: uploads/${Date.now()}.ext
  */
-export async function uploadToStorage(opts: UploadOptions): Promise<UploadResult> {
-  const {
-    bucket,
-    storagePath,
-    buffer,
-    contentType = "application/octet-stream",
-    maxSize = 500 * 1024 * 1024,
-    upsert = true,
-  } = opts;
-
-  const sizeMB = (buffer.length / 1048576).toFixed(1);
-
-  // Validate size
-  if (buffer.length > maxSize) {
-    const maxMB = (maxSize / 1048576).toFixed(0);
-    throw new Error(`File too large (${sizeMB}MB). Maximum is ${maxMB}MB.`);
-  }
-
-  console.log(`[storage] Uploading: bucket=${bucket} path=${storagePath} size=${sizeMB}MB type=${contentType}`);
-
-  // Ensure bucket exists
-  await ensureBucket(bucket, maxSize);
-
-  // Upload
-  const sb = getSupabase();
-  const { error: uploadErr } = await sb.storage
-    .from(bucket)
-    .upload(storagePath, buffer, { contentType, upsert });
-
-  if (uploadErr) {
-    console.error(`[storage] Upload FAILED: bucket=${bucket} path=${storagePath} error=${uploadErr.message}`);
-    throw new Error(`Upload failed: ${uploadErr.message}`);
-  }
-
-  // Get public URL
-  const { data: urlData } = sb.storage.from(bucket).getPublicUrl(storagePath);
-  const publicUrl = urlData?.publicUrl || "";
-
-  console.log(`[storage] Upload OK: ${publicUrl.slice(0, 80)}... (${buffer.length} bytes)`);
-
-  return { publicUrl, storagePath, size: buffer.length, bucket };
-}
-
-/* ── Convenience: generate a storage path ───────────────────────────────── */
-
-/**
- * Build a storage path like `uploads/1713500000000_a1b2.mp4`.
- * Uses timestamp + random suffix to avoid collisions.
- */
-export function makeStoragePath(fileName: string, prefix = "uploads"): string {
+export function makeStoragePath(fileName: string): string {
   const ext = fileName.includes(".")
     ? "." + fileName.split(".").pop()!.toLowerCase()
-    : "";
-  const rand = Math.random().toString(36).slice(2, 6);
-  return `${prefix}/${Date.now()}_${rand}${ext}`;
+    : ".mp4";
+  return `uploads/${Date.now()}${ext}`;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Pattern 1: DIRECT UPLOAD (client → Supabase, bypasses Vercel)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Create a signed upload URL so the CLIENT can PUT a file directly
+ * to Supabase Storage — the file never touches the Next.js server.
+ *
+ * This is the ONLY way to upload files > 4.5MB when deployed on Vercel,
+ * because Vercel serverless functions have a hard body-size limit.
+ *
+ * Flow:
+ *   1. Ensure bucket exists
+ *   2. Generate storage path
+ *   3. createSignedUploadUrl (service role — bypasses RLS)
+ *   4. Return { uploadUrl, publicUrl, storagePath, token }
+ *
+ * Retry: if createSignedUploadUrl fails, clears bucket cache and retries once.
+ */
+export async function getSignedUploadUrl(opts: {
+  fileName: string;
+  contentType?: string;
+  fileSize?: number;
+  bucket?: string;
+}): Promise<SignedUploadUrlResult> {
+  const bucket = opts.bucket || DEFAULT_BUCKET;
+  const storagePath = makeStoragePath(opts.fileName);
+  const tag = `[storage:getSignedUploadUrl]`;
+
+  // Validate file size if provided
+  if (opts.fileSize && opts.fileSize > DEFAULT_MAX_SIZE) {
+    const sizeMB = (opts.fileSize / 1048576).toFixed(1);
+    throw new Error(`File too large (${sizeMB}MB). Maximum is ${DEFAULT_MAX_SIZE / 1048576}MB.`);
+  }
+
+  console.log(`${tag} START: bucket="${bucket}" path="${storagePath}" fileName="${opts.fileName}"`);
+
+  const sb = getSupabase();
+
+  // Try up to 2 times
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const attemptTag = `${tag} [attempt ${attempt}/2]`;
+
+    // Ensure bucket exists before creating signed URL
+    await ensureBucket(bucket);
+
+    console.log(`${attemptTag} Creating signed upload URL...`);
+    const { data, error } = await sb.storage
+      .from(bucket)
+      .createSignedUploadUrl(storagePath);
+
+    if (!error && data?.signedUrl && data?.token) {
+      // Get the public URL this file will have after upload
+      const { data: urlData } = sb.storage.from(bucket).getPublicUrl(storagePath);
+      const publicUrl = urlData?.publicUrl || "";
+
+      console.log(`${attemptTag} ✅ Signed URL created: path=${storagePath} publicUrl=${publicUrl.slice(0, 80)}...`);
+
+      return {
+        uploadUrl: data.signedUrl,
+        publicUrl,
+        storagePath,
+        bucket,
+        token: data.token,
+      };
+    }
+
+    // Failed
+    const errMsg = error?.message || "Unknown error";
+    console.error(`${attemptTag} ❌ createSignedUploadUrl failed: ${errMsg}`);
+
+    if (attempt < 2) {
+      console.log(`${attemptTag} Clearing bucket cache and retrying in ${RETRY_DELAY_MS}ms...`);
+      _bucketReady.delete(bucket);
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+    } else {
+      throw new Error(`Failed to create upload URL: ${errMsg}`);
+    }
+  }
+
+  // Should never reach here, but TypeScript needs it
+  throw new Error("Failed to create upload URL after retries");
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Pattern 2: SERVER-SIDE UPLOAD (for small files < 4MB only)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Upload a file to Supabase Storage from the server.
+ *
+ * ⚠️  Only use for files < 4MB (Vercel body limit).
+ *     For larger files, use getSignedUploadUrl() + client-side PUT.
+ */
+export async function uploadToStorage(opts: UploadOptions): Promise<UploadResult> {
+  const bucket = opts.bucket || DEFAULT_BUCKET;
+  const storagePath = opts.storagePath || makeStoragePath(opts.fileName || "file.mp4");
+  const contentType = opts.contentType || "application/octet-stream";
+  const maxSize = opts.maxSize ?? DEFAULT_MAX_SIZE;
+  const upsert = opts.upsert ?? true;
+  const { buffer } = opts;
+
+  const sizeMB = (buffer.length / 1048576).toFixed(1);
+  const tag = `[storage:upload]`;
+
+  if (buffer.length === 0) {
+    throw new Error("File is empty");
+  }
+
+  if (buffer.length > maxSize) {
+    throw new Error(`File too large (${sizeMB}MB). Maximum is ${(maxSize / 1048576).toFixed(0)}MB.`);
+  }
+
+  console.log(`${tag} START: bucket="${bucket}" path="${storagePath}" size=${sizeMB}MB type=${contentType}`);
+
+  await ensureBucket(bucket, maxSize);
+
+  const sb = getSupabase();
+  let lastError = "";
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const attemptTag = `${tag} [attempt ${attempt}/2]`;
+    console.log(`${attemptTag} Uploading...`);
+
+    const t0 = Date.now();
+    const { error: uploadErr } = await sb.storage
+      .from(bucket)
+      .upload(storagePath, buffer, { contentType, upsert });
+
+    const ms = Date.now() - t0;
+
+    if (!uploadErr) {
+      const { data: urlData } = sb.storage.from(bucket).getPublicUrl(storagePath);
+      const publicUrl = urlData?.publicUrl || "";
+      console.log(`${attemptTag} ✅ Done (${ms}ms): ${publicUrl.slice(0, 100)}`);
+      return { publicUrl, storagePath, size: buffer.length, bucket };
+    }
+
+    lastError = uploadErr.message || "Unknown error";
+    console.error(`${attemptTag} ❌ Failed (${ms}ms): ${lastError}`);
+
+    if (attempt < 2) {
+      _bucketReady.delete(bucket);
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      await ensureBucket(bucket, maxSize);
+    }
+  }
+
+  throw new Error(`Upload failed after retry: ${lastError}`);
 }
