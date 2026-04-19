@@ -55,30 +55,53 @@ function mime(p: string): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Whisper — direct send, no preprocessing
+   Download file from URL to buffer (for Whisper which needs file bytes)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+async function downloadFileFromUrl(url: string): Promise<{ buffer: Buffer; size: number; contentType: string } | { error: string }> {
+  try {
+    console.log(`[download] Fetching: ${url.slice(0, 120)}...`);
+    const res = await fetch(url);
+    if (!res.ok) {
+      return { error: `Download failed: ${res.status} ${res.statusText}` };
+    }
+    const arrayBuffer = await res.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const contentType = res.headers.get("content-type") || "application/octet-stream";
+    console.log(`[download] OK: ${(buffer.length / 1024).toFixed(0)}KB, type=${contentType}`);
+    return { buffer, size: buffer.length, contentType };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[download] ERROR: ${msg}`);
+    return { error: `Download error: ${msg}` };
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Whisper — downloads file from URL, sends bytes to OpenAI
    ═══════════════════════════════════════════════════════════════════════════ */
 
 async function whisperTranscribe(
-  key: string, filePath: string, lang: string,
+  key: string, audioUrl: string, lang: string,
 ): Promise<{ segments: SubSegment[]; error?: string }> {
-  const fs = require("fs");
-  const path = require("path");
+  // Download the file from Supabase Storage (or any URL)
+  const dl = await downloadFileFromUrl(audioUrl);
+  if ("error" in dl) return { segments: [], error: dl.error };
 
-  if (!fs.existsSync(filePath)) return { segments: [], error: `File not found: ${filePath}` };
-  const st = fs.statSync(filePath);
-  if (!st.size) return { segments: [], error: "Empty file" };
+  if (!dl.size) return { segments: [], error: "Empty file" };
 
   // Whisper limit is 25 MB
-  if (st.size > 25 * 1024 * 1024) {
-    return { segments: [], error: `File too large for Whisper: ${(st.size / 1048576).toFixed(1)}MB (max 25MB)` };
+  if (dl.size > 25 * 1024 * 1024) {
+    return { segments: [], error: `File too large for Whisper: ${(dl.size / 1048576).toFixed(1)}MB (max 25MB)` };
   }
 
-  const ext = path.extname(filePath).toLowerCase();
-  console.log(`[whisper] Sending original file directly: ${(st.size / 1024).toFixed(0)}KB ${ext}`);
+  // Detect extension from URL
+  const urlPath = new URL(audioUrl).pathname;
+  const ext = (urlPath.match(/\.\w+$/) || [".mp4"])[0].toLowerCase();
+  console.log(`[whisper] Sending file: ${(dl.size / 1024).toFixed(0)}KB ${ext} type=${dl.contentType}`);
 
-  const buf = fs.readFileSync(filePath);
   const fd = new FormData();
-  fd.append("file", new Blob([buf], { type: mime(filePath) }), `audio${ext}`);
+  fd.append("file", new Blob([dl.buffer], { type: dl.contentType || mime(urlPath) }), `audio${ext}`);
   fd.append("model", "whisper-1");
   fd.append("language", whisperLang(lang));
   fd.append("response_format", "verbose_json");
@@ -101,42 +124,15 @@ async function whisperTranscribe(
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   AssemblyAI transcription
+   AssemblyAI — uses public URL directly (no download needed)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 async function assemblyaiTranscribe(
-  key: string, filePath: string, lang: string,
+  key: string, audioUrl: string, lang: string,
 ): Promise<{ segments: SubSegment[]; error?: string }> {
-  const fs = require("fs");
-  const path = require("path");
+  console.log(`[assemblyai] Using public URL directly: ${audioUrl.slice(0, 120)}...`);
 
-  if (!fs.existsSync(filePath)) return { segments: [], error: `File not found: ${filePath}` };
-  const st = fs.statSync(filePath);
-  if (!st.size) return { segments: [], error: "Empty file" };
-
-  console.log(`[assemblyai] Uploading file: ${(st.size / 1024).toFixed(0)}KB`);
-
-  // Step 1: Upload the file to AssemblyAI
-  const buf = fs.readFileSync(filePath);
-  const uploadRes = await fetch("https://api.assemblyai.com/v2/upload", {
-    method: "POST",
-    headers: {
-      authorization: key,
-      "content-type": "application/octet-stream",
-    },
-    body: buf,
-  });
-
-  if (!uploadRes.ok) {
-    const errText = await uploadRes.text();
-    console.log(`[assemblyai] Upload error ${uploadRes.status}: ${errText.slice(0, 200)}`);
-    return { segments: [], error: `AssemblyAI upload ${uploadRes.status}: ${errText.slice(0, 150)}` };
-  }
-
-  const { upload_url } = await uploadRes.json();
-  console.log(`[assemblyai] File uploaded, creating transcript...`);
-
-  // Step 2: Create transcription job
+  // AssemblyAI can fetch from a public URL directly — no need to download + re-upload
   const transcriptRes = await fetch("https://api.assemblyai.com/v2/transcript", {
     method: "POST",
     headers: {
@@ -144,7 +140,7 @@ async function assemblyaiTranscribe(
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      audio_url: upload_url,
+      audio_url: audioUrl,
       language_code: assemblyLang(lang),
     }),
   });
@@ -158,7 +154,7 @@ async function assemblyaiTranscribe(
   const { id: transcriptId } = await transcriptRes.json();
   console.log(`[assemblyai] Transcript job created: ${transcriptId}`);
 
-  // Step 3: Poll for completion (max 120s)
+  // Poll for completion (max 120s)
   const maxWait = 120000;
   const pollInterval = 3000;
   const start = Date.now();
@@ -416,9 +412,15 @@ export async function POST(req: NextRequest) {
     if (!language) {
       return NextResponse.json({ error: "language required", segments: [] }, { status: 400 });
     }
-    if (!audioUrl || !audioUrl.startsWith("/")) {
-      return NextResponse.json({ error: "audioUrl required (local path)", segments: [] }, { status: 400 });
+    if (!audioUrl) {
+      return NextResponse.json({ error: "audioUrl required", segments: [] }, { status: 400 });
     }
+
+    // Accept both full URLs (Supabase Storage) and legacy local paths
+    const isFullUrl = audioUrl.startsWith("http://") || audioUrl.startsWith("https://");
+    const resolvedUrl = isFullUrl ? audioUrl : `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}${audioUrl}`;
+
+    console.log(`[transcribe] audioUrl: ${audioUrl.slice(0, 120)} → resolved: ${resolvedUrl.slice(0, 120)}`);
 
     // ── Get API keys (merged from both sources) ──
     const ks = getApiKeyStatus();
@@ -435,26 +437,16 @@ export async function POST(req: NextRequest) {
       }, { status: 503 });
     }
 
-    // ── Resolve file path ──
-    const pathMod = require("path");
-    const fsMod = require("fs");
-    const localPath = pathMod.join(process.cwd(), "public", audioUrl);
-
-    if (!fsMod.existsSync(localPath)) {
-      return NextResponse.json({ error: "File not found", segments: [] }, { status: 404 });
-    }
-
-    const fileSizeMB = (fsMod.statSync(localPath).size / 1048576).toFixed(1);
-    console.log(`[transcribe] File: ${audioUrl} size=${fileSizeMB}MB lang=${language} dur=${durationSec}s`);
+    console.log(`[transcribe] Transcription request: url=${resolvedUrl.slice(0, 80)}... lang=${language} dur=${durationSec}s`);
 
     // ── Build provider order based on settings & available keys ──
     const providers: { name: string; fn: () => Promise<{ segments: SubSegment[]; error?: string }> }[] = [];
 
     const addProvider = (name: string) => {
       if (name === "whisper" && keys.openai) {
-        providers.push({ name: "whisper", fn: () => whisperTranscribe(keys.openai, localPath, language) });
+        providers.push({ name: "whisper", fn: () => whisperTranscribe(keys.openai, resolvedUrl, language) });
       } else if (name === "assemblyai" && keys.assemblyai) {
-        providers.push({ name: "assemblyai", fn: () => assemblyaiTranscribe(keys.assemblyai, localPath, language) });
+        providers.push({ name: "assemblyai", fn: () => assemblyaiTranscribe(keys.assemblyai, resolvedUrl, language) });
       }
     };
 
