@@ -1097,15 +1097,24 @@ export default function NewProjectWizard() {
 
         // Poll render job for real progress
         let pollCount = 0;
+        let notFoundCount = 0;
         const pollInterval = setInterval(async () => {
           try {
             pollCount++;
-            const statusRes = await fetch(`/api/render/${jobId}`);
+            const pollUrl = `/api/render/${jobId}`;
+            const statusRes = await fetch(pollUrl);
             if (!statusRes.ok) {
-              console.error(`[render-poll] ❌ Poll #${pollCount} failed: HTTP ${statusRes.status}`);
+              if (statusRes.status === 404 && notFoundCount < 5) {
+                // Job may not be in DB yet — retry a few times before giving up
+                notFoundCount++;
+                console.warn(`[render-poll] ⚠️ Poll #${pollCount} 404 (attempt ${notFoundCount}/5) — jobId=${jobId} url=${pollUrl}`);
+                return; // Don't clearInterval — keep retrying
+              }
+              console.error(`[render-poll] ❌ Poll #${pollCount} failed: HTTP ${statusRes.status} jobId=${jobId} url=${pollUrl}`);
               clearInterval(pollInterval);
               return;
             }
+            notFoundCount = 0; // Reset on success
             const { job: updatedJob } = await statusRes.json();
             if (pollCount <= 3 || pollCount % 5 === 0 || updatedJob.status === "completed" || updatedJob.status === "failed") {
               console.log(`[render-poll] #${pollCount} status=${updatedJob.status} progress=${updatedJob.progress}% stage="${updatedJob.currentStage}" publicUrl=${updatedJob.publicUrl || "(none)"}`);

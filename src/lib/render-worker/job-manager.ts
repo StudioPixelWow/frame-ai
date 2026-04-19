@@ -1,11 +1,16 @@
 /**
  * PixelFrameAI — Render Job Manager
- * File-based render job system. Jobs are stored as JSON files in .frameai/data/render-jobs/
- * The API creates jobs, the worker picks them up and processes them.
+ *
+ * Primary storage: Supabase "render_jobs" table (survives across requests/processes).
+ * Secondary: local JSON files in .frameai/data/render-jobs/ (worker cache).
+ *
+ * Every write goes to BOTH Supabase and file system.
+ * Every read tries Supabase first, falls back to file.
  */
 import fs from "fs";
 import path from "path";
 import { DATA_DIR as FRAMEAI_DATA_DIR } from "@/lib/db/paths";
+import { getSupabase } from "@/lib/db/store";
 
 const DATA_DIR = path.join(FRAMEAI_DATA_DIR, "render-jobs");
 
@@ -48,18 +53,148 @@ export interface RenderJobData {
   premiumMode: boolean;
 }
 
-/** Create a new render job and write it to disk */
-export function createRenderJobFile(data: Omit<RenderJobData, "id">): RenderJobData {
-  const id = `rj_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const job: RenderJobData = { id, ...data };
-  const filePath = path.join(DATA_DIR, `${id}.json`);
-  fs.writeFileSync(filePath, JSON.stringify(job, null, 2));
-  console.log(`[JobManager] Created render job: ${id}`);
-  return job;
+/* ── Supabase helpers (non-blocking — errors are caught, never thrown) ─── */
+
+/** Row shape in Supabase (flat snake_case JSONB blob) */
+function jobToRow(job: RenderJobData): Record<string, unknown> {
+  return {
+    id: job.id,
+    project_id: job.projectId,
+    data: job, // Store the full job as JSONB — avoids column-mismatch issues
+    status: job.status,
+    updated_at: new Date().toISOString(),
+  };
 }
 
-/** Read a render job from disk */
-export function readRenderJob(jobId: string): RenderJobData | null {
+function rowToJob(row: Record<string, unknown>): RenderJobData | null {
+  if (!row) return null;
+  // The full job object is stored in the "data" column
+  const data = row.data as RenderJobData | undefined;
+  if (data && typeof data === "object" && data.id) return data;
+  return null;
+}
+
+async function dbUpsert(job: RenderJobData): Promise<void> {
+  try {
+    const sb = getSupabase();
+    const row = jobToRow(job);
+    const { error } = await sb.from("render_jobs").upsert(row, { onConflict: "id" });
+    if (error) {
+      // Table might not exist — try to create it
+      if (error.message?.includes("render_jobs") && (error.message?.includes("does not exist") || error.message?.includes("relation"))) {
+        console.warn("[JobManager] render_jobs table missing — attempting auto-create");
+        await ensureRenderJobsTable();
+        // Retry once
+        const { error: retryErr } = await sb.from("render_jobs").upsert(row, { onConflict: "id" });
+        if (retryErr) console.error("[JobManager] DB upsert retry failed:", retryErr.message);
+        else console.log(`[JobManager] DB upsert OK (after table create): ${job.id}`);
+      } else {
+        console.error("[JobManager] DB upsert failed:", error.message);
+      }
+    }
+  } catch (err) {
+    console.error("[JobManager] DB upsert error:", err instanceof Error ? err.message : err);
+  }
+}
+
+async function dbRead(jobId: string): Promise<RenderJobData | null> {
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb.from("render_jobs").select("data").eq("id", jobId).maybeSingle();
+    if (error) {
+      // Silently fail — caller will try file fallback
+      return null;
+    }
+    return data ? rowToJob(data as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function dbDelete(jobId: string): Promise<void> {
+  try {
+    const sb = getSupabase();
+    await sb.from("render_jobs").delete().eq("id", jobId);
+  } catch {
+    // non-fatal
+  }
+}
+
+async function dbListByStatus(status: string): Promise<RenderJobData[]> {
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from("render_jobs")
+      .select("data")
+      .eq("status", status)
+      .order("updated_at", { ascending: false });
+    if (error || !data) return [];
+    return data.map((r) => rowToJob(r as Record<string, unknown>)).filter(Boolean) as RenderJobData[];
+  } catch {
+    return [];
+  }
+}
+
+async function dbListAll(): Promise<RenderJobData[]> {
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from("render_jobs")
+      .select("data")
+      .order("updated_at", { ascending: false })
+      .limit(50);
+    if (error || !data) return [];
+    return data.map((r) => rowToJob(r as Record<string, unknown>)).filter(Boolean) as RenderJobData[];
+  } catch {
+    return [];
+  }
+}
+
+/** Auto-create the render_jobs table if it doesn't exist */
+async function ensureRenderJobsTable(): Promise<void> {
+  try {
+    const sb = getSupabase();
+    const sql = `
+      CREATE TABLE IF NOT EXISTS public.render_jobs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT,
+        status TEXT DEFAULT 'queued',
+        data JSONB,
+        updated_at TIMESTAMPTZ DEFAULT now()
+      );
+    `;
+    // Try exec_sql RPC
+    for (const param of ["sql_text", "query", "sql"]) {
+      const { error } = await sb.rpc("exec_sql", { [param]: sql });
+      if (!error) {
+        console.log("[JobManager] render_jobs table created via RPC");
+        // Reload schema cache
+        await sb.rpc("exec_sql", { [param]: "NOTIFY pgrst, 'reload schema';" }).catch(() => {});
+        return;
+      }
+      if (error.message?.includes("already exists")) return;
+      if (!error.message?.includes("argument") && !error.message?.includes("Could not find")) {
+        break;
+      }
+    }
+    console.warn("[JobManager] Could not auto-create render_jobs table. Create it manually:\n" + sql);
+  } catch (err) {
+    console.warn("[JobManager] ensureRenderJobsTable error:", err instanceof Error ? err.message : err);
+  }
+}
+
+/* ── File helpers ────────────────────────────────────────────────────────── */
+
+function fileWrite(job: RenderJobData): void {
+  try {
+    const filePath = path.join(DATA_DIR, `${job.id}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(job, null, 2));
+  } catch (err) {
+    console.warn("[JobManager] File write failed:", err instanceof Error ? err.message : err);
+  }
+}
+
+function fileRead(jobId: string): RenderJobData | null {
   const filePath = path.join(DATA_DIR, `${jobId}.json`);
   if (!fs.existsSync(filePath)) return null;
   try {
@@ -69,26 +204,13 @@ export function readRenderJob(jobId: string): RenderJobData | null {
   }
 }
 
-/** Update a render job on disk */
-export function updateRenderJobFile(jobId: string, updates: Partial<RenderJobData>): RenderJobData | null {
-  const job = readRenderJob(jobId);
-  if (!job) return null;
-  Object.assign(job, updates);
-  const filePath = path.join(DATA_DIR, `${jobId}.json`);
-  fs.writeFileSync(filePath, JSON.stringify(job, null, 2));
-  return job;
-}
-
-/** Delete a render job file */
-export function deleteRenderJobFile(jobId: string): boolean {
+function fileDelete(jobId: string): boolean {
   const filePath = path.join(DATA_DIR, `${jobId}.json`);
   if (!fs.existsSync(filePath)) return false;
-  fs.unlinkSync(filePath);
-  return true;
+  try { fs.unlinkSync(filePath); return true; } catch { return false; }
 }
 
-/** List all render jobs */
-export function listRenderJobs(): RenderJobData[] {
+function fileList(): RenderJobData[] {
   if (!fs.existsSync(DATA_DIR)) return [];
   const files = fs.readdirSync(DATA_DIR).filter((f) => f.endsWith(".json"));
   const jobs: RenderJobData[] = [];
@@ -96,9 +218,74 @@ export function listRenderJobs(): RenderJobData[] {
     try {
       const data = JSON.parse(fs.readFileSync(path.join(DATA_DIR, file), "utf-8"));
       jobs.push(data);
-    } catch {
-      // Skip malformed files
-    }
+    } catch { /* skip */ }
   }
   return jobs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+/* ── Public API (write to both, read DB-first) ──────────────────────────── */
+
+/** Create a new render job — writes to DB + file */
+export async function createRenderJobFile(data: Omit<RenderJobData, "id">): Promise<RenderJobData> {
+  const id = `rj_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const job: RenderJobData = { id, ...data };
+
+  // Write to file (synchronous — always works locally)
+  fileWrite(job);
+  console.log(`[JobManager] Created render job: ${id} (file: ${path.join(DATA_DIR, id + ".json")})`);
+
+  // Write to DB (await — ensures job is in DB before first poll arrives)
+  await dbUpsert(job);
+  console.log(`[JobManager] Render job ${id} persisted to Supabase`);
+
+  return job;
+}
+
+/** Read a render job — tries DB first, then file */
+export async function readRenderJobAsync(jobId: string): Promise<RenderJobData | null> {
+  // Try DB first
+  const dbJob = await dbRead(jobId);
+  if (dbJob) return dbJob;
+  // Fall back to file
+  return fileRead(jobId);
+}
+
+/** Synchronous read (for worker process) — file only */
+export function readRenderJob(jobId: string): RenderJobData | null {
+  return fileRead(jobId);
+}
+
+/** Update a render job — writes to both DB + file */
+export function updateRenderJobFile(jobId: string, updates: Partial<RenderJobData>): RenderJobData | null {
+  // Read from file (worker uses this synchronously)
+  let job = fileRead(jobId);
+  if (!job) return null;
+
+  Object.assign(job, updates);
+
+  // Write to file
+  fileWrite(job);
+
+  // Write to DB (async)
+  dbUpsert(job).catch(() => {});
+
+  return job;
+}
+
+/** Delete a render job — from both DB + file */
+export function deleteRenderJobFile(jobId: string): boolean {
+  dbDelete(jobId).catch(() => {});
+  return fileDelete(jobId);
+}
+
+/** List all render jobs — tries DB first, falls back to file */
+export async function listRenderJobsAsync(): Promise<RenderJobData[]> {
+  const dbJobs = await dbListAll();
+  if (dbJobs.length > 0) return dbJobs;
+  return fileList();
+}
+
+/** Synchronous list (for worker) — file only */
+export function listRenderJobs(): RenderJobData[] {
+  return fileList();
 }

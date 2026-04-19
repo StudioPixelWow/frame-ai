@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createRenderJobFile,
-  listRenderJobs,
+  listRenderJobsAsync,
   type RenderJobData,
 } from "@/lib/render-worker/job-manager";
 import { ensureWorkerRunning, getWorkerStatus } from "@/lib/render-worker/spawn-worker";
@@ -19,7 +19,7 @@ import fs from "fs";
 
 export async function GET() {
   try {
-    const jobs = listRenderJobs();
+    const jobs = await listRenderJobsAsync();
     const worker = getWorkerStatus();
     return NextResponse.json({ jobs, worker });
   } catch (err) {
@@ -188,8 +188,8 @@ export async function POST(req: NextRequest) {
     console.log("[Render API]   segments:", inputProps?.segments?.length || 0);
     console.log("[Render API]   music.trackUrl:", inputProps?.music?.trackUrl || "(none)");
 
-    // Create the render job file on disk
-    const job = createRenderJobFile({
+    // Create the render job (Supabase + file)
+    const job = await createRenderJobFile({
       projectId,
       projectName: projectName || "Untitled",
       status: "queued",

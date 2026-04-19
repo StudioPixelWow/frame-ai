@@ -13,6 +13,7 @@ import path from "path";
 import fs from "fs";
 import {
   readRenderJob,
+  readRenderJobAsync,
   updateRenderJobFile,
   deleteRenderJobFile,
 } from "@/lib/render-worker/job-manager";
@@ -129,11 +130,13 @@ export async function GET(
   context: { params: Promise<{ jobId: string }> }
 ) {
   const { jobId } = await context.params;
-  let job = readRenderJob(jobId);
+  let job = await readRenderJobAsync(jobId);
 
   if (!job) {
+    console.warn(`${tag} GET ${jobId} — not found in DB or file`);
     return NextResponse.json({ error: "Render job not found" }, { status: 404 });
   }
+  console.log(`${tag} GET ${jobId} — status=${job.status} progress=${job.progress}%`);
 
   // Ensure completed jobs are persisted to durable storage + DB
   job = await ensurePersisted(jobId, job) || job;
@@ -148,7 +151,7 @@ export async function PUT(
   const { jobId } = await context.params;
   const body = await req.json();
 
-  const job = readRenderJob(jobId);
+  const job = await readRenderJobAsync(jobId);
   if (!job) {
     return NextResponse.json({ error: "Render job not found" }, { status: 404 });
   }
