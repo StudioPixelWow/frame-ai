@@ -119,7 +119,7 @@ export async function GET(
     const { id } = await context.params;
     const sb = getSupabase();
     let selectList = SELECT_COLUMNS;
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < 25; attempt++) {
       const { data, error } = await sb.from('video_projects').select(selectList).eq('id', id).maybeSingle();
       if (!error) {
         if (!data) return NextResponse.json({ error: 'Project not found', projectId: id }, { status: 404 });
@@ -158,7 +158,7 @@ export async function PUT(
     let updated: ProjectRow | null = null;
     let lastErr: { message: string; code?: string } | null = null;
 
-    for (let attempt = 0; attempt < 8; attempt++) {
+    for (let attempt = 0; attempt < 25; attempt++) {
       const { data, error } = await sb
         .from('video_projects')
         .update(updateRow)

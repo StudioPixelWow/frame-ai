@@ -74,20 +74,42 @@ async function ensurePersisted(jobId: string, job: ReturnType<typeof readRenderJ
   if (publicUrl && job.projectId) {
     try {
       const sb = getSupabase();
-      const { error } = await sb
-        .from("video_projects")
-        .update({
-          render_output_key: publicUrl,
-          video_url: publicUrl,
-          status: "complete",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", job.projectId);
+      let updatePayload: Record<string, unknown> = {
+        render_output_key: publicUrl,
+        video_url: publicUrl,
+        status: "complete",
+        updated_at: new Date().toISOString(),
+      };
 
-      if (error) {
-        console.error(`${tag} ❌ Project DB update failed: ${error.message}`);
-      } else {
-        console.log(`${tag} ✅ Project ${job.projectId} updated: status=complete, render_output_key=${publicUrl.slice(0, 80)}...`);
+      // Auto-drop unknown columns and retry (handles missing video_url, render_output_key, etc.)
+      let success = false;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const { error } = await sb
+          .from("video_projects")
+          .update(updatePayload)
+          .eq("id", job.projectId);
+
+        if (!error) {
+          success = true;
+          console.log(`${tag} ✅ Project ${job.projectId} updated: status=complete, cols=${Object.keys(updatePayload).join(',')}`);
+          break;
+        }
+
+        const m = error.message.match(/column .*?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);
+        const bad = m?.[1] || m?.[2];
+        if (bad && bad in updatePayload) {
+          console.warn(`${tag} ⚠️ Dropping unknown column "${bad}" from persist update`);
+          const { [bad]: _d, ...rest } = updatePayload;
+          void _d;
+          updatePayload = rest;
+        } else {
+          console.error(`${tag} ❌ Project DB update failed: ${error.message}`);
+          break;
+        }
+      }
+
+      if (!success) {
+        console.error(`${tag} ❌ Could not update project ${job.projectId} — run migration: GET /api/data/migrate-video-projects`);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

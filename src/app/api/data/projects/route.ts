@@ -128,8 +128,9 @@ export async function GET() {
     const sb = getSupabase();
 
     // Try full select; on unknown-column error, progressively drop the column.
+    const droppedCols: string[] = [];
     let selectList = SELECT_COLUMNS;
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < 25; attempt++) {
       const { data: rows, error } = await sb.from('video_projects').select(selectList).order('id');
       if (!error) {
         const projects = (rows ?? []).map((r) => rowToProject(r as ProjectRow));
@@ -141,8 +142,9 @@ export async function GET() {
         console.error('[API] GET /api/data/projects supabase error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
+      droppedCols.push(bad);
       const colType = bad.endsWith('_state') || bad.endsWith('_payload') || bad === 'segments' ? 'JSONB' : bad === 'duration' || bad.endsWith('_sec') ? 'INTEGER' : 'TEXT';
-      console.warn(`[API] GET /api/data/projects dropping unknown column "${bad}" from select. Add it via: ALTER TABLE video_projects ADD COLUMN ${bad} ${colType};`);
+      console.warn(`[API] GET /api/data/projects dropping unknown column "${bad}" from select (dropped so far: ${droppedCols.join(', ')}). Fix: ALTER TABLE video_projects ADD COLUMN IF NOT EXISTS ${bad} ${colType};`);
       selectList = selectList
         .split(',')
         .map((s) => s.trim())
@@ -174,10 +176,12 @@ export async function POST(req: NextRequest) {
     console.log(`[API] POST /api/data/projects inserting id=${id} cols=${Object.keys(insertRow).join(',')}`);
 
     // Auto-drop unknown columns on the insert OR the select-back and retry.
+    const droppedInsertCols: string[] = [];
+    const droppedSelectCols: string[] = [];
     let inserted: ProjectRow | null = null;
     let lastErr: { message: string; code?: string } | null = null;
 
-    for (let attempt = 0; attempt < 8; attempt++) {
+    for (let attempt = 0; attempt < 25; attempt++) {
       const { data, error } = await sb
         .from('video_projects')
         .insert(insertRow)
@@ -192,12 +196,14 @@ export async function POST(req: NextRequest) {
       if (!bad) break;
 
       if (bad in insertRow) {
-        console.warn(`[API] POST /api/data/projects dropping unknown insert column "${bad}"`);
+        droppedInsertCols.push(bad);
+        console.warn(`[API] POST /api/data/projects dropping unknown insert column "${bad}" (dropped: ${droppedInsertCols.join(', ')})`);
         const { [bad]: _d, ...rest } = insertRow;
         void _d;
         insertRow = rest;
       } else if (selectList.includes(bad)) {
-        console.warn(`[API] POST /api/data/projects dropping unknown select column "${bad}"`);
+        droppedSelectCols.push(bad);
+        console.warn(`[API] POST /api/data/projects dropping unknown select column "${bad}" (dropped: ${droppedSelectCols.join(', ')})`);
         selectList = selectList.split(',').map((s) => s.trim()).filter((c) => c !== bad).join(', ');
       } else {
         break;
@@ -214,7 +220,8 @@ export async function POST(req: NextRequest) {
         code,
         hint,
         details,
-        droppedCols: Object.keys(toDbInsert(body, id, now)).filter((k) => !(k in insertRow)),
+        droppedInsertCols,
+        droppedSelectCols,
         remainingCols: Object.keys(insertRow),
       });
       return NextResponse.json(

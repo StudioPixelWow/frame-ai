@@ -1,17 +1,17 @@
 /**
  * GET /api/data/migrate-video-projects
  *
- * Idempotent migration: ensures the video_projects table has every column
- * the application code expects. Safe to call repeatedly.
+ * Returns the exact SQL needed to bring video_projects up to date.
+ * Also attempts to run it via exec_sql RPC if available.
  *
- * Strategy:
- *   1. Probe the table with a full SELECT of all expected columns.
- *   2. Parse which columns Supabase says are missing.
- *   3. For each missing column, attempt a Supabase `.rpc()` call to ALTER TABLE.
- *   4. If rpc isn't available, return the raw SQL for manual execution.
- *   5. Reload the PostgREST schema cache.
+ * The DEFINITIVE expected schema is defined here — this is the single
+ * source of truth for what video_projects must look like.
  *
- * Run once after deploy:  curl http://localhost:3000/api/data/migrate-video-projects
+ * Usage:
+ *   1. Visit this endpoint in your browser
+ *   2. Copy the SQL from the response
+ *   3. Paste into Supabase Dashboard → SQL Editor → Run
+ *   4. The API auto-adapts immediately after columns exist
  */
 
 import { NextResponse } from 'next/server';
@@ -19,68 +19,80 @@ import { getSupabase } from '@/lib/db/store';
 
 export const dynamic = 'force-dynamic';
 
-/* ── Authoritative column list ─────────────────────────────────────────── */
+/* ── Single source of truth: every column the app expects ──────────────── */
 
-const COLUMNS: Array<{ name: string; type: string; defaultVal?: string }> = [
-  { name: 'name',                type: 'TEXT',        defaultVal: "''" },
-  { name: 'client_id',           type: 'TEXT' },
-  { name: 'client_name',         type: 'TEXT',        defaultVal: "''" },
-  { name: 'status',              type: 'TEXT',        defaultVal: "'draft'" },
-  { name: 'description',         type: 'TEXT',        defaultVal: "''" },
-  { name: 'project_type',        type: 'TEXT' },
-  { name: 'format',              type: 'TEXT' },
-  { name: 'preset',              type: 'TEXT' },
-  { name: 'duration_sec',        type: 'INTEGER' },
-  { name: 'duration',            type: 'INTEGER' },
-  { name: 'segments',            type: 'JSONB' },
-  { name: 'source_video_key',    type: 'TEXT' },
-  { name: 'render_output_key',   type: 'TEXT' },
-  { name: 'thumbnail_key',       type: 'TEXT' },
-  { name: 'video_url',           type: 'TEXT' },
-  { name: 'thumbnail_url',       type: 'TEXT' },
-  { name: 'wizard_state',        type: 'JSONB' },
-  { name: 'render_payload',      type: 'JSONB' },
-  { name: 'start_date',          type: 'TEXT' },
-  { name: 'end_date',            type: 'TEXT' },
-  { name: 'assigned_manager_id', type: 'TEXT' },
-  { name: 'created_at',          type: 'TIMESTAMPTZ', defaultVal: 'now()' },
-  { name: 'updated_at',          type: 'TIMESTAMPTZ', defaultVal: 'now()' },
+export const VIDEO_PROJECTS_COLUMNS: Array<{
+  name: string;
+  type: string;
+  defaultVal?: string;
+  comment: string;
+}> = [
+  { name: 'name',                type: 'TEXT',        defaultVal: "''",      comment: 'project display name' },
+  { name: 'client_id',           type: 'TEXT',                               comment: 'FK to clients' },
+  { name: 'client_name',         type: 'TEXT',        defaultVal: "''",      comment: 'denormalized client name' },
+  { name: 'status',              type: 'TEXT',        defaultVal: "'draft'", comment: 'draft|analysing|approved|rendering|complete|failed|sent_to_client' },
+  { name: 'description',         type: 'TEXT',        defaultVal: "''",      comment: 'project description' },
+  { name: 'project_type',        type: 'TEXT',                               comment: 'general|ugc|podcast|…' },
+  { name: 'format',              type: 'TEXT',                               comment: '9:16|16:9|1:1|4:5' },
+  { name: 'preset',              type: 'TEXT',                               comment: 'render preset name' },
+  { name: 'duration_sec',        type: 'INTEGER',                            comment: 'video duration in seconds' },
+  { name: 'duration',            type: 'INTEGER',                            comment: 'alias for duration_sec' },
+  { name: 'segments',            type: 'JSONB',                              comment: 'transcription segments array' },
+  { name: 'source_video_key',    type: 'TEXT',                               comment: 'storage key of source video' },
+  { name: 'render_output_key',   type: 'TEXT',                               comment: 'storage key of rendered output' },
+  { name: 'thumbnail_key',       type: 'TEXT',                               comment: 'storage key of thumbnail' },
+  { name: 'video_url',           type: 'TEXT',                               comment: 'public URL of rendered video' },
+  { name: 'thumbnail_url',       type: 'TEXT',                               comment: 'public URL of thumbnail' },
+  { name: 'wizard_state',        type: 'JSONB',                              comment: 'full wizard form state' },
+  { name: 'render_payload',      type: 'JSONB',                              comment: 'Remotion render input props' },
+  { name: 'start_date',          type: 'TEXT',                               comment: 'project start date' },
+  { name: 'end_date',            type: 'TEXT',                               comment: 'project end date' },
+  { name: 'assigned_manager_id', type: 'TEXT',                               comment: 'FK to employees' },
+  { name: 'created_at',          type: 'TIMESTAMPTZ', defaultVal: 'now()',   comment: 'row creation time' },
+  { name: 'updated_at',          type: 'TIMESTAMPTZ', defaultVal: 'now()',   comment: 'last update time' },
 ];
 
-/* ── Build raw SQL ─────────────────────────────────────────────────────── */
+/* ── Build the migration SQL ───────────────────────────────────────────── */
 
-function buildRawSql(): string {
+function buildMigrationSql(): string {
   const lines = [
-    '-- video_projects migration: run in Supabase SQL Editor',
-    '-- Safe to run multiple times — every statement uses IF NOT EXISTS.',
+    '-- ╔══════════════════════════════════════════════════════════════════╗',
+    '-- ║  video_projects — complete column migration                     ║',
+    '-- ║  Run in: Supabase Dashboard → SQL Editor → New query → Run     ║',
+    '-- ║  Safe to run multiple times (IF NOT EXISTS on every statement)  ║',
+    '-- ╚══════════════════════════════════════════════════════════════════╝',
     '',
   ];
-  for (const col of COLUMNS) {
+
+  for (const col of VIDEO_PROJECTS_COLUMNS) {
     const def = col.defaultVal ? ` DEFAULT ${col.defaultVal}` : '';
-    lines.push(`ALTER TABLE public.video_projects ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}${def};`);
+    lines.push(`ALTER TABLE public.video_projects ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}${def};  -- ${col.comment}`);
   }
+
   lines.push('');
-  lines.push("-- Reload PostgREST schema cache so the API sees the new columns:");
+  lines.push('-- Reload PostgREST schema cache (required for Supabase API to see new columns):');
   lines.push("NOTIFY pgrst, 'reload schema';");
+
   return lines.join('\n');
 }
 
-/* ── Detect missing columns via probe SELECT ───────────────────────────── */
+/* ── Detect which columns are actually missing ─────────────────────────── */
 
-async function detectMissing(sb: ReturnType<typeof getSupabase>): Promise<string[]> {
-  const allCols = COLUMNS.map((c) => c.name);
+async function detectMissingColumns(sb: ReturnType<typeof getSupabase>): Promise<string[]> {
+  const allCols = VIDEO_PROJECTS_COLUMNS.map((c) => c.name);
   let selectList = ['id', ...allCols].join(', ');
   const missing: string[] = [];
 
-  for (let attempt = 0; attempt < allCols.length; attempt++) {
+  // Probe with .limit(0) — no data transferred, just schema validation
+  for (let i = 0; i < allCols.length + 2; i++) {
     const { error } = await sb.from('video_projects').select(selectList).limit(0);
-    if (!error) break; // all columns exist
+    if (!error) break;
 
     const m = error.message.match(
       /column .*?['"]?([a-z_]+)['"]? does not exist|Could not find the '([^']+)' column/i,
     );
     const bad = m?.[1] || m?.[2];
-    if (!bad) break; // unknown error shape — stop probing
+    if (!bad) break;
 
     missing.push(bad);
     selectList = selectList
@@ -93,104 +105,79 @@ async function detectMissing(sb: ReturnType<typeof getSupabase>): Promise<string
   return missing;
 }
 
-/* ── Try to run an ALTER via Supabase RPC ──────────────────────────────── */
+/* ── Try to run SQL via exec_sql RPC ───────────────────────────────────── */
 
-async function tryAlter(
+async function tryRunSql(
   sb: ReturnType<typeof getSupabase>,
-  col: (typeof COLUMNS)[number],
+  sql: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const def = col.defaultVal ? ` DEFAULT ${col.defaultVal}` : '';
-  const sql = `ALTER TABLE public.video_projects ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}${def};`;
-
-  // Try common RPC param names
   for (const param of ['sql_text', 'query', 'sql']) {
     const { error } = await sb.rpc('exec_sql', { [param]: sql });
     if (!error) return { ok: true };
-    // If the error is about the column already existing, that's fine
     if (error.message?.includes('already exists')) return { ok: true };
-    // If the error is about the RPC itself (wrong param name), try next
-    if (error.message?.includes('argument') || error.message?.includes('param')) continue;
-    // Some other error — report it
+    if (error.message?.includes('argument') || error.message?.includes('Could not find')) continue;
     return { ok: false, error: error.message };
   }
-  return { ok: false, error: 'exec_sql RPC not available — run the SQL manually in Supabase SQL Editor' };
+  return { ok: false, error: 'exec_sql RPC not available' };
 }
 
-/* ── Reload schema cache ───────────────────────────────────────────────── */
-
-async function reloadSchemaCache(sb: ReturnType<typeof getSupabase>): Promise<string> {
-  for (const param of ['sql_text', 'query', 'sql']) {
-    const { error } = await sb.rpc('exec_sql', { [param]: "NOTIFY pgrst, 'reload schema';" });
-    if (!error) return 'ok';
-  }
-  return 'rpc_unavailable — run: NOTIFY pgrst, \'reload schema\'; in SQL Editor';
-}
-
-/* ── Route handler ─────────────────────────────────────────────────────── */
+/* ── GET handler ───────────────────────────────────────────────────────── */
 
 export async function GET() {
   const sb = getSupabase();
-  const tag = '[migrate-video-projects]';
+  const migrationSql = buildMigrationSql();
 
-  // Step 1: detect which columns are missing
-  console.log(`${tag} Step 1: detecting missing columns…`);
-  const missing = await detectMissing(sb);
-  console.log(`${tag} Missing columns: ${missing.length === 0 ? 'none' : missing.join(', ')}`);
+  // 1. Detect missing
+  const missing = await detectMissingColumns(sb);
+  console.log(`[migrate] Missing columns: ${missing.length === 0 ? 'none' : missing.join(', ')}`);
 
   if (missing.length === 0) {
     return NextResponse.json({
-      message: 'All columns already exist. No migration needed.',
+      status: 'ok',
+      message: 'All 23 columns already exist. No migration needed.',
       missing: [],
-      results: [],
-      schemaReload: 'skipped',
-      rawSql: buildRawSql(),
+      migrationSql,
     });
   }
 
-  // Step 2: try to add each missing column via RPC
-  console.log(`${tag} Step 2: adding ${missing.length} missing columns…`);
-  const results: Array<{ column: string; status: string }> = [];
-  let rpcWorked = true;
+  // 2. Try to add each missing column via RPC
+  const results: Array<{ column: string; result: string }> = [];
+  let anyAdded = false;
 
   for (const colName of missing) {
-    const colDef = COLUMNS.find((c) => c.name === colName);
+    const colDef = VIDEO_PROJECTS_COLUMNS.find((c) => c.name === colName);
     if (!colDef) {
-      results.push({ column: colName, status: 'unknown_column — not in COLUMNS list' });
+      results.push({ column: colName, result: 'skipped — not in expected schema' });
       continue;
     }
-
-    const { ok, error } = await tryAlter(sb, colDef);
-    if (ok) {
-      console.log(`${tag}   ✅ ${colName}: added`);
-      results.push({ column: colName, status: 'added' });
-    } else {
-      console.warn(`${tag}   ❌ ${colName}: ${error}`);
-      results.push({ column: colName, status: `error: ${error}` });
-      rpcWorked = false;
-    }
+    const def = colDef.defaultVal ? ` DEFAULT ${colDef.defaultVal}` : '';
+    const sql = `ALTER TABLE public.video_projects ADD COLUMN IF NOT EXISTS ${colName} ${colDef.type}${def};`;
+    const { ok, error } = await tryRunSql(sb, sql);
+    results.push({ column: colName, result: ok ? 'added' : `failed: ${error}` });
+    if (ok) anyAdded = true;
   }
 
-  // Step 3: reload schema cache
+  // 3. Reload schema cache if anything was added
   let schemaReload = 'skipped';
-  if (rpcWorked && results.some((r) => r.status === 'added')) {
-    console.log(`${tag} Step 3: reloading PostgREST schema cache…`);
-    schemaReload = await reloadSchemaCache(sb);
-    console.log(`${tag} Schema reload: ${schemaReload}`);
+  if (anyAdded) {
+    const { ok } = await tryRunSql(sb, "NOTIFY pgrst, 'reload schema';");
+    schemaReload = ok ? 'ok' : 'failed — run manually';
   }
 
-  // Step 4: verify — probe again
-  const stillMissing = await detectMissing(sb);
-  const allFixed = stillMissing.length === 0;
-  console.log(`${tag} Step 4: verify — ${allFixed ? '✅ all columns present' : `❌ still missing: ${stillMissing.join(', ')}`}`);
+  // 4. Verify
+  const stillMissing = await detectMissingColumns(sb);
+
+  const rpcFailed = results.some((r) => r.result.startsWith('failed'));
 
   return NextResponse.json({
-    message: allFixed
-      ? `Migration complete. Added ${results.filter((r) => r.status === 'added').length} columns.`
-      : `Migration partial. ${stillMissing.length} columns still missing. Run the rawSql in Supabase SQL Editor.`,
+    status: stillMissing.length === 0 ? 'ok' : rpcFailed ? 'manual_migration_required' : 'partial',
+    message: stillMissing.length === 0
+      ? `Migration complete. Added ${results.filter((r) => r.result === 'added').length} columns.`
+      : `⚠️ ${stillMissing.length} columns still missing. Copy the SQL below, paste into Supabase SQL Editor, and run it.`,
     missing,
     stillMissing,
     results,
     schemaReload,
-    rawSql: buildRawSql(),
+    migrationSql,
   });
 }
