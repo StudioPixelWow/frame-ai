@@ -118,68 +118,38 @@ export default function ProjectDetailPage() {
     return (project.wizardState as Record<string, any>).activeLayers || [];
   }, [project]);
 
-  // ── Normalize any value to a string URL ──
-  // Handles: string, null, undefined, { publicUrl }, { url }, { data: { publicUrl } }
-  const toStr = (v: unknown): string | null => {
-    if (!v) return null;
-    if (typeof v === "string") return v;
-    if (typeof v === "object") {
-      const o = v as Record<string, unknown>;
-      if (typeof o.publicUrl === "string" && o.publicUrl) return o.publicUrl;
-      if (typeof o.url === "string" && o.url) return o.url;
-      if (o.data && typeof o.data === "object") {
-        const d = o.data as Record<string, unknown>;
-        if (typeof d.publicUrl === "string" && d.publicUrl) return d.publicUrl;
-      }
-      // Last resort: try JSON.stringify and see if it looks like a URL
-      const s = String(v);
-      if (s.startsWith("http")) return s;
-    }
-    return null;
-  };
-
-  // ── Resolve video path — handles bare keys, absolute paths, full URLs, and objects ──
-  const resolveVideoPath = (raw: unknown): string | null => {
-    const key = toStr(raw);
-    if (!key) return null;
-    if (key.startsWith("http") || key.startsWith("/")) return key;
-    return `/uploads/${key}`;
-  };
-
-  // ── Comprehensive video URL resolver ──
+  // ── Single video URL resolver — force string, never object ──
   const wsAny = project?.wizardState as Record<string, any> | null;
 
-  // Pick the best "final" video (rendered output — everything except sourceVideoKey)
-  const finalVideoSrc =
-    resolveVideoPath(project?.renderOutputKey) ||
-    resolveVideoPath(project?.videoUrl) ||
-    resolveVideoPath(wsAny?.videoUrl) ||
-    resolveVideoPath(wsAny?.uploadedVideoUrl) ||
-    resolveVideoPath(wsAny?.renderedVideoUrl) ||
-    resolveVideoPath(wsAny?.outputUrl) ||
-    resolveVideoPath(wsAny?.finalVideoUrl) ||
-    resolveVideoPath(wsAny?.compositionData?.videoUrl) ||
-    resolveVideoPath(wsAny?.compositionData?.source?.videoUrl) ||
-    null;
+  const forceStr = (v: unknown): string => {
+    if (!v) return "";
+    if (typeof v === "string") return v;
+    if (typeof v === "object") {
+      const o = v as Record<string, any>;
+      return o.publicUrl || o.url || o.data?.publicUrl || "";
+    }
+    return String(v);
+  };
 
-  // Original source upload (last resort for display, never for download when final exists)
-  const sourceVideoSrc =
-    resolveVideoPath(project?.sourceVideoKey) ||
-    resolveVideoPath(wsAny?.sourceVideoUrl) ||
-    resolveVideoPath(wsAny?.originalVideoUrl) ||
-    null;
+  const videoUrl: string =
+    forceStr(project?.renderOutputKey) ||
+    forceStr(project?.videoUrl) ||
+    forceStr(wsAny?.videoUrl) ||
+    forceStr(wsAny?.uploadedVideoUrl) ||
+    forceStr(wsAny?.compositionData?.videoUrl) ||
+    forceStr(wsAny?.compositionData?.source?.videoUrl) ||
+    forceStr(project?.sourceVideoKey) ||
+    "";
 
-  // The single URL used for both the player and the download button
-  const renderVideoSrc = finalVideoSrc || sourceVideoSrc;
-
-  // Debug — always log type + value so object-vs-string bugs are visible
+  // Debug — visible in console
   if (typeof window !== "undefined" && project) {
-    console.log("[ProjectDetail] FINAL VIDEO URL:", renderVideoSrc, typeof renderVideoSrc);
-    console.log("[ProjectDetail] Raw field types:", {
-      "renderOutputKey": typeof project?.renderOutputKey, val: toStr(project?.renderOutputKey)?.slice(0, 80),
-      "videoUrl": typeof project?.videoUrl, valV: toStr(project?.videoUrl)?.slice(0, 80),
-      "sourceVideoKey": typeof project?.sourceVideoKey, valS: toStr(project?.sourceVideoKey)?.slice(0, 80),
-      "ws.videoUrl": typeof wsAny?.videoUrl, valW: toStr(wsAny?.videoUrl)?.slice(0, 80),
+    console.log("VIDEO URL:", videoUrl, typeof videoUrl);
+    console.log("VIDEO URL CANDIDATES:", {
+      renderOutputKey: forceStr(project?.renderOutputKey) || "(empty)",
+      videoUrl_field: forceStr(project?.videoUrl) || "(empty)",
+      wsVideoUrl: forceStr(wsAny?.videoUrl) || "(empty)",
+      wsUploadedVideoUrl: forceStr(wsAny?.uploadedVideoUrl) || "(empty)",
+      sourceVideoKey: forceStr(project?.sourceVideoKey) || "(empty)",
     });
   }
 
@@ -330,15 +300,11 @@ export default function ProjectDetailPage() {
       }}>
         <strong style={{ color: "#f59e0b" }}>VIDEO DEBUG</strong>{" "}
         id={project.id} | status={project.status}
-        {"\n"}renderOutputKey [{typeof project.renderOutputKey}]={toStr(project.renderOutputKey)?.slice(0, 80) || "(null)"}
-        {"\n"}videoUrl [{typeof project.videoUrl}]={toStr(project.videoUrl)?.slice(0, 80) || "(null)"}
-        {"\n"}sourceVideoKey [{typeof project.sourceVideoKey}]={toStr(project.sourceVideoKey)?.slice(0, 80) || "(null)"}
-        {"\n"}ws.videoUrl [{typeof wsAny?.videoUrl}]={toStr(wsAny?.videoUrl)?.slice(0, 80) || "(null)"}
-        {"\n"}ws.uploadedVideoUrl [{typeof wsAny?.uploadedVideoUrl}]={toStr(wsAny?.uploadedVideoUrl)?.slice(0, 80) || "(null)"}
-        {"\n"}
-        <span style={{ color: "#22c55e" }}>{"\n"}FINAL [string]={finalVideoSrc?.slice(0, 100) || "(null)"}</span>
-        <span style={{ color: "#38bdf8" }}>{"\n"}SOURCE [string]={sourceVideoSrc?.slice(0, 100) || "(null)"}</span>
-        <span style={{ color: "#fbbf24" }}>{"\n"}PLAYER [string]={renderVideoSrc?.slice(0, 100) || "(null — BLANK)"}</span>
+        {"\n"}videoUrl [{typeof videoUrl}] = {videoUrl || "(EMPTY)"}
+        {"\n"}renderOutputKey = {forceStr(project.renderOutputKey) || "(empty)"}
+        {"\n"}project.videoUrl = {forceStr(project.videoUrl) || "(empty)"}
+        {"\n"}sourceVideoKey = {forceStr(project.sourceVideoKey) || "(empty)"}
+        {"\n"}ws.videoUrl = {forceStr(wsAny?.videoUrl) || "(empty)"}
       </div>
 
       {/* Header with Actions */}
@@ -383,14 +349,12 @@ export default function ProjectDetailPage() {
               📝 המשך עריכה
             </Link>
           )}
-          {renderVideoSrc && (
+          {videoUrl && (
             <button
               onClick={() => {
-                // Always download the best available video (final > source)
-                const downloadUrl = finalVideoSrc || renderVideoSrc;
-                console.log("[ProjectDetail] Download clicked, URL:", downloadUrl);
+                console.log("DOWNLOAD URL:", videoUrl, typeof videoUrl);
                 const link = document.createElement("a");
-                link.href = downloadUrl;
+                link.href = videoUrl;
                 link.download = `${project.name || "video"}.mp4`;
                 link.target = "_blank";
                 link.rel = "noopener noreferrer";
@@ -479,186 +443,70 @@ export default function ProjectDetailPage() {
       {/* Main Content - Two Column Layout */}
       <div className="proj-layout">
         {/* Left Column - Video Area */}
-        <div className="proj-video-area" style={{ display: "flex", flexDirection: "column", gap: "1.5rem", maxWidth: "800px", margin: "0 auto" }}>
-          {/* Video Frame Container */}
-          <div
-            style={{
-              position: "relative",
-              backgroundColor: "var(--surface-raised)",
-              border: "1px solid var(--border)",
-              borderRadius: "0.75rem",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                position: "relative",
-                paddingBottom: getAspectRatioPadding(project.format as ProjectFormat),
-                backgroundColor: "#1a1a1a",
-              }}
-            >
-              <div
-                className="proj-format-frame"
+        <div className="proj-video-area" style={{ display: "flex", flexDirection: "column", gap: "1.5rem", maxWidth: "900px", margin: "0 auto" }}>
+          {/* Video Player — simple, direct, always renders if URL exists */}
+          {videoUrl ? (
+            <div style={{ position: "relative" }}>
+              <video
+                src={videoUrl}
+                controls
+                autoPlay
+                playsInline
                 style={{
-                  position: "absolute",
-                  inset: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexDirection: "column",
-                  gap: "1rem",
+                  width: "100%",
+                  maxWidth: "900px",
+                  borderRadius: "16px",
+                  margin: "0 auto",
+                  display: "block",
+                  backgroundColor: "#1a1a1a",
                 }}
-              >
-                {/* Rendered Video / Remotion Preview / Source Video / Placeholder */}
-                {renderVideoSrc ? (
-                  <video
-                    src={renderVideoSrc}
-                    controls
-                    playsInline
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                      borderRadius: "0.75rem",
-                    }}
-                  />
-                ) : savedComposition ? (
-                  <div style={{ position: "absolute", inset: 0 }}>
-                    <Player
-                      ref={playerRef}
-                      component={PixelFrameEdit as unknown as React.FC<Record<string, unknown>>}
-                      inputProps={savedComposition.remotionProps as unknown as Record<string, unknown>}
-                      durationInFrames={Math.max(1, savedComposition.durationFrames)}
-                      compositionWidth={savedComposition.dims.width}
-                      compositionHeight={savedComposition.dims.height}
-                      fps={FPS}
-                      style={{ width: "100%", height: "100%", borderRadius: "0.75rem" }}
-                      controls
-                      loop
-                      autoPlay={false}
-                    />
-                  </div>
-                ) : sourceVideoSrc ? (
-                  <video
-                    src={sourceVideoSrc}
-                    controls
-                    playsInline
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                      borderRadius: "0.75rem",
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      flex: 1,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      width: "100%",
-                      flexDirection: "column",
-                      gap: "0.75rem",
-                      color: "var(--foreground-muted)",
-                    }}
-                  >
-                    <div style={{ fontSize: "2rem", opacity: 0.6 }}>🎬</div>
-                    <div style={{ fontSize: "0.875rem", textAlign: "center" }}>
-                      תצוגה מקדימה של פרויקט
-                    </div>
-                  </div>
-                )}
-
-                {/* Rendered badge */}
-                {renderVideoSrc && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "0.75rem",
-                      insetInlineEnd: "0.75rem",
-                      backgroundColor: "rgba(34, 197, 94, 0.9)",
-                      color: "white",
-                      padding: "0.25rem 0.625rem",
-                      borderRadius: "6px",
-                      fontSize: "0.7rem",
-                      fontWeight: 700,
-                      backdropFilter: "blur(8px)",
-                      zIndex: 2,
-                    }}
-                  >
-                    פלט מיוצא
-                  </div>
-                )}
-
-                {/* Remotion composition preview badge */}
-                {!renderVideoSrc && savedComposition && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "0.75rem",
-                      insetInlineEnd: "0.75rem",
-                      backgroundColor: "rgba(167, 139, 250, 0.9)",
-                      color: "white",
-                      padding: "0.25rem 0.625rem",
-                      borderRadius: "6px",
-                      fontSize: "0.7rem",
-                      fontWeight: 700,
-                      backdropFilter: "blur(8px)",
-                      zIndex: 2,
-                    }}
-                  >
-                    תצוגה מקדימה — Remotion
-                  </div>
-                )}
-
-                {/* Subtitle Overlay Sample — only show when no real video is playing */}
-                {!renderVideoSrc && !sourceVideoSrc && subtitleConfig && Object.keys(subtitleConfig).length > 0 && (
-                  <div
-                    className="proj-video-overlay"
-                    style={{
-                      position: "absolute",
-                      bottom: "1.5rem",
-                      insetInlineStart: "1.5rem",
-                      insetInlineEnd: "1.5rem",
-                      backgroundColor: "rgba(0, 0, 0, 0.6)",
-                      borderRadius: "0.375rem",
-                      padding: "0.75rem 1rem",
-                      textAlign: "center",
-                      backdropFilter: "blur(8px)",
-                      fontSize: "0.875rem",
-                      color: "white",
-                      fontFamily: "Arial, sans-serif",
-                    }}
-                  >
-                    זה דוגמה של כתוביות
-                  </div>
-                )}
-
-                {/* Status Badge Overlay */}
-                <div
-                  className="proj-status-badge"
-                  style={{
-                    position: "absolute",
-                    top: "1rem",
-                    insetInlineStart: "1rem",
-                    backgroundColor: statusColor(project.status),
-                    color: "white",
-                    padding: "0.375rem 0.875rem",
-                    borderRadius: "9999px",
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                  }}
-                >
-                  {statusLabel(project.status)}
-                </div>
+              />
+              {/* Status Badge */}
+              <div style={{
+                position: "absolute", top: "1rem", insetInlineStart: "1rem",
+                backgroundColor: statusColor(project.status), color: "white",
+                padding: "0.375rem 0.875rem", borderRadius: "9999px",
+                fontSize: "0.75rem", fontWeight: 600,
+              }}>
+                {statusLabel(project.status)}
+              </div>
+              {/* Rendered badge */}
+              <div style={{
+                position: "absolute", top: "0.75rem", insetInlineEnd: "0.75rem",
+                backgroundColor: "rgba(34, 197, 94, 0.9)", color: "white",
+                padding: "0.25rem 0.625rem", borderRadius: "6px",
+                fontSize: "0.7rem", fontWeight: 700, backdropFilter: "blur(8px)",
+              }}>
+                פלט מיוצא
               </div>
             </div>
-          </div>
+          ) : savedComposition ? (
+            <div style={{ position: "relative", borderRadius: "16px", overflow: "hidden", backgroundColor: "#1a1a1a" }}>
+              <Player
+                ref={playerRef}
+                component={PixelFrameEdit as unknown as React.FC<Record<string, unknown>>}
+                inputProps={savedComposition.remotionProps as unknown as Record<string, unknown>}
+                durationInFrames={Math.max(1, savedComposition.durationFrames)}
+                compositionWidth={savedComposition.dims.width}
+                compositionHeight={savedComposition.dims.height}
+                fps={FPS}
+                style={{ width: "100%", borderRadius: "16px" }}
+                controls
+                loop
+                autoPlay={false}
+              />
+            </div>
+          ) : (
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexDirection: "column", gap: "0.75rem", padding: "4rem 2rem",
+              backgroundColor: "#1a1a1a", borderRadius: "16px",
+              color: "var(--foreground-muted)",
+            }}>
+              <div style={{ fontSize: "2rem", opacity: 0.6 }}>🎬</div>
+              <div style={{ fontSize: "0.875rem" }}>תצוגה מקדימה של פרויקט</div>
+            </div>
+          )}
         </div>
 
           {/* Edit State Info — shown when compositionData is saved */}
