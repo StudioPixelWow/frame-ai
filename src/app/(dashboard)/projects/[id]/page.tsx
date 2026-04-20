@@ -118,14 +118,50 @@ export default function ProjectDetailPage() {
     return (project.wizardState as Record<string, any>).activeLayers || [];
   }, [project]);
 
-  // Resolve video path — handles legacy bare filenames
-  const resolveVideoPath = (key: string | null | undefined) => {
+  // ── Resolve video path — handles bare keys, absolute paths, and full URLs ──
+  const resolveVideoPath = (key: string | null | undefined): string | null => {
     if (!key) return null;
-    if (key.startsWith("/") || key.startsWith("http")) return key;
+    if (key.startsWith("http") || key.startsWith("/")) return key;
     return `/uploads/${key}`;
   };
-  const renderVideoSrc = resolveVideoPath(project?.renderOutputKey) || resolveVideoPath(project?.videoUrl);
+
+  // ── Comprehensive video URL resolver ──
+  // Priority: renderOutputKey > videoUrl > wizardState.videoUrl > wizardState.uploadedVideoUrl > sourceVideoKey
+  // The first four represent the FINAL / rendered video; sourceVideoKey is always the original upload.
+  const wsAny = project?.wizardState as Record<string, any> | null;
+  const candidateFields = {
+    renderOutputKey: project?.renderOutputKey,
+    videoUrl: project?.videoUrl,
+    "wizardState.videoUrl": wsAny?.videoUrl,
+    "wizardState.uploadedVideoUrl": wsAny?.uploadedVideoUrl,
+    sourceVideoKey: project?.sourceVideoKey,
+  };
+
+  // Pick the best "final" video (everything except sourceVideoKey)
+  const finalVideoSrc =
+    resolveVideoPath(project?.renderOutputKey) ||
+    resolveVideoPath(project?.videoUrl) ||
+    resolveVideoPath(wsAny?.videoUrl) ||
+    resolveVideoPath(wsAny?.uploadedVideoUrl) ||
+    null;
+
+  // Original source upload (last resort for display, never for download when final exists)
   const sourceVideoSrc = resolveVideoPath(project?.sourceVideoKey);
+
+  // The URL used for both the player and the download button
+  const renderVideoSrc = finalVideoSrc || sourceVideoSrc;
+
+  // Debug: log all candidate fields so we can diagnose blank-preview issues in production
+  if (typeof window !== "undefined" && project) {
+    console.log("[ProjectDetail] Video URL resolution:", {
+      projectId: project.id,
+      projectStatus: project.status,
+      candidates: candidateFields,
+      resolvedFinal: finalVideoSrc,
+      resolvedSource: sourceVideoSrc,
+      activePlayerSrc: renderVideoSrc,
+    });
+  }
 
   // AI Analysis
   const aiAnalysis = useMemo(() => {
@@ -310,8 +346,11 @@ export default function ProjectDetailPage() {
           {renderVideoSrc && (
             <button
               onClick={() => {
+                // Always download the best available video (final > source)
+                const downloadUrl = finalVideoSrc || renderVideoSrc;
+                console.log("[ProjectDetail] Download clicked, URL:", downloadUrl);
                 const link = document.createElement("a");
-                link.href = renderVideoSrc;
+                link.href = downloadUrl;
                 link.download = `${project.name || "video"}.mp4`;
                 link.target = "_blank";
                 link.rel = "noopener noreferrer";
