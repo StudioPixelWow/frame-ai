@@ -4,7 +4,7 @@
  * DELETE /api/render/[jobId] — Remove job
  *
  * Source of truth: Supabase render_jobs table.
- * No file reads. No in-memory maps.
+ * Fully stateless / Vercel-compatible. Zero fs usage.
  */
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -12,60 +12,8 @@ import {
   updateRenderJob,
   deleteRenderJob,
 } from "@/lib/render-worker/job-manager";
-import { uploadToStorage } from "@/lib/storage/upload";
-import { getSupabase } from "@/lib/db/store";
-import path from "path";
-import fs from "fs";
 
 const tag = "[render/jobId]";
-
-/**
- * When a render job is completed with a local result but no public URL,
- * upload the output to Supabase Storage and update the project record.
- */
-async function ensurePersisted(job: NonNullable<Awaited<ReturnType<typeof readRenderJob>>>) {
-  if (job.status !== "completed") return job;
-  if (job.result_url) return job; // Already persisted
-
-  // Check metadata for local outputPath
-  const outputPath = (job.metadata as any)?.outputPath as string | undefined;
-  if (!outputPath) return job;
-
-  console.log(`${tag} ⚡ Job ${job.job_id} completed but not persisted — uploading`);
-
-  const localPath = path.join(process.cwd(), "public", outputPath.replace(/^\//, ""));
-  if (!fs.existsSync(localPath)) {
-    console.error(`${tag} ❌ Output file not found: ${localPath}`);
-    return job;
-  }
-
-  try {
-    const buffer = fs.readFileSync(localPath);
-    const fileName = path.basename(localPath);
-    const storagePath = `renders/${Date.now()}-${fileName}`;
-    const result = await uploadToStorage({ storagePath, buffer, contentType: "video/mp4", upsert: true });
-
-    // Update render_jobs with the public URL
-    const updated = await updateRenderJob(job.job_id, { result_url: result.publicUrl });
-
-    // Update the video_projects record too
-    if (job.project_id) {
-      try {
-        const sb = getSupabase();
-        await sb.from("video_projects").update({
-          status: "complete",
-          updated_at: new Date().toISOString(),
-        }).eq("id", job.project_id);
-      } catch { /* non-fatal */ }
-    }
-
-    console.log(`${tag} ✅ Upload + persist complete: ${result.publicUrl}`);
-    return updated || job;
-  } catch (err) {
-    console.error(`${tag} ❌ Upload failed:`, err instanceof Error ? err.message : err);
-    return job;
-  }
-}
 
 export async function GET(
   req: NextRequest,
@@ -82,7 +30,7 @@ export async function GET(
 
   try {
     // ── Read ONLY from Supabase ──
-    let job = await readRenderJob(jobId);
+    const job = await readRenderJob(jobId);
 
     if (!job) {
       console.warn(`${tag} ❌ Job ${jobId} not found in render_jobs table`);
@@ -90,9 +38,6 @@ export async function GET(
     }
 
     console.log(`${tag} ✅ Job found: status=${job.status} progress=${job.progress}%`);
-
-    // If completed, ensure output is persisted to durable storage
-    job = await ensurePersisted(job) || job;
 
     // Return shape the client expects
     return NextResponse.json({
@@ -102,7 +47,6 @@ export async function GET(
         status: mapStatus(job.status),
         progress: job.progress,
         currentStage: job.stage || "",
-        outputPath: (job.metadata as any)?.outputPath || null,
         publicUrl: job.result_url,
         error: job.error,
       },

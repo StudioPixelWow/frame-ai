@@ -3,22 +3,20 @@
  * GET  /api/render — List all render jobs
  *
  * POST body: { projectId, projectName, compositionData, remotionProps, quality }
- * Inserts a row into Supabase render_jobs, then spawns the worker.
+ * Inserts a row into Supabase render_jobs (DB only — no filesystem).
+ *
+ * Fully stateless / Vercel-compatible. Zero fs usage.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createRenderJob, listRenderJobs } from "@/lib/render-worker/job-manager";
-import { ensureWorkerRunning, getWorkerStatus } from "@/lib/render-worker/spawn-worker";
 import { compositionToProps } from "@/lib/video-engine/composition-to-props";
-import path from "path";
-import fs from "fs";
 
 const tag = "[Render API]";
 
 export async function GET() {
   try {
     const jobs = await listRenderJobs();
-    const worker = getWorkerStatus();
-    return NextResponse.json({ jobs, worker });
+    return NextResponse.json({ jobs });
   } catch (err) {
     return NextResponse.json({ error: "Failed to fetch render jobs" }, { status: 500 });
   }
@@ -84,32 +82,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Pre-generate music audio file if needed
-    if (inputProps?.music?.enabled && inputProps?.music?.trackUrl) {
-      const trackUrl = inputProps.music.trackUrl as string;
-      if (trackUrl.startsWith("/api/media/audio")) {
-        try {
-          const url = new URL(trackUrl, "http://localhost:3000");
-          const trackId = url.searchParams.get("trackId") || "";
-          if (trackId) {
-            const audioDir = path.join(process.cwd(), "public", "media", "audio");
-            if (!fs.existsSync(audioDir)) fs.mkdirSync(audioDir, { recursive: true });
-            try {
-              const audioRes = await fetch(`http://localhost:3000${trackUrl}`);
-              if (audioRes.ok) {
-                const staticFile = path.join(audioDir, `${trackId}_v2.wav`);
-                const legacyFile = path.join(audioDir, `${trackId}.wav`);
-                if (fs.existsSync(staticFile)) {
-                  inputProps.music.trackUrl = `/media/audio/${trackId}_v2.wav`;
-                } else if (fs.existsSync(legacyFile)) {
-                  inputProps.music.trackUrl = `/media/audio/${trackId}.wav`;
-                }
-              }
-            } catch { /* non-fatal */ }
-          }
-        } catch { /* non-fatal */ }
-      }
-    }
+    // Music track URL: keep as-is (no local file pre-generation on serverless)
+    // The worker or an external renderer will resolve audio URLs at render time.
 
     // Validate video URL
     const videoUrl = inputProps?.videoUrl || "";
@@ -124,11 +98,11 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // ── Generate job ID and persist to Supabase ──
+    // ── Generate job ID and persist to Supabase (DB only) ──
     const jobId = `rj_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     console.log(`${tag} Render job created: jobId=${jobId}`);
 
-    const job = await createRenderJob({
+    await createRenderJob({
       jobId,
       projectId,
       metadata: {
@@ -145,31 +119,6 @@ export async function POST(req: NextRequest) {
 
     console.log(`${tag} ✅ Render job persisted to Supabase: ${jobId}`);
 
-    // Also write a local file for the worker process to pick up
-    const jobDir = path.join(process.cwd(), ".frameai", "data", "render-jobs");
-    if (!fs.existsSync(jobDir)) fs.mkdirSync(jobDir, { recursive: true });
-    const jobFile = path.join(jobDir, `${jobId}.json`);
-    const workerPayload = {
-      id: jobId,
-      projectId,
-      projectName: projectName || "Untitled",
-      status: "queued",
-      progress: 0,
-      currentStage: "ממתין בתור",
-      compositionId: "PixelFrameEdit",
-      inputProps,
-      outputPath: null,
-      createdAt: new Date().toISOString(),
-      quality: quality || "premium",
-      premiumMode: compositionData.premium?.enabled ?? true,
-    };
-    fs.writeFileSync(jobFile, JSON.stringify(workerPayload, null, 2));
-    console.log(`${tag} Worker file written: ${jobFile}`);
-
-    // Ensure the render worker is running
-    const workerResult = ensureWorkerRunning();
-    console.log(`${tag} Worker status: ${workerResult.started ? "started" : "already running"} PID=${workerResult.pid}`);
-
     // Return job shape that the client expects
     return NextResponse.json({
       job: {
@@ -178,10 +127,6 @@ export async function POST(req: NextRequest) {
         progress: 0,
         currentStage: "ממתין בתור",
         projectId,
-      },
-      worker: {
-        started: workerResult.started,
-        pid: workerResult.pid,
       },
     });
   } catch (err) {

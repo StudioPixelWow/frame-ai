@@ -1,72 +1,25 @@
 /**
  * PixelFrameAI — Worker Spawner
- * Spawns the render worker as a child process from the Next.js server.
- * Called from the render API when needed.
+ *
+ * On Vercel (serverless): spawning child processes is not supported.
+ * This module becomes a safe no-op that returns status info only.
+ *
+ * On a persistent server: the worker should be started separately
+ * via `npx tsx src/lib/render-worker/worker.ts` — not spawned from
+ * the API process. The worker polls Supabase for queued jobs.
+ *
+ * Zero filesystem usage. Fully Vercel-compatible.
  */
-import { spawn, ChildProcess } from "child_process";
-import path from "path";
-import fs from "fs";
 
-let workerProcess: ChildProcess | null = null;
-let workerStartedAt: Date | null = null;
-
-import { FRAMEAI_DIR } from "@/lib/db/paths";
-
-const LOG_DIR = path.join(FRAMEAI_DIR, "logs");
-
-function ensureLogDir(): void {
-  if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
-}
-
-/** Check if the worker is alive */
+/** Check if the worker is alive — always false on serverless */
 export function isWorkerRunning(): boolean {
-  if (!workerProcess) return false;
-  try {
-    // Sends signal 0 to check if process exists
-    process.kill(workerProcess.pid!, 0);
-    return true;
-  } catch {
-    workerProcess = null;
-    return false;
-  }
+  return false;
 }
 
-/** Start the render worker if not already running */
+/** No-op on serverless — worker runs as a separate process */
 export function ensureWorkerRunning(): { pid: number | null; started: boolean } {
-  if (isWorkerRunning()) {
-    return { pid: workerProcess!.pid ?? null, started: false };
-  }
-
-  ensureLogDir();
-  const logFile = path.join(LOG_DIR, `render-worker-${Date.now()}.log`);
-  const logStream = fs.createWriteStream(logFile, { flags: "a" });
-
-  console.log("[Spawner] Starting render worker...");
-
-  workerProcess = spawn("npx", ["tsx", path.join(process.cwd(), "src/lib/render-worker/worker.ts")], {
-    cwd: process.cwd(),
-    stdio: ["ignore", "pipe", "pipe"],
-    detached: true,
-    env: { ...process.env, NODE_ENV: "production" },
-  });
-
-  // Pipe stdout/stderr to the log file (passing WriteStream directly to stdio is invalid)
-  workerProcess.stdout?.pipe(logStream);
-  workerProcess.stderr?.pipe(logStream);
-
-  workerProcess.unref();
-  workerStartedAt = new Date();
-
-  const pid = workerProcess.pid ?? null;
-  console.log(`[Spawner] Worker started with PID: ${pid}, log: ${logFile}`);
-
-  workerProcess.on("exit", (code) => {
-    console.log(`[Spawner] Worker exited with code: ${code}`);
-    logStream.end();
-    workerProcess = null;
-  });
-
-  return { pid, started: true };
+  console.log("[Spawner] Worker spawning is disabled on serverless. Run the worker separately.");
+  return { pid: null, started: false };
 }
 
 /** Get worker status info */
@@ -76,8 +29,8 @@ export function getWorkerStatus(): {
   startedAt: string | null;
 } {
   return {
-    running: isWorkerRunning(),
-    pid: workerProcess?.pid ?? null,
-    startedAt: workerStartedAt?.toISOString() ?? null,
+    running: false,
+    pid: null,
+    startedAt: null,
   };
 }

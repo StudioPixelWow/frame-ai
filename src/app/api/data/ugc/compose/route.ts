@@ -3,24 +3,16 @@
  *
  * Queues a Remotion render job for the UGC branded video composition.
  * Takes a HeyGen avatar video URL and composition parameters,
- * creates a render job file that the render worker picks up.
+ * creates a render job in Supabase that the render worker picks up.
  *
  * GET /api/data/ugc/compose?jobId=xxx
- * Returns the status of a render job.
+ * Returns the status of a render job (from Supabase).
+ *
+ * Fully stateless / Vercel-compatible. Zero fs usage.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-
-const PROJECT_ROOT = process.cwd();
-const RENDER_JOBS_DIR = path.join(PROJECT_ROOT, '.frameai/data/render-jobs');
-const OUTPUT_DIR = path.join(PROJECT_ROOT, 'public/renders');
-
-// Ensure directories exist
-[RENDER_JOBS_DIR, OUTPUT_DIR].forEach((dir) => {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-});
+import { createRenderJob, readRenderJob } from '@/lib/render-worker/job-manager';
 
 function generateJobId(): string {
   const ts = Date.now().toString(36);
@@ -64,7 +56,6 @@ export async function POST(req: NextRequest) {
     }
 
     const jobId = generateJobId();
-    const now = new Date().toISOString();
 
     // Build the inputProps for the UGCBrandedVideo Remotion composition
     const inputProps = {
@@ -85,25 +76,17 @@ export async function POST(req: NextRequest) {
       watermarkEnabled,
     };
 
-    // Create a render job file — the worker polls for these
-    const job = {
-      id: jobId,
-      compositionId: 'UGCBrandedVideo',
-      status: 'queued',
-      progress: 0,
-      currentStage: 'בתור לרינדור',
-      inputProps,
-      createdAt: now,
-      startedAt: null,
-      completedAt: null,
-      outputPath: null,
-      error: null,
-    };
+    // Persist to Supabase — the worker polls render_jobs for queued jobs
+    await createRenderJob({
+      jobId,
+      projectId: `ugc-${jobId}`,
+      metadata: {
+        compositionId: 'UGCBrandedVideo',
+        inputProps,
+      },
+    });
 
-    const jobPath = path.join(RENDER_JOBS_DIR, `${jobId}.json`);
-    fs.writeFileSync(jobPath, JSON.stringify(job, null, 2));
-
-    console.log(`[UGC Compose] Created render job: ${jobId}`);
+    console.log(`[UGC Compose] Created render job in Supabase: ${jobId}`);
 
     return NextResponse.json({
       jobId,
@@ -126,28 +109,25 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'jobId is required' }, { status: 400 });
     }
 
-    const jobPath = path.join(RENDER_JOBS_DIR, `${jobId}.json`);
-    if (!fs.existsSync(jobPath)) {
+    const job = await readRenderJob(jobId);
+    if (!job) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
-    const job = JSON.parse(fs.readFileSync(jobPath, 'utf-8'));
-
-    // If completed, use Supabase public URL if available, else fall back to local path
+    // If completed, use result_url
     let videoUrl: string | null = null;
     if (job.status === 'completed') {
-      videoUrl = job.publicUrl || job.outputPath || null;
+      videoUrl = job.result_url || null;
     }
 
     return NextResponse.json({
-      jobId: job.id,
+      jobId: job.job_id,
       status: job.status,
       progress: job.progress || 0,
-      currentStage: job.currentStage || '',
+      currentStage: job.stage || '',
       videoUrl,
       error: job.error || null,
-      createdAt: job.createdAt,
-      completedAt: job.completedAt,
+      createdAt: job.created_at,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
