@@ -139,6 +139,7 @@ export async function processRenderJob(jobId: string): Promise<void> {
           .update({
             status: "complete",
             video_url: resultUrl,
+            render_output_key: resultUrl,
             updated_at: new Date().toISOString(),
           })
           .eq("id", job.project_id);

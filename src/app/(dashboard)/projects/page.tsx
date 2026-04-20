@@ -411,7 +411,7 @@ export default function ProjectsPage() {
                       {p?.name || 'ללא שם'}
                     </div>
                     <div className="proj-card-meta-row">
-                      <span style={{ color: "var(--foreground-muted)" }}>{p?.clientName || 'לקוח לא ידוע'}</span>
+                      <span style={{ color: "var(--foreground-muted)" }}>{p?.clientName || clients?.find((c) => c.id === p?.clientId)?.name || 'לקוח לא ידוע'}</span>
                       {p?.format && (
                         <>
                           <span style={{ opacity: 0.35, flexShrink: 0, fontSize: "0.65rem" }}>·</span>

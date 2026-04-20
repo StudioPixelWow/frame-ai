@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Player, type PlayerRef } from "@remotion/player";
 import { PixelFrameEdit } from "@/remotion/PixelFrameEdit";
 import { FPS, FORMAT_DIMENSIONS } from "@/remotion/types";
-import { useProjects } from "@/lib/api/use-entity";
+import { useProjects, useClients } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import type { Project } from "@/lib/db/schema";
@@ -82,6 +82,7 @@ export default function ProjectDetailPage() {
   const id = (params?.id as string) || "";
 
   const { data: projects, loading, remove } = useProjects();
+  const { data: clients } = useClients();
   const toast = useToast();
 
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -123,7 +124,7 @@ export default function ProjectDetailPage() {
     if (key.startsWith("/") || key.startsWith("http")) return key;
     return `/uploads/${key}`;
   };
-  const renderVideoSrc = resolveVideoPath(project?.renderOutputKey);
+  const renderVideoSrc = resolveVideoPath(project?.renderOutputKey) || resolveVideoPath(project?.videoUrl);
   const sourceVideoSrc = resolveVideoPath(project?.sourceVideoKey);
 
   // AI Analysis
@@ -307,9 +308,17 @@ export default function ProjectDetailPage() {
             </Link>
           )}
           {renderVideoSrc && (
-            <a
-              href={renderVideoSrc}
-              download
+            <button
+              onClick={() => {
+                const link = document.createElement("a");
+                link.href = renderVideoSrc;
+                link.download = `${project.name || "video"}.mp4`;
+                link.target = "_blank";
+                link.rel = "noopener noreferrer";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -332,8 +341,8 @@ export default function ProjectDetailPage() {
                 (e.target as HTMLElement).style.opacity = "1";
               }}
             >
-              הורד MP4
-            </a>
+              ⬇ הורד MP4
+            </button>
           )}
           <button
             onClick={() => setDeleteConfirmOpen(true)}
@@ -391,7 +400,7 @@ export default function ProjectDetailPage() {
       {/* Main Content - Two Column Layout */}
       <div className="proj-layout">
         {/* Left Column - Video Area */}
-        <div className="proj-video-area" style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+        <div className="proj-video-area" style={{ display: "flex", flexDirection: "column", gap: "1.5rem", maxWidth: "800px", margin: "0 auto" }}>
           {/* Video Frame Container */}
           <div
             style={{
@@ -677,7 +686,7 @@ export default function ProjectDetailPage() {
                 לקוח
               </div>
               <div className="proj-detail-value" style={{ fontSize: "0.95rem" }}>
-                {project.clientName || "—"}
+                {project.clientName || clients?.find((c) => c.id === project.clientId)?.name || "—"}
               </div>
             </div>
           </div>

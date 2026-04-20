@@ -830,8 +830,10 @@ export default function NewProjectWizard() {
     setCreating(true);
     try {
       const client = clients.find((c) => c.id === data.clientId);
+      const clientName = client?.name || data.clientId || "";
       const videoDurationSec = data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : 0;
       const projectId = `proj_${Date.now()}`;
+      if (!client) console.warn(`[createProject] Client not found for clientId=${data.clientId}. Using fallback name="${clientName}".`);
 
       // Ensure video is uploaded to Supabase Storage (may not have been if transcription was skipped)
       if (!data.uploadedVideoUrl && data.videoFile) {
@@ -944,7 +946,7 @@ export default function NewProjectWizard() {
 
       // Also build legacy render payload for backward compatibility
       const wizardStateForRender = {
-        title: data.title, clientId: data.clientId, clientName: client?.name || "",
+        title: data.title, clientId: data.clientId, clientName: clientName,
         creativePrompt: data.creativePrompt,
         subtitleFont: data.subtitleFont, subtitleFontWeight: data.subtitleFontWeight,
         subtitleFontSize: data.subtitleFontSize, subtitleColor: data.subtitleColor,
@@ -1005,7 +1007,7 @@ export default function NewProjectWizard() {
 
       // Save project to database
       const savedProject = await createProject({
-        name: data.title, clientId: data.clientId, clientName: client?.name || "",
+        name: data.title, clientId: data.clientId, clientName,
         status: "approved", format: data.format, preset: data.preset,
         durationSec: videoDurationSec,
         segments: data.segments, sourceVideoKey: data.uploadedVideoUrl || data.videoUrl || null,
@@ -1193,9 +1195,9 @@ export default function NewProjectWizard() {
   const handleSaveDraft = async () => {
     setCreating(true);
     try {
-      const client = clients.find((c) => c.id === data.clientId);
+      const draftClient = clients.find((c) => c.id === data.clientId);
       await createProject({
-        name: data.title, clientId: data.clientId, clientName: client?.name || "",
+        name: data.title, clientId: data.clientId, clientName: draftClient?.name || data.clientId || "",
         status: "draft", format: data.format, preset: data.preset,
         durationSec: data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : 0,
         segments: data.segments, sourceVideoKey: data.uploadedVideoUrl || data.videoUrl || null,
