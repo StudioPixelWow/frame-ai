@@ -7,10 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "worker": "tsx src/lib/render-worker/worker.ts",
     "studio": "remotion studio src/remotion/index.ts",
     "remotion:build": "remotion render src/remotion/index.ts PixelFrameEdit out/video.mp4",
     "remotion:install-browser": "npx remotion browser ensure",
-    "render:worker": "npx tsx src/lib/render-worker/worker.ts"
+    "render:worker": "tsx src/render-worker/index.ts",
+    "render:worker:legacy": "tsx src/lib/render-worker/worker.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
@@ -23,7 +25,8 @@
     "openai": "^6.34.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "remotion": "^4.0.447"
+    "remotion": "^4.0.447",
+    "tsx": "^4.19.0"
   },
   "devDependencies": {
     "@types/node": "^22",

@@ -39,4 +39,4 @@ COPY . .
 ENV NODE_ENV=production
 
 # Start the render worker
-CMD ["npx", "tsx", "src/lib/render-worker/worker.ts"]
+CMD ["npm", "run", "worker"]
