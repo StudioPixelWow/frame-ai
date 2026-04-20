@@ -118,7 +118,7 @@ export default function ProjectDetailPage() {
     return (project.wizardState as Record<string, any>).activeLayers || [];
   }, [project]);
 
-  // ── Single video URL resolver — force string, never object ──
+  // ── Video URL resolver — ONLY rendered output, NEVER source ──
   const wsAny = project?.wizardState as Record<string, any> | null;
 
   const forceStr = (v: unknown): string => {
@@ -131,26 +131,22 @@ export default function ProjectDetailPage() {
     return String(v);
   };
 
+  // STRICT priority: rendered output ONLY. Source video is NEVER used for preview/download.
   const videoUrl: string =
     forceStr(project?.renderOutputKey) ||
     forceStr(project?.videoUrl) ||
-    forceStr(wsAny?.videoUrl) ||
-    forceStr(wsAny?.uploadedVideoUrl) ||
-    forceStr(wsAny?.compositionData?.videoUrl) ||
-    forceStr(wsAny?.compositionData?.source?.videoUrl) ||
-    forceStr(project?.sourceVideoKey) ||
     "";
 
-  // Debug — visible in console
+  // Debug logs
   if (typeof window !== "undefined" && project) {
-    console.log("VIDEO URL:", videoUrl, typeof videoUrl);
-    console.log("VIDEO URL CANDIDATES:", {
-      renderOutputKey: forceStr(project?.renderOutputKey) || "(empty)",
-      videoUrl_field: forceStr(project?.videoUrl) || "(empty)",
-      wsVideoUrl: forceStr(wsAny?.videoUrl) || "(empty)",
-      wsUploadedVideoUrl: forceStr(wsAny?.uploadedVideoUrl) || "(empty)",
-      sourceVideoKey: forceStr(project?.sourceVideoKey) || "(empty)",
-    });
+    const sourceVideoUrl = forceStr(project?.sourceVideoKey) || forceStr(wsAny?.videoUrl) || forceStr(wsAny?.uploadedVideoUrl) || "";
+    console.log("RENDERED:", forceStr(project?.renderOutputKey) || "(empty)");
+    console.log("VIDEO:", forceStr(project?.videoUrl) || "(empty)");
+    console.log("SOURCE:", sourceVideoUrl || "(empty)");
+    console.log("ACTIVE VIDEO USED:", videoUrl || "(empty)");
+    if (videoUrl && videoUrl === sourceVideoUrl) {
+      console.error("BUG: Active video URL matches source video! Rendered output should differ from source.");
+    }
   }
 
   // AI Analysis
@@ -291,22 +287,6 @@ export default function ProjectDetailPage() {
 
   return (
     <main style={{ maxWidth: "1400px", margin: "0 auto", padding: "2rem 1.5rem" }}>
-      {/* ── DEBUG BANNER — remove after confirming fix ── */}
-      <div style={{
-        background: "#1e1b2e", border: "1px solid #6d28d9", borderRadius: "8px",
-        padding: "0.75rem 1rem", marginBottom: "1rem", fontSize: "0.65rem",
-        fontFamily: "monospace", color: "#c4b5fd", lineHeight: 1.5, overflowX: "auto",
-        whiteSpace: "pre-wrap", wordBreak: "break-all",
-      }}>
-        <strong style={{ color: "#f59e0b" }}>VIDEO DEBUG</strong>{" "}
-        id={project.id} | status={project.status}
-        {"\n"}videoUrl [{typeof videoUrl}] = {videoUrl || "(EMPTY)"}
-        {"\n"}renderOutputKey = {forceStr(project.renderOutputKey) || "(empty)"}
-        {"\n"}project.videoUrl = {forceStr(project.videoUrl) || "(empty)"}
-        {"\n"}sourceVideoKey = {forceStr(project.sourceVideoKey) || "(empty)"}
-        {"\n"}ws.videoUrl = {forceStr(wsAny?.videoUrl) || "(empty)"}
-      </div>
-
       {/* Header with Actions */}
       <div
         style={{
