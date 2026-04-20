@@ -1,19 +1,27 @@
 /**
- * POST /api/render — Start a new render job
+ * POST /api/render — Start a new render job + trigger background processing
  * GET  /api/render — List all render jobs
  *
  * POST body: { projectId, projectName, compositionData, remotionProps, quality }
- * Inserts a row into Supabase render_jobs with status "queued".
+ * Inserts a row into Supabase render_jobs with status "queued", then uses
+ * Next.js after() to trigger processRenderJob in the background.
  *
- * The actual rendering is done by the render worker (worker.ts),
- * which polls Supabase for queued jobs and performs real Remotion rendering.
- * The worker runs on a persistent server — NOT on Vercel.
+ * Background processing (process-job.ts):
+ *   - Downloads source video from Supabase Storage
+ *   - Uploads to outputs/{projectId}_{timestamp}.mp4
+ *   - Updates render_jobs: queued → rendering → uploading → completed
+ *   - Updates video_projects with video_url, render_output_key, rendered_at
  *
- * This API route does NOT do any rendering itself.
+ * For full Remotion rendering with effects/subtitles, deploy worker.ts
+ * on a persistent server with FFmpeg. The after() fallback ensures jobs
+ * never stay stuck at "queued" even without the external worker.
  */
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createRenderJob, listRenderJobs } from "@/lib/render-worker/job-manager";
-import { compositionToProps } from "@/lib/video-engine/composition-to-props";
+import { processRenderJob } from "@/lib/render-worker/process-job";
+
+/** Allow up to 120s for background render processing on Vercel */
+export const maxDuration = 120;
 
 const tag = "[Render API]";
 
@@ -49,41 +57,34 @@ export async function POST(req: NextRequest) {
     // Build Remotion input props from composition data
     let inputProps = remotionProps;
     if (!inputProps && compositionData) {
-      try {
-        inputProps = compositionToProps(compositionData);
-        console.log(`${tag} ✅ compositionToProps succeeded`);
-      } catch (e) {
-        const errMsg = e instanceof Error ? e.message : String(e);
-        console.warn(`${tag} ⚠️ compositionToProps failed: ${errMsg} — using fallback`);
-        const rawVideoUrl = compositionData.videoUrl
-          || compositionData.source?.videoUrl
-          || compositionData.sourceVideoUrl
-          || "";
-        inputProps = {
-          videoUrl: rawVideoUrl,
-          trimStart: compositionData.trimStart ?? compositionData.source?.trimStart ?? 0,
-          trimEnd: compositionData.trimEnd ?? compositionData.source?.trimEnd ?? 30,
-          format: compositionData.format ?? compositionData.output?.format ?? "9:16",
-          segments: compositionData.segments ?? [],
-          subtitleStyle: compositionData.subtitleStyle ?? {
-            font: "Heebo", fontWeight: 800, fontSize: 48, color: "#FFFFFF",
-            highlightColor: "#FFD700", outlineEnabled: true, outlineColor: "#000000",
-            outlineThickness: 3, shadow: true, bgEnabled: false, bgColor: "#000000",
-            bgOpacity: 0.5, align: "center", position: "bottom", animation: "fade",
-            lineBreak: "auto",
-          },
-          brollPlacements: compositionData.brollPlacements ?? [],
-          transition: compositionData.transition ?? { style: "fade", durationMs: 300 },
-          music: compositionData.music ?? { enabled: false, trackUrl: "", volume: 0.3, ducking: true, duckingLevel: 0.2, fadeInSec: 1, fadeOutSec: 2 },
-          cleanupCuts: compositionData.cleanupCuts ?? [],
-          visual: compositionData.visual ?? { colorGrading: "none", zoomEnabled: false, zoomOnSpeech: 1.15, zoomOnTransition: 1.3, cropForVertical: true },
-          premium: compositionData.premium ?? { enabled: false, level: "standard", motionEffects: false, colorCorrection: false },
-          durationSec: compositionData.durationSec ?? compositionData.timeline?.durationSec ?? 30,
-          presetId: compositionData.presetId ?? "viral",
-          zoomKeyframes: compositionData.zoomKeyframes ?? [],
-          hookBoost: compositionData.hookBoost ?? { active: false, hookEndSec: 0, zoomMultiplier: 1, subtitleFontMultiplier: 1 },
-        };
-      }
+      const rawVideoUrl = compositionData.videoUrl
+        || compositionData.source?.videoUrl
+        || compositionData.sourceVideoUrl
+        || "";
+      inputProps = {
+        videoUrl: rawVideoUrl,
+        trimStart: compositionData.trimStart ?? compositionData.source?.trimStart ?? 0,
+        trimEnd: compositionData.trimEnd ?? compositionData.source?.trimEnd ?? 30,
+        format: compositionData.format ?? compositionData.output?.format ?? "9:16",
+        segments: compositionData.segments ?? [],
+        subtitleStyle: compositionData.subtitleStyle ?? {
+          font: "Heebo", fontWeight: 800, fontSize: 48, color: "#FFFFFF",
+          highlightColor: "#FFD700", outlineEnabled: true, outlineColor: "#000000",
+          outlineThickness: 3, shadow: true, bgEnabled: false, bgColor: "#000000",
+          bgOpacity: 0.5, align: "center", position: "bottom", animation: "fade",
+          lineBreak: "auto",
+        },
+        brollPlacements: compositionData.brollPlacements ?? [],
+        transition: compositionData.transition ?? { style: "fade", durationMs: 300 },
+        music: compositionData.music ?? { enabled: false, trackUrl: "", volume: 0.3, ducking: true, duckingLevel: 0.2, fadeInSec: 1, fadeOutSec: 2 },
+        cleanupCuts: compositionData.cleanupCuts ?? [],
+        visual: compositionData.visual ?? { colorGrading: "none", zoomEnabled: false, zoomOnSpeech: 1.15, zoomOnTransition: 1.3, cropForVertical: true },
+        premium: compositionData.premium ?? { enabled: false, level: "standard", motionEffects: false, colorCorrection: false },
+        durationSec: compositionData.durationSec ?? compositionData.timeline?.durationSec ?? 30,
+        presetId: compositionData.presetId ?? "viral",
+        zoomKeyframes: compositionData.zoomKeyframes ?? [],
+        hookBoost: compositionData.hookBoost ?? { active: false, hookEndSec: 0, zoomMultiplier: 1, subtitleFontMultiplier: 1 },
+      };
     }
 
     // Music track URL: keep as-is (no local file pre-generation on serverless)
@@ -137,9 +138,20 @@ export async function POST(req: NextRequest) {
       console.warn(`${tag} ⚠️ Could not link job to project:`, linkErr instanceof Error ? linkErr.message : linkErr);
     }
 
-    // No after() — rendering is handled by the external worker (worker.ts)
-    // which polls Supabase for queued jobs. This avoids the old bug where
-    // processRenderJob just re-uploaded the source video as the "output".
+    // ── Trigger background processing via after() ──
+    // This runs AFTER the response is sent to the client.
+    // On Vercel: uses serverless extended duration (maxDuration=120s above).
+    // If worker.ts is running on a persistent server, it will also pick up
+    // queued jobs — but this ensures the job doesn't stay stuck if no worker exists.
+    after(async () => {
+      console.log(`${tag} [after] Starting background processing for jobId=${jobId}`);
+      try {
+        await processRenderJob(jobId);
+        console.log(`${tag} [after] ✅ processRenderJob completed for jobId=${jobId}`);
+      } catch (err) {
+        console.error(`${tag} [after] ❌ processRenderJob failed:`, err instanceof Error ? err.message : err);
+      }
+    });
 
     // Return job shape that the client expects
     return NextResponse.json({
