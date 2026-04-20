@@ -62,13 +62,11 @@ export async function runRender(
 ): Promise<RenderResult> {
   const { compositionId, inputProps, onProgress } = opts;
 
-  // ── Dynamic-import Remotion (runtime only, invisible to Turbopack) ──
-  const { bundle } = await import(
-    /* webpackIgnore: true */ "@remotion/bundler"
-  );
-  const { renderMedia, selectComposition } = await import(
-    /* webpackIgnore: true */ "@remotion/renderer"
-  );
+  // ── Dynamic-import Remotion (runtime only) ──
+  // These packages are listed in next.config.ts serverExternalPackages
+  // so Turbopack skips parsing them but Vercel still deploys them.
+  const { bundle } = await import("@remotion/bundler");
+  const { renderMedia, selectComposition } = await import("@remotion/renderer");
   console.log(`${tag} Remotion packages loaded at runtime`);
 
   // ── Bundle ──
