@@ -71,6 +71,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const sb = getSupabase();
+    console.log('[API] GET /api/data/clients — Supabase client OK, querying clients...');
     const { data: rows, error } = await sb
       .from('clients')
       .select('*')
@@ -86,6 +87,7 @@ export async function GET(req: NextRequest) {
     }
 
     const clients = (rows ?? []).map((r: Record<string, unknown>) => rowToClient(r as ClientRow));
+    console.log(`[API] GET /api/data/clients ✅ returning ${clients.length} clients`);
     return NextResponse.json(clients);
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';

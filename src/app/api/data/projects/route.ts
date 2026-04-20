@@ -138,6 +138,7 @@ const SELECT_COLUMNS =
 export async function GET() {
   try {
     const sb = getSupabase();
+    console.log('[API] GET /api/data/projects — Supabase client OK, querying video_projects...');
 
     // Try full select; on unknown-column error, progressively drop the column.
     const droppedCols: string[] = [];
@@ -163,6 +164,7 @@ export async function GET() {
           });
         }
         const projects = (rows ?? []).map((r) => rowToProject(r as ProjectRow));
+        console.log(`[API] GET /api/data/projects ✅ returning ${projects.length} projects`);
         return NextResponse.json(projects);
       }
       const m = error.message.match(/column .*?\.?['"]?([a-z_]+)['"]? does not exist|Could not find the '([^']+)' column/i);
