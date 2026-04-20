@@ -1,27 +1,21 @@
 /**
- * POST /api/render — Start a new render job + trigger background processing
+ * POST /api/render — Create a render job (DB only, no rendering here)
  * GET  /api/render — List all render jobs
  *
- * POST body: { projectId, projectName, compositionData, remotionProps, quality }
- * Inserts a row into Supabase render_jobs with status "queued", then uses
- * Next.js after() to trigger processRenderJob in the background.
+ * This route ONLY writes to the database. It does NOT run Remotion.
+ * Remotion rendering happens in the external worker:
+ *   npm run render:worker   (or: npx tsx src/render-worker/index.ts)
  *
- * Background processing (process-job.ts):
- *   - Downloads source video from Supabase Storage
- *   - Uploads to outputs/{projectId}_{timestamp}.mp4
- *   - Updates render_jobs: queued → rendering → uploading → completed
- *   - Updates video_projects with video_url, render_output_key, rendered_at
- *
- * For full Remotion rendering with effects/subtitles, deploy worker.ts
- * on a persistent server with FFmpeg. The after() fallback ensures jobs
- * never stay stuck at "queued" even without the external worker.
+ * Architecture:
+ *   1. Client POSTs compositionData → this route creates a "queued" job in Supabase
+ *   2. Worker (separate process) polls Supabase for queued jobs
+ *   3. Worker runs bundle() + renderMedia() + uploads output
+ *   4. Worker updates render_jobs status → "done" + result_url
+ *   5. Client polls GET /api/render/[jobId] and sees completion
  */
-import { NextRequest, NextResponse, after } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createRenderJob, listRenderJobs } from "@/lib/render-worker/job-manager";
-import { processRenderJob } from "@/lib/render-worker/process-job";
-
-/** Allow up to 120s for background render processing on Vercel */
-export const maxDuration = 120;
+import { getSupabase } from "@/lib/db/store";
 
 const tag = "[Render API]";
 
@@ -87,9 +81,6 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    // Music track URL: keep as-is (no local file pre-generation on serverless)
-    // The worker or an external renderer will resolve audio URLs at render time.
-
     // Validate video URL
     const videoUrl = inputProps?.videoUrl || "";
     if (!videoUrl) {
@@ -103,9 +94,8 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // ── Generate job ID and persist to Supabase (DB only) ──
+    // ── Create job in Supabase (DB only — no rendering here) ──
     const jobId = `rj_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    console.log(`${tag} Render job created: jobId=${jobId}`);
 
     await createRenderJob({
       jobId,
@@ -115,45 +105,31 @@ export async function POST(req: NextRequest) {
         compositionId: "PixelFrameEdit",
         inputProps,
         quality: quality || "premium",
-        videoUrl,  // Full URL — no truncation (worker.ts needs the complete URL to download)
+        videoUrl,
         outputFormat: compositionData.output?.format || "9:16",
         outputWidth: compositionData.output?.width || 1080,
         outputHeight: compositionData.output?.height || 1920,
       },
     });
 
-    console.log(`${tag} [render-create] created job ${jobId} for project ${projectId}`);
+    console.log(`${tag} ✅ Job created: ${jobId} for project ${projectId}`);
 
     // Link the render job to the project
     try {
-      const { getSupabase } = await import("@/lib/db/store");
       const sb = getSupabase();
       await sb.from("video_projects").update({
         render_job_id: jobId,
         status: "rendering",
         updated_at: new Date().toISOString(),
       }).eq("id", projectId);
-      console.log(`${tag} ✅ Project ${projectId} linked to job ${jobId}, status=rendering`);
+      console.log(`${tag} ✅ Project ${projectId} linked to job ${jobId}`);
     } catch (linkErr) {
       console.warn(`${tag} ⚠️ Could not link job to project:`, linkErr instanceof Error ? linkErr.message : linkErr);
     }
 
-    // ── Trigger background processing via after() ──
-    // This runs AFTER the response is sent to the client.
-    // On Vercel: uses serverless extended duration (maxDuration=120s above).
-    // If worker.ts is running on a persistent server, it will also pick up
-    // queued jobs — but this ensures the job doesn't stay stuck if no worker exists.
-    after(async () => {
-      console.log(`${tag} [after] Starting background processing for jobId=${jobId}`);
-      try {
-        await processRenderJob(jobId);
-        console.log(`${tag} [after] ✅ processRenderJob completed for jobId=${jobId}`);
-      } catch (err) {
-        console.error(`${tag} [after] ❌ processRenderJob failed:`, err instanceof Error ? err.message : err);
-      }
-    });
+    // ── No rendering here — the external worker picks up queued jobs ──
+    // Start worker with: npx tsx src/lib/render-worker/worker.ts
 
-    // Return job shape that the client expects
     return NextResponse.json({
       job: {
         id: jobId,
