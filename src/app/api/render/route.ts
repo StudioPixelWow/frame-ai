@@ -3,17 +3,17 @@
  * GET  /api/render — List all render jobs
  *
  * POST body: { projectId, projectName, compositionData, remotionProps, quality }
- * Inserts a row into Supabase render_jobs, then processes it via after().
+ * Inserts a row into Supabase render_jobs with status "queued".
  *
- * Fully stateless / Vercel-compatible. Zero fs usage.
+ * The actual rendering is done by the render worker (worker.ts),
+ * which polls Supabase for queued jobs and performs real Remotion rendering.
+ * The worker runs on a persistent server — NOT on Vercel.
+ *
+ * This API route does NOT do any rendering itself.
  */
-import { NextRequest, NextResponse, after } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createRenderJob, listRenderJobs } from "@/lib/render-worker/job-manager";
 import { compositionToProps } from "@/lib/video-engine/composition-to-props";
-import { processRenderJob } from "@/lib/render-worker/process-job";
-
-/** Allow up to 120s for the after() background render (download + upload to Supabase) */
-export const maxDuration = 120;
 
 const tag = "[Render API]";
 
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
         compositionId: "PixelFrameEdit",
         inputProps,
         quality: quality || "premium",
-        videoUrl,  // Full URL — no truncation (processRenderJob needs the complete URL to download)
+        videoUrl,  // Full URL — no truncation (worker.ts needs the complete URL to download)
         outputFormat: compositionData.output?.format || "9:16",
         outputWidth: compositionData.output?.width || 1080,
         outputHeight: compositionData.output?.height || 1920,
@@ -122,17 +122,11 @@ export async function POST(req: NextRequest) {
     });
 
     console.log(`${tag} ✅ Render job persisted to Supabase: ${jobId}`);
+    console.log(`${tag} Job is queued — the render worker will pick it up and perform real Remotion rendering.`);
 
-    // ── Trigger background processing via after() ──
-    // Runs AFTER the response is sent — Vercel keeps the function alive.
-    after(async () => {
-      console.log(`${tag} after() triggered — starting processRenderJob(${jobId})`);
-      try {
-        await processRenderJob(jobId);
-      } catch (err) {
-        console.error(`${tag} ❌ after() processRenderJob failed:`, err instanceof Error ? err.message : err);
-      }
-    });
+    // No after() — rendering is handled by the external worker (worker.ts)
+    // which polls Supabase for queued jobs. This avoids the old bug where
+    // processRenderJob just re-uploaded the source video as the "output".
 
     // Return job shape that the client expects
     return NextResponse.json({
