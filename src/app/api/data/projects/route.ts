@@ -54,6 +54,18 @@ type ProjectRow = {
   updated_at?: string | null;
 };
 
+/** Force any value to a string URL, handling Supabase { publicUrl } objects */
+function urlStr(v: unknown): string | null {
+  if (!v) return null;
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    if (typeof o.publicUrl === 'string') return o.publicUrl;
+    if (typeof o.url === 'string') return o.url;
+  }
+  return null;
+}
+
 function rowToProject(r: ProjectRow) {
   return {
     id: r.id,
@@ -69,11 +81,11 @@ function rowToProject(r: ProjectRow) {
     preset: r.preset ?? '',
     durationSec: r.duration_sec ?? 0,
     segments: r.segments ?? [],
-    sourceVideoKey: r.source_video_key ?? null,
-    renderOutputKey: r.render_output_key ?? null,
-    thumbnailKey: r.thumbnail_key ?? null,
-    videoUrl: r.video_url ?? null,
-    thumbnailUrl: r.thumbnail_url ?? null,
+    sourceVideoKey: urlStr(r.source_video_key) ?? null,
+    renderOutputKey: urlStr(r.render_output_key) ?? null,
+    thumbnailKey: urlStr(r.thumbnail_key) ?? null,
+    videoUrl: urlStr(r.video_url) ?? null,
+    thumbnailUrl: urlStr(r.thumbnail_url) ?? null,
     duration: r.duration ?? 0,
     wizardState: r.wizard_state ?? null,
     renderPayload: r.render_payload ?? null,
@@ -150,19 +162,7 @@ export async function GET() {
             droppedCols,
           });
         }
-        const projects = (rows ?? []).map((r) => {
-          const proj = rowToProject(r as ProjectRow);
-          // Inject debug info for video URL tracing (remove after fix verified)
-          (proj as any)._videoDebug = {
-            renderOutputKey: (r as any).render_output_key ?? null,
-            videoUrl: (r as any).video_url ?? null,
-            sourceVideoKey: (r as any).source_video_key ?? null,
-            wsVideoUrl: (r as any).wizard_state?.videoUrl ?? null,
-            wsUploadedVideoUrl: (r as any).wizard_state?.uploadedVideoUrl ?? null,
-            droppedCols,
-          };
-          return proj;
-        });
+        const projects = (rows ?? []).map((r) => rowToProject(r as ProjectRow));
         return NextResponse.json(projects);
       }
       const m = error.message.match(/column .*?\.?['"]?([a-z_]+)['"]? does not exist|Could not find the '([^']+)' column/i);

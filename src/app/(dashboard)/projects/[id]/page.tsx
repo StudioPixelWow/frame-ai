@@ -118,36 +118,38 @@ export default function ProjectDetailPage() {
     return (project.wizardState as Record<string, any>).activeLayers || [];
   }, [project]);
 
-  // ── Resolve video path — handles bare keys, absolute paths, and full URLs ──
-  const resolveVideoPath = (key: string | null | undefined): string | null => {
+  // ── Normalize any value to a string URL ──
+  // Handles: string, null, undefined, { publicUrl }, { url }, { data: { publicUrl } }
+  const toStr = (v: unknown): string | null => {
+    if (!v) return null;
+    if (typeof v === "string") return v;
+    if (typeof v === "object") {
+      const o = v as Record<string, unknown>;
+      if (typeof o.publicUrl === "string" && o.publicUrl) return o.publicUrl;
+      if (typeof o.url === "string" && o.url) return o.url;
+      if (o.data && typeof o.data === "object") {
+        const d = o.data as Record<string, unknown>;
+        if (typeof d.publicUrl === "string" && d.publicUrl) return d.publicUrl;
+      }
+      // Last resort: try JSON.stringify and see if it looks like a URL
+      const s = String(v);
+      if (s.startsWith("http")) return s;
+    }
+    return null;
+  };
+
+  // ── Resolve video path — handles bare keys, absolute paths, full URLs, and objects ──
+  const resolveVideoPath = (raw: unknown): string | null => {
+    const key = toStr(raw);
     if (!key) return null;
     if (key.startsWith("http") || key.startsWith("/")) return key;
     return `/uploads/${key}`;
   };
 
   // ── Comprehensive video URL resolver ──
-  // Priority: renderOutputKey > videoUrl > wizardState.videoUrl > wizardState.uploadedVideoUrl > sourceVideoKey
-  // The first four represent the FINAL / rendered video; sourceVideoKey is always the original upload.
   const wsAny = project?.wizardState as Record<string, any> | null;
 
-  // Gather every possible video URL from every possible field
-  const allCandidates: Record<string, string | null | undefined> = {
-    renderOutputKey: project?.renderOutputKey,
-    videoUrl: project?.videoUrl,
-    "ws.videoUrl": wsAny?.videoUrl,
-    "ws.uploadedVideoUrl": wsAny?.uploadedVideoUrl,
-    sourceVideoKey: project?.sourceVideoKey,
-    // Deep-dig into wizardState for any other video URL fields
-    "ws.sourceVideoUrl": wsAny?.sourceVideoUrl,
-    "ws.originalVideoUrl": wsAny?.originalVideoUrl,
-    "ws.renderedVideoUrl": wsAny?.renderedVideoUrl,
-    "ws.outputUrl": wsAny?.outputUrl,
-    "ws.finalVideoUrl": wsAny?.finalVideoUrl,
-    "ws.compositionData.videoUrl": wsAny?.compositionData?.videoUrl,
-    "ws.compositionData.source.videoUrl": wsAny?.compositionData?.source?.videoUrl,
-  };
-
-  // Pick the best "final" video (everything except sourceVideoKey)
+  // Pick the best "final" video (rendered output — everything except sourceVideoKey)
   const finalVideoSrc =
     resolveVideoPath(project?.renderOutputKey) ||
     resolveVideoPath(project?.videoUrl) ||
@@ -167,19 +169,17 @@ export default function ProjectDetailPage() {
     resolveVideoPath(wsAny?.originalVideoUrl) ||
     null;
 
-  // The URL used for both the player and the download button
+  // The single URL used for both the player and the download button
   const renderVideoSrc = finalVideoSrc || sourceVideoSrc;
 
-  // Debug: log all candidate fields so we can diagnose blank-preview issues in production
+  // Debug — always log type + value so object-vs-string bugs are visible
   if (typeof window !== "undefined" && project) {
-    console.log("[ProjectDetail] Video URL resolution:", {
-      projectId: project.id,
-      projectStatus: project.status,
-      allCandidates,
-      resolvedFinal: finalVideoSrc,
-      resolvedSource: sourceVideoSrc,
-      activePlayerSrc: renderVideoSrc,
-      _videoDebug: (project as any)?._videoDebug,
+    console.log("[ProjectDetail] FINAL VIDEO URL:", renderVideoSrc, typeof renderVideoSrc);
+    console.log("[ProjectDetail] Raw field types:", {
+      "renderOutputKey": typeof project?.renderOutputKey, val: toStr(project?.renderOutputKey)?.slice(0, 80),
+      "videoUrl": typeof project?.videoUrl, valV: toStr(project?.videoUrl)?.slice(0, 80),
+      "sourceVideoKey": typeof project?.sourceVideoKey, valS: toStr(project?.sourceVideoKey)?.slice(0, 80),
+      "ws.videoUrl": typeof wsAny?.videoUrl, valW: toStr(wsAny?.videoUrl)?.slice(0, 80),
     });
   }
 
@@ -330,21 +330,15 @@ export default function ProjectDetailPage() {
       }}>
         <strong style={{ color: "#f59e0b" }}>VIDEO DEBUG</strong>{" "}
         id={project.id} | status={project.status}
+        {"\n"}renderOutputKey [{typeof project.renderOutputKey}]={toStr(project.renderOutputKey)?.slice(0, 80) || "(null)"}
+        {"\n"}videoUrl [{typeof project.videoUrl}]={toStr(project.videoUrl)?.slice(0, 80) || "(null)"}
+        {"\n"}sourceVideoKey [{typeof project.sourceVideoKey}]={toStr(project.sourceVideoKey)?.slice(0, 80) || "(null)"}
+        {"\n"}ws.videoUrl [{typeof wsAny?.videoUrl}]={toStr(wsAny?.videoUrl)?.slice(0, 80) || "(null)"}
+        {"\n"}ws.uploadedVideoUrl [{typeof wsAny?.uploadedVideoUrl}]={toStr(wsAny?.uploadedVideoUrl)?.slice(0, 80) || "(null)"}
         {"\n"}
-        {Object.entries(allCandidates).map(([k, v]) => (
-          <span key={k}>
-            {"\n"}{k}={v ? String(v).slice(0, 100) : <span style={{ color: "#6b7280" }}>(null)</span>}
-          </span>
-        ))}
-        {(project as any)._videoDebug && (
-          <span style={{ color: "#f87171" }}>
-            {"\n"}droppedCols={JSON.stringify((project as any)._videoDebug.droppedCols)}
-          </span>
-        )}
-        {"\n"}
-        <span style={{ color: "#22c55e" }}>{"\n"}FINAL={finalVideoSrc ? String(finalVideoSrc).slice(0, 100) : "(null)"}</span>
-        <span style={{ color: "#38bdf8" }}>{"\n"}SOURCE={sourceVideoSrc ? String(sourceVideoSrc).slice(0, 100) : "(null)"}</span>
-        <span style={{ color: "#fbbf24" }}>{"\n"}PLAYER={renderVideoSrc ? String(renderVideoSrc).slice(0, 100) : "(null — preview will be BLANK)"}</span>
+        <span style={{ color: "#22c55e" }}>{"\n"}FINAL [string]={finalVideoSrc?.slice(0, 100) || "(null)"}</span>
+        <span style={{ color: "#38bdf8" }}>{"\n"}SOURCE [string]={sourceVideoSrc?.slice(0, 100) || "(null)"}</span>
+        <span style={{ color: "#fbbf24" }}>{"\n"}PLAYER [string]={renderVideoSrc?.slice(0, 100) || "(null — BLANK)"}</span>
       </div>
 
       {/* Header with Actions */}
