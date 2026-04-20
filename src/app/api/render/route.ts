@@ -3,13 +3,14 @@
  * GET  /api/render — List all render jobs
  *
  * POST body: { projectId, projectName, compositionData, remotionProps, quality }
- * Inserts a row into Supabase render_jobs (DB only — no filesystem).
+ * Inserts a row into Supabase render_jobs, then processes it via after().
  *
  * Fully stateless / Vercel-compatible. Zero fs usage.
  */
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createRenderJob, listRenderJobs } from "@/lib/render-worker/job-manager";
 import { compositionToProps } from "@/lib/video-engine/composition-to-props";
+import { processRenderJob } from "@/lib/render-worker/process-job";
 
 const tag = "[Render API]";
 
@@ -118,6 +119,17 @@ export async function POST(req: NextRequest) {
     });
 
     console.log(`${tag} ✅ Render job persisted to Supabase: ${jobId}`);
+
+    // ── Trigger background processing via after() ──
+    // Runs AFTER the response is sent — Vercel keeps the function alive.
+    after(async () => {
+      console.log(`${tag} after() triggered — starting processRenderJob(${jobId})`);
+      try {
+        await processRenderJob(jobId);
+      } catch (err) {
+        console.error(`${tag} ❌ after() processRenderJob failed:`, err instanceof Error ? err.message : err);
+      }
+    });
 
     // Return job shape that the client expects
     return NextResponse.json({
