@@ -12,6 +12,9 @@ import { createRenderJob, listRenderJobs } from "@/lib/render-worker/job-manager
 import { compositionToProps } from "@/lib/video-engine/composition-to-props";
 import { processRenderJob } from "@/lib/render-worker/process-job";
 
+/** Allow up to 120s for the after() background render (download + upload to Supabase) */
+export const maxDuration = 120;
+
 const tag = "[Render API]";
 
 export async function GET() {
@@ -111,7 +114,7 @@ export async function POST(req: NextRequest) {
         compositionId: "PixelFrameEdit",
         inputProps,
         quality: quality || "premium",
-        videoUrl: videoUrl.substring(0, 200),
+        videoUrl,  // Full URL — no truncation (processRenderJob needs the complete URL to download)
         outputFormat: compositionData.output?.format || "9:16",
         outputWidth: compositionData.output?.width || 1080,
         outputHeight: compositionData.output?.height || 1920,
