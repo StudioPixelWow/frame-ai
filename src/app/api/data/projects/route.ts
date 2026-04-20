@@ -133,7 +133,36 @@ export async function GET() {
     for (let attempt = 0; attempt < 25; attempt++) {
       const { data: rows, error } = await sb.from('video_projects').select(selectList).order('id');
       if (!error) {
-        const projects = (rows ?? []).map((r) => rowToProject(r as ProjectRow));
+        if (droppedCols.length > 0) {
+          console.warn(`[API] GET /api/data/projects ⚠️ DROPPED COLUMNS: ${droppedCols.join(', ')} — these fields will be null in the response!`);
+        }
+        // Debug: log video fields for first project
+        if (rows && rows.length > 0) {
+          const first = rows[0] as any;
+          console.log(`[API] GET /api/data/projects VIDEO FIELDS (first row):`, {
+            id: first.id,
+            source_video_key: first.source_video_key ?? '(MISSING)',
+            render_output_key: first.render_output_key ?? '(MISSING)',
+            video_url: first.video_url ?? '(MISSING)',
+            status: first.status,
+            has_wizard_state: !!first.wizard_state,
+            ws_videoUrl: first.wizard_state?.videoUrl ?? '(MISSING)',
+            droppedCols,
+          });
+        }
+        const projects = (rows ?? []).map((r) => {
+          const proj = rowToProject(r as ProjectRow);
+          // Inject debug info for video URL tracing (remove after fix verified)
+          (proj as any)._videoDebug = {
+            renderOutputKey: (r as any).render_output_key ?? null,
+            videoUrl: (r as any).video_url ?? null,
+            sourceVideoKey: (r as any).source_video_key ?? null,
+            wsVideoUrl: (r as any).wizard_state?.videoUrl ?? null,
+            wsUploadedVideoUrl: (r as any).wizard_state?.uploadedVideoUrl ?? null,
+            droppedCols,
+          };
+          return proj;
+        });
         return NextResponse.json(projects);
       }
       const m = error.message.match(/column .*?\.?['"]?([a-z_]+)['"]? does not exist|Could not find the '([^']+)' column/i);

@@ -123,7 +123,16 @@ export async function GET(
       const { data, error } = await sb.from('video_projects').select(selectList).eq('id', id).maybeSingle();
       if (!error) {
         if (!data) return NextResponse.json({ error: 'Project not found', projectId: id }, { status: 404 });
-        return NextResponse.json(rowToProject(data as ProjectRow));
+        const raw = data as ProjectRow;
+        console.log(`[API] GET /api/data/projects/${id} VIDEO FIELDS:`, {
+          source_video_key: raw.source_video_key,
+          render_output_key: raw.render_output_key,
+          video_url: raw.video_url,
+          status: raw.status,
+          wizard_state_videoUrl: (raw.wizard_state as any)?.videoUrl,
+          wizard_state_uploadedVideoUrl: (raw.wizard_state as any)?.uploadedVideoUrl,
+        });
+        return NextResponse.json(rowToProject(raw));
       }
       const bad = parseBadColumn(error.message);
       if (!bad) {
