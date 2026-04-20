@@ -26,18 +26,18 @@ export async function GET(
     return NextResponse.json({ error: "Invalid route params" }, { status: 400 });
   }
 
-  console.log(`${tag} ── GET /api/render/${jobId} ──`);
+  console.log(`[render-poll] jobId=${jobId}`);
 
   try {
     // ── Read ONLY from Supabase ──
     const job = await readRenderJob(jobId);
 
     if (!job) {
-      console.warn(`${tag} ❌ Job ${jobId} not found in render_jobs table`);
+      console.warn(`[render-poll] ❌ Job ${jobId} not found in render_jobs table`);
       return NextResponse.json({ error: "Render job not found", jobId }, { status: 404 });
     }
 
-    console.log(`${tag} ✅ Job found: status=${job.status} progress=${job.progress}%`);
+    console.log(`[render-poll] jobId=${jobId} status=${job.status} progress=${job.progress}% output=${job.result_url || "(none)"}`);
 
     // Return shape the client expects
     return NextResponse.json({

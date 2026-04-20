@@ -140,12 +140,13 @@ export default function ProjectDetailPage() {
   // Debug logs
   if (typeof window !== "undefined" && project) {
     const sourceVideoUrl = forceStr(project?.sourceVideoKey) || forceStr(wsAny?.videoUrl) || forceStr(wsAny?.uploadedVideoUrl) || "";
-    console.log("RENDERED:", forceStr(project?.renderOutputKey) || "(empty)");
-    console.log("VIDEO:", forceStr(project?.videoUrl) || "(empty)");
-    console.log("SOURCE:", sourceVideoUrl || "(empty)");
-    console.log("ACTIVE VIDEO USED:", videoUrl || "(empty)");
+    console.log(`[project-detail] resolved video url: ${videoUrl || "(empty)"}`);
+    console.log(`[project-detail] renderOutputKey=${forceStr(project?.renderOutputKey) || "(empty)"} videoUrl=${forceStr(project?.videoUrl) || "(empty)"} source=${sourceVideoUrl || "(empty)"} status=${project?.status}`);
     if (videoUrl && videoUrl === sourceVideoUrl) {
-      console.error("BUG: Active video URL matches source video! Rendered output should differ from source.");
+      console.error("[project-detail] BUG: Active video URL matches source video! Rendered output should differ from source.");
+    }
+    if (!videoUrl && sourceVideoUrl) {
+      console.warn("[project-detail] No rendered output available — video preview is empty. Source exists but is excluded from preview.");
     }
   }
 
@@ -332,7 +333,8 @@ export default function ProjectDetailPage() {
           {videoUrl && (
             <button
               onClick={() => {
-                console.log("DOWNLOAD URL:", videoUrl, typeof videoUrl);
+                const isFinal = !!(forceStr(project?.renderOutputKey) || forceStr(project?.videoUrl));
+                console.log(`[download] using ${isFinal ? "final" : "source"}: ${videoUrl}`);
                 const link = document.createElement("a");
                 link.href = videoUrl;
                 link.download = `${project.name || "video"}.mp4`;

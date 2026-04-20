@@ -363,16 +363,19 @@ export default function ProjectsPage() {
               const badgeColor = statusBadgeColor((p?.status || "draft") as ProjectStatus);
               const isDeleteConfirming = deleteConfirmId === p.id;
 
-              const hasRender = !!p?.renderOutputKey;
-              const hasSource = !!p?.sourceVideoKey;
-              // Ensure paths start with / so they resolve as URLs
-              const resolveVideoPath = (key: string | null | undefined) => {
-                if (!key) return null;
-                if (key.startsWith("/") || key.startsWith("http")) return key;
-                // Legacy: bare filename stored without path — try /uploads/ prefix
-                return `/uploads/${key}`;
+              // Video preview priority: rendered output > videoUrl > source (for thumbnail only)
+              const forceUrl = (v: unknown): string | null => {
+                if (!v) return null;
+                if (typeof v === "string") return v;
+                if (typeof v === "object") {
+                  const o = v as Record<string, any>;
+                  return o.publicUrl || o.url || o.data?.publicUrl || null;
+                }
+                return null;
               };
-              const previewSrc = resolveVideoPath(hasRender ? p?.renderOutputKey : hasSource ? p?.sourceVideoKey : null);
+              // STRICT: rendered output first, then videoUrl (also set to render output by worker)
+              const previewSrc = forceUrl(p?.renderOutputKey) || forceUrl(p?.videoUrl) || forceUrl(p?.sourceVideoKey) || null;
+              const hasRender = !!(forceUrl(p?.renderOutputKey) || forceUrl(p?.videoUrl));
 
               return (
                 <Link key={p.id} href={`/projects/${p.id}`} className="proj-card" style={{ textDecoration: "none", color: "inherit", display: "flex", flexDirection: "column" }}>

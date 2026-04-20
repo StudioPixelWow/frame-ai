@@ -121,8 +121,21 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    console.log(`${tag} ✅ Render job persisted to Supabase: ${jobId}`);
-    console.log(`${tag} Job is queued — the render worker will pick it up and perform real Remotion rendering.`);
+    console.log(`${tag} [render-create] created job ${jobId} for project ${projectId}`);
+
+    // Link the render job to the project
+    try {
+      const { getSupabase } = await import("@/lib/db/store");
+      const sb = getSupabase();
+      await sb.from("video_projects").update({
+        render_job_id: jobId,
+        status: "rendering",
+        updated_at: new Date().toISOString(),
+      }).eq("id", projectId);
+      console.log(`${tag} ✅ Project ${projectId} linked to job ${jobId}, status=rendering`);
+    } catch (linkErr) {
+      console.warn(`${tag} ⚠️ Could not link job to project:`, linkErr instanceof Error ? linkErr.message : linkErr);
+    }
 
     // No after() — rendering is handled by the external worker (worker.ts)
     // which polls Supabase for queued jobs. This avoids the old bug where

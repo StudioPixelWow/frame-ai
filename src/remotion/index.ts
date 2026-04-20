@@ -1,3 +1,14 @@
+/**
+ * Remotion entry point — this file MUST call registerRoot().
+ * Without it, the Remotion CLI and @remotion/renderer cannot find compositions.
+ */
+import { registerRoot } from "remotion";
+import { RemotionRoot } from "./Root";
+
+// Register the root component so Remotion CLI, bundler, and renderer can find compositions.
+registerRoot(RemotionRoot);
+
+// Re-export for use in other parts of the app (e.g. Remotion Player in the browser)
 export { RemotionRoot } from "./Root";
 export type { CompositionProps } from "./types";
 export { UGCBrandedVideo } from "./UGCBrandedVideo";

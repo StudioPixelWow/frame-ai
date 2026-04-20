@@ -133,12 +133,13 @@ async function renderJob(jobId: string): Promise<void> {
   const outputPath = path.join(OUTPUT_DIR, outputFileName);
 
   console.log(`${tag} ═══════════════════════════════════════`);
-  console.log(`${tag} RENDER STARTED`);
+  console.log(`${tag} START RENDER`);
   console.log(`${tag}   Job ID:      ${jobId}`);
   console.log(`${tag}   Project:     ${projectId}`);
   console.log(`${tag}   Source URL:  ${sourceVideoUrl.substring(0, 150)}`);
   console.log(`${tag}   Format:      ${inputProps.format || metadata.outputFormat || "9:16"}`);
   console.log(`${tag}   Duration:    ${inputProps.durationSec || "unknown"}s`);
+  console.log(`${tag}   OUTPUT PATH: ${outputPath}`);
   console.log(`${tag} ═══════════════════════════════════════`);
 
   try {
@@ -195,8 +196,8 @@ async function renderJob(jobId: string): Promise<void> {
     const stats = fs.statSync(outputPath);
     const renderedSizeMB = (stats.size / 1024 / 1024).toFixed(2);
 
-    console.log(`${tag} RENDER OUTPUT VALIDATION:`);
-    console.log(`${tag}   Rendered file:  ${outputPath}`);
+    console.log(`${tag} RENDER DONE`);
+    console.log(`${tag} OUTPUT PATH: ${outputPath}`);
     console.log(`${tag}   Rendered size:  ${renderedSizeMB} MB`);
     console.log(`${tag}   Render width:   ${composition.width}`);
     console.log(`${tag}   Render height:  ${composition.height}`);
@@ -260,11 +261,14 @@ async function renderJob(jobId: string): Promise<void> {
     if (job.project_id) {
       console.log(`${tag} SAVING TO PROJECT: ${job.project_id}`);
 
+      const now = new Date().toISOString();
       const updatePayload = {
         status: "complete",
         video_url: outputUrl,
         render_output_key: outputUrl,
-        updated_at: new Date().toISOString(),
+        render_job_id: jobId,
+        rendered_at: now,
+        updated_at: now,
       };
 
       const { data: updateData, error: updateErr } = await sb

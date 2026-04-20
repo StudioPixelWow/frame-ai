@@ -48,6 +48,8 @@ export const VIDEO_PROJECTS_COLUMNS: Array<{
   { name: 'start_date',          type: 'TEXT',                               comment: 'project start date' },
   { name: 'end_date',            type: 'TEXT',                               comment: 'project end date' },
   { name: 'assigned_manager_id', type: 'TEXT',                               comment: 'FK to employees' },
+  { name: 'render_job_id',       type: 'TEXT',                               comment: 'FK to render_jobs.job_id' },
+  { name: 'rendered_at',         type: 'TIMESTAMPTZ',                        comment: 'timestamp of last successful render' },
   { name: 'created_at',          type: 'TIMESTAMPTZ', defaultVal: 'now()',   comment: 'row creation time' },
   { name: 'updated_at',          type: 'TIMESTAMPTZ', defaultVal: 'now()',   comment: 'last update time' },
 ];
@@ -69,6 +71,26 @@ function buildMigrationSql(): string {
     lines.push(`ALTER TABLE public.video_projects ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}${def};  -- ${col.comment}`);
   }
 
+  lines.push('');
+  lines.push('-- ── render_jobs table (create if not exists) ──');
+  lines.push(`CREATE TABLE IF NOT EXISTS public.render_jobs (
+  job_id TEXT PRIMARY KEY,
+  project_id TEXT REFERENCES public.video_projects(id) ON DELETE SET NULL,
+  status TEXT DEFAULT 'queued',
+  progress INTEGER DEFAULT 0,
+  stage TEXT,
+  result_url TEXT,
+  error TEXT,
+  metadata JSONB,
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);`);
+  lines.push('');
+  lines.push('-- Indexes for render_jobs');
+  lines.push('CREATE INDEX IF NOT EXISTS idx_render_jobs_project ON public.render_jobs(project_id);');
+  lines.push('CREATE INDEX IF NOT EXISTS idx_render_jobs_status ON public.render_jobs(status);');
   lines.push('');
   lines.push('-- Reload PostgREST schema cache (required for Supabase API to see new columns):');
   lines.push("NOTIFY pgrst, 'reload schema';");
