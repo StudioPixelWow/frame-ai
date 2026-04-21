@@ -25,6 +25,7 @@ export default function DocumentsPage() {
   const { data: allDocuments, loading, create, refetch } = useAccountantDocuments();
   const toast = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const selectedFileRef = useRef<File | null>(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [uploadingPeriod, setUploadingPeriod] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -73,8 +74,13 @@ export default function DocumentsPage() {
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    console.log('[AccountantUpload] handleFileSelect fired — file:', file?.name, 'size:', file?.size);
     if (file) {
-      setUploadForm({ ...uploadForm, selectedFile: file });
+      selectedFileRef.current = file;
+      setUploadForm(prev => ({ ...prev, selectedFile: file }));
+      console.log('[AccountantUpload] ✅ File stored in state + ref:', file.name);
+    } else {
+      console.error('[AccountantUpload] handleFileSelect — no file in event');
     }
   };
 
@@ -86,18 +92,28 @@ export default function DocumentsPage() {
    * 4. Refetch to update UI immediately
    */
   const handleUpload = async (periodId: string) => {
-    if (!uploadForm.selectedFile) {
+    console.log('[AccountantUpload] ▶ UPLOAD CLICKED for period:', periodId);
+    console.log('[AccountantUpload]   selectedFile state:', uploadForm.selectedFile?.name ?? 'NULL');
+    console.log('[AccountantUpload]   selectedFile ref:', selectedFileRef.current?.name ?? 'NULL');
+    console.log('[AccountantUpload]   documentType:', uploadForm.documentType);
+    console.log('[AccountantUpload]   year:', selectedYear);
+
+    // Use ref as source of truth for the file (immune to stale closures)
+    const file = selectedFileRef.current || uploadForm.selectedFile;
+
+    if (!file) {
+      console.error('[AccountantUpload] ❌ BLOCKED — no file selected. uploadForm.selectedFile is null AND ref is null.');
       toast("אנא בחר קובץ", "error");
       return;
     }
 
-    const file = uploadForm.selectedFile;
+    console.log('[AccountantUpload] ✅ File found:', file.name, file.size, 'bytes. Proceeding...');
     setIsUploading(true);
     setUploadProgress(0);
 
     try {
       // ── Step 1: Get signed upload URL ──
-      console.log('[AccountantUpload] Step 1: Getting signed URL for', file.name);
+      console.log('[AccountantUpload] Step 1: POST /api/upload for', file.name);
       const signedRes = await fetch('/api/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -108,6 +124,7 @@ export default function DocumentsPage() {
         }),
       });
 
+      console.log('[AccountantUpload] Step 1: Response status:', signedRes.status);
       if (!signedRes.ok) {
         const err = await signedRes.json().catch(() => ({}));
         throw new Error(err.error || `Failed to get upload URL (${signedRes.status})`);
@@ -118,13 +135,14 @@ export default function DocumentsPage() {
       setUploadProgress(30);
 
       // ── Step 2: PUT file directly to Supabase Storage ──
-      console.log('[AccountantUpload] Step 2: Uploading', (file.size / 1024).toFixed(0), 'KB to storage...');
+      console.log('[AccountantUpload] Step 2: PUT', (file.size / 1024).toFixed(0), 'KB to storage...');
       const putRes = await fetch(uploadUrl, {
         method: 'PUT',
         headers: { 'Content-Type': file.type || 'application/octet-stream' },
         body: file,
       });
 
+      console.log('[AccountantUpload] Step 2: Response status:', putRes.status);
       if (!putRes.ok) {
         throw new Error(`File upload to storage failed (${putRes.status})`);
       }
@@ -134,8 +152,7 @@ export default function DocumentsPage() {
       // ── Step 3: Create DB record in app_client_files (category='accountant') ──
       const period = PERIODS.find(p => p.id === periodId);
       const record = {
-        // ClientFile standard fields
-        clientId: 'system', // system-level accounting docs (no specific client)
+        clientId: 'system',
         fileName: file.name,
         fileUrl: publicUrl,
         fileSize: file.size,
@@ -144,37 +161,34 @@ export default function DocumentsPage() {
         linkedTaskId: null,
         linkedGanttItemId: null,
         notes: uploadForm.notes,
-        // Accounting-specific fields (stored in JSONB data column)
         period: periodId,
         periodLabel: `${period?.nameHebrew || ''} ${selectedYear}`,
         year: selectedYear,
-        documentType: uploadForm.documentType, // invoice | receipt | report | tax | other
+        documentType: uploadForm.documentType,
         sentToAccountant: false,
         sentAt: null,
       };
 
-      console.log('[AccountantUpload] Step 3: Creating DB record:', JSON.stringify(record).slice(0, 400));
-
-      if (create) {
-        const created = await create(record);
-        console.log('[AccountantUpload] Step 3 ✅ DB record id:', created?.id, 'period:', (created as any)?.period, 'year:', (created as any)?.year);
-      }
+      console.log('[AccountantUpload] Step 3: POST /api/data/accountant-documents', JSON.stringify(record).slice(0, 400));
+      const created = await create(record);
+      console.log('[AccountantUpload] Step 3 ✅ DB record id:', created?.id);
       setUploadProgress(90);
 
       // ── Step 4: Refetch to confirm persistence ──
-      if (refetch) {
-        await refetch();
-      }
+      console.log('[AccountantUpload] Step 4: Refetching list...');
+      await refetch();
+      console.log('[AccountantUpload] Step 4 ✅ List refreshed');
       setUploadProgress(100);
 
       toast("מסמך הועלה בהצלחה ונשמר", "success");
+      selectedFileRef.current = null;
       setUploadForm({ documentType: "invoice", notes: "", selectedFile: null });
       setUploadingPeriod(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       toast(`שגיאה בהעלאת המסמך: ${msg}`, "error");
-      console.error("[AccountantUpload] ❌ ERROR:", msg);
+      console.error("[AccountantUpload] ❌ ERROR:", msg, error);
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
@@ -342,7 +356,7 @@ export default function DocumentsPage() {
                     <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "600", marginBottom: "0.5rem" }}>סוג מסמך</label>
                     <select
                       value={uploadForm.documentType}
-                      onChange={(e) => setUploadForm({ ...uploadForm, documentType: e.target.value })}
+                      onChange={(e) => { const v = e.target.value; setUploadForm(prev => ({ ...prev, documentType: v })); }}
                       disabled={isUploading}
                       style={{
                         width: "100%", padding: "0.5rem 0.75rem", borderRadius: "0.5rem",
@@ -362,7 +376,7 @@ export default function DocumentsPage() {
                     <textarea
                       placeholder="הערות אופציונליות..."
                       value={uploadForm.notes}
-                      onChange={(e) => setUploadForm({ ...uploadForm, notes: e.target.value })}
+                      onChange={(e) => { const v = e.target.value; setUploadForm(prev => ({ ...prev, notes: v })); }}
                       disabled={isUploading}
                       style={{
                         width: "100%", padding: "0.5rem 0.75rem", borderRadius: "0.5rem",
@@ -391,19 +405,21 @@ export default function DocumentsPage() {
 
                   <div style={{ display: "flex", gap: "0.75rem" }}>
                     <button
-                      onClick={() => handleUpload(period.id)}
-                      disabled={isUploading || !uploadForm.selectedFile}
+                      type="button"
+                      onClick={() => { console.log('[AccountantUpload] 🖱️ Button clicked'); handleUpload(period.id); }}
+                      disabled={isUploading}
                       style={{
                         padding: "0.5rem 1rem",
-                        background: isUploading || !uploadForm.selectedFile ? "#6b7280" : "var(--accent)",
+                        background: isUploading ? "#6b7280" : "var(--accent)",
                         color: "#000", border: "none", borderRadius: "0.5rem", fontWeight: "600",
-                        cursor: isUploading || !uploadForm.selectedFile ? "not-allowed" : "pointer",
-                        opacity: isUploading || !uploadForm.selectedFile ? 0.6 : 1,
+                        cursor: isUploading ? "not-allowed" : "pointer",
+                        opacity: isUploading ? 0.6 : 1,
                       }}
                     >
                       {isUploading ? "מעלה..." : "העלאה"}
                     </button>
                     <button
+                      type="button"
                       onClick={() => setUploadingPeriod(null)}
                       disabled={isUploading}
                       style={{
