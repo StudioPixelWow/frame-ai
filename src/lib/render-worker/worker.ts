@@ -318,7 +318,7 @@ async function renderJob(jobId: string): Promise<void> {
       stage: "מתחיל רינדור",
     });
 
-    console.log(`${tag} Starting renderMedia (concurrency=${REMOTION_CONCURRENCY}, jpegQuality=${JPEG_QUALITY}, videoCacheMB=${VIDEO_CACHE_SIZE_BYTES / 1024 / 1024})...`);
+    console.log(`${tag} Starting renderMedia (concurrency=1, scale=0.6, jpeg=80, cache=${VIDEO_CACHE_SIZE_BYTES / 1024 / 1024}MB)...`);
 
     await renderMedia({
       composition,
@@ -326,30 +326,49 @@ async function renderJob(jobId: string): Promise<void> {
       codec: "h264",
       outputLocation: outputPath,
       inputProps,
-      // ── Resource limits for Railway / Docker ──
-      concurrency: REMOTION_CONCURRENCY,
-      timeoutInMilliseconds: RENDER_TIMEOUT_MS,
-      jpegQuality: JPEG_QUALITY,
+      // ── Railway resource limits ──
+      concurrency: 1,
+      scale: 0.6,
+      imageFormat: "jpeg",
+      jpegQuality: 80,
       offthreadVideoCacheSizeInBytes: VIDEO_CACHE_SIZE_BYTES,
-      chromiumOptions: CHROMIUM_OPTIONS,
-      // ── Encoding: use CRF for predictable output size ──
+      timeoutInMilliseconds: RENDER_TIMEOUT_MS,
       crf: 23,
-      // ── Progress reporting ──
+      // ── Chromium stability for Docker / Railway ──
+      chromiumOptions: {
+        disableWebSecurity: true,
+        ignoreCertificateErrors: true,
+        gl: "angle" as const,
+        enableMultiProcessOnLinux: false,
+        chromiumFlags: [
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+          "--no-sandbox",
+          "--single-process",
+          "--no-zygote",
+          "--disable-setuid-sandbox",
+          "--disable-software-rasterizer",
+          "--disable-extensions",
+          "--disable-background-networking",
+          "--disable-breakpad",
+          "--disable-component-update",
+          "--disable-default-apps",
+          "--disable-hang-monitor",
+          "--disable-translate",
+          "--metrics-recording-only",
+          "--no-first-run",
+          "--js-flags=--max-old-space-size=512",
+        ],
+      },
+      // ── Progress ──
       onProgress: ({ progress }) => {
         const pct = Math.round(20 + progress * 70);
-        const stage =
-          progress < 0.3
-            ? "מעבד קטעי וידאו"
-            : progress < 0.6
-              ? "משלב אפקטים"
-              : progress < 0.9
-                ? "מחיל שיפורים"
-                : "רינדור סופי";
-
+        const mem = process.memoryUsage();
+        console.log(`${tag} render progress=${(progress * 100).toFixed(0)}% pct=${pct}% RSS=${Math.round(mem.rss / 1024 / 1024)}MB`);
         updateJob(jobId, {
           status: "rendering",
           progress: pct,
-          stage,
+          stage: "Rendering...",
         }).catch(() => {});
       },
     });
@@ -630,6 +649,16 @@ async function main(): Promise<void> {
   console.log(`${tag} ✅ Remotion entry file exists`);
   console.log(`${tag} Starting poll loop (every ${POLL_INTERVAL_MS}ms)...`);
   console.log("═══════════════════════════════════════════════════════════");
+
+  // ── Memory logger: every 5s during renders, visible in Railway logs ──
+  setInterval(() => {
+    const m = process.memoryUsage();
+    console.log("[MEMORY]", {
+      rss: Math.round(m.rss / 1024 / 1024) + "MB",
+      heap: Math.round(m.heapUsed / 1024 / 1024) + "MB",
+      rendering: isRendering,
+    });
+  }, 5000);
 
   setInterval(() => {
     pollCount++;
