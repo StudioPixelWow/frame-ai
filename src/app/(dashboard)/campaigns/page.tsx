@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui/modal';
 import { SkeletonKPIRow, SkeletonGrid } from '@/components/ui/skeleton';
 import type { Campaign, CampaignType, CampaignStatus, CampaignPlatform, CampaignMediaType, Lead } from '@/lib/db/schema';
 import { buildCampaignLeadInsights } from '@/lib/leads/lead-quality';
+import { generateSmartSummary } from '@/lib/campaigns/smart-summary';
 import {
   computeHealth,
   generateCampaignAlerts,
@@ -482,6 +483,167 @@ const modalFieldStyle: React.CSSProperties = {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
+// AI ANALYSIS MODAL
+// ══════════════════════════════════════════════════════════════════════════════
+
+interface AnalysisData {
+  summary: string;
+  issues: string[];
+  opportunities: string[];
+  actions: string[];
+}
+
+function AnalysisModal({
+  open,
+  onClose,
+  campaignName,
+  loading: isLoading,
+  data,
+  error,
+}: {
+  open: boolean;
+  onClose: () => void;
+  campaignName: string;
+  loading: boolean;
+  data: AnalysisData | null;
+  error: string | null;
+}) {
+  if (!open) return null;
+
+  const sectionCard = (title: string, icon: string, items: string[], color: string) => (
+    <div style={{
+      padding: '1rem',
+      borderRadius: '0.625rem',
+      backgroundColor: `${color}06`,
+      border: `1px solid ${color}20`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+        <span style={{ fontSize: '1rem' }}>{icon}</span>
+        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--foreground)' }}>{title}</span>
+        <span style={{
+          fontSize: '0.65rem', fontWeight: 700, padding: '0.1rem 0.35rem',
+          borderRadius: '0.2rem', backgroundColor: `${color}15`, color,
+        }}>{items.length}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        {items.map((item, i) => (
+          <div key={i} style={{
+            display: 'flex', gap: '0.5rem', alignItems: 'flex-start',
+            fontSize: '0.8rem', color: 'var(--foreground)', lineHeight: 1.5,
+          }}>
+            <span style={{ color, fontWeight: 700, flexShrink: 0, marginTop: '0.1rem' }}>•</span>
+            <span>{item}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div onClick={onClose} style={{
+        position: 'absolute', inset: 0,
+        backgroundColor: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)',
+      }} />
+      <div style={{
+        position: 'relative',
+        width: 'min(640px, 92vw)',
+        maxHeight: '85vh',
+        backgroundColor: 'var(--surface)',
+        borderRadius: '1rem',
+        border: '1px solid var(--border)',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.2)',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        direction: 'rtl',
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: '1.25rem 1.5rem',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          backgroundColor: 'var(--surface-raised)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '1.1rem' }}>🧠</span>
+            <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--foreground)' }}>
+              ניתוח קמפיין — {campaignName}
+            </h2>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', fontSize: '1.3rem',
+            cursor: 'pointer', color: 'var(--foreground-muted)', padding: '0.25rem', lineHeight: 1,
+          }}>×</button>
+        </div>
+
+        {/* Body */}
+        <div style={{
+          padding: '1.5rem',
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1rem',
+        }}>
+          {isLoading && (
+            <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+              <div style={{
+                width: '2.5rem', height: '2.5rem', borderRadius: '50%',
+                border: '3px solid var(--border)', borderTopColor: 'var(--accent)',
+                animation: 'spin 0.8s linear infinite',
+                margin: '0 auto 1rem',
+              }} />
+              <div style={{ fontSize: '0.9rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>
+                מנתח את הקמפיין...
+              </div>
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+          )}
+
+          {error && (
+            <div style={{
+              padding: '1rem', borderRadius: '0.5rem',
+              backgroundColor: '#ef444410', border: '1px solid #ef444430',
+              color: '#ef4444', fontSize: '0.85rem', fontWeight: 600,
+            }}>
+              שגיאה בניתוח: {error}
+            </div>
+          )}
+
+          {data && !isLoading && (
+            <>
+              {/* Summary */}
+              <div style={{
+                padding: '1rem 1.25rem',
+                borderRadius: '0.625rem',
+                backgroundColor: 'var(--accent)' + '08',
+                border: '1px solid var(--accent)' + '20',
+              }}>
+                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--foreground)', lineHeight: 1.6 }}>
+                  {data.summary}
+                </div>
+              </div>
+
+              {/* Issues */}
+              {data.issues.length > 0 && sectionCard('בעיות שזוהו', '🔴', data.issues, '#ef4444')}
+
+              {/* Opportunities */}
+              {data.opportunities.length > 0 && sectionCard('הזדמנויות', '💡', data.opportunities, '#f59e0b')}
+
+              {/* Actions */}
+              {data.actions.length > 0 && sectionCard('פעולות מומלצות', '🎯', data.actions, '#22c55e')}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -504,6 +666,13 @@ export default function CampaignsPage() {
   // Alerts state
   const [dismissedAlertIds, setDismissedAlertIds] = useState<Set<string>>(new Set());
   const [expandedAlertCard, setExpandedAlertCard] = useState<string | null>(null);
+
+  // AI Analysis state
+  const [analysisModalOpen, setAnalysisModalOpen] = useState(false);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisCampaignName, setAnalysisCampaignName] = useState("");
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -578,6 +747,65 @@ export default function CampaignsPage() {
   const handleDismissAlert = useCallback((alertId: string) => {
     setDismissedAlertIds((prev) => new Set([...prev, alertId]));
   }, []);
+
+  // AI Analysis handler
+  const handleAnalyzeCampaign = useCallback(async (c: Campaign) => {
+    setAnalysisCampaignName(c.campaignName || "ללא שם");
+    setAnalysisData(null);
+    setAnalysisError(null);
+    setAnalysisLoading(true);
+    setAnalysisModalOpen(true);
+
+    try {
+      const health = computeHealth(c);
+      const campaignAlertsList = generateCampaignAlerts(c);
+      const insight = leadInsightsMap[c.id];
+      const clientObj = (clients || []).find((cl) => cl.id === c.clientId);
+
+      const res = await fetch("/api/ai/campaign-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          campaignId: c.id,
+          campaign: {
+            campaignName: c.campaignName,
+            campaignType: c.campaignType,
+            platform: c.platform,
+            status: c.status,
+            objective: c.objective,
+            caption: c.caption,
+            notes: c.notes,
+            budget: c.budget,
+            startDate: c.startDate,
+            endDate: c.endDate,
+            linkedClientFileId: c.linkedClientFileId,
+            externalMediaUrl: c.externalMediaUrl,
+            mediaType: c.mediaType,
+          },
+          healthScore: health.score,
+          healthBreakdown: health.breakdown,
+          alerts: campaignAlertsList.map((a) => ({ type: a.type, severity: a.severity, message: a.message })),
+          leadCount: insight?.leadCount || 0,
+          highQualityLeadCount: insight?.highQualityCount || 0,
+          wonLeadCount: insight?.wonCount || 0,
+          clientName: c.clientName || clientObj?.name || "",
+          clientId: c.clientId,
+          businessField: clientObj?.businessField || "",
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        setAnalysisError(json.error || "שגיאה בניתוח");
+      } else {
+        setAnalysisData(json.analysis);
+      }
+    } catch (err) {
+      setAnalysisError("שגיאת רשת — נסה שנית");
+    } finally {
+      setAnalysisLoading(false);
+    }
+  }, [clients, leadInsightsMap]);
 
   // Modal handlers (preserved from original)
   const handleOpenModal = useCallback((campaign?: Campaign) => {
@@ -873,6 +1101,24 @@ export default function CampaignsPage() {
                     </p>
                   )}
 
+                  {/* Smart Summary */}
+                  {(() => {
+                    const summary = generateSmartSummary(c);
+                    const bg = summary.tone === 'positive' ? '#22c55e' : summary.tone === 'warning' ? '#f59e0b' : '#ef4444';
+                    return (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: '0.35rem',
+                        padding: '0.4rem 0.6rem', borderRadius: '0.4rem',
+                        backgroundColor: `${bg}08`, border: `1px solid ${bg}18`,
+                        fontSize: '0.72rem', fontWeight: 600, color: 'var(--foreground)',
+                        lineHeight: 1.4,
+                      }}>
+                        <span style={{ flexShrink: 0 }}>{summary.icon}</span>
+                        <span>{summary.text}</span>
+                      </div>
+                    );
+                  })()}
+
                   {/* Stats row */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', padding: '0.6rem 0', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
                     <div style={{ textAlign: 'center' }}>
@@ -916,8 +1162,8 @@ export default function CampaignsPage() {
                     <button type="button" onClick={() => handleOpenModal(c)} className="mod-btn-ghost" style={{ flex: 1, padding: '0.35rem', fontSize: '0.68rem', fontWeight: 600, borderRadius: '0.3rem', cursor: 'pointer' }}>
                       עריכה
                     </button>
-                    <button type="button" onClick={() => handleDuplicate(c)} className="mod-btn-ghost" style={{ flex: 1, padding: '0.35rem', fontSize: '0.68rem', fontWeight: 600, borderRadius: '0.3rem', cursor: 'pointer' }}>
-                      שכפל
+                    <button type="button" onClick={() => handleAnalyzeCampaign(c)} style={{ flex: 1, padding: '0.35rem', fontSize: '0.68rem', fontWeight: 600, borderRadius: '0.3rem', cursor: 'pointer', background: 'linear-gradient(135deg, rgba(0,181,254,0.08), rgba(139,92,246,0.08))', border: '1px solid rgba(0,181,254,0.2)', color: 'var(--accent)' }}>
+                      🧠 נתח
                     </button>
                     <button
                       type="button"
@@ -1096,6 +1342,16 @@ export default function CampaignsPage() {
           </div>
         </div>
       </Modal>
+
+      {/* AI Analysis Modal */}
+      <AnalysisModal
+        open={analysisModalOpen}
+        onClose={() => setAnalysisModalOpen(false)}
+        campaignName={analysisCampaignName}
+        loading={analysisLoading}
+        data={analysisData}
+        error={analysisError}
+      />
     </main>
   );
 }
