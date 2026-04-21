@@ -353,24 +353,46 @@ export default function CampaignsPage() {
               נהל קמפיינים ופרסום ברשתות חברתיות
             </p>
           </div>
-          <button
-            onClick={() => handleOpenModal()}
-            style={{
-              backgroundColor: 'var(--accent)',
-              color: 'white',
-              padding: '0.75rem 1.5rem',
-              borderRadius: '0.5rem',
-              border: 'none',
-              fontSize: '0.95rem',
-              fontWeight: '500',
-              cursor: 'pointer',
-              transition: 'opacity 0.2s',
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
-          >
-            + קמפיין חדש
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <Link
+              href="/campaign-builder"
+              style={{
+                background: 'linear-gradient(135deg, var(--accent), #0090cc)',
+                color: 'white',
+                padding: '0.75rem 1.5rem',
+                borderRadius: '0.5rem',
+                border: 'none',
+                fontSize: '0.95rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'opacity 0.2s',
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+              }}
+            >
+              🚀 בנה קמפיין חכם
+            </Link>
+            <button
+              onClick={() => handleOpenModal()}
+              style={{
+                backgroundColor: 'var(--surface-raised)',
+                color: 'var(--foreground)',
+                padding: '0.75rem 1.5rem',
+                borderRadius: '0.5rem',
+                border: '1px solid var(--border)',
+                fontSize: '0.95rem',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'opacity 0.2s',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+            >
+              + קמפיין מהיר
+            </button>
+          </div>
         </div>
 
         {/* KPI Cards */}
@@ -570,7 +592,28 @@ export default function CampaignsPage() {
               }}
             >
               {(campaigns || []).length === 0
-                ? 'אין קמפיינים עדיין'
+                ? (<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                    <div style={{ fontSize: '2rem' }}>📋</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--foreground)' }}>אין קמפיינים עדיין</div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--foreground-muted)' }}>צור את הקמפיין הראשון שלך</div>
+                    <Link
+                      href="/campaign-builder"
+                      style={{
+                        background: 'linear-gradient(135deg, var(--accent), #0090cc)',
+                        color: 'white',
+                        padding: '0.6rem 1.25rem',
+                        borderRadius: '0.5rem',
+                        fontSize: '0.9rem',
+                        fontWeight: 600,
+                        textDecoration: 'none',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                      }}
+                    >
+                      🚀 בנה קמפיין חכם
+                    </Link>
+                  </div>)
                 : 'לא נמצאו קמפיינים התואמים לחיפוש'}
             </div>
           ) : (
@@ -700,16 +743,21 @@ export default function CampaignsPage() {
                     </div>
                     <div>
                       <p style={{ color: 'var(--foreground-muted)', fontSize: '0.8rem', margin: 0 }}>
-                        תאריך התחלה
+                        תאריכים
                       </p>
-                      <p style={{ color: 'var(--foreground)', fontWeight: '600', fontSize: '1rem', margin: '0.25rem 0 0 0' }}>
+                      <p style={{ color: 'var(--foreground)', fontWeight: '600', fontSize: '0.85rem', margin: '0.25rem 0 0 0' }}>
                         {campaign.startDate
                           ? new Date(campaign.startDate).toLocaleDateString('he-IL', {
-                              year: 'numeric',
                               month: 'short',
                               day: 'numeric',
                             })
                           : '—'}
+                        {campaign.endDate
+                          ? ` – ${new Date(campaign.endDate).toLocaleDateString('he-IL', {
+                              month: 'short',
+                              day: 'numeric',
+                            })}`
+                          : ''}
                       </p>
                     </div>
                   </div>

@@ -612,6 +612,21 @@ export default function CommandCenterPage() {
         </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <Link
+            href="/campaign-builder"
+            className="mod-btn-primary"
+            style={{
+              padding: "0.5rem 1rem",
+              fontSize: "0.8rem",
+              textDecoration: "none",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              fontWeight: 700,
+            }}
+          >
+            🚀 צור קמפיין
+          </Link>
+          <Link
             href="/campaigns"
             className="mod-btn-ghost"
             style={{
