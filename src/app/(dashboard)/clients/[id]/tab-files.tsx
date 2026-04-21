@@ -718,7 +718,13 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
                 style={{ display: "none" }}
                 onChange={(e) => {
                   const selected = e.target.files?.[0];
-                  if (selected) setUploadFile(selected);
+                  console.log('[TabFiles] File input onChange — file:', selected?.name, 'size:', selected?.size);
+                  if (selected) {
+                    setUploadFile(selected);
+                    console.log('[TabFiles] ✅ File stored in state:', selected.name);
+                  } else {
+                    console.warn('[TabFiles] No file selected (user cancelled dialog)');
+                  }
                 }}
               />
               {uploadFile ? (
@@ -803,33 +809,76 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
                 }}
                 onClick={async () => {
                   if (!uploadFile) return;
+                  console.log('[TabFiles] ▶ UPLOAD START:', uploadFile.name, uploadFile.size, 'bytes');
                   setIsUploading(true);
                   try {
+                    // ── Step 1: Get signed upload URL from /api/upload ──
+                    const storagePath = `client-files/${client.id}/${Date.now()}_${uploadFile.name}`;
+                    console.log('[TabFiles] Step 1: POST /api/upload for', storagePath);
+                    const signedRes = await fetch('/api/upload', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        fileName: storagePath,
+                        contentType: uploadFile.type || 'application/octet-stream',
+                        fileSize: uploadFile.size,
+                      }),
+                    });
+                    if (!signedRes.ok) {
+                      const err = await signedRes.json().catch(() => ({}));
+                      throw new Error(err.error || `Failed to get upload URL (${signedRes.status})`);
+                    }
+                    const { uploadUrl, publicUrl } = await signedRes.json();
+                    console.log('[TabFiles] Step 1 ✅ publicUrl:', publicUrl?.slice(0, 80));
+
+                    // ── Step 2: PUT file directly to Supabase Storage ──
+                    console.log('[TabFiles] Step 2: PUT', (uploadFile.size / 1024).toFixed(0), 'KB to storage...');
+                    const putRes = await fetch(uploadUrl, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': uploadFile.type || 'application/octet-stream' },
+                      body: uploadFile,
+                    });
+                    if (!putRes.ok) {
+                      throw new Error(`File upload to storage failed (${putRes.status})`);
+                    }
+                    console.log('[TabFiles] Step 2 ✅ file in Supabase Storage');
+
+                    // ── Step 3: Create DB record in app_client_files ──
                     const ext = uploadFile.name.split('.').pop()?.toLowerCase() || '';
                     const fileType = ['mp4','webm','mov','avi'].includes(ext) ? 'video'
                       : ['png','jpg','jpeg','gif','webp','svg'].includes(ext) ? 'image'
                       : ['pdf'].includes(ext) ? 'pdf'
                       : ['doc','docx','xls','xlsx','pptx','txt'].includes(ext) ? 'document'
                       : 'other';
+
+                    console.log('[TabFiles] Step 3: Create DB record, fileUrl:', publicUrl?.slice(0, 80));
                     await createFileRecord({
                       clientId: client.id,
                       fileName: uploadFile.name,
-                      fileUrl: '',
+                      fileUrl: publicUrl,
                       fileType,
                       category: uploadCategory,
-                      description: uploadNotes,
                       fileSize: uploadFile.size,
+                      uploadedBy: null,
+                      linkedTaskId: null,
+                      linkedGanttItemId: null,
+                      notes: uploadNotes,
                       createdAt: new Date().toISOString(),
                       updatedAt: new Date().toISOString(),
                     } as any);
+                    console.log('[TabFiles] Step 3 ✅ DB record created');
+
+                    // ── Step 4: Reset form + refresh list ──
                     setUploadFile(null);
                     setUploadNotes("");
                     setUploadCategory("general");
                     setShowUploadModal(false);
                     if (fileInputRef.current) fileInputRef.current.value = '';
                     await refetchFileRecords();
+                    console.log('[TabFiles] ✅ Upload complete');
                   } catch (err) {
-                    console.error("Upload error:", err);
+                    console.error("[TabFiles] ❌ Upload error:", err);
+                    alert(`שגיאה בהעלאה: ${err instanceof Error ? err.message : String(err)}`);
                   } finally {
                     setIsUploading(false);
                   }

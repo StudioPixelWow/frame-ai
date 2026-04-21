@@ -745,7 +745,13 @@ function ClientDetailContent() {
 
   const loading = clientsLoading || employeesLoading;
 
-  if (loading) {
+  // Only show full-page loading on INITIAL mount (no data yet).
+  // Do NOT unmount the page on background refetches (e.g., window focus after
+  // a file dialog closes) because that destroys the upload modal + file input
+  // and causes the "page refresh" behavior.
+  const isInitialLoad = loading && clients.length === 0;
+
+  if (isInitialLoad) {
     return (
       <main style={{ maxWidth: "1200px", margin: "0 auto", padding: "2rem 1.5rem" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh" }}>
