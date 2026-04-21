@@ -19,7 +19,7 @@ import { useToast } from '@/components/ui/toast';
 import { useOperationalAlerts } from '@/lib/alerts/use-alerts';
 import { SEVERITY_CONFIG, CATEGORY_LABELS } from '@/lib/alerts/engine';
 import { INSIGHT_TYPE_CONFIG } from '@/lib/ai/insights';
-import AnimatedCounter from '@/components/ui/animated-counter';
+import { AnimatedCounter } from '@/components/ui/animated-counter';
 
 const HEBREW_MONTHS = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ'];
 
