@@ -1,6 +1,7 @@
-// ── Production guard: prevent this worker from running on Vercel ──
-if (process.env.NODE_ENV === "production") {
-  console.log("Worker disabled in production (Vercel). Use Railway or a dedicated server.");
+// ── Vercel guard: prevent this worker from running on Vercel serverless ──
+// Railway sets RAILWAY_ENVIRONMENT — that's where the worker SHOULD run.
+if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  console.log("[Worker] Detected Vercel/Lambda — worker disabled. Use Railway.");
   process.exit(0);
 }
 
