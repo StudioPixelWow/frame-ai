@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { accountantDocuments } from '@/lib/db';
-import { ensureSeeded } from '@/lib/db/seed';
 
 export async function GET(
   _req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  ensureSeeded();
   const { id } = await context.params;
 
   try {
@@ -24,7 +22,6 @@ export async function PUT(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  ensureSeeded();
   const { id } = await context.params;
 
   try {
@@ -43,7 +40,6 @@ export async function DELETE(
   _req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  ensureSeeded();
   const { id } = await context.params;
 
   try {

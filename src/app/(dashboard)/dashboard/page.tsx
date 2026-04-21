@@ -18,6 +18,7 @@ import {
 import { useOperationalAlerts } from "@/lib/alerts/use-alerts";
 import { SkeletonKPIRow, SkeletonGrid } from "@/components/ui/skeleton";
 import { AIInsightsPanel, generateInsights } from "@/components/ai-insights-panel";
+import SmartWeeklyCalendar from "@/components/ui/SmartWeeklyCalendar";
 
 /* ── Module definitions ── */
 const modules = [
@@ -492,6 +493,9 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+
+        {/* ═══ 8.5 SMART WEEKLY CALENDAR ═══ */}
+        <SmartWeeklyCalendar />
 
         {/* ═══ 9. MODULE GRID ═══ */}
         <div>

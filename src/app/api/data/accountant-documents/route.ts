@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { accountantDocuments } from '@/lib/db';
-import { ensureSeeded } from '@/lib/db/seed';
 
 export async function GET() {
-  ensureSeeded();
   try {
-    const docs = await accountantDocuments.getAllAsync();
+    const docs = accountantDocuments.getAll();
     return NextResponse.json(docs);
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -15,10 +13,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  ensureSeeded();
   try {
     const body = await req.json();
-    const created = await accountantDocuments.createAsync(body);
+    const created = accountantDocuments.create(body);
     console.log('[accountant-documents] Created:', created.id);
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
