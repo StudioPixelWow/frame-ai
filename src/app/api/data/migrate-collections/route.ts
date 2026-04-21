@@ -32,6 +32,7 @@ const TABLES = [
   'app_creative_dna',
   'app_client_knowledge',
   'app_client_insights',
+  'app_accountant_documents',
 ];
 
 export async function GET() {

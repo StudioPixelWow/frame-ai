@@ -8,7 +8,7 @@ export async function GET(
   const { id } = await context.params;
 
   try {
-    const item = accountantDocuments.getById(id);
+    const item = await accountantDocuments.getByIdAsync(id);
     if (!item) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
@@ -26,7 +26,7 @@ export async function PUT(
 
   try {
     const body = await req.json();
-    const updated = accountantDocuments.update(id, body);
+    const updated = await accountantDocuments.updateAsync(id, body);
     if (!updated) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
@@ -43,7 +43,7 @@ export async function DELETE(
   const { id } = await context.params;
 
   try {
-    const deleted = accountantDocuments.delete(id);
+    const deleted = await accountantDocuments.deleteAsync(id);
     if (!deleted) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }

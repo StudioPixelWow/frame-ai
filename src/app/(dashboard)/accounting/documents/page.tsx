@@ -27,8 +27,9 @@ export default function DocumentsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [uploadingPeriod, setUploadingPeriod] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadForm, setUploadForm] = useState({ fileUrl: "", fileType: "invoice", notes: "", selectedFile: null as File | null });
-  const [sendingPeriod, setSendingPeriod] = useState<string | null>(null);
 
   const years = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -44,7 +45,7 @@ export default function DocumentsPage() {
       if (!doc) return false;
       // Primary: match by explicit period + year fields
       if (doc.period && doc.year) {
-        return doc.period === periodId && doc.year === selectedYear;
+        return doc.period === periodId && Number(doc.year) === selectedYear;
       }
       // Fallback for legacy documents without period field: match by createdAt date
       const docDate = new Date(doc?.createdAt || doc?.uploadDate);
@@ -74,43 +75,101 @@ export default function DocumentsPage() {
     }
   };
 
+  /**
+   * Upload flow:
+   * 1. POST /api/upload → get signed URL + publicUrl
+   * 2. PUT file directly to Supabase Storage via signed URL
+   * 3. POST /api/data/accountant-documents → create DB record with real publicUrl
+   * 4. Refetch to update UI
+   */
   const handleUpload = async (periodId: string) => {
-    if (!uploadForm.selectedFile && !uploadForm.fileUrl) {
+    if (!uploadForm.selectedFile) {
       toast("אנא בחר קובץ", "error");
       return;
     }
 
+    const file = uploadForm.selectedFile;
+    setIsUploading(true);
+    setUploadProgress(0);
+
     try {
+      // ── Step 1: Get signed upload URL from server ──
+      console.log('[AccountantUpload] Step 1: Getting signed URL for', file.name);
+      const signedRes = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: `accountant/${selectedYear}/${periodId}/${file.name}`,
+          contentType: file.type || 'application/octet-stream',
+          fileSize: file.size,
+        }),
+      });
+
+      if (!signedRes.ok) {
+        const err = await signedRes.json().catch(() => ({}));
+        throw new Error(err.error || `Failed to get upload URL (${signedRes.status})`);
+      }
+
+      const { uploadUrl, publicUrl } = await signedRes.json();
+      console.log('[AccountantUpload] Step 1 done — publicUrl:', publicUrl?.slice(0, 80));
+      setUploadProgress(30);
+
+      // ── Step 2: PUT file directly to Supabase Storage ──
+      console.log('[AccountantUpload] Step 2: Uploading file to storage...', file.size, 'bytes');
+      const putRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        body: file,
+      });
+
+      if (!putRes.ok) {
+        throw new Error(`File upload failed (${putRes.status})`);
+      }
+      console.log('[AccountantUpload] Step 2 done — file uploaded to storage');
+      setUploadProgress(70);
+
+      // ── Step 3: Create DB record with real file URL ──
       const period = PERIODS.find(p => p.id === periodId);
       const documentData = {
         period: periodId,
         periodLabel: `${period?.nameHebrew || ''} ${selectedYear}`,
         year: selectedYear,
-        fileName: uploadForm.selectedFile?.name || uploadForm.fileUrl,
-        fileUrl: uploadForm.selectedFile?.name || uploadForm.fileUrl,
+        fileName: file.name,
+        fileUrl: publicUrl,
         fileType: uploadForm.fileType as 'invoice' | 'receipt' | 'report' | 'tax' | 'other',
         notes: uploadForm.notes,
+        sentToAccountant: false,
+        sentAt: null,
         uploadDate: new Date().toISOString(),
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
 
-      // Call create from the hook to add document
-      if (create) {
-        await create(documentData);
-      }
+      console.log('[AccountantUpload] Step 3: Creating DB record:', JSON.stringify(documentData).slice(0, 300));
 
-      // Refetch documents to update the UI
+      if (create) {
+        const created = await create(documentData);
+        console.log('[AccountantUpload] Step 3 done — DB record id:', created?.id, 'period:', created?.period, 'year:', created?.year);
+      }
+      setUploadProgress(90);
+
+      // ── Step 4: Refetch to update the UI ──
       if (refetch) {
         await refetch();
       }
+      setUploadProgress(100);
 
       toast("מסמך הועלה בהצלחה", "success");
       setUploadForm({ fileUrl: "", fileType: "invoice", notes: "", selectedFile: null });
       setUploadingPeriod(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (error) {
-      toast("שגיאה בהעלאת המסמך", "error");
-      console.error("Upload error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      toast(`שגיאה בהעלאת המסמך: ${msg}`, "error");
+      console.error("[AccountantUpload] ERROR:", msg);
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -177,8 +236,7 @@ export default function DocumentsPage() {
       >
         {PERIODS.map((period) => {
           const docs = getDocumentsForPeriod(period.id);
-          const isUploading = uploadingPeriod === period.id;
-          const isSending = sendingPeriod === period.id;
+          const isPeriodUploading = uploadingPeriod === period.id;
 
           return (
             <div
@@ -237,24 +295,51 @@ export default function DocumentsPage() {
                       >
                         {getFileTypeLabel(doc.fileType || "other")}
                       </span>
-                      <button
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          padding: "0.4rem 0.6rem",
-                          borderRadius: "0.375rem",
-                          border: "1px solid var(--border)",
-                          background: "var(--surface)",
-                          color: "var(--foreground)",
-                          cursor: "pointer",
-                          fontSize: "0.8rem",
-                          flexShrink: 0,
-                        }}
-                        title="הורד"
-                      >
-                        ⬇️
-                      </button>
+                      {doc.fileUrl && doc.fileUrl.startsWith("http") ? (
+                        <a
+                          href={doc.fileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: "0.4rem 0.6rem",
+                            borderRadius: "0.375rem",
+                            border: "1px solid var(--border)",
+                            background: "var(--surface)",
+                            color: "var(--foreground)",
+                            cursor: "pointer",
+                            fontSize: "0.8rem",
+                            flexShrink: 0,
+                            textDecoration: "none",
+                          }}
+                          title="הורד"
+                        >
+                          ⬇️
+                        </a>
+                      ) : (
+                        <button
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: "0.4rem 0.6rem",
+                            borderRadius: "0.375rem",
+                            border: "1px solid var(--border)",
+                            background: "var(--surface)",
+                            color: "var(--foreground-muted)",
+                            cursor: "not-allowed",
+                            fontSize: "0.8rem",
+                            flexShrink: 0,
+                            opacity: 0.5,
+                          }}
+                          title="לא זמין"
+                          disabled
+                        >
+                          ⬇️
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -274,7 +359,7 @@ export default function DocumentsPage() {
               )}
 
               {/* Upload Section */}
-              {isUploading ? (
+              {isPeriodUploading ? (
                 <div
                   style={{
                     padding: "1.5rem",
@@ -296,6 +381,7 @@ export default function DocumentsPage() {
                       ref={fileInputRef}
                       type="file"
                       onChange={handleFileSelect}
+                      disabled={isUploading}
                       className="form-input"
                       style={{
                         width: "100%",
@@ -309,7 +395,7 @@ export default function DocumentsPage() {
                     />
                     {uploadForm.selectedFile && (
                       <p style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", marginTop: "0.5rem" }}>
-                        {uploadForm.selectedFile.name}
+                        {uploadForm.selectedFile.name} ({(uploadForm.selectedFile.size / 1024).toFixed(0)} KB)
                       </p>
                     )}
                   </div>
@@ -321,6 +407,7 @@ export default function DocumentsPage() {
                     <select
                       value={uploadForm.fileType}
                       onChange={(e) => setUploadForm({ ...uploadForm, fileType: e.target.value })}
+                      disabled={isUploading}
                       className="form-select"
                       style={{
                         width: "100%",
@@ -347,6 +434,7 @@ export default function DocumentsPage() {
                       placeholder="הערות אופציונליות..."
                       value={uploadForm.notes}
                       onChange={(e) => setUploadForm({ ...uploadForm, notes: e.target.value })}
+                      disabled={isUploading}
                       className="form-input"
                       style={{
                         width: "100%",
@@ -361,24 +449,52 @@ export default function DocumentsPage() {
                     />
                   </div>
 
+                  {/* Upload progress bar */}
+                  {isUploading && (
+                    <div style={{ marginBottom: "1rem" }}>
+                      <div style={{
+                        height: "0.5rem",
+                        background: "var(--border)",
+                        borderRadius: "0.25rem",
+                        overflow: "hidden",
+                      }}>
+                        <div style={{
+                          height: "100%",
+                          width: `${uploadProgress}%`,
+                          background: "#10b981",
+                          transition: "width 0.3s ease",
+                          borderRadius: "0.25rem",
+                        }} />
+                      </div>
+                      <p style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", marginTop: "0.25rem", textAlign: "center" }}>
+                        {uploadProgress < 30 ? "מקבל קישור להעלאה..." :
+                         uploadProgress < 70 ? "מעלה קובץ..." :
+                         uploadProgress < 90 ? "שומר מסמך..." : "סיום..."}
+                      </p>
+                    </div>
+                  )}
+
                   <div style={{ display: "flex", gap: "0.75rem" }}>
                     <button
                       onClick={() => handleUpload(period.id)}
+                      disabled={isUploading || !uploadForm.selectedFile}
                       className="mod-btn-primary"
                       style={{
                         padding: "0.5rem 1rem",
-                        background: "var(--accent)",
+                        background: isUploading ? "#6b7280" : "var(--accent)",
                         color: "#000",
                         border: "none",
                         borderRadius: "0.5rem",
                         fontWeight: "600",
-                        cursor: "pointer",
+                        cursor: isUploading ? "not-allowed" : "pointer",
+                        opacity: isUploading || !uploadForm.selectedFile ? 0.6 : 1,
                       }}
                     >
-                      העלאה
+                      {isUploading ? "מעלה..." : "העלאה"}
                     </button>
                     <button
                       onClick={() => setUploadingPeriod(null)}
+                      disabled={isUploading}
                       className="mod-btn-ghost"
                       style={{
                         padding: "0.5rem 1rem",
@@ -387,7 +503,7 @@ export default function DocumentsPage() {
                         border: "1px solid var(--border)",
                         borderRadius: "0.5rem",
                         fontWeight: "600",
-                        cursor: "pointer",
+                        cursor: isUploading ? "not-allowed" : "pointer",
                       }}
                     >
                       ביטול

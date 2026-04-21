@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { accountantDocuments } from "@/lib/db";
-import { ensureSeeded } from "@/lib/db/seed";
 
 const PERIODS: Record<string, string> = {
   "jan-feb": "ינואר-פברואר",
@@ -20,18 +19,16 @@ const FILE_TYPE_LABELS: Record<string, string> = {
 };
 
 export async function GET(req: NextRequest) {
-  ensureSeeded();
-
   const periodId = req.nextUrl.searchParams.get("period") || "";
   const year = parseInt(req.nextUrl.searchParams.get("year") || String(new Date().getFullYear()));
 
   const periodName = PERIODS[periodId] || periodId;
   const title = `מסמכי רואה חשבון — ${periodName} ${year}`;
 
-  const allDocs = accountantDocuments.getAll();
+  const allDocs = await accountantDocuments.getAllAsync();
   const docs = allDocs.filter((doc: any) => {
     if (doc.period && doc.year) {
-      return doc.period === periodId && doc.year === year;
+      return doc.period === periodId && Number(doc.year) === year;
     }
     return false;
   });
