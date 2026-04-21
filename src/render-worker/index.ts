@@ -1,3 +1,9 @@
+// ── Production guard: prevent this worker from running on Vercel ──
+if (process.env.NODE_ENV === "production") {
+  console.log("Worker disabled in production (Vercel). Use Railway or a dedicated server.");
+  process.exit(0);
+}
+
 /**
  * PixelFrameAI — Render Worker Entry Point
  *
