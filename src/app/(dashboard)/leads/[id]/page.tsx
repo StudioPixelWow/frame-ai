@@ -20,11 +20,17 @@ const INTEREST_TYPE_LABELS: Record<LeadInterestType, string> = {
 
 const STATUS_LABELS: Record<LeadStatus, { label: string; color: string }> = {
   new: { label: "חדש", color: "#3b82f6" },
+  assigned: { label: "שויך", color: "#6366f1" },
   contacted: { label: "נוצר קשר", color: "#f59e0b" },
+  no_answer: { label: "לא ענה", color: "#f97316" },
+  interested: { label: "מתעניין", color: "#06b6d4" },
   proposal_sent: { label: "נשלחה הצעה", color: "#a855f7" },
-  negotiation: { label: 'במו"מ', color: "#f97316" },
+  negotiation: { label: 'במו"מ', color: "#ec4899" },
+  meeting_set: { label: "נקבעה פגישה", color: "#14b8a6" },
   won: { label: "נסגר", color: "#22c55e" },
+  lost: { label: "אבוד", color: "#ef4444" },
   not_relevant: { label: "לא רלוונטי", color: "#6b7280" },
+  duplicate: { label: "כפול", color: "#9ca3af" },
 };
 
 const CONVERSION_OPTIONS = [

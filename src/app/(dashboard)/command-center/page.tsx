@@ -28,6 +28,7 @@ import {
   SEVERITY_COLORS,
   SEVERITY_LABELS,
 } from "@/lib/campaigns/health-engine";
+import { generateLeadHighlights } from "@/lib/leads/lead-quality";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -427,6 +428,7 @@ export default function CommandCenterPage() {
   const engineAlerts = useMemo(() => generateAllAlerts(campaigns), [campaigns]);
   const engineSummary = useMemo(() => summarizeAlerts(engineAlerts), [engineAlerts]);
   const engineHighlights = useMemo(() => generateHighlights(engineAlerts), [engineAlerts]);
+  const leadHighlights = useMemo(() => generateLeadHighlights(leads, campaigns), [leads, campaigns]);
 
   const campaignAlerts = useMemo(() => {
     const result: Array<{
@@ -656,7 +658,7 @@ export default function CommandCenterPage() {
       </div>
 
       {/* ═══ Intelligence Highlights ═══ */}
-      {engineHighlights.length > 0 && (
+      {(engineHighlights.length > 0 || leadHighlights.length > 0) && (
         <div className="premium-card" style={{ padding: "1rem 1.25rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
             <span style={{ fontSize: "1rem" }}>🧠</span>
@@ -672,7 +674,7 @@ export default function CommandCenterPage() {
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
             {engineHighlights.map((h, i) => (
-              <div key={i} style={{
+              <div key={`e-${i}`} style={{
                 display: "flex", alignItems: "center", gap: "0.4rem",
                 padding: "0.5rem 0.75rem", borderRadius: "0.5rem",
                 background: `${SEVERITY_COLORS[h.severity]}08`,
@@ -683,6 +685,21 @@ export default function CommandCenterPage() {
                 <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground)" }}>{h.text}</span>
               </div>
             ))}
+            {leadHighlights.map((h, i) => {
+              const sevColor = h.severity === "high" ? "#ef4444" : h.severity === "medium" ? "#f59e0b" : "#6b7280";
+              return (
+                <div key={`l-${i}`} style={{
+                  display: "flex", alignItems: "center", gap: "0.4rem",
+                  padding: "0.5rem 0.75rem", borderRadius: "0.5rem",
+                  background: `${sevColor}08`,
+                  border: `1px solid ${sevColor}22`,
+                  flex: "1 1 auto", minWidth: "200px",
+                }}>
+                  <span style={{ fontSize: "1rem" }}>{h.icon}</span>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground)" }}>{h.text}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

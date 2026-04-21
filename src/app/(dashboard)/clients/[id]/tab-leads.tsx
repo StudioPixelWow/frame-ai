@@ -8,30 +8,48 @@ import type { Client, Lead, LeadStatus } from "@/lib/db/schema";
 
 const STATUS_COLORS: Record<LeadStatus, { bg: string; text: string }> = {
   new: { bg: "#3b82f6", text: "#3b82f6" },
+  assigned: { bg: "#6366f1", text: "#6366f1" },
   contacted: { bg: "#f59e0b", text: "#f59e0b" },
+  no_answer: { bg: "#f97316", text: "#f97316" },
+  interested: { bg: "#06b6d4", text: "#06b6d4" },
   proposal_sent: { bg: "#a855f7", text: "#a855f7" },
-  negotiation: { bg: "#f97316", text: "#f97316" },
+  negotiation: { bg: "#ec4899", text: "#ec4899" },
+  meeting_set: { bg: "#14b8a6", text: "#14b8a6" },
   won: { bg: "#22c55e", text: "#22c55e" },
+  lost: { bg: "#ef4444", text: "#ef4444" },
   not_relevant: { bg: "#6b7280", text: "#6b7280" },
+  duplicate: { bg: "#9ca3af", text: "#9ca3af" },
 };
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
   new: "חדש",
+  assigned: "שויך",
   contacted: "נוצר קשר",
+  no_answer: "לא ענה",
+  interested: "מתעניין",
   proposal_sent: "נשלחה הצעה",
   negotiation: 'במו״מ',
+  meeting_set: "נקבעה פגישה",
   won: "נסגר",
+  lost: "אבוד",
   not_relevant: "לא רלוונטי",
+  duplicate: "כפול",
 };
 
 const STATUS_FILTERS = [
   { id: "all", label: "כולם" },
   { id: "new", label: "חדש" },
+  { id: "assigned", label: "שויך" },
   { id: "contacted", label: "נוצר קשר" },
+  { id: "no_answer", label: "לא ענה" },
+  { id: "interested", label: "מתעניין" },
   { id: "proposal_sent", label: "נשלחה הצעה" },
   { id: "negotiation", label: 'במו״מ' },
+  { id: "meeting_set", label: "נקבעה פגישה" },
   { id: "won", label: "נסגר" },
+  { id: "lost", label: "אבוד" },
   { id: "not_relevant", label: "לא רלוונטי" },
+  { id: "duplicate", label: "כפול" },
 ];
 
 const SOURCE_OPTIONS = [

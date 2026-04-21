@@ -323,7 +323,7 @@ export interface Payment {
 
 // Lead
 export type LeadInterestType = 'marketing' | 'podcast' | 'branding' | 'website' | 'hosting' | 'other';
-export type LeadStatus = 'new' | 'contacted' | 'proposal_sent' | 'negotiation' | 'won' | 'not_relevant';
+export type LeadStatus = 'new' | 'assigned' | 'contacted' | 'no_answer' | 'interested' | 'proposal_sent' | 'negotiation' | 'meeting_set' | 'won' | 'lost' | 'not_relevant' | 'duplicate';
 
 export interface Lead {
   id: string;

@@ -2,11 +2,12 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
-import { useCampaigns, useClients } from '@/lib/api/use-entity';
+import { useCampaigns, useClients, useLeads } from '@/lib/api/use-entity';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { SkeletonKPIRow, SkeletonGrid } from '@/components/ui/skeleton';
-import type { Campaign, CampaignType, CampaignStatus, CampaignPlatform, CampaignMediaType } from '@/lib/db/schema';
+import type { Campaign, CampaignType, CampaignStatus, CampaignPlatform, CampaignMediaType, Lead } from '@/lib/db/schema';
+import { buildCampaignLeadInsights } from '@/lib/leads/lead-quality';
 import {
   computeHealth,
   generateCampaignAlerts,
@@ -486,6 +487,7 @@ const modalFieldStyle: React.CSSProperties = {
 
 export default function CampaignsPage() {
   const { data: campaigns, loading, error, create, update, remove } = useCampaigns();
+  const { data: allLeads } = useLeads();
   const { data: clients } = useClients();
   const toast = useToast();
 
@@ -542,6 +544,19 @@ export default function CampaignsPage() {
     const avgHealth = total > 0 ? Math.round(all.reduce((s, c) => s + computeHealth(c).score, 0) / total) : 0;
     return { total, active, budget, pending, drafts, avgHealth };
   }, [campaigns]);
+
+  // Campaign → Lead Insights
+  const campaignLeadInsights = useMemo(() => {
+    return buildCampaignLeadInsights(allLeads || [], campaigns || []);
+  }, [allLeads, campaigns]);
+
+  const leadInsightsMap = useMemo(() => {
+    const m: Record<string, { leadCount: number; highQualityCount: number; wonCount: number; avgQuality: number; totalValue: number }> = {};
+    for (const ins of campaignLeadInsights) {
+      m[ins.campaignId] = { leadCount: ins.leadCount, highQualityCount: ins.highQualityCount, wonCount: ins.wonCount, avgQuality: ins.avgQualityScore, totalValue: ins.totalValue };
+    }
+    return m;
+  }, [campaignLeadInsights]);
 
   // Alerts
   const allAlerts = useMemo(() => {
@@ -707,6 +722,7 @@ export default function CampaignsPage() {
             { label: 'ממתינים', value: kpiStats.pending, color: '#f59e0b' },
             { label: 'תקציב כולל', value: `₪${(kpiStats.budget / 1000).toFixed(0)}K`, color: 'var(--accent)' },
             { label: 'בריאות ממוצעת', value: kpiStats.avgHealth, color: kpiStats.avgHealth >= 80 ? '#22c55e' : kpiStats.avgHealth >= 50 ? '#f59e0b' : '#ef4444' },
+            { label: 'לידים', value: (allLeads || []).length, color: '#8b5cf6' },
             { label: 'התראות', value: allAlerts.length, color: alertsSummary.high > 0 ? '#ef4444' : allAlerts.length > 0 ? '#f59e0b' : '#22c55e' },
           ].map((kpi) => (
             <div key={kpi.label} className="premium-card" style={{ padding: '1rem', textAlign: 'center' }}>
@@ -858,7 +874,7 @@ export default function CampaignsPage() {
                   )}
 
                   {/* Stats row */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', padding: '0.6rem 0', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', padding: '0.6rem 0', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--foreground)' }}>₪{(c.budget || 0).toLocaleString('he-IL')}</div>
                       <div style={{ fontSize: '0.6rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>תקציב</div>
@@ -866,6 +882,10 @@ export default function CampaignsPage() {
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--foreground)' }}>{formatDateRange(c.startDate, c.endDate)}</div>
                       <div style={{ fontSize: '0.6rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>תאריכים</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: (leadInsightsMap[c.id]?.leadCount || 0) > 0 ? '#8b5cf6' : 'var(--foreground-muted)' }}>{leadInsightsMap[c.id]?.leadCount || 0}</div>
+                      <div style={{ fontSize: '0.6rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>לידים</div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--foreground)' }}>{timeAgo(c.updatedAt)}</div>
