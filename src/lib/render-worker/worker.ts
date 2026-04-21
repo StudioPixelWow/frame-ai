@@ -5,116 +5,99 @@ if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
   process.exit(0);
 }
 
-/**
- * PixelFrameAI — Render Worker
- * Standalone background process that performs REAL Remotion video rendering.
- * Run with: npx tsx src/lib/render-worker/worker.ts
- *
- * Flow:
- *   1. Polls Supabase render_jobs for "queued" jobs
- *   2. Bundles Remotion project
- *   3. Renders via renderMedia() (real FFmpeg-based encoding)
- *   4. Uploads the rendered MP4 to Supabase Storage (outputs/{projectId}_{ts}.mp4)
- *   5. Updates render_jobs.result_url with the Supabase public URL
- *   6. Updates video_projects with video_url + render_output_key
- *   7. Verifies the DB write
- *
- * NOTE: Requires a persistent server/VM with:
- *   - Node.js filesystem access (for Remotion bundle + rendered output)
- *   - FFmpeg installed (used internally by @remotion/renderer)
- *   - SUPABASE_SERVICE_ROLE_KEY env var
- */
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import path from "path";
-import fs from "fs";
+import path from "node:path";
+import fs from "node:fs";
+import process from "node:process";
 
 const tag = "[Worker]";
 
-// Paths — only for Remotion bundle + output (worker runs on a real server)
+// ── Config ────────────────────────────────────────────────────────────────
+
 const PROJECT_ROOT = process.cwd();
 const REMOTION_ENTRY = path.join(PROJECT_ROOT, "src/remotion/index.ts");
 const OUTPUT_DIR = path.join(PROJECT_ROOT, "public/renders");
 const BUCKET = "project-files";
 
-// Ensure output dir exists
-if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+const POLL_INTERVAL_MS = Number(process.env.RENDER_POLL_INTERVAL_MS ?? 3000);
+const REMOTION_CONCURRENCY = Number(process.env.REMOTION_CONCURRENCY ?? 1);
+const RENDER_TIMEOUT_MS = Number(process.env.REMOTION_TIMEOUT_MS ?? 1000 * 60 * 30);
 
-// State
+// Ensure output dir exists
+if (!fs.existsSync(OUTPUT_DIR)) {
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+}
+
+// ── State ─────────────────────────────────────────────────────────────────
+
 let bundlePath: string | null = null;
 let isRendering = false;
+let isPolling = false;
+let pollCount = 0;
 
-/* ── Supabase client ───────────────────────────────────────────────────── */
+// ── Types ─────────────────────────────────────────────────────────────────
+
+type RenderJobRow = {
+  job_id: string;
+  project_id: string | null;
+  status: string;
+  created_at: string;
+  metadata?: Record<string, any> | null;
+  result_url?: string | null;
+  error?: string | null;
+};
+
+type JobUpdate = {
+  status?: string;
+  progress?: number;
+  stage?: string;
+  result_url?: string;
+  error?: string;
+};
+
+// ── Supabase client ───────────────────────────────────────────────────────
 
 let _sb: SupabaseClient | null = null;
 
 function getWorkerSupabase(): SupabaseClient {
   if (_sb) return _sb;
+
   const url =
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
     process.env.SUPABASE_URL ||
     "https://uaruggdabeyiuppcvbbi.supabase.co";
+
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
   if (!key) {
     throw new Error(`${tag} SUPABASE_SERVICE_ROLE_KEY is required`);
   }
+
   _sb = createClient(url, key, {
-    auth: { autoRefreshToken: false, persistSession: false },
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
   });
+
   console.log(`${tag} Supabase client initialized`);
   return _sb;
 }
 
-/* ── DB helpers ────────────────────────────────────────────────────────── */
+// ── Utilities ─────────────────────────────────────────────────────────────
 
-async function updateJob(
-  jobId: string,
-  updates: { status?: string; progress?: number; stage?: string; result_url?: string; error?: string }
-): Promise<void> {
+function cleanupFile(filePath: string): void {
   try {
-    const sb = getWorkerSupabase();
-    const payload = { ...updates, updated_at: new Date().toISOString() };
-    const { error } = await sb.from("render_jobs").update(payload).eq("job_id", jobId);
-    if (error) {
-      console.warn(`${tag} DB update failed for ${jobId}: ${error.message}`);
-    } else {
-      console.log(`${tag} DB updated: ${jobId} status=${updates.status || "-"} progress=${updates.progress ?? "-"}%`);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log(`${tag} Cleaned up local file: ${filePath}`);
     }
   } catch (err) {
-    console.warn(`${tag} DB update error:`, err instanceof Error ? err.message : err);
+    console.warn(`${tag} Failed to clean up file ${filePath}:`, err);
   }
 }
-
-async function fetchJob(jobId: string): Promise<any | null> {
-  const sb = getWorkerSupabase();
-  const { data, error } = await sb.from("render_jobs").select("*").eq("job_id", jobId).maybeSingle();
-  if (error) {
-    console.warn(`${tag} fetchJob failed: ${error.message}`);
-    return null;
-  }
-  return data;
-}
-
-/* ── Bundle ─────────────────────────────────────────────────────────────── */
-
-async function ensureBundle(): Promise<string> {
-  if (bundlePath && fs.existsSync(bundlePath)) {
-    console.log(`${tag} Using cached bundle`);
-    return bundlePath;
-  }
-  console.log(`${tag} Bundling Remotion project...`);
-  bundlePath = await bundle({
-    entryPoint: REMOTION_ENTRY,
-    onProgress: (progress: number) => {
-      if (progress % 20 === 0) console.log(`${tag} Bundle progress: ${progress}%`);
-    },
-  });
-  console.log(`${tag} Bundle ready at: ${bundlePath}`);
-  return bundlePath;
-}
-
-/* ── Extract storage path from public URL ──────────────────────────────── */
 
 function extractStoragePath(publicUrl: string): string | null {
   const marker = `/storage/v1/object/public/${BUCKET}/`;
@@ -123,11 +106,122 @@ function extractStoragePath(publicUrl: string): string | null {
   return null;
 }
 
-/* ── Render a single job ────────────────────────────────────────────────── */
+// ── DB helpers ────────────────────────────────────────────────────────────
+
+async function updateJob(jobId: string, updates: JobUpdate): Promise<void> {
+  try {
+    const sb = getWorkerSupabase();
+    const payload = {
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await sb.from("render_jobs").update(payload).eq("job_id", jobId);
+
+    if (error) {
+      console.warn(`${tag} DB update failed for ${jobId}: ${error.message}`);
+      return;
+    }
+
+    console.log(
+      `${tag} DB updated: ${jobId} status=${updates.status || "-"} progress=${updates.progress ?? "-"}% stage=${updates.stage || "-"}`
+    );
+  } catch (err) {
+    console.warn(`${tag} DB update error:`, err instanceof Error ? err.message : err);
+  }
+}
+
+async function fetchJob(jobId: string): Promise<RenderJobRow | null> {
+  const sb = getWorkerSupabase();
+
+  const { data, error } = await sb
+    .from("render_jobs")
+    .select("*")
+    .eq("job_id", jobId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn(`${tag} fetchJob failed: ${error.message}`);
+    return null;
+  }
+
+  return (data as RenderJobRow | null) ?? null;
+}
+
+async function claimNextQueuedJob(): Promise<RenderJobRow | null> {
+  const sb = getWorkerSupabase();
+
+  const { data, error } = await sb
+    .from("render_jobs")
+    .select("*")
+    .eq("status", "queued")
+    .order("created_at", { ascending: true })
+    .limit(1);
+
+  if (error) {
+    console.warn(`${tag} Poll query failed: ${error.message}`);
+    return null;
+  }
+
+  if (!data || data.length === 0) return null;
+
+  const job = data[0] as RenderJobRow;
+
+  const { data: claimedRow, error: claimError } = await sb
+    .from("render_jobs")
+    .update({
+      status: "preparing",
+      progress: 1,
+      stage: "נתפס לעיבוד",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("job_id", job.job_id)
+    .eq("status", "queued")
+    .select("*")
+    .maybeSingle();
+
+  if (claimError) {
+    console.warn(`${tag} Failed to claim job ${job.job_id}: ${claimError.message}`);
+    return null;
+  }
+
+  if (!claimedRow) {
+    console.warn(`${tag} Job ${job.job_id} was already claimed by another worker`);
+    return null;
+  }
+
+  console.log(`${tag} ══ CLAIMED JOB: ${job.job_id} (created ${job.created_at}) ══`);
+  return claimedRow as RenderJobRow;
+}
+
+// ── Bundle ────────────────────────────────────────────────────────────────
+
+async function ensureBundle(): Promise<string> {
+  if (bundlePath && fs.existsSync(bundlePath)) {
+    console.log(`${tag} Using cached bundle`);
+    return bundlePath;
+  }
+
+  console.log(`${tag} Bundling Remotion project...`);
+
+  bundlePath = await bundle({
+    entryPoint: REMOTION_ENTRY,
+    onProgress: (progress: number) => {
+      if (progress % 20 === 0) {
+        console.log(`${tag} Bundle progress: ${progress}%`);
+      }
+    },
+  });
+
+  console.log(`${tag} Bundle ready at: ${bundlePath}`);
+  return bundlePath;
+}
+
+// ── Render a single job ───────────────────────────────────────────────────
 
 async function renderJob(jobId: string): Promise<void> {
   const job = await fetchJob(jobId);
-  if (!job || job.status !== "queued") return;
+  if (!job) return;
 
   const metadata = job.metadata || {};
   const inputProps = metadata.inputProps || {};
@@ -136,6 +230,7 @@ async function renderJob(jobId: string): Promise<void> {
   const projectId = job.project_id || "unknown";
 
   isRendering = true;
+
   const outputFileName = `render-${jobId}.mp4`;
   const outputPath = path.join(OUTPUT_DIR, outputFileName);
 
@@ -147,54 +242,76 @@ async function renderJob(jobId: string): Promise<void> {
   console.log(`${tag}   Format:      ${inputProps.format || metadata.outputFormat || "9:16"}`);
   console.log(`${tag}   Duration:    ${inputProps.durationSec || "unknown"}s`);
   console.log(`${tag}   OUTPUT PATH: ${outputPath}`);
+  console.log(`${tag}   Concurrency: ${REMOTION_CONCURRENCY}`);
   console.log(`${tag} ═══════════════════════════════════════`);
 
   try {
-    // ── Stage 1: Preparing ──
-    await updateJob(jobId, { status: "preparing", progress: 5, stage: "מכין את הקומפוזיציה" });
+    await updateJob(jobId, {
+      status: "preparing",
+      progress: 5,
+      stage: "מכין את הקומפוזיציה",
+    });
 
     const serveUrl = await ensureBundle();
-    await updateJob(jobId, { progress: 15, stage: "טוען קבצי מקור" });
 
-    // ── Stage 2: Select composition ──
+    await updateJob(jobId, {
+      status: "preparing",
+      progress: 15,
+      stage: "טוען קבצי מקור",
+    });
+
     console.log(`${tag} Selecting composition: ${compositionId}`);
-    let composition;
-    try {
-      composition = await selectComposition({ serveUrl, id: compositionId, inputProps });
-    } catch (compErr) {
-      console.error(`${tag} selectComposition FAILED:`, compErr instanceof Error ? compErr.message : compErr);
-      throw compErr;
-    }
 
-    console.log(`${tag} Composition resolved: ${composition.width}x${composition.height}, ${composition.durationInFrames}f @ ${composition.fps}fps`);
-    await updateJob(jobId, { status: "rendering", progress: 20, stage: "מתחיל רינדור" });
+    const composition = await selectComposition({
+      serveUrl,
+      id: compositionId,
+      inputProps,
+    });
 
-    // ── Stage 3: REAL Remotion render ──
+    console.log(
+      `${tag} Composition resolved: ${composition.width}x${composition.height}, ${composition.durationInFrames}f @ ${composition.fps}fps`
+    );
+
+    await updateJob(jobId, {
+      status: "rendering",
+      progress: 20,
+      stage: "מתחיל רינדור",
+    });
+
     console.log(`${tag} Starting renderMedia...`);
-    try {
-      await renderMedia({
-        composition,
-        serveUrl,
-        codec: "h264",
-        outputLocation: outputPath,
-        inputProps,
-        onProgress: ({ progress }) => {
-          const pct = Math.round(20 + progress * 70);
-          const stage =
-            progress < 0.3 ? "מעבד קטעי וידאו" :
-            progress < 0.6 ? "משלב אפקטים" :
-            progress < 0.9 ? "מחיל שיפורים" :
-            "רינדור סופי";
-          updateJob(jobId, { status: "rendering", progress: pct, stage }).catch(() => {});
-        },
-      });
-    } catch (renderErr) {
-      console.error(`${tag} renderMedia FAILED:`, renderErr instanceof Error ? renderErr.message : renderErr);
-      throw renderErr;
-    }
 
-    // ── Stage 4: Validate rendered output ──
-    await updateJob(jobId, { status: "finalizing", progress: 92, stage: "מאמת קובץ" });
+    await renderMedia({
+      composition,
+      serveUrl,
+      codec: "h264",
+      outputLocation: outputPath,
+      inputProps,
+      concurrency: REMOTION_CONCURRENCY,
+      timeoutInMilliseconds: RENDER_TIMEOUT_MS,
+      onProgress: ({ progress }) => {
+        const pct = Math.round(20 + progress * 70);
+        const stage =
+          progress < 0.3
+            ? "מעבד קטעי וידאו"
+            : progress < 0.6
+              ? "משלב אפקטים"
+              : progress < 0.9
+                ? "מחיל שיפורים"
+                : "רינדור סופי";
+
+        updateJob(jobId, {
+          status: "rendering",
+          progress: pct,
+          stage,
+        }).catch(() => {});
+      },
+    });
+
+    await updateJob(jobId, {
+      status: "finalizing",
+      progress: 92,
+      stage: "מאמת קובץ",
+    });
 
     if (!fs.existsSync(outputPath)) {
       throw new Error("Render completed but output file not found on disk");
@@ -203,6 +320,10 @@ async function renderJob(jobId: string): Promise<void> {
     const stats = fs.statSync(outputPath);
     const renderedSizeMB = (stats.size / 1024 / 1024).toFixed(2);
 
+    if (stats.size < 1024) {
+      throw new Error(`Rendered file is suspiciously small: ${stats.size} bytes`);
+    }
+
     console.log(`${tag} RENDER DONE`);
     console.log(`${tag} OUTPUT PATH: ${outputPath}`);
     console.log(`${tag}   Rendered size:  ${renderedSizeMB} MB`);
@@ -210,14 +331,15 @@ async function renderJob(jobId: string): Promise<void> {
     console.log(`${tag}   Render height:  ${composition.height}`);
     console.log(`${tag}   Render frames:  ${composition.durationInFrames}`);
     console.log(`${tag}   Render FPS:     ${composition.fps}`);
-    console.log(`${tag}   Render duration: ${(composition.durationInFrames / composition.fps).toFixed(1)}s`);
+    console.log(
+      `${tag}   Render duration: ${(composition.durationInFrames / composition.fps).toFixed(1)}s`
+    );
 
-    if (stats.size < 1024) {
-      throw new Error(`Rendered file is suspiciously small: ${stats.size} bytes — render likely failed`);
-    }
-
-    // ── Stage 5: Upload rendered file to Supabase Storage ──
-    await updateJob(jobId, { progress: 94, stage: "מעלה קובץ סופי" });
+    await updateJob(jobId, {
+      status: "finalizing",
+      progress: 94,
+      stage: "מעלה קובץ סופי",
+    });
 
     const storagePath = `outputs/${projectId}_${Date.now()}.mp4`;
     const fileBuffer = fs.readFileSync(outputPath);
@@ -225,9 +347,13 @@ async function renderJob(jobId: string): Promise<void> {
     console.log(`${tag} Uploading rendered file to Storage: ${storagePath} (${renderedSizeMB} MB)`);
 
     const sb = getWorkerSupabase();
+
     const { error: uploadErr } = await sb.storage
       .from(BUCKET)
-      .upload(storagePath, fileBuffer, { contentType: "video/mp4", upsert: true });
+      .upload(storagePath, fileBuffer, {
+        contentType: "video/mp4",
+        upsert: true,
+      });
 
     if (uploadErr) {
       throw new Error(`Storage upload failed: ${uploadErr.message}`);
@@ -242,34 +368,35 @@ async function renderJob(jobId: string): Promise<void> {
 
     console.log(`${tag} UPLOADED OUTPUT URL: ${outputUrl}`);
 
-    // ── Validate output URL differs from source ──
     if (sourceVideoUrl) {
       const sourcePath = extractStoragePath(sourceVideoUrl);
       const outputPathInStorage = extractStoragePath(outputUrl);
+
       if (sourcePath && outputPathInStorage && sourcePath === outputPathInStorage) {
-        throw new Error(`CRITICAL: Output storage path equals source path — not a new rendered file`);
+        throw new Error("CRITICAL: Output storage path equals source path");
       }
+
       if (outputUrl === sourceVideoUrl) {
-        throw new Error(`CRITICAL: Output URL equals source URL — rendered file was not uploaded correctly`);
+        throw new Error("CRITICAL: Output URL equals source URL");
       }
+
       console.log(`${tag} ✅ Output URL differs from source URL — confirmed new rendered file`);
     }
 
-    // ── Stage 6: Save to render_jobs ──
     await updateJob(jobId, {
       status: "completed",
       progress: 100,
       stage: "הושלם",
       result_url: outputUrl,
     });
+
     console.log(`${tag} ✅ render_jobs updated: result_url=${outputUrl.substring(0, 100)}`);
 
-    // ── Stage 7: Save to video_projects — CRITICAL ──
     if (job.project_id) {
       console.log(`${tag} SAVING TO PROJECT: ${job.project_id}`);
 
       const now = new Date().toISOString();
-      const updatePayload = {
+      const updatePayload: Record<string, unknown> = {
         status: "complete",
         video_url: outputUrl,
         render_output_key: outputUrl,
@@ -286,14 +413,14 @@ async function renderJob(jobId: string): Promise<void> {
         .maybeSingle();
 
       if (updateErr) {
-        console.error(`${tag} ❌ video_projects update ERROR:`, updateErr.message);
+        console.error(`${tag} ❌ video_projects update ERROR: ${updateErr.message}`);
 
-        // If a column doesn't exist, retry without it
         const colMatch = updateErr.message.match(/column.*['"]?([a-z_]+)['"]?.*does not exist/i);
         if (colMatch) {
           const badCol = colMatch[1];
           console.warn(`${tag} ⚠️ Column "${badCol}" missing — retrying without it`);
-          const reduced: Record<string, unknown> = { ...updatePayload };
+
+          const reduced = { ...updatePayload };
           delete reduced[badCol];
 
           const { data: retryData, error: retryErr } = await sb
@@ -304,7 +431,7 @@ async function renderJob(jobId: string): Promise<void> {
             .maybeSingle();
 
           if (retryErr) {
-            console.error(`${tag} ❌ Retry also failed:`, retryErr.message);
+            console.error(`${tag} ❌ Retry also failed: ${retryErr.message}`);
           } else {
             console.log(`${tag} ✅ PROJECT UPDATED (partial): ${JSON.stringify(retryData)}`);
           }
@@ -313,7 +440,6 @@ async function renderJob(jobId: string): Promise<void> {
         console.log(`${tag} ✅ PROJECT UPDATED: ${JSON.stringify(updateData)}`);
       }
 
-      // ── VERIFY: read back the project ──
       const { data: verifyRow, error: verifyErr } = await sb
         .from("video_projects")
         .select("id, status, video_url, render_output_key")
@@ -323,15 +449,19 @@ async function renderJob(jobId: string): Promise<void> {
       if (verifyErr) {
         console.warn(`${tag} ⚠️ Verify select failed: ${verifyErr.message}`);
       } else if (verifyRow) {
-        const savedUrl = (verifyRow as any).video_url || (verifyRow as any).render_output_key;
-        console.log(`${tag} VERIFY: video_url=${(verifyRow as any).video_url || "(null)"} render_output_key=${(verifyRow as any).render_output_key || "(null)"} status=${(verifyRow as any).status}`);
+        const savedUrl =
+          (verifyRow as any).video_url || (verifyRow as any).render_output_key;
+
+        console.log(
+          `${tag} VERIFY: video_url=${(verifyRow as any).video_url || "(null)"} render_output_key=${(verifyRow as any).render_output_key || "(null)"} status=${(verifyRow as any).status}`
+        );
 
         if (!savedUrl) {
           console.error(`${tag} ❌ CRITICAL: Output URL NOT saved to video_projects!`);
-          console.error(`${tag}   Run: ALTER TABLE video_projects ADD COLUMN IF NOT EXISTS video_url TEXT;`);
-          console.error(`${tag}   Run: ALTER TABLE video_projects ADD COLUMN IF NOT EXISTS render_output_key TEXT;`);
         } else if (savedUrl !== outputUrl) {
-          console.error(`${tag} ❌ MISMATCH: saved=${savedUrl.substring(0, 80)} expected=${outputUrl.substring(0, 80)}`);
+          console.error(
+            `${tag} ❌ MISMATCH: saved=${savedUrl.substring(0, 80)} expected=${outputUrl.substring(0, 80)}`
+          );
         } else {
           console.log(`${tag} ✅ VERIFIED: DB video_url matches rendered output URL`);
         }
@@ -342,11 +472,7 @@ async function renderJob(jobId: string): Promise<void> {
       console.error(`${tag} ❌ No project_id on job — cannot update video_projects`);
     }
 
-    // ── Clean up local rendered file ──
-    try {
-      fs.unlinkSync(outputPath);
-      console.log(`${tag} Cleaned up local file: ${outputPath}`);
-    } catch { /* non-critical */ }
+    cleanupFile(outputPath);
 
     console.log(`${tag} ═══════════════════════════════════════`);
     console.log(`${tag} RENDER COMPLETE SUMMARY`);
@@ -359,65 +485,126 @@ async function renderJob(jobId: string): Promise<void> {
     console.log(`${tag}   duration:   ${(composition.durationInFrames / composition.fps).toFixed(1)}s`);
     console.log(`${tag}   storage:    bucket="${BUCKET}" path="${storagePath}"`);
     console.log(`${tag} ═══════════════════════════════════════`);
-
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : "Unknown render error";
     console.error(`${tag} ═══ RENDER FAILED: ${errorMsg} ═══`);
-    await updateJob(jobId, { status: "failed", error: errorMsg, stage: "נכשל" });
 
-    // Clean up partial output
-    try { if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath); } catch { /* */ }
+    await updateJob(jobId, {
+      status: "failed",
+      error: errorMsg,
+      stage: "נכשל",
+    });
+
+    cleanupFile(outputPath);
   } finally {
     isRendering = false;
   }
 }
 
-/* ── Poll for new jobs (from Supabase) ─────────────────────────────────── */
+// ── Poll loop ─────────────────────────────────────────────────────────────
 
 async function pollForJobs(): Promise<void> {
-  if (isRendering) return;
+  if (isRendering || isPolling) return;
+
+  isPolling = true;
 
   try {
-    const sb = getWorkerSupabase();
-    const { data, error } = await sb
-      .from("render_jobs")
-      .select("job_id")
-      .eq("status", "queued")
-      .order("created_at", { ascending: true })
-      .limit(1);
+    const job = await claimNextQueuedJob();
+    if (!job) return;
 
-    if (error) {
-      console.warn(`${tag} Poll query failed:`, error.message);
-      return;
-    }
-
-    if (data && data.length > 0) {
-      const jobId = data[0].job_id;
-      console.log(`${tag} Found queued job: ${jobId}`);
-      await renderJob(jobId);
-    }
+    await renderJob(job.job_id);
   } catch (err) {
     console.warn(`${tag} Poll error:`, err instanceof Error ? err.message : err);
+  } finally {
+    isPolling = false;
   }
 }
 
-/* ── Main ───────────────────────────────────────────────────────────────── */
+// ── Main ──────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  console.log("═══════════════════════════════════════════════");
+  console.log("═══════════════════════════════════════════════════════════");
   console.log(" PixelFrameAI Render Worker (Real Remotion)");
-  console.log(` Output dir: ${OUTPUT_DIR}`);
-  console.log(` Storage bucket: ${BUCKET}`);
-  console.log("═══════════════════════════════════════════════");
+  console.log("═══════════════════════════════════════════════════════════");
+  console.log(`${tag} NODE_ENV:          ${process.env.NODE_ENV ?? "(unset)"}`);
+  console.log(`${tag} RAILWAY_ENV:       ${process.env.RAILWAY_ENVIRONMENT ?? "(unset)"}`);
+  console.log(
+    `${tag} SUPABASE_URL:      ${
+      process.env.SUPABASE_URL
+        ? process.env.SUPABASE_URL.slice(0, 40) + "..."
+        : process.env.NEXT_PUBLIC_SUPABASE_URL
+          ? process.env.NEXT_PUBLIC_SUPABASE_URL.slice(0, 40) + "..."
+          : "(using hardcoded default)"
+    }`
+  );
+  console.log(
+    `${tag} SERVICE_ROLE_KEY:  ${
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+        ? `set (${process.env.SUPABASE_SERVICE_ROLE_KEY.length} chars)`
+        : "❌ MISSING"
+    }`
+  );
+  console.log(`${tag} Output dir:        ${OUTPUT_DIR}`);
+  console.log(`${tag} Storage bucket:    ${BUCKET}`);
+  console.log(`${tag} Remotion entry:    ${REMOTION_ENTRY}`);
+  console.log(`${tag} CWD:               ${PROJECT_ROOT}`);
+  console.log(`${tag} Concurrency:       ${REMOTION_CONCURRENCY}`);
+  console.log("═══════════════════════════════════════════════════════════");
 
-  // Verify Supabase connection
-  getWorkerSupabase();
+  const sb = getWorkerSupabase();
 
-  setInterval(pollForJobs, 3000);
+  const { data: testRows, error: testErr } = await sb
+    .from("render_jobs")
+    .select("job_id, status")
+    .limit(3);
+
+  if (testErr) {
+    console.error(`${tag} ❌ Supabase connection test FAILED: ${testErr.message}`);
+    process.exit(1);
+  }
+
+  console.log(`${tag} ✅ Supabase connection OK — found ${testRows?.length ?? 0} recent jobs`);
+
+  if (testRows && testRows.length > 0) {
+    testRows.forEach((r: any) => {
+      console.log(`${tag}    job=${r.job_id} status=${r.status}`);
+    });
+  }
+
+  if (!fs.existsSync(REMOTION_ENTRY)) {
+    console.error(`${tag} ❌ Remotion entry file not found: ${REMOTION_ENTRY}`);
+    process.exit(1);
+  }
+
+  console.log(`${tag} ✅ Remotion entry file exists`);
+  console.log(`${tag} Starting poll loop (every ${POLL_INTERVAL_MS}ms)...`);
+  console.log("═══════════════════════════════════════════════════════════");
+
+  setInterval(() => {
+    pollCount++;
+    if (pollCount % 20 === 0) {
+      console.log(
+        `${tag} ♥️ heartbeat — ${pollCount} polls, rendering=${isRendering}, polling=${isPolling}, uptime=${Math.round(process.uptime())}s`
+      );
+    }
+    void pollForJobs();
+  }, POLL_INTERVAL_MS);
+
   await pollForJobs();
 }
 
+// ── Global error handlers ────────────────────────────────────────────────
+
+process.on("uncaughtException", (err) => {
+  console.error(`${tag} ❌ Uncaught exception:`, err.message);
+  console.error(err.stack);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error(`${tag} ❌ Unhandled rejection:`, reason);
+});
+
 main().catch((err) => {
-  console.error(`${tag} Fatal error:`, err);
+  console.error(`${tag} Fatal error in main():`, err);
   process.exit(1);
 });
