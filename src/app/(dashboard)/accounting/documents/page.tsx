@@ -200,7 +200,11 @@ export default function DocumentsPage() {
     toast("PDF נפתח בלשונית חדשה — לחץ שמור כ-PDF להורדה", "success");
   };
 
-  if (loading) {
+  // Only show full-page loading on initial mount (no data yet).
+  // Do NOT unmount the form on background refetches (e.g. window focus)
+  // because that destroys the file input and causes "page refresh" behavior.
+  const isInitialLoad = loading && (!allDocuments || allDocuments.length === 0) && !uploadingPeriod;
+  if (isInitialLoad) {
     return (
       <div style={{ direction: "rtl", padding: "2rem", textAlign: "center", color: "var(--foreground-muted)" }}>
         טוען מסמכים...
