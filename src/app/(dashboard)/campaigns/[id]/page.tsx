@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useCampaigns } from '@/lib/api/use-entity';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
+import { SmartVariationsPanel, type CampaignVariation } from '@/components/ui/smart-variations';
 import type { Campaign, CampaignStatus } from '@/lib/db/schema';
 
 const STATUS_COLORS: Record<CampaignStatus, string> = {
@@ -76,6 +77,7 @@ export default function CampaignDetailsPage({ params }: { params: Promise<{ id: 
   const [newStatus, setNewStatus] = useState<CampaignStatus>(campaign?.status || 'draft');
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isVariationsOpen, setIsVariationsOpen] = useState(false);
 
   if (loading) {
     return (
@@ -158,6 +160,44 @@ export default function CampaignDetailsPage({ params }: { params: Promise<{ id: 
       }, 500);
     } catch (error) {
       toast('שגיאה במחיקת קמפיין', 'error');
+    }
+  };
+
+  const handleApplyVariation = async (variation: CampaignVariation) => {
+    try {
+      await update(campaign.id, {
+        ...campaign,
+        caption: variation.primaryText,
+        notes: campaign.notes
+          ? `${campaign.notes}\n\n— וריאציה ${variation.angleLabel} הוחלה —\nכותרת: ${variation.headline}\nCTA: ${variation.cta}`
+          : `— וריאציה ${variation.angleLabel} —\nכותרת: ${variation.headline}\nCTA: ${variation.cta}`,
+      });
+      toast('הווריאציה הוחלה בהצלחה על הקמפיין', 'ai' as any);
+      setIsVariationsOpen(false);
+    } catch {
+      toast('שגיאה בהחלת הווריאציה', 'error');
+    }
+  };
+
+  const handleCreateFromVariation = async (variation: CampaignVariation) => {
+    try {
+      // Navigate to campaign builder with variation data as query params
+      const params = new URLSearchParams({
+        fromVariation: '1',
+        clientId: campaign.clientId,
+        clientName: campaign.clientName,
+        campaignType: campaign.campaignType,
+        platform: campaign.platform,
+        mediaType: campaign.mediaType,
+        caption: variation.primaryText,
+        headline: variation.headline,
+        objective: campaign.objective || '',
+        budget: String(campaign.budget || 0),
+        notes: `וריאציה (${variation.angleLabel}) מקמפיין: ${campaign.campaignName}\nCTA: ${variation.cta}\n${variation.explanation}`,
+      });
+      window.location.href = `/campaign-builder?${params.toString()}`;
+    } catch {
+      toast('שגיאה ביצירת קמפיין חדש', 'error');
     }
   };
 
@@ -611,6 +651,38 @@ export default function CampaignDetailsPage({ params }: { params: Promise<{ id: 
           }}
         >
           <button
+            onClick={() => setIsVariationsOpen(true)}
+            className="ux-btn ux-btn-glow"
+            style={{
+              padding: '0.75rem 1rem',
+              background: 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(59,130,246,0.15))',
+              color: '#a78bfa',
+              border: '1px solid rgba(139,92,246,0.3)',
+              borderRadius: '0.5rem',
+              fontSize: '0.95rem',
+              fontWeight: '700',
+              cursor: 'pointer',
+              transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(139,92,246,0.25), rgba(59,130,246,0.25))';
+              (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)';
+              (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 20px rgba(139,92,246,0.2)';
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(59,130,246,0.15))';
+              (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
+              (e.currentTarget as HTMLElement).style.boxShadow = 'none';
+            }}
+          >
+            <span>🧬</span>
+            צור וריאציות חכמות
+          </button>
+          <button
             onClick={() => setIsStatusModalOpen(true)}
             style={{
               padding: '0.75rem 1rem',
@@ -728,6 +800,29 @@ export default function CampaignDetailsPage({ params }: { params: Promise<{ id: 
               ביטול
             </button>
           </div>
+        </div>
+      </Modal>
+
+      {/* Smart Variations Modal */}
+      <Modal
+        open={isVariationsOpen}
+        onClose={() => setIsVariationsOpen(false)}
+        title="וריאציות חכמות"
+      >
+        <div style={{ padding: '1.5rem', maxWidth: '900px', minWidth: '360px' }}>
+          <SmartVariationsPanel
+            campaignId={campaign.id}
+            primaryText={campaign.caption || ''}
+            headline={''}
+            objective={campaign.objective || ''}
+            campaignType={campaign.campaignType}
+            platform={campaign.platform}
+            clientName={campaign.clientName}
+            clientId={campaign.clientId}
+            onApply={handleApplyVariation}
+            onCreateNew={handleCreateFromVariation}
+            onClose={() => setIsVariationsOpen(false)}
+          />
         </div>
       </Modal>
 
