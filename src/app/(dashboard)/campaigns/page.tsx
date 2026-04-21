@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useCampaigns, useClients } from '@/lib/api/use-entity';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
+import { SkeletonKPIRow, SkeletonGrid } from '@/components/ui/skeleton';
 import type { Campaign, CampaignType, CampaignStatus, CampaignPlatform, CampaignMediaType } from '@/lib/db/schema';
+
+// ── Constants ────────────────────────────────────────────────────────────────
 
 const STATUS_OPTIONS: Array<{ value: CampaignStatus; label: string }> = [
   { value: 'draft', label: 'טיוטה' },
@@ -76,10 +79,152 @@ const PLATFORM_LABELS: Record<CampaignPlatform, string> = {
   multi_platform: 'מולטי-פלטפורמה',
 };
 
+const PLATFORM_ICONS: Record<CampaignPlatform, string> = {
+  facebook: '📘',
+  instagram: '📸',
+  tiktok: '🎵',
+  multi_platform: '🌐',
+};
+
 const MEDIA_TYPE_LABELS: Record<CampaignMediaType, string> = {
   image: 'תמונה',
   video: 'וידאו',
 };
+
+// ── Health Score ──────────────────────────────────────────────────────────────
+
+type HealthLevel = 'strong' | 'attention' | 'weak';
+
+function computeHealth(c: Campaign): { score: number; level: HealthLevel; label: string; color: string } {
+  let score = 0;
+
+  // Status weight (30 pts)
+  const sw: Partial<Record<CampaignStatus, number>> = { active: 30, scheduled: 25, approved: 22, waiting_approval: 18, in_progress: 15, draft: 8, completed: 30 };
+  score += sw[c.status] ?? 8;
+
+  // Budget exists (15 pts)
+  if (c.budget && c.budget > 0) score += 15;
+
+  // Dates valid (15 pts)
+  if (c.startDate) score += 8;
+  if (c.endDate) score += 7;
+
+  // Creative (linked file or external URL) (15 pts)
+  if (c.linkedClientFileId || (c.externalMediaUrl && c.externalMediaUrl.length > 5)) score += 15;
+
+  // Primary text (15 pts)
+  if (c.caption && c.caption.trim().length > 5) score += 15;
+
+  // Headline/notes (10 pts) — stored in notes for builder campaigns
+  if (c.notes && c.notes.trim().length > 3) score += 10;
+
+  score = Math.min(100, score);
+
+  const level: HealthLevel = score >= 70 ? 'strong' : score >= 40 ? 'attention' : 'weak';
+  const label = level === 'strong' ? 'תקין' : level === 'attention' ? 'דורש תשומת לב' : 'חלש';
+  const color = level === 'strong' ? '#22c55e' : level === 'attention' ? '#f59e0b' : '#ef4444';
+
+  return { score, level, label, color };
+}
+
+// ── Health badge ─────────────────────────────────────────────────────────────
+
+function HealthBadge({ campaign, size = 'normal' }: { campaign: Campaign; size?: 'normal' | 'compact' }) {
+  const { score, label, color } = computeHealth(campaign);
+  const isCompact = size === 'compact';
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: isCompact ? '0.35rem' : '0.5rem' }}>
+      <div style={{ position: 'relative', width: isCompact ? 28 : 36, height: isCompact ? 28 : 36 }}>
+        <svg viewBox="0 0 36 36" width={isCompact ? 28 : 36} height={isCompact ? 28 : 36}>
+          <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--border)" strokeWidth="3" />
+          <circle
+            cx="18" cy="18" r="15.5" fill="none" stroke={color} strokeWidth="3"
+            strokeDasharray={`${score * 0.974} ${97.4 - score * 0.974}`}
+            strokeDashoffset="24.35" strokeLinecap="round"
+            style={{ transition: 'stroke-dasharray 400ms' }}
+          />
+        </svg>
+        <span style={{
+          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: isCompact ? '0.55rem' : '0.65rem', fontWeight: 800, color,
+        }}>{score}</span>
+      </div>
+      {!isCompact && (
+        <span style={{ fontSize: '0.68rem', fontWeight: 600, color }}>{label}</span>
+      )}
+    </div>
+  );
+}
+
+// ── Readiness indicators ─────────────────────────────────────────────────────
+
+function ReadinessIndicators({ campaign }: { campaign: Campaign }) {
+  const hasCreative = !!(campaign.linkedClientFileId || (campaign.externalMediaUrl && campaign.externalMediaUrl.length > 5));
+  const hasCopy = !!(campaign.caption && campaign.caption.trim().length > 5);
+  const hasBudget = !!(campaign.budget && campaign.budget > 0);
+  const hasDates = !!campaign.startDate;
+
+  const items: Array<{ ok: boolean; label: string }> = [
+    { ok: hasCreative, label: 'קריאייטיב' },
+    { ok: hasCopy, label: 'קופי' },
+    { ok: hasBudget, label: 'תקציב' },
+    { ok: hasDates, label: 'תאריכים' },
+  ];
+
+  return (
+    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+      {items.map((it) => (
+        <span
+          key={it.label}
+          style={{
+            fontSize: '0.62rem',
+            fontWeight: 600,
+            padding: '0.15rem 0.4rem',
+            borderRadius: '0.25rem',
+            background: it.ok ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.08)',
+            color: it.ok ? '#22c55e' : '#ef4444',
+            border: `1px solid ${it.ok ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.15)'}`,
+          }}
+        >
+          {it.ok ? '✓' : '✗'} {it.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ── Formatted date helper ────────────────────────────────────────────────────
+
+function formatDate(d: string | null): string {
+  if (!d) return '—';
+  try { return new Date(d).toLocaleDateString('he-IL', { month: 'short', day: 'numeric' }); } catch { return '—'; }
+}
+
+function formatDateRange(start: string | null, end: string | null): string {
+  const s = formatDate(start);
+  const e = formatDate(end);
+  if (s === '—' && e === '—') return '—';
+  if (e === '—') return s;
+  return `${s} – ${e}`;
+}
+
+function timeAgo(d: string | null): string {
+  if (!d) return '—';
+  try {
+    const diff = Date.now() - new Date(d).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'עכשיו';
+    if (mins < 60) return `לפני ${mins} דק׳`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `לפני ${hrs} שע׳`;
+    const days = Math.floor(hrs / 24);
+    if (days < 7) return `לפני ${days} ימים`;
+    return formatDate(d);
+  } catch { return '—'; }
+}
+
+// ── Form interface (for quick modal) ─────────────────────────────────────────
 
 interface FormData {
   campaignName: string;
@@ -101,1175 +246,575 @@ interface FormData {
   leadFormIds: string;
 }
 
+const INITIAL_FORM: FormData = {
+  campaignName: '', clientId: '', campaignType: 'paid_social', objective: '',
+  platform: 'facebook', status: 'draft', mediaType: 'image', budget: '',
+  caption: '', notes: '', startDate: '', endDate: '',
+  linkedVideoProjectId: null, linkedClientFileId: null,
+  externalMediaUrl: '', adAccountId: '', leadFormIds: '',
+};
+
+// ── Shared styles ────────────────────────────────────────────────────────────
+
+const selectFilterStyle: React.CSSProperties = {
+  padding: '0.5rem 0.75rem',
+  backgroundColor: 'var(--surface-raised)',
+  border: '1px solid var(--border)',
+  borderRadius: '0.5rem',
+  color: 'var(--foreground)',
+  fontSize: '0.8rem',
+  cursor: 'pointer',
+};
+
+const inputFilterStyle: React.CSSProperties = {
+  ...selectFilterStyle,
+  cursor: 'text',
+};
+
+const modalFieldStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '0.75rem',
+  backgroundColor: 'var(--surface-raised)',
+  border: '1px solid var(--border)',
+  borderRadius: '0.5rem',
+  color: 'var(--foreground)',
+  fontSize: '0.9rem',
+  boxSizing: 'border-box' as const,
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ══════════════════════════════════════════════════════════════════════════════
+
 export default function CampaignsPage() {
-  const { data: campaigns, loading, create, update, remove } = useCampaigns();
+  const { data: campaigns, loading, error, create, update, remove } = useCampaigns();
   const { data: clients } = useClients();
   const toast = useToast();
 
+  // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [filterClient, setFilterClient] = useState('');
   const [filterStatus, setFilterStatus] = useState<CampaignStatus | ''>('');
   const [filterPlatform, setFilterPlatform] = useState<CampaignPlatform | ''>('');
-  const [filterType, setFilterType] = useState<CampaignType | ''>('');
+  const [filterHealth, setFilterHealth] = useState<HealthLevel | ''>('');
 
+  // View mode
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+
+  // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deletingCampaignId, setDeletingCampaignId] = useState<string | null>(null);
+  const [formData, setFormData] = useState<FormData>(INITIAL_FORM);
 
-  const [formData, setFormData] = useState<FormData>({
-    campaignName: '',
-    clientId: '',
-    campaignType: 'paid_social',
-    objective: '',
-    platform: 'facebook',
-    status: 'draft',
-    mediaType: 'image',
-    budget: '',
-    caption: '',
-    notes: '',
-    startDate: '',
-    endDate: '',
-    linkedVideoProjectId: null,
-    linkedClientFileId: null,
-    externalMediaUrl: '',
-    adAccountId: '',
-    leadFormIds: '',
-  });
+  // Derived: initial load
+  const isInitialLoad = loading && (campaigns || []).length === 0;
 
+  // Filtered campaigns
   const filteredCampaigns = useMemo(() => {
-    return (campaigns || []).filter((campaign) => {
-      const matchesSearch =
-        (campaign.campaignName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (campaign.clientName || '').toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesClient = !filterClient || campaign.clientId === filterClient;
-      const matchesStatus = !filterStatus || (campaign.status || 'draft') === filterStatus;
-      const matchesPlatform = !filterPlatform || (campaign.platform || 'facebook') === filterPlatform;
-      const matchesType = !filterType || (campaign.campaignType || 'custom') === filterType;
-
-      return matchesSearch && matchesClient && matchesStatus && matchesPlatform && matchesType;
+    return (campaigns || []).filter((c) => {
+      const q = searchQuery.toLowerCase();
+      const matchesSearch = !q || (c.campaignName || '').toLowerCase().includes(q) || (c.clientName || '').toLowerCase().includes(q);
+      const matchesClient = !filterClient || c.clientId === filterClient;
+      const matchesStatus = !filterStatus || (c.status || 'draft') === filterStatus;
+      const matchesPlatform = !filterPlatform || (c.platform || 'facebook') === filterPlatform;
+      const matchesHealth = !filterHealth || computeHealth(c).level === filterHealth;
+      return matchesSearch && matchesClient && matchesStatus && matchesPlatform && matchesHealth;
+    }).sort((a, b) => {
+      // Sort by updatedAt descending, then createdAt
+      const da = a.updatedAt || a.createdAt || '';
+      const db = b.updatedAt || b.createdAt || '';
+      return db.localeCompare(da);
     });
-  }, [campaigns, searchQuery, filterClient, filterStatus, filterPlatform, filterType]);
+  }, [campaigns, searchQuery, filterClient, filterStatus, filterPlatform, filterHealth]);
 
+  // KPIs
   const kpiStats = useMemo(() => {
-    const totalCampaigns = (campaigns || []).length;
-    const activeCampaigns = (campaigns || []).filter((c) => c.status === 'active').length;
-    const totalBudget = (campaigns || []).reduce((sum, c) => sum + (c.budget || 0), 0);
-    const pendingApproval = (campaigns || []).filter((c) => c.status === 'waiting_approval').length;
-
-    return {
-      totalCampaigns,
-      activeCampaigns,
-      totalBudget,
-      pendingApproval,
-    };
+    const all = campaigns || [];
+    const total = all.length;
+    const active = all.filter((c) => c.status === 'active').length;
+    const budget = all.reduce((s, c) => s + (c.budget || 0), 0);
+    const pending = all.filter((c) => c.status === 'waiting_approval').length;
+    const drafts = all.filter((c) => c.status === 'draft').length;
+    const avgHealth = total > 0 ? Math.round(all.reduce((s, c) => s + computeHealth(c).score, 0) / total) : 0;
+    return { total, active, budget, pending, drafts, avgHealth };
   }, [campaigns]);
 
-  const handleOpenModal = (campaign?: Campaign) => {
+  // Modal handlers (preserved from original)
+  const handleOpenModal = useCallback((campaign?: Campaign) => {
     if (campaign) {
       setEditingCampaign(campaign);
       setFormData({
-        campaignName: campaign.campaignName,
-        clientId: campaign.clientId,
-        campaignType: campaign.campaignType,
-        objective: campaign.objective,
-        platform: campaign.platform,
-        status: campaign.status,
-        mediaType: campaign.mediaType,
-        budget: campaign.budget,
-        caption: campaign.caption,
-        notes: campaign.notes,
-        startDate: campaign.startDate || '',
-        endDate: campaign.endDate || '',
+        campaignName: campaign.campaignName, clientId: campaign.clientId,
+        campaignType: campaign.campaignType, objective: campaign.objective,
+        platform: campaign.platform, status: campaign.status, mediaType: campaign.mediaType,
+        budget: campaign.budget, caption: campaign.caption, notes: campaign.notes,
+        startDate: campaign.startDate || '', endDate: campaign.endDate || '',
         linkedVideoProjectId: campaign.linkedVideoProjectId,
         linkedClientFileId: campaign.linkedClientFileId,
-        externalMediaUrl: campaign.externalMediaUrl,
-        adAccountId: campaign.adAccountId || '',
+        externalMediaUrl: campaign.externalMediaUrl, adAccountId: campaign.adAccountId || '',
         leadFormIds: campaign.leadFormIds?.join(', ') || '',
       });
     } else {
       setEditingCampaign(null);
-      setFormData({
-        campaignName: '',
-        clientId: '',
-        campaignType: 'paid_social',
-        objective: '',
-        platform: 'facebook',
-        status: 'draft',
-        mediaType: 'image',
-        budget: '',
-        caption: '',
-        notes: '',
-        startDate: '',
-        endDate: '',
-        linkedVideoProjectId: null,
-        linkedClientFileId: null,
-        externalMediaUrl: '',
-        adAccountId: '',
-        leadFormIds: '',
-      });
+      setFormData(INITIAL_FORM);
     }
     setIsModalOpen(true);
-  };
+  }, []);
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setEditingCampaign(null);
-  };
+  const handleCloseModal = useCallback(() => { setIsModalOpen(false); setEditingCampaign(null); }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!formData.campaignName.trim()) {
-      toast('נא להכניס שם קמפיין', 'error');
-      return;
-    }
-
-    if (!formData.clientId) {
-      toast('נא לבחור לקוח', 'error');
-      return;
-    }
-
-    if (!formData.objective.trim()) {
-      toast('נא להכניס מטרה קמפיין', 'error');
-      return;
-    }
-
-    if (formData.budget === '') {
-      toast('נא להכניס תקציב', 'error');
-      return;
-    }
-
-    const budgetNum = typeof formData.budget === 'string' ? parseFloat(formData.budget) : formData.budget;
-    if (isNaN(budgetNum) || budgetNum < 0) {
-      toast('תקציב לא תקין', 'error');
-      return;
-    }
-
+    if (!formData.campaignName.trim()) { toast('נא להכניס שם קמפיין', 'error'); return; }
+    if (!formData.clientId) { toast('נא לבחור לקוח', 'error'); return; }
+    const budgetNum = typeof formData.budget === 'string' ? parseFloat(formData.budget) || 0 : formData.budget;
     try {
       const selectedClient = (clients || []).find((c) => c.id === formData.clientId);
-      const clientName = selectedClient?.name || '';
-
-      if (editingCampaign) {
-        await update(editingCampaign.id, {
-          campaignName: formData.campaignName,
-          clientId: formData.clientId,
-          clientName,
-          campaignType: formData.campaignType,
-          objective: formData.objective,
-          platform: formData.platform,
-          status: formData.status,
-          mediaType: formData.mediaType,
-          budget: budgetNum,
-          caption: formData.caption,
-          notes: formData.notes,
-          startDate: formData.startDate || null,
-          endDate: formData.endDate || null,
-          linkedVideoProjectId: formData.linkedVideoProjectId,
-          linkedClientFileId: formData.linkedClientFileId,
-          externalMediaUrl: formData.externalMediaUrl,
-          adAccountId: formData.adAccountId,
-          leadFormIds: (formData.leadFormIds || '').split(',').map(s => s.trim()).filter(Boolean),
-        });
-        toast('קמפיין עודכן בהצלחה', 'success');
-      } else {
-        await create({
-          campaignName: formData.campaignName,
-          clientId: formData.clientId,
-          clientName,
-          campaignType: formData.campaignType,
-          objective: formData.objective,
-          platform: formData.platform,
-          status: formData.status,
-          mediaType: formData.mediaType,
-          budget: budgetNum,
-          caption: formData.caption,
-          notes: formData.notes,
-          startDate: formData.startDate || null,
-          endDate: formData.endDate || null,
-          linkedVideoProjectId: formData.linkedVideoProjectId,
-          linkedClientFileId: formData.linkedClientFileId,
-          externalMediaUrl: formData.externalMediaUrl,
-          adAccountId: formData.adAccountId,
-          leadFormIds: (formData.leadFormIds || '').split(',').map(s => s.trim()).filter(Boolean),
-        });
-        toast('קמפיין נוצר בהצלחה', 'success');
-      }
+      const payload = {
+        campaignName: formData.campaignName, clientId: formData.clientId, clientName: selectedClient?.name || '',
+        campaignType: formData.campaignType, objective: formData.objective, platform: formData.platform,
+        status: formData.status, mediaType: formData.mediaType, budget: budgetNum, caption: formData.caption,
+        notes: formData.notes, startDate: formData.startDate || null, endDate: formData.endDate || null,
+        linkedVideoProjectId: formData.linkedVideoProjectId, linkedClientFileId: formData.linkedClientFileId,
+        externalMediaUrl: formData.externalMediaUrl, adAccountId: formData.adAccountId,
+        leadFormIds: (formData.leadFormIds || '').split(',').map(s => s.trim()).filter(Boolean),
+      };
+      if (editingCampaign) { await update(editingCampaign.id, payload); toast('קמפיין עודכן בהצלחה', 'success'); }
+      else { await create(payload); toast('קמפיין נוצר בהצלחה', 'success'); }
       handleCloseModal();
-    } catch (error) {
-      toast(editingCampaign ? 'שגיאה בעדכון קמפיין' : 'שגיאה ביצירת קמפיין', 'error');
-    }
-  };
+    } catch { toast(editingCampaign ? 'שגיאה בעדכון קמפיין' : 'שגיאה ביצירת קמפיין', 'error'); }
+  }, [formData, clients, editingCampaign, create, update, toast, handleCloseModal]);
 
-  const handleDeleteConfirm = async () => {
+  const handleDeleteConfirm = useCallback(async () => {
     if (!deletingCampaignId) return;
+    try { await remove(deletingCampaignId); toast('קמפיין נמחק בהצלחה', 'success'); setIsDeleteModalOpen(false); setDeletingCampaignId(null); }
+    catch { toast('שגיאה במחיקת קמפיין', 'error'); }
+  }, [deletingCampaignId, remove, toast]);
 
+  const handleDuplicate = useCallback(async (c: Campaign) => {
     try {
-      await remove(deletingCampaignId);
-      toast('קמפיין נמחק בהצלחה', 'success');
-      setIsDeleteModalOpen(false);
-      setDeletingCampaignId(null);
-    } catch (error) {
-      toast('שגיאה במחיקת קמפיין', 'error');
-    }
-  };
+      await create({
+        campaignName: `${c.campaignName} (העתק)`, clientId: c.clientId, clientName: c.clientName,
+        campaignType: c.campaignType, objective: c.objective, platform: c.platform,
+        status: 'draft', mediaType: c.mediaType, budget: c.budget, caption: c.caption,
+        notes: c.notes, startDate: c.startDate, endDate: c.endDate,
+        linkedVideoProjectId: c.linkedVideoProjectId, linkedClientFileId: c.linkedClientFileId,
+        externalMediaUrl: c.externalMediaUrl, adAccountId: c.adAccountId, leadFormIds: c.leadFormIds,
+      });
+      toast('קמפיין שוכפל בהצלחה', 'success');
+    } catch { toast('שגיאה בשכפול', 'error'); }
+  }, [create, toast]);
 
-  const openDeleteModal = (campaignId: string) => {
-    setDeletingCampaignId(campaignId);
-    setIsDeleteModalOpen(true);
-  };
+  const handleStatusChange = useCallback(async (id: string, status: CampaignStatus) => {
+    try { await update(id, { status }); toast(`סטטוס שונה ל${STATUS_LABELS[status]}`, 'success'); }
+    catch { toast('שגיאה בשינוי סטטוס', 'error'); }
+  }, [update, toast]);
 
-  if (loading) {
+  // ── Loading state ────────────────────────────────────────────────────────
+  if (isInitialLoad) {
     return (
-      <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem 1.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3rem 0' }}>
-          <p style={{ color: 'var(--foreground-muted)' }}>טוען...</p>
+      <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem 1.5rem', direction: 'rtl' }}>
+        <div style={{ marginBottom: '1.5rem' }}>
+          <div className="skeleton" style={{ width: 160, height: 32, borderRadius: '0.5rem', marginBottom: '0.5rem' }} />
+          <div className="skeleton" style={{ width: 260, height: 16, borderRadius: '0.25rem' }} />
+        </div>
+        <SkeletonKPIRow count={5} />
+        <div style={{ marginTop: '1.5rem' }}><SkeletonGrid count={6} /></div>
+      </main>
+    );
+  }
+
+  // ── Error state ──────────────────────────────────────────────────────────
+  if (error && (campaigns || []).length === 0) {
+    return (
+      <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem 1.5rem', direction: 'rtl' }}>
+        <div style={{ padding: '3rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>⚠️</div>
+          <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--foreground)', marginBottom: '0.5rem' }}>שגיאה בטעינת קמפיינים</div>
+          <div style={{ fontSize: '0.85rem', color: 'var(--foreground-muted)', marginBottom: '1rem' }}>{error}</div>
+          <button onClick={() => window.location.reload()} className="mod-btn-primary" style={{ padding: '0.5rem 1.25rem', fontSize: '0.85rem', borderRadius: '0.5rem', cursor: 'pointer' }}>
+            רענן את הדף
+          </button>
         </div>
       </main>
     );
   }
 
-  if (!campaigns && !loading) {
-    return (
-      <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem 1.5rem' }}>
-        <div style={{ padding: '2rem', textAlign: 'center' }}>
-          <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⚠️</div>
-          <div style={{ color: 'var(--foreground-muted)' }}>שגיאה בטעינת קמפיינים. נסה לרענן את הדף.</div>
-        </div>
-      </main>
-    );
-  }
-
+  // ── Main render ──────────────────────────────────────────────────────────
   return (
-    <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem 1.5rem' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+    <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem 1.5rem', direction: 'rtl' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+        {/* ── Header ───────────────────────────────────────────── */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
-            <h1 style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--foreground)', margin: 0 }}>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--foreground)', margin: 0, letterSpacing: '-0.02em' }}>
               קמפיינים
             </h1>
-            <p style={{ color: 'var(--foreground-muted)', fontSize: '0.92rem', marginTop: '0.25rem' }}>
-              נהל קמפיינים ופרסום ברשתות חברתיות
+            <p style={{ color: 'var(--foreground-muted)', fontSize: '0.8rem', marginTop: '0.15rem' }}>
+              ניהול, מעקב ובקרה על כל הקמפיינים
             </p>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <Link
               href="/campaign-builder"
-              style={{
-                background: 'linear-gradient(135deg, var(--accent), #0090cc)',
-                color: 'white',
-                padding: '0.75rem 1.5rem',
-                borderRadius: '0.5rem',
-                border: 'none',
-                fontSize: '0.95rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'opacity 0.2s',
-                textDecoration: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-              }}
+              className="mod-btn-primary"
+              style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 700, borderRadius: '0.5rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
             >
-              🚀 בנה קמפיין חכם
+              🚀 בנה קמפיין
             </Link>
             <button
               onClick={() => handleOpenModal()}
-              style={{
-                backgroundColor: 'var(--surface-raised)',
-                color: 'var(--foreground)',
-                padding: '0.75rem 1.5rem',
-                borderRadius: '0.5rem',
-                border: '1px solid var(--border)',
-                fontSize: '0.95rem',
-                fontWeight: '500',
-                cursor: 'pointer',
-                transition: 'opacity 0.2s',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
-              onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+              className="mod-btn-ghost"
+              style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 600, borderRadius: '0.5rem', cursor: 'pointer' }}
             >
-              + קמפיין מהיר
+              + מהיר
             </button>
           </div>
         </div>
 
-        {/* KPI Cards */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: '1rem',
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '0.75rem',
-              padding: '1.5rem',
-            }}
-          >
-            <p style={{ color: 'var(--foreground-muted)', fontSize: '0.85rem', margin: 0, marginBottom: '0.5rem' }}>
-              סה״כ קמפיינים
-            </p>
-            <p style={{ fontSize: '1.75rem', fontWeight: 'bold', color: 'var(--foreground)', margin: 0 }}>
-              {kpiStats.totalCampaigns}
-            </p>
-          </div>
-          <div
-            style={{
-              backgroundColor: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '0.75rem',
-              padding: '1.5rem',
-            }}
-          >
-            <p style={{ color: 'var(--foreground-muted)', fontSize: '0.85rem', margin: 0, marginBottom: '0.5rem' }}>
-              קמפיינים פעילים
-            </p>
-            <p style={{ fontSize: '1.75rem', fontWeight: 'bold', color: '#22c55e', margin: 0 }}>
-              {kpiStats.activeCampaigns}
-            </p>
-          </div>
-          <div
-            style={{
-              backgroundColor: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '0.75rem',
-              padding: '1.5rem',
-            }}
-          >
-            <p style={{ color: 'var(--foreground-muted)', fontSize: '0.85rem', margin: 0, marginBottom: '0.5rem' }}>
-              סה״כ תקציב
-            </p>
-            <p style={{ fontSize: '1.75rem', fontWeight: 'bold', color: 'var(--foreground)', margin: 0 }}>
-              ₪{(kpiStats.totalBudget / 1000).toFixed(0)}K
-            </p>
-          </div>
-          <div
-            style={{
-              backgroundColor: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '0.75rem',
-              padding: '1.5rem',
-            }}
-          >
-            <p style={{ color: 'var(--foreground-muted)', fontSize: '0.85rem', margin: 0, marginBottom: '0.5rem' }}>
-              ממתינים לאישור
-            </p>
-            <p style={{ fontSize: '1.75rem', fontWeight: 'bold', color: '#f59e0b', margin: 0 }}>
-              {kpiStats.pendingApproval}
-            </p>
-          </div>
+        {/* ── KPI Row ──────────────────────────────────────────── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
+          {[
+            { label: 'סה״כ', value: kpiStats.total, color: 'var(--foreground)' },
+            { label: 'פעילים', value: kpiStats.active, color: '#22c55e' },
+            { label: 'טיוטות', value: kpiStats.drafts, color: '#6b7280' },
+            { label: 'ממתינים', value: kpiStats.pending, color: '#f59e0b' },
+            { label: 'תקציב כולל', value: `₪${(kpiStats.budget / 1000).toFixed(0)}K`, color: 'var(--accent)' },
+            { label: 'בריאות ממוצעת', value: kpiStats.avgHealth, color: kpiStats.avgHealth >= 70 ? '#22c55e' : kpiStats.avgHealth >= 40 ? '#f59e0b' : '#ef4444' },
+          ].map((kpi) => (
+            <div key={kpi.label} className="premium-card" style={{ padding: '1rem', textAlign: 'center' }}>
+              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
+              <div style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)', fontWeight: 600, marginTop: '0.15rem' }}>{kpi.label}</div>
+            </div>
+          ))}
         </div>
 
-        {/* Filter Bar */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-            gap: '0.75rem',
-            backgroundColor: 'var(--surface)',
-            padding: '1rem',
-            borderRadius: '0.75rem',
-            border: '1px solid var(--border)',
-          }}
-        >
+        {/* ── Filters ─────────────────────────────────────────── */}
+        <div className="premium-card" style={{ padding: '0.75rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
           <input
             type="text"
             placeholder="חפש קמפיין או לקוח..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              gridColumn: '1 / -1',
-              padding: '0.75rem',
-              backgroundColor: 'var(--surface-raised)',
-              border: '1px solid var(--border)',
-              borderRadius: '0.5rem',
-              color: 'var(--foreground)',
-              fontSize: '0.9rem',
-            }}
+            style={{ ...inputFilterStyle, flex: '1 1 200px', minWidth: '180px' }}
           />
-          <select
-            value={filterClient}
-            onChange={(e) => setFilterClient(e.target.value)}
-            style={{
-              padding: '0.75rem',
-              backgroundColor: 'var(--surface-raised)',
-              border: '1px solid var(--border)',
-              borderRadius: '0.5rem',
-              color: 'var(--foreground)',
-              fontSize: '0.9rem',
-              cursor: 'pointer',
-            }}
-          >
+          <select value={filterClient} onChange={(e) => setFilterClient(e.target.value)} style={selectFilterStyle}>
             <option value="">כל הלקוחות</option>
-            {(clients || []).map((client) => (
-              <option key={client.id} value={client.id}>
-                {client.name}
-              </option>
-            ))}
+            {(clients || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as CampaignStatus | '')}
-            style={{
-              padding: '0.75rem',
-              backgroundColor: 'var(--surface-raised)',
-              border: '1px solid var(--border)',
-              borderRadius: '0.5rem',
-              color: 'var(--foreground)',
-              fontSize: '0.9rem',
-              cursor: 'pointer',
-            }}
-          >
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as CampaignStatus | '')} style={selectFilterStyle}>
             <option value="">כל הסטטוסים</option>
-            {STATUS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
+            {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
-          <select
-            value={filterPlatform}
-            onChange={(e) => setFilterPlatform(e.target.value as CampaignPlatform | '')}
-            style={{
-              padding: '0.75rem',
-              backgroundColor: 'var(--surface-raised)',
-              border: '1px solid var(--border)',
-              borderRadius: '0.5rem',
-              color: 'var(--foreground)',
-              fontSize: '0.9rem',
-              cursor: 'pointer',
-            }}
-          >
+          <select value={filterPlatform} onChange={(e) => setFilterPlatform(e.target.value as CampaignPlatform | '')} style={selectFilterStyle}>
             <option value="">כל הפלטפורמות</option>
-            {PLATFORM_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
+            {PLATFORM_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value as CampaignType | '')}
-            style={{
-              padding: '0.75rem',
-              backgroundColor: 'var(--surface-raised)',
-              border: '1px solid var(--border)',
-              borderRadius: '0.5rem',
-              color: 'var(--foreground)',
-              fontSize: '0.9rem',
-              cursor: 'pointer',
-            }}
-          >
-            <option value="">כל הסוגים</option>
-            {TYPE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
+          <select value={filterHealth} onChange={(e) => setFilterHealth(e.target.value as HealthLevel | '')} style={selectFilterStyle}>
+            <option value="">כל הבריאות</option>
+            <option value="strong">תקין (70+)</option>
+            <option value="attention">דורש תשומת לב</option>
+            <option value="weak">חלש (&lt;40)</option>
           </select>
+
+          {/* View toggle */}
+          <div style={{ display: 'flex', marginRight: 'auto', gap: '0.25rem', background: 'var(--surface-raised)', borderRadius: '0.375rem', border: '1px solid var(--border)', padding: '0.15rem' }}>
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              style={{ padding: '0.3rem 0.5rem', fontSize: '0.72rem', fontWeight: 600, borderRadius: '0.25rem', border: 'none', cursor: 'pointer', background: viewMode === 'cards' ? 'var(--accent)' : 'transparent', color: viewMode === 'cards' ? 'white' : 'var(--foreground-muted)' }}
+            >
+              ▦ כרטיסים
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              style={{ padding: '0.3rem 0.5rem', fontSize: '0.72rem', fontWeight: 600, borderRadius: '0.25rem', border: 'none', cursor: 'pointer', background: viewMode === 'table' ? 'var(--accent)' : 'transparent', color: viewMode === 'table' ? 'white' : 'var(--foreground-muted)' }}
+            >
+              ☰ טבלה
+            </button>
+          </div>
+
+          {/* Active filter count */}
+          {(filterClient || filterStatus || filterPlatform || filterHealth || searchQuery) && (
+            <button
+              type="button"
+              onClick={() => { setSearchQuery(''); setFilterClient(''); setFilterStatus(''); setFilterPlatform(''); setFilterHealth(''); }}
+              style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              נקה סינון
+            </button>
+          )}
         </div>
 
-        {/* Campaign Grid */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
-            gap: '1.5rem',
-          }}
-        >
-          {filteredCampaigns.length === 0 ? (
-            <div
-              style={{
-                gridColumn: '1 / -1',
-                textAlign: 'center',
-                padding: '3rem',
-                color: 'var(--foreground-muted)',
-              }}
-            >
-              {(campaigns || []).length === 0
-                ? (<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-                    <div style={{ fontSize: '2rem' }}>📋</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--foreground)' }}>אין קמפיינים עדיין</div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--foreground-muted)' }}>צור את הקמפיין הראשון שלך</div>
-                    <Link
-                      href="/campaign-builder"
-                      style={{
-                        background: 'linear-gradient(135deg, var(--accent), #0090cc)',
-                        color: 'white',
-                        padding: '0.6rem 1.25rem',
-                        borderRadius: '0.5rem',
-                        fontSize: '0.9rem',
-                        fontWeight: 600,
-                        textDecoration: 'none',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.35rem',
-                      }}
-                    >
-                      🚀 בנה קמפיין חכם
-                    </Link>
-                  </div>)
-                : 'לא נמצאו קמפיינים התואמים לחיפוש'}
-            </div>
-          ) : (
-            filteredCampaigns.map((campaign) => (
-              <Link key={campaign.id} href={`/campaigns/${campaign.id}`} style={{ textDecoration: 'none' }}>
-                <div
-                  style={{
-                    backgroundColor: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '0.75rem',
-                    padding: '1.5rem',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--surface-raised)';
-                    e.currentTarget.style.borderColor = 'var(--accent)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--surface)';
-                    e.currentTarget.style.borderColor = 'var(--border)';
-                  }}
+        {/* ── Results count ────────────────────────────────────── */}
+        <div style={{ fontSize: '0.72rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>
+          {filteredCampaigns.length} מתוך {(campaigns || []).length} קמפיינים
+        </div>
+
+        {/* ── Empty states ─────────────────────────────────────── */}
+        {filteredCampaigns.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+            {(campaigns || []).length === 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ fontSize: '2.5rem' }}>📋</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--foreground)' }}>אין קמפיינים עדיין</div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--foreground-muted)' }}>צור את הקמפיין הראשון שלך</div>
+                <Link href="/campaign-builder" className="mod-btn-primary" style={{ padding: '0.6rem 1.25rem', fontSize: '0.85rem', fontWeight: 700, borderRadius: '0.5rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                  🚀 בנה קמפיין חכם
+                </Link>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ fontSize: '1.5rem' }}>🔍</div>
+                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--foreground)' }}>לא נמצאו קמפיינים התואמים לסינון</div>
+                <button
+                  type="button"
+                  onClick={() => { setSearchQuery(''); setFilterClient(''); setFilterStatus(''); setFilterPlatform(''); setFilterHealth(''); }}
+                  className="mod-btn-ghost"
+                  style={{ padding: '0.4rem 0.875rem', fontSize: '0.78rem', fontWeight: 600, borderRadius: '0.375rem', cursor: 'pointer', marginTop: '0.25rem' }}
                 >
-                  {/* Card Header */}
-                  <div style={{ marginBottom: '1rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--foreground)', margin: 0, flex: 1 }}>
-                        {campaign.campaignName || 'ללא שם'}
+                  נקה סינון
+                </button>
+              </div>
+            )}
+          </div>
+        ) : viewMode === 'cards' ? (
+          /* ── Card View ───────────────────────────────────────── */
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1rem' }}>
+            {filteredCampaigns.map((c) => {
+              const health = computeHealth(c);
+              return (
+                <div
+                  key={c.id}
+                  className="premium-card glow-hover"
+                  style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', borderRight: `3px solid ${health.color}`, transition: 'all 200ms' }}
+                >
+                  {/* Top row: name + status */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--foreground)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {c.campaignName || 'ללא שם'}
                       </h3>
-                      <div
-                        style={{
-                          backgroundColor: STATUS_COLORS[campaign.status || 'draft'],
-                          color: 'white',
-                          padding: '0.25rem 0.75rem',
-                          borderRadius: '0.25rem',
-                          fontSize: '0.75rem',
-                          fontWeight: '600',
-                          whiteSpace: 'nowrap',
-                          marginLeft: '0.5rem',
-                        }}
-                      >
-                        {STATUS_LABELS[campaign.status || 'draft'] || campaign.status || 'לא ידוע'}
-                      </div>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)', margin: '0.15rem 0 0 0' }}>
+                        {c.clientName || 'ללא לקוח'}
+                      </p>
                     </div>
-                    <p style={{ color: 'var(--foreground-muted)', fontSize: '0.9rem', margin: 0 }}>
-                      {campaign.clientName || 'ללא לקוח'}
-                    </p>
+                    <div style={{ backgroundColor: STATUS_COLORS[c.status || 'draft'], color: 'white', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.65rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                      {STATUS_LABELS[c.status || 'draft'] || 'לא ידוע'}
+                    </div>
                   </div>
 
-                  {/* Badges */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
-                    <div
-                      style={{
-                        backgroundColor: 'var(--surface-raised)',
-                        border: '1px solid var(--border)',
-                        padding: '0.35rem 0.75rem',
-                        borderRadius: '0.35rem',
-                        fontSize: '0.75rem',
-                        fontWeight: '500',
-                        color: 'var(--foreground)',
-                      }}
-                    >
-                      {TYPE_LABELS[campaign.campaignType || 'custom'] || campaign.campaignType || 'לא ידוע'}
-                    </div>
-                    <div
-                      style={{
-                        backgroundColor: 'var(--surface-raised)',
-                        border: '1px solid var(--border)',
-                        padding: '0.35rem 0.75rem',
-                        borderRadius: '0.35rem',
-                        fontSize: '0.75rem',
-                        fontWeight: '500',
-                        color: 'var(--foreground)',
-                      }}
-                    >
-                      {PLATFORM_LABELS[campaign.platform || 'facebook'] || campaign.platform || 'לא ידוע'}
-                    </div>
-                    <div
-                      style={{
-                        backgroundColor: 'var(--surface-raised)',
-                        border: '1px solid var(--border)',
-                        padding: '0.35rem 0.75rem',
-                        borderRadius: '0.35rem',
-                        fontSize: '0.75rem',
-                        fontWeight: '500',
-                        color: 'var(--foreground)',
-                      }}
-                    >
-                      {MEDIA_TYPE_LABELS[campaign.mediaType || 'image'] || campaign.mediaType || 'לא ידוע'}
-                    </div>
+                  {/* Badges row */}
+                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 600, padding: '0.15rem 0.45rem', borderRadius: '0.25rem', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--foreground)' }}>
+                      {PLATFORM_ICONS[c.platform || 'facebook']} {PLATFORM_LABELS[c.platform || 'facebook']}
+                    </span>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 600, padding: '0.15rem 0.45rem', borderRadius: '0.25rem', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--foreground)' }}>
+                      {TYPE_LABELS[c.campaignType || 'custom']}
+                    </span>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 600, padding: '0.15rem 0.45rem', borderRadius: '0.25rem', background: 'var(--surface-raised)', border: '1px solid var(--border)', color: 'var(--foreground)' }}>
+                      {MEDIA_TYPE_LABELS[c.mediaType || 'image']}
+                    </span>
                   </div>
 
                   {/* Objective */}
-                  <p
-                    style={{
-                      color: 'var(--foreground-muted)',
-                      fontSize: '0.85rem',
-                      margin: '0 0 0.75rem 0',
-                      lineHeight: '1.4',
-                      flex: 1,
-                    }}
-                  >
-                    {campaign.objective || 'אין תיאור'}
-                  </p>
+                  {c.objective && (
+                    <p style={{ fontSize: '0.73rem', color: 'var(--foreground-muted)', margin: 0, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
+                      {c.objective}
+                    </p>
+                  )}
 
-                  {/* Stats */}
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(2, 1fr)',
-                      gap: '0.75rem',
-                      marginBottom: '1rem',
-                      paddingTop: '1rem',
-                      borderTop: '1px solid var(--border)',
-                    }}
-                  >
-                    <div>
-                      <p style={{ color: 'var(--foreground-muted)', fontSize: '0.8rem', margin: 0 }}>
-                        תקציב
-                      </p>
-                      <p style={{ color: 'var(--foreground)', fontWeight: '600', fontSize: '1rem', margin: '0.25rem 0 0 0' }}>
-                        ₪{(campaign.budget || 0).toLocaleString('he-IL')}
-                      </p>
+                  {/* Stats row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', padding: '0.6rem 0', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--foreground)' }}>₪{(c.budget || 0).toLocaleString('he-IL')}</div>
+                      <div style={{ fontSize: '0.6rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>תקציב</div>
                     </div>
-                    <div>
-                      <p style={{ color: 'var(--foreground-muted)', fontSize: '0.8rem', margin: 0 }}>
-                        תאריכים
-                      </p>
-                      <p style={{ color: 'var(--foreground)', fontWeight: '600', fontSize: '0.85rem', margin: '0.25rem 0 0 0' }}>
-                        {campaign.startDate
-                          ? new Date(campaign.startDate).toLocaleDateString('he-IL', {
-                              month: 'short',
-                              day: 'numeric',
-                            })
-                          : '—'}
-                        {campaign.endDate
-                          ? ` – ${new Date(campaign.endDate).toLocaleDateString('he-IL', {
-                              month: 'short',
-                              day: 'numeric',
-                            })}`
-                          : ''}
-                      </p>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--foreground)' }}>{formatDateRange(c.startDate, c.endDate)}</div>
+                      <div style={{ fontSize: '0.6rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>תאריכים</div>
                     </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--foreground)' }}>{timeAgo(c.updatedAt)}</div>
+                      <div style={{ fontSize: '0.6rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>עדכון</div>
+                    </div>
+                  </div>
+
+                  {/* Health + readiness */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <HealthBadge campaign={c} />
+                    <ReadinessIndicators campaign={c} />
                   </div>
 
                   {/* Actions */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: '0.5rem',
-                      marginTop: 'auto',
-                      paddingTop: '1rem',
-                      borderTop: '1px solid var(--border)',
-                    }}
-                    onClick={(e) => e.preventDefault()}
-                  >
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleOpenModal(campaign);
-                      }}
-                      style={{
-                        flex: 1,
-                        padding: '0.5rem',
-                        backgroundColor: 'transparent',
-                        color: 'var(--foreground-muted)',
-                        border: '1px solid var(--border)',
-                        borderRadius: '0.4rem',
-                        fontSize: '0.8rem',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                      }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--surface-raised)';
-                        (e.currentTarget as HTMLElement).style.color = 'var(--foreground)';
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
-                        (e.currentTarget as HTMLElement).style.color = 'var(--foreground-muted)';
-                      }}
-                    >
+                  <div style={{ display: 'flex', gap: '0.35rem', marginTop: 'auto', paddingTop: '0.25rem' }}>
+                    <Link href={`/campaigns/${c.id}`} className="mod-btn-ghost" style={{ flex: 1, padding: '0.35rem', fontSize: '0.68rem', fontWeight: 600, borderRadius: '0.3rem', textAlign: 'center', textDecoration: 'none' }}>
+                      צפה
+                    </Link>
+                    <button type="button" onClick={() => handleOpenModal(c)} className="mod-btn-ghost" style={{ flex: 1, padding: '0.35rem', fontSize: '0.68rem', fontWeight: 600, borderRadius: '0.3rem', cursor: 'pointer' }}>
                       עריכה
                     </button>
+                    <button type="button" onClick={() => handleDuplicate(c)} className="mod-btn-ghost" style={{ flex: 1, padding: '0.35rem', fontSize: '0.68rem', fontWeight: 600, borderRadius: '0.3rem', cursor: 'pointer' }}>
+                      שכפל
+                    </button>
                     <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        openDeleteModal(campaign.id);
-                      }}
-                      style={{
-                        flex: 1,
-                        padding: '0.5rem',
-                        backgroundColor: 'transparent',
-                        color: '#ef4444',
-                        border: '1px solid #ef4444',
-                        borderRadius: '0.4rem',
-                        fontSize: '0.8rem',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                      }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
-                      }}
+                      type="button"
+                      onClick={() => handleStatusChange(c.id, c.status === 'draft' ? 'waiting_approval' : 'draft')}
+                      className="mod-btn-ghost"
+                      style={{ flex: 1, padding: '0.35rem', fontSize: '0.68rem', fontWeight: 600, borderRadius: '0.3rem', cursor: 'pointer' }}
                     >
-                      מחק
+                      {c.status === 'draft' ? 'מוכן' : 'טיוטה'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setDeletingCampaignId(c.id); setIsDeleteModalOpen(true); }}
+                      style={{ padding: '0.35rem 0.5rem', fontSize: '0.68rem', fontWeight: 600, borderRadius: '0.3rem', cursor: 'pointer', background: 'transparent', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444' }}
+                    >
+                      ✗
                     </button>
                   </div>
                 </div>
-              </Link>
-            ))
-          )}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* ── Table View ──────────────────────────────────────── */
+          <div className="premium-card" style={{ overflow: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                  {['קמפיין', 'לקוח', 'פלטפורמה', 'סטטוס', 'תקציב', 'תאריכים', 'בריאות', 'מוכנות', 'עדכון', 'פעולות'].map((h) => (
+                    <th key={h} style={{ padding: '0.65rem 0.5rem', textAlign: 'right', fontWeight: 700, color: 'var(--foreground-muted)', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredCampaigns.map((c) => (
+                  <tr key={c.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 150ms' }} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-raised)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                    <td style={{ padding: '0.6rem 0.5rem', fontWeight: 600, color: 'var(--foreground)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <Link href={`/campaigns/${c.id}`} style={{ color: 'inherit', textDecoration: 'none' }}>{c.campaignName || 'ללא שם'}</Link>
+                    </td>
+                    <td style={{ padding: '0.6rem 0.5rem', color: 'var(--foreground-muted)' }}>{c.clientName || '—'}</td>
+                    <td style={{ padding: '0.6rem 0.5rem' }}>
+                      <span style={{ fontSize: '0.68rem', padding: '0.12rem 0.35rem', borderRadius: '0.2rem', background: 'var(--surface-raised)', border: '1px solid var(--border)' }}>
+                        {PLATFORM_ICONS[c.platform || 'facebook']} {PLATFORM_LABELS[c.platform || 'facebook']}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.6rem 0.5rem' }}>
+                      <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '0.2rem', background: STATUS_COLORS[c.status || 'draft'], color: 'white' }}>
+                        {STATUS_LABELS[c.status || 'draft']}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.6rem 0.5rem', fontWeight: 600, direction: 'ltr', textAlign: 'left' }}>₪{(c.budget || 0).toLocaleString()}</td>
+                    <td style={{ padding: '0.6rem 0.5rem', color: 'var(--foreground-muted)', whiteSpace: 'nowrap' }}>{formatDateRange(c.startDate, c.endDate)}</td>
+                    <td style={{ padding: '0.6rem 0.5rem' }}><HealthBadge campaign={c} size="compact" /></td>
+                    <td style={{ padding: '0.6rem 0.5rem' }}><ReadinessIndicators campaign={c} /></td>
+                    <td style={{ padding: '0.6rem 0.5rem', color: 'var(--foreground-muted)', whiteSpace: 'nowrap', fontSize: '0.7rem' }}>{timeAgo(c.updatedAt)}</td>
+                    <td style={{ padding: '0.6rem 0.5rem' }}>
+                      <div style={{ display: 'flex', gap: '0.25rem' }}>
+                        <button type="button" onClick={() => handleOpenModal(c)} title="עריכה" style={{ padding: '0.2rem 0.35rem', fontSize: '0.68rem', borderRadius: '0.2rem', border: '1px solid var(--border)', background: 'transparent', color: 'var(--foreground-muted)', cursor: 'pointer' }}>✎</button>
+                        <button type="button" onClick={() => handleDuplicate(c)} title="שכפל" style={{ padding: '0.2rem 0.35rem', fontSize: '0.68rem', borderRadius: '0.2rem', border: '1px solid var(--border)', background: 'transparent', color: 'var(--foreground-muted)', cursor: 'pointer' }}>⧉</button>
+                        <button type="button" onClick={() => { setDeletingCampaignId(c.id); setIsDeleteModalOpen(true); }} title="מחק" style={{ padding: '0.2rem 0.35rem', fontSize: '0.68rem', borderRadius: '0.2rem', border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#ef4444', cursor: 'pointer' }}>✗</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {/* Create/Edit Modal */}
-      <Modal open={isModalOpen} onClose={handleCloseModal} title={editingCampaign ? 'עריכת קמפיין' : 'קמפיין חדש'}>
+      {/* ── Quick Create/Edit Modal (preserved) ────────────────── */}
+      <Modal open={isModalOpen} onClose={handleCloseModal} title={editingCampaign ? 'עריכת קמפיין' : 'קמפיין מהיר'}>
         <div style={{ padding: '1.5rem', maxWidth: '600px' }}>
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            {/* Campaign Name */}
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem' }}>
-                שם קמפיין *
-              </label>
-              <input
-                type="text"
-                value={formData.campaignName}
-                onChange={(e) => setFormData({ ...formData, campaignName: e.target.value })}
-                placeholder="הכנס שם קמפיין"
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  backgroundColor: 'var(--surface-raised)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '0.5rem',
-                  color: 'var(--foreground)',
-                  fontSize: '0.9rem',
-                  boxSizing: 'border-box',
-                }}
-              />
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.35rem' }}>שם קמפיין *</label>
+              <input type="text" value={formData.campaignName} onChange={(e) => setFormData({ ...formData, campaignName: e.target.value })} placeholder="הכנס שם קמפיין" style={modalFieldStyle} />
             </div>
-
-            {/* Client Select */}
             <div>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem' }}>
-                לקוח *
-              </label>
-              <select
-                value={formData.clientId}
-                onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  backgroundColor: 'var(--surface-raised)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '0.5rem',
-                  color: 'var(--foreground)',
-                  fontSize: '0.9rem',
-                  cursor: 'pointer',
-                  boxSizing: 'border-box',
-                }}
-              >
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.35rem' }}>לקוח *</label>
+              <select value={formData.clientId} onChange={(e) => setFormData({ ...formData, clientId: e.target.value })} style={{ ...modalFieldStyle, cursor: 'pointer' }}>
                 <option value="">בחר לקוח</option>
-                {(clients || []).map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
+                {(clients || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-
-            {/* Campaign Type */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem' }}>
-                סוג קמפיין *
-              </label>
-              <select
-                value={formData.campaignType}
-                onChange={(e) => setFormData({ ...formData, campaignType: e.target.value as CampaignType })}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  backgroundColor: 'var(--surface-raised)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '0.5rem',
-                  color: 'var(--foreground)',
-                  fontSize: '0.9rem',
-                  cursor: 'pointer',
-                  boxSizing: 'border-box',
-                }}
-              >
-                {TYPE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Objective */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem' }}>
-                מטרת הקמפיין *
-              </label>
-              <textarea
-                value={formData.objective}
-                onChange={(e) => setFormData({ ...formData, objective: e.target.value })}
-                placeholder="מה המטרה של קמפיין זה?"
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  backgroundColor: 'var(--surface-raised)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '0.5rem',
-                  color: 'var(--foreground)',
-                  fontSize: '0.9rem',
-                  minHeight: '80px',
-                  boxSizing: 'border-box',
-                  fontFamily: 'inherit',
-                  resize: 'vertical',
-                }}
-              />
-            </div>
-
-            {/* Platform */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem' }}>
-                פלטפורמה *
-              </label>
-              <select
-                value={formData.platform}
-                onChange={(e) => setFormData({ ...formData, platform: e.target.value as CampaignPlatform })}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  backgroundColor: 'var(--surface-raised)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '0.5rem',
-                  color: 'var(--foreground)',
-                  fontSize: '0.9rem',
-                  cursor: 'pointer',
-                  boxSizing: 'border-box',
-                }}
-              >
-                {PLATFORM_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Status */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem' }}>
-                סטטוס *
-              </label>
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as CampaignStatus })}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  backgroundColor: 'var(--surface-raised)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '0.5rem',
-                  color: 'var(--foreground)',
-                  fontSize: '0.9rem',
-                  cursor: 'pointer',
-                  boxSizing: 'border-box',
-                }}
-              >
-                {STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Media Type */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem' }}>
-                סוג תוכן *
-              </label>
-              <select
-                value={formData.mediaType}
-                onChange={(e) => setFormData({ ...formData, mediaType: e.target.value as CampaignMediaType })}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  backgroundColor: 'var(--surface-raised)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '0.5rem',
-                  color: 'var(--foreground)',
-                  fontSize: '0.9rem',
-                  cursor: 'pointer',
-                  boxSizing: 'border-box',
-                }}
-              >
-                {MEDIA_TYPE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Budget */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem' }}>
-                תקציב (₪) *
-              </label>
-              <input
-                type="number"
-                value={formData.budget}
-                onChange={(e) => setFormData({ ...formData, budget: e.target.value === '' ? '' : Number(e.target.value) })}
-                placeholder="הכנס תקציב"
-                min="0"
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  backgroundColor: 'var(--surface-raised)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '0.5rem',
-                  color: 'var(--foreground)',
-                  fontSize: '0.9rem',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-
-            {/* Caption */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem' }}>
-                כותרת/תיאור
-              </label>
-              <textarea
-                value={formData.caption}
-                onChange={(e) => setFormData({ ...formData, caption: e.target.value })}
-                placeholder="כותרת או תיאור קצר לקמפיין"
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  backgroundColor: 'var(--surface-raised)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '0.5rem',
-                  color: 'var(--foreground)',
-                  fontSize: '0.9rem',
-                  minHeight: '60px',
-                  boxSizing: 'border-box',
-                  fontFamily: 'inherit',
-                  resize: 'vertical',
-                }}
-              />
-            </div>
-
-            {/* Dates */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem' }}>
-                  תאריך התחלה
-                </label>
-                <input
-                  type="date"
-                  value={formData.startDate}
-                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    backgroundColor: 'var(--surface-raised)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '0.5rem',
-                    color: 'var(--foreground)',
-                    fontSize: '0.9rem',
-                    boxSizing: 'border-box',
-                  }}
-                />
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.35rem' }}>סוג</label>
+                <select value={formData.campaignType} onChange={(e) => setFormData({ ...formData, campaignType: e.target.value as CampaignType })} style={{ ...modalFieldStyle, cursor: 'pointer' }}>
+                  {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem' }}>
-                  תאריך סיום
-                </label>
-                <input
-                  type="date"
-                  value={formData.endDate}
-                  onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    backgroundColor: 'var(--surface-raised)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '0.5rem',
-                    color: 'var(--foreground)',
-                    fontSize: '0.9rem',
-                    boxSizing: 'border-box',
-                  }}
-                />
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.35rem' }}>פלטפורמה</label>
+                <select value={formData.platform} onChange={(e) => setFormData({ ...formData, platform: e.target.value as CampaignPlatform })} style={{ ...modalFieldStyle, cursor: 'pointer' }}>
+                  {PLATFORM_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
               </div>
             </div>
-
-            {/* Lead Settings Section */}
-            <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '0.5rem' }}>
-              <h3 style={{ fontSize: '0.95rem', fontWeight: '600', color: 'var(--foreground)', margin: '0 0 1rem 0' }}>
-                הגדרות לידים
-              </h3>
-
-              {/* Ad Account ID */}
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem' }}>
-                  חשבון פרסום
-                </label>
-                <input
-                  type="text"
-                  value={formData.adAccountId}
-                  onChange={(e) => setFormData({ ...formData, adAccountId: e.target.value })}
-                  placeholder="הכנס מזהה חשבון פרסום"
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    backgroundColor: 'var(--surface-raised)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '0.5rem',
-                    color: 'var(--foreground)',
-                    fontSize: '0.9rem',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-
-              {/* Lead Form IDs */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem' }}>
-                  טפסי לידים לניטור
-                </label>
-                <input
-                  type="text"
-                  value={formData.leadFormIds}
-                  onChange={(e) => setFormData({ ...formData, leadFormIds: e.target.value })}
-                  placeholder="הכנס מזהים מופרדים בפסיקים (ID1, ID2, ID3)"
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    backgroundColor: 'var(--surface-raised)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '0.5rem',
-                    color: 'var(--foreground)',
-                    fontSize: '0.9rem',
-                    boxSizing: 'border-box',
-                  }}
-                />
-                <p style={{ fontSize: '0.8rem', color: 'var(--foreground-muted)', margin: '0.5rem 0 0 0' }}>
-                  הפרד מזהים בפסיקים (,)
-                </p>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.35rem' }}>סטטוס</label>
+                <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value as CampaignStatus })} style={{ ...modalFieldStyle, cursor: 'pointer' }}>
+                  {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.35rem' }}>סוג תוכן</label>
+                <select value={formData.mediaType} onChange={(e) => setFormData({ ...formData, mediaType: e.target.value as CampaignMediaType })} style={{ ...modalFieldStyle, cursor: 'pointer' }}>
+                  {MEDIA_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
               </div>
             </div>
-
-            {/* External Media URL */}
             <div>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem' }}>
-                קישור לתוכן חיצוני
-              </label>
-              <input
-                type="url"
-                value={formData.externalMediaUrl}
-                onChange={(e) => setFormData({ ...formData, externalMediaUrl: e.target.value })}
-                placeholder="https://example.com/media.mp4"
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  backgroundColor: 'var(--surface-raised)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '0.5rem',
-                  color: 'var(--foreground)',
-                  fontSize: '0.9rem',
-                  boxSizing: 'border-box',
-                }}
-              />
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.35rem' }}>מטרה</label>
+              <textarea value={formData.objective} onChange={(e) => setFormData({ ...formData, objective: e.target.value })} placeholder="מטרת הקמפיין" style={{ ...modalFieldStyle, minHeight: '60px', fontFamily: 'inherit', resize: 'vertical' as const }} />
             </div>
-
-            {/* Notes */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.35rem' }}>תקציב ₪</label>
+                <input type="number" value={formData.budget} onChange={(e) => setFormData({ ...formData, budget: e.target.value === '' ? '' : Number(e.target.value) })} min="0" style={modalFieldStyle} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.35rem' }}>התחלה</label>
+                <input type="date" value={formData.startDate} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })} style={modalFieldStyle} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.35rem' }}>סיום</label>
+                <input type="date" value={formData.endDate} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} style={modalFieldStyle} />
+              </div>
+            </div>
             <div>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem' }}>
-                הערות
-              </label>
-              <textarea
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="הערות פנימיות על הקמפיין"
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  backgroundColor: 'var(--surface-raised)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '0.5rem',
-                  color: 'var(--foreground)',
-                  fontSize: '0.9rem',
-                  minHeight: '80px',
-                  boxSizing: 'border-box',
-                  fontFamily: 'inherit',
-                  resize: 'vertical',
-                }}
-              />
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.35rem' }}>כיתוב / קופי</label>
+              <textarea value={formData.caption} onChange={(e) => setFormData({ ...formData, caption: e.target.value })} placeholder="טקסט המודעה" style={{ ...modalFieldStyle, minHeight: '50px', fontFamily: 'inherit', resize: 'vertical' as const }} />
             </div>
-
-            {/* Buttons */}
-            <div style={{ display: 'flex', gap: '0.75rem', paddingTop: '1rem' }}>
-              <button
-                type="submit"
-                style={{
-                  flex: 1,
-                  padding: '0.75rem',
-                  backgroundColor: 'var(--accent)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '0.5rem',
-                  fontSize: '0.95rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'opacity 0.2s',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
-                onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
-              >
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.35rem' }}>הערות</label>
+              <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} placeholder="הערות פנימיות" style={{ ...modalFieldStyle, minHeight: '50px', fontFamily: 'inherit', resize: 'vertical' as const }} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.35rem' }}>חשבון פרסום</label>
+                <input type="text" value={formData.adAccountId} onChange={(e) => setFormData({ ...formData, adAccountId: e.target.value })} placeholder="מזהה חשבון" style={modalFieldStyle} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.35rem' }}>קישור מדיה</label>
+                <input type="url" value={formData.externalMediaUrl} onChange={(e) => setFormData({ ...formData, externalMediaUrl: e.target.value })} placeholder="https://..." style={modalFieldStyle} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', paddingTop: '0.5rem' }}>
+              <button type="submit" className="mod-btn-primary" style={{ flex: 1, padding: '0.6rem', fontSize: '0.85rem', fontWeight: 700, borderRadius: '0.5rem', cursor: 'pointer' }}>
                 {editingCampaign ? 'עדכן' : 'צור'}
               </button>
-              <button
-                type="button"
-                onClick={handleCloseModal}
-                style={{
-                  flex: 1,
-                  padding: '0.75rem',
-                  backgroundColor: 'transparent',
-                  color: 'var(--foreground-muted)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '0.5rem',
-                  fontSize: '0.95rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--surface-raised)';
-                  (e.currentTarget as HTMLElement).style.color = 'var(--foreground)';
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
-                  (e.currentTarget as HTMLElement).style.color = 'var(--foreground-muted)';
-                }}
-              >
+              <button type="button" onClick={handleCloseModal} className="mod-btn-ghost" style={{ flex: 1, padding: '0.6rem', fontSize: '0.85rem', fontWeight: 600, borderRadius: '0.5rem', cursor: 'pointer' }}>
                 ביטול
               </button>
             </div>
@@ -1277,55 +822,17 @@ export default function CampaignsPage() {
         </div>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
+      {/* ── Delete Modal (preserved) ───────────────────────────── */}
       <Modal open={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="אישור מחיקה">
         <div style={{ padding: '1.5rem', maxWidth: '400px' }}>
-          <p style={{ color: 'var(--foreground-muted)', marginBottom: '1.5rem' }}>
+          <p style={{ color: 'var(--foreground-muted)', marginBottom: '1.5rem', fontSize: '0.85rem' }}>
             האם אתה בטוח שברצונך למחוק קמפיין זה? לא ניתן לשחזר פעולה זו.
           </p>
           <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <button
-              onClick={handleDeleteConfirm}
-              style={{
-                flex: 1,
-                padding: '0.75rem',
-                backgroundColor: '#ef4444',
-                color: 'white',
-                border: 'none',
-                borderRadius: '0.5rem',
-                fontSize: '0.95rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'opacity 0.2s',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
-              onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
-            >
+            <button onClick={handleDeleteConfirm} style={{ flex: 1, padding: '0.6rem', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '0.5rem', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>
               מחק
             </button>
-            <button
-              onClick={() => setIsDeleteModalOpen(false)}
-              style={{
-                flex: 1,
-                padding: '0.75rem',
-                backgroundColor: 'transparent',
-                color: 'var(--foreground-muted)',
-                border: '1px solid var(--border)',
-                borderRadius: '0.5rem',
-                fontSize: '0.95rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--surface-raised)';
-                (e.currentTarget as HTMLElement).style.color = 'var(--foreground)';
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
-                (e.currentTarget as HTMLElement).style.color = 'var(--foreground-muted)';
-              }}
-            >
+            <button onClick={() => setIsDeleteModalOpen(false)} className="mod-btn-ghost" style={{ flex: 1, padding: '0.6rem', fontSize: '0.85rem', fontWeight: 600, borderRadius: '0.5rem', cursor: 'pointer' }}>
               ביטול
             </button>
           </div>
