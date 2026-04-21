@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { accountantDocuments } from "@/lib/db";
+import { clientFiles } from "@/lib/db";
 
 const PERIODS: Record<string, string> = {
   "jan-feb": "ינואר-פברואר",
@@ -25,10 +25,12 @@ export async function GET(req: NextRequest) {
   const periodName = PERIODS[periodId] || periodId;
   const title = `מסמכי רואה חשבון — ${periodName} ${year}`;
 
-  const allDocs = await accountantDocuments.getAllAsync();
-  const docs = allDocs.filter((doc: any) => {
-    if (doc.period && doc.year) {
-      return doc.period === periodId && Number(doc.year) === year;
+  // Query app_client_files filtered by category='accountant'
+  const allFiles = await clientFiles.getAllAsync();
+  const docs = allFiles.filter((f: any) => {
+    if (f.category !== 'accountant') return false;
+    if (f.period && f.year) {
+      return f.period === periodId && Number(f.year) === year;
     }
     return false;
   });
@@ -82,7 +84,7 @@ export async function GET(req: NextRequest) {
         return `<tr>
           <td>${i + 1}</td>
           <td>${doc.fileName || ""}</td>
-          <td><span class="type-badge">${FILE_TYPE_LABELS[doc.fileType] || doc.fileType || ""}</span></td>
+          <td><span class="type-badge">${FILE_TYPE_LABELS[doc.documentType] || doc.documentType || FILE_TYPE_LABELS[doc.fileType] || doc.fileType || ""}</span></td>
           <td>${doc.notes || "—"}</td>
           <td>${dateStr}</td>
         </tr>`;

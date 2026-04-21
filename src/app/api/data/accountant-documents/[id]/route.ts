@@ -1,5 +1,10 @@
+/**
+ * CRUD for individual accountant documents.
+ * Backed by app_client_files (category='accountant').
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
-import { accountantDocuments } from '@/lib/db';
+import { clientFiles } from '@/lib/db';
 
 export async function GET(
   _req: NextRequest,
@@ -8,8 +13,8 @@ export async function GET(
   const { id } = await context.params;
 
   try {
-    const item = await accountantDocuments.getByIdAsync(id);
-    if (!item) {
+    const item = await clientFiles.getByIdAsync(id);
+    if (!item || (item as any).category !== 'accountant') {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
     return NextResponse.json(item);
@@ -26,7 +31,8 @@ export async function PUT(
 
   try {
     const body = await req.json();
-    const updated = await accountantDocuments.updateAsync(id, body);
+    body.category = 'accountant'; // ensure category stays correct
+    const updated = await clientFiles.updateAsync(id, body);
     if (!updated) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
@@ -43,7 +49,7 @@ export async function DELETE(
   const { id } = await context.params;
 
   try {
-    const deleted = await accountantDocuments.deleteAsync(id);
+    const deleted = await clientFiles.deleteAsync(id);
     if (!deleted) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }

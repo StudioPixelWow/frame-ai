@@ -15,7 +15,7 @@ import {
   projectMilestones,
   projectPayments,
   hostingRecords,
-  accountantDocuments,
+  clientFiles,
   podcastSessions,
   aiSettings,
   clientKnowledge,
@@ -1687,48 +1687,69 @@ async function seed(): Promise<void> {
     updatedAt: now,
   });
 
-  // ===== ACCOUNTANT DOCUMENTS =====
-  await accountantDocuments.createAsync({
-    period: 'jan-feb',
-    periodLabel: 'ינואר-פברואר 2026',
-    year: 2026,
+  // ===== ACCOUNTANT DOCUMENTS (stored in app_client_files with category='accountant') =====
+  await clientFiles.createAsync({
+    clientId: 'system',
     fileName: 'invoices-jan-feb-2026.pdf',
     fileUrl: '/uploads/invoices-jan-feb-2026.pdf',
-    fileType: 'invoice',
+    fileType: 'pdf',
+    category: 'accountant',
+    fileSize: 0,
+    linkedTaskId: null,
+    linkedGanttItemId: null,
+    uploadedBy: null,
     notes: 'חשבוניות חודשיים ראשונים',
-    sentToAccountant: true,
-    sentAt: '2026-03-05',
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  await accountantDocuments.createAsync({
     period: 'jan-feb',
     periodLabel: 'ינואר-פברואר 2026',
     year: 2026,
-    fileName: 'receipts-jan-feb-2026.pdf',
-    fileUrl: '/uploads/receipts-jan-feb-2026.pdf',
-    fileType: 'receipt',
-    notes: '',
+    documentType: 'invoice',
     sentToAccountant: true,
     sentAt: '2026-03-05',
     createdAt: now,
     updatedAt: now,
-  });
+  } as any);
 
-  await accountantDocuments.createAsync({
+  await clientFiles.createAsync({
+    clientId: 'system',
+    fileName: 'receipts-jan-feb-2026.pdf',
+    fileUrl: '/uploads/receipts-jan-feb-2026.pdf',
+    fileType: 'pdf',
+    category: 'accountant',
+    fileSize: 0,
+    linkedTaskId: null,
+    linkedGanttItemId: null,
+    uploadedBy: null,
+    notes: '',
+    period: 'jan-feb',
+    periodLabel: 'ינואר-פברואר 2026',
+    year: 2026,
+    documentType: 'receipt',
+    sentToAccountant: true,
+    sentAt: '2026-03-05',
+    createdAt: now,
+    updatedAt: now,
+  } as any);
+
+  await clientFiles.createAsync({
+    clientId: 'system',
+    fileName: 'invoices-mar-apr-2026.pdf',
+    fileUrl: '/uploads/invoices-mar-apr-2026.pdf',
+    fileType: 'pdf',
+    category: 'accountant',
+    fileSize: 0,
+    linkedTaskId: null,
+    linkedGanttItemId: null,
+    uploadedBy: null,
+    notes: 'טרם נשלח',
     period: 'mar-apr',
     periodLabel: 'מרץ-אפריל 2026',
     year: 2026,
-    fileName: 'invoices-mar-apr-2026.pdf',
-    fileUrl: '/uploads/invoices-mar-apr-2026.pdf',
-    fileType: 'invoice',
-    notes: 'טרם נשלח',
+    documentType: 'invoice',
     sentToAccountant: false,
     sentAt: null,
     createdAt: now,
     updatedAt: now,
-  });
+  } as any);
 
   // ===== PODCAST SESSIONS =====
   await podcastSessions.createAsync({

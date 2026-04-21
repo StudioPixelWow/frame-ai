@@ -369,10 +369,10 @@ export const PERSISTENCE_MAP: PersistenceEntry[] = [
   },
   {
     module: 'accountant_documents',
-    description: 'Accountant document references',
+    description: 'Accountant document records (stored in app_client_files with category=accountant)',
     apiRoute: '/api/data/accountant-documents',
     storage: 'supabase',
-    table: 'app_accountant_documents',
+    table: 'app_client_files',
     operations: ['select', 'insert', 'update', 'delete'],
     risk: 'low',
   },

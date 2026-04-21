@@ -22,7 +22,7 @@ import type {
   ProjectMilestone,
   ProjectPayment,
   HostingRecord,
-  AccountantDocument,
+
   PodcastSession,
   AISettings,
   ClientKnowledge,
@@ -59,7 +59,8 @@ export const businessProjects = new JsonStore<BusinessProject>('business-project
 export const projectMilestones = new JsonStore<ProjectMilestone>('project-milestones', 'pms');
 export const projectPayments = new JsonStore<ProjectPayment>('project-payments', 'ppy');
 export const hostingRecords = new JsonStore<HostingRecord>('hosting-records', 'hst');
-export const accountantDocuments = new SupabaseCrud<AccountantDocument>('app_accountant_documents', 'acd');
+// accountantDocuments — REMOVED. Accountant docs now stored in app_client_files with category='accountant'.
+// The /api/data/accountant-documents route queries clientFiles filtered by category.
 export const podcastSessions = new SupabaseCrud<PodcastSession>('app_podcast_sessions', 'pcs');
 export const aiSettings = new JsonStore<AISettings>('ai-settings', 'ais');
 export const clientKnowledge = new SupabaseCrud<ClientKnowledge>('app_client_knowledge', 'ckn');

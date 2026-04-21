@@ -32,7 +32,7 @@ const TABLES = [
   'app_creative_dna',
   'app_client_knowledge',
   'app_client_insights',
-  'app_accountant_documents',
+  // app_accountant_documents — REMOVED. Accountant docs use app_client_files (category='accountant').
 ];
 
 export async function GET() {
