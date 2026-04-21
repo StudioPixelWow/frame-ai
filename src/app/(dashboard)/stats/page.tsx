@@ -118,6 +118,7 @@ function ModernKPICard({
 }) {
   return (
     <div
+      className="ux-card ux-card-glow ux-stagger-item"
       style={{
         background: 'var(--surface)',
         border: `2px solid ${color}30`,
@@ -218,6 +219,7 @@ function ModernKPICard({
 function RevenueChart({ months }: { months: Array<{ label: string; value: number; pct: number }> }) {
   return (
     <div
+      className="ux-card ux-light-sweep"
       style={{
         background: 'var(--surface)',
         border: '1px solid var(--border)',
@@ -310,6 +312,7 @@ function ClientDonutChart({ data }: { data: Array<{ label: string; value: number
 
   return (
     <div
+      className="ux-card ux-light-sweep"
       style={{
         background: 'var(--surface)',
         border: '1px solid var(--border)',
@@ -422,6 +425,7 @@ function TaskStatusBar({
 
   return (
     <div
+      className="ux-card ux-light-sweep"
       style={{
         background: 'var(--surface)',
         border: '1px solid var(--border)',
@@ -504,6 +508,7 @@ function HorizontalBarChart({
 
   return (
     <div
+      className="ux-card ux-light-sweep"
       style={{
         background: 'var(--surface)',
         border: '1px solid var(--border)',
@@ -584,6 +589,7 @@ function CampaignCard({
 }) {
   return (
     <div
+      className="ux-card ux-card-glow ux-stagger-item"
       style={{
         background: 'var(--surface)',
         border: '1px solid var(--border)',
@@ -1369,6 +1375,7 @@ export default function AnalyticsDashboard() {
             💎 מדדי ביצוע עיקריים
           </h2>
           <div
+            className="ux-stagger"
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
@@ -1445,7 +1452,7 @@ export default function AnalyticsDashboard() {
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             📈 מדדים נוספים
           </h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+          <div className="ux-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
             <ModernKPICard
               icon="🎯"
               label="לידים החודש"
@@ -1517,6 +1524,7 @@ export default function AnalyticsDashboard() {
             📢 ביצועי קמפיינים
           </h2>
           <div
+            className="ux-stagger"
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
@@ -1562,6 +1570,7 @@ export default function AnalyticsDashboard() {
             🧠 תובנות AI
           </h2>
           <div
+            className="ux-stagger"
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
@@ -1571,6 +1580,7 @@ export default function AnalyticsDashboard() {
             {computedInsights.map((insight, idx) => (
               <div
                 key={idx}
+                className="ux-card ux-card-glow ux-stagger-item"
                 style={{
                   background: 'linear-gradient(135deg, #7c3aed20, #8b5cf620)',
                   border: '1px solid #8b5cf640',
@@ -1680,6 +1690,7 @@ export default function AnalyticsDashboard() {
             ⚡ פעילות אחרונה
           </h2>
           <div
+            className="ux-card ux-light-sweep"
             style={{
               background: 'var(--surface)',
               border: '1px solid var(--border)',

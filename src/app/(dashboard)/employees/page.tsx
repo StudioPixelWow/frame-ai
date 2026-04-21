@@ -265,6 +265,7 @@ export default function EmployeesPage() {
         <button
           onClick={handleOpenCreateModal}
           disabled={loading}
+          className="ux-btn ux-btn-glow"
           style={{
             padding: "0.6rem 1.25rem",
             fontSize: "0.9rem",
@@ -358,6 +359,7 @@ export default function EmployeesPage() {
           placeholder="חיפוש בשם..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          className="ux-input"
           style={{
             flex: 1,
             minWidth: "250px",
@@ -391,6 +393,7 @@ export default function EmployeesPage() {
 
       {/* Employee Grid */}
       <div
+        className="ux-stagger"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
@@ -408,6 +411,7 @@ export default function EmployeesPage() {
               style={{ textDecoration: "none", color: "inherit" }}
             >
               <div
+                className="ux-stagger-item ux-card ux-light-sweep"
                 style={{
                   background: "var(--surface-raised)",
                   border: "1px solid var(--border)",
@@ -598,6 +602,7 @@ export default function EmployeesPage() {
                       e.preventDefault();
                       handleOpenEditModal(employee);
                     }}
+                    className="ux-btn"
                     style={{
                       flex: 1,
                       padding: "0.5rem",
@@ -626,6 +631,7 @@ export default function EmployeesPage() {
                       e.preventDefault();
                       handleOpenDeleteConfirm(employee.id);
                     }}
+                    className="ux-btn"
                     style={{
                       flex: 1,
                       padding: "0.5rem",
@@ -676,6 +682,7 @@ export default function EmployeesPage() {
           <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
             <button
               onClick={handleCloseModal}
+              className="ux-btn"
               style={{
                 padding: "0.5rem 1rem",
                 borderRadius: "0.5rem",
@@ -691,6 +698,7 @@ export default function EmployeesPage() {
             </button>
             <button
               onClick={handleSaveEmployee}
+              className="ux-btn ux-btn-glow"
               style={{
                 padding: "0.5rem 1rem",
                 borderRadius: "0.5rem",
@@ -716,6 +724,7 @@ export default function EmployeesPage() {
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="ux-input"
               style={{
                 width: "100%",
                 padding: "0.6rem",
@@ -736,6 +745,7 @@ export default function EmployeesPage() {
               type="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="ux-input"
               style={{
                 width: "100%",
                 padding: "0.6rem",
@@ -756,6 +766,7 @@ export default function EmployeesPage() {
               type="tel"
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              className="ux-input"
               style={{
                 width: "100%",
                 padding: "0.6rem",
@@ -775,6 +786,7 @@ export default function EmployeesPage() {
             <select
               value={formData.role}
               onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
+              className="ux-input"
               style={{
                 width: "100%",
                 padding: "0.6rem",
@@ -799,6 +811,7 @@ export default function EmployeesPage() {
             <select
               value={formData.status}
               onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+              className="ux-input"
               style={{
                 width: "100%",
                 padding: "0.6rem",
@@ -823,6 +836,7 @@ export default function EmployeesPage() {
               type="number"
               value={formData.salary}
               onChange={(e) => setFormData({ ...formData, salary: Number(e.target.value) })}
+              className="ux-input"
               style={{
                 width: "100%",
                 padding: "0.6rem",
@@ -843,6 +857,7 @@ export default function EmployeesPage() {
               value={formData.skills}
               onChange={(e) => setFormData({ ...formData, skills: e.target.value })}
               placeholder="JavaScript, React, Node.js"
+              className="ux-input"
               style={{
                 width: "100%",
                 padding: "0.6rem",
@@ -864,6 +879,7 @@ export default function EmployeesPage() {
             <textarea
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              className="ux-input"
               style={{
                 width: "100%",
                 padding: "0.6rem",
@@ -889,6 +905,7 @@ export default function EmployeesPage() {
           <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
             <button
               onClick={() => setIsDeleteConfirmOpen(false)}
+              className="ux-btn"
               style={{
                 padding: "0.5rem 1rem",
                 borderRadius: "0.5rem",
@@ -904,6 +921,7 @@ export default function EmployeesPage() {
             </button>
             <button
               onClick={handleConfirmDelete}
+              className="ux-btn ux-btn-glow"
               style={{
                 padding: "0.5rem 1rem",
                 borderRadius: "0.5rem",

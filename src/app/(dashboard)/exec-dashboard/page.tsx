@@ -19,6 +19,7 @@ import { useToast } from '@/components/ui/toast';
 import { useOperationalAlerts } from '@/lib/alerts/use-alerts';
 import { SEVERITY_CONFIG, CATEGORY_LABELS } from '@/lib/alerts/engine';
 import { INSIGHT_TYPE_CONFIG } from '@/lib/ai/insights';
+import AnimatedCounter from '@/components/ui/animated-counter';
 
 const HEBREW_MONTHS = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ'];
 
@@ -578,7 +579,7 @@ export default function ExecDashboardPage() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   return (
-    <div style={{ backgroundColor: 'var(--background)', color: 'var(--foreground)', minHeight: '100vh' }}>
+    <div className="ux-ambient-energy" style={{ backgroundColor: 'var(--background)', color: 'var(--foreground)', minHeight: '100vh' }}>
       {/* HEADER */}
       <div style={headerStyle}>
         <h1 style={titleStyle}>מרכז שליטה</h1>
@@ -598,39 +599,39 @@ export default function ExecDashboardPage() {
       </div>
 
       {/* SECTION 2: TOP KPIs */}
-      <div style={kpisGridStyle}>
-        <div style={kpiCardStyle('var(--accent)')}>
-          <div style={kpiNumberStyle}>{formatCount(kpis.activeClientsCount)}</div>
+      <div className="ux-stagger" style={kpisGridStyle}>
+        <div className="ux-stagger-item ux-card ux-light-sweep" style={kpiCardStyle('var(--accent)')}>
+          <div style={kpiNumberStyle}><AnimatedCounter value={kpis.activeClientsCount} /></div>
           <p style={kpiLabelStyle}>לקוחות פעילים</p>
         </div>
 
-        <div style={kpiCardStyle('#3B82F6')}>
-          <div style={kpiNumberStyle}>{formatCount(kpis.openLeadsCount)}</div>
+        <div className="ux-stagger-item ux-card ux-light-sweep" style={kpiCardStyle('#3B82F6')}>
+          <div style={kpiNumberStyle}><AnimatedCounter value={kpis.openLeadsCount} /></div>
           <p style={kpiLabelStyle}>לידים פתוחים</p>
         </div>
 
-        <div style={kpiCardStyle('#8B5CF6')}>
-          <div style={kpiNumberStyle}>{formatCount(kpis.openTasksCount)}</div>
+        <div className="ux-stagger-item ux-card ux-light-sweep" style={kpiCardStyle('#8B5CF6')}>
+          <div style={kpiNumberStyle}><AnimatedCounter value={kpis.openTasksCount} /></div>
           <p style={kpiLabelStyle}>משימות פתוחות</p>
         </div>
 
-        <div style={kpiCardStyle('#EF4444')}>
-          <div style={kpiNumberStyle}>{formatCount(kpis.overdueTasksCount)}</div>
+        <div className="ux-stagger-item ux-card ux-light-sweep" style={kpiCardStyle('#EF4444')}>
+          <div style={kpiNumberStyle}><AnimatedCounter value={kpis.overdueTasksCount} /></div>
           <p style={kpiLabelStyle}>משימות באיחור</p>
         </div>
 
-        <div style={kpiCardStyle('#10B981')}>
+        <div className="ux-stagger-item ux-card ux-light-sweep" style={kpiCardStyle('#10B981')}>
           <div style={kpiNumberStyle}>{formatCurrency(kpis.monthlyRevenue)}</div>
           <p style={kpiLabelStyle}>הכנסה חודשית</p>
         </div>
 
-        <div style={kpiCardStyle('#EF4444')}>
-          <div style={kpiNumberStyle}>{formatCount(kpis.totalOverduePayments)}</div>
+        <div className="ux-stagger-item ux-card ux-light-sweep" style={kpiCardStyle('#EF4444')}>
+          <div style={kpiNumberStyle}><AnimatedCounter value={kpis.totalOverduePayments} /></div>
           <p style={kpiLabelStyle}>תשלומים בפיגור</p>
         </div>
 
-        <div style={kpiCardStyle('#F59E0B')}>
-          <div style={kpiNumberStyle}>{formatCount(kpis.upcomingPaymentsCount)}</div>
+        <div className="ux-stagger-item ux-card ux-light-sweep" style={kpiCardStyle('#F59E0B')}>
+          <div style={kpiNumberStyle}><AnimatedCounter value={kpis.upcomingPaymentsCount} /></div>
           <p style={kpiLabelStyle}>גביות קרובות</p>
         </div>
       </div>
@@ -646,9 +647,9 @@ export default function ExecDashboardPage() {
             טוען תובנות...
           </div>
         ) : insights && insights.length > 0 ? (
-          <div style={insightsGridStyle}>
+          <div className="ux-stagger" style={insightsGridStyle}>
             {insights.slice(0, 6).map((insight, idx) => (
-              <div key={idx} style={insightCardStyle}>
+              <div key={idx} className="ux-stagger-item ux-card ux-light-sweep" style={insightCardStyle}>
                 <h3 style={insightTitleStyle}>{insight.title}</h3>
                 <p style={insightDescStyle}>{insight.description}</p>
                 {insight.metric && <span style={insightMetricStyle}>{insight.metric}</span>}
@@ -674,21 +675,25 @@ export default function ExecDashboardPage() {
 
         <div style={filterChipsStyle}>
           <button
+            className="ux-btn ux-btn-glow"
             onClick={() => setFilterSeverity('all')}
             style={chipStyle(filterSeverity === 'all', 'var(--accent)')}>
             הכל
           </button>
           <button
+            className="ux-btn ux-btn-glow"
             onClick={() => setFilterSeverity('critical')}
             style={chipStyle(filterSeverity === 'critical', '#EF4444')}>
             🔴 קריטי
           </button>
           <button
+            className="ux-btn ux-btn-glow"
             onClick={() => setFilterSeverity('warning')}
             style={chipStyle(filterSeverity === 'warning', '#F59E0B')}>
             🟡 אזהרה
           </button>
           <button
+            className="ux-btn ux-btn-glow"
             onClick={() => setFilterSeverity('info')}
             style={chipStyle(filterSeverity === 'info', '#3B82F6')}>
             🔵 מידע
@@ -701,7 +706,7 @@ export default function ExecDashboardPage() {
             .slice(0, 10)
             .map(alert => (
               <Link key={alert.id} href={alert.linkHref || '#'} style={{ textDecoration: 'none' }}>
-                <div style={alertCardStyle(alert.severity)}>
+                <div className="ux-card ux-light-sweep" style={alertCardStyle(alert.severity)}>
                   <span style={{ fontSize: '1.3rem' }}>{SEVERITY_CONFIG[alert.severity].icon}</span>
                   <div style={alertContentStyle}>
                     <p style={alertTitleStyle}>{alert.title}</p>
@@ -722,9 +727,9 @@ export default function ExecDashboardPage() {
       </div>
 
       {/* SECTION 5: OPERATIONAL CHARTS */}
-      <div style={chartsContainerStyle}>
+      <div className="ux-stagger" style={chartsContainerStyle}>
         {/* Tasks by Status */}
-        <div style={chartCardStyle}>
+        <div className="ux-stagger-item ux-card ux-light-sweep" style={chartCardStyle}>
           <h3 style={chartTitleStyle}>משימות לפי סטטוס</h3>
           <div style={barChartStyle}>
             {[
@@ -749,7 +754,7 @@ export default function ExecDashboardPage() {
         </div>
 
         {/* Employee Workload */}
-        <div style={chartCardStyle}>
+        <div className="ux-stagger-item ux-card ux-light-sweep" style={chartCardStyle}>
           <h3 style={chartTitleStyle}>עומס עבודה לפי עובד</h3>
           <div style={barChartStyle}>
             {chartData.employeeWorkload.slice(0, 5).map(emp => {
@@ -769,7 +774,7 @@ export default function ExecDashboardPage() {
         </div>
 
         {/* Leads by Status */}
-        <div style={chartCardStyle}>
+        <div className="ux-stagger-item ux-card ux-light-sweep" style={chartCardStyle}>
           <h3 style={chartTitleStyle}>לידים לפי שלב</h3>
           <div style={barChartStyle}>
             {[
@@ -795,7 +800,7 @@ export default function ExecDashboardPage() {
         </div>
 
         {/* Client Types */}
-        <div style={chartCardStyle}>
+        <div className="ux-stagger-item ux-card ux-light-sweep" style={chartCardStyle}>
           <h3 style={chartTitleStyle}>התפלגות סוגי לקוחות</h3>
           <div style={barChartStyle}>
             {[
@@ -827,43 +832,43 @@ export default function ExecDashboardPage() {
           <span>🗂️</span>
           <span>ניווט מהיר</span>
         </h2>
-        <div style={navGridStyle}>
-          <Link href="/clients" style={navCardStyle}>
+        <div className="ux-stagger" style={navGridStyle}>
+          <Link href="/clients" className="ux-stagger-item ux-card ux-light-sweep" style={navCardStyle}>
             <span style={navIconStyle}>👥</span>
             <p style={navTitleStyle}>לקוחות</p>
             <p style={navCountStyle}>{formatCount(kpis.activeClientsCount)}</p>
           </Link>
-          <Link href="/leads" style={navCardStyle}>
+          <Link href="/leads" className="ux-stagger-item ux-card ux-light-sweep" style={navCardStyle}>
             <span style={navIconStyle}>🎯</span>
             <p style={navTitleStyle}>לידים</p>
             <p style={navCountStyle}>{formatCount(kpis.openLeadsCount)}</p>
           </Link>
-          <Link href="/employees" style={navCardStyle}>
+          <Link href="/employees" className="ux-stagger-item ux-card ux-light-sweep" style={navCardStyle}>
             <span style={navIconStyle}>👨‍💼</span>
             <p style={navTitleStyle}>עובדים</p>
             <p style={navCountStyle}>{formatCount(employees.length)}</p>
           </Link>
-          <Link href="/accounting" style={navCardStyle}>
+          <Link href="/accounting" className="ux-stagger-item ux-card ux-light-sweep" style={navCardStyle}>
             <span style={navIconStyle}>💰</span>
             <p style={navTitleStyle}>חשבונות</p>
             <p style={navCountStyle}>{formatCount(kpis.totalOverduePayments)}</p>
           </Link>
-          <Link href="/approvals" style={navCardStyle}>
+          <Link href="/approvals" className="ux-stagger-item ux-card ux-light-sweep" style={navCardStyle}>
             <span style={navIconStyle}>✅</span>
             <p style={navTitleStyle}>אישורים</p>
             <p style={navCountStyle}>{formatCount(approvals.filter(a => a.status === 'pending_approval').length)}</p>
           </Link>
-          <Link href="/accounting/podcast" style={navCardStyle}>
+          <Link href="/accounting/podcast" className="ux-stagger-item ux-card ux-light-sweep" style={navCardStyle}>
             <span style={navIconStyle}>🎙️</span>
             <p style={navTitleStyle}>פודקאסט</p>
             <p style={navCountStyle}>{formatCount(podcastSessions?.length || 0)}</p>
           </Link>
-          <Link href="/projects" style={navCardStyle}>
+          <Link href="/projects" className="ux-stagger-item ux-card ux-light-sweep" style={navCardStyle}>
             <span style={navIconStyle}>📊</span>
             <p style={navTitleStyle}>פרויקטים</p>
             <p style={navCountStyle}>{formatCount(businessProjects?.length || 0)}</p>
           </Link>
-          <Link href="/business-projects" style={navCardStyle}>
+          <Link href="/business-projects" className="ux-stagger-item ux-card ux-light-sweep" style={navCardStyle}>
             <span style={navIconStyle}>🚀</span>
             <p style={navTitleStyle}>עסקים</p>
             <p style={navCountStyle}>{formatCount(businessProjects?.length || 0)}</p>
@@ -905,7 +910,7 @@ export default function ExecDashboardPage() {
         </h2>
         <table style={tableStyle}>
           <thead>
-            <tr>
+            <tr className="ux-table-header">
               <th style={thStyle}>שם לקוח</th>
               <th style={thStyle}>סטטוס Gantt</th>
               <th style={thStyle}>פוסטים שבועיים</th>
@@ -924,7 +929,7 @@ export default function ExecDashboardPage() {
                 else if (ganttStatus === 'sent_to_client') ganttHealth = 'warning';
 
                 return (
-                  <tr key={client.id}>
+                  <tr key={client.id} className="ux-table-row">
                     <td style={tdStyle}>{client.name}</td>
                     <td style={tdStyle}>
                       <span style={healthBadgeStyle(ganttHealth)}>

@@ -246,7 +246,7 @@ export default function ProjectsPage() {
           </div>
           <Link
             href="/projects/new"
-            className="mod-btn-primary"
+            className="mod-btn-primary ux-btn ux-btn-glow"
             style={{ padding: "0.5rem 1.125rem", textDecoration: "none", display: "inline-block" }}
           >
             + פרויקט חדש
@@ -270,7 +270,7 @@ export default function ProjectsPage() {
             </div>
             {hasFilter && (
               <button
-                className="mod-btn-ghost"
+                className="mod-btn-ghost ux-btn"
                 style={{ fontSize: "0.75rem", padding: "0.2rem 0.6rem", height: 36 }}
                 onClick={() => setSearch("")}
               >
@@ -281,7 +281,7 @@ export default function ProjectsPage() {
         )}
 
         {/* Grid */}
-        <div className="proj-grid">
+        <div className="proj-grid ux-stagger">
           {loading ? (
             <div
               style={{
@@ -303,7 +303,7 @@ export default function ProjectsPage() {
               </div>
               <div style={{ fontSize: "0.8125rem" }}>&quot;{search}&quot;</div>
               <button
-                className="mod-btn-ghost"
+                className="mod-btn-ghost ux-btn"
                 style={{ marginTop: "0.25rem", fontSize: "0.8125rem", padding: "0.375rem 0.875rem" }}
                 onClick={() => setSearch("")}
               >
@@ -349,7 +349,7 @@ export default function ProjectsPage() {
                   צור פרויקט ראשון כדי להתחיל לעבוד עם AI
                 </p>
               </div>
-              <button className="mod-btn-primary" style={{ marginTop: "0.5rem", padding: "0.5rem 1.125rem" }} onClick={openCreateModal}>
+              <button className="mod-btn-primary ux-btn ux-btn-glow" style={{ marginTop: "0.5rem", padding: "0.5rem 1.125rem" }} onClick={openCreateModal}>
                 + צור פרויקט ראשון
               </button>
             </div>
@@ -378,7 +378,7 @@ export default function ProjectsPage() {
               const hasRender = !!(forceUrl(p?.renderOutputKey) || forceUrl(p?.videoUrl));
 
               return (
-                <Link key={p.id} href={`/projects/${p.id}`} className="proj-card" style={{ textDecoration: "none", color: "inherit", display: "flex", flexDirection: "column" }}>
+                <Link key={p.id} href={`/projects/${p.id}`} className="proj-card ux-card ux-light-sweep ux-stagger-item" style={{ textDecoration: "none", color: "inherit", display: "flex", flexDirection: "column" }}>
                   {/* Thumbnail with real preview */}
                   <div className="proj-thumb">
                     {previewSrc ? (
@@ -475,7 +475,7 @@ export default function ProjectsPage() {
                     {isDeleteConfirming ? (
                       <>
                         <button
-                          className="proj-card-act-btn"
+                          className="proj-card-act-btn ux-btn"
                           style={{ flex: 1, background: "#f87171" }}
                           onClick={(e) => { e.preventDefault(); handleDelete(p.id); }}
                           disabled={isSubmitting}
@@ -483,7 +483,7 @@ export default function ProjectsPage() {
                           {isSubmitting ? "מוחק..." : "אישור מחיקה"}
                         </button>
                         <button
-                          className="proj-card-act-btn"
+                          className="proj-card-act-btn ux-btn"
                           style={{ flex: 1 }}
                           onClick={(e) => { e.preventDefault(); setDeleteConfirmId(null); }}
                           disabled={isSubmitting}
@@ -494,13 +494,13 @@ export default function ProjectsPage() {
                     ) : (
                       <>
                         <button
-                          className="proj-card-act-btn act-open"
+                          className="proj-card-act-btn act-open ux-btn ux-btn-glow"
                           onClick={(e) => { e.preventDefault(); openEditModal(p); }}
                         >
                           עריכה
                         </button>
                         <button
-                          className="proj-card-act-btn"
+                          className="proj-card-act-btn ux-btn"
                           onClick={(e) => { e.preventDefault(); setDeleteConfirmId(p.id); }}
                         >
                           🗑 מחק
@@ -600,7 +600,7 @@ export default function ProjectsPage() {
           <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
             <button
               type="submit"
-              className="mod-btn-primary"
+              className="mod-btn-primary ux-btn ux-btn-glow"
               style={{ flex: 1 }}
               disabled={isSubmitting}
             >
@@ -608,7 +608,7 @@ export default function ProjectsPage() {
             </button>
             <button
               type="button"
-              className="mod-btn-ghost"
+              className="mod-btn-ghost ux-btn"
               style={{ flex: 1 }}
               onClick={closeModal}
               disabled={isSubmitting}

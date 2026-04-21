@@ -1,7 +1,7 @@
 'use client';
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   useTasks,
   useApprovals,
@@ -22,8 +22,19 @@ export default function LandingPage() {
 
   const [mounted, setMounted] = useState(false);
   const [actionableItems, setActionableItems] = useState<any[]>([]);
+  const heroRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setMounted(true); }, []);
+
+  // Pointer-reactive glow
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!heroRef.current) return;
+    const rect = heroRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    heroRef.current.style.setProperty('--mouse-x', `${x}%`);
+    heroRef.current.style.setProperty('--mouse-y', `${y}%`);
+  }, []);
 
   // Compute actionable items from all data sources
   useEffect(() => {
@@ -38,14 +49,9 @@ export default function LandingPage() {
     tasks.forEach((task) => {
       if (task.dueDate && new Date(task.dueDate) < today && !['completed', 'approved'].includes(task.status)) {
         items.push({
-          id: task.id,
-          type: 'task',
-          title: task.title,
-          clientName: task.clientName || 'כללי',
-          dueDate: task.dueDate,
-          urgency: 'overdue',
-          link: '/tasks',
-          icon: '🔥',
+          id: task.id, type: 'task', title: task.title,
+          clientName: task.clientName || 'כללי', dueDate: task.dueDate,
+          urgency: 'overdue', link: '/tasks', icon: '🔥',
         });
       }
     });
@@ -57,14 +63,9 @@ export default function LandingPage() {
         taskDate.setHours(0, 0, 0, 0);
         if (taskDate.getTime() === today.getTime() && !['completed', 'approved'].includes(task.status)) {
           items.push({
-            id: task.id,
-            type: 'task',
-            title: task.title,
-            clientName: task.clientName || 'כללי',
-            dueDate: task.dueDate,
-            urgency: 'today',
-            link: '/tasks',
-            icon: '📌',
+            id: task.id, type: 'task', title: task.title,
+            clientName: task.clientName || 'כללי', dueDate: task.dueDate,
+            urgency: 'today', link: '/tasks', icon: '📌',
           });
         }
       }
@@ -74,62 +75,53 @@ export default function LandingPage() {
     tasks.forEach((task) => {
       if (task.status === 'under_review') {
         items.push({
-          id: task.id,
-          type: 'task',
-          title: task.title,
-          clientName: task.clientName || 'כללי',
-          dueDate: task.dueDate,
-          urgency: 'review',
-          link: '/tasks',
-          icon: '👀',
+          id: task.id, type: 'task', title: task.title,
+          clientName: task.clientName || 'כללי', dueDate: task.dueDate,
+          urgency: 'review', link: '/tasks', icon: '👁️',
         });
       }
     });
 
-    // 4. Returned tasks
-    tasks.forEach((task) => {
-      if (task.status === 'returned') {
-        items.push({
-          id: task.id,
-          type: 'task',
-          title: task.title,
-          clientName: task.clientName || 'כללי',
-          dueDate: task.dueDate,
-          urgency: 'returned',
-          link: '/tasks',
-          icon: '↩️',
-        });
-      }
-    });
-
-    // 5. Pending approvals
+    // 4. Pending approvals
     approvals.forEach((approval) => {
-      if (approval.status === 'pending_approval') {
+      if (approval.status === 'pending_client' || approval.status === 'pending') {
         items.push({
-          id: approval.id,
-          type: 'approval',
-          title: approval.title,
-          clientName: approval.clientName,
-          dueDate: approval.createdAt,
-          urgency: 'pending',
-          link: '/approvals',
-          icon: '✋',
+          id: approval.id, type: 'approval', title: approval.title || 'אישור ממתין',
+          clientName: approval.clientName || 'כללי', dueDate: approval.deadline,
+          urgency: 'pending', link: '/approvals', icon: '✅',
         });
+      }
+      if (approval.status === 'returned') {
+        items.push({
+          id: approval.id, type: 'approval', title: approval.title || 'אישור הוחזר',
+          clientName: approval.clientName || 'כללי', dueDate: approval.deadline,
+          urgency: 'returned', link: '/approvals', icon: '🔁',
+        });
+      }
+    });
+
+    // 5. Upcoming gantt deadlines
+    ganttItems.forEach((item) => {
+      if (item.endDate) {
+        const endDate = new Date(item.endDate);
+        endDate.setHours(0, 0, 0, 0);
+        if (endDate.getTime() === today.getTime() && item.status !== 'approved') {
+          items.push({
+            id: item.id, type: 'gantt', title: item.taskName || 'משימת גאנט',
+            clientName: item.clientName || 'לקוח', dueDate: item.endDate,
+            urgency: 'today', link: `/clients/${item.clientId}`, icon: '📋',
+          });
+        }
       }
     });
 
     // 6. Overdue payments
     payments.forEach((payment) => {
-      if (payment.status === 'overdue') {
+      if (payment.dueDate && new Date(payment.dueDate) < today && payment.status !== 'paid') {
         items.push({
-          id: payment.id,
-          type: 'payment',
-          title: `${payment.clientName} - ${new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS' }).format(payment.amount)}`,
-          clientName: payment.clientName,
-          dueDate: payment.dueDate,
-          urgency: 'overdue',
-          link: '/accounting/payments',
-          icon: '💰',
+          id: payment.id, type: 'payment', title: `תשלום — ${payment.clientName || 'לקוח'}`,
+          clientName: payment.clientName || '', dueDate: payment.dueDate,
+          urgency: 'overdue', link: '/accounting/payments', icon: '💰',
         });
       }
     });
@@ -141,14 +133,9 @@ export default function LandingPage() {
         followUpDate.setHours(0, 0, 0, 0);
         if (followUpDate.getTime() === today.getTime()) {
           items.push({
-            id: lead.id,
-            type: 'lead',
-            title: lead.fullName || lead.name,
-            clientName: lead.company || 'ללא חברה',
-            dueDate: lead.followUpAt,
-            urgency: 'today',
-            link: '/leads',
-            icon: '📞',
+            id: lead.id, type: 'lead', title: lead.fullName || lead.name,
+            clientName: lead.company || 'ללא חברה', dueDate: lead.followUpAt,
+            urgency: 'today', link: '/leads', icon: '📞',
           });
         }
       }
@@ -158,27 +145,19 @@ export default function LandingPage() {
     clients.forEach((client) => {
       if (client.monthlyGanttStatus !== 'approved') {
         items.push({
-          id: client.id,
-          type: 'client',
+          id: client.id, type: 'client',
           title: `${client.name} - דורש אישור תוכנית חודשית`,
-          clientName: client.name,
-          dueDate: null,
-          urgency: 'pending',
-          link: `/clients/${client.id}`,
-          icon: '📅',
+          clientName: client.name, dueDate: null,
+          urgency: 'pending', link: `/clients/${client.id}`, icon: '📅',
         });
       }
     });
 
-    // Sort: overdue first, then today, then pending/returned/review, then upcoming
     const sortOrder = { overdue: 0, today: 1, review: 2, returned: 3, pending: 4, upcoming: 5 };
     items.sort((a, b) => {
       const orderDiff = (sortOrder[a.urgency as keyof typeof sortOrder] || 5) - (sortOrder[b.urgency as keyof typeof sortOrder] || 5);
       if (orderDiff !== 0) return orderDiff;
-      // Then by due date
-      if (a.dueDate && b.dueDate) {
-        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-      }
+      if (a.dueDate && b.dueDate) return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
       return 0;
     });
 
@@ -186,7 +165,36 @@ export default function LandingPage() {
   }, [tasks, approvals, payments, leads, clients, ganttItems]);
 
   return (
-    <div className="landing">
+    <div className="landing" ref={heroRef} onPointerMove={handlePointerMove}>
+      {/* Pointer-reactive glow */}
+      <div className="ux-landing-glow" />
+
+      {/* Ambient grid overlay */}
+      <div style={{
+        position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none',
+        backgroundImage: 'linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)',
+        backgroundSize: '60px 60px',
+        maskImage: 'radial-gradient(ellipse at center, black 30%, transparent 70%)',
+        WebkitMaskImage: 'radial-gradient(ellipse at center, black 30%, transparent 70%)',
+      }} />
+
+      {/* Floating particles */}
+      <div style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none', overflow: 'hidden' }}>
+        {mounted && Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} style={{
+            position: 'absolute',
+            width: `${3 + i * 1.5}px`, height: `${3 + i * 1.5}px`,
+            borderRadius: '50%',
+            background: i % 2 === 0 ? 'rgba(255,255,255,0.25)' : 'rgba(0,181,254,0.3)',
+            left: `${10 + i * 15}%`,
+            top: `${20 + (i % 3) * 25}%`,
+            animation: `ux-float-particle ${8 + i * 2}s ease-in-out infinite`,
+            animationDelay: `${i * 0.8}s`,
+            filter: 'blur(0.5px)',
+          }} />
+        ))}
+      </div>
+
       {/* ── LEFT: dominant hero image ── */}
       <div className="landing-image-col">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -202,7 +210,11 @@ export default function LandingPage() {
       {/* ── CENTER: branding + content stack ── */}
       <div className="landing-content">
         {/* Logo */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.625rem", marginBottom: "1.75rem" }}>
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center", gap: "0.625rem", marginBottom: "1.75rem",
+          animation: mounted ? 'ux-hero-reveal 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards' : 'none',
+          opacity: mounted ? undefined : 0,
+        }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="https://s-pixel.co.il/wp-content/uploads/2026/04/Asset-1.png"
@@ -213,26 +225,43 @@ export default function LandingPage() {
         </div>
 
         {/* Main title */}
-        <h1 style={{ animation: mounted ? 'portalFadeUp 0.6s ease-out forwards' : 'none', opacity: mounted ? 1 : 0 }}>סטודיו פיקסל פרסום ומיתוג עסקי</h1>
+        <h1 style={{
+          animation: mounted ? 'portalFadeUp 0.7s ease-out 0.15s forwards' : 'none',
+          opacity: mounted ? undefined : 0,
+        }}>
+          סטודיו פיקסל פרסום ומיתוג עסקי
+        </h1>
 
         {/* Supporting text */}
-        <p style={{ animation: mounted ? 'portalFadeUp 0.6s ease-out 0.2s forwards' : 'none', opacity: mounted ? 1 : 0 }}>מערכת ניהול המשרד המשולבת בטכנולוגיות AI בפיתוח אישי</p>
+        <p style={{
+          animation: mounted ? 'portalFadeUp 0.7s ease-out 0.3s forwards' : 'none',
+          opacity: mounted ? undefined : 0,
+        }}>
+          מערכת ניהול המשרד המשולבת בטכנולוגיות AI בפיתוח אישי
+        </p>
 
-        {/* Feature pills */}
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", justifyContent: "center", marginTop: "1.375rem", animation: mounted ? 'portalFadeUp 0.6s ease-out 0.4s forwards' : 'none', opacity: mounted ? 1 : 0 }}>
-          {["✂ עריכה חכמה", "🎬 תוכנית פלט", "📊 ניתוח AI", "🌐 עברית מובנית"].map((f) => (
+        {/* Feature pills — upgraded with glow */}
+        <div style={{
+          display: "flex", gap: "0.5rem", flexWrap: "wrap", justifyContent: "center", marginTop: "1.375rem",
+          animation: mounted ? 'portalFadeUp 0.7s ease-out 0.45s forwards' : 'none',
+          opacity: mounted ? undefined : 0,
+        }}>
+          {["✂ עריכה חכמה", "🎬 תוכנית פלט", "📊 ניתוח AI", "🌐 עברית מובנית"].map((f, i) => (
             <span
               key={f}
+              className="ux-chip"
               style={{
-                background: "rgba(255,255,255,0.18)",
+                background: "rgba(255,255,255,0.12)",
                 color: "#fff",
-                border: "1px solid rgba(255,255,255,0.3)",
+                border: "1px solid rgba(255,255,255,0.22)",
                 borderRadius: 999,
-                padding: "0.3rem 0.8rem",
+                padding: "0.35rem 0.85rem",
                 fontSize: "0.775rem",
                 fontWeight: 600,
-                backdropFilter: "blur(4px)",
+                backdropFilter: "blur(8px)",
                 whiteSpace: "nowrap",
+                animationDelay: `${0.5 + i * 0.08}s`,
+                transition: "all 200ms ease",
               }}
             >
               {f}
@@ -240,21 +269,49 @@ export default function LandingPage() {
           ))}
         </div>
 
-        {/* CTAs */}
-        <div className="ctas" style={{ animation: mounted ? 'portalFadeUp 0.6s ease-out 0.6s forwards' : 'none', opacity: mounted ? 1 : 0 }}>
-          <Link href="/dashboard" className="btn btn-landing-primary btn-lg">
+        {/* AI status hint */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: "0.4rem", marginTop: "1.25rem",
+          animation: mounted ? 'portalFadeUp 0.7s ease-out 0.6s forwards' : 'none',
+          opacity: mounted ? undefined : 0,
+        }}>
+          <div style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: '#22c55e',
+            boxShadow: '0 0 8px rgba(34,197,94,0.5)',
+            animation: 'la-blink 2s infinite',
+          }} />
+          <span style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.6)", fontWeight: 500 }}>
+            AI מערכת פעילה
+          </span>
+        </div>
+
+        {/* CTAs — upgraded with beam effect */}
+        <div className="ctas" style={{
+          animation: mounted ? 'portalFadeUp 0.7s ease-out 0.65s forwards' : 'none',
+          opacity: mounted ? undefined : 0,
+        }}>
+          <Link href="/dashboard" className="btn btn-landing-primary btn-lg ux-light-sweep">
             דשבורד הניהול
           </Link>
-          <Link href="/tasks" className="btn btn-landing-ghost btn-lg">
-            לוח משימות
+          <Link href="/command-center" className="btn btn-landing-ghost btn-lg ux-light-sweep">
+            מרכז הפיקוד
           </Link>
         </div>
 
-        <p className="landing-byline">by Studio Pixel</p>
+        <p className="landing-byline" style={{
+          animation: mounted ? 'portalFadeUp 0.7s ease-out 0.8s forwards' : 'none',
+          opacity: mounted ? undefined : 0,
+        }}>
+          by Studio Pixel
+        </p>
       </div>
 
       {/* ── RIGHT: Tasks to Handle widget (RTL) ── */}
-      <div className="landing-activity">
+      <div className="landing-activity" style={{
+        animation: mounted ? 'portalFadeUp 0.7s ease-out 0.4s forwards' : 'none',
+        opacity: mounted ? undefined : 0,
+      }}>
         <div className="la-panel" style={{ direction: 'rtl', textAlign: 'right' }}>
           <div className="la-head">
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", justifyContent: 'flex-end' }}>
@@ -264,40 +321,45 @@ export default function LandingPage() {
           </div>
           <div className="la-feed">
             {actionableItems.length > 0
-              ? actionableItems.map((item, i) => (
+              ? actionableItems.map((item) => (
                   <Link
                     key={item.id}
                     href={item.link}
-                    style={{
-                      textDecoration: "none",
-                      color: "inherit",
-                      display: "block",
-                    }}
+                    style={{ textDecoration: "none", color: "inherit", display: "block" }}
                   >
                     <div
-                      className="la-item"
-                      style={{
-                        cursor: "pointer",
-                        transition: "background 0.2s",
-                      }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.08)";
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLElement).style.background = "transparent";
-                      }}
+                      className="la-item ux-light-sweep"
+                      style={{ cursor: "pointer" }}
                     >
                       <div className="la-item-icon">{item.icon}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="la-item-title">{item.title}</div>
                         <div className="la-item-sub">{item.clientName}</div>
                       </div>
+                      {item.urgency === 'overdue' && (
+                        <span style={{
+                          fontSize: '0.55rem', fontWeight: 700, padding: '0.1rem 0.35rem',
+                          borderRadius: '0.2rem', background: 'rgba(239,68,68,0.2)', color: '#ef4444',
+                          flexShrink: 0, alignSelf: 'center',
+                        }}>
+                          באיחור
+                        </span>
+                      )}
                     </div>
                   </Link>
                 ))
               : (
-                  <div style={{ padding: "1rem", textAlign: "center", color: "rgba(255,255,255,0.6)", fontSize: "0.875rem" }}>
-                    אין משימות דחופות 🎉
+                  <div style={{
+                    padding: "1.5rem 1rem", textAlign: "center",
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem",
+                  }}>
+                    <span style={{ fontSize: "1.5rem", opacity: 0.5 }}>✅</span>
+                    <span style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.82rem", fontWeight: 500 }}>
+                      אין משימות דחופות
+                    </span>
+                    <span style={{ color: "rgba(255,255,255,0.35)", fontSize: "0.7rem" }}>
+                      המערכת שקטה — הכל תקין
+                    </span>
                   </div>
                 )
             }
@@ -305,11 +367,7 @@ export default function LandingPage() {
           <div className="la-foot" style={{ justifyContent: 'space-between', direction: 'rtl' }}>
             <Link
               href="/tasks"
-              style={{
-                fontSize: "0.7rem",
-                color: "rgba(255,255,255,0.7)",
-                textDecoration: "none",
-              }}
+              style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.7)", textDecoration: "none" }}
             >
               ← צפה בהכל
             </Link>

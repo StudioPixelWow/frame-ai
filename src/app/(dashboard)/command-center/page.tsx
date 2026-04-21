@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import { AnimatedCounter } from "@/components/ui/animated-counter";
 import {
   useClients,
   useCampaigns,
@@ -153,9 +154,12 @@ function KPICard({
   color: string;
   subtext?: string;
 }) {
+  // For numeric values, use AnimatedCounter; for strings (currency, percentages), show as-is
+  const isNumeric = typeof value === "number";
+
   return (
     <div
-      className="premium-card"
+      className="premium-card ux-card ux-light-sweep"
       style={{
         textAlign: "center",
         padding: "1.25rem 1rem",
@@ -173,7 +177,7 @@ function KPICard({
           letterSpacing: "-0.02em",
         }}
       >
-        {value}
+        {isNumeric ? <AnimatedCounter value={value} /> : value}
       </div>
       <div
         style={{
@@ -237,6 +241,7 @@ function AlertRow({
 
   return (
     <div
+      className="ux-stagger-item"
       style={{
         padding: "0.75rem 1rem",
         background: c.bg,
@@ -245,6 +250,7 @@ function AlertRow({
         display: "flex",
         gap: "0.75rem",
         alignItems: "flex-start",
+        transition: "all 150ms ease",
       }}
     >
       <span style={{ fontSize: "0.875rem", lineHeight: 1.6 }}>{c.icon}</span>
@@ -510,6 +516,7 @@ export default function CommandCenterPage() {
 
   return (
     <main
+      className="ux-ambient-energy"
       style={{
         maxWidth: "1280px",
         margin: "0 auto",
@@ -531,17 +538,28 @@ export default function CommandCenterPage() {
         }}
       >
         <div>
-          <h1
-            style={{
-              fontSize: "1.75rem",
-              fontWeight: 800,
-              color: "var(--foreground)",
-              marginBottom: "0.25rem",
-              letterSpacing: "-0.02em",
-            }}
-          >
-            📡 מרכז שליטה — קמפיינים
-          </h1>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem" }}>
+            <h1
+              style={{
+                fontSize: "1.75rem",
+                fontWeight: 800,
+                color: "var(--foreground)",
+                letterSpacing: "-0.02em",
+              }}
+            >
+              📡 מרכז שליטה — קמפיינים
+            </h1>
+            <div
+              style={{
+                width: "8px",
+                height: "8px",
+                borderRadius: "50%",
+                background: "#22c55e",
+                animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+                flexShrink: 0,
+              }}
+            />
+          </div>
           <p
             style={{
               color: "var(--foreground-muted)",
@@ -554,7 +572,7 @@ export default function CommandCenterPage() {
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <Link
             href="/campaign-builder"
-            className="mod-btn-primary"
+            className="mod-btn-primary ux-btn ux-btn-glow"
             style={{
               padding: "0.5rem 1rem",
               fontSize: "0.8rem",
@@ -569,7 +587,7 @@ export default function CommandCenterPage() {
           </Link>
           <Link
             href="/campaigns"
-            className="mod-btn-ghost"
+            className="mod-btn-ghost ux-btn"
             style={{
               padding: "0.5rem 1rem",
               fontSize: "0.8rem",
@@ -583,7 +601,7 @@ export default function CommandCenterPage() {
           </Link>
           <Link
             href="/leads"
-            className="mod-btn-ghost"
+            className="mod-btn-ghost ux-btn"
             style={{
               padding: "0.5rem 1rem",
               fontSize: "0.8rem",
@@ -600,6 +618,7 @@ export default function CommandCenterPage() {
 
       {/* ═══ KPI Row ═══ */}
       <div
+        className="ux-stagger"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
@@ -659,7 +678,7 @@ export default function CommandCenterPage() {
 
       {/* ═══ Intelligence Highlights ═══ */}
       {(engineHighlights.length > 0 || leadHighlights.length > 0) && (
-        <div className="premium-card" style={{ padding: "1rem 1.25rem" }}>
+        <div className="premium-card ux-card ux-card-glow" style={{ padding: "1rem 1.25rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
             <span style={{ fontSize: "1rem" }}>🧠</span>
             <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--foreground)" }}>תובנות מערכת</span>
@@ -714,7 +733,7 @@ export default function CommandCenterPage() {
       >
         {/* Alerts Panel */}
         <div
-          className="premium-card"
+          className="premium-card ux-card ux-card-glow"
           style={{ padding: "1.25rem", maxHeight: "400px", overflow: "hidden" }}
         >
           <div
@@ -805,7 +824,7 @@ export default function CommandCenterPage() {
         </div>
 
         {/* Campaign Status & Platform Breakdown */}
-        <div className="premium-card" style={{ padding: "1.25rem" }}>
+        <div className="premium-card ux-card ux-card-glow" style={{ padding: "1.25rem" }}>
           <div
             style={{
               display: "flex",
@@ -972,7 +991,7 @@ export default function CommandCenterPage() {
       </div>
 
       {/* ═══ Campaign Table ═══ */}
-      <div className="premium-card" style={{ padding: "1.25rem" }}>
+      <div className="premium-card ux-card ux-card-glow" style={{ padding: "1.25rem" }}>
         {/* Table Header + Filters */}
         <div
           style={{
@@ -1080,6 +1099,7 @@ export default function CommandCenterPage() {
             >
               <thead>
                 <tr
+                  className="ux-table-header"
                   style={{
                     borderBottom: "1px solid var(--border)",
                     textAlign: "right",
@@ -1107,6 +1127,7 @@ export default function CommandCenterPage() {
               <tbody>
                 {campaignRows.map((row) => (
                   <tr
+                    className="ux-table-row"
                     key={row.campaign.id}
                     style={{
                       borderBottom: "1px solid var(--border)",
@@ -1260,7 +1281,7 @@ export default function CommandCenterPage() {
       </div>
 
       {/* ═══ Clients with Active Campaigns ═══ */}
-      <div className="premium-card" style={{ padding: "1.25rem" }}>
+      <div className="premium-card ux-card ux-card-glow" style={{ padding: "1.25rem" }}>
         <div
           style={{
             display: "flex",
@@ -1282,6 +1303,7 @@ export default function CommandCenterPage() {
         </div>
 
         <div
+          className="ux-stagger"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
@@ -1345,6 +1367,7 @@ export default function CommandCenterPage() {
               return (
                 <div
                   key={cid}
+                  className="ux-stagger-item ux-card"
                   style={{
                     padding: "0.875rem",
                     background: "var(--surface-raised)",

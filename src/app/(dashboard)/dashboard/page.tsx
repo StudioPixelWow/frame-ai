@@ -19,6 +19,7 @@ import { useOperationalAlerts } from "@/lib/alerts/use-alerts";
 import { SkeletonKPIRow, SkeletonGrid } from "@/components/ui/skeleton";
 import { AIInsightsPanel, generateInsights } from "@/components/ai-insights-panel";
 import SmartWeeklyCalendar from "@/components/ui/SmartWeeklyCalendar";
+import { AnimatedCounter } from "@/components/ui/animated-counter";
 
 /* ── Module definitions ── */
 const modules = [
@@ -73,10 +74,10 @@ function KPICard({ value, label, color, icon, href }: {
   value: string | number; label: string; color: string; icon: string; href: string;
 }) {
   return (
-    <Link href={href} className="premium-card glow-hover" style={{ textDecoration: "none", textAlign: "center", padding: "1.25rem 1rem" }}>
+    <Link href={href} className="premium-card ux-card ux-light-sweep glow-hover" style={{ textDecoration: "none", textAlign: "center", padding: "1.25rem 1rem" }}>
       <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>{icon}</div>
       <div style={{ fontSize: "2rem", fontWeight: 800, color, lineHeight: 1, marginBottom: "0.35rem", letterSpacing: "-0.02em" }}>
-        {value}
+        {typeof value === "number" ? <AnimatedCounter value={value} /> : value}
       </div>
       <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
         {label}
@@ -92,7 +93,7 @@ function SummaryPane({ title, icon, color, rows, href, linkText }: {
   href: string; linkText: string;
 }) {
   return (
-    <div className="premium-card" style={{ direction: "rtl" }}>
+    <div className="premium-card ux-card ux-card-glow" style={{ direction: "rtl" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
         <span style={{ fontSize: "1.125rem" }}>{icon}</span>
         <span style={{ fontSize: "0.875rem", fontWeight: 700, color }}>{title}</span>
@@ -117,7 +118,7 @@ function TimelineItem({ icon, title, subtitle, time, color }: {
   icon: string; title: string; subtitle: string; time: string; color: string;
 }) {
   return (
-    <div className="timeline-item">
+    <div className="timeline-item ux-stagger-item">
       <div className="timeline-dot" style={{ borderColor: `${color}40`, background: `${color}15` }}>
         {icon}
       </div>
@@ -253,6 +254,10 @@ export default function DashboardPage() {
             <div className="mhd-greeting">
               {greeting}, <span className="mhd-greeting-name">טל</span> 👋
             </div>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", marginTop: "0.25rem" }}>
+              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e", animation: "pulse 2s infinite" }} />
+              <span style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", fontWeight: 600 }}>מערכת AI פעילה</span>
+            </div>
             <div className="mhd-greeting-sub">
               מרכז פיקוד Studio Pixel — סקירת ביצועים בזמן אמת
             </div>
@@ -302,32 +307,32 @@ export default function DashboardPage() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
               {analytics.overduePaymentsCount > 0 && (
-                <Link href="/accounting" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem" }}>
+                <Link href="/accounting" className="premium-card ux-card ux-light-sweep" style={{ textDecoration: "none", padding: "0.75rem" }}>
                   <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>תשלומים בפיגור</div>
                   <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ef4444" }}>{analytics.overduePaymentsCount}</div>
                   <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>{formatCurrency(analytics.overdueTotal)}</div>
                 </Link>
               )}
               {analytics.overdueTasks > 0 && (
-                <Link href="/tasks" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem" }}>
+                <Link href="/tasks" className="premium-card ux-card ux-light-sweep" style={{ textDecoration: "none", padding: "0.75rem" }}>
                   <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>משימות בפיגור</div>
                   <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#f97316" }}>{analytics.overdueTasks}</div>
                 </Link>
               )}
               {analytics.pendingApprovals > 0 && (
-                <Link href="/approvals" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem" }}>
+                <Link href="/approvals" className="premium-card ux-card ux-light-sweep" style={{ textDecoration: "none", padding: "0.75rem" }}>
                   <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>אישורים ממתינים</div>
                   <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ef4444" }}>{analytics.pendingApprovals}</div>
                 </Link>
               )}
               {analytics.dueTodayFollowUps > 0 && (
-                <Link href="/leads" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem" }}>
+                <Link href="/leads" className="premium-card ux-card ux-light-sweep" style={{ textDecoration: "none", padding: "0.75rem" }}>
                   <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>פולואפים היום</div>
                   <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#f97316" }}>{analytics.dueTodayFollowUps}</div>
                 </Link>
               )}
               {analytics.clientsMissingGantt > 0 && (
-                <Link href="/clients" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem" }}>
+                <Link href="/clients" className="premium-card ux-card ux-light-sweep" style={{ textDecoration: "none", padding: "0.75rem" }}>
                   <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>לקוחות ללא תוכנית</div>
                   <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#f59e0b" }}>{analytics.clientsMissingGantt}</div>
                 </Link>
@@ -342,7 +347,7 @@ export default function DashboardPage() {
           {isLoading ? (
             <SkeletonKPIRow count={8} />
           ) : analytics ? (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "0.75rem" }}>
+            <div className="ux-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "0.75rem" }}>
               <KPICard icon="👥" value={analytics.activeClients} label="לקוחות פעילים" color="#38bdf8" href="/clients" />
               <KPICard icon="🎯" value={analytics.leadsThisMonth} label="לידים החודש" color="#34d399" href="/leads" />
               <KPICard icon="💰" value={formatCurrency(analytics.revenue)} label="הכנסה החודש" color="#10b981" href="/accounting" />
@@ -358,9 +363,9 @@ export default function DashboardPage() {
         {/* ═══ 4. QUICK ACTIONS ═══ */}
         <div>
           <div className="mhd-section-label">פעולות מהירות</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: "0.75rem" }}>
+          <div className="ux-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: "0.75rem" }}>
             {QUICK_ACTIONS.map(a => (
-              <Link key={a.label} href={a.route} className="quick-action-btn">
+              <Link key={a.label} href={a.route} className="quick-action-btn ux-light-sweep">
                 <span className="quick-action-icon" style={{ filter: `drop-shadow(0 2px 8px ${a.color}60)` }}>{a.icon}</span>
                 <span className="quick-action-label">{a.label}</span>
               </Link>
@@ -382,7 +387,7 @@ export default function DashboardPage() {
           {isLoading ? (
             <SkeletonGrid count={4} columns="repeat(auto-fit, minmax(280px, 1fr))" />
           ) : analytics ? (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
+            <div className="ux-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
               <SummaryPane title="סיכום כלכלי" icon="💰" color="#10b981" href="/accounting" linkText="צפה בפרטים"
                 rows={[
                   { label: "הכנסה החודש", value: formatCurrency(analytics.revenue), color: "#10b981" },
@@ -419,7 +424,7 @@ export default function DashboardPage() {
         {analytics && (analytics.todayTasks.length > 0 || analytics.todayPodcasts.length > 0) && (
           <div>
             <div className="mhd-section-label">📅 ציר הזמן של היום</div>
-            <div className="premium-card" style={{ direction: "rtl" }}>
+            <div className="premium-card ux-card" style={{ direction: "rtl" }}>
               {analytics.todayTasks.map(t => (
                 <TimelineItem
                   key={t.id}
@@ -461,7 +466,7 @@ export default function DashboardPage() {
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1rem" }}>
                 {trends.slice(0, 4).map(trend => (
-                  <div key={trend.id} className="premium-card" style={{ padding: "1rem" }}>
+                  <div key={trend.id} className="premium-card ux-card ux-light-sweep" style={{ padding: "1rem" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
                       <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)", flex: 1 }}>
                         {trend.name}
@@ -502,7 +507,7 @@ export default function DashboardPage() {
           <div className="mhd-section-label">מודולי המערכת</div>
           <div className="mhd-grid">
             {modules.map(m => (
-              <Link key={m.title} href={m.route} className="mhd-card" style={{ "--mc": m.color, textDecoration: "none" } as React.CSSProperties}>
+              <Link key={m.title} href={m.route} className="mhd-card ux-light-sweep" style={{ "--mc": m.color, textDecoration: "none" } as React.CSSProperties}>
                 <div className="mhd-card-icon" style={{ background: m.bg, boxShadow: `0 0 0 1px ${m.color}28` }}>
                   <span style={{ filter: `drop-shadow(0 2px 10px ${m.color}90)` }}>{m.icon}</span>
                 </div>
@@ -522,7 +527,7 @@ export default function DashboardPage() {
             <div className="mhd-section-label">✨ תובנות מערכת</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
               {opInsights.slice(0, 3).map((insight, idx) => (
-                <div key={idx} className="premium-card">
+                <div key={idx} className="premium-card ux-card">
                   <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>{insight.icon}</div>
                   <div style={{ fontSize: "0.875rem", fontWeight: 600, marginBottom: "0.5rem" }}>{insight.title}</div>
                   <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", lineHeight: 1.5 }}>{insight.description}</div>
@@ -537,7 +542,7 @@ export default function DashboardPage() {
             <div className="mhd-section-label">🔔 התראות המערכת</div>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               {alerts.slice(0, 5).map((alert, idx) => (
-                <div key={idx} className="premium-card" style={{ padding: "0.75rem", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+                <div key={idx} className="premium-card ux-card ux-stagger-item" style={{ padding: "0.75rem", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
                   <div style={{ width: "0.5rem", height: "0.5rem", borderRadius: "50%", background: alert.severity === "critical" ? "#ef4444" : "#f59e0b", marginTop: "0.35rem", flexShrink: 0 }} />
                   <div>
                     <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>{alert.title}</div>

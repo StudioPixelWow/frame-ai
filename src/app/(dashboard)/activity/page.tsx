@@ -126,11 +126,11 @@ export default function ActivityPage() {
         </div>
 
         {/* Filter Chips */}
-        <div className="gact-chips" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+        <div className="gact-chips ux-stagger" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
           {filterChips.map((chip) => (
             <button
               key={chip.value}
-              className={`gact-chip ${activeFilter === chip.value ? "active" : ""}`}
+              className={`gact-chip ux-btn ${activeFilter === chip.value ? "active" : ""}`}
               onClick={() => setActiveFilter(chip.value)}
               style={{
                 padding: "0.5rem 1rem",
@@ -166,7 +166,7 @@ export default function ActivityPage() {
               🔍
             </span>
             <input
-              className="gact-search"
+              className="gact-search ux-input"
               type="search"
               placeholder="חיפוש פעילות, פרויקט, לקוח…"
               value={searchQuery}
@@ -187,7 +187,7 @@ export default function ActivityPage() {
         </div>
 
         {/* Activity Feed */}
-        <div className="gact-feed" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <div className="gact-feed ux-stagger" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           {filteredActivities.length === 0 ? (
             <div
               style={{
@@ -203,7 +203,7 @@ export default function ActivityPage() {
             filteredActivities.map((activity) => (
               <div
                 key={activity.id}
-                className="gact-feed-item"
+                className="gact-feed-item ux-card ux-stagger-item"
                 style={{
                   padding: "1rem",
                   border: "1px solid var(--border)",

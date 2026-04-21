@@ -153,7 +153,7 @@ export default function ApprovalsPage() {
     <div dir="rtl" className="apr-page">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <h1 className="mod-page-title">מערכת אישורים</h1>
-        <button className="mod-btn-primary" onClick={openCreateModal}>
+        <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={openCreateModal}>
           + אישור חדש
         </button>
       </div>
@@ -182,9 +182,9 @@ export default function ApprovalsPage() {
           אין אישורים להצגה
         </div>
       ) : (
-        <div className="apr-board" style={{ marginTop: '1rem' }}>
+        <div className="apr-board ux-stagger" style={{ marginTop: '1rem' }}>
           {approvals.map((approval) => (
-            <div key={approval.id} className="apr-card wow-lift">
+            <div key={approval.id} className="apr-card wow-lift ux-card ux-card-glow ux-stagger-item">
               {/* Card Header */}
               <div className="apr-card-header" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
                 <span className={`apr-type-badge apr-st-${approval.status}`}>
@@ -221,14 +221,14 @@ export default function ApprovalsPage() {
                 {approval.status === 'pending_approval' && (
                   <>
                     <button
-                      className="mod-btn-primary"
+                      className="mod-btn-primary ux-btn ux-btn-glow"
                       onClick={() => handleApprove(approval.id)}
                       style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
                     >
                       אישור
                     </button>
                     <button
-                      className="mod-btn-ghost"
+                      className="mod-btn-ghost ux-btn"
                       onClick={() => handleReject(approval.id)}
                       style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', color: '#ef4444' }}
                     >
@@ -237,14 +237,14 @@ export default function ApprovalsPage() {
                   </>
                 )}
                 <button
-                  className="mod-btn-ghost"
+                  className="mod-btn-ghost ux-btn"
                   onClick={() => openEditModal(approval)}
                   style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
                 >
                   עריכה
                 </button>
                 <button
-                  className="mod-btn-ghost"
+                  className="mod-btn-ghost ux-btn"
                   onClick={() => handleDelete(approval.id)}
                   style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', color: '#ef4444' }}
                 >
@@ -266,7 +266,7 @@ export default function ApprovalsPage() {
                 סוג
               </label>
               <select
-                className="form-select"
+                className="form-select ux-chip"
                 value={formData.type}
                 onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
                 style={{
@@ -294,7 +294,7 @@ export default function ApprovalsPage() {
                 כותרת
               </label>
               <input
-                className="form-input"
+                className="form-input ux-input"
                 type="text"
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
@@ -317,7 +317,7 @@ export default function ApprovalsPage() {
                 שם לקוח
               </label>
               <input
-                className="form-input"
+                className="form-input ux-input"
                 type="text"
                 value={formData.clientName}
                 onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
@@ -340,7 +340,7 @@ export default function ApprovalsPage() {
                 סטטוס
               </label>
               <select
-                className="form-select"
+                className="form-select ux-chip"
                 value={formData.status}
                 onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
                 style={{
@@ -365,14 +365,14 @@ export default function ApprovalsPage() {
             {/* Modal Actions */}
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
               <button
-                className="mod-btn-ghost"
+                className="mod-btn-ghost ux-btn"
                 onClick={() => setShowModal(false)}
                 style={{ padding: '0.5rem 1rem' }}
               >
                 ביטול
               </button>
               <button
-                className="mod-btn-primary"
+                className="mod-btn-primary ux-btn ux-btn-glow"
                 onClick={handleSubmit}
                 style={{ padding: '0.5rem 1rem' }}
               >

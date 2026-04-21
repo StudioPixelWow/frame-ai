@@ -117,7 +117,7 @@ function generatePageSuggestions(
   }
 
   // Dashboard / Command Center
-  if (pathname === "/" || pathname.includes("/command-center")) {
+  if (pathname === "/" || pathname.includes("/command-center") || pathname.includes("/dashboard")) {
     const todayLeads = allLeads.filter((l) => {
       const created = l.createdAt ? new Date(l.createdAt).getTime() : 0;
       return created > 0 && Date.now() - created < 86400000;
@@ -131,6 +131,61 @@ function generatePageSuggestions(
         category: "insight",
       });
     }
+  }
+
+  // Tasks page
+  if (pathname.includes("/tasks")) {
+    suggestions.push({
+      id: "tasks-ai",
+      icon: "📋",
+      text: "AI יכול לזהות משימות שחוזרות על עצמן ולהציע אוטומציה",
+      priority: "low",
+      category: "insight",
+    });
+  }
+
+  // Payments / Accounting
+  if (pathname.includes("/payments") || pathname.includes("/accounting")) {
+    suggestions.push({
+      id: "payments-ai",
+      icon: "💳",
+      text: "AI עוקב אחר דפוסי תשלום ויכול לחזות עיכובים מראש",
+      priority: "low",
+      category: "insight",
+    });
+  }
+
+  // Employees
+  if (pathname.includes("/employees")) {
+    suggestions.push({
+      id: "employees-ai",
+      icon: "👥",
+      text: "AI יכול לנתח חלוקת עומסים ולהמליץ על הקצאה אופטימלית",
+      priority: "low",
+      category: "optimization",
+    });
+  }
+
+  // Business Projects
+  if (pathname.includes("/business-projects")) {
+    suggestions.push({
+      id: "projects-ai",
+      icon: "📊",
+      text: "AI מנתח התקדמות פרויקטים ויכול לזהות סיכוני עיכוב",
+      priority: "low",
+      category: "insight",
+    });
+  }
+
+  // Stats / Performance
+  if (pathname.includes("/stats") || pathname.includes("/performance")) {
+    suggestions.push({
+      id: "stats-ai",
+      icon: "📈",
+      text: "AI יכול לזהות מגמות בביצועים ולהמליץ על פעולות לשיפור",
+      priority: "low",
+      category: "optimization",
+    });
   }
 
   // Default suggestion

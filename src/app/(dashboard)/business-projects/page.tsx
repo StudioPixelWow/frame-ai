@@ -323,7 +323,7 @@ export default function BusinessProjectsPage() {
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="mod-btn-primary"
+          className="ux-btn ux-btn-glow mod-btn-primary"
           style={{ textDecoration: "none", display: "inline-block", padding: "0.5rem 1.125rem", border: "none", cursor: "pointer" }}
         >
           + צור פרויקט חדש
@@ -352,7 +352,7 @@ export default function BusinessProjectsPage() {
             </label>
             <input
               type="text"
-              className="form-input"
+              className="ux-input form-input"
               placeholder="שם פרויקט או לקוח..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -366,7 +366,7 @@ export default function BusinessProjectsPage() {
               סוג פרויקט
             </label>
             <select
-              className="form-select"
+              className="ux-chip form-select"
               value={filterType}
               onChange={(e) => setFilterType(e.target.value as any)}
               style={{ fontSize: "0.875rem" }}
@@ -391,7 +391,7 @@ export default function BusinessProjectsPage() {
               סטטוס
             </label>
             <select
-              className="form-select"
+              className="ux-chip form-select"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as any)}
               style={{ fontSize: "0.875rem" }}
@@ -411,7 +411,7 @@ export default function BusinessProjectsPage() {
               לקוח
             </label>
             <select
-              className="form-select"
+              className="ux-chip form-select"
               value={filterClientId}
               onChange={(e) => setFilterClientId(e.target.value)}
               style={{ fontSize: "0.875rem" }}
@@ -431,7 +431,7 @@ export default function BusinessProjectsPage() {
               מיון
             </label>
             <select
-              className="form-select"
+              className="ux-chip form-select"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
               style={{ fontSize: "0.875rem" }}
@@ -446,6 +446,7 @@ export default function BusinessProjectsPage() {
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <button
               onClick={() => setViewMode("grid")}
+              className="ux-btn"
               style={{
                 padding: "0.45rem 0.75rem",
                 borderRadius: "0.5rem",
@@ -462,6 +463,7 @@ export default function BusinessProjectsPage() {
             </button>
             <button
               onClick={() => setViewMode("list")}
+              className="ux-btn"
               style={{
                 padding: "0.45rem 0.75rem",
                 borderRadius: "0.5rem",
@@ -524,7 +526,7 @@ export default function BusinessProjectsPage() {
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="mod-btn-primary"
+            className="ux-btn ux-btn-glow mod-btn-primary"
             style={{ marginTop: "0.5rem", padding: "0.5rem 1.125rem" }}
           >
             + צור פרויקט חדש
@@ -544,7 +546,7 @@ export default function BusinessProjectsPage() {
         >
           <p style={{ fontSize: "0.9rem", margin: "0", marginBottom: "0.5rem" }}>לא נמצאו פרויקטים התואמים לסינון</p>
           <button
-            className="mod-btn-ghost"
+            className="ux-btn mod-btn-ghost"
             onClick={() => {
               setSearch("");
               setFilterType("all");
@@ -559,6 +561,7 @@ export default function BusinessProjectsPage() {
       ) : viewMode === "grid" ? (
         /* Grid View */
         <div
+          className="ux-stagger"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))",
@@ -574,7 +577,7 @@ export default function BusinessProjectsPage() {
             return (
               <div
                 key={project.id}
-                className="agd-card"
+                className="ux-card ux-card-glow ux-light-sweep ux-stagger-item agd-card"
                 style={{
                   padding: "1.25rem",
                   cursor: "pointer",
@@ -860,7 +863,7 @@ export default function BusinessProjectsPage() {
               </label>
               <input
                 type="text"
-                className="form-input"
+                className="ux-input form-input"
                 placeholder="הכנס שם פרויקט"
                 value={projectForm.projectName}
                 onChange={(e) => setProjectForm({ ...projectForm, projectName: e.target.value })}
@@ -874,7 +877,7 @@ export default function BusinessProjectsPage() {
                 לקוח
               </label>
               <select
-                className="form-select"
+                className="ux-chip form-select"
                 value={projectForm.clientId}
                 onChange={(e) => {
                   if (e.target.value === "__new__") {
@@ -918,7 +921,7 @@ export default function BusinessProjectsPage() {
                   </label>
                   <input
                     type="text"
-                    className="form-input"
+                    className="ux-input form-input"
                     placeholder="שם הלקוח"
                     value={clientForm.name}
                     onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
@@ -932,7 +935,7 @@ export default function BusinessProjectsPage() {
                   </label>
                   <input
                     type="text"
-                    className="form-input"
+                    className="ux-input form-input"
                     placeholder="שם החברה"
                     value={clientForm.company}
                     onChange={(e) => setClientForm({ ...clientForm, company: e.target.value })}
@@ -946,7 +949,7 @@ export default function BusinessProjectsPage() {
                   </label>
                   <input
                     type="email"
-                    className="form-input"
+                    className="ux-input form-input"
                     placeholder="דוא״ל"
                     value={clientForm.email}
                     onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })}
@@ -960,7 +963,7 @@ export default function BusinessProjectsPage() {
                   </label>
                   <input
                     type="tel"
-                    className="form-input"
+                    className="ux-input form-input"
                     placeholder="טלפון"
                     value={clientForm.phone}
                     onChange={(e) => setClientForm({ ...clientForm, phone: e.target.value })}
@@ -973,7 +976,7 @@ export default function BusinessProjectsPage() {
                     סוג לקוח
                   </label>
                   <select
-                    className="form-select"
+                    className="ux-chip form-select"
                     value={clientForm.clientType}
                     onChange={(e) => setClientForm({ ...clientForm, clientType: e.target.value as ClientType })}
                     style={{ fontSize: "0.875rem" }}
@@ -989,14 +992,14 @@ export default function BusinessProjectsPage() {
                 <div style={{ display: "flex", gap: "0.5rem" }}>
                   <button
                     onClick={handleCreateClient}
-                    className="mod-btn-primary"
+                    className="ux-btn ux-btn-glow mod-btn-primary"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                   >
                     שמור לקוח
                   </button>
                   <button
                     onClick={() => setShowNewClientForm(false)}
-                    className="mod-btn-ghost"
+                    className="ux-btn mod-btn-ghost"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                   >
                     ביטול
@@ -1011,7 +1014,7 @@ export default function BusinessProjectsPage() {
                 סוג פרויקט
               </label>
               <select
-                className="form-select"
+                className="ux-chip form-select"
                 value={projectForm.projectType}
                 onChange={(e) => setProjectForm({ ...projectForm, projectType: e.target.value as BusinessProjectType })}
                 style={{ fontSize: "0.875rem" }}
@@ -1035,7 +1038,7 @@ export default function BusinessProjectsPage() {
                 תיאור
               </label>
               <textarea
-                className="form-input"
+                className="ux-input form-input"
                 placeholder="תיאור הפרויקט"
                 value={projectForm.description}
                 onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
@@ -1050,7 +1053,7 @@ export default function BusinessProjectsPage() {
               </label>
               <input
                 type="number"
-                className="form-input"
+                className="ux-input form-input"
                 value={projectForm.budget}
                 onChange={(e) => setProjectForm({ ...projectForm, budget: e.target.value })}
                 placeholder="הכנס מחיר כולל"
@@ -1066,7 +1069,7 @@ export default function BusinessProjectsPage() {
               </label>
               <input
                 type="date"
-                className="form-input"
+                className="ux-input form-input"
                 value={projectForm.startDate}
                 onChange={(e) => setProjectForm({ ...projectForm, startDate: e.target.value })}
                 style={{ fontSize: "0.875rem" }}
@@ -1079,7 +1082,7 @@ export default function BusinessProjectsPage() {
                 מנהל מוקצה
               </label>
               <select
-                className="form-select"
+                className="ux-chip form-select"
                 value={projectForm.assignedManagerId}
                 onChange={(e) => setProjectForm({ ...projectForm, assignedManagerId: e.target.value })}
                 style={{ fontSize: "0.875rem" }}
@@ -1097,14 +1100,14 @@ export default function BusinessProjectsPage() {
             <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="mod-btn-ghost"
+                className="ux-btn mod-btn-ghost"
                 style={{ padding: "0.5rem 1.125rem" }}
               >
                 ביטול
               </button>
               <button
                 onClick={handleCreateProject}
-                className="mod-btn-primary"
+                className="ux-btn ux-btn-glow mod-btn-primary"
                 disabled={creatingProject}
                 style={{ padding: "0.5rem 1.125rem" }}
               >

@@ -71,6 +71,7 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
         border: 'none',
         zIndex: 1000,
       }}
+      className="ux-modal-backdrop-enter"
     >
       <div
         style={{
@@ -98,6 +99,7 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
             flexDirection: 'column',
             backdropFilter: 'blur(20px)',
           }}
+          className="ux-modal-enter"
         >
           {/* Header */}
           <div

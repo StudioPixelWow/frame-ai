@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useTasks, useEmployees, useClients, useEmployeeTasks } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
+import { SmartHint } from "@/components/ui/smart-hint";
 import type { Task } from "@/lib/db/schema";
 import { fireConfetti } from "@/lib/confetti";
 
@@ -320,6 +321,7 @@ export default function TasksPage() {
 
   const todayTasks = filtered.filter(t => t.dueDate === today && t.status !== 'completed' && t.status !== 'approved');
   const overdueTasks = filtered.filter(t => t.dueDate && t.dueDate < today && t.status !== 'completed' && t.status !== 'approved');
+  const underReviewTasks = filtered.filter(t => t.status === 'under_review');
 
   const toggleEmployeeExpand = (employeeId: string) => {
     const newExpanded = new Set(expandedEmployees);
@@ -347,8 +349,8 @@ export default function TasksPage() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem" }}>
           <div className="mod-page-title">✅ לוח משימות</div>
           <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
-            <input className="mod-search" placeholder="🔍 חיפוש משימה..." value={search} onChange={(e) => setSearch(e.target.value)} />
-            <button className="mod-btn-primary" onClick={() => openCreate("new")}>+ משימה חדשה</button>
+            <input className="mod-search ux-input" placeholder="🔍 חיפוש משימה..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={() => openCreate("new")}>+ משימה חדשה</button>
           </div>
         </div>
       </div>
@@ -399,6 +401,7 @@ export default function TasksPage() {
         <select
           value={filterEmployee}
           onChange={(e) => setFilterEmployee(e.target.value)}
+          className="ux-chip"
           style={{
             padding: "0.4rem 0.6rem",
             background: "var(--surface)",
@@ -418,6 +421,7 @@ export default function TasksPage() {
         <select
           value={filterClient}
           onChange={(e) => setFilterClient(e.target.value)}
+          className="ux-chip"
           style={{
             padding: "0.4rem 0.6rem",
             background: "var(--surface)",
@@ -437,6 +441,7 @@ export default function TasksPage() {
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
+          className="ux-chip"
           style={{
             padding: "0.4rem 0.6rem",
             background: "var(--surface)",
@@ -456,6 +461,7 @@ export default function TasksPage() {
         <select
           value={filterDateRange}
           onChange={(e) => setFilterDateRange(e.target.value)}
+          className="ux-chip"
           style={{
             padding: "0.4rem 0.6rem",
             background: "var(--surface)",
@@ -480,6 +486,7 @@ export default function TasksPage() {
               setFilterStatus("");
               setFilterDateRange("all");
             }}
+            className="ux-btn"
             style={{
               padding: "0.4rem 0.75rem",
               background: "transparent",
@@ -496,13 +503,33 @@ export default function TasksPage() {
         )}
       </div>
 
+      {/* Contextual Smart Hints */}
+      {!loading && (overdueTasks.length > 0 || underReviewTasks.length > 0) && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1.5rem" }}>
+          {overdueTasks.length > 0 && (
+            <SmartHint
+              type="warning"
+              text={`יש ${overdueTasks.length} משימות בפיגור — כדאי לעדכן או להקצות מחדש`}
+              dismissible
+            />
+          )}
+          {underReviewTasks.length > 0 && (
+            <SmartHint
+              type="ai"
+              text={`יש ${underReviewTasks.length} משימות בביקורת — אישור מהיר משחרר את הצוות`}
+              dismissible
+            />
+          )}
+        </div>
+      )}
+
       {/* Today's Tasks Section */}
       {!loading && (todayTasks.length > 0 || overdueTasks.length > 0) && (
         <div style={{ marginBottom: "2rem", background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1rem" }}>
           <div style={{ fontSize: "0.9rem", fontWeight: 700, marginBottom: "1rem", color: "var(--foreground)" }}>
             📅 משימות להיום
           </div>
-          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }} className="ux-stagger">
             {/* Overdue Tasks */}
             {overdueTasks.map((task) => {
               const pri = PRIORITIES.find((p) => p.id === task.priority);
@@ -510,6 +537,7 @@ export default function TasksPage() {
                 <div
                   key={task.id}
                   onClick={() => openEdit(task)}
+                  className="ux-stagger-item"
                   style={{
                     flex: "0 1 auto",
                     minWidth: "200px",
@@ -542,6 +570,7 @@ export default function TasksPage() {
                 <div
                   key={task.id}
                   onClick={() => openEdit(task)}
+                  className="ux-stagger-item"
                   style={{
                     flex: "0 1 auto",
                     minWidth: "200px",
@@ -584,18 +613,18 @@ export default function TasksPage() {
               <div style={{ fontSize: "0.9rem", fontWeight: 700, marginBottom: "1rem", color: "var(--foreground)" }}>
                 📋 משימות כלליות
               </div>
-              <div className="tasks-board">
+              <div className="tasks-board ux-stagger">
               {COLUMNS.map((col) => {
                 const colTasks = filtered.filter((t) => t.status === col.id);
                 return (
-                  <div key={col.id} className="tasks-col">
+                  <div key={col.id} className="tasks-col ux-stagger-item">
                     <div className="tasks-col-header">
                       <div className="tasks-col-title" style={{ color: col.color }}>
                         {col.label}
                         <span className="tasks-col-count">{colTasks.length}</span>
                       </div>
                     </div>
-                    <div className="tasks-col-body">
+                    <div className="tasks-col-body ux-stagger">
                       {colTasks.map((task) => {
                         const pri = PRIORITIES.find((p) => p.id === task.priority);
                         const isUploading = uploadingTaskId === task.id;
@@ -605,9 +634,9 @@ export default function TasksPage() {
                           .map(id => teamEmployees.find(e => e.id === id)?.name)
                           .filter(Boolean);
                         return (
-                          <div key={task.id} style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                          <div key={task.id} style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }} className="ux-stagger-item">
                             <div
-                              className="task-card"
+                              className="task-card ux-card ux-light-sweep"
                               onClick={() => openEdit(task)}
                               style={isOverdue ? { borderRight: '3px solid #f87171' } : undefined}
                             >
@@ -673,7 +702,7 @@ export default function TasksPage() {
                                 )}
                                 <div style={{ display: "flex", gap: "0.5rem" }}>
                                   <button
-                                    className="mod-btn-primary"
+                                    className="mod-btn-primary ux-btn ux-btn-glow"
                                     onClick={handleFileUpload}
                                     disabled={!selectedFile}
                                     style={{ flex: 1, fontSize: "0.7rem", padding: "0.4rem 0.5rem" }}
@@ -681,7 +710,7 @@ export default function TasksPage() {
                                     העלה
                                   </button>
                                   <button
-                                    className="mod-btn-ghost"
+                                    className="mod-btn-ghost ux-btn"
                                     onClick={() => {
                                       setUploadingTaskId(null);
                                       setSelectedFile(null);
@@ -697,7 +726,7 @@ export default function TasksPage() {
                             {/* Upload Button (only show when not uploading) */}
                             {!isUploading && (
                               <button
-                                className="mod-btn-ghost"
+                                className="mod-btn-ghost ux-btn"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setUploadingTaskId(task.id);
@@ -712,7 +741,7 @@ export default function TasksPage() {
                         );
                       })}
                     </div>
-                    <button className="tasks-add-btn" onClick={() => openCreate(col.id as Task["status"])}>+ הוסף משימה</button>
+                    <button className="tasks-add-btn ux-btn ux-btn-glow" onClick={() => openCreate(col.id as Task["status"])}>+ הוסף משימה</button>
                   </div>
                 );
               })}
@@ -733,10 +762,10 @@ export default function TasksPage() {
                 👥 משימות לפי עובד
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }} className="ux-stagger">
                 {/* Unassigned Tasks Section */}
                 {filtered.filter(t => (!Array.isArray(t.assigneeIds) || t.assigneeIds.length === 0) && !t.assigneeId).length > 0 && (
-                  <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", overflow: "hidden" }}>
+                  <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", overflow: "hidden" }} className="ux-card ux-stagger-item">
                     <div
                       onClick={() => toggleEmployeeExpand('unassigned')}
                       style={{
@@ -780,13 +809,14 @@ export default function TasksPage() {
                               <div style={{ fontSize: "0.8rem", fontWeight: 600, marginBottom: "0.5rem", color: "var(--foreground-muted)" }}>
                                 {statusLabel} ({statusTasks.length})
                               </div>
-                              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }} className="ux-stagger">
                                 {statusTasks.map((task) => {
                                   const pri = PRIORITIES.find((p) => p.id === task.priority);
                                   return (
                                     <div
                                       key={task.id}
                                       onClick={() => openEdit(task)}
+                                      className="ux-card ux-light-sweep ux-stagger-item"
                                       style={{
                                         flex: "0 1 auto",
                                         minWidth: "180px",
@@ -842,7 +872,7 @@ export default function TasksPage() {
                   const empInitial = employee.name.charAt(0).toUpperCase();
 
                   return (
-                    <div key={employee.id} style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", overflow: "hidden" }}>
+                    <div key={employee.id} style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", overflow: "hidden" }} className="ux-card ux-stagger-item">
                       <div
                         onClick={() => toggleEmployeeExpand(employee.id)}
                         style={{
@@ -907,7 +937,7 @@ export default function TasksPage() {
                                 <div style={{ fontSize: "0.8rem", fontWeight: 600, marginBottom: "0.5rem", color: "var(--foreground-muted)" }}>
                                   {statusLabel} ({statusTasks.length})
                                 </div>
-                                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }} className="ux-stagger">
                                   {statusTasks.map((task) => {
                                     const pri = PRIORITIES.find((p) => p.id === (task as any).priority);
                                     const taskDueDate = (task as any).dueDate;
@@ -917,6 +947,7 @@ export default function TasksPage() {
                                       <div
                                         key={task.id}
                                         onClick={() => openEdit(task as Task)}
+                                        className="ux-card ux-light-sweep ux-stagger-item"
                                         style={{
                                           flex: "0 1 auto",
                                           minWidth: "180px",
@@ -969,7 +1000,7 @@ export default function TasksPage() {
         <div style={{ display: "flex", gap: "0.5rem", justifyContent: "space-between", flexWrap: "wrap" }}>
           <div>
             {editingTask && (
-              <button className="mod-btn-ghost" style={{ color: "#f87171", borderColor: "rgba(248,113,113,0.3)", fontSize: "0.75rem" }} onClick={async () => {
+              <button className="mod-btn-ghost ux-btn" style={{ color: "#f87171", borderColor: "rgba(248,113,113,0.3)", fontSize: "0.75rem" }} onClick={async () => {
                 await remove(editingTask.id);
                 setModalOpen(false);
                 toast("המשימה נמחקה", "info");
@@ -980,21 +1011,21 @@ export default function TasksPage() {
           </div>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             {editingTask && (form.status === "in_progress" || form.status === "new") && (
-              <button className="mod-btn-primary" onClick={handleSendForReview} style={{ fontSize: "0.75rem" }}>
+              <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={handleSendForReview} style={{ fontSize: "0.75rem" }}>
                 שלח לבדיקה
               </button>
             )}
             {editingTask && form.status === "under_review" && !showReviewNotes && (
               <>
                 <button
-                  className="mod-btn-ghost"
+                  className="mod-btn-ghost ux-btn"
                   onClick={() => setShowReviewNotes(true)}
                   style={{ fontSize: "0.75rem", color: "#f97316", borderColor: "rgba(249,115,22,0.3)" }}
                 >
                   החזר לתיקון
                 </button>
                 <button
-                  className="mod-btn-primary"
+                  className="mod-btn-primary ux-btn ux-btn-glow"
                   onClick={handleApproveTask}
                   style={{ fontSize: "0.75rem", background: "#22c55e" }}
                 >
@@ -1004,7 +1035,7 @@ export default function TasksPage() {
             )}
             {editingTask && form.status === "approved" && !showReviewNotes && (
               <button
-                className="mod-btn-primary"
+                className="mod-btn-primary ux-btn ux-btn-glow"
                 onClick={handleMarkCompleted}
                 style={{ fontSize: "0.85rem", background: "#10b981", fontWeight: 700, padding: "0.5rem 1.25rem" }}
               >
@@ -1013,7 +1044,7 @@ export default function TasksPage() {
             )}
             {editingTask && form.status === "returned" && (
               <button
-                className="mod-btn-primary"
+                className="mod-btn-primary ux-btn ux-btn-glow"
                 onClick={async () => {
                   if (!editingTask) return;
                   try {
@@ -1030,14 +1061,14 @@ export default function TasksPage() {
                 שלח משימה לבדיקה
               </button>
             )}
-            <button className="mod-btn-ghost" onClick={() => { setModalOpen(false); setReviewNotes(""); setShowReviewNotes(false); }}>ביטול</button>
+            <button className="mod-btn-ghost ux-btn" onClick={() => { setModalOpen(false); setReviewNotes(""); setShowReviewNotes(false); }}>ביטול</button>
             {!showReviewNotes && (
-              <button className="mod-btn-primary" onClick={handleSave}>
+              <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={handleSave}>
                 {editingTask ? "שמור" : "צור משימה"}
               </button>
             )}
             {showReviewNotes && (
-              <button className="mod-btn-primary" onClick={handleReturnForChanges} style={{ background: "#f97316" }}>
+              <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={handleReturnForChanges} style={{ background: "#f97316" }}>
                 שלח הערות
               </button>
             )}
@@ -1049,18 +1080,18 @@ export default function TasksPage() {
             <>
               <div>
                 <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>כותרת *</label>
-                <input className="form-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="כותרת המשימה" />
+                <input className="form-input ux-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="כותרת המשימה" />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
                 <div>
                   <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>סטטוס</label>
-                  <select className="form-select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as Task["status"] })}>
+                  <select className="form-select ux-input ux-chip" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as Task["status"] })}>
                     {COLUMNS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
                   </select>
                 </div>
                 <div>
                   <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>עדיפות</label>
-                  <select className="form-select" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as Task["priority"] })}>
+                  <select className="form-select ux-input ux-chip" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as Task["priority"] })}>
                     {PRIORITIES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                   </select>
                 </div>
@@ -1068,23 +1099,23 @@ export default function TasksPage() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
                 <div>
                   <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>לקוח</label>
-                  <select className="form-select" value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })}>
+                  <select className="form-select ux-input ux-chip" value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })}>
                     <option value="">ללא לקוח</option>
                     {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>תאריך יעד</label>
-                  <input className="form-input" type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} dir="ltr" />
+                  <input className="form-input ux-input" type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} dir="ltr" />
                 </div>
               </div>
               <div>
                 <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>תגיות (מופרדות בפסיק)</label>
-                <input className="form-input" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="עיצוב, AI, עריכה" />
+                <input className="form-input ux-input" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="עיצוב, AI, עריכה" />
               </div>
               <div>
                 <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>תיאור</label>
-                <textarea className="form-input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="תיאור המשימה..." rows={3} style={{ resize: "vertical" }} />
+                <textarea className="form-input ux-input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="תיאור המשימה..." rows={3} style={{ resize: "vertical" }} />
               </div>
 
               {/* Assignees Section */}
@@ -1093,7 +1124,7 @@ export default function TasksPage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                   <select
                     multiple
-                    className="form-select"
+                    className="form-select ux-input ux-chip"
                     value={form.assigneeIds}
                     onChange={(e) => {
                       const selected = Array.from(e.target.selectedOptions, option => option.value);
@@ -1130,6 +1161,7 @@ export default function TasksPage() {
                     type="file"
                     accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
                     onChange={handleAddFile}
+                    className="ux-input"
                     style={{
                       fontSize: "0.7rem",
                       padding: "0.4rem",
@@ -1161,7 +1193,7 @@ export default function TasksPage() {
               {/* Notes Section */}
               <div>
                 <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>הערות</label>
-                <textarea className="form-input" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="הערות פנימיות על המשימה..." rows={2} style={{ resize: "vertical", fontSize: "0.75rem" }} />
+                <textarea className="form-input ux-input" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="הערות פנימיות על המשימה..." rows={2} style={{ resize: "vertical", fontSize: "0.75rem" }} />
               </div>
 
               {/* Timeline/History Section */}
@@ -1192,7 +1224,7 @@ export default function TasksPage() {
               <div>
                 <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.5rem" }}>הערות בחזרה *</label>
                 <textarea
-                  className="form-input"
+                  className="form-input ux-input"
                   value={reviewNotes}
                   onChange={(e) => setReviewNotes(e.target.value)}
                   placeholder="הוסף הערות למה יש להחזיר את המשימה לעובד..."

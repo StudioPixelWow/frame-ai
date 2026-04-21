@@ -4,6 +4,7 @@ import { useState } from "react";
 import { usePayments, useClients } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
+import { SmartHint } from "@/components/ui/smart-hint";
 import type { Payment } from "@/lib/db/schema";
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
@@ -84,6 +85,12 @@ export default function PaymentsPage() {
   const totalOverdue = payments.filter((p) => p.status === "overdue").reduce((s, p) => s + p.amount, 0);
   const totalAll = payments.reduce((s, p) => s + p.amount, 0);
 
+  // Smart hints data
+  const overduePayments = payments.filter((p) => p.status === "overdue");
+  const pendingPayments = payments.filter((p) => p.status === "pending");
+  const overduCount = overduePayments.length;
+  const pendingCount = pendingPayments.length;
+
   const kpis = [
     { label: "סה״כ הכנסות", value: totalRevenue, color: "#34d399" },
     { label: "ממתין לתשלום", value: totalPending, color: "#fbbf24" },
@@ -113,18 +120,30 @@ export default function PaymentsPage() {
           <div>
             <h1 className="mod-page-title">💳 תשלומים וחשבוניות</h1>
           </div>
-          <button className="mod-btn-primary" onClick={openCreate}>+ חשבונית חדשה</button>
+          <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={openCreate}>+ חשבונית חדשה</button>
         </div>
 
         {/* KPI */}
-        <div className="pay-kpi-row" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem" }}>
+        <div className="pay-kpi-row ux-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem" }}>
           {kpis.map((kpi) => (
-            <div key={kpi.label} className="agd-card" style={{ padding: "1rem" }}>
+            <div key={kpi.label} className="agd-card ux-card ux-light-sweep ux-stagger-item" style={{ padding: "1rem" }}>
               <p style={{ fontSize: "0.82rem", color: "var(--foreground-muted)", marginBottom: "0.35rem" }}>{kpi.label}</p>
               <p style={{ fontSize: "1.35rem", fontWeight: 700, color: kpi.color }}>₪{kpi.value.toLocaleString()}</p>
             </div>
           ))}
         </div>
+
+        {/* Smart Hints */}
+        {(overduCount > 0 || pendingCount > 0) && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            {overduCount > 0 && (
+              <SmartHint type="warning" text={`יש ${overduCount} תשלומים בפיגור — תזכורת גבייה יכולה לשפר תזרים`} dismissible />
+            )}
+            {pendingCount > 0 && (
+              <SmartHint type="ai" text={`יש ${pendingCount} חשבוניות ממתינות — שליחת תזכורות אוטומטיות יכולה לזרז תשלום`} dismissible />
+            )}
+          </div>
+        )}
 
         {/* Tabs + Search */}
         <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
@@ -156,7 +175,7 @@ export default function PaymentsPage() {
           <div className="pay-table" style={{ borderRadius: "0.75rem", border: "1px solid var(--border)", overflow: "hidden" }}>
             <table style={{ width: "100%", fontSize: "0.82rem", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--surface-raised)", textAlign: "right", color: "var(--foreground-muted)" }}>
+                <tr className="ux-table-header" style={{ borderBottom: "1px solid var(--border)", background: "var(--surface-raised)", textAlign: "right", color: "var(--foreground-muted)" }}>
                   <th style={{ padding: "0.75rem 1rem", fontWeight: 600 }}>מס׳ חשבונית</th>
                   <th style={{ padding: "0.75rem 1rem", fontWeight: 600 }}>לקוח</th>
                   <th style={{ padding: "0.75rem 1rem", fontWeight: 600 }}>תיאור</th>
@@ -171,7 +190,7 @@ export default function PaymentsPage() {
                 {filtered.map((payment) => {
                   const st = STATUS_MAP[payment.status] || STATUS_MAP.pending;
                   return (
-                    <tr key={payment.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <tr key={payment.id} className="ux-table-row" style={{ borderBottom: "1px solid var(--border)" }}>
                       <td style={{ padding: "0.75rem 1rem", fontWeight: 600 }}>{payment.invoiceNo}</td>
                       <td style={{ padding: "0.75rem 1rem", color: "var(--foreground-muted)" }}>{payment.clientName}</td>
                       <td style={{ padding: "0.75rem 1rem", color: "var(--foreground-muted)" }}>{payment.description}</td>
@@ -187,9 +206,9 @@ export default function PaymentsPage() {
                       </td>
                       <td style={{ padding: "0.75rem 1rem" }}>
                         <div style={{ display: "flex", gap: "0.35rem" }}>
-                          <button className="mod-btn-ghost" style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem" }} onClick={() => openEdit(payment)}>✏️</button>
+                          <button className="mod-btn-ghost ux-btn" style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem" }} onClick={() => openEdit(payment)}>✏️</button>
                           {payment.status !== "paid" && (
-                            <button className="mod-btn-ghost" style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", color: "#22c55e" }} onClick={() => handleMarkPaid(payment)}>✓ שולם</button>
+                            <button className="mod-btn-ghost ux-btn" style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", color: "#22c55e" }} onClick={() => handleMarkPaid(payment)}>✓ שולם</button>
                           )}
                         </div>
                       </td>
@@ -202,7 +221,7 @@ export default function PaymentsPage() {
         )}
 
         {/* Aggregate */}
-        <div className="agd-card" style={{ padding: "1rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div className="agd-card ux-card ux-light-sweep" style={{ padding: "1rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <p style={{ fontSize: "0.82rem", color: "var(--foreground-muted)", marginBottom: "0.2rem" }}>סה״כ סכום בטבלה</p>
             <p style={{ fontSize: "1.15rem", fontWeight: 700 }}>₪{tableTotal.toLocaleString()}</p>
@@ -215,7 +234,7 @@ export default function PaymentsPage() {
         <div style={{ display: "flex", gap: "0.5rem", justifyContent: "space-between" }}>
           <div>
             {editingPayment && (
-              <button className="mod-btn-ghost" style={{ color: "#f87171", fontSize: "0.75rem" }} onClick={async () => {
+              <button className="mod-btn-ghost ux-btn" style={{ color: "#f87171", fontSize: "0.75rem" }} onClick={async () => {
                 await remove(editingPayment.id);
                 setModalOpen(false);
                 toast("התשלום נמחק", "info");
@@ -223,8 +242,8 @@ export default function PaymentsPage() {
             )}
           </div>
           <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button className="mod-btn-ghost" onClick={() => setModalOpen(false)}>ביטול</button>
-            <button className="mod-btn-primary" onClick={handleSave}>{editingPayment ? "שמור" : "צור תשלום"}</button>
+            <button className="mod-btn-ghost ux-btn" onClick={() => setModalOpen(false)}>ביטול</button>
+            <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={handleSave}>{editingPayment ? "שמור" : "צור תשלום"}</button>
           </div>
         </div>
       }>

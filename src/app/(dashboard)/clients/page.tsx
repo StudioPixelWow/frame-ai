@@ -8,6 +8,7 @@ import { useClients, useProjects, useTasks, useCampaigns } from "@/lib/api/use-e
 import { useEmployees } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
+import { SmartHint } from "@/components/ui/smart-hint";
 import type { Client } from "@/lib/db/schema";
 
 const AVATAR_COLORS = ["#00B5FE", "#8b5cf6", "#22c55e", "#f59e0b", "#ec4899", "#14b8a6"];
@@ -283,7 +284,7 @@ export default function ClientsPage() {
             </p>
           </div>
           <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
-            <button className="mod-btn-ghost" onClick={handleExport} style={{ fontSize: "0.875rem" }}>
+            <button className="mod-btn-ghost ux-btn" onClick={handleExport} style={{ fontSize: "0.875rem" }}>
               📥 ייצוא
             </button>
             <div
@@ -326,7 +327,7 @@ export default function ClientsPage() {
                 ≡
               </button>
             </div>
-            <button className="mod-btn-primary" onClick={openCreate}>
+            <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={openCreate}>
               + לקוח חדש
             </button>
           </div>
@@ -348,7 +349,7 @@ export default function ClientsPage() {
           {/* Search */}
           <div style={{ flex: "1 1 220px", minWidth: "180px" }}>
             <input
-              className="mod-search"
+              className="mod-search ux-input"
               type="text"
               placeholder="🔍 חיפוש..."
               value={search}
@@ -437,9 +438,48 @@ export default function ClientsPage() {
           )}
         </div>
 
+        {/* Smart Hints Section */}
+        {(() => {
+          const hints = [];
+
+          // Check for active clients without assigned manager
+          const activeWithoutManager = clients.filter((c) => c.status === "active" && !c.assignedManagerId);
+          if (activeWithoutManager.length > 0) {
+            hints.push(
+              <SmartHint
+                key="unassigned-managers"
+                type="warning"
+                text={`יש ${activeWithoutManager.length} לקוחות פעילים ללא מנהל מטפל — שיבוץ מנהל משפר מעקב ושימור`}
+                dismissible
+              />
+            );
+          }
+
+          // Check for clients without monthly gantt status
+          const withoutMonthlyGantt = clients.filter(
+            (c) => !c.monthlyGanttStatus || c.monthlyGanttStatus === "none" || c.monthlyGanttStatus === "draft"
+          );
+          if (withoutMonthlyGantt.length > 0) {
+            hints.push(
+              <SmartHint
+                key="missing-monthly-gantt"
+                type="ai"
+                text={`יש ${withoutMonthlyGantt.length} לקוחות ללא תוכנית חודשית — הגדרת גאנט חודשי מבטיחה עבודה שוטפת`}
+                dismissible
+              />
+            );
+          }
+
+          return hints.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              {hints}
+            </div>
+          ) : null;
+        })()}
+
         {/* Content Area */}
         {loading ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "1.25rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "1.25rem" }} className="ux-stagger">
             {[1, 2, 3, 4, 5, 6].map(i => (
               <div key={i} className="agd-card" style={{ padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
                 <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
@@ -459,18 +499,18 @@ export default function ClientsPage() {
             <style>{`@keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }`}</style>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="mod-empty" style={{ minHeight: "300px" }}>
-            <div className="mod-empty-icon">👤</div>
-            <div style={{ fontSize: "1rem", fontWeight: 500, marginBottom: "0.5rem" }}>
+          <div className="mod-empty ux-empty-state" style={{ minHeight: "300px" }}>
+            <div className="mod-empty-icon ux-empty-state-icon">👤</div>
+            <div className="ux-empty-state-title" style={{ fontSize: "1rem", fontWeight: 500, marginBottom: "0.5rem" }}>
               {search ? "לא נמצאו לקוחות תואמים" : "אין לקוחות עדיין"}
             </div>
-            <div style={{ fontSize: "0.875rem", color: "var(--foreground-muted)", marginBottom: "1.5rem" }}>
+            <div className="ux-empty-state-text" style={{ fontSize: "0.875rem", color: "var(--foreground-muted)", marginBottom: "1.5rem" }}>
               {search ? "נסה לחפש בקריטריונים שונים" : "התחל בהוספת הלקוח הראשון שלך"}
             </div>
-            {!search && <button className="mod-btn-primary" onClick={openCreate}>+ הוסף לקוח ראשון</button>}
+            {!search && <button className="mod-btn-primary ux-btn ux-btn-glow ux-empty-state-cta" onClick={openCreate}>+ הוסף לקוח ראשון</button>}
           </div>
         ) : viewMode === "grid" ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "1.25rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "1.25rem" }} className="ux-stagger">
             {filtered.map((client) => {
               const displayColor = client.color || avatarColor(client.id);
               const st = STATUS_LABELS[client.status] || STATUS_LABELS.active;
@@ -497,7 +537,7 @@ export default function ClientsPage() {
               return (
                 <div
                   key={client.id}
-                  className="agd-card"
+                  className="agd-card ux-card ux-light-sweep ux-stagger-item"
                   style={{
                     display: "flex",
                     flexDirection: "column",
@@ -665,19 +705,19 @@ export default function ClientsPage() {
                     {/* Actions — 3 primary buttons only */}
                     <div style={{ display: "flex", gap: "0.35rem" }}>
                       <Link href={`/clients/${client.id}`} style={{ textDecoration: "none" }}>
-                        <button className="mod-btn-primary" style={{ fontSize: "0.72rem", padding: "0.35rem 0.75rem" }}>
+                        <button className="mod-btn-primary ux-btn ux-btn-glow" style={{ fontSize: "0.72rem", padding: "0.35rem 0.75rem" }}>
                           פתח
                         </button>
                       </Link>
                       <button
-                        className="mod-btn-ghost"
+                        className="mod-btn-ghost ux-btn"
                         style={{ fontSize: "0.72rem", padding: "0.35rem 0.6rem" }}
                         onClick={(e) => { e.stopPropagation(); openEdit(client); }}
                       >
                         ערוך
                       </button>
                       <button
-                        className="mod-btn-ghost"
+                        className="mod-btn-ghost ux-btn"
                         style={{ fontSize: "0.72rem", padding: "0.35rem 0.6rem" }}
                         onClick={() => router.push(`/clients/${client.id}?tab=content`)}
                       >
@@ -703,7 +743,7 @@ export default function ClientsPage() {
               }}
             >
               <thead>
-                <tr style={{ borderBottom: "2px solid var(--border)" }}>
+                <tr style={{ borderBottom: "2px solid var(--border)" }} className="ux-table-header">
                   <th style={{ textAlign: "right", padding: "1rem", fontWeight: 600, fontSize: "0.875rem" }}>שם</th>
                   <th style={{ textAlign: "right", padding: "1rem", fontWeight: 600, fontSize: "0.875rem" }}>חברה</th>
                   <th style={{ textAlign: "right", padding: "1rem", fontWeight: 600, fontSize: "0.875rem" }}>סוג</th>
@@ -728,6 +768,7 @@ export default function ClientsPage() {
                         borderBottom: "1px solid var(--border)",
                         backgroundColor: idx % 2 === 0 ? "transparent" : "var(--surface-raised)",
                       }}
+                      className="ux-table-row"
                     >
                       <td style={{ padding: "1rem", display: "flex", gap: "0.75rem", alignItems: "center" }}>
                         <div
@@ -798,21 +839,21 @@ export default function ClientsPage() {
                       <td style={{ padding: "1rem", display: "flex", gap: "0.3rem" }}>
                         <Link href={`/clients/${client.id}`} style={{ textDecoration: "none" }}>
                           <button
-                            className="mod-btn-ghost"
+                            className="mod-btn-ghost ux-btn"
                             style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem" }}
                           >
                             פתח
                           </button>
                         </Link>
                         <button
-                          className="mod-btn-ghost"
+                          className="mod-btn-ghost ux-btn"
                           style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem" }}
                           onClick={() => openEdit(client)}
                         >
                           ערוך
                         </button>
                         <button
-                          className="mod-btn-ghost"
+                          className="mod-btn-ghost ux-btn"
                           style={{
                             fontSize: "0.7rem",
                             padding: "0.3rem 0.6rem",
@@ -824,7 +865,7 @@ export default function ClientsPage() {
                           🗑
                         </button>
                         <button
-                          className="mod-btn-ghost"
+                          className="mod-btn-ghost ux-btn"
                           style={{
                             fontSize: "0.7rem",
                             padding: "0.3rem 0.6rem",
@@ -852,10 +893,10 @@ export default function ClientsPage() {
         title={editingClient ? "עריכת לקוח" : "לקוח חדש"}
         footer={
           <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-            <button type="button" className="mod-btn-ghost" onClick={() => setModalOpen(false)}>
+            <button type="button" className="mod-btn-ghost ux-btn" onClick={() => setModalOpen(false)}>
               ביטול
             </button>
-            <button type="button" className="mod-btn-primary" onClick={handleSave} disabled={saving}>
+            <button type="button" className="mod-btn-primary ux-btn ux-btn-glow" onClick={handleSave} disabled={saving}>
               {saving ? "שומר..." : editingClient ? "שמור שינויים" : "צור לקוח"}
             </button>
           </div>
@@ -869,7 +910,7 @@ export default function ClientsPage() {
                 שם *
               </label>
               <input
-                className="form-input"
+                className="form-input ux-input"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="שם הלקוח"
@@ -880,7 +921,7 @@ export default function ClientsPage() {
                 חברה
               </label>
               <input
-                className="form-input"
+                className="form-input ux-input"
                 value={form.company}
                 onChange={(e) => setForm({ ...form, company: e.target.value })}
                 placeholder="שם החברה"
@@ -895,7 +936,7 @@ export default function ClientsPage() {
                 איש קשר
               </label>
               <input
-                className="form-input"
+                className="form-input ux-input"
                 value={form.contactPerson}
                 onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
                 placeholder="שם איש קשר"
@@ -906,7 +947,7 @@ export default function ClientsPage() {
                 טלפון
               </label>
               <input
-                className="form-input"
+                className="form-input ux-input"
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 placeholder="054-000-0000"
@@ -921,7 +962,7 @@ export default function ClientsPage() {
               אימייל
             </label>
             <input
-              className="form-input"
+              className="form-input ux-input"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
               placeholder="email@example.com"
@@ -952,7 +993,7 @@ export default function ClientsPage() {
                 תחום עיסוק
               </label>
               <input
-                className="form-input"
+                className="form-input ux-input"
                 value={form.businessField}
                 onChange={(e) => setForm({ ...form, businessField: e.target.value })}
                 placeholder="תחום עיסוק"
@@ -967,7 +1008,7 @@ export default function ClientsPage() {
                 ריטיינר ₪
               </label>
               <input
-                className="form-input"
+                className="form-input ux-input"
                 type="number"
                 value={form.retainerAmount}
                 onChange={(e) => setForm({ ...form, retainerAmount: Number(e.target.value) })}
@@ -1029,7 +1070,7 @@ export default function ClientsPage() {
                   אתר 🌐
                 </label>
                 <input
-                  className="form-input"
+                  className="form-input ux-input"
                   value={(form as any).websiteUrl || ""}
                   onChange={(e) => setForm({ ...form, websiteUrl: e.target.value })}
                   placeholder="https://example.com"
@@ -1041,7 +1082,7 @@ export default function ClientsPage() {
                   Facebook 📘
                 </label>
                 <input
-                  className="form-input"
+                  className="form-input ux-input"
                   value={(form as any).facebookPageUrl || ""}
                   onChange={(e) => setForm({ ...form, facebookPageUrl: e.target.value })}
                   placeholder="https://facebook.com/page"
@@ -1057,7 +1098,7 @@ export default function ClientsPage() {
                   Instagram 📷
                 </label>
                 <input
-                  className="form-input"
+                  className="form-input ux-input"
                   value={(form as any).instagramProfileUrl || ""}
                   onChange={(e) => setForm({ ...form, instagramProfileUrl: e.target.value })}
                   placeholder="https://instagram.com/profile"
@@ -1069,7 +1110,7 @@ export default function ClientsPage() {
                   TikTok 🎵
                 </label>
                 <input
-                  className="form-input"
+                  className="form-input ux-input"
                   value={(form as any).tiktokProfileUrl || ""}
                   onChange={(e) => setForm({ ...form, tiktokProfileUrl: e.target.value })}
                   placeholder="https://tiktok.com/@profile"
