@@ -25,6 +25,44 @@ const POLL_INTERVAL_MS = Number(process.env.RENDER_POLL_INTERVAL_MS ?? 3000);
 const REMOTION_CONCURRENCY = Number(process.env.REMOTION_CONCURRENCY ?? 1);
 const RENDER_TIMEOUT_MS = Number(process.env.REMOTION_TIMEOUT_MS ?? 1000 * 60 * 30);
 
+// ── Chromium options for low-memory environments (Railway / Docker) ───
+// These flags prevent the OOM killer from SIGKILL-ing the compositor.
+const CHROMIUM_OPTIONS = {
+  disableWebSecurity: true,
+  gl: "angle" as const,
+  enableMultiProcessOnLinux: false, // single-process = less memory
+  chromiumFlags: [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",    // critical: don't use /dev/shm (limited in Docker)
+    "--disable-gpu",
+    "--disable-software-rasterizer",
+    "--disable-extensions",
+    "--disable-background-networking",
+    "--disable-background-timer-throttling",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-breakpad",
+    "--disable-component-update",
+    "--disable-default-apps",
+    "--disable-hang-monitor",
+    "--disable-popup-blocking",
+    "--disable-prompt-on-repost",
+    "--disable-sync",
+    "--disable-translate",
+    "--metrics-recording-only",
+    "--no-first-run",
+    "--js-flags=--max-old-space-size=512",
+  ],
+};
+
+// Cap Remotion's offthread video cache to 256 MB (default is unbounded)
+const VIDEO_CACHE_SIZE_BYTES = Number(
+  process.env.REMOTION_VIDEO_CACHE_MB ?? 256
+) * 1024 * 1024;
+
+// JPEG quality for intermediate frames (default 80, lower = less memory)
+const JPEG_QUALITY = Number(process.env.REMOTION_JPEG_QUALITY ?? 75);
+
 // Ensure output dir exists
 if (!fs.existsSync(OUTPUT_DIR)) {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -266,6 +304,8 @@ async function renderJob(jobId: string): Promise<void> {
       serveUrl,
       id: compositionId,
       inputProps,
+      chromiumOptions: CHROMIUM_OPTIONS,
+      timeoutInMilliseconds: 30000,
     });
 
     console.log(
@@ -278,7 +318,7 @@ async function renderJob(jobId: string): Promise<void> {
       stage: "מתחיל רינדור",
     });
 
-    console.log(`${tag} Starting renderMedia...`);
+    console.log(`${tag} Starting renderMedia (concurrency=${REMOTION_CONCURRENCY}, jpegQuality=${JPEG_QUALITY}, videoCacheMB=${VIDEO_CACHE_SIZE_BYTES / 1024 / 1024})...`);
 
     await renderMedia({
       composition,
@@ -286,8 +326,15 @@ async function renderJob(jobId: string): Promise<void> {
       codec: "h264",
       outputLocation: outputPath,
       inputProps,
+      // ── Resource limits for Railway / Docker ──
       concurrency: REMOTION_CONCURRENCY,
       timeoutInMilliseconds: RENDER_TIMEOUT_MS,
+      jpegQuality: JPEG_QUALITY,
+      offthreadVideoCacheSizeInBytes: VIDEO_CACHE_SIZE_BYTES,
+      chromiumOptions: CHROMIUM_OPTIONS,
+      // ── Encoding: use CRF for predictable output size ──
+      crf: 23,
+      // ── Progress reporting ──
       onProgress: ({ progress }) => {
         const pct = Math.round(20 + progress * 70);
         const stage =
@@ -549,6 +596,10 @@ async function main(): Promise<void> {
   console.log(`${tag} Remotion entry:    ${REMOTION_ENTRY}`);
   console.log(`${tag} CWD:               ${PROJECT_ROOT}`);
   console.log(`${tag} Concurrency:       ${REMOTION_CONCURRENCY}`);
+  console.log(`${tag} JPEG quality:      ${JPEG_QUALITY}`);
+  console.log(`${tag} Video cache MB:    ${VIDEO_CACHE_SIZE_BYTES / 1024 / 1024}`);
+  const mem = process.memoryUsage();
+  console.log(`${tag} Memory at start:   RSS=${Math.round(mem.rss / 1024 / 1024)}MB heap=${Math.round(mem.heapUsed / 1024 / 1024)}MB`);
   console.log("═══════════════════════════════════════════════════════════");
 
   const sb = getWorkerSupabase();
@@ -583,8 +634,9 @@ async function main(): Promise<void> {
   setInterval(() => {
     pollCount++;
     if (pollCount % 20 === 0) {
+      const hbMem = process.memoryUsage();
       console.log(
-        `${tag} ♥️ heartbeat — ${pollCount} polls, rendering=${isRendering}, polling=${isPolling}, uptime=${Math.round(process.uptime())}s`
+        `${tag} ♥ heartbeat — polls=${pollCount} rendering=${isRendering} uptime=${Math.round(process.uptime())}s RSS=${Math.round(hbMem.rss / 1024 / 1024)}MB heap=${Math.round(hbMem.heapUsed / 1024 / 1024)}MB`
       );
     }
     void pollForJobs();
