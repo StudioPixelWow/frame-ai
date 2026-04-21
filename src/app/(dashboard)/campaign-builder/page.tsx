@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -675,15 +675,277 @@ function Step3Creative({
   onChange,
   errors,
   clientFiles,
+  selectedClient,
+  refetchClientFiles,
+  createClientFile,
+  toast,
 }: {
   data: WizardData;
   onChange: (partial: Partial<WizardData>) => void;
   errors: StepErrors;
   clientFiles: ClientFile[];
+  selectedClient: Client | undefined;
+  refetchClientFiles: () => Promise<void>;
+  createClientFile: (item: Partial<ClientFile>) => Promise<ClientFile>;
+  toast: (msg: string, type: "success" | "error") => void;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+
+  // AI state
+  const [aiLoading, setAiLoading] = useState<string | null>(null); // 'caption-improve' | 'caption-variations' | 'headline-improve' | 'headline-variations' | null
+  const [aiResults, setAiResults] = useState<{ field: string; results: string[] } | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   const relevantFiles = clientFiles.filter(
     (f) => f.fileType === "image" || f.fileType === "video"
   );
+
+  // ── Upload handler (reuses real signed-URL pattern) ──
+  const handleFileUpload = useCallback(async (file: File) => {
+    if (!data.clientId) {
+      toast("יש לבחור לקוח לפני העלאת קובץ", "error");
+      return;
+    }
+
+    setUploading(true);
+    setUploadError(null);
+    setUploadSuccess(null);
+
+    try {
+      // Step 1: Get signed upload URL
+      const signedRes = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          contentType: file.type,
+          fileSize: file.size,
+        }),
+      });
+
+      if (!signedRes.ok) {
+        const err = await signedRes.json().catch(() => ({}));
+        throw new Error(err.error || `Upload init failed (${signedRes.status})`);
+      }
+
+      const { uploadUrl, publicUrl, token } = await signedRes.json();
+
+      // Step 2: PUT file directly to Supabase Storage
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+          Authorization: `Bearer ${token}`,
+        },
+        body: file,
+      });
+
+      if (!putRes.ok) {
+        throw new Error(`File upload failed (${putRes.status})`);
+      }
+
+      // Step 3: Create client-file DB record
+      const ext = file.name.split(".").pop()?.toLowerCase() || "";
+      const fileType: ClientFile["fileType"] =
+        ["mp4", "webm", "mov", "avi"].includes(ext) ? "video"
+        : ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext) ? "image"
+        : ["pdf"].includes(ext) ? "pdf"
+        : "other";
+
+      const created = await createClientFile({
+        clientId: data.clientId,
+        fileName: file.name,
+        fileUrl: publicUrl,
+        fileType,
+        category: "social_media" as ClientFile["category"],
+        fileSize: file.size,
+        uploadedBy: "campaign-builder",
+        notes: `הועלה מבונה הקמפיינים`,
+      });
+
+      // Step 4: Refresh file list and auto-select
+      await refetchClientFiles();
+      onChange({ linkedClientFileId: created.id });
+
+      setUploadSuccess(file.name);
+      toast(`הקובץ "${file.name}" הועלה בהצלחה`, "success");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "שגיאה בהעלאת קובץ";
+      setUploadError(msg);
+      toast(msg, "error");
+    } finally {
+      setUploading(false);
+      // Reset the file input so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }, [data.clientId, createClientFile, refetchClientFiles, onChange, toast]);
+
+  // ── AI copy handler ──
+  const handleAI = useCallback(async (field: "caption" | "headline", mode: "improve" | "variations") => {
+    const key = `${field}-${mode}`;
+    setAiLoading(key);
+    setAiError(null);
+    setAiResults(null);
+
+    try {
+      const res = await fetch("/api/ai/campaign-copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode,
+          field,
+          currentText: field === "caption" ? data.caption : data.headline,
+          context: {
+            clientId: data.clientId,
+            clientName: selectedClient?.name || "",
+            businessField: selectedClient?.businessField || "",
+            campaignType: data.campaignType,
+            platform: data.platform,
+            mediaType: data.mediaType,
+            adFormat: data.adFormat,
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `AI generation failed (${res.status})`);
+      }
+
+      const json = await res.json();
+      if (json.results && json.results.length > 0) {
+        setAiResults({ field, results: json.results });
+      } else {
+        throw new Error("AI returned empty results");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "שגיאה ביצירת טקסט";
+      setAiError(msg);
+    } finally {
+      setAiLoading(null);
+    }
+  }, [data, selectedClient]);
+
+  const applyAiResult = useCallback((field: string, text: string) => {
+    if (field === "caption") onChange({ caption: text });
+    else if (field === "headline") onChange({ headline: text });
+    setAiResults(null);
+  }, [onChange]);
+
+  const dismissAiResults = useCallback(() => {
+    setAiResults(null);
+    setAiError(null);
+  }, []);
+
+  // ── AI results chooser ──
+  const renderAiChooser = (field: string) => {
+    if (aiError) {
+      return (
+        <div style={{ padding: "0.75rem", background: "rgba(239,68,68,0.06)", borderRadius: "0.5rem", border: "1px solid rgba(239,68,68,0.2)", marginTop: "0.5rem" }}>
+          <div style={{ fontSize: "0.75rem", color: "#ef4444", fontWeight: 600, marginBottom: "0.25rem" }}>שגיאה ביצירת AI</div>
+          <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>{aiError}</div>
+          <button type="button" onClick={dismissAiResults} className="mod-btn-ghost" style={{ marginTop: "0.5rem", padding: "0.25rem 0.5rem", fontSize: "0.68rem", borderRadius: "0.25rem", cursor: "pointer" }}>
+            סגור
+          </button>
+        </div>
+      );
+    }
+    if (!aiResults || aiResults.field !== field) return null;
+    return (
+      <div style={{ marginTop: "0.5rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+        <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--accent)", marginBottom: "0.15rem" }}>
+          ✨ בחר גרסה:
+        </div>
+        {aiResults.results.map((text, i) => (
+          <div
+            key={i}
+            style={{
+              padding: "0.6rem 0.75rem",
+              background: "var(--surface-raised)",
+              border: "1px solid var(--border)",
+              borderRadius: "0.5rem",
+              cursor: "pointer",
+              transition: "all 150ms",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "0.5rem",
+            }}
+            onClick={() => applyAiResult(field, text)}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.background = "rgba(0,181,254,0.04)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.background = "var(--surface-raised)"; }}
+          >
+            <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--accent)", minWidth: "1.2rem", textAlign: "center", marginTop: "0.05rem" }}>
+              {i + 1}
+            </span>
+            <span style={{ fontSize: "0.78rem", color: "var(--foreground)", lineHeight: 1.5, flex: 1 }}>
+              {text}
+            </span>
+          </div>
+        ))}
+        <button type="button" onClick={dismissAiResults} className="mod-btn-ghost" style={{ alignSelf: "flex-start", padding: "0.25rem 0.5rem", fontSize: "0.68rem", borderRadius: "0.25rem", cursor: "pointer", marginTop: "0.15rem" }}>
+          ביטול
+        </button>
+      </div>
+    );
+  };
+
+  // ── AI buttons row ──
+  const renderAiButtons = (field: "caption" | "headline", improveLabel: string, variationsLabel: string) => {
+    const isFieldLoading = aiLoading?.startsWith(field);
+    return (
+      <div style={{ display: "flex", gap: "0.4rem", marginTop: "0.35rem", flexWrap: "wrap" }}>
+        <button
+          type="button"
+          disabled={!!aiLoading || !data.clientId}
+          onClick={() => handleAI(field, "improve")}
+          className="mod-btn-ghost"
+          style={{
+            padding: "0.3rem 0.6rem",
+            fontSize: "0.68rem",
+            fontWeight: 600,
+            borderRadius: "0.3rem",
+            cursor: aiLoading ? "wait" : "pointer",
+            opacity: aiLoading && !isFieldLoading ? 0.5 : 1,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.25rem",
+          }}
+        >
+          {aiLoading === `${field}-improve` ? (
+            <><span className="skeleton" style={{ width: 12, height: 12, borderRadius: "50%", display: "inline-block" }} /> AI מנסח...</>
+          ) : (
+            <>✨ {improveLabel}</>
+          )}
+        </button>
+        <button
+          type="button"
+          disabled={!!aiLoading || !data.clientId}
+          onClick={() => handleAI(field, "variations")}
+          className="mod-btn-ghost"
+          style={{
+            padding: "0.3rem 0.6rem",
+            fontSize: "0.68rem",
+            fontWeight: 600,
+            borderRadius: "0.3rem",
+            cursor: aiLoading ? "wait" : "pointer",
+            opacity: aiLoading && !isFieldLoading ? 0.5 : 1,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.25rem",
+          }}
+        >
+          {aiLoading === `${field}-variations` ? (
+            <><span className="skeleton" style={{ width: 12, height: 12, borderRadius: "50%", display: "inline-block" }} /> AI מנסח גרסאות...</>
+          ) : (
+            <>🔄 {variationsLabel}</>
+          )}
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
@@ -747,7 +1009,7 @@ function Step3Creative({
                 }
                 style={selectStyle}
               >
-                <option value="">— בחר קובץ קיים —</option>
+                <option value="">— בחר קובץ קיים ({relevantFiles.length}) —</option>
                 {relevantFiles.map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.fileName} ({f.fileType})
@@ -767,8 +1029,65 @@ function Step3Creative({
                 }}
               >
                 {data.clientId
-                  ? "אין קבצי תמונה/וידאו ללקוח זה"
+                  ? "אין קבצי תמונה/וידאו ללקוח זה — העלה קובץ חדש"
                   : "בחר לקוח כדי לראות קבצים קיימים"}
+              </div>
+            )}
+          </div>
+
+          {/* Upload new file */}
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFileUpload(file);
+              }}
+            />
+            <button
+              type="button"
+              disabled={uploading || !data.clientId}
+              onClick={() => fileInputRef.current?.click()}
+              className="mod-btn-ghost"
+              style={{
+                padding: "0.5rem 0.875rem",
+                fontSize: "0.75rem",
+                fontWeight: 600,
+                borderRadius: "0.375rem",
+                cursor: uploading ? "wait" : "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.35rem",
+                opacity: !data.clientId ? 0.5 : 1,
+                width: "100%",
+                justifyContent: "center",
+                border: "1px dashed var(--border)",
+                background: "var(--surface-raised)",
+                transition: "all 150ms",
+              }}
+            >
+              {uploading ? (
+                <><span className="skeleton" style={{ width: 14, height: 14, borderRadius: "50%", display: "inline-block" }} /> מעלה קובץ...</>
+              ) : (
+                <>📤 העלה קובץ חדש</>
+              )}
+            </button>
+            {!data.clientId && (
+              <div style={{ fontSize: "0.65rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>
+                יש לבחור לקוח בשלב 1 לפני העלאת קובץ
+              </div>
+            )}
+            {uploadError && (
+              <div style={{ fontSize: "0.7rem", color: "#ef4444", marginTop: "0.35rem", padding: "0.4rem 0.6rem", background: "rgba(239,68,68,0.06)", borderRadius: "0.375rem", border: "1px solid rgba(239,68,68,0.15)" }}>
+                {uploadError}
+              </div>
+            )}
+            {uploadSuccess && (
+              <div style={{ fontSize: "0.7rem", color: "#22c55e", marginTop: "0.35rem", padding: "0.4rem 0.6rem", background: "rgba(34,197,94,0.06)", borderRadius: "0.375rem", border: "1px solid rgba(34,197,94,0.15)", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                ✅ הקובץ &quot;{uploadSuccess}&quot; הועלה ונבחר
               </div>
             )}
           </div>
@@ -808,9 +1127,13 @@ function Step3Creative({
               }}
             />
             <FieldError error={errors.caption} />
-            <div style={{ fontSize: "0.65rem", color: "var(--foreground-muted)", marginTop: "0.2rem", textAlign: "left", direction: "ltr" }}>
-              {data.caption.length} / 500
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginTop: "0.2rem" }}>
+              <div>{renderAiButtons("caption", "שפר עם AI", "צור 3 גרסאות")}</div>
+              <div style={{ fontSize: "0.65rem", color: "var(--foreground-muted)", direction: "ltr", minWidth: "4rem", textAlign: "left", paddingTop: "0.35rem" }}>
+                {data.caption.length} / 500
+              </div>
             </div>
+            {renderAiChooser("caption")}
           </div>
 
           {/* Headline */}
@@ -823,6 +1146,8 @@ function Step3Creative({
               placeholder="כותרת קצרה ומושכת"
               style={inputStyle}
             />
+            {renderAiButtons("headline", "שפר עם AI", "צור 3 כותרות")}
+            {renderAiChooser("headline")}
           </div>
 
           {/* CTA */}
@@ -1060,7 +1385,7 @@ export default function CampaignBuilderPage() {
   const toast = useToast();
   const { data: clients, loading: clientsLoading, error: clientsError } = useClients();
   const { create: createCampaign } = useCampaigns();
-  const { data: allClientFiles } = useClientFiles();
+  const { data: allClientFiles, refetch: refetchClientFiles, create: createClientFile } = useClientFiles();
 
   const [step, setStep] = useState(1);
   const [data, setData] = useState<WizardData>(INITIAL_DATA);
@@ -1291,6 +1616,10 @@ export default function CampaignBuilderPage() {
           onChange={handleChange}
           errors={errors}
           clientFiles={clientFiles}
+          selectedClient={selectedClient}
+          refetchClientFiles={refetchClientFiles}
+          createClientFile={createClientFile}
+          toast={toast}
         />
       )}
       {step === 4 && (
