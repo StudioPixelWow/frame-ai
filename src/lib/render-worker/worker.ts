@@ -25,43 +25,10 @@ const POLL_INTERVAL_MS = Number(process.env.RENDER_POLL_INTERVAL_MS ?? 3000);
 const REMOTION_CONCURRENCY = Number(process.env.REMOTION_CONCURRENCY ?? 1);
 const RENDER_TIMEOUT_MS = Number(process.env.REMOTION_TIMEOUT_MS ?? 1000 * 60 * 30);
 
-// ── Chromium options for low-memory environments (Railway / Docker) ───
-// These flags prevent the OOM killer from SIGKILL-ing the compositor.
-const CHROMIUM_OPTIONS = {
-  disableWebSecurity: true,
-  gl: "angle" as const,
-  enableMultiProcessOnLinux: false, // single-process = less memory
-  chromiumFlags: [
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
-    "--disable-dev-shm-usage",    // critical: don't use /dev/shm (limited in Docker)
-    "--disable-gpu",
-    "--disable-software-rasterizer",
-    "--disable-extensions",
-    "--disable-background-networking",
-    "--disable-background-timer-throttling",
-    "--disable-backgrounding-occluded-windows",
-    "--disable-breakpad",
-    "--disable-component-update",
-    "--disable-default-apps",
-    "--disable-hang-monitor",
-    "--disable-popup-blocking",
-    "--disable-prompt-on-repost",
-    "--disable-sync",
-    "--disable-translate",
-    "--metrics-recording-only",
-    "--no-first-run",
-    "--js-flags=--max-old-space-size=512",
-  ],
-};
-
-// Cap Remotion's offthread video cache to 256 MB (default is unbounded)
+// Cap Remotion's offthread video cache to 128 MB (default is unbounded)
 const VIDEO_CACHE_SIZE_BYTES = Number(
-  process.env.REMOTION_VIDEO_CACHE_MB ?? 256
+  process.env.REMOTION_VIDEO_CACHE_MB ?? 128
 ) * 1024 * 1024;
-
-// JPEG quality for intermediate frames (default 80, lower = less memory)
-const JPEG_QUALITY = Number(process.env.REMOTION_JPEG_QUALITY ?? 75);
 
 // Ensure output dir exists
 if (!fs.existsSync(OUTPUT_DIR)) {
@@ -298,18 +265,54 @@ async function renderJob(jobId: string): Promise<void> {
       stage: "טוען קבצי מקור",
     });
 
-    console.log(`${tag} Selecting composition: ${compositionId}`);
+    // ── Chromium options: ultra-light for Railway ──
+    const chromiumOpts = {
+      disableWebSecurity: true,
+      ignoreCertificateErrors: true,
+      gl: "swiftshader" as const,
+      enableMultiProcessOnLinux: false,
+      chromiumFlags: [
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--single-process",
+        "--no-zygote",
+        "--disable-background-networking",
+        "--disable-background-timer-throttling",
+        "--disable-renderer-backgrounding",
+        "--disable-extensions",
+        "--mute-audio",
+        "--disable-breakpad",
+        "--disable-component-update",
+        "--disable-default-apps",
+        "--disable-hang-monitor",
+        "--disable-translate",
+        "--metrics-recording-only",
+        "--no-first-run",
+        "--js-flags=--max-old-space-size=384",
+      ],
+    };
 
-    const composition = await selectComposition({
-      serveUrl,
-      id: compositionId,
-      inputProps,
-      chromiumOptions: CHROMIUM_OPTIONS,
-      timeoutInMilliseconds: 30000,
-    });
+    // ── Stage: selectComposition ──
+    console.log(`${tag} [STEP] selectComposition: ${compositionId}`);
+    let composition;
+    try {
+      composition = await selectComposition({
+        serveUrl,
+        id: compositionId,
+        inputProps,
+        chromiumOptions: chromiumOpts,
+        timeoutInMilliseconds: 30000,
+      });
+    } catch (compErr) {
+      const msg = compErr instanceof Error ? compErr.message : String(compErr);
+      console.error(`${tag} ❌ selectComposition CRASHED: ${msg}`);
+      throw new Error(`selectComposition failed: ${msg}`);
+    }
 
     console.log(
-      `${tag} Composition resolved: ${composition.width}x${composition.height}, ${composition.durationInFrames}f @ ${composition.fps}fps`
+      `${tag} [STEP] Composition resolved: ${composition.width}x${composition.height}, ${composition.durationInFrames}f @ ${composition.fps}fps`
     );
 
     await updateJob(jobId, {
@@ -318,60 +321,48 @@ async function renderJob(jobId: string): Promise<void> {
       stage: "מתחיל רינדור",
     });
 
-    console.log(`${tag} Starting renderMedia (concurrency=1, scale=0.6, jpeg=80, cache=${VIDEO_CACHE_SIZE_BYTES / 1024 / 1024}MB)...`);
+    // ── Stage: renderMedia ──
+    const memBefore = process.memoryUsage();
+    console.log(`${tag} [STEP] renderMedia starting (scale=0.35, jpeg=60, concurrency=1, gl=swiftshader) RSS=${Math.round(memBefore.rss / 1024 / 1024)}MB`);
 
-    await renderMedia({
-      composition,
-      serveUrl,
-      codec: "h264",
-      outputLocation: outputPath,
-      inputProps,
-      // ── Railway resource limits ──
-      concurrency: 1,
-      scale: 0.6,
-      imageFormat: "jpeg",
-      jpegQuality: 80,
-      offthreadVideoCacheSizeInBytes: VIDEO_CACHE_SIZE_BYTES,
-      timeoutInMilliseconds: RENDER_TIMEOUT_MS,
-      crf: 23,
-      // ── Chromium stability for Docker / Railway ──
-      chromiumOptions: {
-        disableWebSecurity: true,
-        ignoreCertificateErrors: true,
-        gl: "angle" as const,
-        enableMultiProcessOnLinux: false,
-        chromiumFlags: [
-          "--disable-dev-shm-usage",
-          "--disable-gpu",
-          "--no-sandbox",
-          "--single-process",
-          "--no-zygote",
-          "--disable-setuid-sandbox",
-          "--disable-software-rasterizer",
-          "--disable-extensions",
-          "--disable-background-networking",
-          "--disable-breakpad",
-          "--disable-component-update",
-          "--disable-default-apps",
-          "--disable-hang-monitor",
-          "--disable-translate",
-          "--metrics-recording-only",
-          "--no-first-run",
-          "--js-flags=--max-old-space-size=512",
-        ],
-      },
-      // ── Progress ──
-      onProgress: ({ progress }) => {
-        const pct = Math.round(20 + progress * 70);
-        const mem = process.memoryUsage();
-        console.log(`${tag} render progress=${(progress * 100).toFixed(0)}% pct=${pct}% RSS=${Math.round(mem.rss / 1024 / 1024)}MB`);
-        updateJob(jobId, {
-          status: "rendering",
-          progress: pct,
-          stage: "Rendering...",
-        }).catch(() => {});
-      },
-    });
+    try {
+      await renderMedia({
+        composition,
+        serveUrl,
+        codec: "h264",
+        outputLocation: outputPath,
+        inputProps,
+        // ── Ultra-light Railway config ──
+        concurrency: 1,
+        scale: 0.35,
+        imageFormat: "jpeg",
+        jpegQuality: 60,
+        offthreadVideoCacheSizeInBytes: VIDEO_CACHE_SIZE_BYTES,
+        timeoutInMilliseconds: RENDER_TIMEOUT_MS,
+        crf: 28,
+        chromiumOptions: chromiumOpts,
+        // ── Progress ──
+        onProgress: ({ progress }) => {
+          const pct = Math.round(20 + progress * 70);
+          const mem = process.memoryUsage();
+          console.log(`${tag} render progress=${(progress * 100).toFixed(0)}% pct=${pct}% RSS=${Math.round(mem.rss / 1024 / 1024)}MB`);
+          updateJob(jobId, {
+            status: "rendering",
+            progress: pct,
+            stage: "Rendering...",
+          }).catch(() => {});
+        },
+      });
+    } catch (renderErr) {
+      const msg = renderErr instanceof Error ? renderErr.message : String(renderErr);
+      const memAfter = process.memoryUsage();
+      console.error(`${tag} ❌ renderMedia CRASHED: ${msg}`);
+      console.error(`${tag}    RSS at crash: ${Math.round(memAfter.rss / 1024 / 1024)}MB heap: ${Math.round(memAfter.heapUsed / 1024 / 1024)}MB`);
+      throw new Error(`renderMedia failed: ${msg}`);
+    }
+
+    const memAfterRender = process.memoryUsage();
+    console.log(`${tag} [STEP] renderMedia completed. RSS=${Math.round(memAfterRender.rss / 1024 / 1024)}MB`);
 
     await updateJob(jobId, {
       status: "finalizing",
@@ -553,17 +544,31 @@ async function renderJob(jobId: string): Promise<void> {
     console.log(`${tag} ═══════════════════════════════════════`);
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : "Unknown render error";
-    console.error(`${tag} ═══ RENDER FAILED: ${errorMsg} ═══`);
+    const errorStack = err instanceof Error ? err.stack : undefined;
+    console.error(`${tag} ═══════════════════════════════════════`);
+    console.error(`${tag} RENDER FAILED: ${errorMsg}`);
+    if (errorStack) console.error(`${tag} Stack: ${errorStack}`);
+    console.error(`${tag} ═══════════════════════════════════════`);
 
-    await updateJob(jobId, {
-      status: "failed",
-      error: errorMsg,
-      stage: "נכשל",
-    });
+    try {
+      await updateJob(jobId, {
+        status: "failed",
+        progress: 0,
+        error: errorMsg.substring(0, 500),
+        stage: "Render failed",
+      });
+      console.log(`${tag} ✅ JOB MARKED FAILED: ${jobId}`);
+    } catch (dbErr) {
+      console.error(`${tag} ❌ Could not mark job as failed in DB:`, dbErr instanceof Error ? dbErr.message : dbErr);
+    }
 
     cleanupFile(outputPath);
   } finally {
     isRendering = false;
+    // Force GC hint after render (success or fail) to free Chrome memory
+    if (global.gc) {
+      try { global.gc(); } catch {}
+    }
   }
 }
 
@@ -615,7 +620,8 @@ async function main(): Promise<void> {
   console.log(`${tag} Remotion entry:    ${REMOTION_ENTRY}`);
   console.log(`${tag} CWD:               ${PROJECT_ROOT}`);
   console.log(`${tag} Concurrency:       ${REMOTION_CONCURRENCY}`);
-  console.log(`${tag} JPEG quality:      ${JPEG_QUALITY}`);
+  console.log(`${tag} Render scale:      0.35`);
+  console.log(`${tag} JPEG quality:      60`);
   console.log(`${tag} Video cache MB:    ${VIDEO_CACHE_SIZE_BYTES / 1024 / 1024}`);
   const mem = process.memoryUsage();
   console.log(`${tag} Memory at start:   RSS=${Math.round(mem.rss / 1024 / 1024)}MB heap=${Math.round(mem.heapUsed / 1024 / 1024)}MB`);
