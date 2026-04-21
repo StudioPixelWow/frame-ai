@@ -7,6 +7,20 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { SkeletonKPIRow, SkeletonGrid } from '@/components/ui/skeleton';
 import type { Campaign, CampaignType, CampaignStatus, CampaignPlatform, CampaignMediaType } from '@/lib/db/schema';
+import {
+  computeHealth,
+  generateCampaignAlerts,
+  generateAllAlerts,
+  summarizeAlerts,
+  generateHighlights,
+  ALERT_TYPE_LABELS,
+  ALERT_TYPE_ICONS,
+  SEVERITY_COLORS,
+  SEVERITY_LABELS,
+  type HealthLevel,
+  type CampaignAlert,
+  type AlertSeverity,
+} from '@/lib/campaigns/health-engine';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -91,50 +105,14 @@ const MEDIA_TYPE_LABELS: Record<CampaignMediaType, string> = {
   video: 'וידאו',
 };
 
-// ── Health Score ──────────────────────────────────────────────────────────────
-
-type HealthLevel = 'strong' | 'attention' | 'weak';
-
-function computeHealth(c: Campaign): { score: number; level: HealthLevel; label: string; color: string } {
-  let score = 0;
-
-  // Status weight (30 pts)
-  const sw: Partial<Record<CampaignStatus, number>> = { active: 30, scheduled: 25, approved: 22, waiting_approval: 18, in_progress: 15, draft: 8, completed: 30 };
-  score += sw[c.status] ?? 8;
-
-  // Budget exists (15 pts)
-  if (c.budget && c.budget > 0) score += 15;
-
-  // Dates valid (15 pts)
-  if (c.startDate) score += 8;
-  if (c.endDate) score += 7;
-
-  // Creative (linked file or external URL) (15 pts)
-  if (c.linkedClientFileId || (c.externalMediaUrl && c.externalMediaUrl.length > 5)) score += 15;
-
-  // Primary text (15 pts)
-  if (c.caption && c.caption.trim().length > 5) score += 15;
-
-  // Headline/notes (10 pts) — stored in notes for builder campaigns
-  if (c.notes && c.notes.trim().length > 3) score += 10;
-
-  score = Math.min(100, score);
-
-  const level: HealthLevel = score >= 70 ? 'strong' : score >= 40 ? 'attention' : 'weak';
-  const label = level === 'strong' ? 'תקין' : level === 'attention' ? 'דורש תשומת לב' : 'חלש';
-  const color = level === 'strong' ? '#22c55e' : level === 'attention' ? '#f59e0b' : '#ef4444';
-
-  return { score, level, label, color };
-}
-
-// ── Health badge ─────────────────────────────────────────────────────────────
+// ── Health badge (uses engine) ───────────────────────────────────────────────
 
 function HealthBadge({ campaign, size = 'normal' }: { campaign: Campaign; size?: 'normal' | 'compact' }) {
-  const { score, label, color } = computeHealth(campaign);
+  const { score, label, color, breakdown } = computeHealth(campaign);
   const isCompact = size === 'compact';
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: isCompact ? '0.35rem' : '0.5rem' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: isCompact ? '0.35rem' : '0.5rem' }} title={`מבנה: ${breakdown.structure}/25 | קריאייטיב: ${breakdown.creative}/25 | טרגוט: ${breakdown.targeting}/20 | פעילות: ${breakdown.activity}/30`}>
       <div style={{ position: 'relative', width: isCompact ? 28 : 36, height: isCompact ? 28 : 36 }}>
         <svg viewBox="0 0 36 36" width={isCompact ? 28 : 36} height={isCompact ? 28 : 36}>
           <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--border)" strokeWidth="3" />
@@ -151,13 +129,27 @@ function HealthBadge({ campaign, size = 'normal' }: { campaign: Campaign; size?:
         }}>{score}</span>
       </div>
       {!isCompact && (
-        <span style={{ fontSize: '0.68rem', fontWeight: 600, color }}>{label}</span>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontSize: '0.68rem', fontWeight: 600, color }}>{label}</span>
+          <div style={{ display: 'flex', gap: '2px', marginTop: '2px' }}>
+            {[
+              { v: breakdown.structure, max: 25, c: '#3b82f6' },
+              { v: breakdown.creative, max: 25, c: '#8b5cf6' },
+              { v: breakdown.targeting, max: 20, c: '#f59e0b' },
+              { v: breakdown.activity, max: 30, c: '#22c55e' },
+            ].map((seg, i) => (
+              <div key={i} style={{ width: '18px', height: '3px', borderRadius: '1.5px', background: 'var(--border)', overflow: 'hidden' }}>
+                <div style={{ width: `${(seg.v / seg.max) * 100}%`, height: '100%', background: seg.c, borderRadius: '1.5px' }} />
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
-// ── Readiness indicators ─────────────────────────────────────────────────────
+// ── Readiness indicators ────────────────────────────────────���────────────────
 
 function ReadinessIndicators({ campaign }: { campaign: Campaign }) {
   const hasCreative = !!(campaign.linkedClientFileId || (campaign.externalMediaUrl && campaign.externalMediaUrl.length > 5));
@@ -190,6 +182,212 @@ function ReadinessIndicators({ campaign }: { campaign: Campaign }) {
           {it.ok ? '✓' : '✗'} {it.label}
         </span>
       ))}
+    </div>
+  );
+}
+
+// ── Alert badge for campaign cards ──────────────────────────────────────────
+
+function CampaignAlertBadge({ alerts, expanded, onToggle }: { alerts: CampaignAlert[]; expanded: boolean; onToggle: () => void }) {
+  if (alerts.length === 0) return null;
+  const highCount = alerts.filter((a) => a.severity === 'high').length;
+  const badgeColor = highCount > 0 ? '#ef4444' : '#f59e0b';
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.25rem',
+          padding: '0.2rem 0.5rem',
+          borderRadius: '0.3rem',
+          border: `1px solid ${badgeColor}33`,
+          background: `${badgeColor}0D`,
+          color: badgeColor,
+          fontSize: '0.65rem',
+          fontWeight: 700,
+          cursor: 'pointer',
+          transition: 'all 150ms',
+        }}
+      >
+        {highCount > 0 ? '🔴' : '🟡'} {alerts.length} התראות
+      </button>
+      {expanded && (
+        <div style={{
+          marginTop: '0.4rem',
+          padding: '0.5rem 0.65rem',
+          background: 'var(--surface-raised)',
+          border: '1px solid var(--border)',
+          borderRadius: '0.5rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.35rem',
+        }}>
+          {alerts.slice(0, 5).map((a) => (
+            <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.35rem', fontSize: '0.68rem', lineHeight: 1.4 }}>
+              <span style={{ flexShrink: 0 }}>{ALERT_TYPE_ICONS[a.type]}</span>
+              <span style={{ color: SEVERITY_COLORS[a.severity], fontWeight: 600, flexShrink: 0 }}>
+                [{SEVERITY_LABELS[a.severity]}]
+              </span>
+              <span style={{ color: 'var(--foreground-muted)' }}>{ALERT_TYPE_LABELS[a.type]}</span>
+            </div>
+          ))}
+          {alerts.length > 5 && (
+            <div style={{ fontSize: '0.62rem', color: 'var(--foreground-muted)', fontStyle: 'italic' }}>
+              +{alerts.length - 5} נוספות
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Global Alerts Panel ────────────────────────────��───────────────────────
+
+function AlertsPanel({ alerts, onDismiss }: { alerts: CampaignAlert[]; onDismiss: (id: string) => void }) {
+  const [groupBy, setGroupBy] = useState<'severity' | 'client'>('severity');
+  const [expanded, setExpanded] = useState(true);
+
+  if (alerts.length === 0) return null;
+
+  const summary = summarizeAlerts(alerts);
+  const highlights = generateHighlights(alerts);
+
+  return (
+    <div className="premium-card" style={{ padding: '1.25rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ fontSize: '1.1rem' }}>🔔</span>
+          <div>
+            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--foreground)' }}>
+              התראות קמפיינים
+            </div>
+            <div style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)', display: 'flex', gap: '0.5rem', marginTop: '0.1rem' }}>
+              <span style={{ color: '#ef4444', fontWeight: 600 }}>{summary.high} גבוהות</span>
+              <span style={{ color: '#f59e0b', fontWeight: 600 }}>{summary.medium} בינוניות</span>
+              <span style={{ color: '#6b7280', fontWeight: 600 }}>{summary.low} נמוכות</span>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => setGroupBy('severity')}
+            className={groupBy === 'severity' ? 'mod-btn-primary' : 'mod-btn-ghost'}
+            style={{ padding: '0.25rem 0.5rem', fontSize: '0.62rem', fontWeight: 600, borderRadius: '0.25rem', cursor: 'pointer' }}
+          >
+            חומרה
+          </button>
+          <button
+            type="button"
+            onClick={() => setGroupBy('client')}
+            className={groupBy === 'client' ? 'mod-btn-primary' : 'mod-btn-ghost'}
+            style={{ padding: '0.25rem 0.5rem', fontSize: '0.62rem', fontWeight: 600, borderRadius: '0.25rem', cursor: 'pointer' }}
+          >
+            לקוח
+          </button>
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--foreground-muted)', padding: '0.2rem' }}
+          >
+            {expanded ? '▲' : '▼'}
+          </button>
+        </div>
+      </div>
+
+      {/* Highlights strip */}
+      {highlights.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '0.75rem' }}>
+          {highlights.map((h, i) => (
+            <span key={i} style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              padding: '0.25rem 0.55rem',
+              borderRadius: '1rem',
+              background: `${SEVERITY_COLORS[h.severity]}0D`,
+              border: `1px solid ${SEVERITY_COLORS[h.severity]}33`,
+              color: SEVERITY_COLORS[h.severity],
+              fontSize: '0.65rem',
+              fontWeight: 600,
+            }}>
+              {h.icon} {h.text}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {expanded && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', maxHeight: '300px', overflowY: 'auto' }}>
+          {groupBy === 'severity' ? (
+            // Group by severity
+            (['high', 'medium', 'low'] as AlertSeverity[]).map((sev) => {
+              const sevAlerts = alerts.filter((a) => a.severity === sev);
+              if (sevAlerts.length === 0) return null;
+              return (
+                <div key={sev}>
+                  <div style={{ fontSize: '0.65rem', fontWeight: 700, color: SEVERITY_COLORS[sev], padding: '0.3rem 0', borderBottom: `1px solid ${SEVERITY_COLORS[sev]}22` }}>
+                    {SEVERITY_LABELS[sev]} ({sevAlerts.length})
+                  </div>
+                  {sevAlerts.map((a) => (
+                    <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.25rem', borderBottom: '1px solid var(--border)', fontSize: '0.7rem' }}>
+                      <span style={{ flexShrink: 0 }}>{ALERT_TYPE_ICONS[a.type]}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ color: 'var(--foreground)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.message}</div>
+                        <div style={{ fontSize: '0.6rem', color: 'var(--foreground-muted)' }}>{a.clientName}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onDismiss(a.id)}
+                        title="סמן כטופל"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', color: 'var(--foreground-muted)', padding: '0.15rem', flexShrink: 0 }}
+                      >
+                        ✓
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })
+          ) : (
+            // Group by client
+            Object.entries(summary.byClient).map(([clientId, info]) => {
+              const clientAlerts = alerts.filter((a) => a.clientId === clientId);
+              return (
+                <div key={clientId}>
+                  <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--foreground)', padding: '0.3rem 0', borderBottom: '1px solid var(--border)' }}>
+                    {info.clientName || 'ללא לקוח'} ({info.count} התראות{info.highCount > 0 ? `, ${info.highCount} גבוהות` : ''})
+                  </div>
+                  {clientAlerts.map((a) => (
+                    <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.25rem', borderBottom: '1px solid var(--border)', fontSize: '0.7rem' }}>
+                      <span style={{ flexShrink: 0 }}>{ALERT_TYPE_ICONS[a.type]}</span>
+                      <span style={{ color: SEVERITY_COLORS[a.severity], fontWeight: 600, fontSize: '0.6rem', flexShrink: 0 }}>
+                        [{SEVERITY_LABELS[a.severity]}]
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--foreground)' }}>
+                        {a.campaignName}: {ALERT_TYPE_LABELS[a.type]}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onDismiss(a.id)}
+                        title="סמן כטופל"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', color: 'var(--foreground-muted)', padding: '0.15rem', flexShrink: 0 }}
+                      >
+                        ✓
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -301,6 +499,10 @@ export default function CampaignsPage() {
   // View mode
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
 
+  // Alerts state
+  const [dismissedAlertIds, setDismissedAlertIds] = useState<Set<string>>(new Set());
+  const [expandedAlertCard, setExpandedAlertCard] = useState<string | null>(null);
+
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
@@ -340,6 +542,27 @@ export default function CampaignsPage() {
     const avgHealth = total > 0 ? Math.round(all.reduce((s, c) => s + computeHealth(c).score, 0) / total) : 0;
     return { total, active, budget, pending, drafts, avgHealth };
   }, [campaigns]);
+
+  // Alerts
+  const allAlerts = useMemo(() => {
+    const raw = generateAllAlerts(campaigns || []);
+    return raw.filter((a) => !dismissedAlertIds.has(a.id));
+  }, [campaigns, dismissedAlertIds]);
+
+  const alertsByCampaign = useMemo(() => {
+    const map: Record<string, CampaignAlert[]> = {};
+    for (const a of allAlerts) {
+      if (!map[a.campaignId]) map[a.campaignId] = [];
+      map[a.campaignId].push(a);
+    }
+    return map;
+  }, [allAlerts]);
+
+  const alertsSummary = useMemo(() => summarizeAlerts(allAlerts), [allAlerts]);
+
+  const handleDismissAlert = useCallback((alertId: string) => {
+    setDismissedAlertIds((prev) => new Set([...prev, alertId]));
+  }, []);
 
   // Modal handlers (preserved from original)
   const handleOpenModal = useCallback((campaign?: Campaign) => {
@@ -483,7 +706,8 @@ export default function CampaignsPage() {
             { label: 'טיוטות', value: kpiStats.drafts, color: '#6b7280' },
             { label: 'ממתינים', value: kpiStats.pending, color: '#f59e0b' },
             { label: 'תקציב כולל', value: `₪${(kpiStats.budget / 1000).toFixed(0)}K`, color: 'var(--accent)' },
-            { label: 'בריאות ממוצעת', value: kpiStats.avgHealth, color: kpiStats.avgHealth >= 70 ? '#22c55e' : kpiStats.avgHealth >= 40 ? '#f59e0b' : '#ef4444' },
+            { label: 'בריאות ממוצעת', value: kpiStats.avgHealth, color: kpiStats.avgHealth >= 80 ? '#22c55e' : kpiStats.avgHealth >= 50 ? '#f59e0b' : '#ef4444' },
+            { label: 'התראות', value: allAlerts.length, color: alertsSummary.high > 0 ? '#ef4444' : allAlerts.length > 0 ? '#f59e0b' : '#22c55e' },
           ].map((kpi) => (
             <div key={kpi.label} className="premium-card" style={{ padding: '1rem', textAlign: 'center' }}>
               <div style={{ fontSize: '1.35rem', fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
@@ -491,6 +715,11 @@ export default function CampaignsPage() {
             </div>
           ))}
         </div>
+
+        {/* ── Alerts Panel ─────────────────────────────────────── */}
+        {allAlerts.length > 0 && (
+          <AlertsPanel alerts={allAlerts} onDismiss={handleDismissAlert} />
+        )}
 
         {/* ── Filters ─────────────────────────────────────────── */}
         <div className="premium-card" style={{ padding: '0.75rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
@@ -515,9 +744,9 @@ export default function CampaignsPage() {
           </select>
           <select value={filterHealth} onChange={(e) => setFilterHealth(e.target.value as HealthLevel | '')} style={selectFilterStyle}>
             <option value="">כל הבריאות</option>
-            <option value="strong">תקין (70+)</option>
-            <option value="attention">דורש תשומת לב</option>
-            <option value="weak">חלש (&lt;40)</option>
+            <option value="strong">תקין (80+)</option>
+            <option value="attention">דורש תשומת לב (50-79)</option>
+            <option value="weak">חלש (&lt;50)</option>
           </select>
 
           {/* View toggle */}
@@ -649,6 +878,15 @@ export default function CampaignsPage() {
                     <HealthBadge campaign={c} />
                     <ReadinessIndicators campaign={c} />
                   </div>
+
+                  {/* Alerts badge */}
+                  {(alertsByCampaign[c.id] || []).length > 0 && (
+                    <CampaignAlertBadge
+                      alerts={alertsByCampaign[c.id]}
+                      expanded={expandedAlertCard === c.id}
+                      onToggle={() => setExpandedAlertCard(expandedAlertCard === c.id ? null : c.id)}
+                    />
+                  )}
 
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: '0.35rem', marginTop: 'auto', paddingTop: '0.25rem' }}>

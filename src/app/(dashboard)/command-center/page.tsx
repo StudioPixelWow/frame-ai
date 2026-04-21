@@ -18,6 +18,16 @@ import type {
   CampaignPlatform,
   CampaignType,
 } from "@/lib/db/schema";
+import {
+  computeHealth,
+  generateAllAlerts,
+  generateHighlights,
+  summarizeAlerts,
+  ALERT_TYPE_ICONS,
+  ALERT_TYPE_LABELS,
+  SEVERITY_COLORS,
+  SEVERITY_LABELS,
+} from "@/lib/campaigns/health-engine";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -105,68 +115,26 @@ function getGreeting(): string {
 }
 
 /**
- * Health Score MVP — computes 0-100 from available campaign data.
- *
- * Factors (max 100):
- *   Status weight   40pt
- *   Budget present  15pt
- *   Dates defined   15pt  (8 start + 7 end)
- *   Creative linked 10pt
- *   Has leads       10pt
- *   Has caption     10pt
+ * Health Score — uses the centralized health engine.
+ * Lead bonus: extra points when campaign has associated leads.
  */
 function computeHealthScore(campaign: Campaign, campaignLeads: Lead[]): number {
-  let score = 0;
-
-  // Status weight (max 40)
-  const statusScores: Record<CampaignStatus, number> = {
-    active: 40,
-    scheduled: 35,
-    approved: 30,
-    in_progress: 25,
-    waiting_approval: 20,
-    completed: 35,
-    draft: 10,
-  };
-  score += statusScores[campaign.status] ?? 10;
-
-  // Budget defined (max 15)
-  if (campaign.budget > 0) score += 15;
-
-  // Has start + end date (max 15)
-  if (campaign.startDate) score += 8;
-  if (campaign.endDate) score += 7;
-
-  // Has creative attached (max 10)
-  if (
-    campaign.linkedClientFileId ||
-    campaign.linkedVideoProjectId ||
-    campaign.externalMediaUrl
-  ) {
-    score += 10;
-  }
-
-  // Has leads flowing (max 10)
-  if (campaignLeads.length > 0) score += 10;
-
-  // Has caption / content (max 10)
-  if (campaign.caption && campaign.caption.trim().length > 10) score += 10;
-
-  return Math.min(100, Math.max(0, score));
+  const result = computeHealth(campaign);
+  // Bonus for campaigns with active leads (up to 5 extra pts)
+  const leadBonus = campaignLeads.length > 0 ? Math.min(5, campaignLeads.length) : 0;
+  return Math.min(100, result.score + leadBonus);
 }
 
 function getHealthColor(score: number): string {
   if (score >= 80) return "#22c55e";
-  if (score >= 60) return "#f59e0b";
-  if (score >= 40) return "#f97316";
+  if (score >= 50) return "#f59e0b";
   return "#ef4444";
 }
 
 function getHealthLabel(score: number): string {
-  if (score >= 80) return "מצוין";
-  if (score >= 60) return "טוב";
-  if (score >= 40) return "דורש תשומת לב";
-  return "קריטי";
+  if (score >= 80) return "תקין";
+  if (score >= 50) return "דורש תשומת לב";
+  return "חלש";
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
@@ -454,7 +422,11 @@ export default function CommandCenterPage() {
     return Math.round(sum / campaignRows.length);
   }, [campaignRows]);
 
-  // ── Campaign alerts (from operational alerts + campaign-specific checks) ──
+  // ── Campaign alerts (from health engine + operational alerts) ──
+
+  const engineAlerts = useMemo(() => generateAllAlerts(campaigns), [campaigns]);
+  const engineSummary = useMemo(() => summarizeAlerts(engineAlerts), [engineAlerts]);
+  const engineHighlights = useMemo(() => generateHighlights(engineAlerts), [engineAlerts]);
 
   const campaignAlerts = useMemo(() => {
     const result: Array<{
@@ -463,8 +435,8 @@ export default function CommandCenterPage() {
       description: string;
     }> = [];
 
-    // Pull campaign-relevant items from operational alerts
-    alerts.slice(0, 5).forEach((a) => {
+    // Pull from operational alerts
+    alerts.slice(0, 3).forEach((a) => {
       result.push({
         severity: a.severity as "critical" | "warning" | "info",
         title: a.title,
@@ -472,48 +444,15 @@ export default function CommandCenterPage() {
       });
     });
 
-    // Campaign-specific: active/scheduled without budget
-    campaigns
-      .filter(
-        (c) =>
-          (c.status === "active" || c.status === "scheduled") &&
-          (!c.budget || c.budget === 0)
-      )
-      .forEach((c) => {
-        result.push({
-          severity: "warning",
-          title: `קמפיין ללא תקציב: ${c.campaignName}`,
-          description: `סטטוס ${STATUS_LABELS[c.status] || c.status} בלי תקציב מוגדר`,
-        });
+    // Pull from engine alerts (map severity)
+    engineAlerts.slice(0, 15).forEach((ea) => {
+      const sevMap: Record<string, "critical" | "warning" | "info"> = { high: "critical", medium: "warning", low: "info" };
+      result.push({
+        severity: sevMap[ea.severity] || "info",
+        title: `${ALERT_TYPE_ICONS[ea.type]} ${ea.campaignName}: ${ALERT_TYPE_LABELS[ea.type]}`,
+        description: ea.message,
       });
-
-    // Campaign-specific: active without creative
-    campaigns
-      .filter(
-        (c) =>
-          c.status === "active" &&
-          !c.linkedClientFileId &&
-          !c.linkedVideoProjectId &&
-          !c.externalMediaUrl
-      )
-      .forEach((c) => {
-        result.push({
-          severity: "warning",
-          title: `קמפיין ללא קריאטיב: ${c.campaignName}`,
-          description: `קמפיין פעיל ללא מדיה מצורפת`,
-        });
-      });
-
-    // Low health scores on active campaigns
-    campaignRows
-      .filter((r) => r.healthScore < 40 && r.campaign.status === "active")
-      .forEach((r) => {
-        result.push({
-          severity: "critical",
-          title: `ציון בריאות נמוך: ${r.campaign.campaignName}`,
-          description: `ציון ${r.healthScore}/100 — ${getHealthLabel(r.healthScore)}`,
-        });
-      });
+    });
 
     // Deduplicate by title
     const seen = new Set<string>();
@@ -522,7 +461,7 @@ export default function CommandCenterPage() {
       seen.add(a.title);
       return true;
     });
-  }, [alerts, campaigns, campaignRows]);
+  }, [alerts, engineAlerts]);
 
   // ── Loading state — Skeleton matching dashboard pattern ───────────────────
 
@@ -716,6 +655,38 @@ export default function CommandCenterPage() {
         />
       </div>
 
+      {/* ═══ Intelligence Highlights ═══ */}
+      {engineHighlights.length > 0 && (
+        <div className="premium-card" style={{ padding: "1rem 1.25rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+            <span style={{ fontSize: "1rem" }}>🧠</span>
+            <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--foreground)" }}>תובנות מערכת</span>
+            <span style={{
+              fontSize: "0.6rem", fontWeight: 700,
+              background: engineSummary.high > 0 ? "rgba(239,68,68,0.12)" : "rgba(245,158,11,0.12)",
+              color: engineSummary.high > 0 ? "#ef4444" : "#f59e0b",
+              padding: "0.15rem 0.4rem", borderRadius: "0.2rem",
+            }}>
+              {engineSummary.total} התראות{engineSummary.high > 0 ? ` · ${engineSummary.high} דחופות` : ""}
+            </span>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+            {engineHighlights.map((h, i) => (
+              <div key={i} style={{
+                display: "flex", alignItems: "center", gap: "0.4rem",
+                padding: "0.5rem 0.75rem", borderRadius: "0.5rem",
+                background: `${SEVERITY_COLORS[h.severity]}08`,
+                border: `1px solid ${SEVERITY_COLORS[h.severity]}22`,
+                flex: "1 1 auto", minWidth: "200px",
+              }}>
+                <span style={{ fontSize: "1rem" }}>{h.icon}</span>
+                <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground)" }}>{h.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ═══ Alerts + Status Breakdown row ═══ */}
       <div
         style={{
@@ -752,7 +723,7 @@ export default function CommandCenterPage() {
               </span>
             </div>
             <div style={{ display: "flex", gap: "0.5rem" }}>
-              {criticalCount > 0 && (
+              {(criticalCount + engineSummary.high) > 0 && (
                 <span
                   style={{
                     fontSize: "0.65rem",
@@ -763,10 +734,10 @@ export default function CommandCenterPage() {
                     borderRadius: "0.25rem",
                   }}
                 >
-                  {criticalCount} קריטי
+                  {criticalCount + engineSummary.high} קריטי
                 </span>
               )}
-              {warningCount > 0 && (
+              {(warningCount + engineSummary.medium) > 0 && (
                 <span
                   style={{
                     fontSize: "0.65rem",
@@ -777,7 +748,7 @@ export default function CommandCenterPage() {
                     borderRadius: "0.25rem",
                   }}
                 >
-                  {warningCount} אזהרה
+                  {warningCount + engineSummary.medium} אזהרה
                 </span>
               )}
             </div>
