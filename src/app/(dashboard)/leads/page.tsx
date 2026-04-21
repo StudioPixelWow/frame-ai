@@ -16,6 +16,7 @@ import {
   type QualityLevel,
   type FunnelStage,
 } from "@/lib/leads/lead-quality";
+import { SmartHint, EmptyStateAI } from "@/components/ui/smart-hint";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -1244,6 +1245,29 @@ export default function LeadsPage() {
           </div>
         </div>
 
+        {/* ── Smart Hints ──────────────────────────────────── */}
+        {(() => {
+          const all = leads || [];
+          if (all.length === 0) return null;
+          const hints: Array<{ key: string; icon: string; text: string; type: 'warning' | 'ai' | 'info' }> = [];
+          const newCount = all.filter(l => l.status === 'new').length;
+          if (newCount > 5) {
+            hints.push({ key: 'new-leads', icon: '🔥', text: `${newCount} לידים חדשים ממתינים לטיפול — מומלץ לשייך ולהתחיל מעקב`, type: 'warning' });
+          }
+          const noAssign = all.filter(l => !l.assignedTo && l.status !== 'won' && l.status !== 'lost' && l.status !== 'not_relevant');
+          if (noAssign.length > 3) {
+            hints.push({ key: 'unassigned', icon: '👤', text: `${noAssign.length} לידים ללא שיוך — שייך אותם לנציג לטיפול מהיר`, type: 'info' });
+          }
+          if (hints.length === 0) return null;
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '0.5rem' }}>
+              {hints.slice(0, 2).map(h => (
+                <SmartHint key={h.key} icon={h.icon} text={h.text} type={h.type} />
+              ))}
+            </div>
+          );
+        })()}
+
         {/* CONTENT AREA */}
         {loading ? (
           <div
@@ -1643,14 +1667,13 @@ export default function LeadsPage() {
                     <tr>
                       <td
                         colSpan={10}
-                        style={{
-                          padding: "2.5rem",
-                          textAlign: "center",
-                          color: "var(--foreground-muted)",
-                          fontSize: "0.95rem",
-                        }}
+                        style={{ padding: 0 }}
                       >
-                        לא נמצאו לידים התואמים את המסננים
+                        <EmptyStateAI
+                          icon="🔍"
+                          title="לא נמצאו לידים התואמים את המסננים"
+                          aiSuggestion="נסה להרחיב את הסינון או לבדוק לידים בסטטוסים אחרים"
+                        />
                       </td>
                     </tr>
                   )}

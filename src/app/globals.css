@@ -4128,3 +4128,546 @@
   color: var(--warning);
   margin-top: 0.5rem;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   UX REVOLUTION — Alive, Intelligent, Futuristic Premium AI Product
+   "Quiet Premium Intelligence" — motion + feedback + AI presence
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Part 1: Micro-Interactions ──────────────────────────────────────────── */
+
+/* Button hover scale + glow */
+.ux-btn {
+  position: relative;
+  overflow: hidden;
+  transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 220ms ease,
+              border-color 200ms ease,
+              background 200ms ease;
+}
+.ux-btn:hover {
+  transform: scale(1.02);
+}
+.ux-btn:active {
+  transform: scale(0.97);
+}
+
+/* Primary button glow pulse */
+.ux-btn-glow {
+  position: relative;
+  overflow: hidden;
+  transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 220ms ease;
+}
+.ux-btn-glow:hover {
+  transform: scale(1.02);
+  box-shadow: 0 0 20px rgba(0,181,254,0.3), 0 4px 16px rgba(0,0,0,0.15);
+}
+.ux-btn-glow:active {
+  transform: scale(0.97);
+}
+@keyframes ux-glow-breathe {
+  0%, 100% { box-shadow: 0 0 8px rgba(0,181,254,0.15); }
+  50%      { box-shadow: 0 0 20px rgba(0,181,254,0.3), 0 0 40px rgba(139,92,246,0.1); }
+}
+.ux-btn-glow-pulse {
+  animation: ux-glow-breathe 2.5s ease-in-out infinite;
+}
+
+/* Ripple click effect */
+.ux-ripple {
+  position: relative;
+  overflow: hidden;
+}
+.ux-ripple::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at var(--ripple-x, 50%) var(--ripple-y, 50%),
+    rgba(255,255,255,0.18) 0%, transparent 60%);
+  opacity: 0;
+  transform: scale(0);
+  transition: none;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.ux-ripple:active::after {
+  animation: ux-ripple-go 450ms ease-out forwards;
+}
+@keyframes ux-ripple-go {
+  0%   { opacity: 0.6; transform: scale(0); }
+  100% { opacity: 0; transform: scale(2.5); }
+}
+
+/* Card hover — lift + shadow + border glow */
+.ux-card {
+  transition: transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 280ms ease,
+              border-color 250ms ease;
+}
+.ux-card:hover {
+  transform: translateY(-3px) scale(1.003);
+  box-shadow: 0 12px 36px rgba(0,0,0,0.14),
+              0 0 0 1px rgba(0,181,254,0.08);
+  border-color: rgba(0,181,254,0.15);
+}
+
+/* Card with accent glow border on hover */
+.ux-card-glow {
+  transition: transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 280ms ease,
+              border-color 250ms ease;
+}
+.ux-card-glow:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.12),
+              0 0 24px rgba(0,181,254,0.08),
+              inset 0 0 0 1px rgba(0,181,254,0.1);
+  border-color: rgba(0,181,254,0.2);
+}
+
+/* Input focus glow */
+.ux-input {
+  transition: border-color 200ms ease,
+              box-shadow 200ms ease;
+}
+.ux-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0,181,254,0.1),
+              0 0 12px rgba(0,181,254,0.08);
+}
+
+/* Typing underline animation */
+@keyframes ux-underline-slide {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+.ux-input-underline {
+  position: relative;
+}
+.ux-input-underline::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), rgba(139,92,246,0.6));
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.ux-input-underline:focus-within::after {
+  transform: scaleX(1);
+}
+
+/* ── Part 2: Page Transitions ────────────────────────────────────────────── */
+
+@keyframes ux-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.ux-page-transition {
+  animation: ux-page-enter 280ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Staggered section entrance — enhanced */
+.ux-stagger > * {
+  opacity: 0;
+  animation: ux-page-enter 350ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.ux-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.ux-stagger > *:nth-child(2) { animation-delay: 50ms; }
+.ux-stagger > *:nth-child(3) { animation-delay: 100ms; }
+.ux-stagger > *:nth-child(4) { animation-delay: 150ms; }
+.ux-stagger > *:nth-child(5) { animation-delay: 200ms; }
+.ux-stagger > *:nth-child(6) { animation-delay: 250ms; }
+.ux-stagger > *:nth-child(7) { animation-delay: 300ms; }
+.ux-stagger > *:nth-child(8) { animation-delay: 350ms; }
+.ux-stagger > *:nth-child(9) { animation-delay: 400ms; }
+.ux-stagger > *:nth-child(10) { animation-delay: 450ms; }
+
+/* ── Part 3: Toast upgrades ──────────────────────────────────────────────── */
+
+@keyframes ux-toast-in {
+  0%   { opacity: 0; transform: translateX(40px) scale(0.95); }
+  60%  { opacity: 1; transform: translateX(-4px) scale(1.01); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes ux-toast-out {
+  from { opacity: 1; transform: translateX(0) scale(1); }
+  to   { opacity: 0; transform: translateX(40px) scale(0.95); }
+}
+@keyframes ux-toast-progress {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+@keyframes ux-toast-glow {
+  0%, 100% { box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+  50%      { box-shadow: 0 8px 24px rgba(0,0,0,0.2), 0 0 16px var(--toast-glow-color, rgba(0,181,254,0.2)); }
+}
+
+/* ── Part 4: AI Presence ─────────────────────────────────────────────────── */
+
+/* Floating AI orb */
+@keyframes ux-orb-breathe {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 12px rgba(0,181,254,0.3), 0 0 30px rgba(139,92,246,0.15); }
+  50%      { transform: scale(1.06); box-shadow: 0 0 20px rgba(0,181,254,0.45), 0 0 50px rgba(139,92,246,0.2); }
+}
+@keyframes ux-orb-ring {
+  0%   { transform: scale(0.8); opacity: 0.6; }
+  100% { transform: scale(2); opacity: 0; }
+}
+.ux-ai-orb {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00B5FE 0%, #8b5cf6 100%);
+  cursor: pointer;
+  position: relative;
+  animation: ux-orb-breathe 3s ease-in-out infinite;
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+}
+.ux-ai-orb:hover {
+  transform: scale(1.12);
+}
+.ux-ai-orb::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid rgba(0,181,254,0.3);
+  animation: ux-orb-ring 2.5s ease-out infinite;
+}
+
+/* AI Insight card */
+.ux-ai-insight {
+  position: relative;
+  background: linear-gradient(135deg, rgba(0,181,254,0.04), rgba(139,92,246,0.04));
+  border: 1px solid rgba(0,181,254,0.15);
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+  overflow: hidden;
+  transition: border-color 250ms ease, box-shadow 250ms ease;
+}
+.ux-ai-insight:hover {
+  border-color: rgba(0,181,254,0.3);
+  box-shadow: 0 0 20px rgba(0,181,254,0.06);
+}
+.ux-ai-insight::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), rgba(139,92,246,0.6), transparent);
+}
+
+/* AI label badge */
+.ux-ai-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.18rem 0.5rem;
+  border-radius: 0.25rem;
+  background: linear-gradient(135deg, rgba(0,181,254,0.12), rgba(139,92,246,0.12));
+  color: var(--accent);
+  border: 1px solid rgba(0,181,254,0.15);
+}
+
+/* ── Part 5: Smart Hints ─────────────────────────────────────────────────── */
+
+@keyframes ux-hint-enter {
+  from { opacity: 0; transform: translateY(6px); max-height: 0; padding-top: 0; padding-bottom: 0; }
+  to   { opacity: 1; transform: translateY(0); max-height: 80px; padding-top: 0.6rem; padding-bottom: 0.6rem; }
+}
+@keyframes ux-hint-exit {
+  from { opacity: 1; max-height: 80px; }
+  to   { opacity: 0; max-height: 0; padding: 0; margin: 0; }
+}
+.ux-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.4;
+  animation: ux-hint-enter 350ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  overflow: hidden;
+}
+.ux-hint-info {
+  background: rgba(0,181,254,0.06);
+  border: 1px solid rgba(0,181,254,0.15);
+  color: var(--foreground);
+}
+.ux-hint-warning {
+  background: rgba(245,158,11,0.06);
+  border: 1px solid rgba(245,158,11,0.15);
+  color: var(--foreground);
+}
+.ux-hint-success {
+  background: rgba(34,197,94,0.06);
+  border: 1px solid rgba(34,197,94,0.15);
+  color: var(--foreground);
+}
+.ux-hint-ai {
+  background: linear-gradient(135deg, rgba(0,181,254,0.06), rgba(139,92,246,0.06));
+  border: 1px solid rgba(0,181,254,0.15);
+  color: var(--foreground);
+}
+
+/* ── Part 6: AI Text Generation UX ───────────────────────────────────────── */
+
+@keyframes ux-ai-thinking-dot {
+  0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+  40%           { opacity: 1; transform: scale(1.1); }
+}
+.ux-ai-thinking-dots span {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: ux-ai-thinking-dot 1.2s ease-in-out infinite;
+}
+.ux-ai-thinking-dots span:nth-child(2) { animation-delay: 0.15s; }
+.ux-ai-thinking-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+/* Typing reveal animation */
+@keyframes ux-type-reveal {
+  from { max-height: 0; opacity: 0; }
+  to   { max-height: 500px; opacity: 1; }
+}
+.ux-type-reveal {
+  overflow: hidden;
+  animation: ux-type-reveal 600ms ease-out forwards;
+}
+
+/* AI tone buttons */
+.ux-ai-tone-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 0.375rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(0,181,254,0.15);
+  background: rgba(0,181,254,0.04);
+  color: var(--accent);
+  transition: all 200ms ease;
+}
+.ux-ai-tone-btn:hover {
+  background: rgba(0,181,254,0.1);
+  border-color: rgba(0,181,254,0.3);
+  transform: scale(1.03);
+}
+.ux-ai-tone-btn:active {
+  transform: scale(0.97);
+}
+
+/* ── Part 7: Premium Effects ─────────────────────────────────────────────── */
+
+/* Light sweep on hover */
+.ux-light-sweep {
+  position: relative;
+  overflow: hidden;
+}
+.ux-light-sweep::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -60%;
+  width: 40%;
+  height: 200%;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(255,255,255,0.03),
+    rgba(255,255,255,0.06),
+    rgba(255,255,255,0.03),
+    transparent
+  );
+  transform: skewX(-15deg);
+  transition: none;
+  pointer-events: none;
+}
+.ux-light-sweep:hover::after {
+  animation: ux-sweep 600ms ease-out forwards;
+}
+@keyframes ux-sweep {
+  from { left: -60%; }
+  to   { left: 120%; }
+}
+[data-theme="light"] .ux-light-sweep::after {
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(0,0,0,0.02),
+    rgba(0,0,0,0.04),
+    rgba(0,0,0,0.02),
+    transparent
+  );
+}
+
+/* Gradient glow border */
+.ux-gradient-border {
+  position: relative;
+}
+.ux-gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(0,181,254,0.3), rgba(139,92,246,0.3), rgba(0,181,254,0.3));
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  opacity: 0;
+  transition: opacity 300ms ease;
+  pointer-events: none;
+}
+.ux-gradient-border:hover::before {
+  opacity: 1;
+}
+
+/* Neon text accent */
+.ux-neon-text {
+  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Soft neon glow background */
+.ux-neon-glow {
+  background: radial-gradient(ellipse at 50% 0%, rgba(0,181,254,0.06) 0%, transparent 70%);
+}
+
+/* ── Part 8: Empty States ────────────────────────────────────────────────── */
+
+@keyframes ux-empty-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+.ux-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  text-align: center;
+  gap: 1rem;
+}
+.ux-empty-icon {
+  font-size: 2.5rem;
+  animation: ux-empty-float 3s ease-in-out infinite;
+  opacity: 0.6;
+}
+.ux-empty-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--foreground);
+}
+.ux-empty-text {
+  font-size: 0.85rem;
+  color: var(--foreground-muted);
+  max-width: 340px;
+  line-height: 1.6;
+}
+.ux-empty-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  color: #fff;
+  border: none;
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 200ms ease;
+}
+.ux-empty-cta:hover {
+  transform: scale(1.04);
+  box-shadow: 0 8px 24px rgba(0,181,254,0.3), 0 0 40px rgba(139,92,246,0.15);
+}
+.ux-empty-cta:active {
+  transform: scale(0.97);
+}
+
+/* ── Part 9: Floating AI Panel ───────────────────────────────────────────── */
+
+@keyframes ux-panel-slide {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.ux-ai-panel {
+  position: fixed;
+  bottom: 80px;
+  inset-inline-start: 1.5rem;
+  width: min(380px, calc(100vw - 3rem));
+  max-height: 460px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25),
+              0 0 30px rgba(0,181,254,0.05);
+  overflow: hidden;
+  animation: ux-panel-slide 250ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  z-index: 1500;
+  display: flex;
+  flex-direction: column;
+}
+.ux-ai-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(0,181,254,0.04), rgba(139,92,246,0.04));
+}
+.ux-ai-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* ── Part 10: Spacing + Structure ────────────────────────────────────────── */
+
+.ux-section {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding-inline: 1.5rem;
+}
+@media (min-width: 1440px) {
+  .ux-section { padding-inline: 2rem; }
+}
+.ux-gap-sm { gap: 0.5rem; }
+.ux-gap-md { gap: 1rem; }
+.ux-gap-lg { gap: 1.5rem; }
+.ux-gap-xl { gap: 2rem; }

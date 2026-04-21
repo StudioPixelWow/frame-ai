@@ -9,6 +9,7 @@ import { SkeletonKPIRow, SkeletonGrid } from '@/components/ui/skeleton';
 import type { Campaign, CampaignType, CampaignStatus, CampaignPlatform, CampaignMediaType, Lead } from '@/lib/db/schema';
 import { buildCampaignLeadInsights } from '@/lib/leads/lead-quality';
 import { generateSmartSummary } from '@/lib/campaigns/smart-summary';
+import { SmartHint, EmptyStateAI } from '@/components/ui/smart-hint';
 import {
   computeHealth,
   generateCampaignAlerts,
@@ -1028,31 +1029,51 @@ export default function CampaignsPage() {
           {filteredCampaigns.length} מתוך {(campaigns || []).length} קמפיינים
         </div>
 
+        {/* ── Smart Hints ──────────────────────────────────────── */}
+        {(() => {
+          const all = campaigns || [];
+          const hints: Array<{ key: string; icon: string; text: string; type: 'info' | 'warning' | 'ai' }> = [];
+          const activeMissingBudget = all.filter(c => c.status === 'active' && (!c.budget || c.budget === 0));
+          if (activeMissingBudget.length > 0) {
+            hints.push({ key: 'no-budget', icon: '💰', text: `${activeMissingBudget.length} קמפיינים פעילים ללא תקציב — הגדר תקציב לביצועים טובים`, type: 'warning' });
+          }
+          const draftCount = all.filter(c => c.status === 'draft').length;
+          if (draftCount > 3) {
+            hints.push({ key: 'many-drafts', icon: '📝', text: `${draftCount} טיוטות — שווה לקדם קמפיינים מוכנים או לארכב ישנים`, type: 'info' });
+          }
+          const lowHealth = all.filter(c => c.status === 'active' && computeHealth(c).score < 50);
+          if (lowHealth.length > 0) {
+            hints.push({ key: 'low-health', icon: '⚠️', text: `${lowHealth.length} קמפיינים פעילים עם ציון בריאות נמוך — השלם פרטים חסרים`, type: 'warning' });
+          }
+          if (hints.length === 0) return null;
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+              {hints.slice(0, 2).map(h => (
+                <SmartHint key={h.key} icon={h.icon} text={h.text} type={h.type} />
+              ))}
+            </div>
+          );
+        })()}
+
         {/* ── Empty states ─────────────────────────────────────── */}
         {filteredCampaigns.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+          <div className="ux-page-transition">
             {(campaigns || []).length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-                <div style={{ fontSize: '2.5rem' }}>📋</div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--foreground)' }}>אין קמפיינים עדיין</div>
-                <div style={{ fontSize: '0.85rem', color: 'var(--foreground-muted)' }}>צור את הקמפיין הראשון שלך</div>
-                <Link href="/campaign-builder" className="mod-btn-primary" style={{ padding: '0.6rem 1.25rem', fontSize: '0.85rem', fontWeight: 700, borderRadius: '0.5rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-                  🚀 בנה קמפיין חכם
-                </Link>
-              </div>
+              <EmptyStateAI
+                icon="🚀"
+                title="עדיין אין קמפיינים"
+                subtitle="צור את הקמפיין הראשון ותתחיל לייצר תוצאות"
+                aiSuggestion="רוצה שניצור לך קמפיין חכם? הבינה המלאכותית תעזור לך לבנות קמפיין מותאם ללקוח."
+                ctaLabel="🧠 בנה קמפיין חכם"
+                onCta={() => window.location.href = '/campaign-builder'}
+              />
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                <div style={{ fontSize: '1.5rem' }}>🔍</div>
-                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--foreground)' }}>לא נמצאו קמפיינים התואמים לסינון</div>
-                <button
-                  type="button"
-                  onClick={() => { setSearchQuery(''); setFilterClient(''); setFilterStatus(''); setFilterPlatform(''); setFilterHealth(''); }}
-                  className="mod-btn-ghost"
-                  style={{ padding: '0.4rem 0.875rem', fontSize: '0.78rem', fontWeight: 600, borderRadius: '0.375rem', cursor: 'pointer', marginTop: '0.25rem' }}
-                >
-                  נקה סינון
-                </button>
-              </div>
+              <EmptyStateAI
+                icon="🔍"
+                title="לא נמצאו קמפיינים התואמים לסינון"
+                ctaLabel="נקה סינון"
+                onCta={() => { setSearchQuery(''); setFilterClient(''); setFilterStatus(''); setFilterPlatform(''); setFilterHealth(''); }}
+              />
             )}
           </div>
         ) : viewMode === 'cards' ? (
@@ -1063,8 +1084,8 @@ export default function CampaignsPage() {
               return (
                 <div
                   key={c.id}
-                  className="premium-card glow-hover"
-                  style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', borderRight: `3px solid ${health.color}`, transition: 'all 200ms' }}
+                  className="premium-card glow-hover ux-light-sweep ux-card"
+                  style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', borderRight: `3px solid ${health.color}` }}
                 >
                   {/* Top row: name + status */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>

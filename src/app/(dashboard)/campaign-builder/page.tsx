@@ -1280,29 +1280,34 @@ function Step3Creative({
     }
     if (!aiResults || aiResults.field !== field) return null;
     return (
-      <div style={{ marginTop: "0.5rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-        <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--accent)", marginBottom: "0.15rem" }}>
-          ✨ בחר גרסה:
+      <div className="ux-type-reveal" style={{ marginTop: "0.5rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginBottom: "0.15rem" }}>
+          <span className="ux-ai-label">AI</span>
+          <span style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground)" }}>בחר גרסה:</span>
         </div>
         {aiResults.results.map((text, i) => (
           <div
             key={i}
+            className="ux-card-glow"
             style={{
               padding: "0.6rem 0.75rem",
               background: "var(--surface-raised)",
               border: "1px solid var(--border)",
               borderRadius: "0.5rem",
               cursor: "pointer",
-              transition: "all 150ms",
               display: "flex",
               alignItems: "flex-start",
               gap: "0.5rem",
+              animationDelay: `${i * 80}ms`,
             }}
             onClick={() => applyAiResult(field, text)}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.background = "rgba(0,181,254,0.04)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.background = "var(--surface-raised)"; }}
           >
-            <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--accent)", minWidth: "1.2rem", textAlign: "center", marginTop: "0.05rem" }}>
+            <span style={{
+              fontSize: "0.65rem", fontWeight: 800, minWidth: "1.4rem", height: "1.4rem",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              borderRadius: "50%", background: "rgba(0,181,254,0.08)", color: "var(--accent)",
+              flexShrink: 0, marginTop: "0.05rem",
+            }}>
               {i + 1}
             </span>
             <span style={{ fontSize: "0.78rem", color: "var(--foreground)", lineHeight: 1.5, flex: 1 }}>
@@ -1320,54 +1325,61 @@ function Step3Creative({
   // ── AI buttons row ──
   const renderAiButtons = (field: "caption" | "headline", improveLabel: string, variationsLabel: string) => {
     const isFieldLoading = aiLoading?.startsWith(field);
+    const currentText = field === "caption" ? data.caption : data.headline;
+    const hasText = currentText && currentText.trim().length > 5;
     return (
-      <div style={{ display: "flex", gap: "0.4rem", marginTop: "0.35rem", flexWrap: "wrap" }}>
-        <button
-          type="button"
-          disabled={!!aiLoading || !data.clientId}
-          onClick={() => handleAI(field, "improve")}
-          className="mod-btn-ghost"
-          style={{
-            padding: "0.3rem 0.6rem",
-            fontSize: "0.68rem",
-            fontWeight: 600,
-            borderRadius: "0.3rem",
-            cursor: aiLoading ? "wait" : "pointer",
-            opacity: aiLoading && !isFieldLoading ? 0.5 : 1,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.25rem",
-          }}
-        >
-          {aiLoading === `${field}-improve` ? (
-            <><span className="skeleton" style={{ width: 12, height: 12, borderRadius: "50%", display: "inline-block" }} /> AI מנסח...</>
-          ) : (
-            <>✨ {improveLabel}</>
-          )}
-        </button>
-        <button
-          type="button"
-          disabled={!!aiLoading || !data.clientId}
-          onClick={() => handleAI(field, "variations")}
-          className="mod-btn-ghost"
-          style={{
-            padding: "0.3rem 0.6rem",
-            fontSize: "0.68rem",
-            fontWeight: 600,
-            borderRadius: "0.3rem",
-            cursor: aiLoading ? "wait" : "pointer",
-            opacity: aiLoading && !isFieldLoading ? 0.5 : 1,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.25rem",
-          }}
-        >
-          {aiLoading === `${field}-variations` ? (
-            <><span className="skeleton" style={{ width: 12, height: 12, borderRadius: "50%", display: "inline-block" }} /> AI מנסח גרסאות...</>
-          ) : (
-            <>🔄 {variationsLabel}</>
-          )}
-        </button>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", marginTop: "0.35rem" }}>
+        {/* AI thinking indicator */}
+        {isFieldLoading && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: "0.5rem",
+            padding: "0.5rem 0.75rem", borderRadius: "0.5rem",
+            background: "linear-gradient(135deg, rgba(0,181,254,0.04), rgba(139,92,246,0.04))",
+            border: "1px solid rgba(0,181,254,0.12)",
+          }}>
+            <div className="ux-ai-thinking-dots" style={{ display: "flex", gap: "3px" }}>
+              <span /><span /><span />
+            </div>
+            <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--accent)" }}>
+              AI {aiLoading === `${field}-improve` ? "משפר את הטקסט..." : "יוצר גרסאות..."}
+            </span>
+          </div>
+        )}
+        {/* Main AI buttons */}
+        <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            disabled={!!aiLoading || !data.clientId}
+            onClick={() => handleAI(field, "improve")}
+            className="ux-ai-tone-btn"
+            style={{
+              opacity: aiLoading && !isFieldLoading ? 0.4 : 1,
+              cursor: aiLoading ? "wait" : !data.clientId ? "not-allowed" : "pointer",
+            }}
+          >
+            {aiLoading === `${field}-improve` ? (
+              <>🔄 משפר...</>
+            ) : (
+              <>✨ {improveLabel}</>
+            )}
+          </button>
+          <button
+            type="button"
+            disabled={!!aiLoading || !data.clientId}
+            onClick={() => handleAI(field, "variations")}
+            className="ux-ai-tone-btn"
+            style={{
+              opacity: aiLoading && !isFieldLoading ? 0.4 : 1,
+              cursor: aiLoading ? "wait" : !data.clientId ? "not-allowed" : "pointer",
+            }}
+          >
+            {aiLoading === `${field}-variations` ? (
+              <>🔄 יוצר...</>
+            ) : (
+              <>🔄 {variationsLabel}</>
+            )}
+          </button>
+        </div>
       </div>
     );
   };
