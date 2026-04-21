@@ -58,6 +58,7 @@ interface RequestBody {
     platform: string;
     mediaType?: string;
     adFormat?: string;
+    primaryText?: string; // caption text, used as context for headline generation
   };
 }
 
@@ -90,6 +91,11 @@ export async function POST(req: NextRequest) {
     const maxLen = field === "caption" ? 500 : 80;
     const count = mode === "variations" ? 3 : 1;
 
+    // If generating a headline and we have primaryText, add context about it
+    const primaryTextContext = field === "headline" && context.primaryText?.trim()
+      ? `\n- הכותרת חייבת להתאים ולחזק את הטקסט הראשי של המודעה. חלץ את המסר המרכזי מהטקסט הראשי וצור כותרת שמשלימה אותו — לא חוזרת עליו מילה במילה.\n- הטקסט הראשי של המודעה:\n"${context.primaryText.trim()}"`
+      : "";
+
     const systemPrompt = `אתה קופירייטר מומחה לפרסום דיגיטלי בעברית. אתה כותב טקסטים שיווקיים שממירים לקמפיינים ברשתות חברתיות.
 
 כללים:
@@ -99,7 +105,7 @@ export async function POST(req: NextRequest) {
 - ${field === "caption" ? "טקסט ראשי — עד 500 תווים, פסקה אחת או שתיים, עם הנעה לפעולה" : "כותרת — עד 80 תווים, קצרה, חדה, מושכת תשומת לב"}
 - אל תשתמש בהאשטגים בתוך הטקסט
 - אל תוסיף אימוג'ים אלא אם זה מתאים לפלטפורמה
-- השתמש בידע על הלקוח אם זמין
+- השתמש בידע על הלקוח אם זמין${primaryTextContext}
 
 ${knowledgeCtx ? `מידע על הלקוח:\n${knowledgeCtx}` : ""}`;
 

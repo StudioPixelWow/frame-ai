@@ -63,7 +63,29 @@ const GENDER_OPTIONS = [
   { value: "female", label: "נשים" },
 ];
 
+const TARGETING_MODES = [
+  { value: "living", label: "גרים במיקום", icon: "🏠" },
+  { value: "recently", label: "היו לאחרונה", icon: "📍" },
+  { value: "traveling", label: "מטיילים במיקום", icon: "✈️" },
+  { value: "everyone", label: "כולם", icon: "🌍" },
+] as const;
+
+const ISRAELI_CITIES = [
+  "תל אביב", "ירושלים", "חיפה", "ראשון לציון", "פתח תקווה", "אשדוד", "נתניה",
+  "באר שבע", "בני ברק", "חולון", "רמת גן", "אשקלון", "רחובות", "בת ים", "הרצליה",
+  "כפר סבא", "רעננה", "מודיעין", "לוד", "רמלה", "נצרת", "הוד השרון", "גבעתיים",
+  "קריית אתא", "עכו", "אילת", "טבריה", "רמת השרון", "יהוד", "כפר יונה",
+  "גוש דן", "שרון", "מרכז", "צפון", "דרום", "ישראל",
+];
+
 // ── Wizard State Types ───────────────────────────────────────────────────────
+
+interface GeoLocation {
+  city: string;
+  radius: number; // km
+}
+
+type TargetingMode = "living" | "recently" | "traveling" | "everyone";
 
 interface WizardData {
   // Step 1 — basics
@@ -73,12 +95,14 @@ interface WizardData {
   campaignType: CampaignType;
   startDate: string;
   endDate: string;
-  // Step 2 — audience
-  location: string;
+  // Step 2 — audience (structured)
+  locations: GeoLocation[];
+  excludedLocations: string[];
+  targetingMode: TargetingMode;
   ageMin: number;
   ageMax: number;
   gender: string;
-  interests: string;
+  interests: string[];
   audienceNotes: string;
   // Step 3 — creative
   mediaType: CampaignMediaType;
@@ -101,11 +125,13 @@ const INITIAL_DATA: WizardData = {
   campaignType: "lead_gen",
   startDate: "",
   endDate: "",
-  location: "",
+  locations: [],
+  excludedLocations: [],
+  targetingMode: "living",
   ageMin: 18,
   ageMax: 65,
   gender: "all",
-  interests: "",
+  interests: [],
   audienceNotes: "",
   mediaType: "image",
   adFormat: "single",
@@ -499,69 +525,339 @@ function Step2Audience({
   data,
   onChange,
   selectedClient,
+  toast,
 }: {
   data: WizardData;
   onChange: (partial: Partial<WizardData>) => void;
   errors: StepErrors;
   selectedClient: Client | undefined;
+  toast: (msg: string, type: "success" | "error") => void;
 }) {
+  const [cityInput, setCityInput] = useState("");
+  const [cityRadius, setCityRadius] = useState(25);
+  const [excludeInput, setExcludeInput] = useState("");
+  const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
+  const [excludeSuggestions, setExcludeSuggestions] = useState<string[]>([]);
+  const [interestInput, setInterestInput] = useState("");
+  const [aiInterestsLoading, setAiInterestsLoading] = useState(false);
+  const [aiInterestSuggestions, setAiInterestSuggestions] = useState<string[]>([]);
+
+  // Autocomplete for city input
+  const handleCityInputChange = useCallback((value: string, isExclude?: boolean) => {
+    if (isExclude) {
+      setExcludeInput(value);
+      if (value.trim().length >= 1) {
+        setExcludeSuggestions(
+          ISRAELI_CITIES.filter(
+            (c) => c.includes(value.trim()) && !data.excludedLocations.includes(c)
+          ).slice(0, 6)
+        );
+      } else {
+        setExcludeSuggestions([]);
+      }
+    } else {
+      setCityInput(value);
+      if (value.trim().length >= 1) {
+        setCitySuggestions(
+          ISRAELI_CITIES.filter(
+            (c) => c.includes(value.trim()) && !data.locations.some((l) => l.city === c)
+          ).slice(0, 6)
+        );
+      } else {
+        setCitySuggestions([]);
+      }
+    }
+  }, [data.locations, data.excludedLocations]);
+
+  const addLocation = useCallback((city: string) => {
+    if (!city.trim()) return;
+    if (data.locations.some((l) => l.city === city.trim())) return;
+    onChange({ locations: [...data.locations, { city: city.trim(), radius: cityRadius }] });
+    setCityInput("");
+    setCitySuggestions([]);
+  }, [data.locations, cityRadius, onChange]);
+
+  const removeLocation = useCallback((index: number) => {
+    onChange({ locations: data.locations.filter((_, i) => i !== index) });
+  }, [data.locations, onChange]);
+
+  const addExclude = useCallback((city: string) => {
+    if (!city.trim()) return;
+    if (data.excludedLocations.includes(city.trim())) return;
+    onChange({ excludedLocations: [...data.excludedLocations, city.trim()] });
+    setExcludeInput("");
+    setExcludeSuggestions([]);
+  }, [data.excludedLocations, onChange]);
+
+  const removeExclude = useCallback((index: number) => {
+    onChange({ excludedLocations: data.excludedLocations.filter((_, i) => i !== index) });
+  }, [data.excludedLocations, onChange]);
+
+  const addInterest = useCallback((interest: string) => {
+    const trimmed = interest.trim();
+    if (!trimmed || data.interests.includes(trimmed)) return;
+    onChange({ interests: [...data.interests, trimmed] });
+    setInterestInput("");
+  }, [data.interests, onChange]);
+
+  const removeInterest = useCallback((index: number) => {
+    onChange({ interests: data.interests.filter((_, i) => i !== index) });
+  }, [data.interests, onChange]);
+
+  // AI interest suggestions
+  const handleAiInterests = useCallback(async () => {
+    if (!data.clientId) {
+      toast("יש לבחור לקוח בשלב 1 כדי לקבל הצעות AI", "error");
+      return;
+    }
+    setAiInterestsLoading(true);
+    setAiInterestSuggestions([]);
+    try {
+      const res = await fetch("/api/ai/campaign-interests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: data.clientId,
+          clientName: selectedClient?.name || "",
+          businessField: selectedClient?.businessField || "",
+          campaignType: data.campaignType,
+          platform: data.platform,
+          existingInterests: data.interests,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `AI failed (${res.status})`);
+      }
+      const json = await res.json();
+      if (json.interests && json.interests.length > 0) {
+        // Filter out already-selected interests
+        const filtered = (json.interests as string[]).filter((i: string) => !data.interests.includes(i));
+        setAiInterestSuggestions(filtered);
+      } else {
+        toast("AI לא הצליח ליצור הצעות — נסה שנית", "error");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "שגיאה ביצירת הצעות";
+      toast(msg, "error");
+    } finally {
+      setAiInterestsLoading(false);
+    }
+  }, [data.clientId, data.campaignType, data.platform, data.interests, selectedClient, toast]);
+
+  const chipStyle: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "0.3rem",
+    padding: "0.3rem 0.6rem",
+    fontSize: "0.72rem",
+    fontWeight: 600,
+    borderRadius: "1rem",
+    border: "1px solid var(--border)",
+    background: "var(--surface-raised)",
+    color: "var(--foreground)",
+    transition: "all 150ms",
+  };
+
+  const removeChipBtnStyle: React.CSSProperties = {
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    fontSize: "0.8rem",
+    color: "var(--foreground-muted)",
+    padding: "0",
+    lineHeight: 1,
+    display: "flex",
+    alignItems: "center",
+  };
+
+  const suggestionDropdownStyle: React.CSSProperties = {
+    position: "absolute",
+    top: "100%",
+    right: 0,
+    left: 0,
+    zIndex: 20,
+    background: "var(--surface-raised)",
+    border: "1px solid var(--border)",
+    borderRadius: "0.5rem",
+    boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
+    maxHeight: "200px",
+    overflowY: "auto",
+  };
+
+  const suggestionItemStyle: React.CSSProperties = {
+    padding: "0.5rem 0.75rem",
+    fontSize: "0.75rem",
+    cursor: "pointer",
+    borderBottom: "1px solid var(--border)",
+    transition: "background 100ms",
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-      {/* AI suggestion placeholder */}
-      <div
-        style={{
-          padding: "1rem 1.25rem",
-          background: "rgba(139,92,246,0.06)",
-          border: "1px solid rgba(139,92,246,0.2)",
-          borderRadius: "0.75rem",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.75rem",
-        }}
-      >
-        <span style={{ fontSize: "1.25rem" }}>🤖</span>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: "0.825rem", fontWeight: 700, color: "#8b5cf6", marginBottom: "0.15rem" }}>
-            הצעת AI לקהל יעד
-          </div>
-          <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", lineHeight: 1.5 }}>
-            {selectedClient
-              ? `על בסיס נתוני הלקוח "${selectedClient.name}" — תחום: ${selectedClient.businessField || "לא הוגדר"}. הצעת AI תהיה זמינה בגרסה הבאה.`
-              : "בחר לקוח בשלב 1 כדי לקבל הצעות AI מותאמות לקהל יעד"}
-          </div>
-        </div>
-        <span
-          style={{
-            fontSize: "0.65rem",
-            fontWeight: 700,
-            background: "rgba(139,92,246,0.12)",
-            color: "#8b5cf6",
-            padding: "0.2rem 0.5rem",
-            borderRadius: "0.25rem",
-          }}
-        >
-          בקרוב
-        </span>
-      </div>
-
+      {/* ── Geographic Targeting ── */}
       <div className="premium-card" style={{ padding: "1.25rem" }}>
-        <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "1rem" }}>
-          הגדרת קהל יעד
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
+          <span style={{ fontSize: "1.1rem" }}>📍</span>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>
+            טרגוט גאוגרפי
+          </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          {/* Location */}
+          {/* Targeting mode */}
           <div>
-            <FieldLabel label="מיקום גאוגרפי" />
-            <input
-              type="text"
-              value={data.location}
-              onChange={(e) => onChange({ location: e.target.value })}
-              placeholder="לדוגמה: ישראל, תל אביב, גוש דן"
-              style={inputStyle}
-            />
+            <FieldLabel label="מצב טרגוט" />
+            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+              {TARGETING_MODES.map((mode) => (
+                <button
+                  key={mode.value}
+                  type="button"
+                  onClick={() => onChange({ targetingMode: mode.value })}
+                  className={data.targetingMode === mode.value ? "mod-btn-primary" : "mod-btn-ghost"}
+                  style={{
+                    padding: "0.4rem 0.75rem",
+                    fontSize: "0.72rem",
+                    fontWeight: 600,
+                    borderRadius: "0.375rem",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.25rem",
+                  }}
+                >
+                  {mode.icon} {mode.label}
+                </button>
+              ))}
+            </div>
           </div>
 
+          {/* Include locations */}
+          <div>
+            <FieldLabel label="מיקומי יעד" />
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
+              <div style={{ flex: 1, position: "relative" }}>
+                <input
+                  type="text"
+                  value={cityInput}
+                  onChange={(e) => handleCityInputChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (citySuggestions.length > 0) {
+                        addLocation(citySuggestions[0]);
+                      } else if (cityInput.trim()) {
+                        addLocation(cityInput);
+                      }
+                    }
+                  }}
+                  placeholder="הקלד עיר או אזור..."
+                  style={inputStyle}
+                />
+                {citySuggestions.length > 0 && (
+                  <div style={suggestionDropdownStyle}>
+                    {citySuggestions.map((city) => (
+                      <div
+                        key={city}
+                        style={suggestionItemStyle}
+                        onClick={() => addLocation(city)}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,181,254,0.06)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                      >
+                        📍 {city}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", minWidth: "110px" }}>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={cityRadius}
+                  onChange={(e) => setCityRadius(Math.max(1, Number(e.target.value) || 25))}
+                  style={{ ...inputStyle, width: "60px", textAlign: "center" }}
+                />
+                <span style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", whiteSpace: "nowrap" }}>ק&quot;מ</span>
+              </div>
+            </div>
+
+            {/* Location chips */}
+            {data.locations.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginTop: "0.6rem" }}>
+                {data.locations.map((loc, i) => (
+                  <span key={i} style={{ ...chipStyle, background: "rgba(0,181,254,0.08)", borderColor: "rgba(0,181,254,0.25)" }}>
+                    📍 {loc.city}
+                    <span style={{ fontSize: "0.62rem", color: "var(--foreground-muted)" }}>+{loc.radius}km</span>
+                    <button type="button" style={removeChipBtnStyle} onClick={() => removeLocation(i)}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Exclude locations */}
+          <div>
+            <FieldLabel label="מיקומים לא לכלול (אופציונלי)" />
+            <div style={{ position: "relative" }}>
+              <input
+                type="text"
+                value={excludeInput}
+                onChange={(e) => handleCityInputChange(e.target.value, true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (excludeSuggestions.length > 0) {
+                      addExclude(excludeSuggestions[0]);
+                    } else if (excludeInput.trim()) {
+                      addExclude(excludeInput);
+                    }
+                  }
+                }}
+                placeholder="עיר או אזור להוציא מהטרגוט..."
+                style={inputStyle}
+              />
+              {excludeSuggestions.length > 0 && (
+                <div style={suggestionDropdownStyle}>
+                  {excludeSuggestions.map((city) => (
+                    <div
+                      key={city}
+                      style={suggestionItemStyle}
+                      onClick={() => addExclude(city)}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.06)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                    >
+                      🚫 {city}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {data.excludedLocations.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginTop: "0.6rem" }}>
+                {data.excludedLocations.map((loc, i) => (
+                  <span key={i} style={{ ...chipStyle, background: "rgba(239,68,68,0.06)", borderColor: "rgba(239,68,68,0.2)", color: "#ef4444" }}>
+                    🚫 {loc}
+                    <button type="button" style={{ ...removeChipBtnStyle, color: "#ef4444" }} onClick={() => removeExclude(i)}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Demographics ── */}
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
+          <span style={{ fontSize: "1.1rem" }}>👥</span>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>
+            דמוגרפיה
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           {/* Age range */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
             <div>
@@ -611,31 +907,158 @@ function Step2Audience({
               ))}
             </div>
           </div>
+        </div>
+      </div>
 
-          {/* Interests */}
-          <div>
-            <FieldLabel label="תחומי עניין" />
-            <textarea
-              value={data.interests}
-              onChange={(e) => onChange({ interests: e.target.value })}
-              placeholder="לדוגמה: כושר, תזונה, אורח חיים בריא, יוגה..."
-              rows={2}
-              style={{ ...inputStyle, resize: "vertical" }}
-            />
+      {/* ── Interests (with AI) ── */}
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span style={{ fontSize: "1.1rem" }}>🎯</span>
+            <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>
+              תחומי עניין
+            </div>
           </div>
+          <button
+            type="button"
+            disabled={aiInterestsLoading || !data.clientId}
+            onClick={handleAiInterests}
+            className="mod-btn-ghost"
+            style={{
+              padding: "0.35rem 0.7rem",
+              fontSize: "0.7rem",
+              fontWeight: 600,
+              borderRadius: "0.375rem",
+              cursor: aiInterestsLoading ? "wait" : "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.25rem",
+              opacity: !data.clientId ? 0.5 : 1,
+              background: "rgba(139,92,246,0.06)",
+              borderColor: "rgba(139,92,246,0.2)",
+              color: "#8b5cf6",
+            }}
+          >
+            {aiInterestsLoading ? (
+              <><span className="skeleton" style={{ width: 12, height: 12, borderRadius: "50%", display: "inline-block" }} /> AI מנתח...</>
+            ) : (
+              <>🤖 הצע תחומי עניין</>
+            )}
+          </button>
+        </div>
 
-          {/* Manual notes */}
-          <div>
-            <FieldLabel label="הערות טרגוט נוספות" />
-            <textarea
-              value={data.audienceNotes}
-              onChange={(e) => onChange({ audienceNotes: e.target.value })}
-              placeholder="הערות חופשיות — Lookalike, Custom Audience, Exclude..."
-              rows={2}
-              style={{ ...inputStyle, resize: "vertical" }}
-            />
+        {/* Manual interest input */}
+        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
+          <input
+            type="text"
+            value={interestInput}
+            onChange={(e) => setInterestInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addInterest(interestInput);
+              }
+            }}
+            placeholder="הקלד תחום עניין ולחץ Enter..."
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button
+            type="button"
+            onClick={() => addInterest(interestInput)}
+            disabled={!interestInput.trim()}
+            className="mod-btn-ghost"
+            style={{
+              padding: "0.4rem 0.75rem",
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              borderRadius: "0.375rem",
+              cursor: "pointer",
+              opacity: !interestInput.trim() ? 0.5 : 1,
+            }}
+          >
+            + הוסף
+          </button>
+        </div>
+
+        {/* Selected interests */}
+        {data.interests.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginBottom: "0.75rem" }}>
+            {data.interests.map((interest, i) => (
+              <span key={i} style={{ ...chipStyle, background: "rgba(139,92,246,0.08)", borderColor: "rgba(139,92,246,0.2)" }}>
+                🎯 {interest}
+                <button type="button" style={removeChipBtnStyle} onClick={() => removeInterest(i)}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* AI suggestions */}
+        {aiInterestSuggestions.length > 0 && (
+          <div style={{
+            padding: "0.75rem",
+            background: "rgba(139,92,246,0.04)",
+            border: "1px solid rgba(139,92,246,0.15)",
+            borderRadius: "0.5rem",
+          }}>
+            <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "#8b5cf6", marginBottom: "0.5rem" }}>
+              ✨ הצעות AI — לחץ להוספה:
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
+              {aiInterestSuggestions.map((interest, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => {
+                    addInterest(interest);
+                    setAiInterestSuggestions((prev) => prev.filter((_, idx) => idx !== i));
+                  }}
+                  style={{
+                    ...chipStyle,
+                    cursor: "pointer",
+                    background: "rgba(139,92,246,0.08)",
+                    borderColor: "rgba(139,92,246,0.25)",
+                    borderStyle: "dashed",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.15)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.08)"; }}
+                >
+                  + {interest}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setAiInterestSuggestions([])}
+              className="mod-btn-ghost"
+              style={{ marginTop: "0.5rem", padding: "0.2rem 0.5rem", fontSize: "0.65rem", borderRadius: "0.25rem", cursor: "pointer" }}
+            >
+              סגור הצעות
+            </button>
+          </div>
+        )}
+
+        {!data.clientId && (
+          <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>
+            בחר לקוח בשלב 1 כדי לקבל הצעות AI מותאמות
+          </div>
+        )}
+      </div>
+
+      {/* ── Audience notes ── */}
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+          <span style={{ fontSize: "1.1rem" }}>📝</span>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>
+            הערות טרגוט נוספות
           </div>
         </div>
+        <textarea
+          value={data.audienceNotes}
+          onChange={(e) => onChange({ audienceNotes: e.target.value })}
+          placeholder="הערות חופשיות — Lookalike, Custom Audience, Exclude..."
+          rows={2}
+          style={{ ...inputStyle, resize: "vertical" }}
+        />
       </div>
 
       {/* Client knowledge box */}
@@ -806,6 +1229,8 @@ function Step3Creative({
             platform: data.platform,
             mediaType: data.mediaType,
             adFormat: data.adFormat,
+            // Pass primary text as context for headline generation
+            ...(field === "headline" && data.caption.trim() ? { primaryText: data.caption } : {}),
           },
         }),
       });
@@ -1440,14 +1865,18 @@ export default function CampaignBuilderPage() {
     setSubmitting(true);
     try {
       const clientName = selectedClient?.name || "";
+      const locationStr = data.locations.map((l) => `${l.city}(+${l.radius}km)`).join(", ");
+      const excludeStr = data.excludedLocations.length > 0 ? ` | הוצא: ${data.excludedLocations.join(", ")}` : "";
+      const interestsStr = data.interests.join(", ");
       await createCampaign({
         campaignName: data.campaignName || "טיוטה חדשה",
         clientId: data.clientId,
         clientName,
         campaignType: data.campaignType,
         objective: [
-          data.location && `מיקום: ${data.location}`,
-          data.interests && `עניינים: ${data.interests}`,
+          locationStr && `מיקום: ${locationStr}${excludeStr}`,
+          data.targetingMode !== "living" && `מצב: ${TARGETING_MODES.find((m) => m.value === data.targetingMode)?.label || data.targetingMode}`,
+          interestsStr && `עניינים: ${interestsStr}`,
           data.audienceNotes,
         ].filter(Boolean).join(" | ") || "",
         platform: data.platform,
@@ -1490,14 +1919,18 @@ export default function CampaignBuilderPage() {
     setSubmitting(true);
     try {
       const clientName = selectedClient?.name || "";
+      const locationStr2 = data.locations.map((l) => `${l.city}(+${l.radius}km)`).join(", ");
+      const excludeStr2 = data.excludedLocations.length > 0 ? ` | הוצא: ${data.excludedLocations.join(", ")}` : "";
+      const interestsStr2 = data.interests.join(", ");
       await createCampaign({
         campaignName: data.campaignName,
         clientId: data.clientId,
         clientName,
         campaignType: data.campaignType,
         objective: [
-          data.location && `מיקום: ${data.location}`,
-          data.interests && `עניינים: ${data.interests}`,
+          locationStr2 && `מיקום: ${locationStr2}${excludeStr2}`,
+          data.targetingMode !== "living" && `מצב: ${TARGETING_MODES.find((m) => m.value === data.targetingMode)?.label || data.targetingMode}`,
+          interestsStr2 && `עניינים: ${interestsStr2}`,
           data.audienceNotes,
         ].filter(Boolean).join(" | ") || "",
         platform: data.platform,
@@ -1608,6 +2041,7 @@ export default function CampaignBuilderPage() {
           onChange={handleChange}
           errors={errors}
           selectedClient={selectedClient}
+          toast={toast}
         />
       )}
       {step === 3 && (
