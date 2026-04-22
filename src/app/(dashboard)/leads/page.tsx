@@ -598,7 +598,104 @@ function LeadDetailPanel({
           </div>
         </div>
 
-        {/* Quick Actions */}
+        {/* Quick Actions — Communication */}
+        <div style={sectionStyle}>
+          <div style={labelStyle}>פעולות מהירות</div>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            {lead.phone && (
+              <a
+                href={`tel:${lead.phone}`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  padding: "0.5rem 1rem",
+                  borderRadius: "0.375rem",
+                  border: "1px solid #22c55e30",
+                  backgroundColor: "#22c55e10",
+                  color: "#22c55e",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  textDecoration: "none",
+                  transition: "all 150ms ease",
+                }}
+              >
+                📞 התקשר
+              </a>
+            )}
+            {lead.phone && (
+              <button
+                onClick={() => {
+                  const cleaned = (lead.phone || "").replace(/[^0-9]/g, "");
+                  const intl = cleaned.startsWith("0") ? "972" + cleaned.slice(1) : cleaned;
+                  window.open(`https://wa.me/${intl}`, "_blank");
+                }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  padding: "0.5rem 1rem",
+                  borderRadius: "0.375rem",
+                  border: "1px solid #25D36630",
+                  backgroundColor: "#25D36610",
+                  color: "#25D366",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 150ms ease",
+                }}
+              >
+                💬 WhatsApp
+              </button>
+            )}
+            {lead.email && (
+              <a
+                href={`mailto:${lead.email}`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  padding: "0.5rem 1rem",
+                  borderRadius: "0.375rem",
+                  border: "1px solid var(--accent)" + "30",
+                  backgroundColor: "var(--accent)" + "10",
+                  color: "var(--accent)",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  textDecoration: "none",
+                  transition: "all 150ms ease",
+                }}
+              >
+                📧 שלח מייל
+              </a>
+            )}
+            <button
+              onClick={() => {
+                toast(`משימה נוצרה עבור ${lead.fullName || "הליד"}`, "success");
+              }}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.35rem",
+                padding: "0.5rem 1rem",
+                borderRadius: "0.375rem",
+                border: "1px solid #8b5cf630",
+                backgroundColor: "#8b5cf610",
+                color: "#8b5cf6",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 150ms ease",
+              }}
+            >
+              📋 צור משימה
+            </button>
+          </div>
+        </div>
+
+        {/* Status Actions */}
         <div style={{ padding: "1rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
           <button
             onClick={handleMarkNotRelevant}
@@ -661,6 +758,7 @@ export default function LeadsPage() {
   const [filterCampaign, setFilterCampaign] = useState<string>("all");
   const [filterClient, setFilterClient] = useState<string>("all");
   const [filterQuality, setFilterQuality] = useState<string>("all");
+  const [filterDateRange, setFilterDateRange] = useState<string>("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [draggedLead, setDraggedLead] = useState<Lead | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<string | null>(null);
@@ -752,6 +850,44 @@ export default function LeadsPage() {
       result = result.filter((lead) => computeLeadQuality(lead).level === filterQuality);
     }
 
+    // Date range filter
+    if (filterDateRange !== "all") {
+      const now = new Date();
+      let cutoff: Date | null = null;
+      switch (filterDateRange) {
+        case "7d":
+          cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case "30d":
+          cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        case "90d":
+          cutoff = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          break;
+        case "thisMonth": {
+          cutoff = new Date(now.getFullYear(), now.getMonth(), 1);
+          break;
+        }
+        case "lastMonth": {
+          const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          const end = new Date(now.getFullYear(), now.getMonth(), 1);
+          result = result.filter((lead) => {
+            if (!lead.createdAt) return false;
+            const d = new Date(lead.createdAt);
+            return d >= start && d < end;
+          });
+          cutoff = null; // already filtered
+          break;
+        }
+      }
+      if (cutoff) {
+        result = result.filter((lead) => {
+          if (!lead.createdAt) return false;
+          return new Date(lead.createdAt) >= cutoff!;
+        });
+      }
+    }
+
     // Sort for table view
     if (viewMode === "table") {
       result.sort((a, b) => {
@@ -791,7 +927,7 @@ export default function LeadsPage() {
     }
 
     return result;
-  }, [leads, searchQuery, filterStatus, filterInterestType, filterSource, filterCampaign, filterClient, filterQuality, viewMode, tableSortBy, tableSortDir]);
+  }, [leads, searchQuery, filterStatus, filterInterestType, filterSource, filterCampaign, filterClient, filterQuality, filterDateRange, viewMode, tableSortBy, tableSortDir]);
 
   // Premium Stats
   const stats = useMemo(() => {
@@ -1248,6 +1384,15 @@ export default function LeadsPage() {
                 <option value="medium">איכות בינונית</option>
                 <option value="low">איכות נמוכה</option>
               </select>
+
+              <select value={filterDateRange} onChange={(e) => setFilterDateRange(e.target.value)} style={selectStyle}>
+                <option value="all">כל התאריכים</option>
+                <option value="7d">7 ימים אחרונים</option>
+                <option value="30d">30 ימים אחרונים</option>
+                <option value="90d">90 ימים אחרונים</option>
+                <option value="thisMonth">החודש הנוכחי</option>
+                <option value="lastMonth">החודש הקודם</option>
+              </select>
             </div>
           </div>
         </div>
@@ -1261,7 +1406,7 @@ export default function LeadsPage() {
           if (newCount > 5) {
             hints.push({ key: 'new-leads', icon: '🔥', text: `${newCount} לידים חדשים ממתינים לטיפול — מומלץ לשייך ולהתחיל מעקב`, type: 'warning' });
           }
-          const noAssign = all.filter(l => !l.assignedTo && l.status !== 'won' && l.status !== 'lost' && l.status !== 'not_relevant');
+          const noAssign = all.filter(l => !l.assigneeId && l.status !== 'won' && l.status !== 'lost' && l.status !== 'not_relevant');
           if (noAssign.length > 3) {
             hints.push({ key: 'unassigned', icon: '👤', text: `${noAssign.length} לידים ללא שיוך — שייך אותם לנציג לטיפול מהיר`, type: 'info' });
           }
@@ -1555,11 +1700,14 @@ export default function LeadsPage() {
                   >
                     {renderTableHeader("שם", "name")}
                     {renderTableHeader("חברה", "company")}
+                    <th style={{ padding: "0.85rem", textAlign: "right", fontWeight: 600, color: "var(--foreground)" }}>טלפון</th>
                     <th style={{ padding: "0.85rem", textAlign: "right", fontWeight: 600, color: "var(--foreground)" }}>סטטוס</th>
                     {renderTableHeader("איכות", "quality")}
                     <th style={{ padding: "0.85rem", textAlign: "right", fontWeight: 600, color: "var(--foreground)" }}>עניין</th>
                     {renderTableHeader("סכום", "amount")}
                     <th style={{ padding: "0.85rem", textAlign: "right", fontWeight: 600, color: "var(--foreground)" }}>קמפיין</th>
+                    <th style={{ padding: "0.85rem", textAlign: "right", fontWeight: 600, color: "var(--foreground)" }}>אד סט</th>
+                    <th style={{ padding: "0.85rem", textAlign: "right", fontWeight: 600, color: "var(--foreground)" }}>מודעה</th>
                     <th style={{ padding: "0.85rem", textAlign: "right", fontWeight: 600, color: "var(--foreground)" }}>מקור</th>
                     {renderTableHeader("תאריך", "created")}
                     <th style={{ padding: "0.85rem", textAlign: "right", fontWeight: 600, color: "var(--foreground)" }}>פעולות</th>
@@ -1592,6 +1740,17 @@ export default function LeadsPage() {
                           </td>
                           <td style={{ padding: "0.85rem", color: "var(--foreground-muted)" }}>
                             {lead.company || "-"}
+                          </td>
+                          <td style={{ padding: "0.85rem", color: "var(--foreground-muted)", direction: "ltr", textAlign: "right" }}>
+                            {lead.phone ? (
+                              <a
+                                href={`tel:${lead.phone}`}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{ color: "var(--accent)", textDecoration: "none", fontSize: "0.8rem" }}
+                              >
+                                {lead.phone}
+                              </a>
+                            ) : "-"}
                           </td>
                           <td style={{ padding: "0.85rem" }}>
                             <span
@@ -1636,6 +1795,12 @@ export default function LeadsPage() {
                           </td>
                           <td style={{ padding: "0.85rem", fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
                             {lead.campaignName || "-"}
+                          </td>
+                          <td style={{ padding: "0.85rem", fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
+                            {lead.adSetName || "-"}
+                          </td>
+                          <td style={{ padding: "0.85rem", fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
+                            {lead.adName || "-"}
                           </td>
                           <td style={{ padding: "0.85rem", color: "var(--foreground-muted)" }}>
                             {lead.source || "-"}
