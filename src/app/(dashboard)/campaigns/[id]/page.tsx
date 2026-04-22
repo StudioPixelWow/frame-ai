@@ -82,9 +82,115 @@ function metricColor(value: number, good: number, mid: number): string {
   return 'rgba(255,255,255,0.5)';
 }
 
+// ── Ad Intelligence Engine ─────────────────────────────────────────────
+
+/** Composite performance score (0–100) for sorting & ranking */
+function getAdPerformanceScore(ad: Ad): number {
+  let score = 0;
+  // CTR component (0–30)
+  score += Math.min(ad.ctr * 10, 30);
+  // Leads component (0–25)
+  score += Math.min(ad.leads * 5, 25);
+  // Cost efficiency (0–25): lower CPL = better
+  if (ad.cpl > 0 && ad.cpl < 30) score += 25;
+  else if (ad.cpl > 0 && ad.cpl < 60) score += 15;
+  else if (ad.cpl > 0 && ad.cpl < 100) score += 5;
+  // Engagement volume (0–20)
+  if (ad.impressions > 10000) score += 20;
+  else if (ad.impressions > 5000) score += 12;
+  else if (ad.impressions > 1000) score += 6;
+  return Math.min(score, 100);
+}
+
+/** Detect if ad performance is declining (at risk) */
+function isAdAtRisk(ad: Ad): boolean {
+  // High spend, zero results
+  if (ad.spend > 150 && ad.leads === 0) return true;
+  // Very high impressions but terrible CTR
+  if (ad.impressions > 3000 && ad.ctr < 0.5) return true;
+  // High CPL relative to spend
+  if (ad.cpl > 120 && ad.spend > 100) return true;
+  return false;
+}
+
+/** Find the best ad (winner) in a list */
+function findWinnerAd(ads: Ad[]): string | null {
+  if (ads.length < 2) return null;
+  let best: Ad | null = null;
+  let bestScore = -1;
+  for (const ad of ads) {
+    const s = getAdPerformanceScore(ad);
+    if (s > bestScore && s >= 30) { best = ad; bestScore = s; }
+  }
+  return best?.id || null;
+}
+
+/** Sort ads by performance score descending (stable) */
+function sortAdsByPerformance(ads: Ad[]): Ad[] {
+  return [...ads].sort((a, b) => getAdPerformanceScore(b) - getAdPerformanceScore(a));
+}
+
+/** Group ads by performance tier */
+function groupAdsByTier(ads: Ad[]): { tier: string; color: string; ads: Ad[] }[] {
+  const tiers: { tier: string; color: string; ads: Ad[] }[] = [
+    { tier: '🏆 מובילים', color: '#22c55e', ads: [] },
+    { tier: '⚡ ממוצעים', color: '#f59e0b', ads: [] },
+    { tier: '🔧 לשיפור', color: '#ef4444', ads: [] },
+  ];
+  for (const ad of ads) {
+    const score = getAdPerformanceScore(ad);
+    if (score >= 50) tiers[0].ads.push(ad);
+    else if (score >= 20) tiers[1].ads.push(ad);
+    else tiers[2].ads.push(ad);
+  }
+  return tiers.filter((t) => t.ads.length > 0);
+}
+
+/** Generate a fake sparkline path for timeline (deterministic from ad data) */
+function generateSparklinePath(ad: Ad, width: number, height: number): string {
+  const points = 8;
+  const seed = (ad.impressions * 7 + ad.clicks * 13 + ad.leads * 29 + ad.spend * 3) || 1;
+  const vals: number[] = [];
+  let v = 0.5;
+  for (let i = 0; i < points; i++) {
+    v += (Math.sin(seed * (i + 1) * 0.7) * 0.3);
+    v = Math.max(0.05, Math.min(0.95, v));
+    vals.push(v);
+  }
+  // Normalize
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const range = max - min || 1;
+  return vals.map((v2, i) => {
+    const x = (i / (points - 1)) * width;
+    const y = height - ((v2 - min) / range) * height * 0.85 - height * 0.075;
+    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+}
+
+/** Get AI whisper — a subtle, actionable micro-suggestion */
+function getAdWhisper(ad: Ad): { text: string; type: 'tip' | 'warn' | 'boost' } {
+  if (ad.spend > 200 && ad.leads === 0) return { text: 'עצור והחלף קריאייטיב — אין תוצאות', type: 'warn' };
+  if (ad.ctr >= 3) return { text: 'נסה להגדיל תקציב ב-20% ולהרחיב גיאוגרפיה', type: 'boost' };
+  if (ad.ctr >= 2 && ad.leads >= 3) return { text: 'שכפל עם כותרת שונה לבדיקת A/B', type: 'boost' };
+  if (ad.impressions > 5000 && ad.ctr < 1) return { text: 'שנה תמונה ראשית — הקריאייטיב לא תופס', type: 'warn' };
+  if (ad.cpl > 80) return { text: 'נסה CTA חזק יותר או קהל יעד מצומצם', type: 'tip' };
+  if (ad.leads >= 1 && ad.ctr < 1.5) return { text: 'CTR נמוך — שפר כותרת וטקסט ראשי', type: 'tip' };
+  return { text: 'הוסף A/B test עם וריאציית כותרת', type: 'tip' };
+}
+
+const WHISPER_COLORS = {
+  tip: { color: '#8b5cf6', bg: 'rgba(139,92,246,0.06)' },
+  warn: { color: '#ef4444', bg: 'rgba(239,68,68,0.06)' },
+  boost: { color: '#22c55e', bg: 'rgba(34,197,94,0.06)' },
+};
+
+type AdSortMode = 'default' | 'performance' | 'spend' | 'leads' | 'ctr';
+type AdGroupMode = 'none' | 'tier' | 'creative' | 'status';
+
 // ── View mode types ────────────────────────────────────────────────────
 
-type AdViewMode = 'grid' | 'compare' | 'heat';
+type AdViewMode = 'grid' | 'compare' | 'heat' | 'timeline';
 type AdFilter = 'all' | 'best' | 'worst' | 'active' | 'paused' | 'image' | 'video' | 'ai_scale' | 'ai_fatigued' | 'ai_improve';
 
 // ── Styles ──────────────────────────────────────────────────────────────
@@ -126,19 +232,29 @@ const pillBtn = (active: boolean): React.CSSProperties => ({
   whiteSpace: 'nowrap' as const,
 });
 
-// ── Premium Ad Card ────────────────────────────────────────────────────
+// ── Premium Ad Card (Intelligence Edition) ────────────────────────────
 
 function AdCard({
-  ad, onEdit, onDuplicate, onCreateVariation, viewMode,
+  ad, onEdit, onDuplicate, onCreateVariation, onInlineEdit, viewMode,
+  isWinner, isSelected, onToggleSelect,
 }: {
   ad: Ad;
   onEdit: (ad: Ad) => void;
   onDuplicate: (ad: Ad) => void;
   onCreateVariation: (ad: Ad) => void;
+  onInlineEdit?: (ad: Ad, field: string, value: string) => void;
   viewMode: AdViewMode;
+  isWinner?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (ad: Ad) => void;
 }) {
+  const cardRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isHovering, setIsHovering] = useState(false);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const [whisperOpen, setWhisperOpen] = useState(false);
+  const [inlineField, setInlineField] = useState<string | null>(null);
+  const [inlineValue, setInlineValue] = useState('');
 
   const isVideo = ad.creativeType === 'video';
   const hasMedia = ad.mediaUrl && ad.mediaUrl.length > 5;
@@ -146,25 +262,65 @@ function AdCard({
   const aiStatus = getAdAIStatus(ad);
   const aiConfig = AI_STATUS_CONFIG[aiStatus];
   const aiInsight = getAdAIInsight(ad, aiStatus);
+  const atRisk = isAdAtRisk(ad);
+  const whisper = getAdWhisper(ad);
+  const whisperColor = WHISPER_COLORS[whisper.type];
+  const perfScore = getAdPerformanceScore(ad);
   const isHeat = viewMode === 'heat';
+  const isTimeline = viewMode === 'timeline';
 
-  // Heat border color based on overall performance
+  // Heat border color
   const heatColor = isHeat
     ? (aiStatus === 'scale' ? '#22c55e' : aiStatus === 'fatigued' ? '#f59e0b' : '#ef4444')
     : 'transparent';
 
+  // Winner glow
+  const winnerGlow = isWinner
+    ? '0 0 18px rgba(34,197,94,0.35), 0 0 4px rgba(34,197,94,0.2)'
+    : '';
+
   useEffect(() => {
     if (!videoRef.current || !isVideo) return;
-    if (isHovering) {
-      videoRef.current.play().catch(() => {});
-    } else {
-      videoRef.current.pause();
-      videoRef.current.currentTime = 0;
-    }
+    if (isHovering) { videoRef.current.play().catch(() => {}); }
+    else { videoRef.current.pause(); videoRef.current.currentTime = 0; }
   }, [isHovering, isVideo]);
+
+  // Magnetic tilt handler
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = (e.clientX - cx) / (rect.width / 2);
+    const dy = (e.clientY - cy) / (rect.height / 2);
+    setTilt({ x: dy * -2.5, y: dx * 2.5 });
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setIsHovering(false);
+    setTilt({ x: 0, y: 0 });
+  }, []);
+
+  // Inline edit helpers
+  const startInlineEdit = (field: string, currentValue: string) => {
+    setInlineField(field);
+    setInlineValue(currentValue);
+  };
+
+  const commitInlineEdit = () => {
+    if (inlineField && onInlineEdit && inlineValue.trim()) {
+      onInlineEdit(ad, inlineField, inlineValue.trim());
+    }
+    setInlineField(null);
+  };
+
+  const tiltTransform = isHovering
+    ? `translateY(-4px) perspective(600px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`
+    : 'translateY(0) perspective(600px) rotateX(0deg) rotateY(0deg)';
 
   return (
     <div
+      ref={cardRef}
       className="ad-card-premium"
       style={{
         position: 'relative',
@@ -172,23 +328,67 @@ function AdCard({
         overflow: 'hidden',
         cursor: 'pointer',
         transition: 'transform 250ms cubic-bezier(0.22,1,0.36,1), box-shadow 250ms cubic-bezier(0.22,1,0.36,1)',
-        transform: isHovering ? 'translateY(-4px)' : 'translateY(0)',
-        boxShadow: isHovering
-          ? '0 12px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,181,254,0.15)'
-          : '0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px var(--border)',
+        transform: tiltTransform,
+        boxShadow: [
+          isHovering ? '0 12px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,181,254,0.15)' : '0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px var(--border)',
+          winnerGlow,
+        ].filter(Boolean).join(', '),
         background: 'var(--surface-raised)',
-        border: isHeat ? `2px solid ${heatColor}` : '1px solid var(--border)',
+        border: isSelected ? '2px solid var(--accent)' : isWinner ? '2px solid #22c55e' : isHeat ? `2px solid ${heatColor}` : '1px solid var(--border)',
         display: 'flex',
         flexDirection: 'column',
       }}
       onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
     >
+      {/* ── Winner Badge ── */}
+      {isWinner && (
+        <div style={{
+          position: 'absolute', top: '-1px', left: '50%', transform: 'translateX(-50%)',
+          zIndex: 10, fontSize: '0.58rem', fontWeight: 800, padding: '0.15rem 0.65rem',
+          borderRadius: '0 0 0.4rem 0.4rem',
+          background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: '#fff',
+          boxShadow: '0 2px 8px rgba(34,197,94,0.3)',
+          letterSpacing: '0.02em',
+        }}>
+          🏆 המודעה המובילה
+        </div>
+      )}
+
+      {/* ── Compare Checkbox ── */}
+      {onToggleSelect && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onToggleSelect(ad); }}
+          style={{
+            position: 'absolute', top: '0.35rem', left: '0.35rem', zIndex: 12,
+            width: '1.3rem', height: '1.3rem', borderRadius: '0.25rem',
+            border: `2px solid ${isSelected ? 'var(--accent)' : 'rgba(255,255,255,0.5)'}`,
+            background: isSelected ? 'var(--accent)' : 'rgba(0,0,0,0.3)',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '0.7rem', color: '#fff', fontWeight: 800,
+            backdropFilter: 'blur(4px)', transition: 'all 150ms',
+          }}
+        >
+          {isSelected ? '✓' : ''}
+        </button>
+      )}
+
+      {/* ── At Risk Overlay ── */}
+      {atRisk && !isHovering && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(239,68,68,0.06)',
+          borderRadius: '0.75rem', zIndex: 1, pointerEvents: 'none',
+        }} />
+      )}
+
       {/* ── Media Area ─────────────────────────── */}
       <div style={{
         position: 'relative',
         width: '100%',
-        paddingBottom: '105%',
+        paddingBottom: isTimeline ? '65%' : '105%',
         background: 'var(--surface-sunken, #111)',
         overflow: 'hidden',
       }}>
@@ -199,10 +399,7 @@ function AdCard({
               src={ad.mediaUrl}
               poster={ad.thumbnailUrl || undefined}
               muted loop playsInline
-              style={{
-                position: 'absolute', top: 0, left: 0,
-                width: '100%', height: '100%', objectFit: 'cover',
-              }}
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
             />
           ) : (
             <img
@@ -210,8 +407,7 @@ function AdCard({
               alt={ad.name}
               loading="lazy"
               style={{
-                position: 'absolute', top: 0, left: 0,
-                width: '100%', height: '100%', objectFit: 'cover',
+                position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover',
                 transition: 'transform 400ms cubic-bezier(0.22,1,0.36,1)',
                 transform: isHovering ? 'scale(1.06)' : 'scale(1)',
               }}
@@ -253,17 +449,7 @@ function AdCard({
           ))}
         </div>
 
-        {/* ── Top-right: Status ── */}
-        <div style={{
-          position: 'absolute', top: '0.45rem', right: '0.45rem',
-          fontSize: '0.55rem', fontWeight: 700, padding: '0.18rem 0.45rem',
-          borderRadius: '0.2rem', background: statusColor, color: '#fff',
-          backdropFilter: 'blur(4px)',
-        }}>
-          {STATUS_LABELS[ad.status] || ad.status}
-        </div>
-
-        {/* ── Top-left: Creative type ── */}
+        {/* ── Score Pill (top-left, behind creative type) ── */}
         <div style={{
           position: 'absolute', top: '0.45rem', left: '0.45rem',
           fontSize: '0.55rem', fontWeight: 700, padding: '0.18rem 0.4rem',
@@ -271,6 +457,26 @@ function AdCard({
           backdropFilter: 'blur(4px)',
         }}>
           {CREATIVE_TYPE_ICONS[ad.creativeType]} {CREATIVE_TYPE_LABELS[ad.creativeType]}
+        </div>
+
+        {/* ── Top-right: Status + At Risk ── */}
+        <div style={{ position: 'absolute', top: '0.45rem', right: '0.45rem', display: 'flex', gap: '0.25rem' }}>
+          {atRisk && (
+            <div style={{
+              fontSize: '0.55rem', fontWeight: 700, padding: '0.18rem 0.45rem',
+              borderRadius: '0.2rem', background: 'rgba(239,68,68,0.85)', color: '#fff',
+              backdropFilter: 'blur(4px)', animation: 'pulse-subtle 2s infinite',
+            }}>
+              ⚠️ ירידה בביצועים
+            </div>
+          )}
+          <div style={{
+            fontSize: '0.55rem', fontWeight: 700, padding: '0.18rem 0.45rem',
+            borderRadius: '0.2rem', background: statusColor, color: '#fff',
+            backdropFilter: 'blur(4px)',
+          }}>
+            {STATUS_LABELS[ad.status] || ad.status}
+          </div>
         </div>
 
         {/* ── AI Badge ── */}
@@ -286,6 +492,20 @@ function AdCard({
           {aiConfig.icon} {aiConfig.label}
         </div>
 
+        {/* ── Performance Score Chip ── */}
+        <div style={{
+          position: 'absolute', bottom: isHovering ? '3.8rem' : '3.2rem', left: '0.45rem',
+          fontSize: '0.5rem', fontWeight: 800, padding: '0.15rem 0.4rem',
+          borderRadius: '999px',
+          background: perfScore >= 50 ? 'rgba(34,197,94,0.2)' : perfScore >= 20 ? 'rgba(245,158,11,0.2)' : 'rgba(239,68,68,0.2)',
+          color: perfScore >= 50 ? '#22c55e' : perfScore >= 20 ? '#f59e0b' : '#ef4444',
+          backdropFilter: 'blur(8px)',
+          transition: 'bottom 200ms, opacity 200ms',
+          opacity: isHovering ? 1 : 0.75,
+        }}>
+          {perfScore}pts
+        </div>
+
         {/* ── Hover Actions Overlay ── */}
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
@@ -297,7 +517,7 @@ function AdCard({
         }}>
           {[
             { label: 'עריכה', icon: '✎', onClick: () => onEdit(ad) },
-            { label: 'נתונים', icon: '📊', onClick: () => onEdit(ad) },
+            { label: 'מהיר', icon: '⚡', onClick: () => startInlineEdit('headline', ad.headline || ad.name) },
             { label: 'שפר AI', icon: '🧠', onClick: () => onCreateVariation(ad) },
             { label: 'שכפל', icon: '⧉', onClick: () => onDuplicate(ad) },
           ].map((action) => (
@@ -325,34 +545,110 @@ function AdCard({
 
       {/* ── Info Section ──────────────────────── */}
       <div style={{ padding: '0.65rem 0.75rem 0.5rem', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-        <h4 style={{
-          fontSize: '0.8rem', fontWeight: 700, color: 'var(--foreground)', margin: 0,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          letterSpacing: '-0.01em',
-        }}>
-          {ad.headline || ad.name}
-        </h4>
-        {ad.primaryText && (
-          <p style={{
-            fontSize: '0.66rem', color: 'var(--foreground-muted)', margin: 0,
-            overflow: 'hidden', textOverflow: 'ellipsis',
-            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
-            lineHeight: 1.45,
-          }}>
+        {/* Headline — inline editable */}
+        {inlineField === 'headline' ? (
+          <div style={{ display: 'flex', gap: '0.25rem' }}>
+            <input
+              autoFocus
+              value={inlineValue}
+              onChange={(e) => setInlineValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') commitInlineEdit(); if (e.key === 'Escape') setInlineField(null); }}
+              onBlur={commitInlineEdit}
+              style={{
+                flex: 1, fontSize: '0.8rem', fontWeight: 700, padding: '0.15rem 0.35rem',
+                borderRadius: '0.25rem', border: '1px solid var(--accent)',
+                background: 'var(--surface-sunken, var(--background))', color: 'var(--foreground)',
+                fontFamily: 'inherit', outline: 'none',
+              }}
+            />
+          </div>
+        ) : (
+          <h4
+            style={{
+              fontSize: '0.8rem', fontWeight: 700, color: 'var(--foreground)', margin: 0,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              letterSpacing: '-0.01em', cursor: 'text',
+            }}
+            onDoubleClick={() => startInlineEdit('headline', ad.headline || ad.name)}
+            title="לחץ פעמיים לעריכה מהירה"
+          >
+            {ad.headline || ad.name}
+          </h4>
+        )}
+
+        {ad.primaryText && inlineField !== 'primaryText' && (
+          <p
+            style={{
+              fontSize: '0.66rem', color: 'var(--foreground-muted)', margin: 0,
+              overflow: 'hidden', textOverflow: 'ellipsis',
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
+              lineHeight: 1.45, cursor: 'text',
+            }}
+            onDoubleClick={() => startInlineEdit('primaryText', ad.primaryText)}
+          >
             {ad.primaryText}
           </p>
         )}
+        {inlineField === 'primaryText' && (
+          <textarea
+            autoFocus
+            value={inlineValue}
+            onChange={(e) => setInlineValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape') setInlineField(null); }}
+            onBlur={commitInlineEdit}
+            style={{
+              fontSize: '0.66rem', padding: '0.2rem 0.35rem', minHeight: '2.5rem',
+              borderRadius: '0.25rem', border: '1px solid var(--accent)',
+              background: 'var(--surface-sunken, var(--background))', color: 'var(--foreground)',
+              fontFamily: 'inherit', resize: 'vertical' as const, outline: 'none',
+            }}
+          />
+        )}
 
-        {/* ── AI Insight Line ── */}
-        <div style={{
-          marginTop: 'auto', paddingTop: '0.35rem',
-          fontSize: '0.6rem', color: aiConfig.color, fontWeight: 600,
-          display: 'flex', alignItems: 'flex-start', gap: '0.3rem',
-          lineHeight: 1.35, opacity: 0.9,
-          borderTop: '1px solid var(--border)',
-        }}>
-          <span style={{ flexShrink: 0, marginTop: '0.1rem' }}>✨</span>
-          <span>{aiInsight}</span>
+        {/* ── Mini Sparkline (timeline view) ── */}
+        {isTimeline && (
+          <div style={{ margin: '0.2rem 0', opacity: 0.7 }}>
+            <svg width="100%" height="24" viewBox="0 0 100 24" preserveAspectRatio="none" style={{ display: 'block' }}>
+              <path d={generateSparklinePath(ad, 100, 24)} fill="none" stroke={aiConfig.color} strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </div>
+        )}
+
+        {/* ── AI Whisper (expandable) ── */}
+        <div
+          style={{
+            marginTop: 'auto', paddingTop: '0.35rem',
+            borderTop: '1px solid var(--border)',
+            cursor: 'pointer',
+          }}
+          onClick={(e) => { e.stopPropagation(); setWhisperOpen(!whisperOpen); }}
+        >
+          <div style={{
+            fontSize: '0.58rem', fontWeight: 600, color: whisperColor.color,
+            display: 'flex', alignItems: 'center', gap: '0.25rem',
+            padding: '0.15rem 0.3rem', borderRadius: '0.3rem',
+            background: whisperOpen ? whisperColor.bg : 'transparent',
+            transition: 'background 150ms',
+          }}>
+            <span style={{ fontSize: '0.65rem' }}>💡</span>
+            <span style={{ flex: 1, lineHeight: 1.35 }}>
+              {whisperOpen ? whisper.text : whisper.text.slice(0, 28) + (whisper.text.length > 28 ? '...' : '')}
+            </span>
+            <span style={{
+              fontSize: '0.5rem', opacity: 0.6,
+              transform: whisperOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform 150ms',
+            }}>▾</span>
+          </div>
+          {whisperOpen && (
+            <div style={{
+              fontSize: '0.55rem', color: 'var(--foreground-muted)', padding: '0.25rem 0.3rem 0.1rem',
+              lineHeight: 1.4,
+            }}>
+              ציון ביצועים: <strong style={{ color: perfScore >= 50 ? '#22c55e' : perfScore >= 20 ? '#f59e0b' : '#ef4444' }}>{perfScore}/100</strong>
+              {' · '}{aiConfig.icon} {aiConfig.label}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -420,14 +716,96 @@ function AdGridEmptyState({ onAddAd }: { onAddAd: () => void }) {
   );
 }
 
-// ── Filter Bar ─────────────────────────────────────────────────────────
+// ── A/B Compare Panel ─────────────────────────────────────────────────
+
+function ABComparePanel({ ads, onClose }: { ads: Ad[]; onClose: () => void }) {
+  if (ads.length < 2) return null;
+  const metrics = ['ctr', 'cpl', 'leads', 'spend', 'impressions', 'clicks'] as const;
+  const metricLabels: Record<string, string> = {
+    ctr: 'CTR', cpl: 'CPL', leads: 'לידים', spend: 'הוצאה', impressions: 'חשיפות', clicks: 'קליקים',
+  };
+
+  return (
+    <div style={{
+      ...cardStyle, padding: '1rem',
+      border: '1px solid var(--accent)', borderRadius: '0.75rem',
+      background: 'var(--surface-raised)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+        <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--foreground)', margin: 0 }}>
+          ⚖ השוואת A/B — {ads.length} מודעות
+        </h3>
+        <button type="button" onClick={onClose} style={{
+          background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem',
+          color: 'var(--foreground-muted)', padding: '0.2rem 0.4rem',
+        }}>✕</button>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem' }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'right', padding: '0.4rem 0.5rem', borderBottom: '1px solid var(--border)', color: 'var(--foreground-muted)', fontWeight: 600 }}>מדד</th>
+              {ads.map((ad) => (
+                <th key={ad.id} style={{ textAlign: 'center', padding: '0.4rem 0.5rem', borderBottom: '1px solid var(--border)', color: 'var(--foreground)', fontWeight: 700, maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {ad.headline || ad.name}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style={{ padding: '0.35rem 0.5rem', fontWeight: 600, color: 'var(--foreground-muted)' }}>ציון AI</td>
+              {ads.map((ad) => {
+                const s = getAdPerformanceScore(ad);
+                const best = Math.max(...ads.map(getAdPerformanceScore));
+                return (
+                  <td key={ad.id} style={{ textAlign: 'center', padding: '0.35rem', fontWeight: 800, color: s === best ? '#22c55e' : 'var(--foreground)' }}>
+                    {s === best && ads.length > 1 ? `🏆 ${s}` : s}
+                  </td>
+                );
+              })}
+            </tr>
+            {metrics.map((key) => {
+              const vals = ads.map((ad) => ad[key] as number);
+              const best = key === 'cpl' ? Math.min(...vals.filter((v) => v > 0)) : Math.max(...vals);
+              return (
+                <tr key={key} style={{ borderTop: '1px solid var(--border)' }}>
+                  <td style={{ padding: '0.35rem 0.5rem', fontWeight: 600, color: 'var(--foreground-muted)' }}>{metricLabels[key]}</td>
+                  {ads.map((ad) => {
+                    const v = ad[key] as number;
+                    const isBest = v === best && v > 0 && ads.filter((a) => (a[key] as number) === best).length === 1;
+                    return (
+                      <td key={ad.id} style={{
+                        textAlign: 'center', padding: '0.35rem', fontWeight: 700,
+                        color: isBest ? '#22c55e' : 'var(--foreground)',
+                        background: isBest ? 'rgba(34,197,94,0.06)' : 'transparent',
+                      }}>
+                        {key === 'ctr' ? `${v.toFixed(1)}%` : key === 'cpl' || key === 'spend' ? `₪${v.toFixed(0)}` : v}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Filter Bar (Intelligence Edition) ─────────────────────────────────
 
 function AdFilterBar({
   filter, onFilter, viewMode, onViewMode, adCount,
+  sortMode, onSort, groupMode, onGroup, compareCount, onOpenCompare,
 }: {
   filter: AdFilter; onFilter: (f: AdFilter) => void;
   viewMode: AdViewMode; onViewMode: (m: AdViewMode) => void;
   adCount: number;
+  sortMode: AdSortMode; onSort: (s: AdSortMode) => void;
+  groupMode: AdGroupMode; onGroup: (g: AdGroupMode) => void;
+  compareCount: number; onOpenCompare: () => void;
 }) {
   const filters: Array<{ value: AdFilter; label: string }> = [
     { value: 'all', label: 'הכל' },
@@ -437,53 +815,109 @@ function AdFilterBar({
     { value: 'paused', label: 'מושהים' },
     { value: 'image', label: '🖼️ תמונה' },
     { value: 'video', label: '🎬 וידאו' },
-    { value: 'ai_scale', label: '🚀 מוכן לסקייל' },
-    { value: 'ai_improve', label: '🔧 צריך שיפור' },
+    { value: 'ai_scale', label: '🚀 סקייל' },
+    { value: 'ai_improve', label: '🔧 שיפור' },
   ];
 
   const viewModes: Array<{ value: AdViewMode; label: string; icon: string }> = [
     { value: 'grid', label: 'רשת', icon: '▦' },
     { value: 'compare', label: 'השוואה', icon: '⚖' },
     { value: 'heat', label: 'חום', icon: '🔥' },
+    { value: 'timeline', label: 'ציר זמן', icon: '📈' },
+  ];
+
+  const sortOptions: Array<{ value: AdSortMode; label: string }> = [
+    { value: 'default', label: 'ברירת מחדל' },
+    { value: 'performance', label: '⭐ ביצועים' },
+    { value: 'spend', label: '💰 הוצאה' },
+    { value: 'leads', label: '👥 לידים' },
+    { value: 'ctr', label: '📊 CTR' },
+  ];
+
+  const groupOptions: Array<{ value: AdGroupMode; label: string }> = [
+    { value: 'none', label: 'ללא' },
+    { value: 'tier', label: '🏅 רמה' },
+    { value: 'creative', label: '🎨 סוג' },
+    { value: 'status', label: '📋 סטטוס' },
   ];
 
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap',
+      display: 'flex', flexDirection: 'column', gap: '0.4rem',
       padding: '0.6rem 0.85rem', borderRadius: '0.75rem',
       background: 'var(--surface-raised)', border: '1px solid var(--border)',
     }}>
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', flex: 1 }}>
-        {filters.map((f) => (
-          <button key={f.value} type="button" onClick={() => onFilter(f.value)} style={pillBtn(filter === f.value)}>
-            {f.label}
-          </button>
-        ))}
+      {/* Row 1: Filters + Count + View modes */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', flex: 1 }}>
+          {filters.map((f) => (
+            <button key={f.value} type="button" onClick={() => onFilter(f.value)} style={pillBtn(filter === f.value)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <span style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>
+          {adCount} מודעות
+        </span>
+
+        <div style={{
+          display: 'flex', gap: '0.15rem', padding: '0.15rem',
+          borderRadius: '0.4rem', background: 'var(--surface-sunken, var(--background))',
+          border: '1px solid var(--border)',
+        }}>
+          {viewModes.map((m) => (
+            <button key={m.value} type="button" onClick={() => onViewMode(m.value)} style={{
+              padding: '0.25rem 0.5rem', fontSize: '0.65rem', fontWeight: 600,
+              borderRadius: '0.25rem', border: 'none', cursor: 'pointer',
+              background: viewMode === m.value ? 'var(--accent)' : 'transparent',
+              color: viewMode === m.value ? '#fff' : 'var(--foreground-muted)',
+              transition: 'all 150ms', whiteSpace: 'nowrap' as const,
+            }}>
+              {m.icon} {m.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Count */}
-      <span style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>
-        {adCount} מודעות
-      </span>
+      {/* Row 2: Sort + Group + Compare CTA */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        {/* Sort */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+          <span style={{ fontSize: '0.6rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>מיון:</span>
+          {sortOptions.map((s) => (
+            <button key={s.value} type="button" onClick={() => onSort(s.value)} style={{
+              ...pillBtn(sortMode === s.value), fontSize: '0.6rem', padding: '0.2rem 0.45rem',
+            }}>
+              {s.label}
+            </button>
+          ))}
+        </div>
 
-      {/* View modes */}
-      <div style={{
-        display: 'flex', gap: '0.15rem', padding: '0.15rem',
-        borderRadius: '0.4rem', background: 'var(--surface-sunken, var(--background))',
-        border: '1px solid var(--border)',
-      }}>
-        {viewModes.map((m) => (
-          <button key={m.value} type="button" onClick={() => onViewMode(m.value)} style={{
-            padding: '0.25rem 0.5rem', fontSize: '0.65rem', fontWeight: 600,
-            borderRadius: '0.25rem', border: 'none', cursor: 'pointer',
-            background: viewMode === m.value ? 'var(--accent)' : 'transparent',
-            color: viewMode === m.value ? '#fff' : 'var(--foreground-muted)',
-            transition: 'all 150ms', whiteSpace: 'nowrap' as const,
+        {/* Group */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+          <span style={{ fontSize: '0.6rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>קבץ:</span>
+          {groupOptions.map((g) => (
+            <button key={g.value} type="button" onClick={() => onGroup(g.value)} style={{
+              ...pillBtn(groupMode === g.value), fontSize: '0.6rem', padding: '0.2rem 0.45rem',
+            }}>
+              {g.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Compare CTA */}
+        {compareCount >= 2 && (
+          <button type="button" onClick={onOpenCompare} style={{
+            padding: '0.25rem 0.6rem', fontSize: '0.65rem', fontWeight: 700,
+            borderRadius: '999px', border: 'none', cursor: 'pointer',
+            background: 'linear-gradient(135deg, var(--accent), #0092cc)', color: '#fff',
+            boxShadow: '0 2px 8px rgba(0,181,254,0.3)',
+            animation: 'pulse-subtle 2s infinite',
           }}>
-            {m.icon} {m.label}
+            ⚖ השווה {compareCount} מודעות
           </button>
-        ))}
+        )}
       </div>
     </div>
   );
@@ -499,7 +933,12 @@ function AdSetSection({
   onAddAd,
   onDuplicate,
   onCreateVariation,
+  onInlineEdit,
   viewMode,
+  sortMode,
+  groupMode,
+  selectedAdIds,
+  onToggleSelect,
 }: {
   adSet: AdSet;
   adsForSet: Ad[];
@@ -508,10 +947,60 @@ function AdSetSection({
   onAddAd: (adSetId: string) => void;
   onDuplicate: (ad: Ad) => void;
   onCreateVariation: (ad: Ad) => void;
+  onInlineEdit: (ad: Ad, field: string, value: string) => void;
   viewMode: AdViewMode;
+  sortMode: AdSortMode;
+  groupMode: AdGroupMode;
+  selectedAdIds: Set<string>;
+  onToggleSelect: (ad: Ad) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const statusColor = STATUS_COLORS[adSet.status] || '#6b7280';
+
+  // Winner detection for this set
+  const winnerId = useMemo(() => findWinnerAd(adsForSet), [adsForSet]);
+
+  // Apply sorting
+  const sortedAds = useMemo(() => {
+    const ads = [...adsForSet];
+    switch (sortMode) {
+      case 'performance': return sortAdsByPerformance(ads);
+      case 'spend': return ads.sort((a, b) => b.spend - a.spend);
+      case 'leads': return ads.sort((a, b) => b.leads - a.leads);
+      case 'ctr': return ads.sort((a, b) => b.ctr - a.ctr);
+      default: return ads;
+    }
+  }, [adsForSet, sortMode]);
+
+  // Apply grouping
+  const groupedAds = useMemo(() => {
+    if (groupMode === 'none') return null;
+    if (groupMode === 'tier') return groupAdsByTier(sortedAds);
+    if (groupMode === 'creative') {
+      const map: Record<string, Ad[]> = {};
+      for (const ad of sortedAds) {
+        const key = ad.creativeType;
+        (map[key] = map[key] || []).push(ad);
+      }
+      return Object.entries(map).map(([key, ads]) => ({
+        tier: `${CREATIVE_TYPE_ICONS[key as AdCreativeType]} ${CREATIVE_TYPE_LABELS[key as AdCreativeType]}`,
+        color: 'var(--accent)',
+        ads,
+      }));
+    }
+    if (groupMode === 'status') {
+      const map: Record<string, Ad[]> = {};
+      for (const ad of sortedAds) {
+        (map[ad.status] = map[ad.status] || []).push(ad);
+      }
+      return Object.entries(map).map(([key, ads]) => ({
+        tier: STATUS_LABELS[key] || key,
+        color: STATUS_COLORS[key] || '#6b7280',
+        ads,
+      }));
+    }
+    return null;
+  }, [sortedAds, groupMode]);
 
   const totals = useMemo(() => {
     return adsForSet.reduce((acc, ad) => ({
@@ -627,21 +1116,42 @@ function AdSetSection({
         adsForSet.length === 0 ? (
           <AdGridEmptyState onAddAd={() => onAddAd(adSet.id)} />
         ) : (
-          <div style={{
-            display: viewMode === 'compare' ? 'flex' : 'grid',
-            gridTemplateColumns: viewMode !== 'compare' ? 'repeat(auto-fill, minmax(240px, 1fr))' : undefined,
-            gap: '1rem',
-            overflowX: viewMode === 'compare' ? 'auto' : undefined,
-          }}>
-            {adsForSet.map((ad) => (
-              <div key={ad.id} style={viewMode === 'compare' ? { minWidth: '280px', flex: '0 0 280px' } : undefined}>
-                <AdCard
-                  ad={ad}
-                  onEdit={onEditAd}
-                  onDuplicate={onDuplicate}
-                  onCreateVariation={onCreateVariation}
-                  viewMode={viewMode}
-                />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {(groupedAds || [{ tier: '', color: '', ads: sortedAds }]).map((group) => (
+              <div key={group.tier || '_all'}>
+                {/* Group header */}
+                {group.tier && groupMode !== 'none' && (
+                  <div style={{
+                    fontSize: '0.72rem', fontWeight: 700, color: group.color,
+                    marginBottom: '0.5rem', padding: '0.2rem 0.5rem',
+                    borderRight: `3px solid ${group.color}`, background: `${group.color}08`,
+                    borderRadius: '0 0.3rem 0.3rem 0',
+                  }}>
+                    {group.tier} ({group.ads.length})
+                  </div>
+                )}
+                <div style={{
+                  display: viewMode === 'compare' ? 'flex' : 'grid',
+                  gridTemplateColumns: viewMode !== 'compare' ? 'repeat(auto-fill, minmax(240px, 1fr))' : undefined,
+                  gap: '1rem',
+                  overflowX: viewMode === 'compare' ? 'auto' : undefined,
+                }}>
+                  {group.ads.map((ad) => (
+                    <div key={ad.id} style={viewMode === 'compare' ? { minWidth: '280px', flex: '0 0 280px' } : undefined}>
+                      <AdCard
+                        ad={ad}
+                        onEdit={onEditAd}
+                        onDuplicate={onDuplicate}
+                        onCreateVariation={onCreateVariation}
+                        onInlineEdit={onInlineEdit}
+                        viewMode={viewMode}
+                        isWinner={ad.id === winnerId}
+                        isSelected={selectedAdIds.has(ad.id)}
+                        onToggleSelect={onToggleSelect}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
             <button
@@ -649,10 +1159,9 @@ function AdSetSection({
               onClick={() => onAddAd(adSet.id)}
               style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                minHeight: '260px', borderRadius: '0.75rem', cursor: 'pointer',
+                minHeight: '180px', borderRadius: '0.75rem', cursor: 'pointer',
                 border: '2px dashed var(--border)', background: 'transparent',
                 color: 'var(--foreground-muted)', transition: 'all 200ms', gap: '0.5rem',
-                ...(viewMode === 'compare' ? { minWidth: '280px', flex: '0 0 280px' } : {}),
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = 'var(--accent)';
@@ -724,10 +1233,14 @@ export default function CampaignDetailPage() {
     return map[campaign.id] || null;
   }, [campaign, allLeads]);
 
-  // ── Filter & View Mode ──────────────────────────────────────────────
+  // ── Filter, Sort, Group, View Mode, Compare ─────────────────────────
 
   const [adFilter, setAdFilter] = useState<AdFilter>('all');
   const [adViewMode, setAdViewMode] = useState<AdViewMode>('grid');
+  const [adSortMode, setAdSortMode] = useState<AdSortMode>('default');
+  const [adGroupMode, setAdGroupMode] = useState<AdGroupMode>('none');
+  const [selectedAdIds, setSelectedAdIds] = useState<Set<string>>(new Set());
+  const [showComparePanel, setShowComparePanel] = useState(false);
 
   const filteredAdsByAdSet = useMemo(() => {
     const map: Record<string, Ad[]> = {};
@@ -756,6 +1269,19 @@ export default function CampaignDetailPage() {
   const filteredAdCount = useMemo(() => {
     return Object.values(filteredAdsByAdSet).reduce((sum, arr) => sum + arr.length, 0);
   }, [filteredAdsByAdSet]);
+
+  const selectedAdsForCompare = useMemo(() => {
+    return campaignAds.filter((ad) => selectedAdIds.has(ad.id));
+  }, [campaignAds, selectedAdIds]);
+
+  const handleToggleSelect = useCallback((ad: Ad) => {
+    setSelectedAdIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(ad.id)) next.delete(ad.id);
+      else next.add(ad.id);
+      return next;
+    });
+  }, []);
 
   // ── Duplicate & Variation handlers ────────────────────────────────
 
@@ -808,6 +1334,13 @@ export default function CampaignDetailPage() {
       toast('וריאציה נוצרה — ערוך את הקריאייטיב', 'success');
     } catch { toast('שגיאה ביצירת וריאציה', 'error'); }
   }, [createAd, toast]);
+
+  const handleInlineEdit = useCallback(async (ad: Ad, field: string, value: string) => {
+    try {
+      await updateAd(ad.id, { [field]: value });
+      toast('עודכן בהצלחה', 'success');
+    } catch { toast('שגיאה בעדכון', 'error'); }
+  }, [updateAd, toast]);
 
   // ── Modals ──────────────────────────────────────────────────────────
 
@@ -1030,6 +1563,20 @@ export default function CampaignDetailPage() {
             viewMode={adViewMode}
             onViewMode={setAdViewMode}
             adCount={filteredAdCount}
+            sortMode={adSortMode}
+            onSort={setAdSortMode}
+            groupMode={adGroupMode}
+            onGroup={setAdGroupMode}
+            compareCount={selectedAdIds.size}
+            onOpenCompare={() => setShowComparePanel(true)}
+          />
+        )}
+
+        {/* A/B Compare Panel */}
+        {showComparePanel && selectedAdsForCompare.length >= 2 && (
+          <ABComparePanel
+            ads={selectedAdsForCompare}
+            onClose={() => { setShowComparePanel(false); setSelectedAdIds(new Set()); }}
           />
         )}
 
@@ -1063,7 +1610,12 @@ export default function CampaignDetailPage() {
                 onAddAd={(adSetId) => handleOpenAdModal(adSetId)}
                 onDuplicate={handleDuplicate}
                 onCreateVariation={handleCreateVariation}
+                onInlineEdit={handleInlineEdit}
                 viewMode={adViewMode}
+                sortMode={adSortMode}
+                groupMode={adGroupMode}
+                selectedAdIds={selectedAdIds}
+                onToggleSelect={handleToggleSelect}
               />
             ))}
           </div>
