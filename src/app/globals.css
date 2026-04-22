@@ -7089,3 +7089,494 @@
   background: rgba(0,181,254,0.14);
   border-color: rgba(0,181,254,0.3);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   2030 MOTION SYSTEM — PixelManageAI Premium Motion Primitives
+   Extends existing ux-* system. Use pm-* prefix.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Motion Tokens ──────────────────────────────────────────────────────── */
+:root {
+  --pm-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --pm-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --pm-ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --pm-ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  --pm-dur-instant: 120ms;
+  --pm-dur-fast: 200ms;
+  --pm-dur-normal: 300ms;
+  --pm-dur-slow: 500ms;
+  --pm-dur-cinematic: 800ms;
+  --pm-gradient-brand: linear-gradient(135deg, #02AFFE 0%, #05E2FF 100%);
+}
+
+/* ── 1. Error field shake ───────────────────────────────────────────────── */
+@keyframes pm-shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-6px); }
+  30% { transform: translateX(5px); }
+  45% { transform: translateX(-4px); }
+  60% { transform: translateX(3px); }
+  75% { transform: translateX(-2px); }
+  90% { transform: translateX(1px); }
+}
+.pm-shake {
+  animation: pm-shake 500ms var(--pm-ease-smooth);
+}
+
+/* Error pulse — soft red border flash */
+@keyframes pm-error-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); border-color: #ef4444; }
+  50% { box-shadow: 0 0 12px 2px rgba(239,68,68,0.15); }
+  100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); border-color: var(--border); }
+}
+.pm-error-pulse {
+  animation: pm-error-pulse 700ms ease-out;
+}
+
+/* Inline error reveal */
+@keyframes pm-error-reveal {
+  from { opacity: 0; transform: translateY(-4px); max-height: 0; }
+  to { opacity: 1; transform: translateY(0); max-height: 60px; }
+}
+.pm-error-reveal {
+  animation: pm-error-reveal 300ms var(--pm-ease-out) forwards;
+  overflow: hidden;
+  color: #ef4444;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* ── 2. Drawer / panel slide ────────────────────────────────────────────── */
+@keyframes pm-drawer-in-right {
+  from { transform: translateX(100%); opacity: 0.5; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes pm-drawer-out-right {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(100%); opacity: 0; }
+}
+@keyframes pm-drawer-in-left {
+  from { transform: translateX(-100%); opacity: 0.5; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.pm-drawer-enter-right {
+  animation: pm-drawer-in-right var(--pm-dur-normal) var(--pm-ease-out) forwards;
+}
+.pm-drawer-exit-right {
+  animation: pm-drawer-out-right var(--pm-dur-fast) var(--pm-ease-smooth) forwards;
+}
+.pm-drawer-enter-left {
+  animation: pm-drawer-in-left var(--pm-dur-normal) var(--pm-ease-out) forwards;
+}
+
+/* ── 3. Tab / section switch ────────────────────────────────────────────── */
+@keyframes pm-tab-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pm-tab-exit {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-6px); }
+}
+.pm-tab-enter {
+  animation: pm-tab-enter var(--pm-dur-normal) var(--pm-ease-out) forwards;
+}
+.pm-tab-exit {
+  animation: pm-tab-exit var(--pm-dur-fast) var(--pm-ease-smooth) forwards;
+}
+
+/* ── 4. Collapsible section expand/collapse ─────────────────────────────── */
+@keyframes pm-expand {
+  from { opacity: 0; max-height: 0; transform: scaleY(0.96); }
+  to { opacity: 1; max-height: 1000px; transform: scaleY(1); }
+}
+@keyframes pm-collapse {
+  from { opacity: 1; max-height: 1000px; transform: scaleY(1); }
+  to { opacity: 0; max-height: 0; transform: scaleY(0.96); }
+}
+.pm-expand {
+  animation: pm-expand var(--pm-dur-normal) var(--pm-ease-out) forwards;
+  transform-origin: top;
+  overflow: hidden;
+}
+.pm-collapse {
+  animation: pm-collapse var(--pm-dur-fast) var(--pm-ease-smooth) forwards;
+  transform-origin: top;
+  overflow: hidden;
+}
+
+/* ── 5. Live data update emphasis ───────────────────────────────────────── */
+@keyframes pm-data-flash {
+  0% { background-color: rgba(2, 175, 254, 0.12); }
+  100% { background-color: transparent; }
+}
+.pm-data-updated {
+  animation: pm-data-flash 1.2s ease-out;
+}
+
+/* Live update pulse — subtle cyan border flash */
+@keyframes pm-live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(2, 175, 254, 0.35); }
+  50% { box-shadow: 0 0 14px 3px rgba(2, 175, 254, 0.12); }
+  100% { box-shadow: 0 0 0 0 rgba(2, 175, 254, 0); }
+}
+.pm-live-pulse {
+  animation: pm-live-pulse 900ms ease-out;
+}
+
+/* ── 6. KPI counter smooth count-up ─────────────────────────────────────── */
+.pm-counter {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  transition: transform 400ms var(--pm-ease-spring);
+}
+.pm-counter-bump {
+  animation: ux-counter-pop 400ms var(--pm-ease-bounce);
+}
+
+/* ── 7. Chart / widget entrance ─────────────────────────────────────────── */
+@keyframes pm-widget-enter {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.pm-widget-enter {
+  animation: pm-widget-enter var(--pm-dur-slow) var(--pm-ease-out) forwards;
+}
+/* Staggered widget entrance */
+.pm-widgets-stagger > * {
+  opacity: 0;
+  animation: pm-widget-enter var(--pm-dur-slow) var(--pm-ease-out) forwards;
+}
+.pm-widgets-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.pm-widgets-stagger > *:nth-child(2) { animation-delay: 80ms; }
+.pm-widgets-stagger > *:nth-child(3) { animation-delay: 160ms; }
+.pm-widgets-stagger > *:nth-child(4) { animation-delay: 240ms; }
+.pm-widgets-stagger > *:nth-child(5) { animation-delay: 320ms; }
+.pm-widgets-stagger > *:nth-child(6) { animation-delay: 400ms; }
+.pm-widgets-stagger > *:nth-child(7) { animation-delay: 480ms; }
+.pm-widgets-stagger > *:nth-child(8) { animation-delay: 560ms; }
+
+/* ── 8. AI insight reveal ───────────────────────────────────────────────── */
+@keyframes pm-ai-reveal {
+  0% { opacity: 0; transform: translateY(10px); clip-path: inset(0 0 100% 0); }
+  60% { clip-path: inset(0 0 0% 0); }
+  100% { opacity: 1; transform: translateY(0); clip-path: inset(0 0 0% 0); }
+}
+.pm-ai-reveal {
+  animation: pm-ai-reveal 600ms var(--pm-ease-out) forwards;
+}
+
+/* AI shimmer on insight surface */
+.pm-ai-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.pm-ai-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(2, 175, 254, 0.06), rgba(5, 226, 255, 0.04), transparent);
+  animation: pm-ai-shimmer-sweep 4s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+@keyframes pm-ai-shimmer-sweep {
+  0% { left: -100%; }
+  50%, 100% { left: 200%; }
+}
+
+/* AI data stream — very subtle vertical lines */
+.pm-ai-stream {
+  position: relative;
+  overflow: hidden;
+}
+.pm-ai-stream::before {
+  content: '';
+  position: absolute;
+  top: -100%;
+  left: 50%;
+  width: 1px;
+  height: 60%;
+  background: linear-gradient(180deg, transparent, rgba(2, 175, 254, 0.15), transparent);
+  animation: pm-stream-descend 5s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes pm-stream-descend {
+  0% { top: -60%; }
+  100% { top: 160%; }
+}
+
+/* ── 9. Success glow on element ─────────────────────────────────────────── */
+@keyframes pm-success-glow {
+  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45); }
+  40% { box-shadow: 0 0 16px 4px rgba(34, 197, 94, 0.18); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+.pm-success-glow {
+  animation: pm-success-glow 800ms ease-out;
+}
+
+/* Success checkmark draw */
+@keyframes pm-check-draw {
+  0% { stroke-dashoffset: 36; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* Button success state — brief green flash then restore */
+@keyframes pm-btn-success {
+  0% { background: var(--success); transform: scale(1); }
+  30% { transform: scale(1.04); }
+  100% { background: var(--accent); transform: scale(1); }
+}
+.pm-btn-success {
+  animation: pm-btn-success 800ms var(--pm-ease-spring);
+}
+
+/* New card/item reveal — scale in from slightly below */
+@keyframes pm-item-born {
+  from { opacity: 0; transform: translateY(12px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.pm-item-born {
+  animation: pm-item-born 400ms var(--pm-ease-spring) forwards;
+}
+
+/* ── 10. AI Progress Modal CSS ──────────────────────────────────────────── */
+
+/* Backdrop */
+.pm-progress-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: ux-modal-backdrop 400ms ease-out forwards;
+}
+
+/* Modal container */
+.pm-progress-modal {
+  position: relative;
+  width: 340px;
+  padding: 2.5rem 2rem 2rem;
+  border-radius: 24px;
+  text-align: center;
+  background: rgba(17, 17, 19, 0.85);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5),
+              0 0 80px rgba(2, 175, 254, 0.06),
+              inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  animation: ux-modal-open 500ms var(--pm-ease-spring) forwards;
+}
+[data-theme="light"] .pm-progress-modal {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.12),
+              0 0 40px rgba(2, 175, 254, 0.06);
+}
+
+/* Progress ring container */
+.pm-progress-ring-wrap {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  margin: 0 auto 1.5rem;
+}
+
+/* SVG ring */
+.pm-progress-ring {
+  width: 140px;
+  height: 140px;
+  transform: rotate(-90deg);
+}
+.pm-progress-ring-bg {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.06);
+  stroke-width: 6;
+}
+[data-theme="light"] .pm-progress-ring-bg {
+  stroke: rgba(0, 0, 0, 0.06);
+}
+.pm-progress-ring-fill {
+  fill: none;
+  stroke: url(#pm-ring-gradient);
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 600ms var(--pm-ease-smooth);
+  filter: drop-shadow(0 0 6px rgba(2, 175, 254, 0.4));
+}
+
+/* Ring glow */
+.pm-progress-ring-glow {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(2, 175, 254, 0.08) 0%, transparent 70%);
+  animation: glow-pulse 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Percentage inside ring */
+.pm-progress-value {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+  letter-spacing: -0.02em;
+}
+.pm-progress-value span {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--foreground-muted);
+  margin-inline-start: 2px;
+}
+
+/* Stage label */
+.pm-progress-stage {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--foreground);
+  margin-bottom: 0.35rem;
+  min-height: 1.3em;
+}
+
+/* Sub-stage hint */
+.pm-progress-hint {
+  font-size: 0.72rem;
+  color: var(--foreground-muted);
+  margin-bottom: 1rem;
+}
+
+/* Success state */
+@keyframes pm-progress-success {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+.pm-progress-modal.pm-success .pm-progress-ring-wrap {
+  animation: pm-progress-success 600ms var(--pm-ease-spring);
+}
+.pm-progress-modal.pm-success .pm-progress-ring-fill {
+  stroke: var(--success);
+  filter: drop-shadow(0 0 8px rgba(34, 197, 94, 0.5));
+}
+
+/* Exit animation */
+@keyframes pm-progress-exit {
+  to { opacity: 0; transform: scale(0.92) translateY(16px); filter: blur(4px); }
+}
+.pm-progress-modal.pm-exiting {
+  animation: pm-progress-exit 350ms var(--pm-ease-smooth) forwards;
+}
+
+/* ── 11. Branded confetti ───────────────────────────────────────────────── */
+.pm-confetti-piece {
+  position: fixed;
+  top: -10px;
+  width: var(--c-size, 8px);
+  height: var(--c-size, 8px);
+  border-radius: var(--c-radius, 2px);
+  background: var(--c-color, #02AFFE);
+  opacity: 0.9;
+  z-index: 10000;
+  pointer-events: none;
+  animation: pm-confetti-fall var(--c-dur, 2.5s) cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+@keyframes pm-confetti-fall {
+  0% { transform: translateY(0) translateX(0) rotate(0deg) scale(1); opacity: 0.95; }
+  25% { opacity: 0.9; }
+  100% { transform: translateY(100vh) translateX(var(--c-drift, 40px)) rotate(var(--c-spin, 720deg)) scale(0.4); opacity: 0; }
+}
+
+/* ── 12. Enhanced skeleton with brand gradient ──────────────────────────── */
+.pm-skeleton {
+  background: linear-gradient(90deg,
+    var(--surface) 25%,
+    rgba(2, 175, 254, 0.04) 37%,
+    var(--surface) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+.pm-skeleton-row {
+  height: 0.875rem;
+  border-radius: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+.pm-skeleton-row:last-child {
+  width: 60%;
+}
+
+/* ── 13. Premium toast styles ───────────────────────────────────────────── */
+.pm-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9998;
+  min-width: 300px;
+  max-width: 420px;
+  padding: 1rem 1.25rem;
+  border-radius: 14px;
+  background: rgba(17, 17, 19, 0.88);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  animation: ux-toast-in 500ms var(--pm-ease-spring) forwards;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--foreground);
+}
+[data-theme="light"] .pm-toast {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
+  color: var(--foreground);
+}
+.pm-toast-exit {
+  animation: ux-toast-out 300ms var(--pm-ease-smooth) forwards;
+}
+.pm-toast-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+.pm-toast-success { border-left: 3px solid var(--success); }
+.pm-toast-error { border-left: 3px solid var(--error); }
+.pm-toast-warning { border-left: 3px solid var(--warning); }
+.pm-toast-info { border-left: 3px solid var(--accent); }
+
+/* Toast progress bar */
+.pm-toast-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 0 0 14px 14px;
+  background: var(--pm-gradient-brand);
+  animation: ux-toast-progress var(--toast-dur, 4s) linear forwards;
+  transform-origin: left;
+}
+
+/* ── 14. Reduced motion ─────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
