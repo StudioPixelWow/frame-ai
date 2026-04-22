@@ -53,10 +53,17 @@ const ConnectionsIcon = () => (
   </svg>
 );
 
+const AutomationsIcon = () => (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+  </svg>
+);
+
 const sections = [
   { href: "/dashboard",       icon: <DashboardIcon />,      label: "Dashboard" },
   { href: "/command-center",  icon: <CommandCenterIcon />,   label: "Command Center" },
   { href: "/connections",     icon: <ConnectionsIcon />,     label: "Connections" },
+  { href: "/automations",     icon: <AutomationsIcon />,     label: "Automations" },
   { href: "/projects",        icon: <ProjectsIcon />,        label: "Projects" },
   { href: "/leads",           icon: <LeadsIcon />,           label: "Leads" },
   { href: "/clients",         icon: <ClientsIcon />,         label: "Clients" },

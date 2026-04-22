@@ -811,6 +811,9 @@ export interface AutomationRule {
   conditions: string;
   lastTriggeredAt: string | null;
   triggerCount: number;
+  approvalMode?: 'auto_safe' | 'requires_approval' | 'recommendation_only';
+  scope?: string;
+  clientId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

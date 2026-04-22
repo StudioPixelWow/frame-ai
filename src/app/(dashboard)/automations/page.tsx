@@ -3,29 +3,31 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import type { AutomationRule, AutomationTrigger, AutomationAction, SystemEvent } from '@/lib/db/schema';
 import { useAutomationRules, useSystemEvents } from '@/lib/api/use-entity';
 
-type Category = 'all' | 'tasks' | 'gantt' | 'payments' | 'leads' | 'podcast';
+type StatusFilter = 'all' | 'active' | 'paused' | 'draft';
+type TypeFilter = 'all' | 'leads' | 'tasks' | 'payments' | 'campaigns' | 'content';
 
 const TRIGGER_LABELS: Record<AutomationTrigger, string> = {
   task_created: 'משימה נוצרה',
   task_status_changed: 'סטטוס משימה השתנה',
-  file_uploaded_to_task: 'קובץ הועלה למשימה',
+  file_uploaded_to_task: 'קובץ הועלה',
   gantt_created: 'גאנט נוצר',
   gantt_approved: 'גאנט אושר',
-  gantt_sent_to_client: 'גאנט נשלח ללקוח',
+  gantt_sent_to_client: 'גאנט נשלח',
   payment_due: 'תשלום מתקרב',
   payment_overdue: 'תשלום באיחור',
-  lead_status_changed: 'סטטוס ליד השתנה',
+  lead_status_changed: 'סטטוס ליד',
   proposal_sent: 'הצעה נשלחה',
   project_created: 'פרויקט נוצר',
-  project_status_changed: 'סטטוס פרויקט השתנה',
-  podcast_session_booked: 'הקלטת פודקאסט נקבעה',
-  podcast_session_completed: 'הקלטת פודקאסט הושלמה',
-  client_missing_monthly_gantt: 'לקוח חסר גאנט חודשי',
-  client_less_than_2_weekly_posts: 'פחות מ-2 פוסטים שבועיים',
-  weekly_client_email_day: 'יום מיילים שבועי',
+  project_status_changed: 'סטטוס פרויקט',
+  podcast_session_booked: 'פודקאסט נקבע',
+  podcast_session_completed: 'פודקאסט הושלם',
+  client_missing_monthly_gantt: 'חסר גאנט חודשי',
+  client_less_than_2_weekly_posts: 'פחות מ-2 פוסטים',
+  weekly_client_email_day: 'יום מיילים',
   employee_task_due_today: 'משימת עובד היום',
 };
 
@@ -38,37 +40,43 @@ const ACTION_LABELS: Record<AutomationAction, string> = {
   assign_employee: 'שייך עובד',
   generate_pdf: 'הפק PDF',
   add_to_calendar: 'הוסף ליומן',
-  push_to_approval_center: 'שלח למרכז אישורים',
+  push_to_approval_center: 'שלח לאישור',
 };
 
-const TRIGGER_TO_CATEGORY: Record<AutomationTrigger, Category> = {
+const TRIGGER_TO_TYPE: Record<AutomationTrigger, TypeFilter> = {
   task_created: 'tasks',
   task_status_changed: 'tasks',
   file_uploaded_to_task: 'tasks',
-  gantt_created: 'gantt',
-  gantt_approved: 'gantt',
-  gantt_sent_to_client: 'gantt',
+  gantt_created: 'content',
+  gantt_approved: 'content',
+  gantt_sent_to_client: 'content',
   payment_due: 'payments',
   payment_overdue: 'payments',
   lead_status_changed: 'leads',
   proposal_sent: 'leads',
   project_created: 'tasks',
   project_status_changed: 'tasks',
-  podcast_session_booked: 'podcast',
-  podcast_session_completed: 'podcast',
-  client_missing_monthly_gantt: 'gantt',
-  client_less_than_2_weekly_posts: 'gantt',
+  podcast_session_booked: 'campaigns',
+  podcast_session_completed: 'campaigns',
+  client_missing_monthly_gantt: 'content',
+  client_less_than_2_weekly_posts: 'content',
   weekly_client_email_day: 'tasks',
   employee_task_due_today: 'tasks',
 };
 
-const CATEGORY_LABELS: Record<Category, string> = {
+const TYPE_LABELS: Record<TypeFilter, string> = {
   all: 'הכל',
-  tasks: 'משימות',
-  gantt: 'תוכן',
-  payments: 'תשלומים',
   leads: 'לידים',
-  podcast: 'פודקאסט',
+  tasks: 'משימות',
+  payments: 'תשלומים',
+  campaigns: 'קמפיינים',
+  content: 'תוכן',
+};
+
+const APPROVAL_MODES = {
+  auto_safe: { label: 'אוטומטי', color: '#10b981' },
+  requires_approval: { label: 'דורש אישור', color: '#f59e0b' },
+  recommendation_only: { label: 'המלצה בלבד', color: '#3b82f6' },
 };
 
 const DEFAULT_AUTOMATIONS: AutomationRule[] = [
@@ -87,6 +95,7 @@ const DEFAULT_AUTOMATIONS: AutomationRule[] = [
     triggerCount: 12,
     createdAt: '2026-03-15T10:00:00Z',
     updatedAt: '2026-04-10T14:23:00Z',
+    approvalMode: 'auto_safe',
   },
   {
     id: '2',
@@ -103,6 +112,7 @@ const DEFAULT_AUTOMATIONS: AutomationRule[] = [
     triggerCount: 5,
     createdAt: '2026-03-20T10:00:00Z',
     updatedAt: '2026-04-09T09:15:00Z',
+    approvalMode: 'requires_approval',
   },
   {
     id: '3',
@@ -119,6 +129,7 @@ const DEFAULT_AUTOMATIONS: AutomationRule[] = [
     triggerCount: 8,
     createdAt: '2026-03-18T10:00:00Z',
     updatedAt: '2026-04-08T11:45:00Z',
+    approvalMode: 'auto_safe',
   },
   {
     id: '4',
@@ -135,6 +146,7 @@ const DEFAULT_AUTOMATIONS: AutomationRule[] = [
     triggerCount: 45,
     createdAt: '2026-03-10T10:00:00Z',
     updatedAt: '2026-04-11T08:00:00Z',
+    approvalMode: 'auto_safe',
   },
   {
     id: '5',
@@ -142,7 +154,7 @@ const DEFAULT_AUTOMATIONS: AutomationRule[] = [
     description: 'שלח מייל עקוב 3 ימים אחרי שליחת הצעה',
     trigger: 'proposal_sent',
     action: 'send_email',
-    isActive: true,
+    isActive: false,
     targetEmail: 'sales@example.com',
     targetWhatsApp: '',
     templateId: null,
@@ -151,6 +163,7 @@ const DEFAULT_AUTOMATIONS: AutomationRule[] = [
     triggerCount: 3,
     createdAt: '2026-03-25T10:00:00Z',
     updatedAt: '2026-04-06T16:30:00Z',
+    approvalMode: 'recommendation_only',
   },
   {
     id: '6',
@@ -167,700 +180,309 @@ const DEFAULT_AUTOMATIONS: AutomationRule[] = [
     triggerCount: 0,
     createdAt: '2026-03-22T10:00:00Z',
     updatedAt: '2026-03-22T10:00:00Z',
-  },
-  {
-    id: '7',
-    name: 'הזמנת פודקאסט - צור תשלום',
-    description: 'צור משימת תשלום כשפודקאסט הוזמן',
-    trigger: 'podcast_session_booked',
-    action: 'create_task',
-    isActive: true,
-    targetEmail: '',
-    targetWhatsApp: '',
-    templateId: null,
-    conditions: '',
-    lastTriggeredAt: '2026-04-05T13:20:00Z',
-    triggerCount: 2,
-    createdAt: '2026-03-30T10:00:00Z',
-    updatedAt: '2026-04-05T13:20:00Z',
-  },
-  {
-    id: '8',
-    name: 'שלח חומרים סופיים',
-    description: 'שלח חומרים סופיים אחרי השלמת הקלטה',
-    trigger: 'podcast_session_completed',
-    action: 'send_email',
-    isActive: true,
-    targetEmail: 'podcast@example.com',
-    targetWhatsApp: '',
-    templateId: null,
-    conditions: '',
-    lastTriggeredAt: '2026-04-04T10:00:00Z',
-    triggerCount: 1,
-    createdAt: '2026-03-28T10:00:00Z',
-    updatedAt: '2026-04-04T10:00:00Z',
-  },
-  {
-    id: '9',
-    name: 'תשלום מתקרב - הזכרון',
-    description: 'הזכר על תשלומים שעומדים להתבצע',
-    trigger: 'payment_due',
-    action: 'send_whatsapp',
-    isActive: false,
-    targetEmail: '',
-    targetWhatsApp: '+972501234567',
-    templateId: null,
-    conditions: '',
-    lastTriggeredAt: null,
-    triggerCount: 0,
-    createdAt: '2026-03-12T10:00:00Z',
-    updatedAt: '2026-03-12T10:00:00Z',
-  },
-  {
-    id: '10',
-    name: 'משימה חדשה - אודעה',
-    description: 'צור התראה כשמשימה חדשה נוצרה',
-    trigger: 'task_created',
-    action: 'create_notification',
-    isActive: true,
-    targetEmail: '',
-    targetWhatsApp: '',
-    templateId: null,
-    conditions: '',
-    lastTriggeredAt: '2026-04-11T15:45:00Z',
-    triggerCount: 28,
-    createdAt: '2026-03-05T10:00:00Z',
-    updatedAt: '2026-04-11T15:45:00Z',
+    approvalMode: 'auto_safe',
   },
 ];
 
-interface ModalState {
-  isOpen: boolean;
-  editingId: string | null;
-  formData: {
-    name: string;
-    description: string;
-    trigger: AutomationTrigger;
-    action: AutomationAction;
-    targetEmail: string;
-    targetWhatsApp: string;
-    isActive: boolean;
-  };
-}
-
 export default function AutomationsPage() {
-  const { data: apiAutomations, refetch: mutate } = useAutomationRules();
+  const { data: apiAutomations, loading, error, update, refetch } = useAutomationRules();
   const { data: systemEvents } = useSystemEvents();
 
-  const [automations, setAutomations] = useState<AutomationRule[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<Category>('all');
-  const [modal, setModal] = useState<ModalState>({
-    isOpen: false,
-    editingId: null,
-    formData: {
-      name: '',
-      description: '',
-      trigger: 'task_created',
-      action: 'send_email',
-      targetEmail: '',
-      targetWhatsApp: '',
-      isActive: true,
-    },
-  });
-
-  // Initialize automations from API, fallback to defaults if empty
-  useMemo(() => {
-    setAutomations(apiAutomations && apiAutomations.length > 0 ? apiAutomations : DEFAULT_AUTOMATIONS);
+  const automations = useMemo(() => {
+    return (apiAutomations && apiAutomations.length > 0) ? apiAutomations : DEFAULT_AUTOMATIONS;
   }, [apiAutomations]);
 
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dismissedSuggestion, setDismissedSuggestion] = useState(false);
+
   const filteredAutomations = useMemo(() => {
-    if (selectedCategory === 'all') {
-      return automations;
+    let filtered = automations;
+
+    if (statusFilter === 'active') {
+      filtered = filtered.filter((a) => a.isActive);
+    } else if (statusFilter === 'paused') {
+      filtered = filtered.filter((a) => !a.isActive && a.createdAt);
     }
-    return automations.filter(
-      (a) => TRIGGER_TO_CATEGORY[a.trigger] === selectedCategory
-    );
-  }, [automations, selectedCategory]);
+
+    if (typeFilter !== 'all') {
+      filtered = filtered.filter((a) => TRIGGER_TO_TYPE[a.trigger] === typeFilter);
+    }
+
+    if (searchTerm) {
+      const lower = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (a) =>
+          a.name.toLowerCase().includes(lower) ||
+          a.description.toLowerCase().includes(lower)
+      );
+    }
+
+    return filtered;
+  }, [automations, statusFilter, typeFilter, searchTerm]);
 
   const stats = useMemo(() => {
-    const total = automations.length;
     const active = automations.filter((a) => a.isActive).length;
-    const triggerCount = automations.reduce((sum, a) => sum + a.triggerCount, 0);
-    const emailCount = automations.filter(
-      (a) => a.action === 'send_email'
+    const paused = automations.filter((a) => !a.isActive).length;
+    const today = new Date().toISOString().split('T')[0];
+    const triggeredToday = automations.reduce((sum, a) => {
+      if (a.lastTriggeredAt && a.lastTriggeredAt.startsWith(today)) {
+        return sum + a.triggerCount;
+      }
+      return sum;
+    }, 0);
+    const pendingApproval = automations.filter(
+      (a) => a.approvalMode && a.approvalMode !== 'auto_safe' && a.triggerCount > 0
     ).length;
 
-    return { total, active, triggerCount, emailCount };
+    return { active, paused, triggeredToday, pendingApproval, total: automations.length };
   }, [automations]);
 
-  const openCreateModal = () => {
-    setModal({
-      isOpen: true,
-      editingId: null,
-      formData: {
-        name: '',
-        description: '',
-        trigger: 'task_created',
-        action: 'send_email',
-        targetEmail: '',
-        targetWhatsApp: '',
-        isActive: true,
-      },
-    });
-  };
-
-  const openEditModal = (automation: AutomationRule) => {
-    setModal({
-      isOpen: true,
-      editingId: automation.id,
-      formData: {
-        name: automation.name,
-        description: automation.description,
-        trigger: automation.trigger,
-        action: automation.action,
-        targetEmail: automation.targetEmail,
-        targetWhatsApp: automation.targetWhatsApp,
-        isActive: automation.isActive,
-      },
-    });
-  };
-
-  const closeModal = () => {
-    setModal({
-      isOpen: false,
-      editingId: null,
-      formData: {
-        name: '',
-        description: '',
-        trigger: 'task_created',
-        action: 'send_email',
-        targetEmail: '',
-        targetWhatsApp: '',
-        isActive: true,
-      },
-    });
-  };
-
-  const saveAutomation = async () => {
-    const { name, description, trigger, action, targetEmail, targetWhatsApp, isActive } =
-      modal.formData;
-
-    if (!name.trim()) {
-      alert('נא להזין שם אוטומציה');
-      return;
-    }
-
-    if (modal.editingId) {
-      // Edit existing
-      const updatedAutomation = automations.find((a) => a.id === modal.editingId);
-      if (updatedAutomation) {
-        const payload = {
-          ...updatedAutomation,
-          name,
-          description,
-          trigger,
-          action,
-          targetEmail,
-          targetWhatsApp,
-          isActive,
-          updatedAt: new Date().toISOString(),
-        };
-
-        try {
-          await fetch(`/api/data/automation-rules/${modal.editingId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-
-          setAutomations((prev) =>
-            prev.map((a) =>
-              a.id === modal.editingId
-                ? payload
-                : a
-            )
-          );
-          await mutate();
-        } catch (error) {
-          console.error('Failed to update automation:', error);
-          alert('שגיאה בעדכון האוטומציה');
-        }
-      }
-    } else {
-      // Create new
-      const newAutomation: AutomationRule = {
-        id: Date.now().toString(),
-        name,
-        description,
-        trigger,
-        action,
-        isActive,
-        targetEmail,
-        targetWhatsApp,
-        templateId: null,
-        conditions: '',
-        lastTriggeredAt: null,
-        triggerCount: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      try {
-        await fetch('/api/data/automation-rules', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newAutomation),
-        });
-
-        setAutomations((prev) => [newAutomation, ...prev]);
-        await mutate();
-      } catch (error) {
-        console.error('Failed to create automation:', error);
-        alert('שגיאה בהוספת האוטומציה');
-      }
-    }
-
-    closeModal();
-  };
-
-  const deleteAutomation = async (id: string) => {
-    if (confirm('האם אתה בטוח שברצונך למחוק אוטומציה זו?')) {
-      try {
-        await fetch(`/api/data/automation-rules/${id}`, {
-          method: 'DELETE',
-        });
-
-        setAutomations((prev) => prev.filter((a) => a.id !== id));
-        await mutate();
-      } catch (error) {
-        console.error('Failed to delete automation:', error);
-        alert('שגיאה במחיקת האוטומציה');
-      }
-    }
-  };
-
-  const toggleActive = async (id: string) => {
+  const handleToggle = async (id: string) => {
     const automation = automations.find((a) => a.id === id);
     if (automation) {
-      const payload = {
-        ...automation,
-        isActive: !automation.isActive,
-        updatedAt: new Date().toISOString(),
-      };
-
       try {
-        await fetch(`/api/data/automation-rules/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        setAutomations((prev) =>
-          prev.map((a) =>
-            a.id === id ? payload : a
-          )
-        );
-        await mutate();
+        await update(id, { isActive: !automation.isActive });
+        await refetch();
       } catch (error) {
         console.error('Failed to toggle automation:', error);
-        alert('שגיאה בהחלפת סטטוס');
       }
     }
   };
 
-  const updateFormData = (
-    key: keyof ModalState['formData'],
-    value: any
-  ) => {
-    setModal((prev) => ({
-      ...prev,
-      formData: {
-        ...prev.formData,
-        [key]: value,
-      },
-    }));
-  };
-
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'לא הופעל';
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-
-    if (diffDays > 0) return `לפני ${diffDays} ימים`;
-    if (diffHours > 0) return `לפני ${diffHours} שעות`;
-    return 'זה עתה';
-  };
+  const handleEmptyState = stats.total === 0;
+  const showAISuggestion = !dismissedSuggestion && stats.total < 3;
 
   return (
-    <div dir="rtl" className="min-h-screen p-6" style={{ backgroundColor: 'var(--background)' }}>
-      {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1
-            className="text-4xl font-bold"
-            style={{ color: 'var(--foreground)' }}
-          >
-            אוטומציות
-          </h1>
-          <p className="mt-2" style={{ color: 'var(--foreground-muted)' }}>
-            ניהול חוקי אוטומציה והטריגרים שלך
-          </p>
+    <div dir="rtl" className="min-h-screen" style={{ backgroundColor: 'var(--background)' }}>
+      <div className="p-8">
+        {/* Header */}
+        <div className="mb-8 flex items-start justify-between">
+          <div>
+            <h1
+              className="text-5xl font-bold mb-2 ux-stagger"
+              style={{ color: 'var(--foreground)' }}
+            >
+              מרכז אוטומציות
+            </h1>
+            <p className="text-lg ux-stagger" style={{ color: 'var(--foreground-muted)' }}>
+              צור ונהל אוטומציות חכמות שחוסכות לך שעות של עבודה ידנית
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <Link
+              href="/automations/templates"
+              className="px-6 py-3 rounded-lg font-medium transition-all ux-stagger"
+              style={{
+                backgroundColor: 'var(--surface)',
+                color: 'var(--accent)',
+                border: '2px solid var(--accent)',
+              }}
+            >
+              בחר תבנית
+            </Link>
+            <Link
+              href="/automations/new"
+              className="px-6 py-3 rounded-lg font-medium text-white transition-all ux-stagger"
+              style={{ backgroundColor: 'var(--accent)' }}
+            >
+              צור אוטומציה
+            </Link>
+          </div>
         </div>
-        <button
-          onClick={openCreateModal}
-          className="px-6 py-3 rounded-lg font-medium transition-all"
-          style={{
-            backgroundColor: 'var(--accent)',
-            color: 'white',
-          }}
-        >
-          + אוטומציה חדשה
-        </button>
-      </div>
 
-      {/* Stats Row */}
-      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
-        <StatCard
-          label="סה״כ אוטומציות"
-          value={stats.total.toString()}
-          icon="⚙️"
-        />
-        <StatCard
-          label="אוטומציות פעילות"
-          value={stats.active.toString()}
-          icon="✓"
-        />
-        <StatCard
-          label="הפעלות השבוע"
-          value={stats.triggerCount.toString()}
-          icon="📊"
-        />
-        <StatCard
-          label="מייל אוטומציות"
-          value={stats.emailCount.toString()}
-          icon="📧"
-        />
-      </div>
+        {/* KPI Strip */}
+        {!handleEmptyState && (
+          <div className="mb-8 auto-kpi-strip">
+            <div className="grid grid-cols-5 gap-4">
+              <KPICard
+                label="פעילות"
+                value={stats.active.toString()}
+                accent="var(--accent)"
+                icon="▶️"
+              />
+              <KPICard
+                label="מושהות"
+                value={stats.paused.toString()}
+                accent="#f59e0b"
+                icon="⏸️"
+              />
+              <KPICard
+                label="פעולות היום"
+                value={stats.triggeredToday.toString()}
+                accent="#3b82f6"
+                icon="📊"
+              />
+              <KPICard
+                label="ממתין לאישור"
+                value={stats.pendingApproval.toString()}
+                accent="#f59e0b"
+                icon="✋"
+              />
+              <KPICard
+                label="נכשלו"
+                value="0"
+                accent="#ef4444"
+                icon="❌"
+              />
+            </div>
+          </div>
+        )}
 
-      {/* Category Tabs */}
-      <div className="mb-6 flex flex-wrap gap-3">
-        {(Object.keys(CATEGORY_LABELS) as Category[]).map((cat) => (
-          <button
-            key={cat}
-            onClick={() => setSelectedCategory(cat)}
-            className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              selectedCategory === cat
-                ? 'text-white'
-                : ''
-            }`}
-            style={{
-              backgroundColor:
-                selectedCategory === cat
-                  ? 'var(--accent)'
-                  : 'var(--surface)',
-              color:
-                selectedCategory === cat
-                  ? 'white'
-                  : 'var(--foreground)',
-              border: `1px solid var(--border)`,
-            }}
-          >
-            {CATEGORY_LABELS[cat]}
-          </button>
-        ))}
-      </div>
+        {/* AI Suggestion Banner */}
+        {showAISuggestion && !handleEmptyState && (
+          <div className="mb-6 ai-suggestion-banner">
+            <div
+              className="rounded-lg p-4 flex items-start justify-between"
+              style={{
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                border: '1px solid rgba(59, 130, 246, 0.3)',
+              }}
+            >
+              <div>
+                <p className="font-semibold" style={{ color: '#3b82f6' }}>
+                  💡 עצה חכמה
+                </p>
+                <p style={{ color: 'var(--foreground-muted)' }} className="text-sm mt-1">
+                  אתה משתמש רק ב-{stats.total} אוטומציות. שקול להוסיף עוד לחסוך זמן בתהליכים חוזרים.
+                </p>
+              </div>
+              <button
+                onClick={() => setDismissedSuggestion(true)}
+                className="text-xs mt-1 hover:opacity-70"
+                style={{ color: '#3b82f6' }}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
 
-      {/* Automations List */}
-      <div className="space-y-4">
-        {filteredAutomations.length === 0 ? (
+        {/* Filter Bar */}
+        {!handleEmptyState && (
+          <div className="mb-6 space-y-4">
+            <div className="flex flex-wrap gap-2">
+              {(['all', 'active', 'paused', 'draft'] as StatusFilter[]).map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setStatusFilter(status)}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    statusFilter === status ? 'text-white' : ''
+                  }`}
+                  style={{
+                    backgroundColor:
+                      statusFilter === status
+                        ? 'var(--accent)'
+                        : 'var(--surface)',
+                    color:
+                      statusFilter === status
+                        ? 'white'
+                        : 'var(--foreground)',
+                    border: `1px solid var(--border)`,
+                  }}
+                >
+                  {status === 'all' && 'הכל'}
+                  {status === 'active' && 'פעיל'}
+                  {status === 'paused' && 'מושהה'}
+                  {status === 'draft' && 'טיוטה'}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-4 flex-wrap">
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
+                className="px-4 py-2 rounded-lg font-medium border"
+                style={{
+                  backgroundColor: 'var(--surface)',
+                  borderColor: 'var(--border)',
+                  color: 'var(--foreground)',
+                }}
+              >
+                {(Object.keys(TYPE_LABELS) as TypeFilter[]).map((type) => (
+                  <option key={type} value={type}>
+                    {TYPE_LABELS[type]}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                type="text"
+                placeholder="חיפוש אוטומציות..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="flex-1 px-4 py-2 rounded-lg border"
+                style={{
+                  backgroundColor: 'var(--surface)',
+                  borderColor: 'var(--border)',
+                  color: 'var(--foreground)',
+                  minWidth: '300px',
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Automations List */}
+        {handleEmptyState ? (
+          <EmptyState />
+        ) : filteredAutomations.length === 0 ? (
           <div
-            className="rounded-lg p-8 text-center"
+            className="rounded-lg p-12 text-center premium-card"
             style={{
               backgroundColor: 'var(--surface)',
-              border: '1px solid var(--border)',
             }}
           >
-            <p style={{ color: 'var(--foreground-muted)' }}>
-              אין אוטומציות בקטגוריה זו
+            <p style={{ color: 'var(--foreground-muted)' }} className="text-lg">
+              לא נמצאו אוטומציות התואמות את הסינון שלך
             </p>
           </div>
         ) : (
-          filteredAutomations.map((automation) => (
-            <AutomationCard
-              key={automation.id}
-              automation={automation}
-              onEdit={() => openEditModal(automation)}
-              onDelete={() => deleteAutomation(automation.id)}
-              onToggle={() => toggleActive(automation.id)}
-            />
-          ))
-        )}
-      </div>
-
-      {/* Recent Activity Section */}
-      <div className="mt-12">
-        <h2
-          className="text-2xl font-bold mb-6"
-          style={{ color: 'var(--foreground)' }}
-        >
-          פעילות אחרונה
-        </h2>
-        <RecentActivitySection events={systemEvents || []} />
-      </div>
-
-      {/* Modal */}
-      {modal.isOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
-          onClick={closeModal}
-        >
-          <div
-            className="w-full max-w-2xl rounded-lg p-6"
-            style={{ backgroundColor: 'var(--surface)' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2
-              className="mb-6 text-2xl font-bold"
-              style={{ color: 'var(--foreground)' }}
-            >
-              {modal.editingId ? 'עריכת אוטומציה' : 'אוטומציה חדשה'}
-            </h2>
-
-            <div className="space-y-4 mb-6">
-              <div>
-                <label
-                  className="block mb-2 text-sm font-medium"
-                  style={{ color: 'var(--foreground)' }}
-                >
-                  שם
-                </label>
-                <input
-                  type="text"
-                  value={modal.formData.name}
-                  onChange={(e) => updateFormData('name', e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg border transition-all focus:outline-none"
-                  style={{
-                    borderColor: 'var(--border)',
-                    backgroundColor: 'var(--background)',
-                    color: 'var(--foreground)',
-                  }}
-                  placeholder="שם האוטומציה"
-                />
-              </div>
-
-              <div>
-                <label
-                  className="block mb-2 text-sm font-medium"
-                  style={{ color: 'var(--foreground)' }}
-                >
-                  תיאור
-                </label>
-                <textarea
-                  value={modal.formData.description}
-                  onChange={(e) =>
-                    updateFormData('description', e.target.value)
-                  }
-                  className="w-full px-4 py-2 rounded-lg border transition-all focus:outline-none"
-                  style={{
-                    borderColor: 'var(--border)',
-                    backgroundColor: 'var(--background)',
-                    color: 'var(--foreground)',
-                  }}
-                  placeholder="תיאור האוטומציה"
-                  rows={3}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label
-                    className="block mb-2 text-sm font-medium"
-                    style={{ color: 'var(--foreground)' }}
-                  >
-                    טריגר
-                  </label>
-                  <select
-                    value={modal.formData.trigger}
-                    onChange={(e) =>
-                      updateFormData(
-                        'trigger',
-                        e.target.value as AutomationTrigger
-                      )
-                    }
-                    className="w-full px-4 py-2 rounded-lg border transition-all focus:outline-none"
-                    style={{
-                      borderColor: 'var(--border)',
-                      backgroundColor: 'var(--background)',
-                      color: 'var(--foreground)',
-                    }}
-                  >
-                    {(Object.keys(TRIGGER_LABELS) as AutomationTrigger[]).map(
-                      (trigger) => (
-                        <option key={trigger} value={trigger}>
-                          {TRIGGER_LABELS[trigger]}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    className="block mb-2 text-sm font-medium"
-                    style={{ color: 'var(--foreground)' }}
-                  >
-                    פעולה
-                  </label>
-                  <select
-                    value={modal.formData.action}
-                    onChange={(e) =>
-                      updateFormData('action', e.target.value as AutomationAction)
-                    }
-                    className="w-full px-4 py-2 rounded-lg border transition-all focus:outline-none"
-                    style={{
-                      borderColor: 'var(--border)',
-                      backgroundColor: 'var(--background)',
-                      color: 'var(--foreground)',
-                    }}
-                  >
-                    {(Object.keys(ACTION_LABELS) as AutomationAction[]).map(
-                      (action) => (
-                        <option key={action} value={action}>
-                          {ACTION_LABELS[action]}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label
-                    className="block mb-2 text-sm font-medium"
-                    style={{ color: 'var(--foreground)' }}
-                  >
-                    אימייל יעד
-                  </label>
-                  <input
-                    type="email"
-                    value={modal.formData.targetEmail}
-                    onChange={(e) =>
-                      updateFormData('targetEmail', e.target.value)
-                    }
-                    className="w-full px-4 py-2 rounded-lg border transition-all focus:outline-none"
-                    style={{
-                      borderColor: 'var(--border)',
-                      backgroundColor: 'var(--background)',
-                      color: 'var(--foreground)',
-                    }}
-                    placeholder="example@email.com"
-                  />
-                </div>
-
-                <div>
-                  <label
-                    className="block mb-2 text-sm font-medium"
-                    style={{ color: 'var(--foreground)' }}
-                  >
-                    וואטסאפ יעד
-                  </label>
-                  <input
-                    type="text"
-                    value={modal.formData.targetWhatsApp}
-                    onChange={(e) =>
-                      updateFormData('targetWhatsApp', e.target.value)
-                    }
-                    className="w-full px-4 py-2 rounded-lg border transition-all focus:outline-none"
-                    style={{
-                      borderColor: 'var(--border)',
-                      backgroundColor: 'var(--background)',
-                      color: 'var(--foreground)',
-                    }}
-                    placeholder="+972501234567"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="isActive"
-                  checked={modal.formData.isActive}
-                  onChange={(e) =>
-                    updateFormData('isActive', e.target.checked)
-                  }
-                  className="w-5 h-5 rounded cursor-pointer"
-                  style={{ accentColor: 'var(--accent)' }}
-                />
-                <label
-                  htmlFor="isActive"
-                  className="cursor-pointer font-medium"
-                  style={{ color: 'var(--foreground)' }}
-                >
-                  פעיל
-                </label>
-              </div>
-            </div>
-
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={closeModal}
-                className="px-6 py-2 rounded-lg font-medium transition-all"
+          <div className="space-y-3">
+            {filteredAutomations.map((automation, idx) => (
+              <div
+                key={automation.id}
                 style={{
-                  backgroundColor: 'var(--surface-variant)',
-                  color: 'var(--foreground)',
-                  border: '1px solid var(--border)',
+                  animation: `auto-card-enter 0.3s ease-out ${idx * 50}ms both`,
                 }}
               >
-                ביטול
-              </button>
-              <button
-                onClick={saveAutomation}
-                className="px-6 py-2 rounded-lg font-medium text-white transition-all"
-                style={{ backgroundColor: 'var(--accent)' }}
-              >
-                שמור
-              </button>
-            </div>
+                <AutomationCard
+                  automation={automation}
+                  onToggle={() => handleToggle(automation.id)}
+                />
+              </div>
+            ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
 
-interface StatCardProps {
+interface KPICardProps {
   label: string;
   value: string;
+  accent: string;
   icon: string;
 }
 
-function StatCard({ label, value, icon }: StatCardProps) {
+function KPICard({ label, value, accent, icon }: KPICardProps) {
   return (
     <div
-      className="rounded-lg p-6 border"
+      className="premium-card rounded-lg p-4"
       style={{
         backgroundColor: 'var(--surface)',
-        borderColor: 'var(--border)',
+        border: `2px solid ${accent}20`,
       }}
     >
-      <div className="flex items-start justify-between">
+      <div className="flex items-center justify-between">
         <div>
-          <p
-            className="text-sm font-medium mb-2"
-            style={{ color: 'var(--foreground-muted)' }}
-          >
+          <p className="text-xs font-medium mb-1" style={{ color: 'var(--foreground-muted)' }}>
             {label}
           </p>
-          <p
-            className="text-3xl font-bold"
-            style={{ color: 'var(--foreground)' }}
-          >
+          <p className="text-3xl font-bold" style={{ color: accent }}>
             {value}
           </p>
         </div>
@@ -872,33 +494,36 @@ function StatCard({ label, value, icon }: StatCardProps) {
 
 interface AutomationCardProps {
   automation: AutomationRule;
-  onEdit: () => void;
-  onDelete: () => void;
   onToggle: () => void;
 }
 
-function AutomationCard({
-  automation,
-  onEdit,
-  onDelete,
-  onToggle,
-}: AutomationCardProps) {
+function AutomationCard({ automation, onToggle }: AutomationCardProps) {
+  const statusBadgeClass = automation.isActive ? 'auto-badge-active' : 'auto-badge-paused';
+  const approvalMode = automation.approvalMode || 'auto_safe';
+  const approvalModeConfig = APPROVAL_MODES[approvalMode as keyof typeof APPROVAL_MODES];
+
   return (
     <div
-      className="rounded-lg p-6 border transition-all hover:shadow-md"
+      className="premium-card auto-card rounded-lg p-5 border transition-all hover:shadow-lg"
       style={{
         backgroundColor: 'var(--surface)',
         borderColor: 'var(--border)',
       }}
     >
+      {/* Header with name, badge, and toggle */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
-          <h3
-            className="text-lg font-bold mb-1"
-            style={{ color: 'var(--foreground)' }}
-          >
-            {automation.name}
-          </h3>
+          <div className="flex items-center gap-3 mb-2">
+            <h3
+              className="text-lg font-bold"
+              style={{ color: 'var(--foreground)' }}
+            >
+              {automation.name}
+            </h3>
+            <span className={`text-xs font-semibold px-2 py-1 rounded-full ${statusBadgeClass}`}>
+              {automation.isActive ? 'פעיל' : 'מושהה'}
+            </span>
+          </div>
           <p
             className="text-sm"
             style={{ color: 'var(--foreground-muted)' }}
@@ -908,7 +533,7 @@ function AutomationCard({
         </div>
         <button
           onClick={onToggle}
-          className="ml-4 relative inline-flex h-8 w-14 items-center rounded-full transition-colors flex-shrink-0"
+          className="ms-4 relative inline-flex h-8 w-14 items-center rounded-full transition-colors flex-shrink-0"
           style={{
             backgroundColor: automation.isActive
               ? 'var(--accent)'
@@ -924,61 +549,74 @@ function AutomationCard({
         </button>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
+      {/* Flow: Trigger → Action */}
+      <div className="mb-4 flex items-center gap-3 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
         <Badge label={TRIGGER_LABELS[automation.trigger]} variant="trigger" />
-        <span style={{ color: 'var(--foreground-muted)' }}>→</span>
+        <div className="auto-flow-arrow">→</div>
         <Badge label={ACTION_LABELS[automation.action]} variant="action" />
+        <div className="ms-auto">
+          <span
+            className="text-xs font-semibold px-2 py-1 rounded-full"
+            style={{
+              backgroundColor: `${approvalModeConfig.color}20`,
+              color: approvalModeConfig.color,
+            }}
+          >
+            {approvalModeConfig.label}
+          </span>
+        </div>
       </div>
 
-      <div
-        className="grid grid-cols-3 gap-4 mb-4 pb-4 border-t"
-        style={{ borderColor: 'var(--border)' }}
-      >
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-3 mb-4 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
         <div>
-          <p
-            className="text-xs font-medium mb-1"
-            style={{ color: 'var(--foreground-muted)' }}
-          >
+          <p className="text-xs font-medium mb-1" style={{ color: 'var(--foreground-muted)' }}>
             הפעלה אחרונה
           </p>
-          <p style={{ color: 'var(--foreground)' }} className="text-sm">
+          <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
             {formatDateDisplay(automation.lastTriggeredAt)}
           </p>
         </div>
         <div>
-          <p
-            className="text-xs font-medium mb-1"
-            style={{ color: 'var(--foreground-muted)' }}
-          >
-            מספר הפעלות
+          <p className="text-xs font-medium mb-1" style={{ color: 'var(--foreground-muted)' }}>
+            סה״כ הפעלות
           </p>
-          <p style={{ color: 'var(--foreground)' }} className="text-sm">
+          <p className="text-sm font-medium" style={{ color: 'var(--accent)' }}>
             {automation.triggerCount}
           </p>
         </div>
         <div>
-          <p
-            className="text-xs font-medium mb-1"
-            style={{ color: 'var(--foreground-muted)' }}
-          >
-            סטטוס
+          <p className="text-xs font-medium mb-1" style={{ color: 'var(--foreground-muted)' }}>
+            טווח
           </p>
-          <p
-            style={{
-              color: automation.isActive
-                ? 'var(--accent)'
-                : 'var(--foreground-muted)',
-            }}
-            className="text-sm font-medium"
-          >
-            {automation.isActive ? 'פעיל' : 'מושבת'}
+          <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+            כל הלקוחות
+          </p>
+        </div>
+        <div>
+          <p className="text-xs font-medium mb-1" style={{ color: 'var(--foreground-muted)' }}>
+            סטטוס בריאות
+          </p>
+          <p className="text-sm font-medium" style={{ color: '#10b981' }}>
+            ✓ טוב
           </p>
         </div>
       </div>
 
+      {/* Actions */}
       <div className="flex gap-2">
+        <Link
+          href={`/automations/edit/${automation.id}`}
+          className="flex-1 px-4 py-2 rounded-lg font-medium transition-all text-sm text-center"
+          style={{
+            backgroundColor: 'var(--surface-variant)',
+            color: 'var(--accent)',
+            border: '1px solid var(--border)',
+          }}
+        >
+          עריכה
+        </Link>
         <button
-          onClick={onEdit}
           className="flex-1 px-4 py-2 rounded-lg font-medium transition-all text-sm"
           style={{
             backgroundColor: 'var(--surface-variant)',
@@ -986,16 +624,7 @@ function AutomationCard({
             border: '1px solid var(--border)',
           }}
         >
-          עריכה
-        </button>
-        <button
-          onClick={onDelete}
-          className="flex-1 px-4 py-2 rounded-lg font-medium transition-all text-sm text-white"
-          style={{
-            backgroundColor: '#ef4444',
-          }}
-        >
-          מחיקה
+          עוד
         </button>
       </div>
     </div>
@@ -1041,106 +670,54 @@ function formatDateDisplay(dateString: string | null): string {
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffMins = Math.floor(diffMs / (1000 * 60));
 
-  if (diffDays > 0) return `לפני ${diffDays} ימים`;
-  if (diffHours > 0) return `לפני ${diffHours} שעות`;
-  if (diffMins > 0) return `לפני ${diffMins} דקות`;
-  return 'זה עתה';
+  if (diffDays > 0) return `לפני ${diffDays}d`;
+  if (diffHours > 0) return `לפני ${diffHours}h`;
+  if (diffMins > 0) return `לפני ${diffMins}m`;
+  return 'עכשיו';
 }
 
-interface RecentActivitySectionProps {
-  events: SystemEvent[];
-}
-
-function RecentActivitySection({ events }: RecentActivitySectionProps) {
-  const SYSTEM_EVENT_TYPE_LABELS: Record<string, string> = {
-    trigger: 'הפעלת אוטומציה',
-    error: 'שגיאה',
-    warning: 'אזהרה',
-    info: 'מידע',
-    success: 'הצלחה',
-    migration: 'הגירה',
-    sync: 'סנכרון',
-  };
-
-  // Filter for automation-related events and take the last 5
-  const automationEvents = events
-    .filter((e) => e.source && e.source.includes('automation') || e.type === 'trigger')
-    .slice(0, 5);
-
+function EmptyState() {
   return (
-    <div className="space-y-3">
-      {automationEvents.length === 0 ? (
-        <div
-          className="rounded-lg p-8 text-center"
+    <div
+      className="rounded-lg p-16 text-center"
+      style={{
+        backgroundColor: 'var(--surface)',
+        border: '2px dashed var(--border)',
+      }}
+    >
+      <div className="mb-4 text-5xl">⚡</div>
+      <h3
+        className="text-2xl font-bold mb-2"
+        style={{ color: 'var(--foreground)' }}
+      >
+        אתה עדיין לא הגדרת אוטומציות
+      </h3>
+      <p
+        className="text-lg mb-6"
+        style={{ color: 'var(--foreground-muted)' }}
+      >
+        התחל עכשיו וחוסוך שעות של עבודה ידנית עם אוטומציות חכמות
+      </p>
+      <div className="flex gap-3 justify-center">
+        <Link
+          href="/automations/templates"
+          className="px-6 py-3 rounded-lg font-medium transition-all"
           style={{
-            backgroundColor: 'var(--surface)',
-            border: '1px solid var(--border)',
+            backgroundColor: 'var(--background)',
+            color: 'var(--accent)',
+            border: '2px solid var(--accent)',
           }}
         >
-          <p style={{ color: 'var(--foreground-muted)' }}>
-            אין פעילות אחרונה
-          </p>
-        </div>
-      ) : (
-        automationEvents.map((event) => (
-          <div
-            key={event.id}
-            className="rounded-lg p-4 border"
-            style={{
-              backgroundColor: 'var(--surface)',
-              borderColor: 'var(--border)',
-            }}
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <span
-                    className="px-2 py-1 rounded text-xs font-medium"
-                    style={{
-                      backgroundColor:
-                        event.type === 'error'
-                          ? 'rgba(239, 68, 68, 0.1)'
-                          : event.type === 'warning'
-                          ? 'rgba(245, 158, 11, 0.1)'
-                          : event.type === 'success'
-                          ? 'rgba(34, 197, 94, 0.1)'
-                          : 'rgba(59, 130, 246, 0.1)',
-                      color:
-                        event.type === 'error'
-                          ? '#ef4444'
-                          : event.type === 'warning'
-                          ? '#f59e0b'
-                          : event.type === 'success'
-                          ? '#22c55e'
-                          : '#3b82f6',
-                    }}
-                  >
-                    {SYSTEM_EVENT_TYPE_LABELS[event.type] || event.type}
-                  </span>
-                  <span
-                    className="text-xs"
-                    style={{ color: 'var(--foreground-muted)' }}
-                  >
-                    {formatDateDisplay(event.createdAt)}
-                  </span>
-                </div>
-                <p
-                  className="font-medium text-sm mb-1"
-                  style={{ color: 'var(--foreground)' }}
-                >
-                  {event.title}
-                </p>
-                <p
-                  className="text-xs"
-                  style={{ color: 'var(--foreground-muted)' }}
-                >
-                  {event.message}
-                </p>
-              </div>
-            </div>
-          </div>
-        ))
-      )}
+          בחר מתבנית
+        </Link>
+        <Link
+          href="/automations/new"
+          className="px-6 py-3 rounded-lg font-medium text-white transition-all"
+          style={{ backgroundColor: 'var(--accent)' }}
+        >
+          צור חדשה
+        </Link>
+      </div>
     </div>
   );
 }

@@ -20,6 +20,7 @@ import TabLeads from "./tab-leads";
 import TabCreativeDNA from "./tab-creative-dna";
 import TabResearch from "./tab-research";
 import TabVideos from "./tab-videos";
+import { TabAutomations } from "@/components/client/tab-automations";
 
 const AVATAR_COLORS = ["#00B5FE", "#00B5FE", "#22c55e", "#f59e0b", "#ec4899", "#14b8a6"];
 
@@ -63,7 +64,7 @@ const GANTT_STATUS_COLORS: Record<string, { label: string; color: string }> = {
   none: { label: "לא יוצר", color: "#9ca3af" },
 };
 
-type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos";
+type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos" | "automations";
 
 const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "overview", label: "סקירה" },
@@ -78,6 +79,7 @@ const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "files", label: "קבצים" },
   { id: "accounting", label: "הנהח״ש" },
   { id: "portal", label: "פורטל" },
+  { id: "automations", label: "אוטומציות" },
   { id: "activity", label: "פעילות" },
 ];
 
@@ -1176,6 +1178,9 @@ function ClientDetailContent() {
         )}
         {activeTab === "portal" && (
           <TabPortal client={client} />
+        )}
+        {activeTab === "automations" && (
+          <TabAutomations clientId={client.id} clientName={client.name} />
         )}
         {activeTab === "activity" && (
           <TabActivity client={client} />
