@@ -262,7 +262,7 @@ export function generateCampaignAlerts(c: Campaign): CampaignAlert[] {
  */
 export function generateAllAlerts(campaigns: Campaign[]): CampaignAlert[] {
   const allAlerts: CampaignAlert[] = [];
-  for (const c of campaigns) {
+  for (const c of (campaigns ?? [])) {
     allAlerts.push(...generateCampaignAlerts(c));
   }
 
@@ -281,8 +281,9 @@ export function generateAllAlerts(campaigns: Campaign[]): CampaignAlert[] {
  * Aggregate alerts into a summary.
  */
 export function summarizeAlerts(alerts: CampaignAlert[]): AlertsSummary {
+  const safeAlerts = alerts ?? [];
   const summary: AlertsSummary = {
-    total: alerts.length,
+    total: safeAlerts.length,
     high: 0,
     medium: 0,
     low: 0,
@@ -290,7 +291,7 @@ export function summarizeAlerts(alerts: CampaignAlert[]): AlertsSummary {
     byClient: {},
   };
 
-  for (const a of alerts) {
+  for (const a of safeAlerts) {
     if (a.severity === "high") summary.high++;
     else if (a.severity === "medium") summary.medium++;
     else summary.low++;

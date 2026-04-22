@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { wow } from '@/lib/wow';
@@ -321,17 +323,24 @@ function HealthBar({ score }: { score: number }) {
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export default function CommandCenterPage() {
-  const { data: clients, loading: l1 } = useClients();
-  const { data: campaigns, loading: l2 } = useCampaigns();
-  const { data: leads, loading: l3 } = useLeads();
-  const { data: payments, loading: l4 } = usePayments();
+  const { data: rawClients, loading: l1 } = useClients();
+  const { data: rawCampaigns, loading: l2 } = useCampaigns();
+  const { data: rawLeads, loading: l3 } = useLeads();
+  const { data: rawPayments, loading: l4 } = usePayments();
   const {
-    alerts,
+    alerts: rawAlerts,
     criticalCount,
     warningCount,
     infoCount,
     loading: l5,
   } = useOperationalAlerts();
+
+  // Safe fallbacks — never let undefined reach .filter/.map/.reduce/.length
+  const clients = rawClients ?? [];
+  const campaigns = rawCampaigns ?? [];
+  const leads = rawLeads ?? [];
+  const payments = rawPayments ?? [];
+  const alerts = rawAlerts ?? [];
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [platformFilter, setPlatformFilter] = useState<string>("all");

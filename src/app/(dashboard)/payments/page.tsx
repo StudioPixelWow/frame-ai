@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useState } from "react";
 import { usePayments, useClients } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
@@ -24,8 +26,12 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export default function PaymentsPage() {
-  const { data: payments, loading, create, update, remove } = usePayments();
-  const { data: clients } = useClients();
+  const { data: rawPayments, loading, create, update, remove } = usePayments();
+  const { data: rawClients } = useClients();
+
+  // Safe fallbacks — never let undefined reach .filter/.map/.reduce/.length
+  const payments = rawPayments ?? [];
+  const clients = rawClients ?? [];
   const toast = useToast();
 
   const [activeTab, setActiveTab] = useState("all");

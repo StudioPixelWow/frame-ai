@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = "force-dynamic";
+
 import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { wow } from '@/lib/wow';
@@ -650,9 +652,14 @@ function AnalysisModal({
 // ══════════════════════════════════════════════════════════════════════════════
 
 export default function CampaignsPage() {
-  const { data: campaigns, loading, error, create, update, remove } = useCampaigns();
-  const { data: allLeads } = useLeads();
-  const { data: clients } = useClients();
+  const { data: rawCampaigns, loading, error, create, update, remove } = useCampaigns();
+  const { data: rawLeads } = useLeads();
+  const { data: rawClients } = useClients();
+
+  // Safe fallbacks — never let undefined reach .filter/.map/.reduce/.length
+  const campaigns = rawCampaigns ?? [];
+  const allLeads = rawLeads ?? [];
+  const clients = rawClients ?? [];
   const toast = useToast();
 
   // Filters

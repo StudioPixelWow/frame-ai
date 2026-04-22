@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useClients, usePayments, useProjectPayments, useHostingRecords, usePodcastSessions } from "@/lib/api/use-entity";
 import { useState, useMemo } from "react";
 
@@ -14,11 +16,18 @@ interface UnifiedPayment {
 }
 
 export default function PaymentsPage() {
-  const { data: clients, update: updateClient } = useClients();
-  const { data: payments } = usePayments();
-  const { data: projectPayments, update: updateProjectPayment } = useProjectPayments();
-  const { data: hostingRecords, update: updateHostingRecord } = useHostingRecords();
-  const { data: podcastSessions } = usePodcastSessions();
+  const { data: rawClients, update: updateClient } = useClients();
+  const { data: rawPayments } = usePayments();
+  const { data: rawProjectPayments, update: updateProjectPayment } = useProjectPayments();
+  const { data: rawHostingRecords, update: updateHostingRecord } = useHostingRecords();
+  const { data: rawPodcastSessions } = usePodcastSessions();
+
+  // Safe fallbacks — never let undefined reach .filter/.map/.reduce/.length
+  const clients = rawClients ?? [];
+  const payments = rawPayments ?? [];
+  const projectPayments = rawProjectPayments ?? [];
+  const hostingRecords = rawHostingRecords ?? [];
+  const podcastSessions = rawPodcastSessions ?? [];
 
   const [filterType, setFilterType] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");

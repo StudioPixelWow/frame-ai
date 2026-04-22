@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = "force-dynamic";
+
 import { useState, useMemo } from "react"
 import { usePodcastSessions, useClients } from "@/lib/api/use-entity"
 import { useToast } from "@/components/ui/toast"

@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useState } from "react";
 import { useActivities } from "@/lib/api/use-entity";
 import type { ActivityEntry } from "@/lib/db/schema";

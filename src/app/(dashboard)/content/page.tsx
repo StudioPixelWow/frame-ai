@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 export default function ContentPage() {
   return (
     <main className="max-w-[1100px] mx-auto px-6 py-8"><div className="space-y-6">

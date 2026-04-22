@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = "force-dynamic";
+
 import { useState } from 'react';
 import { useApprovals } from '@/lib/api/use-entity';
 import { useToast } from '@/components/ui/toast';

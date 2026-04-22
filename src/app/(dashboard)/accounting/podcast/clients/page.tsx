@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = "force-dynamic";
+
 import { useRouter } from "next/navigation"
 import { usePodcastSessions } from "@/lib/api/use-entity"
 import { useMemo, useState } from "react"

@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { use, useState, useMemo } from "react";
 import Link from "next/link";
 import { useEmployees, useEmployeeTasks, useTasks } from "@/lib/api/use-entity";

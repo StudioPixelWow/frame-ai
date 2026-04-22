@@ -59,7 +59,18 @@ export interface AlertsInput {
 // ENGINE
 // ═══════════════════════════════════════════════════════════════════════
 
-export function computeAlerts(input: AlertsInput): OperationalAlert[] {
+export function computeAlerts(rawInput: AlertsInput): OperationalAlert[] {
+  // Safe fallbacks — guard every array field against undefined
+  const input: AlertsInput = {
+    clients: rawInput.clients ?? [],
+    leads: rawInput.leads ?? [],
+    employees: rawInput.employees ?? [],
+    employeeTasks: rawInput.employeeTasks ?? [],
+    payments: rawInput.payments ?? [],
+    ganttItems: rawInput.ganttItems ?? [],
+    approvals: rawInput.approvals ?? [],
+    projectPayments: rawInput.projectPayments ?? [],
+  };
   const alerts: OperationalAlert[] = [];
   const now = new Date();
   const today = now.toISOString().split('T')[0];
@@ -340,7 +351,7 @@ export function countAlertsByCategory(alerts: OperationalAlert[]): Record<AlertC
     lead_stale: 0,
     pending_approval: 0,
   };
-  alerts.forEach((a) => {
+  (alerts ?? []).forEach((a) => {
     counts[a.category]++;
   });
   return counts;
@@ -348,7 +359,7 @@ export function countAlertsByCategory(alerts: OperationalAlert[]): Record<AlertC
 
 export function countAlertsBySeverity(alerts: OperationalAlert[]): Record<AlertSeverity, number> {
   const counts: Record<AlertSeverity, number> = { critical: 0, warning: 0, info: 0 };
-  alerts.forEach((a) => {
+  (alerts ?? []).forEach((a) => {
     counts[a.severity]++;
   });
   return counts;

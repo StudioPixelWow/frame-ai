@@ -34,14 +34,24 @@ export interface UseAlertsReturn {
 }
 
 export function useOperationalAlerts(): UseAlertsReturn {
-  const { data: clients, loading: l1 } = useClients();
-  const { data: leads, loading: l2 } = useLeads();
-  const { data: employees, loading: l3 } = useEmployees();
-  const { data: employeeTasks, loading: l4 } = useEmployeeTasks();
-  const { data: payments, loading: l5 } = usePayments();
-  const { data: ganttItems, loading: l6 } = useClientGanttItems();
-  const { data: approvals, loading: l7 } = useApprovals();
-  const { data: projectPayments, loading: l8 } = useProjectPayments();
+  const { data: rawClients, loading: l1 } = useClients();
+  const { data: rawLeads, loading: l2 } = useLeads();
+  const { data: rawEmployees, loading: l3 } = useEmployees();
+  const { data: rawEmployeeTasks, loading: l4 } = useEmployeeTasks();
+  const { data: rawPayments, loading: l5 } = usePayments();
+  const { data: rawGanttItems, loading: l6 } = useClientGanttItems();
+  const { data: rawApprovals, loading: l7 } = useApprovals();
+  const { data: rawProjectPayments, loading: l8 } = useProjectPayments();
+
+  // Safe fallbacks — never let undefined reach .filter/.map/.reduce
+  const clients = rawClients ?? [];
+  const leads = rawLeads ?? [];
+  const employees = rawEmployees ?? [];
+  const employeeTasks = rawEmployeeTasks ?? [];
+  const payments = rawPayments ?? [];
+  const ganttItems = rawGanttItems ?? [];
+  const approvals = rawApprovals ?? [];
+  const projectPayments = rawProjectPayments ?? [];
 
   const loading = l1 || l2 || l3 || l4 || l5 || l6 || l7 || l8;
 

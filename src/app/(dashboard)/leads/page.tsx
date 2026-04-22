@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useLeads, useCampaigns, useClients } from "@/lib/api/use-entity";
@@ -640,9 +642,14 @@ function LeadDetailPanel({
 // ══════════════════════════════════════════════════════════════════════════════
 
 export default function LeadsPage() {
-  const { data: leads, loading, create, update, remove, refetch } = useLeads();
-  const { data: campaigns } = useCampaigns();
-  const { data: clients } = useClients();
+  const { data: rawLeads, loading, create, update, remove, refetch } = useLeads();
+  const { data: rawCampaigns } = useCampaigns();
+  const { data: rawClients } = useClients();
+
+  // Safe fallbacks — never let undefined reach .filter/.map/.reduce/.length
+  const leads = rawLeads ?? [];
+  const campaigns = rawCampaigns ?? [];
+  const clients = rawClients ?? [];
   const toast = useToast();
 
   // UI State

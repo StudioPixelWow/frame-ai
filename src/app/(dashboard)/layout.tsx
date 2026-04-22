@@ -4,6 +4,7 @@ import { ToastProvider } from "@/components/ui/toast";
 import { AuthProvider } from "@/lib/auth/auth-context";
 import { AICopilotContainer } from "@/components/ui/ai-copilot-drawer";
 import { PageTransition } from "@/components/ui/page-transition";
+import { DataErrorBoundary } from "@/components/ui/data-states";
 
 export default function DashboardLayout({
   children,
@@ -33,9 +34,11 @@ export default function DashboardLayout({
                 marginInlineStart: "64px",
               }}
             >
-              <PageTransition>
-                {children}
-              </PageTransition>
+              <DataErrorBoundary>
+                <PageTransition>
+                  {children}
+                </PageTransition>
+              </DataErrorBoundary>
             </div>
             <AICopilotContainer />
           </div>

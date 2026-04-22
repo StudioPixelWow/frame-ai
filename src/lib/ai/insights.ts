@@ -50,7 +50,17 @@ export interface InsightsInput {
 // ENGINE
 // ═══════════════════════════════════════════════════════════════════════
 
-export function computeInsights(input: InsightsInput): ManagementInsight[] {
+export function computeInsights(rawInput: InsightsInput): ManagementInsight[] {
+  // Safe fallbacks — guard every array field against undefined
+  const input: InsightsInput = {
+    clients: rawInput.clients ?? [],
+    leads: rawInput.leads ?? [],
+    employees: rawInput.employees ?? [],
+    employeeTasks: rawInput.employeeTasks ?? [],
+    payments: rawInput.payments ?? [],
+    ganttItems: rawInput.ganttItems ?? [],
+    projectPayments: rawInput.projectPayments ?? [],
+  };
   const insights: ManagementInsight[] = [];
   const now = new Date();
   let idCounter = 0;

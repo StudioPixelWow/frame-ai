@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = "force-dynamic";
+
 import { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/toast';
 import { useAISettings, useEmployees, useGmailSettings } from '@/lib/api/use-entity';

@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -83,11 +85,18 @@ type ProjectFormData = {
 export default function BusinessProjectsPage() {
   const router = useRouter();
   const toast = useToast();
-  const { data: projects, loading: projectsLoading, create: createProject, refetch: refetchProjects } = useBusinessProjects();
-  const { data: milestones } = useProjectMilestones();
-  const { data: payments } = useProjectPayments();
-  const { data: clients, create: createClientHook, refetch: refetchClients } = useClients();
-  const { data: employees } = useEmployees();
+  const { data: rawProjects, loading: projectsLoading, create: createProject, refetch: refetchProjects } = useBusinessProjects();
+  const { data: rawMilestones } = useProjectMilestones();
+  const { data: rawPayments } = useProjectPayments();
+  const { data: rawClients, create: createClientHook, refetch: refetchClients } = useClients();
+  const { data: rawEmployees } = useEmployees();
+
+  // Safe fallbacks — never let undefined reach .filter/.map/.reduce/.length
+  const projects = rawProjects ?? [];
+  const milestones = rawMilestones ?? [];
+  const payments = rawPayments ?? [];
+  const clients = rawClients ?? [];
+  const employees = rawEmployees ?? [];
 
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [filterType, setFilterType] = useState<BusinessProjectType | "all">("all");

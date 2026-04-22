@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { wow } from '@/lib/wow';
@@ -138,17 +140,30 @@ export default function DashboardPage() {
   const greeting = getGreeting();
   const dateLabel = getDateLabel();
 
-  const { data: clients, loading: cL } = useClients();
-  const { data: tasks, loading: tL } = useTasks();
-  const { data: payments, loading: pL } = usePayments();
-  const { data: leads, loading: lL } = useLeads();
-  const { data: employees, loading: eL } = useEmployees();
-  const { data: campaigns, loading: caL } = useCampaigns();
-  const { data: approvals, loading: aL } = useApprovals();
-  const { data: podcastSessions, loading: poL } = usePodcastSessions();
-  const { data: projectPayments, loading: ppL } = useProjectPayments();
-  const { data: businessProjects, loading: bpL } = useBusinessProjects();
-  const { data: socialPosts, loading: spL } = useSocialPosts();
+  const { data: rawClients, loading: cL } = useClients();
+  const { data: rawTasks, loading: tL } = useTasks();
+  const { data: rawPayments, loading: pL } = usePayments();
+  const { data: rawLeads, loading: lL } = useLeads();
+  const { data: rawEmployees, loading: eL } = useEmployees();
+  const { data: rawCampaigns, loading: caL } = useCampaigns();
+  const { data: rawApprovals, loading: aL } = useApprovals();
+  const { data: rawPodcastSessions, loading: poL } = usePodcastSessions();
+  const { data: rawProjectPayments, loading: ppL } = useProjectPayments();
+  const { data: rawBusinessProjects, loading: bpL } = useBusinessProjects();
+  const { data: rawSocialPosts, loading: spL } = useSocialPosts();
+
+  // Safe fallbacks — never let undefined reach .filter/.map/.reduce/.length
+  const clients = rawClients ?? [];
+  const tasks = rawTasks ?? [];
+  const payments = rawPayments ?? [];
+  const leads = rawLeads ?? [];
+  const employees = rawEmployees ?? [];
+  const campaigns = rawCampaigns ?? [];
+  const approvals = rawApprovals ?? [];
+  const podcastSessions = rawPodcastSessions ?? [];
+  const projectPayments = rawProjectPayments ?? [];
+  const businessProjects = rawBusinessProjects ?? [];
+  const socialPosts = rawSocialPosts ?? [];
   const { alerts, insights: opInsights } = useOperationalAlerts();
 
   const isLoading = cL || tL || pL || lL || eL || caL || aL || poL || ppL || bpL || spL;
