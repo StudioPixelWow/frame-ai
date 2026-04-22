@@ -29,6 +29,8 @@ const TABLES = [
   'app_podcast_sessions',
   'app_meetings',
   'app_follow_up_reminders',
+  'app_ad_sets',
+  'app_ads',
   'app_creative_dna',
   'app_client_knowledge',
   'app_client_insights',

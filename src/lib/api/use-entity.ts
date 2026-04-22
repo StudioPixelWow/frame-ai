@@ -29,6 +29,8 @@ import type {
   PodcastSession,
   AISettings,
   ClientKnowledge,
+  AdSet,
+  Ad,
   AutomationRule,
   AutomationRun,
   ApprovalQueueItem,
@@ -52,6 +54,8 @@ export const usePayments = () => useData<Payment>('payments', { pollInterval: 18
 export const useLeads = () => useData<Lead>('leads', { pollInterval: 300000, refetchOnFocus: false });
 export const useEmployees = () => useData<Employee>('employees', { refetchOnFocus: false });
 export const useCampaigns = () => useData<Campaign>('campaigns', { refetchOnFocus: false });
+export const useAdSets = () => useData<AdSet>('ad-sets', { refetchOnFocus: false });
+export const useAds = () => useData<Ad>('ads', { refetchOnFocus: false });
 export const useUsers = () => useData<User>('users', { refetchOnFocus: false });
 export const useApprovals = () => useData<Approval>('approvals', { pollInterval: 180000, refetchOnFocus: false });
 export const useActivities = () => useData<ActivityEntry>('activities');

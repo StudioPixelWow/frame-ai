@@ -30,6 +30,8 @@ import type {
   ClientResearch,
   ClientInsight,
   AutomationRule,
+  AdSet,
+  Ad,
   AutomationRun,
   ApprovalQueueItem,
   WhatsAppMessage,
@@ -50,6 +52,8 @@ export const payments = new SupabaseCrud<Payment>('app_payments', 'pay');
 export const leads = new SupabaseCrud<Lead>('app_leads', 'led');
 export const employees = new JsonStore<Employee>('employees', 'emp');
 export const campaigns = new SupabaseCrud<Campaign>('app_campaigns', 'cmp');
+export const adSets = new SupabaseCrud<AdSet>('app_ad_sets', 'ads');
+export const ads = new SupabaseCrud<Ad>('app_ads', 'ad');
 export const users = new JsonStore<User>('users', 'usr');
 export const approvals = new SupabaseCrud<Approval>('app_approvals', 'apr');
 export const activities = new JsonStore<ActivityEntry>('activities', 'act');

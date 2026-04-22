@@ -466,6 +466,80 @@ export interface Campaign {
   updatedAt: string;
 }
 
+// Ad Set — middle layer (Campaign → Ad Set → Ad)
+export type AdSetStatus = 'active' | 'paused' | 'draft' | 'archived';
+
+export interface AdSet {
+  id: string;
+  campaignId: string;
+  name: string;
+  status: AdSetStatus;
+
+  // Audience / Targeting
+  ageMin: number | null;
+  ageMax: number | null;
+  genders: ('male' | 'female' | 'all')[];
+  geoLocations: string[];          // e.g. ["תל אביב", "ירושלים"]
+  interests: string[];             // e.g. ["עסקים קטנים", "שיווק דיגיטלי"]
+  customAudiences: string[];       // audience IDs
+  excludedAudiences: string[];     // excluded audience IDs
+  placements: string[];            // e.g. ["feed", "stories", "reels"]
+
+  // Budget & Schedule
+  dailyBudget: number | null;
+  lifetimeBudget: number | null;
+  startDate: string | null;
+  endDate: string | null;
+  bidStrategy: 'lowest_cost' | 'cost_cap' | 'bid_cap' | null;
+  bidAmount: number | null;
+
+  // Meta
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Ad — creative layer (Campaign → Ad Set → Ad)
+export type AdStatus = 'active' | 'paused' | 'draft' | 'rejected' | 'archived';
+export type AdCreativeType = 'image' | 'video' | 'carousel' | 'slideshow';
+
+export interface Ad {
+  id: string;
+  adSetId: string;
+  campaignId: string;           // denormalized for easy queries
+  name: string;
+  status: AdStatus;
+
+  // Creative
+  creativeType: AdCreativeType;
+  mediaUrl: string;             // image or video URL
+  thumbnailUrl: string | null;  // video thumbnail / carousel first image
+  primaryText: string;          // main ad copy
+  headline: string;             // bold headline
+  description: string;          // optional description line
+  ctaType: string;              // e.g. "LEARN_MORE", "SIGN_UP", "SHOP_NOW"
+  ctaLink: string;              // destination URL
+
+  // Linked assets
+  linkedVideoProjectId: string | null;
+  linkedClientFileId: string | null;
+
+  // Performance metrics (synced from Meta or manual)
+  impressions: number;
+  clicks: number;
+  spend: number;
+  leads: number;
+  conversions: number;
+  ctr: number;                  // clicks/impressions
+  cpl: number;                  // cost per lead
+  cpc: number;                  // cost per click
+  roas: number;                 // return on ad spend
+
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // User
 export interface User {
   id: string;
