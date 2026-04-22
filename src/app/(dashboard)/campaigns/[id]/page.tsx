@@ -88,7 +88,7 @@ function AdCard({ ad, onEdit }: { ad: Ad; onEdit: (ad: Ad) => void }) {
   const statusColor = STATUS_COLORS[ad.status] || '#6b7280';
 
   useEffect(() => {
-    if (\!videoRef.current || \!isVideo) return;
+    if (!videoRef.current || !isVideo) return;
     if (isHovering) {
       videoRef.current.play().catch(() => {});
     } else {
@@ -292,7 +292,7 @@ function AdSetSection({
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
           <button
             type="button"
-            onClick={() => setCollapsed(\!collapsed)}
+            onClick={() => setCollapsed(!collapsed)}
             style={{
               background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem',
               color: 'var(--foreground-muted)', padding: '0.25rem', transition: 'transform 150ms',
@@ -379,7 +379,7 @@ function AdSetSection({
       </div>
 
       {/* Ads Grid */}
-      {\!collapsed && (
+      {!collapsed && (
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
@@ -461,7 +461,7 @@ export default function CampaignDetailPage() {
   }, [campaignAds]);
 
   const leadInsights = useMemo(() => {
-    if (\!campaign || \!allLeads) return null;
+    if (!campaign || !allLeads) return null;
     const map = buildCampaignLeadInsights([campaign], allLeads || []);
     return map[campaign.id] || null;
   }, [campaign, allLeads]);
@@ -504,7 +504,7 @@ export default function CampaignDetailPage() {
 
   const handleSubmitAdSet = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (\!adSetForm.name.trim()) { toast('נא להכניס שם לקבוצת מודעות', 'error'); return; }
+    if (!adSetForm.name.trim()) { toast('נא להכניס שם לקבוצת מודעות', 'error'); return; }
     try {
       const payload = {
         campaignId,
@@ -556,7 +556,7 @@ export default function CampaignDetailPage() {
 
   const handleSubmitAd = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (\!adForm.name.trim()) { toast('נא להכניס שם למודעה', 'error'); return; }
+    if (!adForm.name.trim()) { toast('נא להכניס שם למודעה', 'error'); return; }
     try {
       const payload = {
         adSetId: adModalAdSetId,
@@ -590,7 +590,7 @@ export default function CampaignDetailPage() {
 
   // ── Loading ─────────────────────────────────────────────────────────
 
-  if (\!campaign) {
+  if (!campaign) {
     return (
       <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem 1.5rem', direction: 'rtl' }}>
         <SkeletonKPIRow count={5} />
