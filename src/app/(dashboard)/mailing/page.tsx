@@ -15,7 +15,7 @@ const MAILING_STATUS_LABELS: Record<MailingStatus, string> = {
 
 const MAILING_STATUS_COLORS: Record<MailingStatus, string> = {
   draft: '#6b7280',
-  scheduled: '#8b5cf6',
+  scheduled: '#0092cc',
   sending: '#3b82f6',
   sent: '#22c55e',
   failed: '#ef4444',

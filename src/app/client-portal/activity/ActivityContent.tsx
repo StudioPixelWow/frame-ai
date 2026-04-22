@@ -52,7 +52,7 @@ const formatDate = (dateString: string): string => {
 const getActivityTypeBadgeColor = (type: string): string => {
   const colorMap: Record<string, string> = {
     client: '#3b82f6',
-    project: '#8b5cf6',
+    project: '#0092cc',
     payment: '#f59e0b',
     render: '#ec4899',
     ai: '#06b6d4',

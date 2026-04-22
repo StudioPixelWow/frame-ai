@@ -577,7 +577,7 @@ export default function BusinessProjectsPage() {
             return (
               <div
                 key={project.id}
-                className="ux-card ux-card-glow ux-light-sweep ux-stagger-item agd-card"
+                className="premium-card ux-stagger-item agd-card"
                 style={{
                   padding: "1.25rem",
                   cursor: "pointer",

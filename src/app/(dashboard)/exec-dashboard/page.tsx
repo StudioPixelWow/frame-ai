@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { wow } from '@/lib/wow';
 import {
   useClients,
   useLeads,
@@ -582,7 +583,7 @@ export default function ExecDashboardPage() {
     <div className="ux-ambient-energy" style={{ backgroundColor: 'var(--background)', color: 'var(--foreground)', minHeight: '100vh' }}>
       {/* HEADER */}
       <div style={headerStyle}>
-        <h1 style={titleStyle}>מרכז שליטה</h1>
+        <h1 className="ux-hero-enter" style={titleStyle}>מרכז שליטה</h1>
         <p style={subtitleStyle}>
           {timeOfDay} • {getTodayHebrew()}
         </p>
@@ -600,44 +601,44 @@ export default function ExecDashboardPage() {
 
       {/* SECTION 2: TOP KPIs */}
       <div className="ux-stagger" style={kpisGridStyle}>
-        <div className="ux-stagger-item ux-card ux-light-sweep" style={kpiCardStyle('var(--accent)')}>
-          <div style={kpiNumberStyle}><AnimatedCounter value={kpis.activeClientsCount} /></div>
+        <div className="ux-stagger-item premium-card" style={kpiCardStyle('var(--accent)')}>
+          <div className="ux-kpi-value" style={kpiNumberStyle}><AnimatedCounter value={kpis.activeClientsCount} /></div>
           <p style={kpiLabelStyle}>לקוחות פעילים</p>
         </div>
 
-        <div className="ux-stagger-item ux-card ux-light-sweep" style={kpiCardStyle('#3B82F6')}>
-          <div style={kpiNumberStyle}><AnimatedCounter value={kpis.openLeadsCount} /></div>
+        <div className="ux-stagger-item premium-card" style={kpiCardStyle('#3B82F6')}>
+          <div className="ux-kpi-value" style={kpiNumberStyle}><AnimatedCounter value={kpis.openLeadsCount} /></div>
           <p style={kpiLabelStyle}>לידים פתוחים</p>
         </div>
 
-        <div className="ux-stagger-item ux-card ux-light-sweep" style={kpiCardStyle('#8B5CF6')}>
-          <div style={kpiNumberStyle}><AnimatedCounter value={kpis.openTasksCount} /></div>
+        <div className="ux-stagger-item premium-card" style={kpiCardStyle('#3B82F6')}>
+          <div className="ux-kpi-value" style={kpiNumberStyle}><AnimatedCounter value={kpis.openTasksCount} /></div>
           <p style={kpiLabelStyle}>משימות פתוחות</p>
         </div>
 
-        <div className="ux-stagger-item ux-card ux-light-sweep" style={kpiCardStyle('#EF4444')}>
-          <div style={kpiNumberStyle}><AnimatedCounter value={kpis.overdueTasksCount} /></div>
+        <div className="ux-stagger-item premium-card" style={kpiCardStyle('#EF4444')}>
+          <div className="ux-kpi-value" style={kpiNumberStyle}><AnimatedCounter value={kpis.overdueTasksCount} /></div>
           <p style={kpiLabelStyle}>משימות באיחור</p>
         </div>
 
-        <div className="ux-stagger-item ux-card ux-light-sweep" style={kpiCardStyle('#10B981')}>
-          <div style={kpiNumberStyle}>{formatCurrency(kpis.monthlyRevenue)}</div>
+        <div className="ux-stagger-item premium-card" style={kpiCardStyle('#10B981')}>
+          <div className="ux-kpi-value" style={kpiNumberStyle}>{formatCurrency(kpis.monthlyRevenue)}</div>
           <p style={kpiLabelStyle}>הכנסה חודשית</p>
         </div>
 
-        <div className="ux-stagger-item ux-card ux-light-sweep" style={kpiCardStyle('#EF4444')}>
-          <div style={kpiNumberStyle}><AnimatedCounter value={kpis.totalOverduePayments} /></div>
+        <div className="ux-stagger-item premium-card" style={kpiCardStyle('#EF4444')}>
+          <div className="ux-kpi-value" style={kpiNumberStyle}><AnimatedCounter value={kpis.totalOverduePayments} /></div>
           <p style={kpiLabelStyle}>תשלומים בפיגור</p>
         </div>
 
-        <div className="ux-stagger-item ux-card ux-light-sweep" style={kpiCardStyle('#F59E0B')}>
-          <div style={kpiNumberStyle}><AnimatedCounter value={kpis.upcomingPaymentsCount} /></div>
+        <div className="ux-stagger-item premium-card" style={kpiCardStyle('#F59E0B')}>
+          <div className="ux-kpi-value" style={kpiNumberStyle}><AnimatedCounter value={kpis.upcomingPaymentsCount} /></div>
           <p style={kpiLabelStyle}>גביות קרובות</p>
         </div>
       </div>
 
       {/* SECTION 3: AI INSIGHTS */}
-      <div style={{ padding: '32px' }}>
+      <div className="ux-ai-banner" style={{ padding: '32px' }}>
         <h2 style={sectionTitleStyle}>
           <span>✨</span>
           <span>תובנות AI</span>
@@ -649,7 +650,7 @@ export default function ExecDashboardPage() {
         ) : insights && insights.length > 0 ? (
           <div className="ux-stagger" style={insightsGridStyle}>
             {insights.slice(0, 6).map((insight, idx) => (
-              <div key={idx} className="ux-stagger-item ux-card ux-light-sweep" style={insightCardStyle}>
+              <div key={idx} className="ux-stagger-item premium-card" style={insightCardStyle}>
                 <h3 style={insightTitleStyle}>{insight.title}</h3>
                 <p style={insightDescStyle}>{insight.description}</p>
                 {insight.metric && <span style={insightMetricStyle}>{insight.metric}</span>}
@@ -706,7 +707,7 @@ export default function ExecDashboardPage() {
             .slice(0, 10)
             .map(alert => (
               <Link key={alert.id} href={alert.linkHref || '#'} style={{ textDecoration: 'none' }}>
-                <div className="ux-card ux-light-sweep" style={alertCardStyle(alert.severity)}>
+                <div className="premium-card" style={alertCardStyle(alert.severity)}>
                   <span style={{ fontSize: '1.3rem' }}>{SEVERITY_CONFIG[alert.severity].icon}</span>
                   <div style={alertContentStyle}>
                     <p style={alertTitleStyle}>{alert.title}</p>
@@ -729,12 +730,12 @@ export default function ExecDashboardPage() {
       {/* SECTION 5: OPERATIONAL CHARTS */}
       <div className="ux-stagger" style={chartsContainerStyle}>
         {/* Tasks by Status */}
-        <div className="ux-stagger-item ux-card ux-light-sweep" style={chartCardStyle}>
+        <div className="ux-stagger-item premium-card" style={chartCardStyle}>
           <h3 style={chartTitleStyle}>משימות לפי סטטוס</h3>
           <div style={barChartStyle}>
             {[
               { label: 'חדש', value: chartData.tasksByStatus.new, color: '#3B82F6' },
-              { label: 'בביצוע', value: chartData.tasksByStatus.in_progress, color: '#8B5CF6' },
+              { label: 'בביצוע', value: chartData.tasksByStatus.in_progress, color: '#0092cc' },
               { label: 'בבדיקה', value: chartData.tasksByStatus.under_review, color: '#F59E0B' },
               { label: 'הושלמה', value: chartData.tasksByStatus.completed, color: '#10B981' },
             ].map(item => {
@@ -754,7 +755,7 @@ export default function ExecDashboardPage() {
         </div>
 
         {/* Employee Workload */}
-        <div className="ux-stagger-item ux-card ux-light-sweep" style={chartCardStyle}>
+        <div className="ux-stagger-item premium-card" style={chartCardStyle}>
           <h3 style={chartTitleStyle}>עומס עבודה לפי עובד</h3>
           <div style={barChartStyle}>
             {chartData.employeeWorkload.slice(0, 5).map(emp => {
@@ -774,12 +775,12 @@ export default function ExecDashboardPage() {
         </div>
 
         {/* Leads by Status */}
-        <div className="ux-stagger-item ux-card ux-light-sweep" style={chartCardStyle}>
+        <div className="ux-stagger-item premium-card" style={chartCardStyle}>
           <h3 style={chartTitleStyle}>לידים לפי שלב</h3>
           <div style={barChartStyle}>
             {[
               { label: 'חדש', value: chartData.leadsByStatus.new, color: '#3B82F6' },
-              { label: 'יצור קשר', value: chartData.leadsByStatus.contacted, color: '#8B5CF6' },
+              { label: 'יצור קשר', value: chartData.leadsByStatus.contacted, color: '#0092cc' },
               { label: 'הצעה', value: chartData.leadsByStatus.proposal_sent, color: '#F59E0B' },
               { label: 'משא ומתן', value: chartData.leadsByStatus.negotiation, color: '#EC4899' },
               { label: 'נסגר', value: chartData.leadsByStatus.won, color: '#10B981' },
@@ -800,12 +801,12 @@ export default function ExecDashboardPage() {
         </div>
 
         {/* Client Types */}
-        <div className="ux-stagger-item ux-card ux-light-sweep" style={chartCardStyle}>
+        <div className="ux-stagger-item premium-card" style={chartCardStyle}>
           <h3 style={chartTitleStyle}>התפלגות סוגי לקוחות</h3>
           <div style={barChartStyle}>
             {[
               { label: 'שיווק', value: chartData.clientTypeDistribution.marketing, color: '#3B82F6' },
-              { label: 'ברנדינג', value: chartData.clientTypeDistribution.branding, color: '#8B5CF6' },
+              { label: 'ברנדינג', value: chartData.clientTypeDistribution.branding, color: '#0092cc' },
               { label: 'אתרים', value: chartData.clientTypeDistribution.websites, color: '#10B981' },
               { label: 'הוסטינג', value: chartData.clientTypeDistribution.hosting, color: '#F59E0B' },
               { label: 'פודקאסט', value: chartData.clientTypeDistribution.podcast, color: '#EC4899' },
@@ -833,42 +834,42 @@ export default function ExecDashboardPage() {
           <span>ניווט מהיר</span>
         </h2>
         <div className="ux-stagger" style={navGridStyle}>
-          <Link href="/clients" className="ux-stagger-item ux-card ux-light-sweep" style={navCardStyle}>
+          <Link href="/clients" className="ux-stagger-item premium-card" style={navCardStyle}>
             <span style={navIconStyle}>👥</span>
             <p style={navTitleStyle}>לקוחות</p>
             <p style={navCountStyle}>{formatCount(kpis.activeClientsCount)}</p>
           </Link>
-          <Link href="/leads" className="ux-stagger-item ux-card ux-light-sweep" style={navCardStyle}>
+          <Link href="/leads" className="ux-stagger-item premium-card" style={navCardStyle}>
             <span style={navIconStyle}>🎯</span>
             <p style={navTitleStyle}>לידים</p>
             <p style={navCountStyle}>{formatCount(kpis.openLeadsCount)}</p>
           </Link>
-          <Link href="/employees" className="ux-stagger-item ux-card ux-light-sweep" style={navCardStyle}>
+          <Link href="/employees" className="ux-stagger-item premium-card" style={navCardStyle}>
             <span style={navIconStyle}>👨‍💼</span>
             <p style={navTitleStyle}>עובדים</p>
             <p style={navCountStyle}>{formatCount(employees.length)}</p>
           </Link>
-          <Link href="/accounting" className="ux-stagger-item ux-card ux-light-sweep" style={navCardStyle}>
+          <Link href="/accounting" className="ux-stagger-item premium-card" style={navCardStyle}>
             <span style={navIconStyle}>💰</span>
             <p style={navTitleStyle}>חשבונות</p>
             <p style={navCountStyle}>{formatCount(kpis.totalOverduePayments)}</p>
           </Link>
-          <Link href="/approvals" className="ux-stagger-item ux-card ux-light-sweep" style={navCardStyle}>
+          <Link href="/approvals" className="ux-stagger-item premium-card" style={navCardStyle}>
             <span style={navIconStyle}>✅</span>
             <p style={navTitleStyle}>אישורים</p>
             <p style={navCountStyle}>{formatCount(approvals.filter(a => a.status === 'pending_approval').length)}</p>
           </Link>
-          <Link href="/accounting/podcast" className="ux-stagger-item ux-card ux-light-sweep" style={navCardStyle}>
+          <Link href="/accounting/podcast" className="ux-stagger-item premium-card" style={navCardStyle}>
             <span style={navIconStyle}>🎙️</span>
             <p style={navTitleStyle}>פודקאסט</p>
             <p style={navCountStyle}>{formatCount(podcastSessions?.length || 0)}</p>
           </Link>
-          <Link href="/projects" className="ux-stagger-item ux-card ux-light-sweep" style={navCardStyle}>
+          <Link href="/projects" className="ux-stagger-item premium-card" style={navCardStyle}>
             <span style={navIconStyle}>📊</span>
             <p style={navTitleStyle}>פרויקטים</p>
             <p style={navCountStyle}>{formatCount(businessProjects?.length || 0)}</p>
           </Link>
-          <Link href="/business-projects" className="ux-stagger-item ux-card ux-light-sweep" style={navCardStyle}>
+          <Link href="/business-projects" className="ux-stagger-item premium-card" style={navCardStyle}>
             <span style={navIconStyle}>🚀</span>
             <p style={navTitleStyle}>עסקים</p>
             <p style={navCountStyle}>{formatCount(businessProjects?.length || 0)}</p>
@@ -885,7 +886,7 @@ export default function ExecDashboardPage() {
         <div style={pipelineStyle}>
           {[
             { label: 'חדש', count: chartData.leadsByStatus.new, color: '#3B82F6' },
-            { label: 'יצור קשר', count: chartData.leadsByStatus.contacted, color: '#8B5CF6' },
+            { label: 'יצור קשר', count: chartData.leadsByStatus.contacted, color: '#0092cc' },
             { label: 'הצעה', count: chartData.leadsByStatus.proposal_sent, color: '#F59E0B' },
             { label: 'משא ומתן', count: chartData.leadsByStatus.negotiation, color: '#EC4899' },
             { label: 'נסגר', count: chartData.leadsByStatus.won, color: '#10B981' },

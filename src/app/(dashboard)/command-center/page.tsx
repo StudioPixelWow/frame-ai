@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import { wow } from '@/lib/wow';
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import {
   useClients,
@@ -48,7 +49,7 @@ const STATUS_COLORS: Record<CampaignStatus, string> = {
   in_progress: "#3b82f6",
   waiting_approval: "#f59e0b",
   approved: "#10b981",
-  scheduled: "#8b5cf6",
+  scheduled: "#0092cc",
   active: "#22c55e",
   completed: "#00B5FE",
 };
@@ -159,7 +160,7 @@ function KPICard({
 
   return (
     <div
-      className="premium-card ux-card ux-light-sweep"
+      className="premium-card"
       style={{
         textAlign: "center",
         padding: "1.25rem 1rem",
@@ -168,6 +169,7 @@ function KPICard({
     >
       <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>{icon}</div>
       <div
+        className="ux-kpi-value"
         style={{
           fontSize: "2rem",
           fontWeight: 800,
@@ -540,6 +542,7 @@ export default function CommandCenterPage() {
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem" }}>
             <h1
+              className="ux-hero-enter"
               style={{
                 fontSize: "1.75rem",
                 fontWeight: 800,
@@ -616,6 +619,57 @@ export default function CommandCenterPage() {
         </div>
       </div>
 
+      {/* ═══ AI Contextual Suggestion ═══ */}
+      {(() => {
+        // Analyze current data to provide smart suggestions
+        const hasLowHealthCampaigns = campaignRows.some((r) => r.healthScore < 50);
+        const hasLeadsNeedingFollowUp = leads.some((l) => l.status === "contacted" || l.status === "interested");
+        const campaignsWithoutLeads = campaigns.filter((c) => !leads.some((l) => l.campaignId === c.id)).length;
+        const lowConversionRate = parseFloat(kpis.conversionRate) < 25 && kpis.totalLeads > 5;
+
+        let suggestion = null;
+
+        if (hasLowHealthCampaigns) {
+          suggestion = {
+            icon: "⚠️",
+            text: `${campaignRows.filter((r) => r.healthScore < 50).length} קמפיינים בעלי בריאות נמוכה דורשים תשומת לב מידית`,
+          };
+        } else if (hasLeadsNeedingFollowUp) {
+          const pendingCount = leads.filter((l) => l.status === "contacted" || l.status === "interested").length;
+          suggestion = {
+            icon: "📞",
+            text: `${pendingCount} לידים ממתינים למעקב — שפר את שיעור ההמרה שלך`,
+          };
+        } else if (campaignsWithoutLeads > 0 && campaigns.length > 3) {
+          suggestion = {
+            icon: "🎯",
+            text: `${campaignsWithoutLeads} קמפיינים עדיין לא הניבו לידים — בדוק את התצורה שלהם`,
+          };
+        } else if (lowConversionRate) {
+          suggestion = {
+            icon: "📈",
+            text: `שיעור ההמרה שלך הוא ${kpis.conversionRate}% — שקול לעדן את הקהל המטרה`,
+          };
+        } else if (kpis.activeBudget > 0) {
+          suggestion = {
+            icon: "✨",
+            text: `כל הקמפיינים שלך בריאים! המשך לעקוב אחר ביצועים וקבע מטרות חדשות`,
+          };
+        }
+
+        if (!suggestion) return null;
+
+        return (
+          <div className="ai-suggestion-banner" style={{ marginBottom: "1rem" }}>
+            <span className="ai-badge">✨ AI</span>
+            <span style={{ fontSize: "1rem" }}>{suggestion.icon}</span>
+            <span style={{ flex: 1, fontSize: "0.82rem", fontWeight: 500, color: "var(--foreground)" }}>
+              {suggestion.text}
+            </span>
+          </div>
+        );
+      })()}
+
       {/* ═══ KPI Row ═══ */}
       <div
         className="ux-stagger"
@@ -676,9 +730,11 @@ export default function CommandCenterPage() {
         />
       </div>
 
+      <div style={{ height: '1px', background: 'var(--border)', margin: '0.5rem 0' }} />
+
       {/* ═══ Intelligence Highlights ═══ */}
       {(engineHighlights.length > 0 || leadHighlights.length > 0) && (
-        <div className="premium-card ux-card ux-card-glow" style={{ padding: "1rem 1.25rem" }}>
+        <div className="premium-card" style={{ padding: "1rem 1.25rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
             <span style={{ fontSize: "1rem" }}>🧠</span>
             <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--foreground)" }}>תובנות מערכת</span>
@@ -723,6 +779,8 @@ export default function CommandCenterPage() {
         </div>
       )}
 
+      <div style={{ height: '1px', background: 'var(--border)', margin: '0.5rem 0' }} />
+
       {/* ═══ Alerts + Status Breakdown row ═══ */}
       <div
         style={{
@@ -733,7 +791,7 @@ export default function CommandCenterPage() {
       >
         {/* Alerts Panel */}
         <div
-          className="premium-card ux-card ux-card-glow"
+          className="premium-card"
           style={{ padding: "1.25rem", maxHeight: "400px", overflow: "hidden" }}
         >
           <div
@@ -824,7 +882,7 @@ export default function CommandCenterPage() {
         </div>
 
         {/* Campaign Status & Platform Breakdown */}
-        <div className="premium-card ux-card ux-card-glow" style={{ padding: "1.25rem" }}>
+        <div className="premium-card" style={{ padding: "1.25rem" }}>
           <div
             style={{
               display: "flex",
@@ -990,8 +1048,10 @@ export default function CommandCenterPage() {
         </div>
       </div>
 
+      <div style={{ height: '1px', background: 'var(--border)', margin: '0.5rem 0' }} />
+
       {/* ═══ Campaign Table ═══ */}
-      <div className="premium-card ux-card ux-card-glow" style={{ padding: "1.25rem" }}>
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
         {/* Table Header + Filters */}
         <div
           style={{
@@ -1280,8 +1340,10 @@ export default function CommandCenterPage() {
         )}
       </div>
 
+      <div style={{ height: '1px', background: 'var(--border)', margin: '0.5rem 0' }} />
+
       {/* ═══ Clients with Active Campaigns ═══ */}
-      <div className="premium-card ux-card ux-card-glow" style={{ padding: "1.25rem" }}>
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
         <div
           style={{
             display: "flex",
@@ -1367,7 +1429,7 @@ export default function CommandCenterPage() {
               return (
                 <div
                   key={cid}
-                  className="ux-stagger-item ux-card"
+                  className="ux-stagger-item premium-card"
                   style={{
                     padding: "0.875rem",
                     background: "var(--surface-raised)",

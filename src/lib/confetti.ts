@@ -3,7 +3,7 @@
  * No external dependencies — appends DOM elements that auto-remove.
  */
 
-const COLORS = ['#00B5FE', '#22C55E', '#F59E0B', '#8b5cf6', '#EF4444', '#ec4899', '#00D9FF'];
+const COLORS = ['#00B5FE', '#22C55E', '#F59E0B', '#00B5FE', '#EF4444', '#ec4899', '#00D9FF'];
 const SHAPES = ['50%', '2px', '0'];
 
 export function fireConfetti(count = 40, durationMs = 3200) {

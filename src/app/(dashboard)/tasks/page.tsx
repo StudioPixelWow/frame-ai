@@ -636,7 +636,7 @@ export default function TasksPage() {
                         return (
                           <div key={task.id} style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }} className="ux-stagger-item">
                             <div
-                              className="task-card ux-card ux-light-sweep"
+                              className="task-card premium-card"
                               onClick={() => openEdit(task)}
                               style={isOverdue ? { borderRight: '3px solid #f87171' } : undefined}
                             >
@@ -816,7 +816,7 @@ export default function TasksPage() {
                                     <div
                                       key={task.id}
                                       onClick={() => openEdit(task)}
-                                      className="ux-card ux-light-sweep ux-stagger-item"
+                                      className="premium-card ux-stagger-item"
                                       style={{
                                         flex: "0 1 auto",
                                         minWidth: "180px",
@@ -947,7 +947,7 @@ export default function TasksPage() {
                                       <div
                                         key={task.id}
                                         onClick={() => openEdit(task as Task)}
-                                        className="ux-card ux-light-sweep ux-stagger-item"
+                                        className="premium-card ux-stagger-item"
                                         style={{
                                           flex: "0 1 auto",
                                           minWidth: "180px",

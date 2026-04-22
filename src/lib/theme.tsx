@@ -12,8 +12,8 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: "dark",
-  resolvedTheme: "dark",
+  theme: "light",
+  resolvedTheme: "light",
   setTheme: () => {},
 });
 
@@ -22,8 +22,8 @@ export function useTheme() {
 }
 
 function getSystemTheme(): ResolvedTheme {
-  if (typeof window === "undefined") return "dark";
-  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  if (typeof window === "undefined") return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
 function resolve(theme: Theme): ResolvedTheme {
@@ -31,13 +31,13 @@ function resolve(theme: Theme): ResolvedTheme {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("dark");
-  const [resolvedTheme, setResolved] = useState<ResolvedTheme>("dark");
+  const [theme, setThemeState] = useState<Theme>("light");
+  const [resolvedTheme, setResolved] = useState<ResolvedTheme>("light");
 
   // Load persisted preference on mount
   useEffect(() => {
     const stored = localStorage.getItem("frameai-theme") as Theme | null;
-    const initial = stored ?? "dark";
+    const initial = stored ?? "light";
     setThemeState(initial);
     setResolved(resolve(initial));
   }, []);

@@ -170,9 +170,9 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
               alignItems: "center",
               gap: "0.375rem",
               whiteSpace: "nowrap",
-              color: "#8b5cf6",
-              borderColor: "rgba(139,92,246,0.3)",
-              background: "rgba(139,92,246,0.06)",
+              color: "#00B5FE",
+              borderColor: "rgba(0,181,254,0.3)",
+              background: "rgba(0,181,254,0.06)",
             }}
           >
             🎬 צור סרטון UGC
@@ -274,8 +274,8 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
                     transition: "border-color 150ms, box-shadow 150ms",
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = isVideo ? "rgba(139,92,246,0.4)" : "var(--accent)";
-                    e.currentTarget.style.boxShadow = isVideo ? "0 0 16px rgba(139,92,246,0.08)" : "0 0 12px rgba(0,0,0,0.06)";
+                    e.currentTarget.style.borderColor = isVideo ? "rgba(0,181,254,0.4)" : "var(--accent)";
+                    e.currentTarget.style.boxShadow = isVideo ? "0 0 16px rgba(0,181,254,0.08)" : "0 0 12px rgba(0,0,0,0.06)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.borderColor = "var(--border)";
@@ -329,11 +329,11 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
                           width: "48px",
                           height: "48px",
                           borderRadius: "50%",
-                          background: "rgba(139,92,246,0.9)",
+                          background: "rgba(0,181,254,0.9)",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
-                          boxShadow: "0 4px 20px rgba(139,92,246,0.4)",
+                          boxShadow: "0 4px 20px rgba(0,181,254,0.4)",
                           transition: "transform 150ms",
                         }}>
                           <span style={{ color: "#fff", fontSize: "1.25rem", marginRight: "-2px" }}>▶</span>
@@ -415,7 +415,7 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
                       style={{
                         fontSize: "0.625rem",
                         padding: "0.2rem 0.5rem",
-                        background: isVideo ? "rgba(139,92,246,0.1)" : "#f0f9ff",
+                        background: isVideo ? "rgba(0,181,254,0.1)" : "#f0f9ff",
                         color: isVideo ? "#a78bfa" : "#0369a1",
                         borderRadius: "0.25rem",
                         fontWeight: 600,
@@ -456,8 +456,8 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
                             flex: 1,
                             padding: "0.5rem 0.75rem",
                             fontSize: "0.75rem",
-                            color: "#8b5cf6",
-                            borderColor: "rgba(139,92,246,0.2)",
+                            color: "#00B5FE",
+                            borderColor: "rgba(0,181,254,0.2)",
                           }}
                         >
                           ▶ צפה
@@ -520,7 +520,7 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
               width: "95%",
               maxHeight: "90vh",
               overflow: "hidden",
-              border: "1px solid rgba(139,92,246,0.2)",
+              border: "1px solid rgba(0,181,254,0.2)",
               boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
             }}
             onClick={(e) => e.stopPropagation()}
@@ -543,8 +543,8 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
                 <button
                   onClick={() => handleDownload(videoModalFile)}
                   style={{
-                    background: "rgba(139,92,246,0.15)",
-                    border: "1px solid rgba(139,92,246,0.25)",
+                    background: "rgba(0,181,254,0.15)",
+                    border: "1px solid rgba(0,181,254,0.25)",
                     borderRadius: "0.375rem",
                     padding: "0.375rem 0.75rem",
                     color: "#c4b5fd",

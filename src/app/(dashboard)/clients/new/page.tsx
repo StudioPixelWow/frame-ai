@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useToast } from '@/components/ui/toast';
 import { useEmployees, useClients } from '@/lib/api/use-entity';
 
-const PRESET_COLORS = ['#00B5FE', '#8b5cf6', '#22c55e', '#f59e0b', '#ec4899', '#ef4444', '#14b8a6', '#6366f1', '#f97316', '#84cc16'];
+const PRESET_COLORS = ['#00B5FE', '#00B5FE', '#22c55e', '#f59e0b', '#ec4899', '#ef4444', '#14b8a6', '#6366f1', '#f97316', '#84cc16'];
 
 const CLIENT_TYPES = [
   { id: 'marketing', label: 'שיווק', emoji: '📢' },

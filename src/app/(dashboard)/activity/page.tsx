@@ -203,7 +203,7 @@ export default function ActivityPage() {
             filteredActivities.map((activity) => (
               <div
                 key={activity.id}
-                className="gact-feed-item ux-card ux-stagger-item"
+                className="gact-feed-item premium-card ux-stagger-item"
                 style={{
                   padding: "1rem",
                   border: "1px solid var(--border)",

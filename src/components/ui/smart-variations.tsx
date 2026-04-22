@@ -395,8 +395,8 @@ export function SmartVariationsPanel({
                   <div
                     style={{
                       padding: "0.625rem 0.75rem",
-                      background: "rgba(139,92,246,0.05)",
-                      border: "1px solid rgba(139,92,246,0.1)",
+                      background: "rgba(0,181,254,0.05)",
+                      border: "1px solid rgba(0,181,254,0.1)",
                       borderRadius: "0.375rem",
                       display: "flex",
                       alignItems: "flex-start",

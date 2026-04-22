@@ -160,7 +160,7 @@ export default function CollectionsPage() {
     const colors: Record<string, string> = {
       retainer: "#22c55e",
       project: "#3b82f6",
-      hosting: "#8b5cf6",
+      hosting: "#0092cc",
       podcast: "#fbbf24",
     };
     return colors[type] || "#6b7280";

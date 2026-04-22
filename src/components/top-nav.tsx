@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ThemeToggle } from "./theme-toggle";
 import { NotificationCenter } from "./notification-center";
 import { RoleSwitcher } from "./role-switcher";
+import { SoundToggle } from "./ui/sound-toggle";
 import { useAuth } from "@/lib/auth/auth-context";
 
 /* ── Nav items matching the preview exactly ─────────────────────────────── */
@@ -112,6 +113,7 @@ export function TopNav() {
             <span>מחובר</span>
           </div>
 
+          <SoundToggle />
           <ThemeToggle />
 
           {/* User avatar pill */}

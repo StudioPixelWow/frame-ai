@@ -1669,7 +1669,7 @@ function StableVideoPreview({ src, videoRef: externalRef, stepName, subtitleData
                 padding: "2px 8px", borderRadius: 4, fontSize: "0.55rem", fontWeight: 700,
                 color: "#fff",
                 background: layer === "Subtitles" ? "rgba(34,197,94,0.8)" :
-                  layer === "B-Roll" ? "rgba(139,92,246,0.8)" :
+                  layer === "B-Roll" ? "rgba(0,181,254,0.8)" :
                   layer === "Transitions" ? "rgba(59,130,246,0.8)" :
                   layer === "Music" ? "rgba(236,72,153,0.8)" :
                   layer === "Cleanup" ? "rgba(245,158,11,0.8)" :
@@ -1717,7 +1717,7 @@ function StepInfo({ data, patch, clients, createClient }: {
   const toast = useToast();
   const [showNewClient, setShowNewClient] = useState(false);
   const [nc, setNc] = useState({ name: "", company: "", contactPerson: "", email: "", notes: "", color: "#00B5FE", clientType: "marketing" as const });
-  const presetColors = ["#00B5FE","#8b5cf6","#22c55e","#f59e0b","#ec4899","#ef4444","#14b8a6","#6366f1","#f97316","#84cc16"];
+  const presetColors = ["#00B5FE","#00B5FE","#22c55e","#f59e0b","#ec4899","#ef4444","#14b8a6","#6366f1","#f97316","#84cc16"];
 
   const handleCreateClient = async () => {
     if (!nc.name.trim()) { toast("שם לקוח הוא שדה חובה", "error"); return; }
@@ -1987,7 +1987,7 @@ function StepUpload({ data, patch }: { data: WizardData; patch: (p: Partial<Wiza
                     <button className="wiz-btn wiz-btn-ghost wiz-btn-sm" onClick={cancelUpload} style={{ fontSize: "0.65rem", padding: "0 4px" }}>ביטול</button>
                   </div>
                   <div style={{ width: "100%", height: 4, borderRadius: 2, background: "rgba(167,139,250,0.15)", overflow: "hidden" }}>
-                    <div style={{ width: `${uploadProgress}%`, height: "100%", borderRadius: 2, background: "linear-gradient(90deg, #a78bfa, #7c3aed)", transition: "width 200ms ease" }} />
+                    <div style={{ width: `${uploadProgress}%`, height: "100%", borderRadius: 2, background: "linear-gradient(90deg, #a78bfa, #0073a8)", transition: "width 200ms ease" }} />
                   </div>
                 </div>
               )}
@@ -4399,8 +4399,8 @@ function StepTransitions({ data, patch, videoSrc: parentVideoSrc }: { data: Wiza
       {/* ═══ AI Analysis Panel ═══ */}
       <div style={{
         marginBottom: "1.25rem", padding: "1rem 1.25rem", borderRadius: "0.75rem",
-        background: "linear-gradient(135deg, rgba(139,92,246,0.06) 0%, rgba(0,181,254,0.06) 100%)",
-        border: "1px solid rgba(139,92,246,0.2)",
+        background: "linear-gradient(135deg, rgba(0,181,254,0.06) 0%, rgba(0,181,254,0.06) 100%)",
+        border: "1px solid rgba(0,181,254,0.2)",
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -4424,8 +4424,8 @@ function StepTransitions({ data, patch, videoSrc: parentVideoSrc }: { data: Wiza
           ]).map(lvl => (
             <button key={lvl.id} onClick={() => setAiIntensity(lvl.id)} title={lvl.desc} style={{
               padding: "0.35rem 0.75rem", borderRadius: "0.375rem", fontSize: "0.78rem", fontWeight: 600,
-              border: aiIntensity === lvl.id ? "2px solid rgba(139,92,246,0.6)" : "1px solid var(--border)",
-              background: aiIntensity === lvl.id ? "rgba(139,92,246,0.1)" : "var(--surface)",
+              border: aiIntensity === lvl.id ? "2px solid rgba(0,181,254,0.6)" : "1px solid var(--border)",
+              background: aiIntensity === lvl.id ? "rgba(0,181,254,0.1)" : "var(--surface)",
               color: aiIntensity === lvl.id ? "rgb(139,92,246)" : "var(--foreground-muted)",
               cursor: "pointer", transition: "all 0.15s",
             }}>
@@ -4441,7 +4441,7 @@ function StepTransitions({ data, patch, videoSrc: parentVideoSrc }: { data: Wiza
             disabled={aiAnalyzing || data.segments.length === 0}
             style={{
               padding: "0.5rem 1rem", borderRadius: "0.5rem", border: "none",
-              background: aiAnalyzing ? "var(--surface-raised)" : "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+              background: aiAnalyzing ? "var(--surface-raised)" : "linear-gradient(135deg, #00B5FE, #6d28d9)",
               color: "#fff", fontWeight: 700, fontSize: "0.82rem", cursor: aiAnalyzing ? "wait" : "pointer",
               opacity: data.segments.length === 0 ? 0.4 : 1, transition: "all 0.2s",
             }}
@@ -4453,7 +4453,7 @@ function StepTransitions({ data, patch, videoSrc: parentVideoSrc }: { data: Wiza
             disabled={aiAnalyzing || data.segments.length === 0}
             style={{
               padding: "0.5rem 1rem", borderRadius: "0.5rem",
-              border: "1px solid rgba(139,92,246,0.4)",
+              border: "1px solid rgba(0,181,254,0.4)",
               background: "transparent", color: "rgb(139,92,246)",
               fontWeight: 600, fontSize: "0.82rem", cursor: aiAnalyzing ? "wait" : "pointer",
               opacity: data.segments.length === 0 ? 0.4 : 1, transition: "all 0.2s",
@@ -4465,7 +4465,7 @@ function StepTransitions({ data, patch, videoSrc: parentVideoSrc }: { data: Wiza
 
         {/* AI Reasoning */}
         {aiReasoning && (
-          <div style={{ marginTop: "0.75rem", padding: "0.6rem 0.75rem", borderRadius: "0.5rem", background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.15)", fontSize: "0.75rem", color: "var(--foreground-muted)", lineHeight: 1.5 }}>
+          <div style={{ marginTop: "0.75rem", padding: "0.6rem 0.75rem", borderRadius: "0.5rem", background: "rgba(0,181,254,0.06)", border: "1px solid rgba(0,181,254,0.15)", fontSize: "0.75rem", color: "var(--foreground-muted)", lineHeight: 1.5 }}>
             <span style={{ fontWeight: 700 }}>🧠 סיכום AI: </span>{aiReasoning}
           </div>
         )}
@@ -4499,7 +4499,7 @@ function StepTransitions({ data, patch, videoSrc: parentVideoSrc }: { data: Wiza
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
                         <span style={{ fontWeight: 700 }}>{catEntry?.nameHe || s.type}</span>
-                        <span style={{ fontSize: "0.62rem", padding: "1px 6px", borderRadius: 4, background: "rgba(139,92,246,0.1)", color: "rgb(139,92,246)", fontWeight: 600 }}>
+                        <span style={{ fontSize: "0.62rem", padding: "1px 6px", borderRadius: 4, background: "rgba(0,181,254,0.1)", color: "rgb(139,92,246)", fontWeight: 600 }}>
                           {CATEGORY_ICONS[s.category] || "📍"} {CATEGORY_LABELS[s.category] || s.category}
                         </span>
                         <span style={{ fontSize: "0.62rem", color: "var(--foreground-muted)" }}>

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from "next/link";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   useTasks,
   useApprovals,
@@ -26,15 +26,6 @@ export default function LandingPage() {
 
   useEffect(() => { setMounted(true); }, []);
 
-  // Pointer-reactive glow
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    if (!heroRef.current) return;
-    const rect = heroRef.current.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    heroRef.current.style.setProperty('--mouse-x', `${x}%`);
-    heroRef.current.style.setProperty('--mouse-y', `${y}%`);
-  }, []);
 
   // Compute actionable items from all data sources
   useEffect(() => {
@@ -165,53 +156,15 @@ export default function LandingPage() {
   }, [tasks, approvals, payments, leads, clients, ganttItems]);
 
   return (
-    <div className="landing" ref={heroRef} onPointerMove={handlePointerMove}>
-      {/* Pointer-reactive glow */}
-      <div className="ux-landing-glow" />
+    <div className="landing" ref={heroRef}>
 
-      {/* Ambient grid overlay */}
-      <div style={{
-        position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none',
-        backgroundImage: 'linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)',
-        backgroundSize: '60px 60px',
-        maskImage: 'radial-gradient(ellipse at center, black 30%, transparent 70%)',
-        WebkitMaskImage: 'radial-gradient(ellipse at center, black 30%, transparent 70%)',
-      }} />
 
-      {/* Floating particles */}
-      <div style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none', overflow: 'hidden' }}>
-        {mounted && Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} style={{
-            position: 'absolute',
-            width: `${3 + i * 1.5}px`, height: `${3 + i * 1.5}px`,
-            borderRadius: '50%',
-            background: i % 2 === 0 ? 'rgba(255,255,255,0.25)' : 'rgba(0,181,254,0.3)',
-            left: `${10 + i * 15}%`,
-            top: `${20 + (i % 3) * 25}%`,
-            animation: `ux-float-particle ${8 + i * 2}s ease-in-out infinite`,
-            animationDelay: `${i * 0.8}s`,
-            filter: 'blur(0.5px)',
-          }} />
-        ))}
-      </div>
 
-      {/* ── LEFT: dominant hero image ── */}
-      <div className="landing-image-col">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="https://s-pixel.co.il/wp-content/uploads/2025/12/Layer-47.png"
-          alt="PixelFrameAI interface"
-          className="landing-hero-img"
-          loading="eager"
-          style={{ animation: 'portalFloat 4s ease-in-out infinite' }}
-        />
-      </div>
-
-      {/* ── CENTER: branding + content stack ── */}
+      {/* ── LEFT: branding + content stack ── */}
       <div className="landing-content">
         {/* Logo */}
         <div style={{
-          display: "flex", flexDirection: "column", alignItems: "center", gap: "0.625rem", marginBottom: "1.75rem",
+          display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.625rem", marginBottom: "1.75rem",
           animation: mounted ? 'ux-hero-reveal 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards' : 'none',
           opacity: mounted ? undefined : 0,
         }}>
@@ -219,7 +172,7 @@ export default function LandingPage() {
           <img
             src="https://s-pixel.co.il/wp-content/uploads/2026/04/Asset-1.png"
             alt="PixelFrameAI"
-            style={{ display: "block", height: 72, width: "auto", objectFit: "contain", filter: "brightness(0) invert(1)" }}
+            style={{ display: "block", height: 36, width: "auto", objectFit: "contain", filter: "var(--logo-filter, none)" }}
           />
           <span className="brand-lockup-name">PixelFrameAI</span>
         </div>
@@ -242,23 +195,15 @@ export default function LandingPage() {
 
         {/* Feature pills — upgraded with glow */}
         <div style={{
-          display: "flex", gap: "0.5rem", flexWrap: "wrap", justifyContent: "center", marginTop: "1.375rem",
+          display: "flex", gap: "0.5rem", flexWrap: "wrap", justifyContent: "flex-end", marginTop: "1.375rem",
           animation: mounted ? 'portalFadeUp 0.7s ease-out 0.45s forwards' : 'none',
           opacity: mounted ? undefined : 0,
         }}>
           {["✂ עריכה חכמה", "🎬 תוכנית פלט", "📊 ניתוח AI", "🌐 עברית מובנית"].map((f, i) => (
             <span
               key={f}
-              className="ux-chip"
+              className="ux-chip landing-chip"
               style={{
-                background: "rgba(255,255,255,0.12)",
-                color: "#fff",
-                border: "1px solid rgba(255,255,255,0.22)",
-                borderRadius: 999,
-                padding: "0.35rem 0.85rem",
-                fontSize: "0.775rem",
-                fontWeight: 600,
-                backdropFilter: "blur(8px)",
                 whiteSpace: "nowrap",
                 animationDelay: `${0.5 + i * 0.08}s`,
                 transition: "all 200ms ease",
@@ -271,19 +216,19 @@ export default function LandingPage() {
 
         {/* AI status hint */}
         <div style={{
-          display: "flex", alignItems: "center", gap: "0.4rem", marginTop: "1.25rem",
+          display: "flex", alignItems: "center", gap: "0.4rem", marginTop: "1.25rem", justifyContent: "flex-end",
           animation: mounted ? 'portalFadeUp 0.7s ease-out 0.6s forwards' : 'none',
           opacity: mounted ? undefined : 0,
         }}>
+          <span style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", fontWeight: 500 }}>
+            AI מערכת פעילה
+          </span>
           <div style={{
             width: 6, height: 6, borderRadius: '50%',
             background: '#22c55e',
             boxShadow: '0 0 8px rgba(34,197,94,0.5)',
             animation: 'la-blink 2s infinite',
           }} />
-          <span style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.6)", fontWeight: 500 }}>
-            AI מערכת פעילה
-          </span>
         </div>
 
         {/* CTAs — upgraded with beam effect */}
@@ -307,7 +252,18 @@ export default function LandingPage() {
         </p>
       </div>
 
-      {/* ── RIGHT: Tasks to Handle widget (RTL) ── */}
+      {/* ── RIGHT: dominant hero image ── */}
+      <div className="landing-image-col">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="https://s-pixel.co.il/wp-content/uploads/2025/12/Layer-47.png"
+          alt="PixelFrameAI interface"
+          className="landing-hero-img"
+          loading="eager"
+        />
+      </div>
+
+      {/* ── OVERLAY: Tasks to Handle widget ── */}
       <div className="landing-activity" style={{
         animation: mounted ? 'portalFadeUp 0.7s ease-out 0.4s forwards' : 'none',
         opacity: mounted ? undefined : 0,
@@ -315,7 +271,7 @@ export default function LandingPage() {
         <div className="la-panel" style={{ direction: 'rtl', textAlign: 'right' }}>
           <div className="la-head">
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", justifyContent: 'flex-end' }}>
-              <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "#fff" }}>משימות לטיפול</span>
+              <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "var(--foreground)" }}>משימות לטיפול</span>
               <span className="la-pulse" />
             </div>
           </div>
@@ -354,10 +310,10 @@ export default function LandingPage() {
                     display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem",
                   }}>
                     <span style={{ fontSize: "1.5rem", opacity: 0.5 }}>✅</span>
-                    <span style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.82rem", fontWeight: 500 }}>
+                    <span style={{ color: "var(--foreground)", fontSize: "0.82rem", fontWeight: 500 }}>
                       אין משימות דחופות
                     </span>
-                    <span style={{ color: "rgba(255,255,255,0.35)", fontSize: "0.7rem" }}>
+                    <span style={{ color: "var(--foreground-subtle)", fontSize: "0.7rem" }}>
                       המערכת שקטה — הכל תקין
                     </span>
                   </div>
@@ -367,11 +323,11 @@ export default function LandingPage() {
           <div className="la-foot" style={{ justifyContent: 'space-between', direction: 'rtl' }}>
             <Link
               href="/tasks"
-              style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.7)", textDecoration: "none" }}
+              style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", textDecoration: "none" }}
             >
               ← צפה בהכל
             </Link>
-            <span style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.5)" }}>
+            <span style={{ fontSize: "0.7rem", color: "var(--foreground-subtle)" }}>
               {actionableItems.length} משימות דחופות
             </span>
           </div>
@@ -379,10 +335,6 @@ export default function LandingPage() {
       </div>
 
       <style>{`
-  @keyframes portalFloat {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-8px); }
-  }
   @keyframes portalFadeUp {
     from { opacity: 0; transform: translateY(15px); }
     to { opacity: 1; transform: translateY(0); }

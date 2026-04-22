@@ -25,7 +25,7 @@ const HEBREW_DAYS  = ["ראשון","שני","שלישי","רביעי","חמיש�
 type EventType = "employee_task" | "task" | "payment" | "lead" | "podcast" | "milestone" | "meeting";
 
 const EVENT_META: Record<EventType, { label: string; color: string; icon: string }> = {
-  employee_task: { label: "משימות עובדים", color: "#8b5cf6", icon: "👤" },
+  employee_task: { label: "משימות עובדים", color: "#0092cc", icon: "👤" },
   task:          { label: "משימות כלליות", color: "#3b82f6", icon: "📋" },
   payment:       { label: "תשלומים",       color: "#fbbf24", icon: "💰" },
   lead:          { label: "פולואפ לידים",  color: "#34d399", icon: "📞" },
@@ -487,7 +487,7 @@ export default function BusinessCalendarPage() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.75rem", marginBottom: "1.5rem" }}>
         {[
           { label: "משימות פעילות", value: stats.total, color: "#3b82f6" },
-          { label: "להיום", value: stats.todayTasks, color: "#8b5cf6" },
+          { label: "להיום", value: stats.todayTasks, color: "#0092cc" },
           { label: "השבוע", value: stats.thisWeek, color: "#22c55e" },
           { label: "באיחור", value: stats.overdue, color: "#ef4444" },
           { label: "הושלמו", value: stats.completed, color: "#10b981" },

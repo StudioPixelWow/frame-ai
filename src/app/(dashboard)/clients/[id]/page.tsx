@@ -19,7 +19,7 @@ import TabCreativeDNA from "./tab-creative-dna";
 import TabResearch from "./tab-research";
 import TabVideos from "./tab-videos";
 
-const AVATAR_COLORS = ["#00B5FE", "#8b5cf6", "#22c55e", "#f59e0b", "#ec4899", "#14b8a6"];
+const AVATAR_COLORS = ["#00B5FE", "#00B5FE", "#22c55e", "#f59e0b", "#ec4899", "#14b8a6"];
 
 function avatarColor(id: string) {
   let hash = 0;
@@ -33,7 +33,7 @@ function initials(name: string) {
 
 const CLIENT_TYPE_LABELS: Record<string, { label: string; color: string; emoji?: string }> = {
   marketing: { label: "פרסום ושיווק", color: "#00B5FE" },
-  branding: { label: "מיתוג", color: "#8b5cf6" },
+  branding: { label: "מיתוג", color: "#00B5FE" },
   websites: { label: "בניית אתרים", color: "#22c55e" },
   hosting: { label: "אחסון", color: "#f59e0b" },
   podcast: { label: "פודקאסט", color: "#CCFF00", emoji: "🎙️" },
@@ -917,7 +917,7 @@ function ClientDetailContent() {
                     display: "inline-flex",
                     alignItems: "center",
                     gap: "0.375rem",
-                    color: "#8b5cf6",
+                    color: "#00B5FE",
                     borderColor: "rgba(139,92,246,0.3)",
                     background: "rgba(139,92,246,0.06)",
                   }}
@@ -1593,7 +1593,7 @@ function ClientDetailContent() {
                             fontSize: "0.8rem",
                             fontWeight: selected ? 700 : 500,
                             borderRadius: "9999px",
-                            border: selected ? "1.5px solid #8b5cf6" : "1px solid rgba(255,255,255,0.1)",
+                            border: selected ? "1.5px solid #00B5FE" : "1px solid rgba(255,255,255,0.1)",
                             background: selected ? "rgba(139,92,246,0.18)" : "rgba(255,255,255,0.04)",
                             color: selected ? "#c4b5fd" : "rgba(255,255,255,0.55)",
                             cursor: (ugcGenerating || ugcScriptGenerating) ? "not-allowed" : "pointer",
@@ -1924,7 +1924,7 @@ function ClientDetailContent() {
                           style={{
                             display: "flex", flexDirection: "column", alignItems: "center", gap: "0.375rem",
                             padding: "0.5rem", borderRadius: "0.5rem",
-                            border: isSelected ? "2px solid #8b5cf6" : "1px solid rgba(255,255,255,0.08)",
+                            border: isSelected ? "2px solid #00B5FE" : "1px solid rgba(255,255,255,0.08)",
                             background: isSelected ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.02)",
                             cursor: ugcGenerating ? "not-allowed" : "pointer",
                             transition: "all 150ms", textAlign: "center",
@@ -1933,7 +1933,7 @@ function ClientDetailContent() {
                           <div style={{
                             width: 56, height: 56, borderRadius: "50%", overflow: "hidden",
                             background: "rgba(255,255,255,0.06)", flexShrink: 0,
-                            border: isSelected ? "2px solid #8b5cf6" : "2px solid transparent",
+                            border: isSelected ? "2px solid #00B5FE" : "2px solid transparent",
                           }}>
                             {imgUrl ? (
                               /* eslint-disable-next-line @next/next/no-img-element */
@@ -2031,12 +2031,12 @@ function ClientDetailContent() {
                           style={{
                             flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "0.375rem",
                             padding: "0.75rem 0.5rem", borderRadius: "0.5rem",
-                            border: isActive ? "2px solid #8b5cf6" : "1px solid rgba(255,255,255,0.08)",
+                            border: isActive ? "2px solid #00B5FE" : "1px solid rgba(255,255,255,0.08)",
                             background: isActive ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.02)",
                             cursor: ugcGenerating ? "not-allowed" : "pointer", transition: "all 150ms",
                           }}
                         >
-                          <div style={{ width: aspectW, height: aspectH, borderRadius: 3, border: `2px solid ${isActive ? "#8b5cf6" : "rgba(255,255,255,0.2)"}`, opacity: isActive ? 1 : 0.5 }} />
+                          <div style={{ width: aspectW, height: aspectH, borderRadius: 3, border: `2px solid ${isActive ? "#00B5FE" : "rgba(255,255,255,0.2)"}`, opacity: isActive ? 1 : 0.5 }} />
                           <span style={{ fontSize: "0.8rem", fontWeight: 700, color: isActive ? "#c4b5fd" : "rgba(255,255,255,0.5)" }}>{fmt}</span>
                           <span style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.3)", textAlign: "center", lineHeight: 1.2 }}>{dim.label}</span>
                         </button>
@@ -2060,7 +2060,7 @@ function ClientDetailContent() {
                           onClick={() => setUgcDuration(dur)}
                           style={{
                             flex: 1, padding: "0.625rem 0.5rem", borderRadius: "0.5rem",
-                            border: isActive ? "2px solid #8b5cf6" : "1px solid rgba(255,255,255,0.08)",
+                            border: isActive ? "2px solid #00B5FE" : "1px solid rgba(255,255,255,0.08)",
                             background: isActive ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.02)",
                             color: isActive ? "#c4b5fd" : "rgba(255,255,255,0.5)",
                             fontSize: "0.85rem", fontWeight: 700, cursor: ugcGenerating ? "not-allowed" : "pointer",
@@ -2096,7 +2096,7 @@ function ClientDetailContent() {
                           style={{
                             display: "flex", flexDirection: "column", alignItems: "center", gap: "0.3rem",
                             padding: "0.5rem 0.25rem", borderRadius: "0.5rem",
-                            border: isActive ? "2px solid #8b5cf6" : "1px solid rgba(255,255,255,0.08)",
+                            border: isActive ? "2px solid #00B5FE" : "1px solid rgba(255,255,255,0.08)",
                             background: isActive ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.02)",
                             cursor: ugcGenerating ? "not-allowed" : "pointer", transition: "all 150ms",
                           }}
@@ -2140,7 +2140,7 @@ function ClientDetailContent() {
                           style={{
                             padding: "0.375rem 0.75rem", borderRadius: "1rem",
                             fontSize: "0.75rem", fontWeight: 600,
-                            border: isActive ? "1px solid #8b5cf6" : "1px solid rgba(255,255,255,0.08)",
+                            border: isActive ? "1px solid #00B5FE" : "1px solid rgba(255,255,255,0.08)",
                             background: isActive ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.02)",
                             color: isActive ? "#c4b5fd" : "rgba(255,255,255,0.4)",
                             cursor: ugcGenerating ? "not-allowed" : "pointer", transition: "all 150ms",
@@ -2185,7 +2185,7 @@ function ClientDetailContent() {
                           onClick={() => ugcLogoInputRef.current?.click()}
                           style={{
                             width: "100%", padding: "0.75rem", borderRadius: "0.5rem",
-                            border: ugcLogoUrl ? "2px solid #8b5cf6" : "1px dashed rgba(255,255,255,0.15)",
+                            border: ugcLogoUrl ? "2px solid #00B5FE" : "1px dashed rgba(255,255,255,0.15)",
                             background: ugcLogoUrl ? "rgba(139,92,246,0.08)" : "rgba(255,255,255,0.02)",
                             color: ugcLogoUrl ? "#c4b5fd" : "rgba(255,255,255,0.35)",
                             fontSize: "0.75rem", fontWeight: 600, cursor: "pointer",
@@ -2216,7 +2216,7 @@ function ClientDetailContent() {
                           onClick={() => ugcProductInputRef.current?.click()}
                           style={{
                             width: "100%", padding: "0.75rem", borderRadius: "0.5rem",
-                            border: ugcProductImageUrl ? "2px solid #8b5cf6" : "1px dashed rgba(255,255,255,0.15)",
+                            border: ugcProductImageUrl ? "2px solid #00B5FE" : "1px dashed rgba(255,255,255,0.15)",
                             background: ugcProductImageUrl ? "rgba(139,92,246,0.08)" : "rgba(255,255,255,0.02)",
                             color: ugcProductImageUrl ? "#c4b5fd" : "rgba(255,255,255,0.35)",
                             fontSize: "0.75rem", fontWeight: 600, cursor: "pointer",
@@ -2377,7 +2377,7 @@ function ClientDetailContent() {
                               <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
                                 <div style={{
                                   height: "100%", borderRadius: 2, width: `${ugcComposeProgress}%`,
-                                  background: "linear-gradient(90deg, #8b5cf6, #a78bfa)",
+                                  background: "linear-gradient(90deg, #00B5FE, #a78bfa)",
                                   transition: "width 0.5s ease",
                                 }} />
                               </div>
@@ -2432,7 +2432,7 @@ function ClientDetailContent() {
                     borderRadius: "0.5rem", border: "none",
                     background: (!ugcAvatarId || !ugcVoiceId || !ugcScript.trim())
                       ? "rgba(139,92,246,0.2)"
-                      : "linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)",
+                      : "linear-gradient(135deg, #00B5FE 0%, #6366f1 100%)",
                     color: "#fff",
                     cursor: (!ugcAvatarId || !ugcVoiceId || !ugcScript.trim()) ? "not-allowed" : "pointer",
                     opacity: (!ugcAvatarId || !ugcVoiceId || !ugcScript.trim()) ? 0.5 : 1,
@@ -2504,7 +2504,7 @@ function ClientAlerts({ client }: { client: Client }) {
 
 const TASK_TYPE_CONFIG: Record<string, { emoji: string; label: string; color: string }> = {
   social: { emoji: "📱", label: "סושיאל", color: "#3b82f6" },
-  internal: { emoji: "🏢", label: "פנימי", color: "#8b5cf6" },
+  internal: { emoji: "🏢", label: "פנימי", color: "#00B5FE" },
   design: { emoji: "🎨", label: "עיצוב", color: "#ec4899" },
   website: { emoji: "🌐", label: "אתר", color: "#10b981" },
   branding: { emoji: "✨", label: "מיתוג", color: "#f59e0b" },
@@ -2514,7 +2514,7 @@ const TASK_TYPE_CONFIG: Record<string, { emoji: string; label: string; color: st
 const TASK_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   new: { label: "חדש", color: "#3b82f6" },
   in_progress: { label: "בעבודה", color: "#f59e0b" },
-  under_review: { label: "בבדיקה", color: "#8b5cf6" },
+  under_review: { label: "בבדיקה", color: "#00B5FE" },
   returned: { label: "הוחזר", color: "#f97316" },
   approved: { label: "אושר", color: "#22c55e" },
   completed: { label: "הושלם", color: "#10b981" },

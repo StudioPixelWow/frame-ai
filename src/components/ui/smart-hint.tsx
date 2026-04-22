@@ -158,7 +158,7 @@ export function AIThinkingDots({ text = "AI חושב..." }: AIThinkingProps) {
         gap: "0.5rem",
         padding: "0.6rem 0.85rem",
         borderRadius: "0.5rem",
-        background: "linear-gradient(135deg, rgba(0,181,254,0.04), rgba(139,92,246,0.04))",
+        background: "linear-gradient(135deg, rgba(0,181,254,0.04), rgba(0,181,254,0.04))",
         border: "1px solid rgba(0,181,254,0.12)",
         direction: "rtl",
       }}

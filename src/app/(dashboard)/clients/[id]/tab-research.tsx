@@ -272,7 +272,7 @@ export default function TabResearch({ client }: TabResearchProps) {
   const getCategoryColor = (category: string) => {
     switch (category) {
       case 'gap': return '#3b82f6';
-      case 'underused_angle': return '#8b5cf6';
+      case 'underused_angle': return '#0092cc';
       case 'positioning': return '#f97316';
       case 'trend': return '#ef4444';
       default: return '#6b7280';
@@ -397,7 +397,7 @@ export default function TabResearch({ client }: TabResearchProps) {
   const IDEA_CATEGORY_LABELS: Record<string, { label: string; color: string }> = {
     weakness: { label: 'חולשה', color: '#ef4444' },
     opportunity: { label: 'הזדמנות', color: '#22c55e' },
-    audience: { label: 'קהל', color: '#8b5cf6' },
+    audience: { label: 'קהל', color: '#0092cc' },
     competitor: { label: 'מתחרה', color: '#3b82f6' },
     trend: { label: 'טרנד', color: '#f59e0b' },
     seasonal: { label: 'עונתי', color: '#06b6d4' },
@@ -466,7 +466,7 @@ export default function TabResearch({ client }: TabResearchProps) {
           <p style={{ fontSize: '1rem', color: 'var(--foreground-muted)', maxWidth: '400px' }}>ניתוח מעמיק של העסק, המתחרים, וההזדמנויות — הכל מבוסס AI</p>
           <button
             onClick={handleGenerateResearch}
-            style={{ backgroundColor: 'transparent', background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.75rem 1.5rem', fontSize: '1rem', fontWeight: 600, cursor: 'pointer', transition: 'transform 0.2s ease, box-shadow 0.2s ease' }}
+            style={{ backgroundColor: 'transparent', background: 'linear-gradient(135deg, #0092cc 0%, #6d28d9 100%)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.75rem 1.5rem', fontSize: '1rem', fontWeight: 600, cursor: 'pointer', transition: 'transform 0.2s ease, box-shadow 0.2s ease' }}
             onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 16px rgba(139, 92, 246, 0.3)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
           >
@@ -514,7 +514,7 @@ export default function TabResearch({ client }: TabResearchProps) {
               <button
                 onClick={handleGenerateResearch}
                 disabled={generating}
-                style={{ backgroundColor: 'transparent', background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', opacity: generating ? 0.6 : 1 }}
+                style={{ backgroundColor: 'transparent', background: 'linear-gradient(135deg, #0092cc 0%, #6d28d9 100%)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', opacity: generating ? 0.6 : 1 }}
               >
                 🔄 חקור מחדש
               </button>
@@ -602,7 +602,7 @@ export default function TabResearch({ client }: TabResearchProps) {
           </div>
 
           {/* Section A: Identity */}
-          <div style={{ ...cardStyle, marginBottom: '2rem', borderLeft: '4px solid #8b5cf6' }}>
+          <div style={{ ...cardStyle, marginBottom: '2rem', borderLeft: '4px solid #0092cc' }}>
             <h3 style={sectionTitleStyle}>🧠 מי הלקוח</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
               <div>
@@ -699,7 +699,7 @@ export default function TabResearch({ client }: TabResearchProps) {
                   <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--foreground)', marginBottom: '0.5rem' }}>סוגי תוכן:</p>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
                     {competitor.contentTypes.map((type, tidx) => (
-                      <span key={tidx} style={{ backgroundColor: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.3)', color: '#8b5cf6', padding: '0.25rem 0.75rem', borderRadius: '0.375rem', fontSize: '0.75rem', fontWeight: 500 }}>{type}</span>
+                      <span key={tidx} style={{ backgroundColor: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.3)', color: '#0092cc', padding: '0.25rem 0.75rem', borderRadius: '0.375rem', fontSize: '0.75rem', fontWeight: 500 }}>{type}</span>
                     ))}
                   </div>
                   <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--foreground)', marginBottom: '0.5rem' }}>הבדל בטון:</p>
@@ -776,12 +776,12 @@ export default function TabResearch({ client }: TabResearchProps) {
               <h3 style={sectionTitleStyle}>🎯 קונספטים לקמפיינים</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
                 {safeCampaignConcepts.map((concept, idx) => (
-                  <div key={idx} style={{ ...cardStyle, borderLeft: '4px solid #8b5cf6' }} {...hoverHandlers}>
+                  <div key={idx} style={{ ...cardStyle, borderLeft: '4px solid #0092cc' }} {...hoverHandlers}>
                     <h4 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--foreground)', marginBottom: '0.75rem' }}>{concept.name}</h4>
                     <p style={{ fontSize: '0.875rem', color: 'var(--foreground-muted)', marginBottom: '1rem', lineHeight: '1.5' }}>{concept.goal}</p>
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
                       {concept.platforms.map((p, pidx) => (
-                        <span key={pidx} style={{ backgroundColor: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.3)', color: '#8b5cf6', padding: '0.2rem 0.6rem', borderRadius: '0.375rem', fontSize: '0.75rem', fontWeight: 500 }}>{p}</span>
+                        <span key={pidx} style={{ backgroundColor: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.3)', color: '#0092cc', padding: '0.2rem 0.6rem', borderRadius: '0.375rem', fontSize: '0.75rem', fontWeight: 500 }}>{p}</span>
                       ))}
                     </div>
                     <p style={{ fontSize: '0.8125rem', color: 'var(--foreground-muted)' }}>פורמט: {concept.format}</p>

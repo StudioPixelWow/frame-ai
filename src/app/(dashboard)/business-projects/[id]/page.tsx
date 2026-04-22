@@ -38,7 +38,7 @@ interface FileFormData {
 const statusColors: Record<MilestoneStatus, string> = {
   pending: '#6b7280',
   in_progress: '#f59e0b',
-  submitted: '#8b5cf6',
+  submitted: '#0092cc',
   approved: '#22c55e',
   returned: '#f97316',
 };
@@ -82,7 +82,7 @@ const projectStatusLabels: Record<string, string> = {
 const projectStatusColors: Record<string, string> = {
   not_started: '#6b7280',
   in_progress: '#f59e0b',
-  awaiting_approval: '#8b5cf6',
+  awaiting_approval: '#0092cc',
   waiting_for_client: '#f97316',
   completed: '#22c55e',
 };
@@ -2309,7 +2309,7 @@ export default function BusinessProjectPage() {
                           <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(99,102,241,0.15)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.25)' }}>מקדמה</span>
                         )}
                         {(payment as any)?.paymentType === 'final' && (
-                          <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(168,85,247,0.15)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.25)' }}>סופי</span>
+                          <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(0,181,254,0.15)', color: '#38bdf8', border: '1px solid rgba(0,181,254,0.25)' }}>סופי</span>
                         )}
                         {(payment as any)?.isDue === true && payment?.status !== 'paid' && (
                           <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.25)' }}>מגיע לתשלום</span>

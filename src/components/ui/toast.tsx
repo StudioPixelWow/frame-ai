@@ -93,10 +93,10 @@ const TOAST_CONFIG: Record<ToastType, {
   },
   ai: {
     icon: '🧠',
-    bg: 'linear-gradient(135deg, rgba(0,181,254,0.08), rgba(139,92,246,0.08))',
+    bg: 'linear-gradient(135deg, rgba(0,181,254,0.08), rgba(0,181,254,0.08))',
     border: 'rgba(0,181,254,0.25)',
-    glow: 'rgba(139,92,246,0.15)',
-    accent: '#8b5cf6',
+    glow: 'rgba(0,181,254,0.15)',
+    accent: '#00B5FE',
   },
 };
 
@@ -189,8 +189,8 @@ function ToastItem({ t, onRemove }: { t: Toast; onRemove: (id: string) => void }
             textTransform: 'uppercase',
             padding: '0.1rem 0.35rem',
             borderRadius: '0.2rem',
-            background: 'linear-gradient(135deg, rgba(0,181,254,0.15), rgba(139,92,246,0.15))',
-            color: '#8b5cf6',
+            background: 'linear-gradient(135deg, rgba(0,181,254,0.15), rgba(0,181,254,0.15))',
+            color: '#00B5FE',
             marginBottom: '0.25rem',
             marginInlineEnd: '0.4rem',
           }}>

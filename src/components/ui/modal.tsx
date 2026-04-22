@@ -89,15 +89,16 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
         <div
           style={{
             backgroundColor: 'var(--surface-raised)',
-            borderRadius: '0.75rem',
-            border: `1px solid var(--border)`,
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+            borderRadius: '1rem',
+            border: `1px solid rgba(0,181,254,0.12)`,
+            boxShadow: '0 40px 100px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,181,254,0.06), 0 0 80px rgba(0,181,254,0.04)',
             maxWidth: '32rem',
             width: '100%',
             maxHeight: '90vh',
             display: 'flex',
             flexDirection: 'column',
-            backdropFilter: 'blur(20px)',
+            backdropFilter: 'blur(24px) saturate(1.4)',
+            WebkitBackdropFilter: 'blur(24px) saturate(1.4)',
           }}
           className="ux-modal-enter"
         >

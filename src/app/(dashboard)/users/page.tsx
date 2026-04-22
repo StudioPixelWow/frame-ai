@@ -10,7 +10,7 @@ import type { User } from "@/lib/db/schema";
 const ROLE_CONFIG: Record<string, { label: string; color: string }> = {
   admin: { label: "מנהל", color: "#22c55e" },
   manager: { label: "מנהל פרויקטים", color: "#f59e0b" },
-  editor: { label: "עורך", color: "#8b5cf6" },
+  editor: { label: "עורך", color: "#0092cc" },
   viewer: { label: "צופה", color: "#6b7280" },
 };
 

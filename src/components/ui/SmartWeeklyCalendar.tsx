@@ -211,7 +211,7 @@ export default function SmartWeeklyCalendar() {
           time: m.startTime || "",
           type: "meeting" as const,
           status: m.status,
-          color: "#8b5cf6",
+          color: "#00B5FE",
         }));
 
       const items = [...dayMeetings, ...dayTasks].sort((a, b) => a.time.localeCompare(b.time));
@@ -417,8 +417,8 @@ export default function SmartWeeklyCalendar() {
 
         {/* ═══ AI Insights Panel ═══ */}
         <div style={{
-          background: "linear-gradient(135deg, rgba(139,92,246,0.05), rgba(59,130,246,0.05))",
-          border: "1px solid rgba(139,92,246,0.15)",
+          background: "linear-gradient(135deg, rgba(0,181,254,0.05), rgba(59,130,246,0.05))",
+          border: "1px solid rgba(0,181,254,0.15)",
           borderRadius: "0.75rem",
           padding: "1rem",
         }}>

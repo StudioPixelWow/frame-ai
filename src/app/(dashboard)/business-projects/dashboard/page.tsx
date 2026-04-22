@@ -348,7 +348,7 @@ export default function BusinessProjectsDashboard() {
           <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(168,85,247,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
             📝
           </div>
-          <div className="dash-kpi-value" style={{ color: '#c084fc' }}>{paymentKpis.awaitingFinal}</div>
+          <div className="dash-kpi-value" style={{ color: '#38bdf8' }}>{paymentKpis.awaitingFinal}</div>
           <div className="dash-kpi-label">ממתינים לתשלום סופי</div>
         </div>
         <div className="dash-kpi" style={{ animationDelay: '0.3s' }}>

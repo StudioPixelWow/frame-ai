@@ -86,7 +86,7 @@ export default function AccountingPage() {
         }}
       >
         <div
-          className="ux-card ux-light-sweep ux-stagger-item"
+          className="premium-card ux-stagger-item"
           style={{
             background: "var(--surface-raised)",
             border: "1px solid var(--border)",
@@ -103,7 +103,7 @@ export default function AccountingPage() {
         </div>
 
         <div
-          className="ux-card ux-light-sweep ux-stagger-item"
+          className="premium-card ux-stagger-item"
           style={{
             background: "var(--surface-raised)",
             border: "1px solid var(--border)",
@@ -123,7 +123,7 @@ export default function AccountingPage() {
         </div>
 
         <div
-          className="ux-card ux-light-sweep ux-stagger-item"
+          className="premium-card ux-stagger-item"
           style={{
             background: "var(--surface-raised)",
             border: "1px solid var(--border)",
@@ -154,7 +154,7 @@ export default function AccountingPage() {
       >
         {/* Payments Card */}
         <button
-          className="ux-card ux-light-sweep ux-stagger-item"
+          className="premium-card ux-stagger-item"
           onClick={() => router.push("/accounting/payments")}
           style={{
             background: "var(--surface-raised)",
@@ -199,7 +199,7 @@ export default function AccountingPage() {
 
         {/* Collections Card */}
         <button
-          className="ux-card ux-light-sweep ux-stagger-item"
+          className="premium-card ux-stagger-item"
           onClick={() => router.push("/accounting/collections")}
           style={{
             background: "var(--surface-raised)",
@@ -244,7 +244,7 @@ export default function AccountingPage() {
 
         {/* Accountant Documents Card */}
         <button
-          className="ux-card ux-light-sweep ux-stagger-item"
+          className="premium-card ux-stagger-item"
           onClick={() => router.push("/accounting/documents")}
           style={{
             background: "var(--surface-raised)",
@@ -289,7 +289,7 @@ export default function AccountingPage() {
 
         {/* Podcast Card */}
         <button
-          className="ux-card ux-light-sweep ux-stagger-item"
+          className="premium-card ux-stagger-item"
           onClick={() => router.push("/accounting/podcast")}
           style={{
             background: "var(--surface-raised)",

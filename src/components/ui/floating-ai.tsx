@@ -312,7 +312,7 @@ export function FloatingAI() {
         </div>
       )}
 
-      {/* Floating orb */}
+      {/* Floating orb — DRAMATIC */}
       <div
         style={{
           position: "fixed",
@@ -321,13 +321,28 @@ export function FloatingAI() {
           zIndex: 1400,
         }}
       >
+        {/* Outer glow ring */}
+        <div
+          style={{
+            position: "absolute",
+            inset: "-8px",
+            borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(0,181,254,0.12) 0%, transparent 70%)",
+            animation: "ux-orb-breathe 3s ease-in-out infinite",
+            pointerEvents: "none",
+          }}
+        />
         <button
           className="ux-ai-orb"
           onClick={toggle}
           aria-label="AI Assistant"
           title="תובנות AI"
+          style={{
+            width: "56px",
+            height: "56px",
+          }}
         >
-          <span style={{ fontSize: "1.15rem", position: "relative", zIndex: 1 }}>
+          <span style={{ fontSize: "1.35rem", position: "relative", zIndex: 1 }}>
             {open ? "×" : "🧠"}
           </span>
 
@@ -336,20 +351,21 @@ export function FloatingAI() {
             <span
               style={{
                 position: "absolute",
-                top: "-2px",
-                insetInlineEnd: "-2px",
-                width: "18px",
-                height: "18px",
+                top: "-4px",
+                insetInlineEnd: "-4px",
+                width: "22px",
+                height: "22px",
                 borderRadius: "50%",
-                background: "#ef4444",
+                background: "linear-gradient(135deg, #ef4444, #dc2626)",
                 color: "#fff",
-                fontSize: "0.6rem",
+                fontSize: "0.65rem",
                 fontWeight: 800,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 border: "2px solid var(--surface)",
                 zIndex: 2,
+                boxShadow: "0 0 12px rgba(239,68,68,0.4)",
               }}
             >
               {highPriorityCount}

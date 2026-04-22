@@ -411,7 +411,7 @@ export default function EmployeesPage() {
               style={{ textDecoration: "none", color: "inherit" }}
             >
               <div
-                className="ux-stagger-item ux-card ux-light-sweep"
+                className="ux-stagger-item premium-card"
                 style={{
                   background: "var(--surface-raised)",
                   border: "1px solid var(--border)",
@@ -505,7 +505,7 @@ export default function EmployeesPage() {
                   {[
                     { label: "פתוחות", value: stats.open, color: "var(--accent)", bg: "rgba(0, 181, 254, 0.08)", border: "rgba(0, 181, 254, 0.2)" },
                     { label: "איחור", value: stats.overdue, color: stats.overdue > 0 ? "#ef4444" : "var(--foreground-muted)", bg: stats.overdue > 0 ? "rgba(239, 68, 68, 0.08)" : "rgba(107, 114, 128, 0.08)", border: stats.overdue > 0 ? "rgba(239, 68, 68, 0.2)" : "rgba(107, 114, 128, 0.2)" },
-                    { label: "בבדיקה", value: stats.underReview, color: stats.underReview > 0 ? "#8b5cf6" : "var(--foreground-muted)", bg: stats.underReview > 0 ? "rgba(139, 92, 246, 0.08)" : "rgba(107, 114, 128, 0.08)", border: stats.underReview > 0 ? "rgba(139, 92, 246, 0.2)" : "rgba(107, 114, 128, 0.2)" },
+                    { label: "בבדיקה", value: stats.underReview, color: stats.underReview > 0 ? "#0092cc" : "var(--foreground-muted)", bg: stats.underReview > 0 ? "rgba(0, 146, 204, 0.08)" : "rgba(107, 114, 128, 0.08)", border: stats.underReview > 0 ? "rgba(0, 146, 204, 0.2)" : "rgba(107, 114, 128, 0.2)" },
                     { label: "השבוע", value: stats.thisWeek, color: "#22c55e", bg: "rgba(34, 197, 94, 0.08)", border: "rgba(34, 197, 94, 0.2)" },
                   ].map((s) => (
                     <div key={s.label} style={{ background: s.bg, border: `1px solid ${s.border}`, borderRadius: "0.5rem", padding: "0.6rem", textAlign: "center" }}>

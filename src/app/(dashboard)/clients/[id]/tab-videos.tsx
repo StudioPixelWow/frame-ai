@@ -15,7 +15,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   draft:          { label: 'טיוטה',        color: '#6b7280', bg: 'rgba(107, 114, 128, 0.12)' },
   analysing:      { label: 'בעיבוד',       color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)' },
   approved:       { label: 'אושר',         color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.12)' },
-  rendering:      { label: 'ברנדור',       color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.12)' },
+  rendering:      { label: 'ברנדור',       color: '#0092cc', bg: 'rgba(0, 146, 204, 0.12)' },
   complete:       { label: 'מוכן',         color: '#22c55e', bg: 'rgba(34, 197, 94, 0.12)' },
   failed:         { label: 'נכשל',         color: '#dc2626', bg: 'rgba(220, 38, 38, 0.12)' },
   sent_to_client: { label: 'נשלח ללקוח',  color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.12)' },

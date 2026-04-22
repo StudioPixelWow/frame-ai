@@ -86,7 +86,7 @@ export function deriveProjectData(
 export const STATUS_COLORS: Record<DerivedProjectStatus, string> = {
   not_started: '#6b7280',
   in_progress: '#f59e0b',
-  awaiting_approval: '#8b5cf6',
+  awaiting_approval: '#0092cc',
   waiting_for_client: '#f97316',
   completed: '#22c55e',
 };

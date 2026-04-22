@@ -8,7 +8,7 @@ import type { EmployeeTask } from "@/lib/db/schema";
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   new: { label: "חדש", color: "#3b82f6", bg: "rgba(59, 130, 246, 0.12)" },
   in_progress: { label: "בעבודה", color: "#f59e0b", bg: "rgba(245, 158, 11, 0.12)" },
-  under_review: { label: "בבדיקה", color: "#8b5cf6", bg: "rgba(139, 92, 246, 0.12)" },
+  under_review: { label: "בבדיקה", color: "#0092cc", bg: "rgba(0, 146, 204, 0.12)" },
   returned: { label: "הוחזר", color: "#ef4444", bg: "rgba(239, 68, 68, 0.12)" },
   approved: { label: "אושר", color: "#22c55e", bg: "rgba(34, 197, 94, 0.12)" },
   completed: { label: "הושלם", color: "#6b7280", bg: "rgba(107, 114, 128, 0.12)" },
@@ -122,7 +122,7 @@ export default function EmployeeDashboardPage({ params }: { params: Promise<{ id
   const tabs = [
     { key: "today" as const, label: "היום", count: todayTasks.length, color: "#3b82f6" },
     { key: "overdue" as const, label: "באיחור", count: overdueTasks.length, color: "#ef4444" },
-    { key: "review" as const, label: "בבדיקה", count: reviewTasks.length, color: "#8b5cf6" },
+    { key: "review" as const, label: "בבדיקה", count: reviewTasks.length, color: "#0092cc" },
     { key: "upcoming" as const, label: "קרוב", count: upcomingTasks.length, color: "#f59e0b" },
   ];
 
@@ -200,7 +200,7 @@ export default function EmployeeDashboardPage({ params }: { params: Promise<{ id
           { label: "פתוחות", value: activeTasks.length, color: "var(--accent)", bg: "rgba(0, 181, 254, 0.08)", border: "rgba(0, 181, 254, 0.2)" },
           { label: "היום", value: todayTasks.length, color: "#3b82f6", bg: "rgba(59, 130, 246, 0.08)", border: "rgba(59, 130, 246, 0.2)" },
           { label: "באיחור", value: overdueTasks.length, color: "#ef4444", bg: "rgba(239, 68, 68, 0.08)", border: "rgba(239, 68, 68, 0.2)" },
-          { label: "בבדיקה", value: reviewTasks.length, color: "#8b5cf6", bg: "rgba(139, 92, 246, 0.08)", border: "rgba(139, 92, 246, 0.2)" },
+          { label: "בבדיקה", value: reviewTasks.length, color: "#0092cc", bg: "rgba(0, 146, 204, 0.08)", border: "rgba(0, 146, 204, 0.2)" },
         ].map((card) => (
           <div key={card.label} style={{
             background: card.bg, border: `1px solid ${card.border}`,

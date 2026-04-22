@@ -27,7 +27,7 @@ const GANTT_STATUS_COLORS: Record<string, { label: string; color: string }> = {
   draft: { label: "טיוטה", color: "#6b7280" },
   planned: { label: "מתוכנן", color: "#3b82f6" },
   in_progress: { label: "בעבודה", color: "#f59e0b" },
-  submitted_for_approval: { label: "ממתין לאישור", color: "#8b5cf6" },
+  submitted_for_approval: { label: "ממתין לאישור", color: "#0092cc" },
   returned_for_changes: { label: "חזר לתיקון", color: "#f97316" },
   approved: { label: "מאושר", color: "#22c55e" },
   scheduled: { label: "מתוזמן", color: "#06b6d4" },
@@ -40,7 +40,7 @@ const RESEARCH_SOURCE_LABELS: Record<string, { label: string; emoji: string; col
   weakness: { label: "חולשה", emoji: "⚠️", color: "#ef4444" },
   opportunity: { label: "הזדמנות", emoji: "🚀", color: "#22c55e" },
   competitor: { label: "מתחרה", emoji: "🧲", color: "#3b82f6" },
-  audience: { label: "קהל", emoji: "👥", color: "#8b5cf6" },
+  audience: { label: "קהל", emoji: "👥", color: "#0092cc" },
   campaign_concept: { label: "קמפיין", emoji: "🎯", color: "#f59e0b" },
   content_angle: { label: "זווית תוכן", emoji: "💡", color: "#f97316" },
 };
@@ -50,7 +50,7 @@ const ITEM_TYPE_CONFIG: Record<string, { emoji: string; label: string; color: st
   story: { emoji: "📸", label: "סטורי", color: "#ec4899" },
   reel: { emoji: "🎬", label: "ריל", color: "#f59e0b" },
   carousel: { emoji: "🖼️", label: "קרוסלה", color: "#10b981" },
-  internal_task: { emoji: "🏢", label: "פנימי", color: "#8b5cf6" },
+  internal_task: { emoji: "🏢", label: "פנימי", color: "#0092cc" },
   campaign_task: { emoji: "📣", label: "קמפיין", color: "#f97316" },
 };
 
@@ -72,7 +72,7 @@ const FORMAT_CONFIG: Record<string, string> = {
 };
 
 const TASK_TYPE_CONFIG: Record<string, { emoji: string; label: string; color: string }> = {
-  internal: { emoji: "🏢", label: "פנימי", color: "#8b5cf6" },
+  internal: { emoji: "🏢", label: "פנימי", color: "#0092cc" },
   design: { emoji: "🎨", label: "עיצוב", color: "#ec4899" },
   website: { emoji: "🌐", label: "אתר", color: "#10b981" },
   branding: { emoji: "✨", label: "מיתוג", color: "#f59e0b" },
@@ -119,7 +119,7 @@ function getProtectionBadge(item: ClientGanttItem, sentToTaskIds: Set<string>): 
   if (item.status === "published") return { label: "פורסם", color: "#15803d" };
   if (item.status === "in_progress") return { label: "בעבודה", color: "#f59e0b" };
   if (item.status === "scheduled") return { label: "מתוזמן", color: "#06b6d4" };
-  if (item.status === "submitted_for_approval") return { label: "ממתין לאישור", color: "#8b5cf6" };
+  if (item.status === "submitted_for_approval") return { label: "ממתין לאישור", color: "#0092cc" };
   return null;
 }
 
@@ -1377,7 +1377,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                               await updateGanttItem(item.id, { status: "submitted_for_approval" } as any);
                               toast("נשלח לאישור", "success");
                             }}
-                            style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem", color: "#8b5cf6" }}
+                            style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem", color: "#0092cc" }}
                           >
                             🔍 שלח לאישור
                           </button>
@@ -1634,7 +1634,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                       {/* Video & Campaign Connection */}
                       <div
                         style={{
-                          background: "linear-gradient(135deg, #3b82f610, #8b5cf610)",
+                          background: "linear-gradient(135deg, #3b82f610, #0092cc10)",
                           padding: "1rem",
                           borderRadius: "0.5rem",
                           border: "1px solid var(--border)",

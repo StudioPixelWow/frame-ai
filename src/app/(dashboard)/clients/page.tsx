@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { wow } from '@/lib/wow';
 import { useClients, useProjects, useTasks, useCampaigns } from "@/lib/api/use-entity";
 import { useEmployees } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
@@ -11,7 +12,7 @@ import { Modal } from "@/components/ui/modal";
 import { SmartHint } from "@/components/ui/smart-hint";
 import type { Client } from "@/lib/db/schema";
 
-const AVATAR_COLORS = ["#00B5FE", "#8b5cf6", "#22c55e", "#f59e0b", "#ec4899", "#14b8a6"];
+const AVATAR_COLORS = ["#00B5FE", "#00B5FE", "#22c55e", "#f59e0b", "#ec4899", "#14b8a6"];
 
 function avatarColor(id: string) {
   let hash = 0;
@@ -31,7 +32,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 
 const CLIENT_TYPE_LABELS: Record<string, { label: string; color: string; emoji?: string }> = {
   marketing: { label: "פרסום ושיווק", color: "#00B5FE", emoji: "📢" },
-  branding: { label: "מיתוג", color: "#8b5cf6", emoji: "🎨" },
+  branding: { label: "מיתוג", color: "#00B5FE", emoji: "🎨" },
   websites: { label: "בניית אתרים", color: "#22c55e", emoji: "🌐" },
   hosting: { label: "אחסון", color: "#f59e0b", emoji: "🖥️" },
   podcast: { label: "פודקאסט", color: "#CCFF00", emoji: "🎙️" },
@@ -269,6 +270,7 @@ export default function ClientsPage() {
       <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
         {/* Header Section */}
         <div
+          className="ux-hero-enter"
           style={{
             display: "flex",
             alignItems: "center",
@@ -335,6 +337,7 @@ export default function ClientsPage() {
 
         {/* Filters Bar — compact single row with sort integrated */}
         <div
+          className="ux-section-divider"
           style={{
             display: "flex",
             gap: "0.75rem",
@@ -537,7 +540,7 @@ export default function ClientsPage() {
               return (
                 <div
                   key={client.id}
-                  className="agd-card ux-card ux-light-sweep ux-stagger-item"
+                  className="agd-card premium-card ux-stagger-item"
                   style={{
                     display: "flex",
                     flexDirection: "column",
@@ -768,7 +771,7 @@ export default function ClientsPage() {
                         borderBottom: "1px solid var(--border)",
                         backgroundColor: idx % 2 === 0 ? "transparent" : "var(--surface-raised)",
                       }}
-                      className="ux-table-row"
+                      className="ux-table-row premium-card"
                     >
                       <td style={{ padding: "1rem", display: "flex", gap: "0.75rem", alignItems: "center" }}>
                         <div
@@ -869,8 +872,8 @@ export default function ClientsPage() {
                           style={{
                             fontSize: "0.7rem",
                             padding: "0.3rem 0.6rem",
-                            color: "#8b5cf6",
-                            borderColor: "rgba(139,92,246,0.3)",
+                            color: "#00B5FE",
+                            borderColor: "rgba(0,181,254,0.3)",
                           }}
                           onClick={() => router.push(`/clients/${client.id}?ugc=1`)}
                         >
@@ -1038,7 +1041,7 @@ export default function ClientsPage() {
               צבע אישור
             </label>
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              {["#00B5FE", "#8b5cf6", "#22c55e", "#f59e0b", "#ec4899", "#14b8a6", "#ef4444"].map((color) => (
+              {["#00B5FE", "#00B5FE", "#22c55e", "#f59e0b", "#ec4899", "#14b8a6", "#ef4444"].map((color) => (
                 <button
                   key={color}
                   onClick={() => setForm({ ...form, color })}

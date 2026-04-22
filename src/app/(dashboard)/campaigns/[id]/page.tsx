@@ -6,6 +6,8 @@ import { useCampaigns } from '@/lib/api/use-entity';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { SmartVariationsPanel, type CampaignVariation } from '@/components/ui/smart-variations';
+import { SuccessModal } from '@/components/ui/success-modal';
+import { sound } from '@/lib/sound-feedback';
 import type { Campaign, CampaignStatus } from '@/lib/db/schema';
 
 const STATUS_COLORS: Record<CampaignStatus, string> = {
@@ -13,7 +15,7 @@ const STATUS_COLORS: Record<CampaignStatus, string> = {
   in_progress: '#3b82f6',
   waiting_approval: '#f59e0b',
   approved: '#10b981',
-  scheduled: '#8b5cf6',
+  scheduled: '#0092cc',
   active: '#22c55e',
   completed: '#00B5FE',
 };
@@ -78,6 +80,7 @@ export default function CampaignDetailsPage({ params }: { params: Promise<{ id: 
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isVariationsOpen, setIsVariationsOpen] = useState(false);
+  const [showVariationSuccess, setShowVariationSuccess] = useState(false);
 
   if (loading) {
     return (
@@ -172,8 +175,8 @@ export default function CampaignDetailsPage({ params }: { params: Promise<{ id: 
           ? `${campaign.notes}\n\n— וריאציה ${variation.angleLabel} הוחלה —\nכותרת: ${variation.headline}\nCTA: ${variation.cta}`
           : `— וריאציה ${variation.angleLabel} —\nכותרת: ${variation.headline}\nCTA: ${variation.cta}`,
       });
-      toast('הווריאציה הוחלה בהצלחה על הקמפיין', 'ai' as any);
       setIsVariationsOpen(false);
+      setShowVariationSuccess(true);
     } catch {
       toast('שגיאה בהחלת הווריאציה', 'error');
     }
@@ -655,9 +658,9 @@ export default function CampaignDetailsPage({ params }: { params: Promise<{ id: 
             className="ux-btn ux-btn-glow"
             style={{
               padding: '0.75rem 1rem',
-              background: 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(59,130,246,0.15))',
+              background: 'linear-gradient(135deg, rgba(0,146,204,0.15), rgba(59,130,246,0.15))',
               color: '#a78bfa',
-              border: '1px solid rgba(139,92,246,0.3)',
+              border: '1px solid rgba(0,146,204,0.3)',
               borderRadius: '0.5rem',
               fontSize: '0.95rem',
               fontWeight: '700',
@@ -669,12 +672,12 @@ export default function CampaignDetailsPage({ params }: { params: Promise<{ id: 
               gap: '0.5rem',
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(139,92,246,0.25), rgba(59,130,246,0.25))';
+              (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(0,146,204,0.25), rgba(59,130,246,0.25))';
               (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)';
-              (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 20px rgba(139,92,246,0.2)';
+              (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 20px rgba(0,146,204,0.2)';
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(59,130,246,0.15))';
+              (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(0,146,204,0.15), rgba(59,130,246,0.15))';
               (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
               (e.currentTarget as HTMLElement).style.boxShadow = 'none';
             }}
@@ -880,6 +883,30 @@ export default function CampaignDetailsPage({ params }: { params: Promise<{ id: 
           </div>
         </div>
       </Modal>
+
+      {/* Variation applied success modal */}
+      <SuccessModal
+        show={showVariationSuccess}
+        icon="🧬"
+        title="הווריאציה הוחלה בהצלחה!"
+        subtitle="הטקסט של הקמפיין עודכן עם הזווית החדשה"
+        confetti={true}
+        actions={[
+          {
+            label: "צפה בקמפיין",
+            icon: "👁️",
+            onClick: () => setShowVariationSuccess(false),
+            variant: "primary",
+          },
+          {
+            label: "חזור לקמפיינים",
+            icon: "📋",
+            onClick: () => { window.location.href = '/campaigns'; },
+            variant: "ghost",
+          },
+        ]}
+        onClose={() => setShowVariationSuccess(false)}
+      />
     </main>
   );
 }

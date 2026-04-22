@@ -184,7 +184,7 @@ export default function ApprovalsPage() {
       ) : (
         <div className="apr-board ux-stagger" style={{ marginTop: '1rem' }}>
           {approvals.map((approval) => (
-            <div key={approval.id} className="apr-card wow-lift ux-card ux-card-glow ux-stagger-item">
+            <div key={approval.id} className="apr-card premium-card ux-stagger-item">
               {/* Card Header */}
               <div className="apr-card-header" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
                 <span className={`apr-type-badge apr-st-${approval.status}`}>

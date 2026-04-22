@@ -5,7 +5,7 @@ import type { Client, Employee } from "@/lib/db/schema";
 
 const CLIENT_TYPE_LABELS: Record<string, { label: string; color: string; emoji?: string }> = {
   marketing: { label: "מרקטינג", color: "#00B5FE" },
-  branding: { label: "ברנדינג", color: "#8b5cf6" },
+  branding: { label: "ברנדינג", color: "#00B5FE" },
   websites: { label: "אתרים", color: "#22c55e" },
   hosting: { label: "הוסטינג", color: "#f59e0b" },
   podcast: { label: "פודקאסט", color: "#CCFF00", emoji: "🎙️" },

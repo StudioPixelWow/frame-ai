@@ -46,7 +46,7 @@ const SOURCE_OPTIONS = [
 ];
 
 const INTEREST_TYPE_COLORS: Record<LeadInterestType, string> = {
-  marketing: "#8b5cf6",
+  marketing: "#0092cc",
   podcast: "#06b6d4",
   branding: "#ec4899",
   website: "#14b8a6",

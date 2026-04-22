@@ -146,7 +146,7 @@ export default function PaymentsPage() {
       retainer: "#3b82f6",
       project: "#10b981",
       hosting: "#f59e0b",
-      podcast: "#8b5cf6",
+      podcast: "#0092cc",
     };
     return colors[type] || "#6b7280";
   };

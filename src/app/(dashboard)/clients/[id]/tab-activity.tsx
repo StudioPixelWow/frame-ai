@@ -42,7 +42,7 @@ function getRelativeTime(dateStr: string): string {
 }
 
 const EMAIL_TYPE_LABELS: Record<string, { label: string; color: string }> = {
-  gantt_approval: { label: "אישור גאנט", color: "#8b5cf6" },
+  gantt_approval: { label: "אישור גאנט", color: "#0092cc" },
   weekly_update: { label: "עדכון שבועי", color: "#3b82f6" },
   payment_reminder: { label: "תזכורת תשלום", color: "#f59e0b" },
   portal_login: { label: "גישה לפורטל", color: "#00B5FE" },

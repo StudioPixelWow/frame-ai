@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { wow } from '@/lib/wow';
 import {
   useClients,
   useTasks,
@@ -35,7 +36,7 @@ const modules = [
   { icon: "📋", title: "פרויקטים", desc: "פרויקטי מיתוג, אתרים והוסטינג", route: "/business-projects", color: "#f97316", bg: "rgba(249,115,22,0.13)" },
   { icon: "💰", title: "הנהלת חשבונות", desc: "תשלומים, גביות ומסמכי רואה חשבון", route: "/accounting", color: "#10b981", bg: "rgba(16,185,129,0.13)" },
   { icon: "✅", title: "אישורים", desc: "מרכז אישורים לתוכן, וידאו ופרויקטים", route: "/approvals", color: "#ef4444", bg: "rgba(239,68,68,0.13)" },
-  { icon: "🌐", title: "פורטל לקוח", desc: "גישת לקוחות לצפייה ואישור תוכן", route: "/client-portal", color: "#8b5cf6", bg: "rgba(139,92,246,0.13)" },
+  { icon: "🌐", title: "פורטל לקוח", desc: "גישת לקוחות לצפייה ואישור תוכן", route: "/client-portal", color: "#00B5FE", bg: "rgba(0,181,254,0.13)" },
   { icon: "📈", title: "דשבורד מנהלים", desc: "מרכז שליטה, התראות ותובנות AI", route: "/exec-dashboard", color: "#ec4899", bg: "rgba(236,72,153,0.13)" },
 ];
 
@@ -74,9 +75,9 @@ function KPICard({ value, label, color, icon, href }: {
   value: string | number; label: string; color: string; icon: string; href: string;
 }) {
   return (
-    <Link href={href} className="premium-card ux-card ux-light-sweep glow-hover" style={{ textDecoration: "none", textAlign: "center", padding: "1.25rem 1rem" }}>
+    <Link href={href} className="premium-card" style={{ textDecoration: "none", textAlign: "center", padding: "1.25rem 1rem" }}>
       <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>{icon}</div>
-      <div style={{ fontSize: "2rem", fontWeight: 800, color, lineHeight: 1, marginBottom: "0.35rem", letterSpacing: "-0.02em" }}>
+      <div className="ux-kpi-value" style={{ fontSize: "2rem", fontWeight: 800, color, lineHeight: 1, marginBottom: "0.35rem", letterSpacing: "-0.02em" }}>
         {typeof value === "number" ? <AnimatedCounter value={value} /> : value}
       </div>
       <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
@@ -93,7 +94,7 @@ function SummaryPane({ title, icon, color, rows, href, linkText }: {
   href: string; linkText: string;
 }) {
   return (
-    <div className="premium-card ux-card ux-card-glow" style={{ direction: "rtl" }}>
+    <div className="premium-card" style={{ direction: "rtl" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
         <span style={{ fontSize: "1.125rem" }}>{icon}</span>
         <span style={{ fontSize: "0.875rem", fontWeight: 700, color }}>{title}</span>
@@ -242,14 +243,9 @@ export default function DashboardPage() {
 
   return (
     <div className="mhd-root">
-      {/* Background orbs */}
-      <div className="mhd-orb mhd-orb-1" />
-      <div className="mhd-orb mhd-orb-2" />
-      <div className="mhd-orb mhd-orb-3" />
-
       <div className="mhd-content stagger-in">
         {/* ═══ 1. HERO SECTION ═══ */}
-        <div className="mhd-header">
+        <div className="mhd-header ux-hero-enter">
           <div>
             <div className="mhd-greeting">
               {greeting}, <span className="mhd-greeting-name">טל</span> 👋
@@ -299,6 +295,30 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* ═══ 1.5. AI CONTEXTUAL SUGGESTION ═══ */}
+        {!isLoading && analytics && (() => {
+          const suggestion = analytics.overdueTasks > 3
+            ? { icon: "🔥", text: `יש ${analytics.overdueTasks} משימות בפיגור — AI ממליץ לתעדף ולחלק מחדש`, action: "צפה במשימות", href: "/tasks" }
+            : analytics.clientsMissingGantt > 2
+            ? { icon: "📊", text: `${analytics.clientsMissingGantt} לקוחות ללא תוכנית חודשית — צור תוכניות כדי לשמור על הסדר`, action: "נהל לקוחות", href: "/clients" }
+            : analytics.overduePaymentsCount > 0
+            ? { icon: "💰", text: `${formatCurrency(analytics.overdueTotal)} בפיגור גבייה — צור קשר עם הלקוחות`, action: "צפה בתשלומים", href: "/accounting" }
+            : analytics.activeLeads > 5
+            ? { icon: "🎯", text: `${analytics.activeLeads} לידים פעילים — AI מזהה הזדמנות לסגירת עסקאות`, action: "נהל לידים", href: "/leads" }
+            : null;
+          if (!suggestion) return null;
+          return (
+            <div className="ai-suggestion-banner">
+              <span className="ai-badge">✨ AI</span>
+              <span style={{ fontSize: "1rem" }}>{suggestion.icon}</span>
+              <span style={{ flex: 1, fontSize: "0.82rem", fontWeight: 500, color: "var(--foreground)" }}>{suggestion.text}</span>
+              <Link href={suggestion.href} style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--accent)", textDecoration: "none", whiteSpace: "nowrap" }}>
+                {suggestion.action} ←
+              </Link>
+            </div>
+          );
+        })()}
+
         {/* ═══ 2. URGENT ACTIONS ═══ */}
         {!isLoading && analytics && (analytics.overduePaymentsCount > 0 || analytics.overdueTasks > 0 || analytics.pendingApprovals > 0 || analytics.dueTodayFollowUps > 0) && (
           <div style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)", borderRadius: "0.75rem", padding: "1.25rem", direction: "rtl" }}>
@@ -307,32 +327,32 @@ export default function DashboardPage() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
               {analytics.overduePaymentsCount > 0 && (
-                <Link href="/accounting" className="premium-card ux-card ux-light-sweep" style={{ textDecoration: "none", padding: "0.75rem" }}>
+                <Link href="/accounting" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem" }}>
                   <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>תשלומים בפיגור</div>
                   <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ef4444" }}>{analytics.overduePaymentsCount}</div>
                   <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>{formatCurrency(analytics.overdueTotal)}</div>
                 </Link>
               )}
               {analytics.overdueTasks > 0 && (
-                <Link href="/tasks" className="premium-card ux-card ux-light-sweep" style={{ textDecoration: "none", padding: "0.75rem" }}>
+                <Link href="/tasks" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem" }}>
                   <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>משימות בפיגור</div>
                   <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#f97316" }}>{analytics.overdueTasks}</div>
                 </Link>
               )}
               {analytics.pendingApprovals > 0 && (
-                <Link href="/approvals" className="premium-card ux-card ux-light-sweep" style={{ textDecoration: "none", padding: "0.75rem" }}>
+                <Link href="/approvals" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem" }}>
                   <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>אישורים ממתינים</div>
                   <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ef4444" }}>{analytics.pendingApprovals}</div>
                 </Link>
               )}
               {analytics.dueTodayFollowUps > 0 && (
-                <Link href="/leads" className="premium-card ux-card ux-light-sweep" style={{ textDecoration: "none", padding: "0.75rem" }}>
+                <Link href="/leads" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem" }}>
                   <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>פולואפים היום</div>
                   <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#f97316" }}>{analytics.dueTodayFollowUps}</div>
                 </Link>
               )}
               {analytics.clientsMissingGantt > 0 && (
-                <Link href="/clients" className="premium-card ux-card ux-light-sweep" style={{ textDecoration: "none", padding: "0.75rem" }}>
+                <Link href="/clients" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem" }}>
                   <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>לקוחות ללא תוכנית</div>
                   <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#f59e0b" }}>{analytics.clientsMissingGantt}</div>
                 </Link>
@@ -424,7 +444,7 @@ export default function DashboardPage() {
         {analytics && (analytics.todayTasks.length > 0 || analytics.todayPodcasts.length > 0) && (
           <div>
             <div className="mhd-section-label">📅 ציר הזמן של היום</div>
-            <div className="premium-card ux-card" style={{ direction: "rtl" }}>
+            <div className="premium-card" style={{ direction: "rtl" }}>
               {analytics.todayTasks.map(t => (
                 <TimelineItem
                   key={t.id}
@@ -466,7 +486,7 @@ export default function DashboardPage() {
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1rem" }}>
                 {trends.slice(0, 4).map(trend => (
-                  <div key={trend.id} className="premium-card ux-card ux-light-sweep" style={{ padding: "1rem" }}>
+                  <div key={trend.id} className="premium-card" style={{ padding: "1rem" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
                       <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)", flex: 1 }}>
                         {trend.name}
@@ -507,7 +527,7 @@ export default function DashboardPage() {
           <div className="mhd-section-label">מודולי המערכת</div>
           <div className="mhd-grid">
             {modules.map(m => (
-              <Link key={m.title} href={m.route} className="mhd-card ux-light-sweep" style={{ "--mc": m.color, textDecoration: "none" } as React.CSSProperties}>
+              <Link key={m.title} href={m.route} className="mhd-card premium-card" style={{ "--mc": m.color, textDecoration: "none" } as React.CSSProperties}>
                 <div className="mhd-card-icon" style={{ background: m.bg, boxShadow: `0 0 0 1px ${m.color}28` }}>
                   <span style={{ filter: `drop-shadow(0 2px 10px ${m.color}90)` }}>{m.icon}</span>
                 </div>
@@ -527,7 +547,7 @@ export default function DashboardPage() {
             <div className="mhd-section-label">✨ תובנות מערכת</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
               {opInsights.slice(0, 3).map((insight, idx) => (
-                <div key={idx} className="premium-card ux-card">
+                <div key={idx} className="premium-card">
                   <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>{insight.icon}</div>
                   <div style={{ fontSize: "0.875rem", fontWeight: 600, marginBottom: "0.5rem" }}>{insight.title}</div>
                   <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", lineHeight: 1.5 }}>{insight.description}</div>
@@ -542,7 +562,7 @@ export default function DashboardPage() {
             <div className="mhd-section-label">🔔 התראות המערכת</div>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               {alerts.slice(0, 5).map((alert, idx) => (
-                <div key={idx} className="premium-card ux-card ux-stagger-item" style={{ padding: "0.75rem", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+                <div key={idx} className="premium-card ux-stagger-item" style={{ padding: "0.75rem", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
                   <div style={{ width: "0.5rem", height: "0.5rem", borderRadius: "50%", background: alert.severity === "critical" ? "#ef4444" : "#f59e0b", marginTop: "0.35rem", flexShrink: 0 }} />
                   <div>
                     <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>{alert.title}</div>

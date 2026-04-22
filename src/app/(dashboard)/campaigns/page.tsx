@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
+import { wow } from '@/lib/wow';
 import { useCampaigns, useClients, useLeads } from '@/lib/api/use-entity';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -64,7 +65,7 @@ const STATUS_COLORS: Record<CampaignStatus, string> = {
   in_progress: '#3b82f6',
   waiting_approval: '#f59e0b',
   approved: '#10b981',
-  scheduled: '#8b5cf6',
+  scheduled: '#0092cc',
   active: '#22c55e',
   completed: '#00B5FE',
 };
@@ -137,7 +138,7 @@ function HealthBadge({ campaign, size = 'normal' }: { campaign: Campaign; size?:
           <div style={{ display: 'flex', gap: '2px', marginTop: '2px' }}>
             {[
               { v: breakdown.structure, max: 25, c: '#3b82f6' },
-              { v: breakdown.creative, max: 25, c: '#8b5cf6' },
+              { v: breakdown.creative, max: 25, c: '#0092cc' },
               { v: breakdown.targeting, max: 20, c: '#f59e0b' },
               { v: breakdown.activity, max: 30, c: '#22c55e' },
             ].map((seg, i) => (
@@ -915,7 +916,7 @@ export default function CampaignsPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
         {/* ── Header ───────────────────────────────────────────── */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div className="ux-hero-enter" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--foreground)', margin: 0, letterSpacing: '-0.02em' }}>
               קמפיינים
@@ -927,7 +928,7 @@ export default function CampaignsPage() {
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <Link
               href="/campaign-builder"
-              className="mod-btn-primary"
+              className="mod-btn-primary ux-btn ux-btn-glow"
               style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 700, borderRadius: '0.5rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
             >
               🚀 בנה קמפיין
@@ -951,7 +952,7 @@ export default function CampaignsPage() {
             { label: 'ממתינים', value: kpiStats.pending, color: '#f59e0b' },
             { label: 'תקציב כולל', value: `₪${(kpiStats.budget / 1000).toFixed(0)}K`, color: 'var(--accent)' },
             { label: 'בריאות ממוצעת', value: kpiStats.avgHealth, color: kpiStats.avgHealth >= 80 ? '#22c55e' : kpiStats.avgHealth >= 50 ? '#f59e0b' : '#ef4444' },
-            { label: 'לידים', value: (allLeads || []).length, color: '#8b5cf6' },
+            { label: 'לידים', value: (allLeads || []).length, color: '#0092cc' },
             { label: 'התראות', value: allAlerts.length, color: alertsSummary.high > 0 ? '#ef4444' : allAlerts.length > 0 ? '#f59e0b' : '#22c55e' },
           ].map((kpi) => (
             <div key={kpi.label} className="premium-card" style={{ padding: '1rem', textAlign: 'center' }}>
@@ -1055,6 +1056,36 @@ export default function CampaignsPage() {
           );
         })()}
 
+        {/* ── AI Contextual Suggestion Banner ──────────────────── */}
+        {(() => {
+          const drafts = (campaigns || []).filter(c => c.status === 'draft');
+          const noBudget = (campaigns || []).filter(c => c.status === 'active' && (!c.budget || c.budget === 0));
+          const staleDrafts = drafts.filter(c => {
+            const created = c.createdAt ? new Date(c.createdAt).getTime() : 0;
+            return created > 0 && (Date.now() - created) / 86400000 > 7;
+          });
+
+          const suggestion = noBudget.length > 0
+            ? { icon: '💰', text: `${noBudget.length} קמפיינים פעילים ללא תקציב — הגדר תקציב לשיפור ביצועים`, badge: 'אזהרה' }
+            : staleDrafts.length > 0
+            ? { icon: '⏰', text: `${staleDrafts.length} טיוטות מעל שבוע — קדם או ארכב כדי לשמור על סדר`, badge: 'המלצה' }
+            : drafts.length > 3
+            ? { icon: '📋', text: `${drafts.length} טיוטות ממתינות — AI ממליץ לסיים ולהפעיל`, badge: 'תובנה' }
+            : null;
+
+          if (!suggestion) return null;
+          return (
+            <div className="ai-suggestion-banner" style={{ marginBottom: '1rem' }}>
+              <span className="ai-badge">✨ AI</span>
+              <span style={{ fontSize: '1rem' }}>{suggestion.icon}</span>
+              <span style={{ flex: 1, fontSize: '0.82rem', fontWeight: 500, color: 'var(--foreground)' }}>{suggestion.text}</span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '0.2rem', background: 'rgba(0,181,254,0.1)', color: 'var(--accent)' }}>
+                {suggestion.badge}
+              </span>
+            </div>
+          );
+        })()}
+
         {/* ── Empty states ─────────────────────────────────────── */}
         {filteredCampaigns.length === 0 ? (
           <div className="ux-page-transition">
@@ -1084,7 +1115,7 @@ export default function CampaignsPage() {
               return (
                 <div
                   key={c.id}
-                  className="premium-card glow-hover ux-light-sweep ux-card"
+                  className="premium-card"
                   style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', borderRight: `3px solid ${health.color}` }}
                 >
                   {/* Top row: name + status */}
@@ -1097,7 +1128,7 @@ export default function CampaignsPage() {
                         {c.clientName || 'ללא לקוח'}
                       </p>
                     </div>
-                    <div style={{ backgroundColor: STATUS_COLORS[c.status || 'draft'], color: 'white', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.65rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                    <div className={c.status === 'active' ? 'ux-status-active' : ''} style={{ backgroundColor: STATUS_COLORS[c.status || 'draft'], color: 'white', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.65rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
                       {STATUS_LABELS[c.status || 'draft'] || 'לא ידוע'}
                     </div>
                   </div>
@@ -1151,7 +1182,7 @@ export default function CampaignsPage() {
                       <div style={{ fontSize: '0.6rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>תאריכים</div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: (leadInsightsMap[c.id]?.leadCount || 0) > 0 ? '#8b5cf6' : 'var(--foreground-muted)' }}>{leadInsightsMap[c.id]?.leadCount || 0}</div>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: (leadInsightsMap[c.id]?.leadCount || 0) > 0 ? '#0092cc' : 'var(--foreground-muted)' }}>{leadInsightsMap[c.id]?.leadCount || 0}</div>
                       <div style={{ fontSize: '0.6rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>לידים</div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
@@ -1183,7 +1214,7 @@ export default function CampaignsPage() {
                     <button type="button" onClick={() => handleOpenModal(c)} className="mod-btn-ghost" style={{ flex: 1, padding: '0.35rem', fontSize: '0.68rem', fontWeight: 600, borderRadius: '0.3rem', cursor: 'pointer' }}>
                       עריכה
                     </button>
-                    <button type="button" onClick={() => handleAnalyzeCampaign(c)} style={{ flex: 1, padding: '0.35rem', fontSize: '0.68rem', fontWeight: 600, borderRadius: '0.3rem', cursor: 'pointer', background: 'linear-gradient(135deg, rgba(0,181,254,0.08), rgba(139,92,246,0.08))', border: '1px solid rgba(0,181,254,0.2)', color: 'var(--accent)' }}>
+                    <button type="button" onClick={() => handleAnalyzeCampaign(c)} className="ux-ai-banner" style={{ flex: 1, padding: '0.35rem', fontSize: '0.68rem', fontWeight: 600, borderRadius: '0.3rem', cursor: 'pointer', background: 'linear-gradient(135deg, rgba(0,181,254,0.08), rgba(0,146,204,0.08))', border: '1px solid rgba(0,181,254,0.2)', color: 'var(--accent)' }}>
                       🧠 נתח
                     </button>
                     <button

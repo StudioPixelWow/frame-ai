@@ -83,7 +83,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     .status-submitted_for_approval { background: #fef3c7; color: #d97706; }
     .status-returned_for_changes { background: #fff7ed; color: #ea580c; }
     .status-cancelled { background: #fee2e2; color: #dc2626; }
-    .platform-badge { display: inline-block; padding: 1px 8px; border-radius: 8px; font-size: 10px; font-weight: 600; background: #f3e8ff; color: #7c3aed; }
+    .platform-badge { display: inline-block; padding: 1px 8px; border-radius: 8px; font-size: 10px; font-weight: 600; background: #f3e8ff; color: #0092cc; }
     .footer { text-align: center; margin-top: 24px; font-size: 11px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 12px; }
     .summary { display: flex; justify-content: center; gap: 32px; margin-bottom: 20px; }
     .summary-card { text-align: center; padding: 12px 20px; background: #f8f9fa; border-radius: 10px; border: 1px solid #e5e7eb; }

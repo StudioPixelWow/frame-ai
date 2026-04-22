@@ -366,7 +366,7 @@ function ConnectionCard({
 
   return (
     <div
-      className="premium-card glow-hover"
+      className="premium-card"
       style={{
         padding: "1.25rem",
         display: "flex",

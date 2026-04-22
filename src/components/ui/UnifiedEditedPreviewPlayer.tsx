@@ -597,7 +597,7 @@ export const UnifiedEditedPreviewPlayer = forwardRef<UnifiedPreviewHandle, Unifi
             <div style={{
               position: "absolute", top: 8, right: 8, zIndex: 15,
               fontSize: "0.6rem", fontWeight: 700, padding: "2px 8px", borderRadius: 6,
-              background: "rgba(139,92,246,0.9)", color: "#fff",
+              background: "rgba(0,181,254,0.9)", color: "#fff",
             }}>
               ✨ {activeEffectsNow.length} אפקט{activeEffectsNow.length > 1 ? "ים" : ""}
             </div>
@@ -621,7 +621,7 @@ export const UnifiedEditedPreviewPlayer = forwardRef<UnifiedPreviewHandle, Unifi
             { label: "כתוביות", active: !!activeSeg, color: "#3b82f6" },
             { label: "הדגשה", active: !!(activeSeg?.highlightWord || (activeSeg?.emphasisWords && activeSeg.emphasisWords.length > 0)), color: "#fbbf24" },
             { label: "B-Roll", active: !!activeBroll, color: "#22c55e" },
-            { label: "אפקטים", active: activeEffectsNow.length > 0, color: "#8b5cf6" },
+            { label: "אפקטים", active: activeEffectsNow.length > 0, color: "#00B5FE" },
           ] as const).map(l => (
             <span key={l.label} style={{
               fontSize: "0.62rem", padding: "2px 6px", borderRadius: 4,

@@ -262,7 +262,7 @@ export function computeInsights(input: InsightsInput): ManagementInsight[] {
 export const INSIGHT_TYPE_CONFIG: Record<InsightType, { color: string; bg: string; label: string }> = {
   attention: { color: '#ef4444', bg: 'rgba(239, 68, 68, 0.08)', label: 'דורש תשומת לב' },
   planning: { color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.08)', label: 'תכנון' },
-  workload: { color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.08)', label: 'עומסים' },
+  workload: { color: '#0092cc', bg: 'rgba(139, 92, 246, 0.08)', label: 'עומסים' },
   payment: { color: '#10b981', bg: 'rgba(16, 185, 129, 0.08)', label: 'כספים' },
   recommendation: { color: '#00B5FE', bg: 'rgba(0, 181, 254, 0.08)', label: 'המלצה' },
 };

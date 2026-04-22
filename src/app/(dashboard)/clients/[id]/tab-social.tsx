@@ -101,7 +101,7 @@ const getStatusColor = (
     pending: { bg: "#d4a500", text: "#1a1a1a", label: "ממתין" },
     approved: { bg: "#10b981", text: "#ffffff", label: "אושר" },
     published: { bg: "#00B5FE", text: "#ffffff", label: "פורסם" },
-    scheduled: { bg: "#8b5cf6", text: "#ffffff", label: "מתוזמן" },
+    scheduled: { bg: "#0092cc", text: "#ffffff", label: "מתוזמן" },
     submitted_for_approval: {
       bg: "#f59e0b",
       text: "#ffffff",

@@ -371,7 +371,7 @@ export default function TabCreativeDNA({ client, employees }: TabCreativeDNAProp
               padding: "0.875rem 2rem",
               background: isGenerating
                 ? "var(--foreground-muted)"
-                : "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)",
+                : "linear-gradient(135deg, #00B5FE 0%, #0073a8 100%)",
               color: "white",
               border: "none",
               borderRadius: "0.5rem",
@@ -417,7 +417,7 @@ export default function TabCreativeDNA({ client, employees }: TabCreativeDNAProp
                 padding: "0.625rem 1.125rem",
                 background: isGenerating
                   ? "var(--foreground-muted)"
-                  : "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)",
+                  : "linear-gradient(135deg, #00B5FE 0%, #0073a8 100%)",
                 color: "white",
                 border: "none",
                 borderRadius: "0.375rem",
@@ -696,7 +696,7 @@ export default function TabCreativeDNA({ client, employees }: TabCreativeDNAProp
                   padding: "0.625rem 1.125rem",
                   background: isSavingEdit
                     ? "var(--foreground-muted)"
-                    : "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)",
+                    : "linear-gradient(135deg, #00B5FE 0%, #0073a8 100%)",
                   color: "white",
                   border: "none",
                   borderRadius: "0.375rem",

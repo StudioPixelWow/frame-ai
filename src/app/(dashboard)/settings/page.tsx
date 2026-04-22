@@ -1016,7 +1016,7 @@ export default function SettingsPage() {
         <div style={{ marginBottom: '1.25rem' }}>
           <label style={labelStyle}>שימוש עיקרי</label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.4rem' }}>
-            <span style={{ fontSize: '0.7rem', padding: '3px 10px', borderRadius: '12px', background: 'rgba(139,92,246,0.15)', color: '#8b5cf6' }}>ספק תמלול ראשי</span>
+            <span style={{ fontSize: '0.7rem', padding: '3px 10px', borderRadius: '12px', background: 'rgba(139,92,246,0.15)', color: '#0092cc' }}>ספק תמלול ראשי</span>
           </div>
         </div>
 

@@ -71,7 +71,7 @@ export async function POST(
         status: 'active',
         retainer_amount: 0,
         retainer_day: 1,
-        color: '#8B5CF6',
+        color: '#0092cc',
         converted_from_lead: lead.id,
         created_at: now,
         updated_at: now,

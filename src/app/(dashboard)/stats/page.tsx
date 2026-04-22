@@ -26,7 +26,7 @@ interface BarChartItem {
 const TASK_STATUS_COLORS: Record<string, string> = {
   new: '#3B82F6',
   in_progress: '#F59E0B',
-  under_review: '#8b5cf6',
+  under_review: '#0092cc',
   returned: '#EF4444',
   approved: '#22C55E',
   completed: '#22C55E',
@@ -38,7 +38,7 @@ const TASK_STATUS_COLORS: Record<string, string> = {
 
 const PAYMENT_TYPE_COLORS: Record<string, string> = {
   invoice: '#3B82F6',
-  retainer: '#8b5cf6',
+  retainer: '#0092cc',
   milestone: '#22C55E',
   expense: '#F59E0B',
 };
@@ -118,7 +118,7 @@ function ModernKPICard({
 }) {
   return (
     <div
-      className="ux-card ux-card-glow ux-stagger-item"
+      className="premium-card ux-stagger-item"
       style={{
         background: 'var(--surface)',
         border: `2px solid ${color}30`,
@@ -219,7 +219,7 @@ function ModernKPICard({
 function RevenueChart({ months }: { months: Array<{ label: string; value: number; pct: number }> }) {
   return (
     <div
-      className="ux-card ux-light-sweep"
+      className="premium-card"
       style={{
         background: 'var(--surface)',
         border: '1px solid var(--border)',
@@ -312,7 +312,7 @@ function ClientDonutChart({ data }: { data: Array<{ label: string; value: number
 
   return (
     <div
-      className="ux-card ux-light-sweep"
+      className="premium-card"
       style={{
         background: 'var(--surface)',
         border: '1px solid var(--border)',
@@ -425,7 +425,7 @@ function TaskStatusBar({
 
   return (
     <div
-      className="ux-card ux-light-sweep"
+      className="premium-card"
       style={{
         background: 'var(--surface)',
         border: '1px solid var(--border)',
@@ -508,7 +508,7 @@ function HorizontalBarChart({
 
   return (
     <div
-      className="ux-card ux-light-sweep"
+      className="premium-card"
       style={{
         background: 'var(--surface)',
         border: '1px solid var(--border)',
@@ -589,7 +589,7 @@ function CampaignCard({
 }) {
   return (
     <div
-      className="ux-card ux-card-glow ux-stagger-item"
+      className="premium-card ux-stagger-item"
       style={{
         background: 'var(--surface)',
         border: '1px solid var(--border)',
@@ -895,7 +895,7 @@ export default function AnalyticsDashboard() {
           label: CLIENT_TYPE_LABELS[type] || type,
           value: count,
           pct: (count / maxClientType) * 100,
-          color: '#8b5cf6',
+          color: '#0092cc',
         });
       });
 
@@ -1125,7 +1125,7 @@ export default function AnalyticsDashboard() {
     return Object.entries(typeCounts).map(([label, value]) => ({
       label,
       value,
-      color: analytics.clientTypeDistribution.find((item) => item.label === label)?.color || '#8b5cf6',
+      color: analytics.clientTypeDistribution.find((item) => item.label === label)?.color || '#0092cc',
     }));
   }, [analytics]);
 
@@ -1237,7 +1237,7 @@ export default function AnalyticsDashboard() {
         title: 'לקוח מובילה',
         description: `${topClient.name} עם ${topClient.taskCount} משימות פעילות`,
         time: 'חודש זה',
-        color: '#8b5cf6',
+        color: '#0092cc',
       });
     }
 
@@ -1403,7 +1403,7 @@ export default function AnalyticsDashboard() {
               label="לקוחות פעילים"
               value={analytics.activeClients}
               subtitle={`${analytics.mostActiveClients.length} בעומס`}
-              color="#8b5cf6"
+              color="#0092cc"
             />
             <ModernKPICard
               icon="📢"
@@ -1476,7 +1476,7 @@ export default function AnalyticsDashboard() {
               label="ממתין לאישור"
               value={analytics.pendingApprovals}
               subtitle="אישורים פתוחים"
-              color="#8b5cf6"
+              color="#0092cc"
             />
             <ModernKPICard
               icon="📋"
@@ -1580,10 +1580,10 @@ export default function AnalyticsDashboard() {
             {computedInsights.map((insight, idx) => (
               <div
                 key={idx}
-                className="ux-card ux-card-glow ux-stagger-item"
+                className="premium-card ux-stagger-item"
                 style={{
-                  background: 'linear-gradient(135deg, #7c3aed20, #8b5cf620)',
-                  border: '1px solid #8b5cf640',
+                  background: 'linear-gradient(135deg, #0092cc20, #0092cc20)',
+                  border: '1px solid #0092cc40',
                   borderRadius: '1rem',
                   padding: '1.75rem',
                   display: 'flex',
@@ -1594,13 +1594,13 @@ export default function AnalyticsDashboard() {
                   cursor: 'default',
                 }}
                 onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.borderColor = '#8b5cf680';
+                  (e.currentTarget as HTMLElement).style.borderColor = '#0092cc80';
                   (e.currentTarget as HTMLElement).style.boxShadow =
                     '0 0 30px rgba(139, 92, 246, 0.25)';
                   (e.currentTarget as HTMLElement).style.transform = 'translateY(-3px)';
                 }}
                 onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.borderColor = '#8b5cf640';
+                  (e.currentTarget as HTMLElement).style.borderColor = '#0092cc40';
                   (e.currentTarget as HTMLElement).style.boxShadow =
                     '0 0 20px rgba(139, 92, 246, 0.15)';
                   (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
@@ -1690,7 +1690,7 @@ export default function AnalyticsDashboard() {
             ⚡ פעילות אחרונה
           </h2>
           <div
-            className="ux-card ux-light-sweep"
+            className="premium-card"
             style={{
               background: 'var(--surface)',
               border: '1px solid var(--border)',

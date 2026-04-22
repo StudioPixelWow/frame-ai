@@ -80,7 +80,7 @@ function FilesContentInner() {
     const colorMap: Record<string, string> = {
       approved_final: '#22c55e',
       branding: '#3b82f6',
-      general: '#8b5cf6',
+      general: '#0092cc',
       social_media: '#f59e0b',
       agreements: '#06b6d4',
     };

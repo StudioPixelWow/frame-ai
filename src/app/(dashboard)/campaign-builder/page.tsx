@@ -936,7 +936,7 @@ function Step2Audience({
               opacity: !data.clientId ? 0.5 : 1,
               background: "rgba(139,92,246,0.06)",
               borderColor: "rgba(139,92,246,0.2)",
-              color: "#8b5cf6",
+              color: "#0092cc",
             }}
           >
             {aiInterestsLoading ? (
@@ -1000,7 +1000,7 @@ function Step2Audience({
             border: "1px solid rgba(139,92,246,0.15)",
             borderRadius: "0.5rem",
           }}>
-            <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "#8b5cf6", marginBottom: "0.5rem" }}>
+            <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "#0092cc", marginBottom: "0.5rem" }}>
               ✨ הצעות AI — לחץ להוספה:
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
@@ -1288,7 +1288,7 @@ function Step3Creative({
         {aiResults.results.map((text, i) => (
           <div
             key={i}
-            className="ux-card-glow"
+            className="premium-card-sm"
             style={{
               padding: "0.6rem 0.75rem",
               background: "var(--surface-raised)",
