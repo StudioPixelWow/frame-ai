@@ -267,15 +267,10 @@ export default function EmployeesPage() {
         <button
           onClick={handleOpenCreateModal}
           disabled={loading}
-          className="ux-btn ux-btn-glow"
+          className="btn-cta"
           style={{
             padding: "0.6rem 1.25rem",
             fontSize: "0.9rem",
-            fontWeight: 600,
-            background: "var(--accent)",
-            color: "#fff",
-            border: "none",
-            borderRadius: "0.5rem",
             cursor: "pointer",
             whiteSpace: "nowrap",
           }}
@@ -700,16 +695,11 @@ export default function EmployeesPage() {
             </button>
             <button
               onClick={handleSaveEmployee}
-              className="ux-btn ux-btn-glow"
+              className="btn-cta"
               style={{
                 padding: "0.5rem 1rem",
-                borderRadius: "0.5rem",
-                background: "var(--accent)",
-                color: "#fff",
-                border: "none",
                 cursor: "pointer",
                 fontSize: "0.9rem",
-                fontWeight: 500,
               }}
             >
               {editingEmployeeId ? "עדכן" : "הוסף"}
