@@ -725,7 +725,7 @@
 
 .landing-byline { color: var(--foreground-subtle) !important; font-size: 0.75rem !important; margin-top: 2.5rem; letter-spacing: 0.02em; }
 
-/* Image column — statue */
+/* Image column — statue hero scene */
 .landing-image-col {
   display: flex;
   align-items: center;
@@ -734,18 +734,162 @@
   position: relative;
   z-index: 2;
 }
+
+/* ── Hero scene wrapper ── */
+.hero-scene {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  perspective: 1200px;
+}
+
+/* ── Statue image with float + entrance ── */
 .landing-hero-img {
   width: auto;
   height: 70vh;
   max-height: 700px;
   object-fit: contain;
   display: block;
-  filter: drop-shadow(0 20px 40px rgba(0,0,0,0.08));
-  animation: landing-float 6s ease-in-out infinite;
+  position: relative;
+  z-index: 3;
+  filter: drop-shadow(0 20px 50px rgba(0, 200, 255, 0.15)) drop-shadow(0 8px 24px rgba(0,0,0,0.10));
+  animation: statue-float 7s ease-in-out infinite, statue-entrance 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: filter 0.5s ease, transform 0.4s ease;
+  will-change: transform, filter;
 }
-@keyframes landing-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-12px); }
+.hero-scene:hover .landing-hero-img {
+  filter: drop-shadow(0 24px 60px rgba(0, 200, 255, 0.28)) drop-shadow(0 0 80px rgba(2, 175, 254, 0.12)) drop-shadow(0 8px 24px rgba(0,0,0,0.12));
+  transform: scale(1.03);
+}
+
+/* Float keyframes — slow premium vertical drift + subtle rotation */
+@keyframes statue-float {
+  0%, 100% { transform: translateY(0) rotateY(0deg) rotateX(0deg); }
+  25% { transform: translateY(-8px) rotateY(0.5deg) rotateX(-0.3deg); }
+  50% { transform: translateY(-14px) rotateY(-0.4deg) rotateX(0.2deg); }
+  75% { transform: translateY(-6px) rotateY(0.3deg) rotateX(-0.15deg); }
+}
+
+/* Cinematic entrance — fade-in + rise */
+@keyframes statue-entrance {
+  from { opacity: 0; transform: translateY(40px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Neon glow ring behind statue ── */
+.hero-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 55%;
+  height: 70%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(2, 175, 254, 0.12) 0%, rgba(5, 226, 255, 0.06) 40%, transparent 70%);
+  filter: blur(40px);
+  z-index: 1;
+  animation: glow-pulse 5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+}
+
+/* ── Holographic shimmer overlay on statue ── */
+.hero-shimmer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 4;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.06) 42%,
+    rgba(2, 175, 254, 0.08) 48%,
+    rgba(255, 255, 255, 0.04) 54%,
+    transparent 66%
+  );
+  background-size: 250% 100%;
+  animation: shimmer-sweep 6s ease-in-out infinite;
+  mix-blend-mode: overlay;
+  border-radius: 12px;
+}
+@keyframes shimmer-sweep {
+  0%, 100% { background-position: 200% 0; }
+  50% { background-position: -50% 0; }
+}
+
+/* ── Particle system — orbiting dots ── */
+.hero-particles {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+.hero-particle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(2, 175, 254, 0.6);
+  box-shadow: 0 0 6px rgba(2, 175, 254, 0.4);
+  animation: particle-orbit linear infinite;
+  will-change: transform, opacity;
+}
+.hero-particle:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.3);
+}
+@keyframes particle-orbit {
+  0% { transform: rotate(0deg) translateX(var(--orbit-r)) rotate(0deg); opacity: 0; }
+  10% { opacity: var(--p-opacity, 0.7); }
+  90% { opacity: var(--p-opacity, 0.7); }
+  100% { transform: rotate(360deg) translateX(var(--orbit-r)) rotate(-360deg); opacity: 0; }
+}
+
+/* ── Data stream lines — vertical falling lines ── */
+.hero-streams {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0.4;
+}
+.hero-stream-line {
+  position: absolute;
+  width: 1px;
+  background: linear-gradient(180deg, transparent 0%, rgba(2, 175, 254, 0.5) 30%, rgba(5, 226, 255, 0.3) 70%, transparent 100%);
+  animation: stream-fall linear infinite;
+  will-change: transform;
+}
+@keyframes stream-fall {
+  0% { transform: translateY(-100%); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(calc(100vh)); opacity: 0; }
+}
+
+/* ── Depth blur on background layers ── */
+.hero-depth-bg {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  backdrop-filter: blur(2px);
+  background: radial-gradient(ellipse at 50% 60%, rgba(2, 175, 254, 0.04) 0%, transparent 60%);
 }
 
 .brand-lockup-name {
@@ -844,6 +988,9 @@
   .landing-content { padding: 3rem 1.5rem; max-width: 100%; }
   .landing-image-col { height: 300px; }
   .landing-hero-img { height: 100%; }
+  .hero-glow { width: 70%; height: 50%; filter: blur(30px); }
+  .hero-streams { display: none; }
+  .hero-particles .hero-particle:nth-child(n+7) { display: none; }
   .landing h1 { font-size: 2.25rem; }
 }
 

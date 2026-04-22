@@ -3,7 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   useTasks,
   useApprovals,
@@ -25,8 +25,45 @@ export default function LandingPage() {
   const [mounted, setMounted] = useState(false);
   const [actionableItems, setActionableItems] = useState<any[]>([]);
   const heroRef = useRef<HTMLDivElement>(null);
+  const sceneRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => { setMounted(true); }, []);
+
+  // ── Mouse parallax for statue depth ──
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!sceneRef.current || !imgRef.current) return;
+    const rect = sceneRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;  // -0.5 to 0.5
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    imgRef.current.style.transform = `translateX(${x * -12}px) translateY(${y * -8}px)`;
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    if (!imgRef.current) return;
+    imgRef.current.style.transform = '';
+  }, []);
+
+  // ── Particle config — stable across renders ──
+  const particles = useMemo(() => Array.from({ length: 12 }, (_, i) => ({
+    id: i,
+    size: 2 + Math.random() * 3,
+    orbitR: 80 + Math.random() * 140,
+    duration: 12 + Math.random() * 16,
+    delay: Math.random() * -20,
+    opacity: 0.3 + Math.random() * 0.5,
+    top: 15 + Math.random() * 70,
+    left: 10 + Math.random() * 80,
+  })), []);
+
+  // ── Data stream lines config ──
+  const streamLines = useMemo(() => Array.from({ length: 6 }, (_, i) => ({
+    id: i,
+    left: 10 + Math.random() * 80,
+    height: 40 + Math.random() * 80,
+    duration: 5 + Math.random() * 6,
+    delay: Math.random() * -8,
+  })), []);
 
 
   // Compute actionable items from all data sources
@@ -254,15 +291,69 @@ export default function LandingPage() {
         </p>
       </div>
 
-      {/* ── RIGHT: dominant hero image ── */}
+      {/* ── RIGHT: animated hero scene ── */}
       <div className="landing-image-col">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="https://s-pixel.co.il/wp-content/uploads/2025/12/Layer-47.png"
-          alt="PixelManageAI interface"
-          className="landing-hero-img"
-          loading="eager"
-        />
+        <div
+          className="hero-scene"
+          ref={sceneRef}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+        >
+          {/* Depth blur background layer */}
+          <div className="hero-depth-bg" />
+
+          {/* Data stream lines — falling vertical lines */}
+          <div className="hero-streams">
+            {streamLines.map((s) => (
+              <div
+                key={s.id}
+                className="hero-stream-line"
+                style={{
+                  left: `${s.left}%`,
+                  height: `${s.height}px`,
+                  animationDuration: `${s.duration}s`,
+                  animationDelay: `${s.delay}s`,
+                }}
+              />
+            ))}
+          </div>
+
+          {/* Neon glow behind statue */}
+          <div className="hero-glow" />
+
+          {/* Orbiting particle field */}
+          <div className="hero-particles">
+            {particles.map((p) => (
+              <div
+                key={p.id}
+                className="hero-particle"
+                style={{
+                  width: p.size,
+                  height: p.size,
+                  top: `${p.top}%`,
+                  left: `${p.left}%`,
+                  '--orbit-r': `${p.orbitR}px`,
+                  '--p-opacity': p.opacity,
+                  animationDuration: `${p.duration}s`,
+                  animationDelay: `${p.delay}s`,
+                } as React.CSSProperties}
+              />
+            ))}
+          </div>
+
+          {/* The statue — with parallax ref */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            ref={imgRef}
+            src="https://s-pixel.co.il/wp-content/uploads/2025/12/Layer-47.png"
+            alt="PixelManageAI interface"
+            className="landing-hero-img"
+            loading="eager"
+          />
+
+          {/* Holographic shimmer overlay */}
+          <div className="hero-shimmer" />
+        </div>
       </div>
 
       {/* ── OVERLAY: Tasks to Handle widget ── */}
