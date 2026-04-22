@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Analysis Pipeline Module
+ * PixelManageAI — Analysis Pipeline Module
  *
  * The server-side pipeline that runs between file upload and Transcript Review.
  * Covers video inspection (ffprobe), clip validation, transcription (ASR),

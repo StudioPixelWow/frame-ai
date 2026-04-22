@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Remotion Runtime Handoff Module
+ * PixelManageAI — Remotion Runtime Handoff Module
  *
  * The connective tissue between the Phase 5 data model and the
  * Phase 6.5 render worker. Covers:

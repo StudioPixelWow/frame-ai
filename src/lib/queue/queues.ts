@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — BullMQ Queue Definitions
+ * PixelManageAI — BullMQ Queue Definitions
  *
  * Two queues shared by the API server (producer) and worker processes (consumers):
  *   - video-analysis: ffprobe inspection + ASR transcription (concurrency 2)

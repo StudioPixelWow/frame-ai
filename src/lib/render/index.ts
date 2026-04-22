@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Render Module
+ * PixelManageAI — Render Module
  *
  * The complete render job lifecycle — from approval to downloadable MP4.
  *

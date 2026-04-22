@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Output Lifecycle Management
+ * PixelManageAI — Output Lifecycle Management
  *
  * Status transitions for render output records:
  *   available → archived → deleted

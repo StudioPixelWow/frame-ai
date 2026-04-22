@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Render Job Manager
+ * PixelManageAI — Render Job Manager
  *
  * Source of truth: Supabase "render_jobs" table.
  * No file-based storage. No in-memory maps.

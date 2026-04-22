@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Wizard State Serialisation
+ * PixelManageAI — Wizard State Serialisation
  *
  * Converts live browser state (_nf, PV) into the storable
  * ProjectPersistedState. Called before every PATCH /api/projects/:id.

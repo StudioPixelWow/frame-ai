@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Render Worker Execution Logic
+ * PixelManageAI — Render Worker Execution Logic
  *
  * Server-side only. Defines the step-by-step execution sequence
  * for a render job. The actual BullMQ consumer wiring and Remotion
@@ -107,7 +107,7 @@ export function buildCompositionConfig(
   const durationInFrames = Math.max(1, Math.ceil(clipDurationSec * fps));
 
   return {
-    id: "PixelFrameComposition",
+    id: "PixelManageComposition",
     width,
     height,
     fps,

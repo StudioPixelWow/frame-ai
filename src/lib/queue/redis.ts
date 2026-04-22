@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Redis Connection Factory
+ * PixelManageAI — Redis Connection Factory
  *
  * Creates ioredis connections configured for BullMQ.
  * BullMQ requires separate connections for producers and consumers

@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Queue Module
+ * PixelManageAI — Queue Module
  *
  * Background job infrastructure built on BullMQ + Redis.
  * Two queues, shared by the API server (producer) and separate

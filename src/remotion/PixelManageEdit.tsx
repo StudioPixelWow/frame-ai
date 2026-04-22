@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Main Composition
+ * PixelManageAI — Main Composition
  * Real multi-layer video composition driven by CompositionProps.
  *
  * Premium layers visible in preview/render:
@@ -24,7 +24,7 @@ function seededRand(seed: number): number {
   return x - Math.floor(x);
 }
 
-export const PixelFrameEdit: React.FC<CompositionProps> = (props) => {
+export const PixelManageEdit: React.FC<CompositionProps> = (props) => {
   const frame = useCurrentFrame();
   const { fps, width, height, durationInFrames } = useVideoConfig();
   const currentSec = frame / fps;
@@ -234,7 +234,7 @@ export const PixelFrameEdit: React.FC<CompositionProps> = (props) => {
     if (!videoUrl) return "";
     if (videoUrl.startsWith("blob:")) {
       // eslint-disable-next-line no-console
-      console.error("[PixelFrameEdit] CRITICAL: blob: URL passed to Remotion composition — this will cause black screen!", videoUrl);
+      console.error("[PixelManageEdit] CRITICAL: blob: URL passed to Remotion composition — this will cause black screen!", videoUrl);
       return ""; // Refuse to render — prevents silent black screen
     }
     return videoUrl;
@@ -243,7 +243,7 @@ export const PixelFrameEdit: React.FC<CompositionProps> = (props) => {
   // Debug: log video source status (only in development, throttle to every 30 frames)
   if (typeof window !== "undefined" && process.env.NODE_ENV === "development" && frame % 30 === 0) {
     // eslint-disable-next-line no-console
-    console.debug("[PixelFrameEdit] videoUrl:", safeVideoUrl ? `"${safeVideoUrl.substring(0, 80)}..."` : "EMPTY/NULL",
+    console.debug("[PixelManageEdit] videoUrl:", safeVideoUrl ? `"${safeVideoUrl.substring(0, 80)}..."` : "EMPTY/NULL",
       "| clips:", videoClips.length, "| durationSec:", durationSec, "| frame:", frame,
       "| zoomScale:", zoomScale.toFixed(3));
   }

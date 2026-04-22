@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Project Status Machine
+ * PixelManageAI — Project Status Machine
  *
  * Canonical status transitions for the full project lifecycle.
  * Synthesised from Phases 6.3–6.9 into a single authoritative reference.

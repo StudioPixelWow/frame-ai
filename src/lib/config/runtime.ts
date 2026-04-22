@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Runtime Configuration
+ * PixelManageAI — Runtime Configuration
  *
  * Centralised runtime constants injected via environment variables.
  * All frontend-accessible vars must use the NEXT_PUBLIC_ prefix.
@@ -7,6 +7,11 @@
  * This replaces scattered `process.env.NEXT_PUBLIC_*` reads with a
  * single source of truth so refactors only touch one file.
  */
+
+// ── App identity ─────────────────────────────────────────────────────────
+
+/** Canonical application name — use this everywhere in UI and metadata. */
+export const APP_NAME = "PixelManageAi";
 
 // ── Server URLs ───────────────────────────────────────────────────────────
 

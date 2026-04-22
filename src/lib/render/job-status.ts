@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Render Job Status Machine
+ * PixelManageAI — Render Job Status Machine
  *
  * Status transitions, retry classification, progress reporting,
  * and UI label mapping for render jobs.

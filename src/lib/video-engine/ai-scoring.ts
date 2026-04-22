@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — AI Video Analysis Engine
+ * PixelManageAI — AI Video Analysis Engine
  * Scoring, hook generation, re-edit suggestions, performance prediction, highlight detection.
  */
 

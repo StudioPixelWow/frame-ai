@@ -20,7 +20,7 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { href: "/dashboard",         label: "דשבורד",          id: "nav-dashboard" },
-  { href: "/projects",          label: "PixelFrameAI",    id: "nav-projects", allowedRoles: ['admin', 'employee'] },
+  { href: "/projects",          label: "PixelManageAI",    id: "nav-projects", allowedRoles: ['admin', 'employee'] },
   { href: "/clients",           label: "לקוחות",          id: "nav-clients", allowedRoles: ['admin', 'employee'] },
   { href: "/leads",             label: "לידים",           id: "nav-leads", allowedRoles: ['admin', 'employee'] },
   { href: "/campaigns",         label: "קמפיינים",        id: "nav-campaigns", allowedRoles: ['admin', 'employee'] },
@@ -80,12 +80,12 @@ export function TopNav() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="https://s-pixel.co.il/wp-content/uploads/2026/04/Asset-1.png"
-            alt="PixelFrameAI"
+            alt="PixelManageAI"
             style={{ height: 28, width: "auto", filter: "brightness(0) invert(1)" }}
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
           <span className="text-sm font-bold tracking-tight text-accent-text hidden sm:inline">
-            PixelFrameAI
+            PixelManageAI
           </span>
         </Link>
 

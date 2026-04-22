@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Viral Intelligence Engine
+ * PixelManageAI — Viral Intelligence Engine
  * Trending topics analysis, niche viral patterns, idea generation.
  */
 

@@ -1,11 +1,11 @@
 /**
- * PixelFrameAI — Error Handling & Recovery Module
+ * PixelManageAI — Error Handling & Recovery Module
  *
  * Comprehensive error infrastructure for all failure modes across
  * the upload → analysis → render pipeline. Covers:
  *
  *   - Error code registry (22 codes across 6 categories)
- *   - PixelFrameError class with code + userMessage
+ *   - PixelManageError class with code + userMessage
  *   - Code-based retry classification (supersedes pattern matching)
  *   - Structured JSONB error_detail for job tables
  *   - Upload file validation (client + server)
@@ -15,7 +15,7 @@
  *   - Asset key resolution with existence check
  *
  * Usage:
- *   import { PixelFrameError, buildErrorDetail, isRetryableError } from '@/lib/errors';
+ *   import { PixelManageError, buildErrorDetail, isRetryableError } from '@/lib/errors';
  */
 
 // Error codes + categories
@@ -48,14 +48,14 @@ export {
   ASSET_KEY_CORRUPT,
   UNKNOWN_ERROR,
 } from "./error-codes";
-export type { ErrorCategory, PixelFrameErrorCode } from "./error-codes";
+export type { ErrorCategory, PixelManageErrorCode } from "./error-codes";
 
 // Error class + retry classification
 export {
-  PixelFrameError,
+  PixelManageError,
   isRetryableError,
-  isPixelFrameError,
-} from "./pixelframe-error";
+  isPixelManageError,
+} from "./pixelmanage-error";
 
 // Structured error detail
 export {

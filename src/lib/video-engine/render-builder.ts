@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Render Payload Builder
+ * PixelManageAI — Render Payload Builder
  * Converts wizard state into a strongly-typed RenderPayload for Remotion.
  */
 

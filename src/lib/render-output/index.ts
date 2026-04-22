@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Render Output Module
+ * PixelManageAI — Render Output Module
  *
  * Durable render output records — the permanent artifact layer
  * that survives job retention expiry. Covers:

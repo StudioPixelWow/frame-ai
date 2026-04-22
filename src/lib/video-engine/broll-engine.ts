@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Advanced B-Roll Engine
+ * PixelManageAI — Advanced B-Roll Engine
  *
  * Extends broll-analysis.ts with category-aware, intensity-based B-roll planning.
  * Builds intelligent placements using content category detection and advanced

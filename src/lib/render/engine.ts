@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Render Engine Client
+ * PixelManageAI — Render Engine Client
  *
  * Replaces the prototype RENDER_ENGINE stub with real API calls.
  * Both epApproveAndCreate() and triggerRender() converge to

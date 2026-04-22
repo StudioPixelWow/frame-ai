@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Render Job Persistence
+ * PixelManageAI — Render Job Persistence
  * Stores render jobs in .frameai/data/render-jobs.json
  */
 import { JsonStore } from "./store";

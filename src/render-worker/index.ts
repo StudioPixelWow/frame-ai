@@ -5,7 +5,7 @@ if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
 }
 
 /**
- * PixelFrameAI — Render Worker Entry Point
+ * PixelManageAI — Render Worker Entry Point
  *
  * Standalone Node.js process that performs Remotion video rendering.
  * Runs OUTSIDE Next.js / Vercel — on a persistent server with FFmpeg.
@@ -35,7 +35,7 @@ const tag = "[Worker]";
 
 async function main(): Promise<void> {
   console.log("═══════════════════════════════════════════════");
-  console.log(" PixelFrameAI Render Worker");
+  console.log(" PixelManageAI Render Worker");
   console.log(" Remotion rendering on persistent server");
   console.log("═══════════════════════════════════════════════");
 

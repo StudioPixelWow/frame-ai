@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — End-to-End Flow Module
+ * PixelManageAI — End-to-End Flow Module
  *
  * Canonical reference for the full upload-to-download pipeline.
  * Synthesises Phases 6.1–6.10 into:

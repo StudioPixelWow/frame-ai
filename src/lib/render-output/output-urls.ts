@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Output URL Generation & Download Filenames
+ * PixelManageAI — Output URL Generation & Download Filenames
  *
  * Generates fresh signed URLs from storage keys on every API read.
  * URLs are NEVER stored in the DB — only `output_key` and `thumb_key`
@@ -56,8 +56,8 @@ export async function generateOutputUrls(
 /**
  * Build a descriptive download filename for an output.
  *
- * Format: `pixelframe-v{version}-{preset}-{aspect}-{duration}s.mp4`
- * Example: `pixelframe-v3-shift-9x16-30s.mp4`
+ * Format: `pixelmanage-v{version}-{preset}-{aspect}-{duration}s.mp4`
+ * Example: `pixelmanage-v3-shift-9x16-30s.mp4`
  *
  * @param output  Output list item with version, preset, aspect ratio, duration
  */
@@ -67,7 +67,7 @@ export function buildDownloadFilename(
   const slug = output.presetLabel.toLowerCase().replace(/\s+/g, "-");
   const ar = output.aspectRatio.replace(":", "x"); // '9:16' → '9x16'
   const dur = Math.round(output.durationSec);
-  return `pixelframe-v${output.versionNumber}-${slug}-${ar}-${dur}s.mp4`;
+  return `pixelmanage-v${output.versionNumber}-${slug}-${ar}-${dur}s.mp4`;
 }
 
 // ── File size formatting ──────────────────────────────────────────────────

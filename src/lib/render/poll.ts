@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Render Status Polling
+ * PixelManageAI — Render Status Polling
  *
  * Client-side polling logic for tracking render job progress.
  * Replaces the prototype pollRenderStatus() with proper status mapping.

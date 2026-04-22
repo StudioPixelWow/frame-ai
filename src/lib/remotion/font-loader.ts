@@ -1,11 +1,11 @@
 /**
- * PixelFrameAI — Remotion Font Loader
+ * PixelManageAI — Remotion Font Loader
  *
  * Loads Google Fonts inside a Remotion `delayRender` block before
  * any composition frames are rendered. Without this, the first frames
  * render with a fallback system font.
  *
- * Usage (in PixelFrameComposition):
+ * Usage (in PixelManageComposition):
  *   useEffect(() => {
  *     if (props.fontPreloads?.length) {
  *       loadFontsFromPayload(props.fontPreloads);

@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Project State Restoration
+ * PixelManageAI — Project State Restoration
  *
  * Restores _nf (wizard state) and PV (video preview state) from a
  * persisted ApiProject response. Called when a project is opened from

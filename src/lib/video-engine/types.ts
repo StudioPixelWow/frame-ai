@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Core Type Definitions
+ * PixelManageAI — Core Type Definitions
  * Shared types across all AI engine modules.
  */
 

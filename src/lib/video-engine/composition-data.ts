@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Composition Data Builder
+ * PixelManageAI — Composition Data Builder
  * Converts wizard state into finalCompositionData — the single source of truth
  * for both preview (Remotion Player) and render (Remotion SSR).
  */

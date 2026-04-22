@@ -1,4 +1,4 @@
-# PixelFrameAI System Audit — April 2026
+# PixelManageAI System Audit — April 2026
 
 ## 1. Current Live App Status
 
@@ -30,9 +30,9 @@
 - Analysis worker — orchestration logic exists, no consumer process
 - API client (browser-side) — calls endpoints that don't fully exist
 
-### Remotion Renderer (separate project: pixelframe-renderer)
+### Remotion Renderer (separate project: pixelmanage-renderer)
 - **Express server** on port 3002 with full API
-- **Single composition**: PixelFrameEdit (segments + subtitles overlay)
+- **Single composition**: PixelManageEdit (segments + subtitles overlay)
 - **3 subtitle presets**: Pixel Premium, Pixel Performance, Pixel Social
 - **4 formats**: 9:16, 16:9, 1:1, 4:5
 - **Dynamic duration** from segment data
@@ -44,7 +44,7 @@
 
 ## 2. Approved Preview Status
 
-The preview (`pixelframeai-preview.html`, 49K lines) is a complete SPA with:
+The preview (`pixelmanageai-preview.html`, 49K lines) is a complete SPA with:
 - **12 data collections** all persisted to localStorage
 - **Full CRUD** on tasks, employees, payments, leads, clients, projects, campaigns, approvals, automations, assets, users
 - **Modal-based editing** for every entity
@@ -144,7 +144,7 @@ DETAIL:
 8. User review/edit      ❌ No review panel UI
 9. User approval         ❌ No approval action
 10. Render submission    ⚠️ Client API exists, no server endpoint
-11. Remotion render      ✅ Works in pixelframe-renderer
+11. Remotion render      ✅ Works in pixelmanage-renderer
 12. Output storage       ⚠️ S3 adapter exists, not configured
 13. Delivery/download    ❌ No output viewing page
 ```
@@ -183,7 +183,7 @@ DETAIL:
 4. Wire transcription (Whisper API or mock for dev)
 5. Connect transcript analysis → content generation
 6. Build review/approval panel UI
-7. Wire render submission → pixelframe-renderer
+7. Wire render submission → pixelmanage-renderer
 8. Build render progress UI
 9. Build output viewing/download page
 

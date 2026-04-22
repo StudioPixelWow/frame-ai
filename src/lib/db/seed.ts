@@ -1253,7 +1253,7 @@ async function seed(): Promise<void> {
   // Create users
   const user1 = await users.createAsync({
     name: 'טל זטלמן',
-    email: 'tal@pixelframe.ai',
+    email: 'tal@pixelmanage.ai',
     role: 'admin',
     avatar: null,
     status: 'active',
@@ -1263,7 +1263,7 @@ async function seed(): Promise<void> {
 
   const user2 = await users.createAsync({
     name: 'דנה כהן',
-    email: 'dana@pixelframe.ai',
+    email: 'dana@pixelmanage.ai',
     role: 'editor',
     avatar: null,
     status: 'active',
@@ -1273,7 +1273,7 @@ async function seed(): Promise<void> {
 
   const user3 = await users.createAsync({
     name: 'מיכל ברגר',
-    email: 'michal@pixelframe.ai',
+    email: 'michal@pixelmanage.ai',
     role: 'manager',
     avatar: null,
     status: 'active',
@@ -1283,7 +1283,7 @@ async function seed(): Promise<void> {
 
   const user4 = await users.createAsync({
     name: 'אור שטיין',
-    email: 'or@pixelframe.ai',
+    email: 'or@pixelmanage.ai',
     role: 'viewer',
     avatar: null,
     status: 'active',

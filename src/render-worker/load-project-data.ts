@@ -60,7 +60,7 @@ export async function loadProjectData(jobId: string): Promise<ProjectRenderData 
 
   const metadata = (job.metadata || {}) as Record<string, unknown>;
   const inputProps = (metadata.inputProps as Record<string, unknown>) || {};
-  const compositionId = (metadata.compositionId as string) || "PixelFrameEdit";
+  const compositionId = (metadata.compositionId as string) || "PixelManageEdit";
   const videoUrl = (inputProps.videoUrl as string) || (metadata.videoUrl as string) || "";
 
   // Resolve format

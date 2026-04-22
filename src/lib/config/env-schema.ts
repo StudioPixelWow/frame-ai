@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Environment Variable Schema
+ * PixelManageAI — Environment Variable Schema
  *
  * Defines required environment variables per process type.
  * Used by `validateEnv()` at startup to fail fast with a clear
@@ -80,7 +80,7 @@ export const ENV_DEFAULTS: Record<string, string> = {
   DATABASE_POOL_MIN: "2",
   DATABASE_POOL_MAX: "10",
   RENDER_TIMEOUT_MS: "1800000", // 30 minutes
-  RENDER_TMP_DIR: "/tmp/pixelframe-renders",
+  RENDER_TMP_DIR: "/tmp/pixelmanage-renders",
   FFMPEG_PATH: "/usr/bin/ffmpeg",
   FFPROBE_PATH: "/usr/bin/ffprobe",
   TRANSCRIPTION_MAX_FILE_SIZE_MB: "500",

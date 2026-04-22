@@ -37,7 +37,7 @@ export interface S3AdapterOptions {
   accessKeyId: string;
   secretAccessKey: string;
   bucket: string;
-  publicBaseUrl?: string; // e.g. 'https://cdn.pixelframeai.com'
+  publicBaseUrl?: string; // e.g. 'https://cdn.pixelmanageai.com'
 }
 
 export class S3StorageAdapter implements StorageAdapter {

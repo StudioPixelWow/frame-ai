@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Base Worker Factory
+ * PixelManageAI — Base Worker Factory
  *
  * Shared worker creation pattern used by both the analysis worker
  * and render worker processes. Provides:

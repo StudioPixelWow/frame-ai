@@ -1,7 +1,7 @@
 /**
- * PixelFrameAI — Composition Data to Remotion Props Converter
+ * PixelManageAI — Composition Data to Remotion Props Converter
  * Transforms the finalCompositionData into the props shape expected by
- * the Remotion PixelFrameEdit composition.
+ * the Remotion PixelManageEdit composition.
  */
 
 import type { FinalCompositionData } from "./composition-data";

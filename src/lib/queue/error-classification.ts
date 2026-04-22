@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Queue Error Classification
+ * PixelManageAI — Queue Error Classification
  *
  * Determines whether a job error is retryable (transient) or permanent.
  * BullMQ's UnrecoverableError can be thrown from any processor to skip

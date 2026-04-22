@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Analysis Job Types
+ * PixelManageAI — Analysis Job Types
  *
  * Types for the server-side analysis pipeline that runs between file upload
  * and the user entering Transcript Review (step 8).

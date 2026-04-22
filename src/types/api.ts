@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — API Type Contracts
+ * PixelManageAI — API Type Contracts
  *
  * Request and response types for every REST endpoint described in the
  * runtime architecture spec (Phase 6, §3). These types are shared

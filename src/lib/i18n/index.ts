@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — i18n Module
+ * PixelManageAI — i18n Module
  *
  * Centralised locale access. Currently Hebrew-only (the app is RTL-first).
  * If multi-language support is needed later, this module becomes the

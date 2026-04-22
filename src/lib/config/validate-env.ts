@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Startup Environment Validation
+ * PixelManageAI — Startup Environment Validation
  *
  * Called as the first line of each process entry point.
  * Validates that all required environment variables are set,

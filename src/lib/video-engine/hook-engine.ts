@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Hook-First Editing Engine
+ * PixelManageAI — Hook-First Editing Engine
  *
  * Optimizes the first 3-5 seconds of video to maximize viewer retention.
  * Analyzes opening content for hook strength, detects weak introductions,

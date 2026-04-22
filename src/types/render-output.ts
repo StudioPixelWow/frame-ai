@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Render Output Types
+ * PixelManageAI — Render Output Types
  *
  * Types for the durable render output record layer.
  * A `render_outputs` row is a permanent deliverable — unlike

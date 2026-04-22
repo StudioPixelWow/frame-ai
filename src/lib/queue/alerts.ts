@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Job Exhaustion Alerts
+ * PixelManageAI — Job Exhaustion Alerts
  *
  * Fires a webhook when a job exhausts all retry attempts.
  * Targets Slack incoming webhooks or any HTTP endpoint.

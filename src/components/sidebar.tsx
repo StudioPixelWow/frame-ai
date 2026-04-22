@@ -75,7 +75,7 @@ export function Sidebar() {
           <circle cx="24" cy="26" r="3" fill="black" fillOpacity="0.45" />
         </svg>
         <span className="text-sm font-semibold tracking-tight text-foreground">
-          PixelFrameAI
+          PixelManageAI
         </span>
       </div>
 

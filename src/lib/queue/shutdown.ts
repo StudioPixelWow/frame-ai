@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Graceful Worker Shutdown
+ * PixelManageAI — Graceful Worker Shutdown
  *
  * Hooks SIGTERM/SIGINT to drain the BullMQ worker before exiting.
  * The currently-executing job is allowed to finish; no new jobs are

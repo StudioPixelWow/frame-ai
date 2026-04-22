@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Flow Stage Definitions
+ * PixelManageAI — Flow Stage Definitions
  *
  * The 10 stages of the upload-to-download pipeline, annotated with
  * sync/async classification, blocking behaviour, and data outputs.

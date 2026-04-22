@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Stock Media Provider Service
+ * PixelManageAI — Stock Media Provider Service
  *
  * Searches Pexels and Pixabay for stock videos.
  * Architecture prepared for Shutterstock (future).

@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — AI B-Roll Analysis Engine
+ * PixelManageAI — AI B-Roll Analysis Engine
  *
  * Analyzes transcript segments to generate intelligent B-roll suggestions.
  * Uses NLP-style heuristics to identify:

@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   PixelFrameAI Design Tokens
+   PixelManageAI Design Tokens
    Primary accent: #00B5FE (Studio Pixel brand blue)
    Usage philosophy:
      - accent-*  covers every interactive surface — buttons, links, tabs,
@@ -1539,7 +1539,7 @@
 .col-action-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   PixelFrameAI — Project Wizard
+   PixelManageAI — Project Wizard
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .wiz-root {

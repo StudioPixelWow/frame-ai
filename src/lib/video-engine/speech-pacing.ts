@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Speech-based Pacing Engine
+ * PixelManageAI — Speech-based Pacing Engine
  *
  * Analyzes transcript timing to optimize edit rhythm based on speech patterns,
  * silence detection, and content energy levels. Supports multiple pacing modes

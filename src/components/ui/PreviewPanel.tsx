@@ -2,7 +2,7 @@
 
 import { useRef, useState, useMemo, useCallback, useEffect } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
-import { PixelFrameEdit } from "@/remotion/PixelFrameEdit";
+import { PixelManageEdit } from "@/remotion/PixelManageEdit";
 import { FPS, FORMAT_DIMENSIONS } from "@/remotion/types";
 import type { CompositionProps } from "@/remotion/types";
 import {
@@ -13,7 +13,7 @@ import { compositionToProps } from "@/lib/video-engine/composition-to-props";
 import { FormatFrame } from "@/components/ui/FormatFrame";
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   PreviewPanel — Persistent Video Preview for PixelFrameAI
+   PreviewPanel — Persistent Video Preview for PixelManageAI
    Displays a Remotion composition preview with timeline scrub markers,
    active layers indicator, and optional debug overlay.
    ═══════════════════════════════════════════════════════════════════════════ */

@@ -2,7 +2,7 @@
 
 /**
  * UnifiedEditedPreviewPlayer — THE single source-of-truth preview player
- * for the PixelFrameAI wizard editing pipeline.
+ * for the PixelManageAI wizard editing pipeline.
  *
  * Shows the accumulated edit state across ALL previous wizard stages:
  *   Layer 0  → Base video (or active B-roll replacing it)

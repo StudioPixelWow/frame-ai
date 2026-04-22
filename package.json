@@ -9,7 +9,7 @@
     "lint": "next lint",
     "worker": "tsx src/lib/render-worker/worker.ts",
     "studio": "remotion studio src/remotion/index.ts",
-    "remotion:build": "remotion render src/remotion/index.ts PixelFrameEdit out/video.mp4",
+    "remotion:build": "remotion render src/remotion/index.ts PixelManageEdit out/video.mp4",
     "remotion:install-browser": "npx remotion browser ensure",
     "render:worker": "tsx src/render-worker/index.ts",
     "render:worker:legacy": "tsx src/lib/render-worker/worker.ts"

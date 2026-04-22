@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Retention AI Engine
+ * PixelManageAI — Retention AI Engine
  *
  * Analyzes the entire video timeline for engagement optimization.
  * Identifies low-engagement zones and applies targeted interventions

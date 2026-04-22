@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Structured Error Detail
+ * PixelManageAI — Structured Error Detail
  *
  * Replaces the plain `error text` column on job tables with a
  * structured JSONB `error_detail` object. Enables the API to return
@@ -15,7 +15,7 @@
 
 import type { ErrorCategory } from "./error-codes";
 import { categorise } from "./error-codes";
-import { PixelFrameError, isRetryableError } from "./pixelframe-error";
+import { PixelManageError, isRetryableError } from "./pixelmanage-error";
 
 // ── Error detail schema ───────────────────────────────────────────────────
 
@@ -58,7 +58,7 @@ export interface ErrorContext {
 /**
  * Build a structured `JobErrorDetail` from any error.
  *
- * If the error is a `PixelFrameError`, its code and userMessage are
+ * If the error is a `PixelManageError`, its code and userMessage are
  * used directly. Otherwise, the error is classified as `UNKNOWN_ERROR`
  * with a generic user message.
  *
@@ -71,7 +71,7 @@ export function buildErrorDetail(
   attemptNumber: number,
   context?: ErrorContext,
 ): JobErrorDetail {
-  const isPf = error instanceof PixelFrameError;
+  const isPf = error instanceof PixelManageError;
 
   return {
     code: isPf ? error.code : "UNKNOWN_ERROR",

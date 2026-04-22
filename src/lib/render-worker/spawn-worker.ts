@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Worker Spawner
+ * PixelManageAI — Worker Spawner
  *
  * On Vercel (serverless): spawning child processes is not supported.
  * This module becomes a safe no-op that returns status info only.

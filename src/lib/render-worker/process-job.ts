@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — process-job stub
+ * PixelManageAI — process-job stub
  *
  * Rendering is handled by the external worker process:
  *   npx tsx src/lib/render-worker/worker.ts

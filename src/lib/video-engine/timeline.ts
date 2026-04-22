@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Timeline Model
+ * PixelManageAI — Timeline Model
  * Represents the edited video as a multi-track timeline.
  * This is the internal structure that drives both preview and render.
  */

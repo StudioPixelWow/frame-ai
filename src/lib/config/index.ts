@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Configuration Module
+ * PixelManageAI — Configuration Module
  *
  * Startup validation + typed environment variable access.
  *
@@ -33,6 +33,7 @@ export type { ProcessType } from "./env-schema";
 
 // Runtime constants
 export {
+  APP_NAME,
   API_BASE_URL,
   RENDER_SERVER,
   AUTH_DISABLED,

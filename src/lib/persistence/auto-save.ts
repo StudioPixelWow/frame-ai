@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Auto-Save Utilities
+ * PixelManageAI — Auto-Save Utilities
  *
  * Provides debounced auto-save wiring for wizard state.
  *

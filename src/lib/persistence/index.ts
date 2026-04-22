@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Persistence Module
+ * PixelManageAI — Persistence Module
  *
  * Central export for all project state persistence utilities.
  *

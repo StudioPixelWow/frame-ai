@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PixelFrameAI",
+  title: "PixelManageAI",
   description: "AI-powered video editing platform by Studio Pixel",
   icons: {
     icon: [

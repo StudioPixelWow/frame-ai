@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Creative Instructions Interpreter
+ * PixelManageAI — Creative Instructions Interpreter
  * Parses natural language creative prompts into render configuration.
  */
 

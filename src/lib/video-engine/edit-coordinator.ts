@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Unified Edit Coordinator
+ * PixelManageAI — Unified Edit Coordinator
  *
  * Orchestrates all editing systems (hook, pacing, B-roll, zoom, retention)
  * into a cohesive edit plan. Detects conflicts between systems and resolves

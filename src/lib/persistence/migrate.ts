@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Schema Version Migration
+ * PixelManageAI — Schema Version Migration
  *
  * Upgrades any persisted state version to the current version.
  * Called on every project load, before loadProjectState() processes the data.

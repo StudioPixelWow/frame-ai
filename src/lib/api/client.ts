@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — API Client
+ * PixelManageAI — API Client
  *
  * Browser-side HTTP client for project and upload endpoints.
  * Render endpoints live in `src/lib/render/engine.ts` and are

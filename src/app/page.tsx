@@ -173,10 +173,10 @@ export default function LandingPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="https://s-pixel.co.il/wp-content/uploads/2026/04/Asset-1.png"
-            alt="PixelFrameAI"
+            alt="PixelManageAI"
             style={{ display: "block", height: 36, width: "auto", objectFit: "contain", filter: "var(--logo-filter, none)" }}
           />
-          <span className="brand-lockup-name">PixelFrameAI</span>
+          <span className="brand-lockup-name">PixelManageAI</span>
         </div>
 
         {/* Main title */}
@@ -259,7 +259,7 @@ export default function LandingPage() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="https://s-pixel.co.il/wp-content/uploads/2025/12/Layer-47.png"
-          alt="PixelFrameAI interface"
+          alt="PixelManageAI interface"
           className="landing-hero-img"
           loading="eager"
         />

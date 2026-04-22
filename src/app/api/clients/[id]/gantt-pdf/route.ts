@@ -156,7 +156,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
   </table>
 
   <div class="footer">
-    נוצר על ידי סטודיו פיקסל · PixelFrameAI · ${new Date().toLocaleDateString("he-IL")}
+    נוצר על ידי סטודיו פיקסל · PixelManageAI · ${new Date().toLocaleDateString("he-IL")}
   </div>
 </body>
 </html>`;

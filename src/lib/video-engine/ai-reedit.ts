@@ -1,5 +1,5 @@
 /**
- * AI Re-edit Engine for PixelFrameAI
+ * AI Re-edit Engine for PixelManageAI
  * Generates alternative edit versions of videos in different creative modes
  * Supports: viral, premium, emotional, and sales-focused edits
  */

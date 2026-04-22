@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Error Recovery Handlers
+ * PixelManageAI — Error Recovery Handlers
  *
  * Recovery logic for each failure type. These handlers update
  * project and job status to enable the correct recovery path.
@@ -171,7 +171,7 @@ export interface StorageExistenceChecker {
 /**
  * Verify that all storage keys referenced in a render payload exist.
  *
- * Throws a PixelFrameError('RENDER_SOURCE_MISSING') if any key is missing.
+ * Throws a PixelManageError('RENDER_SOURCE_MISSING') if any key is missing.
  * Called during the 'preparing' sub-status of render execution.
  */
 export async function resolveAllAssetKeys(
@@ -190,10 +190,10 @@ export async function resolveAllAssetKeys(
 
   if (missing.length > 0) {
     // Import dynamically to avoid circular dependency
-    const { PixelFrameError } = await import("./pixelframe-error");
+    const { PixelManageError } = await import("./pixelmanage-error");
     const label = missing.join(", ");
     const plural = missing.length > 1;
-    throw new PixelFrameError(
+    throw new PixelManageError(
       "RENDER_SOURCE_MISSING",
       `The ${label} file${plural ? "s are" : " is"} no longer available. Please re-upload before rendering.`,
     );

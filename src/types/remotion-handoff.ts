@@ -1,10 +1,10 @@
 /**
- * PixelFrameAI — Remotion Runtime Handoff Types
+ * PixelManageAI — Remotion Runtime Handoff Types
  *
  * Type contracts for the bridge between the project data model
  * (RenderPayload v2.2) and the Remotion composition layer.
  *
- * These types define exactly what the PixelFrameComposition receives
+ * These types define exactly what the PixelManageComposition receives
  * as props. The worker reads _remotion from the DB and passes it
  * verbatim (after videoUrl substitution).
  *
@@ -175,12 +175,12 @@ export interface FontPreload {
 // ── Complete input props for the composition ──────────────────────────────
 
 /**
- * The full props object that `PixelFrameComposition` receives.
+ * The full props object that `PixelManageComposition` receives.
  *
  * This is the content of `render_payload._remotion` from the DB,
  * with `videoUrl` substituted by the worker from a signed storage URL.
  */
-export interface PixelFrameRemotionProps {
+export interface PixelManageRemotionProps {
   // Source video
   videoUrl: string | null;   // null in DB → substituted by worker with signed URL
 

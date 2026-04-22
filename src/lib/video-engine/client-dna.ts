@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Client DNA Analysis Engine
+ * PixelManageAI — Client DNA Analysis Engine
  * Analyzes client's content patterns, tone, recurring themes.
  */
 

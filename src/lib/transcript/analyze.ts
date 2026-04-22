@@ -71,7 +71,7 @@ export async function analyzeTranscript(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.warn(
-        `[PixelFrameAI] Anthropic analysis failed — using fallback. Reason: ${message}`
+        `[PixelManageAI] Anthropic analysis failed — using fallback. Reason: ${message}`
       );
       analysis = analyzeWithFallback(segments);
       provider = "fallback";
@@ -91,7 +91,7 @@ export async function analyzeTranscript(
       await storeAnalysis(projectId, stamped);
     } catch (err) {
       // Storage failure must not break the caller
-      console.warn(`[PixelFrameAI] Failed to store analysis for project "${projectId}":`, err);
+      console.warn(`[PixelManageAI] Failed to store analysis for project "${projectId}":`, err);
     }
   }
 

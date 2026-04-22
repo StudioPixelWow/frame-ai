@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Video Inspection
+ * PixelManageAI — Video Inspection
  *
  * Extracts authoritative server-side metadata via ffprobe.
  * The browser's HTMLVideoElement.duration is unreliable for MXF, TS,

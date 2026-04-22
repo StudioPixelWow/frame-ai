@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Output Record Creation
+ * PixelManageAI — Output Record Creation
  *
  * Creates a durable `render_outputs` record after a render job completes.
  * All five writes (version lock, primary reset, INSERT, job update,

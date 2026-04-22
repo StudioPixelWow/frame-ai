@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Render Job Types
+ * PixelManageAI — Render Job Types
  *
  * Types for the full render job lifecycle — from approval through
  * to a downloadable MP4. Covers the status machine, Remotion composition
@@ -30,7 +30,7 @@ export type RenderSubStatus =
  * Passed to Remotion's renderMedia() as the composition definition.
  */
 export interface CompositionConfig {
-  id: string;           // 'PixelFrameComposition'
+  id: string;           // 'PixelManageComposition'
   width: number;
   height: number;
   fps: number;
@@ -40,10 +40,10 @@ export interface CompositionConfig {
 // ── Remotion input props ───────────────────────────────────────────────────
 
 /**
- * The exact interface the PixelFrameComposition React component receives.
+ * The exact interface the PixelManageComposition React component receives.
  * The worker passes this to renderMedia() verbatim (after videoUrl substitution).
  */
-export interface PixelFrameInputProps {
+export interface PixelManageInputProps {
   // Source video
   videoUrl: string;       // signed CDN URL (substituted by worker — never blob)
   videoWidth: number;

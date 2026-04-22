@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — API Client Barrel Export
+ * PixelManageAI — API Client Barrel Export
  *
  * Re-exports the project/upload client alongside the render engine
  * so consumers can import everything from `@/lib/api`.

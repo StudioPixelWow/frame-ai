@@ -227,7 +227,7 @@ function getMockConnections(): Connection[] {
         { name: "write_contacts", granted: true },
         { name: "webhooks", granted: false },
       ],
-      accountLabel: "PixelFrameAI CRM",
+      accountLabel: "PixelManageAI CRM",
       actionLabel: "תקן סנכרון",
       actionVariant: "warning",
     },

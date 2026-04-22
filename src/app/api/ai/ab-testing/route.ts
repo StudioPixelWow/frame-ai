@@ -1,5 +1,5 @@
 /**
- * A/B Testing API Route for PixelFrameAI
+ * A/B Testing API Route for PixelManageAI
  *
  * GET /api/ai/ab-testing — Fetch stored A/B test results for a client
  * POST /api/ai/ab-testing — Generate 2-3 content variations for A/B testing

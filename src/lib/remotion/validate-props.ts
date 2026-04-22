@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Render Input Props Validator
+ * PixelManageAI — Render Input Props Validator
  *
  * Validates the key fields in `inputProps` before calling renderMedia().
  * A silent bad value (e.g. `clip.durSec = 0`) produces a 0-frame
@@ -11,7 +11,7 @@
  * since the result would be the same.
  */
 
-import type { PixelFrameRemotionProps } from "@/types/remotion-handoff";
+import type { PixelManageRemotionProps } from "@/types/remotion-handoff";
 import type { CompositionLayout } from "./composition-layout";
 
 /**
@@ -40,7 +40,7 @@ export class RenderValidationError extends Error {
  * @throws RenderValidationError with all issues listed if validation fails
  */
 export function validateInputProps(
-  props: PixelFrameRemotionProps,
+  props: PixelManageRemotionProps,
   config: CompositionLayout,
   renderId?: string,
 ): void {

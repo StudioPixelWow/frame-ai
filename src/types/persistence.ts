@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Project Persistence Types
+ * PixelManageAI — Project Persistence Types
  *
  * The complete, serialisable snapshot of a wizard session.
  * Stored verbatim in projects.wizard_state (JSONB).

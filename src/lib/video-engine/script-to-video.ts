@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Script-to-Video Engine
+ * PixelManageAI — Script-to-Video Engine
  * Converts script text into timed subtitle segments and scene plans.
  */
 

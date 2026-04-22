@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Error Code Registry
+ * PixelManageAI — Error Code Registry
  *
  * Stable, machine-readable error codes for every failure mode.
  * Used for support triage, UI branching, and retry classification.
@@ -65,7 +65,7 @@ export const UNKNOWN_ERROR = "UNKNOWN_ERROR" as const;
 
 // ── All error codes type ──────────────────────────────────────────────────
 
-export type PixelFrameErrorCode =
+export type PixelManageErrorCode =
   | typeof UPLOAD_NETWORK_FAILURE
   | typeof UPLOAD_SIZE_EXCEEDED
   | typeof UPLOAD_TYPE_REJECTED
@@ -93,7 +93,7 @@ export type PixelFrameErrorCode =
 
 // ── Code → category mapping ───────────────────────────────────────────────
 
-const CODE_CATEGORIES: Record<PixelFrameErrorCode, ErrorCategory> = {
+const CODE_CATEGORIES: Record<PixelManageErrorCode, ErrorCategory> = {
   UPLOAD_NETWORK_FAILURE: "transient",
   UPLOAD_SIZE_EXCEEDED: "input_invalid",
   UPLOAD_TYPE_REJECTED: "input_invalid",
@@ -124,14 +124,14 @@ const CODE_CATEGORIES: Record<PixelFrameErrorCode, ErrorCategory> = {
  * Get the error category for a given error code.
  */
 export function categorise(code: string): ErrorCategory {
-  return CODE_CATEGORIES[code as PixelFrameErrorCode] ?? "logic_error";
+  return CODE_CATEGORIES[code as PixelManageErrorCode] ?? "logic_error";
 }
 
 // ── Non-retryable codes set ───────────────────────────────────────────────
 
 /**
  * Error codes that should NEVER be auto-retried.
- * Used by the enhanced `isRetryable()` in pixelframe-error.ts.
+ * Used by the enhanced `isRetryable()` in pixelmanage-error.ts.
  */
 export const NON_RETRYABLE_CODES = new Set<string>([
   UPLOAD_SIZE_EXCEEDED,

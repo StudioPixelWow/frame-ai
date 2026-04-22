@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Composition Layout Calculator
+ * PixelManageAI — Composition Layout Calculator
  *
  * Maps output format IDs to canvas pixel dimensions and computes
  * `durationInFrames` from clip duration. The result is stored in
@@ -26,13 +26,13 @@ export const COMPOSITION_FPS = 30;
 // ── Composition ID ────────────────────────────────────────────────────────
 
 /**
- * The stable Remotion composition ID — always "PixelFrame".
- * This matches the `<Composition id="PixelFrame" ...>` in Root.tsx.
+ * The stable Remotion composition ID — always "PixelManage".
+ * This matches the `<Composition id="PixelManage" ...>` in Root.tsx.
  *
  * Do NOT use the project metadata ID (e.g. 'p1234567890') as the
  * composition ID — that is for logging only.
  */
-export const REMOTION_COMPOSITION_ID = "PixelFrame";
+export const REMOTION_COMPOSITION_ID = "PixelManage";
 
 // ── Layout result ─────────────────────────────────────────────────────────
 

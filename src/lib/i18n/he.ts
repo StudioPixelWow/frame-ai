@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Hebrew Locale Dictionary
+ * PixelManageAI — Hebrew Locale Dictionary
  *
  * Complete Hebrew translations for the entire UI. This is the single
  * source of truth — components import from here rather than hardcoding

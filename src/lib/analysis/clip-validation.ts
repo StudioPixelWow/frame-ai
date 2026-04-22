@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Clip Timing Validation
+ * PixelManageAI — Clip Timing Validation
  *
  * Validates clip range and re-indexes segments to clip-relative time.
  * Runs synchronously in the API handler (not a worker job).

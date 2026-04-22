@@ -230,7 +230,7 @@ async function renderJob(jobId: string): Promise<void> {
 
   const metadata = job.metadata || {};
   const inputProps = metadata.inputProps || {};
-  const compositionId = metadata.compositionId || "PixelFrameEdit";
+  const compositionId = metadata.compositionId || "PixelManageEdit";
   const sourceVideoUrl: string = inputProps.videoUrl || metadata.videoUrl || "";
   const projectId = job.project_id || "unknown";
 
@@ -595,7 +595,7 @@ async function pollForJobs(): Promise<void> {
 
 async function main(): Promise<void> {
   console.log("═══════════════════════════════════════════════════════════");
-  console.log(" PixelFrameAI Render Worker (Real Remotion)");
+  console.log(" PixelManageAI Render Worker (Real Remotion)");
   console.log("═══════════════════════════════════════════════════════════");
   console.log(`${tag} NODE_ENV:          ${process.env.NODE_ENV ?? "(unset)"}`);
   console.log(`${tag} RAILWAY_ENV:       ${process.env.RAILWAY_ENVIRONMENT ?? "(unset)"}`);

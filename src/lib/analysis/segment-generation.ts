@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Segment Generation
+ * PixelManageAI — Segment Generation
  *
  * Groups the raw word array from transcription into readable subtitle
  * blocks (RawSegment[]). Runs synchronously inside the transcription worker,

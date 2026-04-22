@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Error Banner & API Error Contracts
+ * PixelManageAI — Error Banner & API Error Contracts
  *
  * Type definitions for user-visible error states.
  *

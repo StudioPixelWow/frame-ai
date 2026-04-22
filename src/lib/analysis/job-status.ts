@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Analysis Job Status Machine & Retry Logic
+ * PixelManageAI — Analysis Job Status Machine & Retry Logic
  *
  * Manages job state transitions, retry with exponential backoff,
  * and error classification (retryable vs terminal).

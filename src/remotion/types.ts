@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Remotion Type Definitions
+ * PixelManageAI — Remotion Type Definitions
  * Types shared between all Remotion components.
  */
 

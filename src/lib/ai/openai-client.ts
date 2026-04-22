@@ -1,5 +1,5 @@
 /**
- * OpenAI integration for PixelFrameAI
+ * OpenAI integration for PixelManageAI
  * Uses the OpenAI Chat Completions API
  */
 

@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Player, type PlayerRef } from "@remotion/player";
-import { PixelFrameEdit } from "@/remotion/PixelFrameEdit";
+import { PixelManageEdit } from "@/remotion/PixelManageEdit";
 import { FPS, FORMAT_DIMENSIONS } from "@/remotion/types";
 import { useProjects, useClients } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
@@ -468,7 +468,7 @@ export default function ProjectDetailPage() {
             <div style={{ position: "relative", borderRadius: "16px", overflow: "hidden", backgroundColor: "#1a1a1a" }}>
               <Player
                 ref={playerRef}
-                component={PixelFrameEdit as unknown as React.FC<Record<string, unknown>>}
+                component={PixelManageEdit as unknown as React.FC<Record<string, unknown>>}
                 inputProps={savedComposition.remotionProps as unknown as Record<string, unknown>}
                 durationInFrames={Math.max(1, savedComposition.durationFrames)}
                 compositionWidth={savedComposition.dims.width}

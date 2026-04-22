@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
       projectId,
       metadata: {
         projectName: projectName || "Untitled",
-        compositionId: "PixelFrameEdit",
+        compositionId: "PixelManageEdit",
         inputProps,
         quality: quality || "premium",
         videoUrl,

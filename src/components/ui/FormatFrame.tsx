@@ -2,7 +2,7 @@
 
 import { useRef, useState, useMemo, useCallback, useEffect } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
-import { PixelFrameEdit } from "@/remotion/PixelFrameEdit";
+import { PixelManageEdit } from "@/remotion/PixelManageEdit";
 import { FPS, FORMAT_DIMENSIONS } from "@/remotion/types";
 import type { CompositionProps } from "@/remotion/types";
 
@@ -206,7 +206,7 @@ export function FormatFrame({
         {remotionProps && !playerError ? (
           <Player
             ref={playerEl}
-            component={PixelFrameEdit as unknown as React.FC<Record<string, unknown>>}
+            component={PixelManageEdit as unknown as React.FC<Record<string, unknown>>}
             inputProps={remotionProps}
             durationInFrames={durationInFrames}
             compositionWidth={dims.width}

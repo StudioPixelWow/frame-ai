@@ -1,5 +1,5 @@
 /**
- * PixelFrameAI — Transcription Provider Abstraction
+ * PixelManageAI — Transcription Provider Abstraction
  *
  * Defines the provider interface and configuration for ASR services.
  * Actual provider implementations (Whisper, AssemblyAI, etc.) will be

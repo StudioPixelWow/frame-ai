@@ -1,10 +1,10 @@
 /**
- * PixelFrameAI — Remotion Root
+ * PixelManageAI — Remotion Root
  * Registers the main composition with dynamic metadata.
  */
 import React from "react";
 import { Composition } from "remotion";
-import { PixelFrameEdit } from "./PixelFrameEdit";
+import { PixelManageEdit } from "./PixelManageEdit";
 import { UGCBrandedVideo } from "./UGCBrandedVideo";
 import type { CompositionProps } from "./types";
 import { FPS, FORMAT_DIMENSIONS } from "./types";
@@ -73,8 +73,8 @@ export const RemotionRoot: React.FC = () => {
   return (
     <>
       <Composition
-        id="PixelFrameEdit"
-        component={PixelFrameEdit as unknown as React.FC<Record<string, unknown>>}
+        id="PixelManageEdit"
+        component={PixelManageEdit as unknown as React.FC<Record<string, unknown>>}
         durationInFrames={FPS * 15}
         fps={FPS}
         width={1080}
