@@ -221,9 +221,14 @@ const CATEGORY_LABELS = {
 export function FloatingAI() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const { data: campaigns } = useCampaigns();
-  const { data: leads } = useLeads();
-  const { data: clients } = useClients();
+  const { data: rawCampaigns } = useCampaigns();
+  const { data: rawLeads } = useLeads();
+  const { data: rawClients } = useClients();
+
+  // Safe fallbacks — never let undefined reach .filter/.map/.reduce
+  const campaigns = rawCampaigns ?? [];
+  const leads = rawLeads ?? [];
+  const clients = rawClients ?? [];
 
   const suggestions = useMemo(
     () => generatePageSuggestions(pathname, campaigns, leads, clients),

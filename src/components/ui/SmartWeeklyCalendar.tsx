@@ -176,8 +176,12 @@ function calculateScore(days: DayData[], allTasks: any[]): { score: number; labe
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function SmartWeeklyCalendar() {
-  const { data: tasks } = useTasks();
-  const { data: meetings } = useMeetings();
+  const { data: rawTasks } = useTasks();
+  const { data: rawMeetings } = useMeetings();
+
+  // Safe fallbacks — never let undefined reach .filter/.map/.reduce
+  const tasks = rawTasks ?? [];
+  const meetings = rawMeetings ?? [];
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 

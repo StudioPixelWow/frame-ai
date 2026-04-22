@@ -26,11 +26,14 @@ interface Props {
 
 export function ProjectNotificationBell({ projectId }: Props) {
   const router = useRouter();
-  const { data: allNotifications, update: updateNotification, refetch } = useProjectNotifications();
+  const { data: rawNotifications, update: updateNotification, refetch } = useProjectNotifications();
   const [isOpen, setIsOpen] = useState(false);
   const [generatingLoading, setGeneratingLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Safe fallback — never let undefined reach .filter/.map
+  const allNotifications = rawNotifications ?? [];
 
   // Filter by project if needed
   const notifications = projectId

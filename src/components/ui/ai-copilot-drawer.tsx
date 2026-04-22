@@ -101,11 +101,19 @@ const getSeverityIcon = (severity: "critical" | "warning" | "info"): string => {
 
 // Insights Tab Component
 const InsightsTab: React.FC = () => {
-  const { alerts, insights } = useOperationalAlerts();
-  const { data: tasks } = useTasks();
-  const { data: clients } = useClients();
-  const { data: campaigns } = useCampaigns();
-  const { data: payments } = usePayments();
+  const { alerts: rawAlerts, insights: rawInsights } = useOperationalAlerts();
+  const { data: rawTasks } = useTasks();
+  const { data: rawClients } = useClients();
+  const { data: rawCampaigns } = useCampaigns();
+  const { data: rawPayments } = usePayments();
+
+  // Safe fallbacks — never let undefined reach .filter/.map/.reduce
+  const alerts = rawAlerts ?? [];
+  const insights = rawInsights ?? [];
+  const tasks = rawTasks ?? [];
+  const clients = rawClients ?? [];
+  const campaigns = rawCampaigns ?? [];
+  const payments = rawPayments ?? [];
 
   const allAlerts = useMemo(() => {
     const mapped = alerts.map((alert) => ({
@@ -268,15 +276,20 @@ const InsightsTab: React.FC = () => {
 
 // Actions Tab Component
 const ActionsTab: React.FC = () => {
-  const { data: tasks } = useTasks();
-  const { data: clients } = useClients();
-  const { data: payments } = usePayments();
+  const { data: rawTasks } = useTasks();
+  const { data: rawClients } = useClients();
+  const { data: rawPayments } = usePayments();
+
+  // Safe fallbacks — never let undefined reach .filter/.map/.reduce
+  const tasks = rawTasks ?? [];
+  const clients = rawClients ?? [];
+  const payments = rawPayments ?? [];
 
   const stats = useMemo(() => {
     return {
-      activeClients: clients?.filter((c) => (c as any).status !== "inactive").length || 0,
-      openTasks: tasks?.filter((t) => (t as any).status !== "completed").length || 0,
-      pendingPayments: payments?.filter((p) => (p as any).status === "pending").length || 0,
+      activeClients: clients.filter((c) => (c as any).status !== "inactive").length,
+      openTasks: tasks.filter((t) => (t as any).status !== "completed").length,
+      pendingPayments: payments.filter((p) => (p as any).status === "pending").length,
     };
   }, [clients, tasks, payments]);
 
@@ -842,7 +855,8 @@ const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({ isOpen, onClose }) =>
   );
   const pathname = usePathname();
   const pageName = getPageName(pathname);
-  const { alerts } = useOperationalAlerts();
+  const { alerts: rawAlerts } = useOperationalAlerts();
+  const alerts = rawAlerts ?? [];
 
   const criticalAlertCount = useMemo(() => {
     return alerts.filter((a) => a.severity === "critical").length;
@@ -1012,7 +1026,8 @@ interface AICopilotToggleProps {
 }
 
 const AICopilotToggle: React.FC<AICopilotToggleProps> = ({ onClick, isOpen }) => {
-  const { alerts } = useOperationalAlerts();
+  const { alerts: rawAlerts } = useOperationalAlerts();
+  const alerts = rawAlerts ?? [];
 
   const criticalAlertCount = useMemo(() => {
     return alerts.filter((a) => a.severity === "critical").length;
