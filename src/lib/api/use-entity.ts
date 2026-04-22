@@ -40,16 +40,16 @@ import type {
   ProjectNotification,
 } from '@/lib/db/schema';
 
-// Core entities with realtime polling (30s) + focus refetch
-export const useClients = () => useData<Client>('clients', { pollInterval: 30000 });
-export const useProjects = () => useData<Project>('projects');
-export const useTasks = () => useData<Task>('tasks', { pollInterval: 30000 });
-export const usePayments = () => useData<Payment>('payments', { pollInterval: 30000 });
-export const useLeads = () => useData<Lead>('leads', { pollInterval: 60000 });
-export const useEmployees = () => useData<Employee>('employees');
-export const useCampaigns = () => useData<Campaign>('campaigns');
-export const useUsers = () => useData<User>('users');
-export const useApprovals = () => useData<Approval>('approvals', { pollInterval: 30000 });
+// Core entities — relaxed polling (3 min) + no refetch on focus to avoid jankiness
+export const useClients = () => useData<Client>('clients', { pollInterval: 180000, refetchOnFocus: false });
+export const useProjects = () => useData<Project>('projects', { refetchOnFocus: false });
+export const useTasks = () => useData<Task>('tasks', { pollInterval: 180000, refetchOnFocus: false });
+export const usePayments = () => useData<Payment>('payments', { pollInterval: 180000, refetchOnFocus: false });
+export const useLeads = () => useData<Lead>('leads', { pollInterval: 300000, refetchOnFocus: false });
+export const useEmployees = () => useData<Employee>('employees', { refetchOnFocus: false });
+export const useCampaigns = () => useData<Campaign>('campaigns', { refetchOnFocus: false });
+export const useUsers = () => useData<User>('users', { refetchOnFocus: false });
+export const useApprovals = () => useData<Approval>('approvals', { pollInterval: 180000, refetchOnFocus: false });
 export const useActivities = () => useData<ActivityEntry>('activities');
 export const useClientGanttItems = () => useData<ClientGanttItem>('client-gantt-items');
 export const useClientTasks = () => useData<ClientTask>('client-tasks');
