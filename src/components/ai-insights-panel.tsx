@@ -42,8 +42,16 @@ export function generateInsights(data: {
   const insights: AIInsight[] = [];
   const now = new Date();
 
+  // Safe fallbacks — never let undefined reach .filter/.map/.reduce
+  const safeTasks = data.tasks ?? [];
+  const safeClients = data.clients ?? [];
+  const safeApprovals = data.approvals ?? [];
+  const safePayments = data.payments ?? [];
+  const safeCampaigns = data.campaigns ?? [];
+  const safeSocialPosts = data.socialPosts ?? [];
+
   // ── HOT: Tasks stuck in review > 3 days ──
-  const stuckInReview = data.tasks.filter(t => {
+  const stuckInReview = safeTasks.filter(t => {
     return t.status === 'under_review';
   });
   if (stuckInReview.length > 0) {
@@ -58,7 +66,7 @@ export function generateInsights(data: {
   }
 
   // ── WARNING: Overdue payments ──
-  const overduePayments = data.payments.filter(p =>
+  const overduePayments = safePayments.filter(p =>
     (p.status === 'overdue') ||
     (p.status === 'pending' && p.dueDate && new Date(p.dueDate) < now)
   );
@@ -75,7 +83,7 @@ export function generateInsights(data: {
   }
 
   // ── ACTION: Pending approvals ──
-  const pendingApprovals = data.approvals.filter(a => a.status === 'pending_approval');
+  const pendingApprovals = safeApprovals.filter(a => a.status === 'pending_approval');
   if (pendingApprovals.length > 0) {
     insights.push({
       id: 'pending-approvals',
@@ -88,7 +96,7 @@ export function generateInsights(data: {
   }
 
   // ── WARNING: Clients without gantt plan ──
-  const missingGantt = data.clients.filter(c =>
+  const missingGantt = safeClients.filter(c =>
     c.status === 'active' &&
     (!c.monthlyGanttStatus || c.monthlyGanttStatus === 'none' || c.monthlyGanttStatus === 'draft')
   );
@@ -105,11 +113,11 @@ export function generateInsights(data: {
 
   // ── OPPORTUNITY: Clients with low social activity ──
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const lowActivity = data.clients
+  const lowActivity = safeClients
     .filter(c => c.status === 'active' && c.clientType !== 'podcast' && c.clientType !== 'hosting')
     .map(c => ({
       ...c,
-      postCount: data.socialPosts.filter(p => p.clientId === c.id && p.createdAt && new Date(p.createdAt) >= monthStart).length,
+      postCount: safeSocialPosts.filter(p => p.clientId === c.id && p.createdAt && new Date(p.createdAt) >= monthStart).length,
     }))
     .filter(c => c.postCount < 2);
   if (lowActivity.length > 0) {
@@ -124,7 +132,7 @@ export function generateInsights(data: {
   }
 
   // ── OPPORTUNITY: Active campaigns ──
-  const activeCampaigns = data.campaigns.filter(c => c.status === 'active');
+  const activeCampaigns = safeCampaigns.filter(c => c.status === 'active');
   if (activeCampaigns.length > 0) {
     insights.push({
       id: 'active-campaigns',
@@ -137,7 +145,7 @@ export function generateInsights(data: {
   }
 
   // ── HOT: Overdue tasks ──
-  const overdueTasks = data.tasks.filter(t =>
+  const overdueTasks = safeTasks.filter(t =>
     t.dueDate && new Date(t.dueDate) < now && t.status !== 'completed' && t.status !== 'approved'
   );
   if (overdueTasks.length > 0) {

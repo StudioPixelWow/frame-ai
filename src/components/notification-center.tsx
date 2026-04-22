@@ -9,7 +9,8 @@ import type { AlertSeverity } from '@/lib/alerts/engine';
 
 export function NotificationCenter() {
   const router = useRouter();
-  const { alerts, totalAlerts, criticalCount, warningCount } = useOperationalAlerts();
+  const { alerts: rawAlerts, totalAlerts, criticalCount, warningCount } = useOperationalAlerts();
+  const alerts = rawAlerts ?? [];
   const [isOpen, setIsOpen] = useState(false);
   const [severityFilter, setSeverityFilter] = useState<Set<AlertSeverity>>(
     new Set(['critical', 'warning', 'info'])
