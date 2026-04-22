@@ -1,80 +1,86 @@
 'use client';
 
 import Link from 'next/link';
+import { useMemo } from 'react';
+import { useAutomationRules, useAutomationRuns } from '@/lib/api/use-entity';
 
 interface Props {
   clientId: string;
   clientName: string;
 }
 
-export function TabAutomations({ clientId, clientName }: Props) {
-  const automations = [
-    {
-      id: 1,
-      name: 'מעקב אחרי ליד חדש',
-      trigger: 'ליד נוצר',
-      action: 'שלח מייל מעקב',
-      status: 'פעיל',
-      lastRun: 'לפני 3 שעות',
-    },
-    {
-      id: 2,
-      name: `הזמנה לפגישה - ${clientName}`,
-      trigger: 'הלקוח ביטל פגישה',
-      action: 'שלח הודעה ב-SMS',
-      status: 'פעיל',
-      lastRun: 'לפני 5 שעות',
-    },
-    {
-      id: 3,
-      name: `קבלת תשלום - ${clientName}`,
-      trigger: 'התשלום בביצוע',
-      action: 'שלח אישור וחשבונית',
-      status: 'לא פעיל',
-      lastRun: 'לפני יום',
-    },
-    {
-      id: 4,
-      name: 'התראה על תוכן חדש',
-      trigger: 'תוכן בוצע',
-      action: 'שלח הודעה לטל זטלמן',
-      status: 'פעיל',
-      lastRun: 'לפני 2 שעות',
-    },
-  ];
+const ACTION_LABELS: Record<string, string> = {
+  create_task: 'יצירת משימה',
+  assign_employee: 'הקצאת נציג',
+  send_email: 'שליחת אימייל',
+  send_whatsapp: 'שליחת WhatsApp',
+  create_notification: 'יצירת התראה',
+  push_to_approval_center: 'שליחה לאישור',
+  update_status: 'עדכון סטטוס',
+};
 
-  const recentActivities = [
-    {
-      id: 1,
-      action: `שלח מייל מעקב ללקוח ${clientName}`,
-      timestamp: 'לפני 2 שעות',
-      status: 'הצלחה',
-    },
-    {
-      id: 2,
-      action: 'אוטומציה: קבלת תשלום הופעלה',
-      timestamp: 'לפני 4 שעות',
-      status: 'הצלחה',
-    },
-    {
-      id: 3,
-      action: `עדכון נתונים ללקוח ${clientName}`,
-      timestamp: 'לפני 6 שעות',
-      status: 'הצלחה',
-    },
-    {
-      id: 4,
-      action: 'אוטומציה: התראת תשלום להוגשה',
-      timestamp: 'לפני יום',
-      status: 'כשל',
-    },
-    {
-      id: 5,
-      action: `עדכון סטטוס עבור ${clientName}`,
-      timestamp: 'לפני יומיים',
-      status: 'הצלחה',
-    },
-  ];
+const TRIGGER_LABELS: Record<string, string> = {
+  lead_status_changed: 'שינוי סטטוס ליד',
+  task_created: 'משימה נוצרה',
+  task_status_changed: 'שינוי סטטוס משימה',
+  payment_overdue: 'תשלום באיחור',
+  project_created: 'פרויקט נוצר',
+  proposal_sent: 'הצעה נשלחה',
+  payment_due: 'תשלום מגיע',
+  gantt_created: 'גאנט נוצר',
+  gantt_approved: 'גאנט אושר',
+};
+
+// Default mock automations for when no client-scoped rules exist
+const DEFAULT_AUTOMATIONS = [
+  { id: 'demo-1', name: 'מעקב אחרי ליד חדש', trigger: 'lead_status_changed', action: 'send_email', status: 'פעיל', lastRun: 'לפני 3 שעות' },
+  { id: 'demo-2', name: 'התראת תשלום', trigger: 'payment_overdue', action: 'create_notification', status: 'פעיל', lastRun: 'לפני 5 שעות' },
+  { id: 'demo-3', name: 'יצירת משימה', trigger: 'task_created', action: 'create_task', status: 'לא פעיל', lastRun: 'לפני יום' },
+];
+
+export function TabAutomations({ clientId, clientName }: Props) {
+  const { data: allRules = [] } = useAutomationRules();
+  const { data: allRuns = [] } = useAutomationRuns();
+
+  // Filter rules scoped to this client (or global rules)
+  const clientRules = useMemo(() => {
+    const rules = allRules.filter(r => r.clientId === clientId || !r.clientId);
+    return rules.length > 0 ? rules : null;
+  }, [allRules, clientId]);
+
+  // Get recent runs for this client
+  const clientRuns = useMemo(() => {
+    return allRuns
+      .filter(r => r.clientId === clientId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5);
+  }, [allRuns, clientId]);
+
+  const automations = clientRules
+    ? clientRules.map(r => ({
+        id: r.id,
+        name: r.name,
+        trigger: r.trigger,
+        action: r.action,
+        status: r.isActive ? 'פעיל' : 'לא פעיל',
+        lastRun: r.lastTriggeredAt
+          ? `לפני ${Math.floor((Date.now() - new Date(r.lastTriggeredAt).getTime()) / 3600000)} שעות`
+          : 'טרם הופעל',
+      }))
+    : DEFAULT_AUTOMATIONS;
+
+  const recentActivities = clientRuns.length > 0
+    ? clientRuns.map(run => ({
+        id: run.id,
+        action: `${run.ruleName}: ${ACTION_LABELS[run.action] || run.action}`,
+        timestamp: `לפני ${Math.max(1, Math.floor((Date.now() - new Date(run.createdAt).getTime()) / 3600000))} שעות`,
+        status: run.status === 'success' || run.status === 'approved' ? 'הצלחה' : run.status === 'failed' ? 'כשל' : 'ממתין',
+      }))
+    : [
+        { id: 'd-1', action: `שלח מייל מעקב ללקוח ${clientName}`, timestamp: 'לפני 2 שעות', status: 'הצלחה' },
+        { id: 'd-2', action: 'אוטומציה: קבלת תשלום הופעלה', timestamp: 'לפני 4 שעות', status: 'הצלחה' },
+        { id: 'd-3', action: `עדכון נתונים ללקוח ${clientName}`, timestamp: 'לפני 6 שעות', status: 'הצלחה' },
+      ];
 
   const suggestions = [
     {
@@ -98,22 +104,14 @@ export function TabAutomations({ clientId, clientName }: Props) {
   ];
 
   const templates = [
-    {
-      id: 1,
-      name: 'מעקב ליד חדש',
-      description: 'שלח מייל מעקב בעת יצירת ליד חדש',
-    },
-    {
-      id: 2,
-      name: 'התראת תשלום באיחור',
-      description: 'שלח הזכרון כאשר תשלום באיחור',
-    },
+    { id: 1, name: 'מעקב ליד חדש', description: 'שלח מייל מעקב בעת יצירת ליד חדש' },
+    { id: 2, name: 'התראת תשלום באיחור', description: 'שלח הזכרון כאשר תשלום באיחור' },
   ];
 
   const statusColors: Record<string, string> = {
     'הצלחה': '#22c55e',
     'כשל': '#ef4444',
-    'התראה': '#f59e0b',
+    'ממתין': '#f59e0b',
   };
 
   return (
@@ -144,7 +142,6 @@ export function TabAutomations({ clientId, clientName }: Props) {
                   {auto.name}
                 </h3>
                 <span
-                  className={`auto-badge-${auto.status === 'פעיל' ? 'active' : 'inactive'}`}
                   style={{
                     fontSize: '0.7rem',
                     fontWeight: 600,
@@ -161,9 +158,9 @@ export function TabAutomations({ clientId, clientName }: Props) {
               </div>
 
               <div style={{ fontSize: '0.85rem', color: 'var(--foreground-muted)', margin: '0.25rem 0' }}>
-                <span style={{ display: 'inline-block' }}>📤 {auto.trigger}</span>
+                <span style={{ display: 'inline-block' }}>📤 {TRIGGER_LABELS[auto.trigger] || auto.trigger}</span>
                 <span style={{ display: 'block', margin: '0.25rem 0' }}>→</span>
-                <span style={{ display: 'inline-block' }}>📥 {auto.action}</span>
+                <span style={{ display: 'inline-block' }}>📥 {ACTION_LABELS[auto.action] || auto.action}</span>
               </div>
 
               <div style={{ fontSize: '0.8rem', color: 'var(--foreground-muted)', marginTop: '0.5rem' }}>

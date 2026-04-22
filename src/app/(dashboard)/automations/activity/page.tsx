@@ -2,7 +2,8 @@
 export const dynamic = "force-dynamic";
 
 import React, { useMemo, useState } from 'react';
-import { useSystemEvents } from '@/lib/api/use-entity';
+import { useSystemEvents, useAutomationRuns } from '@/lib/api/use-entity';
+import type { AutomationRun } from '@/lib/db/schema';
 
 // Mock data generator
 const generateMockEvents = () => {
@@ -162,10 +163,66 @@ const generateMockEvents = () => {
 
 type TimelineEvent = ReturnType<typeof generateMockEvents>[0];
 
+const ACTION_LABELS: Record<string, string> = {
+  create_task: 'יצירת משימה',
+  assign_employee: 'הקצאת נציג',
+  send_email: 'שליחת אימייל',
+  send_whatsapp: 'שליחת WhatsApp',
+  create_notification: 'יצירת התראה',
+  push_to_approval_center: 'שליחה לאישור',
+  update_status: 'עדכון סטטוס',
+};
+
+function mapRunToTimeline(run: AutomationRun): TimelineEvent {
+  const resultMap: Record<string, string> = {
+    success: 'success',
+    failed: 'failed',
+    pending_approval: 'waiting',
+    approved: 'success',
+    rejected: 'failed',
+    skipped: 'ai_recommendation',
+  };
+  return {
+    id: run.id,
+    automationName: run.ruleName,
+    automationId: run.ruleId,
+    actionType: run.action.includes('email') ? 'email' :
+      run.action.includes('whatsapp') ? 'whatsapp' :
+      run.action.includes('task') ? 'task' :
+      run.action.includes('assign') ? 'assign' :
+      run.action.includes('notification') ? 'notification' : 'update',
+    actionDesc: ACTION_LABELS[run.action] || run.action,
+    result: (resultMap[run.status] || 'success') as any,
+    entityType: run.entityType || 'system',
+    entityName: (run.result as any)?.employeeName || run.ruleName || '',
+    details: (run.result as any)?.details || `${run.action} — ${run.eventType}`,
+    createdAt: run.createdAt,
+    ...(run.aiDecision ? { aiSuggestion: (run.aiDecision as any)?.suggestedAction } : {}),
+    ...(run.status === 'failed' ? { errorMessage: (run.result as any)?.details } : {}),
+  };
+}
+
 function ActivityPage() {
   const { data: events = [] } = useSystemEvents();
+  const { data: runs = [] } = useAutomationRuns();
   const mockEvents = generateMockEvents();
-  const timelineEvents = (events && events.length > 0 ? events : mockEvents) as TimelineEvent[];
+
+  // Convert real automation runs to timeline format and merge
+  const realRunEvents = useMemo(() => {
+    if (!runs || runs.length === 0) return [];
+    return runs.map(mapRunToTimeline);
+  }, [runs]);
+
+  const timelineEvents = useMemo(() => {
+    if (realRunEvents.length > 0) {
+      // Merge real runs with any system events
+      return [...realRunEvents].sort((a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+    }
+    // Fallback to mock
+    return mockEvents;
+  }, [realRunEvents, mockEvents]) as TimelineEvent[];
 
   const [resultFilter, setResultFilter] = useState<'all' | 'success' | 'failed' | 'waiting'>('all');
   const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month' | 'all'>('all');

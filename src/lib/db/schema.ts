@@ -818,6 +818,54 @@ export interface AutomationRule {
   updatedAt: string;
 }
 
+// Automation Run — persisted execution record
+export type AutomationRunStatus = 'success' | 'failed' | 'skipped' | 'pending_approval' | 'approved' | 'rejected';
+
+export interface AutomationRun {
+  id: string;
+  ruleId: string;
+  ruleName: string;
+  eventId: string;
+  eventType: string;
+  trigger: string;
+  action: string;
+  status: AutomationRunStatus;
+  approvalMode: 'auto_safe' | 'requires_approval' | 'recommendation_only';
+  result: Record<string, unknown>;
+  aiDecision: Record<string, unknown> | null;
+  clientId: string | null;
+  entityType: string;
+  entityId: string | null;
+  executedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Approval Queue Item — pending automation approvals
+export type ApprovalQueueStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+
+export interface ApprovalQueueItem {
+  id: string;
+  automationRunId: string;
+  ruleId: string;
+  ruleName: string;
+  action: string;
+  eventType: string;
+  eventPayload: Record<string, unknown>;
+  clientId: string | null;
+  clientName: string;
+  entityType: string;
+  entityId: string | null;
+  aiRecommendation: string | null;
+  aiConfidence: number | null;
+  status: ApprovalQueueStatus;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNotes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // WhatsApp Message
 export type WhatsAppMessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
 

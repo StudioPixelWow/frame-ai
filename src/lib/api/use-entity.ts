@@ -30,6 +30,8 @@ import type {
   AISettings,
   ClientKnowledge,
   AutomationRule,
+  AutomationRun,
+  ApprovalQueueItem,
   WhatsAppMessage,
   EmailTemplate,
   Mailing,
@@ -81,3 +83,5 @@ export const useProjectTimeline = () => useData<ProjectTimelineEvent>('project-t
 export const useProjectNotifications = () => useData<ProjectNotification>('project-notifications');
 export const useSystemEvents = () => useData<SystemEvent>('system-events', { pollInterval: 180000, refetchOnFocus: false });
 export const useAuditLog = () => useData<AuditLog>('audit-log', { pollInterval: 180000, refetchOnFocus: false });
+export const useAutomationRuns = () => useData<AutomationRun>('automation-runs', { pollInterval: 60000, refetchOnFocus: false });
+export const useApprovalQueue = () => useData<ApprovalQueueItem>('approval-queue', { pollInterval: 30000, refetchOnFocus: false });

@@ -30,6 +30,8 @@ import type {
   ClientResearch,
   ClientInsight,
   AutomationRule,
+  AutomationRun,
+  ApprovalQueueItem,
   WhatsAppMessage,
   EmailTemplate,
   Mailing,
@@ -73,6 +75,8 @@ export const employeeTasks = new SupabaseCrud<EmployeeTask>('app_employee_tasks'
 export const followUpReminders = new SupabaseCrud<FollowUpReminder>('app_follow_up_reminders', 'fur');
 export const portalComments = new JsonStore<PortalComment>('portal-comments', 'pcm');
 export const automationRules = new JsonStore<AutomationRule>('automation-rules', 'atr');
+export const automationRuns = new JsonStore<AutomationRun>('automation-runs', 'arn');
+export const approvalQueue = new JsonStore<ApprovalQueueItem>('approval-queue', 'apq');
 export const whatsappMessages = new SupabaseCrud<WhatsAppMessage>('app_whatsapp_messages', 'wam');
 export const emailTemplates = new JsonStore<EmailTemplate>('email-templates', 'emt');
 export const mailings = new SupabaseCrud<Mailing>('app_mailings', 'mai');
