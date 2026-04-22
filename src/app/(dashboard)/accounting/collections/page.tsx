@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import Link from "next/link";
 import { useClients, usePayments, useProjectPayments, useHostingRecords, usePodcastSessions } from "@/lib/api/use-entity";
 import { useState, useMemo } from "react";
@@ -16,12 +18,19 @@ interface PaymentEvent {
 }
 
 export default function CollectionsPage() {
-  const { data: clients } = useClients();
-  const { data: payments } = usePayments();
-  const { data: projectPayments } = useProjectPayments();
-  const { data: hostingRecords } = useHostingRecords();
-  const { data: podcastSessions } = usePodcastSessions();
+  const { data: rawClients } = useClients();
+  const { data: rawPayments } = usePayments();
+  const { data: rawProjectPayments } = useProjectPayments();
+  const { data: rawHostingRecords } = useHostingRecords();
+  const { data: rawPodcastSessions } = usePodcastSessions();
   const toast = useToast();
+
+  // Safe fallbacks — never let undefined reach .filter/.map/.forEach
+  const clients = rawClients ?? [];
+  const payments = rawPayments ?? [];
+  const projectPayments = rawProjectPayments ?? [];
+  const hostingRecords = rawHostingRecords ?? [];
+  const podcastSessions = rawPodcastSessions ?? [];
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
@@ -31,71 +40,62 @@ export default function CollectionsPage() {
   const allPaymentEvents = useMemo(() => {
     const events: PaymentEvent[] = [];
 
-    if (clients) {
-      clients.forEach((client: any) => {
-        if (client.retainerAmount && client.retainerDay) {
-          const date = new Date();
-          date.setDate(client.retainerDay);
-          events.push({
-            id: `retainer-${client.id}`,
-            clientId: client.id,
-            clientName: client.name || client.clientName || "לא ידוע",
-            amount: client.retainerAmount,
-            date,
-            type: "retainer",
-            status: client.paymentStatus || "pending",
-          });
-        }
-      });
-    }
-
-    if (projectPayments) {
-      projectPayments
-        .filter((payment: any) => payment.isDue === true && payment.status !== "paid")
-        .forEach((payment: any) => {
-          const client = clients?.find((c: any) => c.id === payment.clientId);
-          const typeLabel = payment.paymentType === "deposit" ? " (מקדמה)" : payment.paymentType === "final" ? " (סופי)" : "";
-          // Use dueDate if set, otherwise use today (payment is due now but has no specific date)
-          const paymentDate = payment.dueDate ? new Date(payment.dueDate) : new Date();
-          events.push({
-            id: `project-${payment.id}`,
-            clientId: payment.clientId,
-            clientName: (client?.name || payment.clientName || "לא ידוע") + typeLabel,
-            amount: payment.amount || 0,
-            date: paymentDate,
-            type: "project",
-            status: payment.status || "pending",
-          });
-        });
-    }
-
-    if (hostingRecords) {
-      hostingRecords.forEach((record: any) => {
-        const client = clients?.find((c: any) => c.id === record.clientId);
+    clients.forEach((client: any) => {
+      if (client.retainerAmount && client.retainerDay) {
+        const date = new Date();
+        date.setDate(client.retainerDay);
         events.push({
-          id: `hosting-${record.id}`,
-          clientId: record.clientId,
-          clientName: client?.name || record.clientName || "לא ידוע",
-          amount: record.yearlyPaymentAmount || 0,
-          date: new Date(record.nextPaymentDate),
-          type: "hosting",
-          status: "pending",
+          id: `retainer-${client.id}`,
+          clientId: client.id,
+          clientName: client.name || client.clientName || "לא ידוע",
+          amount: client.retainerAmount,
+          date,
+          type: "retainer",
+          status: client.paymentStatus || "pending",
         });
-      });
-    }
+      }
+    });
 
-    if (podcastSessions) {
-      podcastSessions.forEach((session: any) => {
+    projectPayments
+      .filter((payment: any) => payment.isDue === true && payment.status !== "paid")
+      .forEach((payment: any) => {
+        const client = clients.find((c: any) => c.id === payment.clientId);
+        const typeLabel = payment.paymentType === "deposit" ? " (מקדמה)" : payment.paymentType === "final" ? " (סופי)" : "";
+        const paymentDate = payment.dueDate ? new Date(payment.dueDate) : new Date();
         events.push({
-          id: `podcast-${session.id}`,
-          clientName: session.clientName || "LOUD",
-          amount: session.price || 0,
-          date: new Date(session.sessionDate),
-          type: "podcast",
-          status: session.paymentStatus || "pending",
+          id: `project-${payment.id}`,
+          clientId: payment.clientId,
+          clientName: (client?.name || payment.clientName || "לא ידוע") + typeLabel,
+          amount: payment.amount || 0,
+          date: paymentDate,
+          type: "project",
+          status: payment.status || "pending",
         });
       });
-    }
+
+    hostingRecords.forEach((record: any) => {
+      const client = clients.find((c: any) => c.id === record.clientId);
+      events.push({
+        id: `hosting-${record.id}`,
+        clientId: record.clientId,
+        clientName: client?.name || record.clientName || "לא ידוע",
+        amount: record.yearlyPaymentAmount || 0,
+        date: new Date(record.nextPaymentDate),
+        type: "hosting",
+        status: "pending",
+      });
+    });
+
+    podcastSessions.forEach((session: any) => {
+      events.push({
+        id: `podcast-${session.id}`,
+        clientName: session.clientName || "LOUD",
+        amount: session.price || 0,
+        date: new Date(session.sessionDate),
+        type: "podcast",
+        status: session.paymentStatus || "pending",
+      });
+    });
 
     return events;
   }, [clients, payments, projectPayments, hostingRecords, podcastSessions]);
@@ -224,6 +224,9 @@ export default function CollectionsPage() {
     setSelectedDay(null);
   };
 
+  // Check if all data sources are still loading (all empty arrays from fallback)
+  const isDataEmpty = clients.length === 0 && payments.length === 0 && projectPayments.length === 0 && hostingRecords.length === 0 && podcastSessions.length === 0;
+
   return (
     <div style={{ direction: "rtl", padding: "2rem" }}>
       {/* Header */}
@@ -233,6 +236,30 @@ export default function CollectionsPage() {
         </h1>
         <p style={{ color: "var(--foreground-muted)", fontSize: "0.95rem" }}>לוח גבייה חודשי</p>
       </div>
+
+      {/* Empty State */}
+      {isDataEmpty && (
+        <div
+          className="premium-card"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "3rem 2rem",
+            textAlign: "center",
+            marginBottom: "2rem",
+          }}
+        >
+          <span style={{ fontSize: "2.5rem", marginBottom: "1rem", opacity: 0.5 }}>💰</span>
+          <p style={{ fontSize: "1.1rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.5rem" }}>
+            אין נתונים להצגה כרגע
+          </p>
+          <p style={{ fontSize: "0.85rem", color: "var(--foreground-muted)", maxWidth: "320px" }}>
+            נתוני הגבייה יופיעו כאן ברגע שיהיו לקוחות ותשלומים במערכת
+          </p>
+        </div>
+      )}
 
       {/* Summary Stats */}
       <div
