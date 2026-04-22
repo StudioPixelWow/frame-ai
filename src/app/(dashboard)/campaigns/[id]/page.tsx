@@ -47,6 +47,46 @@ const CTA_LABELS: Record<string, string> = {
   GET_OFFER: 'קבל הצעה', SUBSCRIBE: 'הירשם', APPLY_NOW: 'הגש מועמדות',
 };
 
+// ── AI Ad Analysis (deterministic, no API) ─────────────────────────────
+
+type AIAdStatus = 'scale' | 'fatigued' | 'improve';
+
+const AI_STATUS_CONFIG: Record<AIAdStatus, { label: string; color: string; bg: string; icon: string }> = {
+  scale:    { label: 'מוכן לסקייל', color: '#22c55e', bg: '#22c55e12', icon: '🚀' },
+  fatigued: { label: 'נשחק',       color: '#f59e0b', bg: '#f59e0b12', icon: '⚡' },
+  improve:  { label: 'צריך שיפור', color: '#ef4444', bg: '#ef444412', icon: '🔧' },
+};
+
+function getAdAIStatus(ad: Ad): AIAdStatus {
+  if (ad.ctr >= 2 && ad.cpl > 0 && ad.cpl < 50 && ad.leads >= 5) return 'scale';
+  if (ad.ctr > 0 && ad.ctr < 1) return 'improve';
+  if (ad.impressions > 5000 && ad.ctr < 1.5) return 'fatigued';
+  if (ad.spend > 200 && ad.leads === 0) return 'improve';
+  if (ad.ctr >= 1.5 || ad.leads >= 3) return 'scale';
+  if (ad.impressions > 2000) return 'fatigued';
+  return 'improve';
+}
+
+function getAdAIInsight(ad: Ad, status: AIAdStatus): string {
+  if (status === 'scale') return `CTR ${ad.ctr.toFixed(1)}% מעולה — שווה להגדיל תקציב ולהרחיב קהל`;
+  if (status === 'fatigued') return `${(ad.impressions / 1000).toFixed(0)}K חשיפות עם CTR יורד — נסה קריאייטיב חדש`;
+  if (ad.spend > 100 && ad.leads === 0) return `₪${ad.spend.toFixed(0)} הוצאה ללא לידים — שנה כותרת או CTA`;
+  return 'שפר את הכותרת והקריאייטיב כדי לשפר ביצועים';
+}
+
+/** Color-code a metric value based on thresholds */
+function metricColor(value: number, good: number, mid: number): string {
+  if (value >= good) return '#22c55e';
+  if (value >= mid) return '#f59e0b';
+  if (value > 0) return '#ef4444';
+  return 'rgba(255,255,255,0.5)';
+}
+
+// ── View mode types ────────────────────────────────────────────────────
+
+type AdViewMode = 'grid' | 'compare' | 'heat';
+type AdFilter = 'all' | 'best' | 'worst' | 'active' | 'paused' | 'image' | 'video' | 'ai_scale' | 'ai_fatigued' | 'ai_improve';
+
 // ── Styles ──────────────────────────────────────────────────────────────
 
 const cardStyle: React.CSSProperties = {
@@ -77,15 +117,41 @@ const metricLabelStyle: React.CSSProperties = {
   fontSize: '0.6rem', color: 'var(--foreground-muted)', fontWeight: 600, marginTop: '0.1rem',
 };
 
-// ── Ad Card Component ──────────────────────────────────────────────────
+const pillBtn = (active: boolean): React.CSSProperties => ({
+  padding: '0.3rem 0.65rem', fontSize: '0.68rem', fontWeight: 600,
+  borderRadius: '999px', border: 'none', cursor: 'pointer',
+  background: active ? 'var(--accent)' : 'var(--surface-raised)',
+  color: active ? '#fff' : 'var(--foreground-muted)',
+  transition: 'all 150ms',
+  whiteSpace: 'nowrap' as const,
+});
 
-function AdCard({ ad, onEdit }: { ad: Ad; onEdit: (ad: Ad) => void }) {
+// ── Premium Ad Card ────────────────────────────────────────────────────
+
+function AdCard({
+  ad, onEdit, onDuplicate, onCreateVariation, viewMode,
+}: {
+  ad: Ad;
+  onEdit: (ad: Ad) => void;
+  onDuplicate: (ad: Ad) => void;
+  onCreateVariation: (ad: Ad) => void;
+  viewMode: AdViewMode;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isHovering, setIsHovering] = useState(false);
 
   const isVideo = ad.creativeType === 'video';
   const hasMedia = ad.mediaUrl && ad.mediaUrl.length > 5;
   const statusColor = STATUS_COLORS[ad.status] || '#6b7280';
+  const aiStatus = getAdAIStatus(ad);
+  const aiConfig = AI_STATUS_CONFIG[aiStatus];
+  const aiInsight = getAdAIInsight(ad, aiStatus);
+  const isHeat = viewMode === 'heat';
+
+  // Heat border color based on overall performance
+  const heatColor = isHeat
+    ? (aiStatus === 'scale' ? '#22c55e' : aiStatus === 'fatigued' ? '#f59e0b' : '#ef4444')
+    : 'transparent';
 
   useEffect(() => {
     if (!videoRef.current || !isVideo) return;
@@ -99,24 +165,31 @@ function AdCard({ ad, onEdit }: { ad: Ad; onEdit: (ad: Ad) => void }) {
 
   return (
     <div
-      className="premium-card"
+      className="ad-card-premium"
       style={{
         position: 'relative',
         borderRadius: '0.75rem',
         overflow: 'hidden',
         cursor: 'pointer',
-        transition: 'transform 200ms, box-shadow 200ms',
+        transition: 'transform 250ms cubic-bezier(0.22,1,0.36,1), box-shadow 250ms cubic-bezier(0.22,1,0.36,1)',
+        transform: isHovering ? 'translateY(-4px)' : 'translateY(0)',
+        boxShadow: isHovering
+          ? '0 12px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,181,254,0.15)'
+          : '0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px var(--border)',
+        background: 'var(--surface-raised)',
+        border: isHeat ? `2px solid ${heatColor}` : '1px solid var(--border)',
+        display: 'flex',
+        flexDirection: 'column',
       }}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
-      onClick={() => onEdit(ad)}
     >
-      {/* Media area */}
+      {/* ── Media Area ─────────────────────────── */}
       <div style={{
         position: 'relative',
         width: '100%',
-        paddingBottom: '100%',
-        background: 'var(--surface-sunken, #1a1a2e)',
+        paddingBottom: '105%',
+        background: 'var(--surface-sunken, #111)',
         overflow: 'hidden',
       }}>
         {hasMedia ? (
@@ -125,9 +198,7 @@ function AdCard({ ad, onEdit }: { ad: Ad; onEdit: (ad: Ad) => void }) {
               ref={videoRef}
               src={ad.mediaUrl}
               poster={ad.thumbnailUrl || undefined}
-              muted
-              loop
-              playsInline
+              muted loop playsInline
               style={{
                 position: 'absolute', top: 0, left: 0,
                 width: '100%', height: '100%', objectFit: 'cover',
@@ -137,11 +208,12 @@ function AdCard({ ad, onEdit }: { ad: Ad; onEdit: (ad: Ad) => void }) {
             <img
               src={ad.mediaUrl}
               alt={ad.name}
+              loading="lazy"
               style={{
                 position: 'absolute', top: 0, left: 0,
                 width: '100%', height: '100%', objectFit: 'cover',
-                transition: 'transform 300ms',
-                transform: isHovering ? 'scale(1.05)' : 'scale(1)',
+                transition: 'transform 400ms cubic-bezier(0.22,1,0.36,1)',
+                transform: isHovering ? 'scale(1.06)' : 'scale(1)',
               }}
             />
           )
@@ -150,102 +222,268 @@ function AdCard({ ad, onEdit }: { ad: Ad; onEdit: (ad: Ad) => void }) {
             position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
             color: 'var(--foreground-muted)', fontSize: '0.8rem',
+            background: 'linear-gradient(135deg, rgba(0,181,254,0.04), rgba(139,92,246,0.04))',
           }}>
-            <span style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>
+            <span style={{ fontSize: '2.5rem', marginBottom: '0.5rem', opacity: 0.6 }}>
               {CREATIVE_TYPE_ICONS[ad.creativeType]}
             </span>
-            <span>אין מדיה</span>
+            <span style={{ fontWeight: 600 }}>אין מדיה</span>
           </div>
         )}
 
-        {/* Performance overlay */}
+        {/* ── Performance Overlay (color-coded) ── */}
         <div style={{
           position: 'absolute', bottom: 0, left: 0, right: 0,
-          background: 'linear-gradient(transparent, rgba(0,0,0,0.85))',
-          padding: '1.5rem 0.75rem 0.6rem',
+          background: 'linear-gradient(transparent 0%, rgba(0,0,0,0.92) 70%)',
+          padding: '2rem 0.6rem 0.55rem',
           display: 'flex', justifyContent: 'space-around',
+          opacity: isHovering ? 1 : 0.85,
+          transition: 'opacity 200ms',
         }}>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#fff' }}>
-              {ad.ctr > 0 ? `${ad.ctr.toFixed(1)}%` : '—'}
+          {[
+            { val: ad.ctr > 0 ? `${ad.ctr.toFixed(1)}%` : '—', label: 'CTR', color: metricColor(ad.ctr, 2, 1) },
+            { val: ad.cpl > 0 ? `₪${ad.cpl.toFixed(0)}` : '—', label: 'CPL', color: ad.cpl > 0 && ad.cpl < 50 ? '#22c55e' : ad.cpl > 0 && ad.cpl < 100 ? '#f59e0b' : ad.cpl > 0 ? '#ef4444' : 'rgba(255,255,255,0.5)' },
+            { val: ad.leads > 0 ? String(ad.leads) : '—', label: 'לידים', color: metricColor(ad.leads, 10, 3) },
+            { val: ad.spend > 0 ? `₪${ad.spend.toFixed(0)}` : '—', label: 'הוצאה', color: 'rgba(255,255,255,0.85)' },
+          ].map((m) => (
+            <div key={m.label} style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '0.82rem', fontWeight: 800, color: m.color, letterSpacing: '-0.02em' }}>{m.val}</div>
+              <div style={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.55)', fontWeight: 600, marginTop: '0.1rem' }}>{m.label}</div>
             </div>
-            <div style={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>CTR</div>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#fff' }}>
-              {ad.cpl > 0 ? `₪${ad.cpl.toFixed(0)}` : '—'}
-            </div>
-            <div style={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>CPL</div>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#fff' }}>
-              {ad.leads > 0 ? ad.leads : '—'}
-            </div>
-            <div style={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>לידים</div>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#fff' }}>
-              {ad.spend > 0 ? `₪${ad.spend.toFixed(0)}` : '—'}
-            </div>
-            <div style={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>הוצאה</div>
-          </div>
+          ))}
         </div>
 
-        {/* Status badge */}
+        {/* ── Top-right: Status ── */}
         <div style={{
-          position: 'absolute', top: '0.5rem', right: '0.5rem',
-          fontSize: '0.6rem', fontWeight: 700, padding: '0.2rem 0.5rem',
-          borderRadius: '0.25rem', background: statusColor, color: '#fff',
+          position: 'absolute', top: '0.45rem', right: '0.45rem',
+          fontSize: '0.55rem', fontWeight: 700, padding: '0.18rem 0.45rem',
+          borderRadius: '0.2rem', background: statusColor, color: '#fff',
+          backdropFilter: 'blur(4px)',
         }}>
           {STATUS_LABELS[ad.status] || ad.status}
         </div>
 
-        {/* Creative type badge */}
+        {/* ── Top-left: Creative type ── */}
         <div style={{
-          position: 'absolute', top: '0.5rem', left: '0.5rem',
-          fontSize: '0.6rem', fontWeight: 700, padding: '0.2rem 0.45rem',
-          borderRadius: '0.25rem', background: 'rgba(0,0,0,0.6)', color: '#fff',
+          position: 'absolute', top: '0.45rem', left: '0.45rem',
+          fontSize: '0.55rem', fontWeight: 700, padding: '0.18rem 0.4rem',
+          borderRadius: '0.2rem', background: 'rgba(0,0,0,0.55)', color: '#fff',
+          backdropFilter: 'blur(4px)',
         }}>
           {CREATIVE_TYPE_ICONS[ad.creativeType]} {CREATIVE_TYPE_LABELS[ad.creativeType]}
         </div>
+
+        {/* ── AI Badge ── */}
+        <div style={{
+          position: 'absolute', bottom: isHovering ? '3.8rem' : '3.2rem', right: '0.45rem',
+          fontSize: '0.55rem', fontWeight: 700, padding: '0.2rem 0.5rem',
+          borderRadius: '999px', background: aiConfig.bg, color: aiConfig.color,
+          border: `1px solid ${aiConfig.color}25`,
+          backdropFilter: 'blur(8px)',
+          transition: 'bottom 200ms, opacity 200ms',
+          opacity: isHovering ? 1 : 0.9,
+        }}>
+          {aiConfig.icon} {aiConfig.label}
+        </div>
+
+        {/* ── Hover Actions Overlay ── */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
+          opacity: isHovering ? 1 : 0,
+          transition: 'opacity 200ms',
+          pointerEvents: isHovering ? 'auto' : 'none',
+        }}>
+          {[
+            { label: 'עריכה', icon: '✎', onClick: () => onEdit(ad) },
+            { label: 'נתונים', icon: '📊', onClick: () => onEdit(ad) },
+            { label: 'שפר AI', icon: '🧠', onClick: () => onCreateVariation(ad) },
+            { label: 'שכפל', icon: '⧉', onClick: () => onDuplicate(ad) },
+          ].map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); action.onClick(); }}
+              style={{
+                padding: '0.45rem 0.55rem', fontSize: '0.65rem', fontWeight: 700,
+                borderRadius: '0.4rem', border: 'none', cursor: 'pointer',
+                background: 'rgba(255,255,255,0.15)', color: '#fff',
+                backdropFilter: 'blur(8px)',
+                transition: 'background 150ms, transform 150ms',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.28)'; e.currentTarget.style.transform = 'scale(1.08)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.transform = 'scale(1)'; }}
+            >
+              <span style={{ fontSize: '1rem' }}>{action.icon}</span>
+              <span>{action.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Ad info */}
-      <div style={{ padding: '0.75rem' }}>
+      {/* ── Info Section ──────────────────────── */}
+      <div style={{ padding: '0.65rem 0.75rem 0.5rem', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
         <h4 style={{
-          fontSize: '0.82rem', fontWeight: 700, color: 'var(--foreground)', margin: 0,
+          fontSize: '0.8rem', fontWeight: 700, color: 'var(--foreground)', margin: 0,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          letterSpacing: '-0.01em',
         }}>
-          {ad.name}
+          {ad.headline || ad.name}
         </h4>
-        {ad.headline && (
-          <p style={{
-            fontSize: '0.72rem', color: 'var(--foreground-muted)', margin: '0.25rem 0 0',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {ad.headline}
-          </p>
-        )}
         {ad.primaryText && (
           <p style={{
-            fontSize: '0.68rem', color: 'var(--foreground-muted)', margin: '0.2rem 0 0',
+            fontSize: '0.66rem', color: 'var(--foreground-muted)', margin: 0,
             overflow: 'hidden', textOverflow: 'ellipsis',
             display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
-            lineHeight: 1.4,
+            lineHeight: 1.45,
           }}>
             {ad.primaryText}
           </p>
         )}
-        {ad.ctaType && (
-          <div style={{ marginTop: '0.4rem' }}>
-            <span style={{
-              fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem',
-              borderRadius: '0.2rem', background: 'var(--accent)', color: '#fff',
-            }}>
-              {CTA_LABELS[ad.ctaType] || ad.ctaType}
-            </span>
-          </div>
-        )}
+
+        {/* ── AI Insight Line ── */}
+        <div style={{
+          marginTop: 'auto', paddingTop: '0.35rem',
+          fontSize: '0.6rem', color: aiConfig.color, fontWeight: 600,
+          display: 'flex', alignItems: 'flex-start', gap: '0.3rem',
+          lineHeight: 1.35, opacity: 0.9,
+          borderTop: '1px solid var(--border)',
+        }}>
+          <span style={{ flexShrink: 0, marginTop: '0.1rem' }}>✨</span>
+          <span>{aiInsight}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Premium Empty State ────────────────────────────────────────────────
+
+function AdGridEmptyState({ onAddAd }: { onAddAd: () => void }) {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      padding: '4rem 2rem', borderRadius: '1rem',
+      background: 'linear-gradient(135deg, rgba(0,181,254,0.03), rgba(139,92,246,0.03))',
+      border: '2px dashed var(--border)',
+    }}>
+      <div style={{
+        width: '4.5rem', height: '4.5rem', borderRadius: '1rem',
+        background: 'linear-gradient(135deg, rgba(0,181,254,0.1), rgba(139,92,246,0.1))',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        marginBottom: '1.25rem', fontSize: '2rem',
+      }}>
+        🎨
+      </div>
+      <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--foreground)', margin: 0, letterSpacing: '-0.02em' }}>
+        צור את המודעה הראשונה
+      </h3>
+      <p style={{ fontSize: '0.82rem', color: 'var(--foreground-muted)', margin: '0.5rem 0 1.5rem', textAlign: 'center', maxWidth: '340px', lineHeight: 1.5 }}>
+        הוסף מודעות עם תמונה, וידאו או קרוסלה — עקוב אחרי ביצועים בזמן אמת עם תובנות AI
+      </p>
+      <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <button
+          type="button"
+          onClick={onAddAd}
+          className="mod-btn-primary"
+          style={{
+            padding: '0.6rem 1.5rem', fontSize: '0.85rem', fontWeight: 700,
+            borderRadius: '0.5rem', cursor: 'pointer',
+            background: 'linear-gradient(135deg, var(--accent), #0092cc)',
+            border: 'none', color: '#fff',
+            boxShadow: '0 4px 12px rgba(0,181,254,0.3)',
+            transition: 'transform 150ms, box-shadow 150ms',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,181,254,0.4)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,181,254,0.3)'; }}
+        >
+          + צור מודעה
+        </button>
+        <button
+          type="button"
+          onClick={onAddAd}
+          style={{
+            padding: '0.6rem 1.25rem', fontSize: '0.85rem', fontWeight: 600,
+            borderRadius: '0.5rem', cursor: 'pointer',
+            background: 'transparent', border: '1px solid var(--border)',
+            color: 'var(--foreground-muted)', transition: 'all 150ms',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--foreground-muted)'; }}
+        >
+          🧠 צור וריאציה עם AI
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Filter Bar ─────────────────────────────────────────────────────────
+
+function AdFilterBar({
+  filter, onFilter, viewMode, onViewMode, adCount,
+}: {
+  filter: AdFilter; onFilter: (f: AdFilter) => void;
+  viewMode: AdViewMode; onViewMode: (m: AdViewMode) => void;
+  adCount: number;
+}) {
+  const filters: Array<{ value: AdFilter; label: string }> = [
+    { value: 'all', label: 'הכל' },
+    { value: 'best', label: '🏆 הטובים' },
+    { value: 'worst', label: '📉 חלשים' },
+    { value: 'active', label: 'פעילים' },
+    { value: 'paused', label: 'מושהים' },
+    { value: 'image', label: '🖼️ תמונה' },
+    { value: 'video', label: '🎬 וידאו' },
+    { value: 'ai_scale', label: '🚀 מוכן לסקייל' },
+    { value: 'ai_improve', label: '🔧 צריך שיפור' },
+  ];
+
+  const viewModes: Array<{ value: AdViewMode; label: string; icon: string }> = [
+    { value: 'grid', label: 'רשת', icon: '▦' },
+    { value: 'compare', label: 'השוואה', icon: '⚖' },
+    { value: 'heat', label: 'חום', icon: '🔥' },
+  ];
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap',
+      padding: '0.6rem 0.85rem', borderRadius: '0.75rem',
+      background: 'var(--surface-raised)', border: '1px solid var(--border)',
+    }}>
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', flex: 1 }}>
+        {filters.map((f) => (
+          <button key={f.value} type="button" onClick={() => onFilter(f.value)} style={pillBtn(filter === f.value)}>
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Count */}
+      <span style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>
+        {adCount} מודעות
+      </span>
+
+      {/* View modes */}
+      <div style={{
+        display: 'flex', gap: '0.15rem', padding: '0.15rem',
+        borderRadius: '0.4rem', background: 'var(--surface-sunken, var(--background))',
+        border: '1px solid var(--border)',
+      }}>
+        {viewModes.map((m) => (
+          <button key={m.value} type="button" onClick={() => onViewMode(m.value)} style={{
+            padding: '0.25rem 0.5rem', fontSize: '0.65rem', fontWeight: 600,
+            borderRadius: '0.25rem', border: 'none', cursor: 'pointer',
+            background: viewMode === m.value ? 'var(--accent)' : 'transparent',
+            color: viewMode === m.value ? '#fff' : 'var(--foreground-muted)',
+            transition: 'all 150ms', whiteSpace: 'nowrap' as const,
+          }}>
+            {m.icon} {m.label}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -259,12 +497,18 @@ function AdSetSection({
   onEditAd,
   onEditAdSet,
   onAddAd,
+  onDuplicate,
+  onCreateVariation,
+  viewMode,
 }: {
   adSet: AdSet;
   adsForSet: Ad[];
   onEditAd: (ad: Ad) => void;
   onEditAdSet: (adSet: AdSet) => void;
   onAddAd: (adSetId: string) => void;
+  onDuplicate: (ad: Ad) => void;
+  onCreateVariation: (ad: Ad) => void;
+  viewMode: AdViewMode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const statusColor = STATUS_COLORS[adSet.status] || '#6b7280';
@@ -380,36 +624,50 @@ function AdSetSection({
 
       {/* Ads Grid */}
       {!collapsed && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-          gap: '1rem',
-        }}>
-          {adsForSet.map((ad) => (
-            <AdCard key={ad.id} ad={ad} onEdit={onEditAd} />
-          ))}
-          <button
-            type="button"
-            onClick={() => onAddAd(adSet.id)}
-            style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              minHeight: '260px', borderRadius: '0.75rem', cursor: 'pointer',
-              border: '2px dashed var(--border)', background: 'transparent',
-              color: 'var(--foreground-muted)', transition: 'all 200ms', gap: '0.5rem',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'var(--accent)';
-              e.currentTarget.style.color = 'var(--accent)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--border)';
-              e.currentTarget.style.color = 'var(--foreground-muted)';
-            }}
-          >
-            <span style={{ fontSize: '1.5rem' }}>+</span>
-            <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>הוסף מודעה</span>
-          </button>
-        </div>
+        adsForSet.length === 0 ? (
+          <AdGridEmptyState onAddAd={() => onAddAd(adSet.id)} />
+        ) : (
+          <div style={{
+            display: viewMode === 'compare' ? 'flex' : 'grid',
+            gridTemplateColumns: viewMode !== 'compare' ? 'repeat(auto-fill, minmax(240px, 1fr))' : undefined,
+            gap: '1rem',
+            overflowX: viewMode === 'compare' ? 'auto' : undefined,
+          }}>
+            {adsForSet.map((ad) => (
+              <div key={ad.id} style={viewMode === 'compare' ? { minWidth: '280px', flex: '0 0 280px' } : undefined}>
+                <AdCard
+                  ad={ad}
+                  onEdit={onEditAd}
+                  onDuplicate={onDuplicate}
+                  onCreateVariation={onCreateVariation}
+                  viewMode={viewMode}
+                />
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => onAddAd(adSet.id)}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                minHeight: '260px', borderRadius: '0.75rem', cursor: 'pointer',
+                border: '2px dashed var(--border)', background: 'transparent',
+                color: 'var(--foreground-muted)', transition: 'all 200ms', gap: '0.5rem',
+                ...(viewMode === 'compare' ? { minWidth: '280px', flex: '0 0 280px' } : {}),
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--accent)';
+                e.currentTarget.style.color = 'var(--accent)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--border)';
+                e.currentTarget.style.color = 'var(--foreground-muted)';
+              }}
+            >
+              <span style={{ fontSize: '1.5rem' }}>+</span>
+              <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>הוסף מודעה</span>
+            </button>
+          </div>
+        )
       )}
     </div>
   );
@@ -465,6 +723,91 @@ export default function CampaignDetailPage() {
     const map = buildCampaignLeadInsights([campaign], allLeads || []);
     return map[campaign.id] || null;
   }, [campaign, allLeads]);
+
+  // ── Filter & View Mode ──────────────────────────────────────────────
+
+  const [adFilter, setAdFilter] = useState<AdFilter>('all');
+  const [adViewMode, setAdViewMode] = useState<AdViewMode>('grid');
+
+  const filteredAdsByAdSet = useMemo(() => {
+    const map: Record<string, Ad[]> = {};
+    for (const adSet of campaignAdSets) {
+      const setAds = adsByAdSet[adSet.id] || [];
+      const filtered = setAds.filter((ad) => {
+        switch (adFilter) {
+          case 'all': return true;
+          case 'best': return getAdAIStatus(ad) === 'scale';
+          case 'worst': return getAdAIStatus(ad) === 'improve';
+          case 'active': return ad.status === 'active';
+          case 'paused': return ad.status === 'paused';
+          case 'image': return ad.creativeType === 'image';
+          case 'video': return ad.creativeType === 'video';
+          case 'ai_scale': return getAdAIStatus(ad) === 'scale';
+          case 'ai_fatigued': return getAdAIStatus(ad) === 'fatigued';
+          case 'ai_improve': return getAdAIStatus(ad) === 'improve';
+          default: return true;
+        }
+      });
+      map[adSet.id] = filtered;
+    }
+    return map;
+  }, [campaignAdSets, adsByAdSet, adFilter]);
+
+  const filteredAdCount = useMemo(() => {
+    return Object.values(filteredAdsByAdSet).reduce((sum, arr) => sum + arr.length, 0);
+  }, [filteredAdsByAdSet]);
+
+  // ── Duplicate & Variation handlers ────────────────────────────────
+
+  const handleDuplicate = useCallback(async (ad: Ad) => {
+    try {
+      await createAd({
+        adSetId: ad.adSetId,
+        campaignId: ad.campaignId,
+        name: `${ad.name} (עותק)`,
+        status: 'draft' as AdStatus,
+        creativeType: ad.creativeType,
+        mediaUrl: ad.mediaUrl,
+        thumbnailUrl: ad.thumbnailUrl,
+        primaryText: ad.primaryText,
+        headline: ad.headline,
+        description: ad.description,
+        ctaType: ad.ctaType,
+        ctaLink: ad.ctaLink,
+        linkedVideoProjectId: ad.linkedVideoProjectId,
+        linkedClientFileId: ad.linkedClientFileId,
+        impressions: 0, clicks: 0, spend: 0, leads: 0, conversions: 0,
+        ctr: 0, cpl: 0, cpc: 0, roas: 0,
+        notes: ad.notes,
+      });
+      toast('מודעה שוכפלה בהצלחה', 'success');
+    } catch { toast('שגיאה בשכפול', 'error'); }
+  }, [createAd, toast]);
+
+  const handleCreateVariation = useCallback(async (ad: Ad) => {
+    try {
+      await createAd({
+        adSetId: ad.adSetId,
+        campaignId: ad.campaignId,
+        name: `${ad.name} (וריאציה AI)`,
+        status: 'draft' as AdStatus,
+        creativeType: ad.creativeType,
+        mediaUrl: ad.mediaUrl,
+        thumbnailUrl: ad.thumbnailUrl,
+        primaryText: ad.primaryText ? `${ad.primaryText} ✨` : '',
+        headline: ad.headline ? `${ad.headline} — גרסה חדשה` : '',
+        description: ad.description,
+        ctaType: ad.ctaType,
+        ctaLink: ad.ctaLink,
+        linkedVideoProjectId: ad.linkedVideoProjectId,
+        linkedClientFileId: ad.linkedClientFileId,
+        impressions: 0, clicks: 0, spend: 0, leads: 0, conversions: 0,
+        ctr: 0, cpl: 0, cpc: 0, roas: 0,
+        notes: `וריאציה של מודעה: ${ad.id}`,
+      });
+      toast('וריאציה נוצרה — ערוך את הקריאייטיב', 'success');
+    } catch { toast('שגיאה ביצירת וריאציה', 'error'); }
+  }, [createAd, toast]);
 
   // ── Modals ──────────────────────────────────────────────────────────
 
@@ -679,6 +1022,17 @@ export default function CampaignDetailPage() {
           </button>
         </div>
 
+        {/* Filter & View Mode Bar */}
+        {campaignAds.length > 0 && (
+          <AdFilterBar
+            filter={adFilter}
+            onFilter={setAdFilter}
+            viewMode={adViewMode}
+            onViewMode={setAdViewMode}
+            adCount={filteredAdCount}
+          />
+        )}
+
         {campaignAdSets.length === 0 ? (
           <div style={{ ...cardStyle, textAlign: 'center', padding: '3rem' }}>
             <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>📦</div>
@@ -703,10 +1057,13 @@ export default function CampaignDetailPage() {
               <AdSetSection
                 key={adSet.id}
                 adSet={adSet}
-                adsForSet={adsByAdSet[adSet.id] || []}
+                adsForSet={filteredAdsByAdSet[adSet.id] || []}
                 onEditAd={(ad) => handleOpenAdModal(adSet.id, ad)}
                 onEditAdSet={(s) => handleOpenAdSetModal(s)}
                 onAddAd={(adSetId) => handleOpenAdModal(adSetId)}
+                onDuplicate={handleDuplicate}
+                onCreateVariation={handleCreateVariation}
+                viewMode={adViewMode}
               />
             ))}
           </div>
