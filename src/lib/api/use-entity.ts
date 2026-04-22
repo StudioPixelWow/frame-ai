@@ -38,6 +38,8 @@ import type {
   MilestoneFile,
   ProjectTimelineEvent,
   ProjectNotification,
+  SystemEvent,
+  AuditLog,
 } from '@/lib/db/schema';
 
 // Core entities — relaxed polling (3 min) + no refetch on focus to avoid jankiness
@@ -77,3 +79,5 @@ export const useMeetings = () => useData<Meeting>('meetings');
 export const useMilestoneFiles = () => useData<MilestoneFile>('milestone-files');
 export const useProjectTimeline = () => useData<ProjectTimelineEvent>('project-timeline');
 export const useProjectNotifications = () => useData<ProjectNotification>('project-notifications');
+export const useSystemEvents = () => useData<SystemEvent>('system-events', { pollInterval: 180000, refetchOnFocus: false });
+export const useAuditLog = () => useData<AuditLog>('audit-log', { pollInterval: 180000, refetchOnFocus: false });

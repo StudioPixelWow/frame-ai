@@ -36,6 +36,8 @@ import type {
   GmailSettings,
   Meeting,
   ProjectNotification,
+  SystemEvent,
+  AuditLog,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -77,3 +79,5 @@ export const mailings = new SupabaseCrud<Mailing>('app_mailings', 'mai');
 export const gmailSettings = new JsonStore<GmailSettings>('gmail-settings', 'gml');
 export const meetings = new SupabaseCrud<Meeting>('app_meetings', 'mtg');
 export const projectNotifications = new JsonStore<ProjectNotification>('project-notifications', 'pno');
+export const systemEvents = new SupabaseCrud<SystemEvent>('app_system_events', 'sys');
+export const auditLog = new SupabaseCrud<AuditLog>('app_audit_log', 'aud');

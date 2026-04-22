@@ -3,7 +3,8 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useMemo } from 'react';
-import type { AutomationRule, AutomationTrigger, AutomationAction } from '@/lib/db/schema';
+import type { AutomationRule, AutomationTrigger, AutomationAction, SystemEvent } from '@/lib/db/schema';
+import { useAutomationRules, useSystemEvents } from '@/lib/api/use-entity';
 
 type Category = 'all' | 'tasks' | 'gantt' | 'payments' | 'leads' | 'podcast';
 
@@ -248,7 +249,10 @@ interface ModalState {
 }
 
 export default function AutomationsPage() {
-  const [automations, setAutomations] = useState<AutomationRule[]>(DEFAULT_AUTOMATIONS);
+  const { data: apiAutomations, refetch: mutate } = useAutomationRules();
+  const { data: systemEvents } = useSystemEvents();
+
+  const [automations, setAutomations] = useState<AutomationRule[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<Category>('all');
   const [modal, setModal] = useState<ModalState>({
     isOpen: false,
@@ -263,6 +267,11 @@ export default function AutomationsPage() {
       isActive: true,
     },
   });
+
+  // Initialize automations from API, fallback to defaults if empty
+  useMemo(() => {
+    setAutomations(apiAutomations && apiAutomations.length > 0 ? apiAutomations : DEFAULT_AUTOMATIONS);
+  }, [apiAutomations]);
 
   const filteredAutomations = useMemo(() => {
     if (selectedCategory === 'all') {
@@ -332,7 +341,7 @@ export default function AutomationsPage() {
     });
   };
 
-  const saveAutomation = () => {
+  const saveAutomation = async () => {
     const { name, description, trigger, action, targetEmail, targetWhatsApp, isActive } =
       modal.formData;
 
@@ -343,23 +352,40 @@ export default function AutomationsPage() {
 
     if (modal.editingId) {
       // Edit existing
-      setAutomations((prev) =>
-        prev.map((a) =>
-          a.id === modal.editingId
-            ? {
-                ...a,
-                name,
-                description,
-                trigger,
-                action,
-                targetEmail,
-                targetWhatsApp,
-                isActive,
-                updatedAt: new Date().toISOString(),
-              }
-            : a
-        )
-      );
+      const updatedAutomation = automations.find((a) => a.id === modal.editingId);
+      if (updatedAutomation) {
+        const payload = {
+          ...updatedAutomation,
+          name,
+          description,
+          trigger,
+          action,
+          targetEmail,
+          targetWhatsApp,
+          isActive,
+          updatedAt: new Date().toISOString(),
+        };
+
+        try {
+          await fetch(`/api/data/automation-rules/${modal.editingId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+
+          setAutomations((prev) =>
+            prev.map((a) =>
+              a.id === modal.editingId
+                ? payload
+                : a
+            )
+          );
+          await mutate();
+        } catch (error) {
+          console.error('Failed to update automation:', error);
+          alert('שגיאה בעדכון האוטומציה');
+        }
+      }
     } else {
       // Create new
       const newAutomation: AutomationRule = {
@@ -378,24 +404,68 @@ export default function AutomationsPage() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      setAutomations((prev) => [newAutomation, ...prev]);
+
+      try {
+        await fetch('/api/data/automation-rules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newAutomation),
+        });
+
+        setAutomations((prev) => [newAutomation, ...prev]);
+        await mutate();
+      } catch (error) {
+        console.error('Failed to create automation:', error);
+        alert('שגיאה בהוספת האוטומציה');
+      }
     }
 
     closeModal();
   };
 
-  const deleteAutomation = (id: string) => {
+  const deleteAutomation = async (id: string) => {
     if (confirm('האם אתה בטוח שברצונך למחוק אוטומציה זו?')) {
-      setAutomations((prev) => prev.filter((a) => a.id !== id));
+      try {
+        await fetch(`/api/data/automation-rules/${id}`, {
+          method: 'DELETE',
+        });
+
+        setAutomations((prev) => prev.filter((a) => a.id !== id));
+        await mutate();
+      } catch (error) {
+        console.error('Failed to delete automation:', error);
+        alert('שגיאה במחיקת האוטומציה');
+      }
     }
   };
 
-  const toggleActive = (id: string) => {
-    setAutomations((prev) =>
-      prev.map((a) =>
-        a.id === id ? { ...a, isActive: !a.isActive } : a
-      )
-    );
+  const toggleActive = async (id: string) => {
+    const automation = automations.find((a) => a.id === id);
+    if (automation) {
+      const payload = {
+        ...automation,
+        isActive: !automation.isActive,
+        updatedAt: new Date().toISOString(),
+      };
+
+      try {
+        await fetch(`/api/data/automation-rules/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        setAutomations((prev) =>
+          prev.map((a) =>
+            a.id === id ? payload : a
+          )
+        );
+        await mutate();
+      } catch (error) {
+        console.error('Failed to toggle automation:', error);
+        alert('שגיאה בהחלפת סטטוס');
+      }
+    }
   };
 
   const updateFormData = (
@@ -528,6 +598,17 @@ export default function AutomationsPage() {
             />
           ))
         )}
+      </div>
+
+      {/* Recent Activity Section */}
+      <div className="mt-12">
+        <h2
+          className="text-2xl font-bold mb-6"
+          style={{ color: 'var(--foreground)' }}
+        >
+          פעילות אחרונה
+        </h2>
+        <RecentActivitySection events={systemEvents || []} />
       </div>
 
       {/* Modal */}
@@ -858,7 +939,7 @@ function AutomationCard({
             className="text-xs font-medium mb-1"
             style={{ color: 'var(--foreground-muted)' }}
           >
-            آخر تفعيل
+            הפעלה אחרונה
           </p>
           <p style={{ color: 'var(--foreground)' }} className="text-sm">
             {formatDateDisplay(automation.lastTriggeredAt)}
@@ -869,7 +950,7 @@ function AutomationCard({
             className="text-xs font-medium mb-1"
             style={{ color: 'var(--foreground-muted)' }}
           >
-            عدد التفعيلات
+            מספר הפעלות
           </p>
           <p style={{ color: 'var(--foreground)' }} className="text-sm">
             {automation.triggerCount}
@@ -880,7 +961,7 @@ function AutomationCard({
             className="text-xs font-medium mb-1"
             style={{ color: 'var(--foreground-muted)' }}
           >
-            الحالة
+            סטטוס
           </p>
           <p
             style={{
@@ -890,7 +971,7 @@ function AutomationCard({
             }}
             className="text-sm font-medium"
           >
-            {automation.isActive ? 'فعال' : 'معطل'}
+            {automation.isActive ? 'פעיל' : 'מושבת'}
           </p>
         </div>
       </div>
@@ -964,4 +1045,102 @@ function formatDateDisplay(dateString: string | null): string {
   if (diffHours > 0) return `לפני ${diffHours} שעות`;
   if (diffMins > 0) return `לפני ${diffMins} דקות`;
   return 'זה עתה';
+}
+
+interface RecentActivitySectionProps {
+  events: SystemEvent[];
+}
+
+function RecentActivitySection({ events }: RecentActivitySectionProps) {
+  const SYSTEM_EVENT_TYPE_LABELS: Record<string, string> = {
+    trigger: 'הפעלת אוטומציה',
+    error: 'שגיאה',
+    warning: 'אזהרה',
+    info: 'מידע',
+    success: 'הצלחה',
+    migration: 'הגירה',
+    sync: 'סנכרון',
+  };
+
+  // Filter for automation-related events and take the last 5
+  const automationEvents = events
+    .filter((e) => e.source && e.source.includes('automation') || e.type === 'trigger')
+    .slice(0, 5);
+
+  return (
+    <div className="space-y-3">
+      {automationEvents.length === 0 ? (
+        <div
+          className="rounded-lg p-8 text-center"
+          style={{
+            backgroundColor: 'var(--surface)',
+            border: '1px solid var(--border)',
+          }}
+        >
+          <p style={{ color: 'var(--foreground-muted)' }}>
+            אין פעילות אחרונה
+          </p>
+        </div>
+      ) : (
+        automationEvents.map((event) => (
+          <div
+            key={event.id}
+            className="rounded-lg p-4 border"
+            style={{
+              backgroundColor: 'var(--surface)',
+              borderColor: 'var(--border)',
+            }}
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <span
+                    className="px-2 py-1 rounded text-xs font-medium"
+                    style={{
+                      backgroundColor:
+                        event.type === 'error'
+                          ? 'rgba(239, 68, 68, 0.1)'
+                          : event.type === 'warning'
+                          ? 'rgba(245, 158, 11, 0.1)'
+                          : event.type === 'success'
+                          ? 'rgba(34, 197, 94, 0.1)'
+                          : 'rgba(59, 130, 246, 0.1)',
+                      color:
+                        event.type === 'error'
+                          ? '#ef4444'
+                          : event.type === 'warning'
+                          ? '#f59e0b'
+                          : event.type === 'success'
+                          ? '#22c55e'
+                          : '#3b82f6',
+                    }}
+                  >
+                    {SYSTEM_EVENT_TYPE_LABELS[event.type] || event.type}
+                  </span>
+                  <span
+                    className="text-xs"
+                    style={{ color: 'var(--foreground-muted)' }}
+                  >
+                    {formatDateDisplay(event.createdAt)}
+                  </span>
+                </div>
+                <p
+                  className="font-medium text-sm mb-1"
+                  style={{ color: 'var(--foreground)' }}
+                >
+                  {event.title}
+                </p>
+                <p
+                  className="text-xs"
+                  style={{ color: 'var(--foreground-muted)' }}
+                >
+                  {event.message}
+                </p>
+              </div>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
 }

@@ -931,3 +931,44 @@ export interface GmailSettings {
   createdAt: string;
   updatedAt: string;
 }
+
+// System Event — internal system-level events and monitoring
+export type SystemEventType = 'error' | 'warning' | 'info' | 'success' | 'migration' | 'sync' | 'trigger';
+
+export interface SystemEvent {
+  id: string;
+  type: SystemEventType;
+  source: string; // e.g. 'ai-renderer', 'email-service', 'sync-service'
+  title: string;
+  message: string;
+  details: Record<string, unknown>;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  resolved: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Audit Log — user action tracking and compliance
+export type AuditLogAction =
+  | 'create' | 'update' | 'delete' | 'read'
+  | 'approve' | 'reject' | 'submit'
+  | 'export' | 'import' | 'download'
+  | 'share' | 'invite' | 'remove_access'
+  | 'change_settings' | 'authenticate';
+
+export interface AuditLog {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  action: AuditLogAction;
+  entityType: string; // e.g. 'client', 'project', 'task'
+  entityId: string | null;
+  entityName: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  changes: Record<string, { old: unknown; new: unknown }>;
+  result: 'success' | 'failure';
+  errorMessage: string | null;
+  createdAt: string;
+}
