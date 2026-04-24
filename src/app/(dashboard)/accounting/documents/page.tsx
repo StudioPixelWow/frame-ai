@@ -3,8 +3,33 @@
 export const dynamic = "force-dynamic";
 
 import { useAccountantDocuments } from "@/lib/api/use-entity";
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { useToast } from "@/components/ui/toast";
+
+/* ── Email Preview Modal types ── */
+interface EmailAttachment {
+  id: string;
+  fileName: string;
+  fileUrl: string | null;
+  fileSize: number;
+  documentType: string;
+  notes: string;
+  uploadedAt: string | null;
+  accessible: boolean;
+}
+
+interface EmailPreview {
+  to: string;
+  subject: string;
+  body: string;
+  attachments: EmailAttachment[];
+  inaccessibleCount: number;
+  totalFiles: number;
+  totalSize: number;
+  sentAt: string;
+  periodName: string;
+  year: number;
+}
 
 interface BimonthlyPeriod {
   id: string;
@@ -37,6 +62,12 @@ export default function DocumentsPage() {
     notes: "",
     selectedFile: null as File | null,
   });
+
+  // ── Send to accountant state ──
+  const [sendingPeriod, setSendingPeriod] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
+  const [emailPreview, setEmailPreview] = useState<EmailPreview | null>(null);
+  const [sendMessage, setSendMessage] = useState("");
 
   const years = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -200,6 +231,54 @@ export default function DocumentsPage() {
   const handleExportPeriod = (periodId: string) => {
     window.open(`/api/accounting/export-pdf?period=${periodId}&year=${selectedYear}`, "_blank");
     toast("PDF נפתח בלשונית חדשה — לחץ שמור כ-PDF להורדה", "success");
+  };
+
+  /** Send files to accountant — calls API, shows preview modal with real attachments */
+  const handleSendToAccountant = useCallback(async (periodId: string) => {
+    const docs = getDocumentsForPeriod(periodId);
+    if (docs.length === 0) {
+      toast("אין מסמכים לתקופה זו — העלה מסמכים לפני שליחה", "error");
+      return;
+    }
+
+    setIsSending(true);
+    setSendingPeriod(periodId);
+
+    try {
+      const res = await fetch("/api/accounting/send-to-accountant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          period: periodId,
+          year: selectedYear,
+          message: sendMessage || undefined,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast(data.error || "שגיאה בשליחה", "error");
+        setSendingPeriod(null);
+        return;
+      }
+
+      setEmailPreview(data.emailPreview);
+      await refetch();
+      toast(`${data.emailPreview.totalFiles} קבצים נשלחו לרואה חשבון בהצלחה`, "success");
+    } catch (error) {
+      toast("שגיאה בשליחה לרואה חשבון", "error");
+      console.error("[SendToAccountant] Error:", error);
+    } finally {
+      setIsSending(false);
+    }
+  }, [selectedYear, sendMessage, refetch, toast]);
+
+  /** Close preview modal */
+  const closePreview = () => {
+    setEmailPreview(null);
+    setSendingPeriod(null);
+    setSendMessage("");
   };
 
   // Only show full-page loading on initial mount (no data yet).
@@ -452,21 +531,203 @@ export default function DocumentsPage() {
                 </button>
               )}
 
-              {/* Export */}
-              <button
-                onClick={() => handleExportPeriod(period.id)}
-                style={{
-                  width: "100%", padding: "0.75rem", background: "#10b981",
-                  color: "#fff", border: "none", borderRadius: "0.5rem",
-                  fontWeight: "600", cursor: "pointer",
-                }}
-              >
-                📧 ייצא למייל
-              </button>
+              {/* Actions: Send + Export */}
+              <div style={{ display: "flex", gap: "0.75rem" }}>
+                <button
+                  onClick={() => handleSendToAccountant(period.id)}
+                  disabled={isSending && sendingPeriod === period.id}
+                  style={{
+                    flex: 1, padding: "0.75rem",
+                    background: isSending && sendingPeriod === period.id ? "#6b7280" : "#10b981",
+                    color: "#fff", border: "none", borderRadius: "0.5rem",
+                    fontWeight: "600",
+                    cursor: isSending && sendingPeriod === period.id ? "not-allowed" : "pointer",
+                    opacity: isSending && sendingPeriod === period.id ? 0.7 : 1,
+                  }}
+                >
+                  {isSending && sendingPeriod === period.id ? "שולח..." : "📧 שלח לרואה חשבון"}
+                </button>
+                <button
+                  onClick={() => handleExportPeriod(period.id)}
+                  style={{
+                    padding: "0.75rem 1rem", background: "transparent",
+                    color: "var(--foreground)", border: "1px solid var(--border)",
+                    borderRadius: "0.5rem", fontWeight: "600", cursor: "pointer",
+                  }}
+                  title="ייצא כ-PDF"
+                >
+                  📄
+                </button>
+              </div>
             </div>
           );
         })}
       </div>
+
+      {/* ═══ EMAIL PREVIEW MODAL ═══ */}
+      {emailPreview && (
+        <div
+          onClick={closePreview}
+          style={{
+            position: "fixed", inset: 0, zIndex: 9999,
+            background: "rgba(0,0,0,0.5)", display: "flex",
+            alignItems: "center", justifyContent: "center", padding: "2rem",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "var(--surface-raised, #fff)", borderRadius: "1rem",
+              maxWidth: "640px", width: "100%", maxHeight: "85vh", overflowY: "auto",
+              padding: "2rem", direction: "rtl", boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+              <div>
+                <h2 style={{ fontSize: "1.25rem", fontWeight: 700, margin: 0 }}>
+                  נשלח לרואה חשבון
+                </h2>
+                <p style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>
+                  {emailPreview.periodName} {emailPreview.year}
+                </p>
+              </div>
+              <div style={{
+                display: "inline-flex", alignItems: "center", gap: "0.35rem",
+                padding: "0.25rem 0.75rem", borderRadius: "999px",
+                background: "rgba(16,185,129,0.12)", color: "#10b981",
+                fontSize: "0.72rem", fontWeight: 600,
+              }}>
+                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10b981" }} />
+                נשלח בהצלחה
+              </div>
+            </div>
+
+            {/* Email details */}
+            <div style={{
+              background: "var(--surface, rgba(0,0,0,0.02))", borderRadius: "0.75rem",
+              padding: "1rem 1.25rem", marginBottom: "1.25rem", border: "1px solid var(--border)",
+            }}>
+              <div style={{ fontSize: "0.8rem", marginBottom: "0.5rem" }}>
+                <span style={{ fontWeight: 600 }}>אל: </span>
+                <span style={{ color: "var(--foreground-muted)" }}>{emailPreview.to}</span>
+              </div>
+              <div style={{ fontSize: "0.8rem", marginBottom: "0.5rem" }}>
+                <span style={{ fontWeight: 600 }}>נושא: </span>
+                <span style={{ color: "var(--foreground-muted)" }}>{emailPreview.subject}</span>
+              </div>
+              <div style={{ fontSize: "0.8rem" }}>
+                <span style={{ fontWeight: 600 }}>נשלח ב: </span>
+                <span style={{ color: "var(--foreground-muted)" }}>
+                  {new Date(emailPreview.sentAt).toLocaleString("he-IL")}
+                </span>
+              </div>
+            </div>
+
+            {/* Attachments list — the actual files */}
+            <div style={{ marginBottom: "1.25rem" }}>
+              <h3 style={{ fontSize: "0.9rem", fontWeight: 700, marginBottom: "0.75rem" }}>
+                📎 קבצים מצורפים ({emailPreview.totalFiles})
+              </h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                {emailPreview.attachments.map((att, idx) => (
+                  <div
+                    key={att.id}
+                    style={{
+                      display: "flex", alignItems: "center", gap: "0.75rem",
+                      padding: "0.75rem 1rem", borderRadius: "0.5rem",
+                      border: "1px solid var(--border)", background: "var(--surface-raised, #fff)",
+                    }}
+                  >
+                    <span style={{ fontSize: "1.25rem" }}>
+                      {att.documentType === "invoice" ? "🧾" :
+                       att.documentType === "receipt" ? "🧾" :
+                       att.documentType === "report" ? "📊" :
+                       att.documentType === "tax" ? "📋" : "📄"}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "0.85rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {att.fileName}
+                      </div>
+                      <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>
+                        {(att.fileSize / 1024).toFixed(0)} KB
+                        {att.notes ? ` · ${att.notes}` : ""}
+                      </div>
+                    </div>
+                    {att.accessible && att.fileUrl ? (
+                      <a
+                        href={att.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: "inline-flex", alignItems: "center", justifyContent: "center",
+                          padding: "0.4rem 0.75rem", borderRadius: "0.375rem",
+                          background: "#10b981", color: "#fff", fontSize: "0.72rem",
+                          fontWeight: 600, textDecoration: "none", whiteSpace: "nowrap",
+                        }}
+                      >
+                        ⬇️ הורד
+                      </a>
+                    ) : (
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", padding: "0.4rem 0.75rem",
+                        borderRadius: "0.375rem", background: "rgba(239,68,68,0.1)",
+                        color: "#ef4444", fontSize: "0.72rem", fontWeight: 600,
+                      }}>
+                        לא זמין
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {emailPreview.inaccessibleCount > 0 && (
+                <div style={{
+                  marginTop: "0.75rem", padding: "0.75rem", borderRadius: "0.5rem",
+                  background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)",
+                  fontSize: "0.8rem", color: "#f59e0b",
+                }}>
+                  ⚠️ {emailPreview.inaccessibleCount} קבצים ללא קישור נגיש — ודא שהועלו כראוי
+                </div>
+              )}
+            </div>
+
+            {/* Total */}
+            <div style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "0.75rem 1rem", borderRadius: "0.5rem",
+              background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.15)",
+              marginBottom: "1.5rem",
+            }}>
+              <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>סה״כ</span>
+              <span style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>
+                {emailPreview.totalFiles} קבצים · {(emailPreview.totalSize / 1024).toFixed(0)} KB
+              </span>
+            </div>
+
+            {/* Mock notice */}
+            <div style={{
+              padding: "0.75rem 1rem", borderRadius: "0.5rem", marginBottom: "1.25rem",
+              background: "rgba(56,189,248,0.06)", border: "1px solid rgba(56,189,248,0.15)",
+              fontSize: "0.78rem", color: "var(--foreground-muted)", lineHeight: 1.6,
+            }}>
+              💡 <strong>שים לב:</strong> כרגע השליחה מדומה — הקבצים סומנו כ&quot;נשלח&quot; ואתה יכול להוריד אותם ידנית.
+              כשתגדיר שירות מייל (SendGrid/Resend), הקבצים יישלחו אוטומטית כקבצים מצורפים.
+            </div>
+
+            {/* Close button */}
+            <button
+              onClick={closePreview}
+              style={{
+                width: "100%", padding: "0.75rem", background: "var(--accent, #10b981)",
+                color: "#000", border: "none", borderRadius: "0.5rem",
+                fontWeight: "600", cursor: "pointer", fontSize: "0.9rem",
+              }}
+            >
+              סגור
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

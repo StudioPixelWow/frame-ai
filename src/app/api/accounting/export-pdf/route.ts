@@ -81,9 +81,12 @@ export async function GET(req: NextRequest) {
     <tbody>
       ${docs.length > 0 ? docs.map((doc: any, i: number) => {
         const dateStr = doc.createdAt ? new Date(doc.createdAt).toLocaleDateString("he-IL") : "";
+        const fileLink = doc.fileUrl && doc.fileUrl.startsWith("http")
+          ? `<a href="${doc.fileUrl}" target="_blank" rel="noopener" style="color:#059669;text-decoration:none;font-weight:600;">${doc.fileName || "מסמך"} ⬇️</a>`
+          : (doc.fileName || "מסמך ללא קישור");
         return `<tr>
           <td>${i + 1}</td>
-          <td>${doc.fileName || ""}</td>
+          <td>${fileLink}</td>
           <td><span class="type-badge">${FILE_TYPE_LABELS[doc.documentType] || doc.documentType || FILE_TYPE_LABELS[doc.fileType] || doc.fileType || ""}</span></td>
           <td>${doc.notes || "—"}</td>
           <td>${dateStr}</td>
