@@ -304,6 +304,51 @@ function AccountingPageInner() {
           </div>
         </button>
 
+        {/* Timeline & Collections Card */}
+        <button
+          className="premium-card ux-stagger-item"
+          onClick={() => router.push("/accounting/timeline")}
+          style={{
+            background: "var(--surface-raised)",
+            border: "2px solid var(--border)",
+            borderRadius: "1rem",
+            padding: "2rem",
+            cursor: "pointer",
+            transition: "all 0.3s ease",
+            textAlign: "right",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 16px rgba(239, 68, 68, 0.2)";
+            (e.currentTarget as HTMLElement).style.borderColor = "#ef4444";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.1)";
+            (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
+          }}
+        >
+          <div style={{ fontSize: "2.5rem", marginBottom: "1rem" }}>⏰</div>
+          <h3 style={{ fontSize: "1.25rem", fontWeight: "bold", marginBottom: "0.5rem", color: "var(--foreground)" }}>
+            ציר זמן וגבייה
+          </h3>
+          <p style={{ color: "var(--foreground-muted)", fontSize: "0.9rem", marginBottom: "1.5rem" }}>
+            מעקב חודשי וגבייה חכמה
+          </p>
+          <div
+            style={{
+              display: "inline-block",
+              background: "#ef4444",
+              color: "#fff",
+              padding: "0.5rem 1rem",
+              borderRadius: "0.5rem",
+              fontSize: "0.85rem",
+              fontWeight: "600",
+            }}
+          >
+            גבייה חכמה
+          </div>
+        </button>
+
         {/* Podcast Card */}
         <button
           className="premium-card ux-stagger-item"

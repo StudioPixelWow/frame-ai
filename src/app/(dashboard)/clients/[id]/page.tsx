@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useClients, useEmployees, useClientGanttItems, useClientTasks, useTasks, useClientFiles, useSocialPosts } from "@/lib/api/use-entity";
+import { useClients, useEmployees, useClientGanttItems, useClientTasks, useTasks, useClientFiles, useSocialPosts, usePayments, useProjectPayments, useCampaigns, useLeads } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import type { Client, Employee } from "@/lib/db/schema";
 import TabOverview from "./tab-overview";
@@ -111,6 +111,12 @@ function ClientDetailContent() {
   const { data: clients, loading: clientsLoading, update: updateClient } = useClients();
   const { data: employees, loading: employeesLoading } = useEmployees();
   const { data: allSocialPosts } = useSocialPosts();
+  const { data: overviewPayments } = usePayments();
+  const { data: overviewProjectPayments } = useProjectPayments();
+  const { data: overviewCampaigns } = useCampaigns();
+  const { data: overviewLeads } = useLeads();
+  const { data: overviewTasks } = useTasks();
+  const { data: overviewGanttItems } = useClientGanttItems();
   const toast = useToast();
 
   const searchParams = useSearchParams();
@@ -1145,6 +1151,13 @@ function ClientDetailContent() {
               onUpdateClient={async (updates) => { await updateClient(client.id, updates); }}
               employees={employees || []}
               onNavigateTab={(tab) => setActiveTab(tab as TabName)}
+              tasks={overviewTasks || []}
+              payments={overviewPayments || []}
+              projectPayments={overviewProjectPayments || []}
+              campaigns={overviewCampaigns || []}
+              leads={overviewLeads || []}
+              ganttItems={overviewGanttItems || []}
+              socialPosts={allSocialPosts || []}
             />
             {/* AI Insights widget below overview */}
             <div style={{ marginTop: "2rem" }}>

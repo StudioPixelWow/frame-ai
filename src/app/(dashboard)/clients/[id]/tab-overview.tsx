@@ -1,7 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { Client, Employee } from "@/lib/db/schema";
+import {
+  computeClientHealth,
+  inferClientStatus,
+  STATUS_LABELS_EXTENDED,
+  getClientSnapshotCounts,
+  type ClientHealthScore,
+  type ClientStatusExtended,
+} from "@/lib/business/client-health";
 
 const CLIENT_TYPE_LABELS: Record<string, { label: string; color: string; emoji?: string }> = {
   marketing: { label: "מרקטינג", color: "#00B5FE" },
@@ -52,13 +60,35 @@ interface TabOverviewProps {
   onUpdateClient?: (updates: Partial<Client>) => Promise<void>;
   employees?: Employee[];
   onNavigateTab?: (tab: string) => void;
+  tasks?: any[];
+  payments?: any[];
+  projectPayments?: any[];
+  campaigns?: any[];
+  leads?: any[];
+  ganttItems?: any[];
+  socialPosts?: any[];
 }
 
-export default function TabOverview({ client, assignedManager, color, onUpdateClient, employees = [], onNavigateTab }: TabOverviewProps) {
+export default function TabOverview({ client, assignedManager, color, onUpdateClient, employees = [], onNavigateTab, tasks = [], payments = [], projectPayments = [], campaigns = [], leads = [], ganttItems = [], socialPosts = [] }: TabOverviewProps) {
   const [isAssigneeDropdownOpen, setIsAssigneeDropdownOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
   const TEAM_MEMBERS = ["טל זטלמן", "מאיה זטלמן", "נועם בוברין", "מיכאלה"];
+
+  // Health Score
+  const healthScore = useMemo(() => {
+    const clientTasks = tasks.filter((t: any) => t.clientId === client.id);
+    const clientPayments = payments.filter((p: any) => p.clientId === client.id);
+    const clientProjectPayments = projectPayments.filter((p: any) => p.clientId === client.id);
+    return computeClientHealth(client as any, clientTasks, clientPayments, clientProjectPayments);
+  }, [client, tasks, payments, projectPayments]);
+
+  const extendedStatus = useMemo(() => inferClientStatus(client as any, healthScore), [client, healthScore]);
+
+  // Snapshot counts
+  const snapshot = useMemo(() => {
+    return getClientSnapshotCounts(client.id, campaigns as any, leads as any, tasks as any, ganttItems as any, socialPosts as any);
+  }, [client.id, campaigns, leads, tasks, ganttItems, socialPosts]);
 
   const handleAssignEmployee = async (employeeId: string) => {
     if (!onUpdateClient) return;
@@ -71,15 +101,130 @@ export default function TabOverview({ client, assignedManager, color, onUpdateCl
     }
   };
 
+  const statusInfo = STATUS_LABELS_EXTENDED[extendedStatus] || STATUS_LABELS_EXTENDED.active;
+
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr",
-        gap: "1.5rem",
-        marginBottom: "2rem",
-      }}
-    >
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", marginBottom: "2rem" }}>
+      {/* Health Score + Snapshot Row */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
+        {/* Health Score Card */}
+        <div
+          className="agd-card"
+          style={{
+            background: "var(--surface-raised)",
+            border: `2px solid ${healthScore.color}30`,
+            borderRadius: "0.75rem",
+            padding: "1.5rem",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+            <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground-muted)", margin: 0 }}>
+              בריאות לקוח
+            </h3>
+            <div style={{
+              padding: "0.25rem 0.75rem",
+              borderRadius: "1rem",
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              background: `${statusInfo.color}15`,
+              color: statusInfo.color,
+              border: `1px solid ${statusInfo.color}30`,
+            }}>
+              {statusInfo.label}
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
+            <div style={{
+              width: 64,
+              height: 64,
+              borderRadius: "50%",
+              background: `conic-gradient(${healthScore.color} ${healthScore.score * 3.6}deg, var(--border) 0deg)`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              position: "relative",
+            }}>
+              <div style={{
+                width: 52,
+                height: 52,
+                borderRadius: "50%",
+                background: "var(--surface-raised)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: 700,
+                fontSize: "1.1rem",
+                color: healthScore.color,
+              }}>
+                {healthScore.score}
+              </div>
+            </div>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+              {healthScore.factors.slice(0, 3).map((factor, i) => (
+                <div key={i} style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                  <span style={{ color: healthScore.color }}>•</span> {factor}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Client Snapshot Card */}
+        <div
+          className="agd-card"
+          style={{
+            background: "var(--surface-raised)",
+            border: "1px solid var(--border)",
+            borderRadius: "0.75rem",
+            padding: "1.5rem",
+          }}
+        >
+          <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground-muted)", margin: "0 0 1rem 0" }}>
+            תמונת מצב
+          </h3>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+            {[
+              { label: "קמפיינים פעילים", value: snapshot.activeCampaigns, color: "#00B5FE", tab: "campaigns" },
+              { label: "לידים פתוחים", value: snapshot.openLeads, color: "#a78bfa", tab: "leads" },
+              { label: "משימות בטיפול", value: snapshot.pendingTasks, color: "#f59e0b", tab: "tasks" },
+              { label: "תוכן קרוב", value: snapshot.upcomingContent, color: "#22c55e", tab: "content" },
+            ].map((item) => (
+              <button
+                key={item.label}
+                onClick={() => onNavigateTab?.(item.tab)}
+                style={{
+                  background: `${item.color}08`,
+                  border: `1px solid ${item.color}20`,
+                  borderRadius: "0.5rem",
+                  padding: "0.75rem",
+                  cursor: "pointer",
+                  textAlign: "right",
+                  transition: "all 150ms",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = `${item.color}50`; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = `${item.color}20`; }}
+              >
+                <div style={{ fontSize: "1.25rem", fontWeight: 700, color: item.color }}>{item.value}</div>
+                <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>{item.label}</div>
+              </button>
+            ))}
+          </div>
+          {snapshot.totalPosts > 0 && (
+            <div style={{ marginTop: "0.75rem", fontSize: "0.8rem", color: "var(--foreground-muted)", textAlign: "center", borderTop: "1px solid var(--border)", paddingTop: "0.5rem" }}>
+              סה״כ {snapshot.totalPosts} פוסטים פורסמו
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Main Overview Grid */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "1.5rem",
+        }}
+      >
       {/* Left Column */}
       <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
         {/* Identity Card */}
@@ -770,6 +915,7 @@ export default function TabOverview({ client, assignedManager, color, onUpdateCl
             )}
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
