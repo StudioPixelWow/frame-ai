@@ -17,12 +17,15 @@ import {
   useProjectPayments,
   useBusinessProjects,
   useSocialPosts,
+  useEmployeeTasks,
+  useClientGanttItems,
 } from "@/lib/api/use-entity";
 import { useOperationalAlerts } from "@/lib/alerts/use-alerts";
 import { SkeletonKPIRow, SkeletonGrid } from "@/components/ui/skeleton";
 import { AIInsightsPanel, generateInsights } from "@/components/ai-insights-panel";
 import SmartWeeklyCalendar from "@/components/ui/SmartWeeklyCalendar";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
+import { useAuth } from "@/lib/auth/auth-context";
 
 /* ── Module definitions ── */
 const modules = [
@@ -136,7 +139,297 @@ function TimelineItem({ icon, title, subtitle, time, color }: {
   );
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   ═══ EMPLOYEE DASHBOARD ═══
+   A focused, personalized view for employees — shows only their clients,
+   tasks, projects, and content. No financial data or admin metrics.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+function EmployeeDashboard({ employeeId }: { employeeId: string }) {
+  const greeting = getGreeting();
+  const dateLabel = getDateLabel();
+  const { data: employees } = useEmployees();
+  const { data: clients } = useClients();
+  const { data: tasks } = useTasks();
+  const { data: employeeTasks } = useEmployeeTasks();
+  const { data: ganttItems } = useClientGanttItems();
+  const { data: approvals } = useApprovals();
+  const { data: businessProjects } = useBusinessProjects();
+
+  const employee = employees.find(e => e.id === employeeId);
+  const employeeName = employee?.name || "עובד";
+
+  // Tasks assigned to this employee (both global tasks and employee-tasks)
+  const myGlobalTasks = useMemo(() =>
+    tasks.filter(t => t.assigneeIds?.includes(employeeId) && t.status !== "completed"),
+    [tasks, employeeId]
+  );
+  const myEmployeeTasks = useMemo(() =>
+    employeeTasks.filter(t => t.assignedEmployeeId === employeeId && t.status !== "completed"),
+    [employeeTasks, employeeId]
+  );
+  const allMyTaskCount = myGlobalTasks.length + myEmployeeTasks.length;
+
+  // Clients where this employee is assigned manager
+  const myClients = useMemo(() =>
+    clients.filter(c => c.assignedManagerId === employeeId && c.status === "active"),
+    [clients, employeeId]
+  );
+
+  // Gantt items for my clients
+  const myGanttItems = useMemo(() => {
+    const myClientIds = new Set(myClients.map(c => c.id));
+    return ganttItems.filter(g => myClientIds.has(g.clientId));
+  }, [ganttItems, myClients]);
+
+  // My approvals (pending, related to my clients)
+  const myApprovals = useMemo(() => {
+    const myClientNames = new Set(myClients.map(c => c.name));
+    return approvals.filter(a => a.status === "pending_approval" && myClientNames.has(a.clientName || ""));
+  }, [approvals, myClients]);
+
+  // My projects
+  const myProjects = useMemo(() =>
+    businessProjects.filter(p => p.projectStatus === "in_progress" && myClients.some(c => c.id === p.clientId)),
+    [businessProjects, myClients]
+  );
+
+  // Overdue tasks
+  const today = new Date().toISOString().split("T")[0];
+  const overdueGlobal = myGlobalTasks.filter(t => t.dueDate && t.dueDate < today);
+  const overdueEmployee = myEmployeeTasks.filter(t => t.dueDate && t.dueDate < today);
+  const overdueCount = overdueGlobal.length + overdueEmployee.length;
+
+  // Today tasks
+  const todayGlobal = myGlobalTasks.filter(t => t.dueDate && t.dueDate === today);
+  const todayEmployee = myEmployeeTasks.filter(t => t.dueDate && t.dueDate === today);
+  const todayTaskCount = todayGlobal.length + todayEmployee.length;
+
+  // Current month gantt stats
+  const now = new Date();
+  const currentMonthGantt = myGanttItems.filter(g => {
+    if (g.ganttType === "monthly" && g.date) {
+      const d = new Date(g.date);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }
+    if (g.ganttType === "annual") return g.month === now.getMonth() + 1 && g.year === now.getFullYear();
+    return false;
+  });
+  const publishedGantt = currentMonthGantt.filter(g => g.status === "published" || g.status === "approved").length;
+
+  return (
+    <div className="mhd-root">
+      <div className="mhd-content stagger-in">
+        {/* ═══ HERO ═══ */}
+        <div className="mhd-header ux-hero-enter">
+          <div>
+            <div className="mhd-greeting">
+              {greeting}, <span className="mhd-greeting-name">{employeeName}</span> 👋
+            </div>
+            <div className="mhd-greeting-sub">מרכז העבודה שלך — הנה מה שצריך את תשומת הלב שלך</div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.75rem" }}>
+            <div className="mhd-date-badge">📅 {dateLabel}</div>
+          </div>
+        </div>
+
+        {/* ═══ KPI ROW ═══ */}
+        <div>
+          <div className="mhd-section-label">סקירה מהירה</div>
+          <div className="ux-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.75rem" }}>
+            <KPICard icon="📋" value={allMyTaskCount} label="משימות פתוחות" color="#2dd4bf" href="/tasks" />
+            <KPICard icon="🔴" value={overdueCount} label="באיחור" color="#ef4444" href="/tasks" />
+            <KPICard icon="📅" value={todayTaskCount} label="משימות היום" color="#38bdf8" href="/tasks" />
+            <KPICard icon="👥" value={myClients.length} label="לקוחות שלי" color="#a78bfa" href="/clients" />
+            <KPICard icon="⏳" value={myApprovals.length} label="ממתינים לאישור" color="#f59e0b" href="/approvals" />
+            <KPICard icon="📊" value={`${publishedGantt}/${currentMonthGantt.length}`} label="תוכן החודש" color="#22c55e" href="/clients" />
+          </div>
+        </div>
+
+        {/* ═══ URGENT ACTIONS ═══ */}
+        {(overdueCount > 0 || myApprovals.length > 0) && (
+          <div style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)", borderRadius: "0.75rem", padding: "1.25rem", direction: "rtl" }}>
+            <div style={{ fontSize: "0.875rem", fontWeight: 600, marginBottom: "0.75rem", color: "#ef4444" }}>
+              🚨 דורש טיפול
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
+              {overdueCount > 0 && (
+                <Link href="/tasks" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem" }}>
+                  <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>משימות באיחור</div>
+                  <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ef4444" }}>{overdueCount}</div>
+                </Link>
+              )}
+              {myApprovals.length > 0 && (
+                <Link href="/approvals" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem" }}>
+                  <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>אישורים ממתינים</div>
+                  <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#f59e0b" }}>{myApprovals.length}</div>
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══ MY CLIENTS ═══ */}
+        {myClients.length > 0 && (
+          <div>
+            <div className="mhd-section-label">👥 הלקוחות שלי</div>
+            <div className="ux-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "1rem" }}>
+              {myClients.map(client => {
+                const clientTasks = myGlobalTasks.filter(t => t.clientId === client.id);
+                const clientGantt = myGanttItems.filter(g => g.clientId === client.id);
+                const color = client.color || "#00B5FE";
+                const initials = client.name.split(" ").map(w => w[0]).join("").slice(0, 2);
+                return (
+                  <Link key={client.id} href={`/clients/${client.id}`} className="premium-card" style={{ textDecoration: "none", padding: "1.25rem", direction: "rtl" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem" }}>
+                      <div style={{
+                        width: 40, height: 40, borderRadius: "50%",
+                        background: `${color}20`, border: `2px solid ${color}40`, color,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontWeight: 700, fontSize: "0.85rem",
+                      }}>
+                        {initials}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>{client.name}</div>
+                        {client.company && <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>{client.company}</div>}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: "0.65rem", padding: "0.15rem 0.5rem", borderRadius: "999px", background: "rgba(45,212,191,0.1)", color: "#2dd4bf", fontWeight: 600 }}>
+                        {clientTasks.length} משימות
+                      </span>
+                      <span style={{ fontSize: "0.65rem", padding: "0.15rem 0.5rem", borderRadius: "999px", background: "rgba(34,197,94,0.1)", color: "#22c55e", fontWeight: 600 }}>
+                        {clientGantt.length} פריטי תוכן
+                      </span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ═══ TODAY'S TASKS ═══ */}
+        {(todayGlobal.length > 0 || todayEmployee.length > 0) && (
+          <div>
+            <div className="mhd-section-label">📅 משימות להיום</div>
+            <div className="premium-card" style={{ direction: "rtl" }}>
+              {todayGlobal.map(t => (
+                <TimelineItem key={t.id} icon="📋" title={t.title} subtitle={t.clientName || "כללי"} time="היום" color="#2dd4bf" />
+              ))}
+              {todayEmployee.map(t => (
+                <TimelineItem key={t.id} icon="✅" title={t.title} subtitle={t.clientName || "כללי"} time="היום" color="#38bdf8" />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ═══ ALL OPEN TASKS ═══ */}
+        <div>
+          <div className="mhd-section-label">📋 משימות פתוחות ({allMyTaskCount})</div>
+          {allMyTaskCount === 0 ? (
+            <div className="premium-card" style={{ textAlign: "center", padding: "2rem", color: "var(--foreground-muted)", fontSize: "0.85rem" }}>
+              אין משימות פתוחות — כל הכבוד! ✨
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              {[...myGlobalTasks, ...myEmployeeTasks]
+                .sort((a, b) => {
+                  const po: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+                  return (po[a.priority] ?? 9) - (po[b.priority] ?? 9);
+                })
+                .slice(0, 15)
+                .map(task => {
+                  const priorityColor: Record<string, string> = { urgent: "#ef4444", high: "#f97316", medium: "#fbbf24", low: "#22c55e" };
+                  const statusLabel: Record<string, string> = { new: "חדש", in_progress: "בביצוע", under_review: "בביקורת", returned: "הוחזר" };
+                  return (
+                    <Link key={task.id} href="/tasks" className="premium-card ux-stagger-item" style={{ textDecoration: "none", padding: "0.75rem 1rem", display: "flex", alignItems: "center", gap: "0.75rem", direction: "rtl" }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: priorityColor[task.priority] || "#6b7280", flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "0.82rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.title}</div>
+                        <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>
+                          {task.clientName || "כללי"} • {statusLabel[task.status] || task.status}
+                        </div>
+                      </div>
+                      {task.dueDate && (
+                        <div style={{
+                          fontSize: "0.65rem", fontWeight: 600, whiteSpace: "nowrap",
+                          color: task.dueDate < today ? "#ef4444" : "var(--foreground-muted)",
+                        }}>
+                          {new Date(task.dueDate).toLocaleDateString("he-IL", { day: "numeric", month: "short" })}
+                        </div>
+                      )}
+                    </Link>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+
+        {/* ═══ ACTIVE PROJECTS ═══ */}
+        {myProjects.length > 0 && (
+          <div>
+            <div className="mhd-section-label">🚀 פרויקטים פעילים ({myProjects.length})</div>
+            <div className="ux-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "1rem" }}>
+              {myProjects.slice(0, 6).map(project => (
+                <Link key={project.id} href={`/business-projects`} className="premium-card" style={{ textDecoration: "none", padding: "1rem", direction: "rtl" }}>
+                  <div style={{ fontWeight: 700, fontSize: "0.875rem", marginBottom: "0.25rem" }}>{project.projectName}</div>
+                  <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", marginBottom: "0.5rem" }}>{(project as any).clientName || ""}</div>
+                  <span style={{
+                    display: "inline-block", fontSize: "0.65rem", fontWeight: 600, padding: "0.15rem 0.5rem",
+                    borderRadius: "999px", background: "rgba(56,189,248,0.1)", color: "#38bdf8",
+                  }}>
+                    בביצוע
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ═══ QUICK ACTIONS (employee-scoped) ═══ */}
+        <div>
+          <div className="mhd-section-label">פעולות מהירות</div>
+          <div className="ux-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: "0.75rem" }}>
+            {[
+              { icon: "📅", label: "משימות", route: "/tasks", color: "#2dd4bf" },
+              { icon: "👤", label: "לקוחות", route: "/clients", color: "#38bdf8" },
+              { icon: "📋", label: "אישורים", route: "/approvals", color: "#f59e0b" },
+              { icon: "📣", label: "קמפיינים", route: "/campaigns", color: "#a78bfa" },
+              { icon: "📆", label: "יומן", route: "/business-calendar", color: "#f97316" },
+            ].map(a => (
+              <Link key={a.label} href={a.route} className="quick-action-btn ux-light-sweep">
+                <span className="quick-action-icon" style={{ filter: `drop-shadow(0 2px 8px ${a.color}60)` }}>{a.icon}</span>
+                <span className="quick-action-label">{a.label}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* ═══ WEEKLY CALENDAR ═══ */}
+        <SmartWeeklyCalendar />
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   ═══ ADMIN / MANAGER DASHBOARD (original) ═══
+   ══════════════════════════════════════════════════════════════════════════════ */
+
 export default function DashboardPage() {
+  const { role, employeeId, isEmployee } = useAuth();
+
+  // If employee role with selected employee, show employee dashboard
+  if (isEmployee && employeeId) {
+    return <EmployeeDashboard employeeId={employeeId} />;
+  }
+
+  return <AdminDashboard />;
+}
+
+function AdminDashboard() {
   const greeting = getGreeting();
   const dateLabel = getDateLabel();
 

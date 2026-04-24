@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useLeads, useCampaigns, useClients } from "@/lib/api/use-entity";
+import { AdminOnly } from "@/components/role-gate";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import type { Lead, LeadStatus, LeadInterestType } from "@/lib/db/schema";
@@ -739,6 +740,16 @@ function LeadDetailPanel({
 // ══════════════════════════════════════════════════════════════════════════════
 
 export default function LeadsPage() {
+  return <AdminOnly fallback={
+    <div dir="rtl" style={{ maxWidth: 600, margin: "4rem auto", textAlign: "center", padding: "2rem" }}>
+      <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>🔒</div>
+      <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "0.5rem" }}>אין גישה</h2>
+      <p style={{ fontSize: "0.875rem", color: "var(--foreground-muted)" }}>עמוד הלידים זמין למנהלים בלבד</p>
+    </div>
+  }><LeadsPageInner /></AdminOnly>;
+}
+
+function LeadsPageInner() {
   const { data: rawLeads, loading, create, update, remove, refetch } = useLeads();
   const { data: rawCampaigns } = useCampaigns();
   const { data: rawClients } = useClients();

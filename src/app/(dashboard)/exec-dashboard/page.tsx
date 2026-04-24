@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { AdminOnly } from "@/components/role-gate";
 import { wow } from '@/lib/wow';
 import {
   useClients,
@@ -27,6 +28,16 @@ import { AnimatedCounter } from '@/components/ui/animated-counter';
 const HEBREW_MONTHS = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ'];
 
 export default function ExecDashboardPage() {
+  return <AdminOnly fallback={
+    <div dir="rtl" style={{ maxWidth: 600, margin: "4rem auto", textAlign: "center", padding: "2rem" }}>
+      <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>🔒</div>
+      <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "0.5rem" }}>אין גישה</h2>
+      <p style={{ fontSize: "0.875rem", color: "var(--foreground-muted)" }}>דשבורד מנהלים זמין למנהלים בלבד</p>
+    </div>
+  }><ExecDashboardInner /></AdminOnly>;
+}
+
+function ExecDashboardInner() {
   const toast = useToast();
   const [filterSeverity, setFilterSeverity] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
   const [timeOfDay, setTimeOfDay] = useState('');

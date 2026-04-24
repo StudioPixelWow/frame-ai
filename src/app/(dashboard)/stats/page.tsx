@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
+import { AdminOnly } from "@/components/role-gate";
 import {
   useClients,
   useTasks,
@@ -677,6 +678,16 @@ function CampaignCard({
 }
 
 export default function AnalyticsDashboard() {
+  return <AdminOnly fallback={
+    <div dir="rtl" style={{ maxWidth: 600, margin: "4rem auto", textAlign: "center", padding: "2rem" }}>
+      <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>🔒</div>
+      <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "0.5rem" }}>אין גישה</h2>
+      <p style={{ fontSize: "0.875rem", color: "var(--foreground-muted)" }}>עמוד הסטטיסטיקות זמין למנהלים בלבד</p>
+    </div>
+  }><AnalyticsDashboardInner /></AdminOnly>;
+}
+
+function AnalyticsDashboardInner() {
   const [animationsReady, setAnimationsReady] = useState(false);
 
   const { data: clients, loading: clientsLoading } = useClients();

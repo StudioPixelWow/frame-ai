@@ -5,8 +5,23 @@ export const dynamic = "force-dynamic";
 import { useRouter } from "next/navigation";
 import { usePayments, useClients, useHostingRecords, useProjectPayments } from "@/lib/api/use-entity";
 import { useState, useMemo } from "react";
+import { AdminOnly } from "@/components/role-gate";
+
+function AccessDenied() {
+  return (
+    <div dir="rtl" style={{ maxWidth: 600, margin: "4rem auto", textAlign: "center", padding: "2rem" }}>
+      <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>🔒</div>
+      <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "0.5rem" }}>אין גישה</h2>
+      <p style={{ fontSize: "0.875rem", color: "var(--foreground-muted)" }}>עמוד זה זמין למנהלים בלבד</p>
+    </div>
+  );
+}
 
 export default function AccountingPage() {
+  return <AdminOnly fallback={<AccessDenied />}><AccountingPageInner /></AdminOnly>;
+}
+
+function AccountingPageInner() {
   const router = useRouter();
   const { data: payments } = usePayments();
   const { data: clients } = useClients();
