@@ -70,7 +70,7 @@ export default function MailingPage() {
   const { data: allTemplates, create: createTemplate, update: updateTemplate } = useEmailTemplates();
   const toast = useToast();
 
-  const [activeTab, setActiveTab] = useState<'new' | 'scheduled' | 'sent' | 'templates'>('new');
+  const [activeTab, setActiveTab] = useState<'board' | 'new' | 'templates'>('board');
   const [formState, setFormState] = useState<FormState>(EMPTY_FORM);
   const [templates, setTemplates] = useState<EmailTemplate[]>(allTemplates || []);
   const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
@@ -231,8 +231,9 @@ export default function MailingPage() {
     }
   };
 
-  const scheduledMailings = useMemo(() => allMailings?.filter(m => m.status === 'scheduled') || [], [allMailings]);
-  const sentMailings = useMemo(() => allMailings?.filter(m => m.status === 'sent') || [], [allMailings]);
+  const draftMailings = useMemo(() => (allMailings || []).filter(m => m.status === 'draft').sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()), [allMailings]);
+  const scheduledMailings = useMemo(() => (allMailings || []).filter(m => m.status === 'scheduled').sort((a, b) => new Date(a.scheduledAt || a.createdAt).getTime() - new Date(b.scheduledAt || b.createdAt).getTime()), [allMailings]);
+  const sentMailings = useMemo(() => (allMailings || []).filter(m => m.status === 'sent').sort((a, b) => new Date(b.sentAt || b.createdAt).getTime() - new Date(a.sentAt || a.createdAt).getTime()), [allMailings]);
 
   const formatRecipientFilter = (filter: Mailing['recipientFilter']): string => {
     if (filter.type === 'all') return 'כל הלקוחות הפעילים';
@@ -659,33 +660,30 @@ export default function MailingPage() {
         }
       `}</style>
 
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px', color: 'var(--foreground)' }}>
-          דיוור ודיוור בתפזורת
-        </h1>
-        <p style={{ color: 'var(--foreground-muted)', fontSize: '14px' }}>
-          ניהול קמפיינים דיוור לכל הלקוחות שלך
-        </p>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem", borderBottom: "1px solid var(--border)", paddingBottom: "1rem" }}>
+        <div>
+          <h1 className="mod-page-title">לוח דיוורים</h1>
+          <p style={{ color: 'var(--foreground-muted)', fontSize: '0.8rem', marginTop: '0.25rem' }}>
+            {(allMailings || []).length} דיוורים סה"כ — {scheduledMailings.length} מתוזמנים, {draftMailings.length} טיוטות
+          </p>
+        </div>
+        <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={() => setActiveTab('new')}>
+          + דיוור חדש
+        </button>
       </div>
 
-      <div style={{ marginBottom: '20px' }}>
+      <div style={{ marginBottom: '20px', display: 'flex', gap: '0.5rem' }}>
+        <button
+          className={`tab-button ${activeTab === 'board' ? 'active' : ''}`}
+          onClick={() => setActiveTab('board')}
+        >
+          לוח דיוורים
+        </button>
         <button
           className={`tab-button ${activeTab === 'new' ? 'active' : ''}`}
           onClick={() => setActiveTab('new')}
         >
-          דיוור חדש
-        </button>
-        <button
-          className={`tab-button ${activeTab === 'scheduled' ? 'active' : ''}`}
-          onClick={() => setActiveTab('scheduled')}
-        >
-          דיוורים מתוזמנים
-        </button>
-        <button
-          className={`tab-button ${activeTab === 'sent' ? 'active' : ''}`}
-          onClick={() => setActiveTab('sent')}
-        >
-          דיוורים שנשלחו
+          צור דיוור
         </button>
         <button
           className={`tab-button ${activeTab === 'templates' ? 'active' : ''}`}
@@ -694,6 +692,96 @@ export default function MailingPage() {
           תבניות
         </button>
       </div>
+
+      {/* ── BOARD VIEW ────────────────────────────────────────────────────── */}
+      <section className={`section ${activeTab === 'board' ? 'active' : ''}`}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+          {/* Scheduled Mailings — most important */}
+          <div>
+            <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ color: '#0092cc' }}>📅</span> מתוזמנים ({scheduledMailings.length})
+            </h3>
+            {scheduledMailings.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '0.75rem' }}>
+                {scheduledMailings.map(mailing => (
+                  <div key={mailing.id} className="agd-card premium-card" style={{ padding: '1rem', borderRight: '3px solid #0092cc' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--foreground)' }}>{mailing.subject}</span>
+                      <span className="status-badge" style={{ backgroundColor: '#0092cc', fontSize: '0.65rem' }}>מתוזמן</span>
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--foreground-muted)', marginBottom: '0.5rem' }}>
+                      {mailing.scheduledAt ? new Date(mailing.scheduledAt).toLocaleString('he-IL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'לא תוזמן'}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                      <span style={{ color: 'var(--foreground-muted)' }}>{mailing.recipientCount} נמענים — {formatRecipientFilter(mailing.recipientFilter)}</span>
+                      <button className="mod-btn-ghost ux-btn" onClick={() => handleCancelScheduled(mailing.id)} style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem', color: '#ef4444' }}>
+                        בטל
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding: '1.5rem', background: 'var(--surface-raised)', border: '1px dashed var(--border)', borderRadius: '0.5rem', textAlign: 'center', color: 'var(--foreground-muted)', fontSize: '0.85rem' }}>
+                אין דיוורים מתוזמנים — צור דיוור חדש ותזמן אותו
+              </div>
+            )}
+          </div>
+
+          {/* Draft Mailings */}
+          <div>
+            <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ color: '#6b7280' }}>📝</span> טיוטות ({draftMailings.length})
+            </h3>
+            {draftMailings.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '0.75rem' }}>
+                {draftMailings.map(mailing => (
+                  <div key={mailing.id} className="agd-card premium-card" style={{ padding: '1rem', borderRight: '3px solid #6b7280' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--foreground)' }}>{mailing.subject}</span>
+                      <span className="status-badge" style={{ backgroundColor: '#6b7280', fontSize: '0.65rem' }}>טיוטה</span>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>
+                      {mailing.recipientCount} נמענים — נוצר {new Date(mailing.createdAt).toLocaleDateString('he-IL')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding: '1rem', background: 'var(--surface-raised)', border: '1px dashed var(--border)', borderRadius: '0.5rem', textAlign: 'center', color: 'var(--foreground-muted)', fontSize: '0.85rem' }}>
+                אין טיוטות
+              </div>
+            )}
+          </div>
+
+          {/* Sent Mailings — history */}
+          <div>
+            <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ color: '#22c55e' }}>✉️</span> נשלחו ({sentMailings.length})
+            </h3>
+            {sentMailings.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '0.75rem' }}>
+                {sentMailings.slice(0, 12).map(mailing => (
+                  <div key={mailing.id} className="agd-card" style={{ padding: '1rem', borderRight: '3px solid #22c55e', opacity: 0.85 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <span style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--foreground)' }}>{mailing.subject}</span>
+                      <span className="status-badge" style={{ backgroundColor: '#22c55e', fontSize: '0.65rem' }}>נשלח</span>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>
+                      {mailing.sentAt ? new Date(mailing.sentAt).toLocaleString('he-IL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'} — {mailing.recipientCount} נמענים
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding: '1rem', background: 'var(--surface-raised)', border: '1px dashed var(--border)', borderRadius: '0.5rem', textAlign: 'center', color: 'var(--foreground-muted)', fontSize: '0.85rem' }}>
+                לא נשלחו דיוורים עדיין
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* ── TAB 1: NEW MAILING ────────────────────────────────────────────── */}
       <section className={`section ${activeTab === 'new' ? 'active' : ''}`}>
@@ -953,116 +1041,7 @@ export default function MailingPage() {
         </div>
       </section>
 
-      {/* ── TAB 2: SCHEDULED MAILINGS ────────────────────────────────────── */}
-      <section className={`section ${activeTab === 'scheduled' ? 'active' : ''}`}>
-        {scheduledMailings.length > 0 ? (
-          <div className="card">
-            <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px', color: 'var(--foreground)' }}>
-              דיוורים מתוזמנים ({scheduledMailings.length})
-            </h2>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>נושא</th>
-                  <th>מקבלים</th>
-                  <th>תאריך תזמון</th>
-                  <th>פעולות</th>
-                </tr>
-              </thead>
-              <tbody>
-                {scheduledMailings.map(mailing => (
-                  <tr key={mailing.id}>
-                    <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {mailing.subject}
-                    </td>
-                    <td>{mailing.recipientCount}</td>
-                    <td>
-                      {mailing.scheduledAt
-                        ? new Date(mailing.scheduledAt).toLocaleString('he-IL')
-                        : '-'
-                      }
-                    </td>
-                    <td>
-                      <button
-                        className="button"
-                        onClick={() => handleCancelScheduled(mailing.id)}
-                        style={{ marginRight: '8px', padding: '6px 12px', fontSize: '12px' }}
-                      >
-                        בטל
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="card">
-            <div className="empty-state">
-              <div className="empty-state-icon">📅</div>
-              <div>אין דיוורים מתוזמנים כרגע</div>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* ── TAB 3: SENT MAILINGS ──────────────────────────────────────────── */}
-      <section className={`section ${activeTab === 'sent' ? 'active' : ''}`}>
-        {sentMailings.length > 0 ? (
-          <div className="card">
-            <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px', color: 'var(--foreground)' }}>
-              דיוורים שנשלחו ({sentMailings.length})
-            </h2>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>נושא</th>
-                  <th>מקבלים</th>
-                  <th>סינון</th>
-                  <th>תאריך שליחה</th>
-                  <th>סטטוס</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sentMailings.map(mailing => (
-                  <tr key={mailing.id}>
-                    <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {mailing.subject}
-                    </td>
-                    <td>{mailing.recipientCount}</td>
-                    <td style={{ fontSize: '12px', color: 'var(--foreground-muted)' }}>
-                      {formatRecipientFilter(mailing.recipientFilter)}
-                    </td>
-                    <td>
-                      {mailing.sentAt
-                        ? new Date(mailing.sentAt).toLocaleString('he-IL')
-                        : '-'
-                      }
-                    </td>
-                    <td>
-                      <span
-                        className="status-badge"
-                        style={{ backgroundColor: MAILING_STATUS_COLORS[mailing.status] }}
-                      >
-                        {MAILING_STATUS_LABELS[mailing.status]}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="card">
-            <div className="empty-state">
-              <div className="empty-state-icon">✉️</div>
-              <div>לא נשלחו דיוורים עדיין</div>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* ── TAB 4: TEMPLATES ──────────────────────────────────────────────── */}
+      {/* ── TAB 3: TEMPLATES ──────────────────────────────────────────────── */}
       <section className={`section ${activeTab === 'templates' ? 'active' : ''}`}>
         {templates && templates.length > 0 ? (
           <div className="card">

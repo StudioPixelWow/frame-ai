@@ -541,8 +541,14 @@ export default function TasksPage() {
       {/* Today's Tasks Section */}
       {!loading && (todayTasks.length > 0 || overdueTasks.length > 0) && (
         <div style={{ marginBottom: "2rem", background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1rem" }}>
-          <div style={{ fontSize: "0.9rem", fontWeight: 700, marginBottom: "1rem", color: "var(--foreground)" }}>
-            📅 משימות להיום
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+            <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>
+              📅 משימות להיום — {new Date().toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long" })}
+            </div>
+            <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
+              {todayTasks.length + overdueTasks.length} משימות פתוחות
+              {overdueTasks.length > 0 && <span style={{ color: "#f87171", fontWeight: 600 }}> ({overdueTasks.length} באיחור)</span>}
+            </div>
           </div>
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }} className="ux-stagger">
             {/* Overdue Tasks */}
@@ -620,9 +626,14 @@ export default function TasksPage() {
 
       {/* Future Tasks Section */}
       {!loading && futureTasks.length > 0 && (
-        <div style={{ marginBottom: "2rem", background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1rem" }}>
-          <div style={{ fontSize: "0.9rem", fontWeight: 700, marginBottom: "1rem", color: "var(--foreground)" }}>
-            📌 משימות קרובות
+        <div style={{ marginBottom: "2rem", background: "var(--surface-raised)", border: "1px solid rgba(0,181,254,0.2)", borderRadius: "0.75rem", padding: "1rem" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+            <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>
+              📌 משימות קרובות
+            </div>
+            <span style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", background: "var(--surface)", padding: "0.2rem 0.6rem", borderRadius: "999px", border: "1px solid var(--border)" }}>
+              {futureTasks.length} משימות בהמתנה
+            </span>
           </div>
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }} className="ux-stagger">
             {futureTasks.map((task: any) => {
@@ -655,9 +666,10 @@ export default function TasksPage() {
                     <span style={{ display: "inline-block", padding: "0.125rem 0.375rem", background: pri?.color || "#6b7280", borderRadius: "2px", color: "#fff", fontSize: "0.65rem" }}>
                       {PRIORITIES.find(p => p.id === task.priority)?.label || "רגיל"}
                     </span>
-                    {daysUntil !== null && (
-                      <span style={{ fontSize: "0.68rem", color: daysUntil <= 2 ? "#f59e0b" : "var(--foreground-muted)" }}>
-                        {daysUntil === 1 ? "מחר" : `בעוד ${daysUntil} ימים`}
+                    {dueDate && (
+                      <span style={{ fontSize: "0.68rem", color: daysUntil !== null && daysUntil <= 2 ? "#f59e0b" : "var(--foreground-muted)" }}>
+                        {dueDate.toLocaleDateString("he-IL", { weekday: "short", day: "numeric", month: "short" })}
+                        {daysUntil !== null && ` (${daysUntil === 1 ? "מחר" : `בעוד ${daysUntil} ימים`})`}
                       </span>
                     )}
                   </div>
@@ -976,15 +988,27 @@ export default function TasksPage() {
                       </div>
                       {expandedEmployees.has(employee.id) && (
                         <div style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
-                          {/* Status Groups */}
-                          {["today_tasks", "in_progress", "under_review", "returned", "approved", "completed"].map((statusGroup) => {
+                          {/* Status Groups — same logic as general board: overdue → today → future → status columns */}
+                          {["overdue_tasks", "today_tasks", "future_tasks", "in_progress", "under_review", "returned", "approved", "completed"].map((statusGroup) => {
                             let statusTasks = allEmpTasks;
 
-                            if (statusGroup === "today_tasks") {
+                            if (statusGroup === "overdue_tasks") {
                               statusTasks = statusTasks.filter(t => {
-                                const dueDate = 'dueDate' in t ? t.dueDate : null;
+                                const dd = 'dueDate' in t ? t.dueDate : null;
                                 const status = 'status' in t ? t.status : null;
-                                return dueDate === today && status !== 'completed' && status !== 'approved';
+                                return dd && dd < today && status !== 'completed' && status !== 'approved';
+                              });
+                            } else if (statusGroup === "today_tasks") {
+                              statusTasks = statusTasks.filter(t => {
+                                const dd = 'dueDate' in t ? t.dueDate : null;
+                                const status = 'status' in t ? t.status : null;
+                                return dd === today && status !== 'completed' && status !== 'approved';
+                              });
+                            } else if (statusGroup === "future_tasks") {
+                              statusTasks = statusTasks.filter(t => {
+                                const dd = 'dueDate' in t ? t.dueDate : null;
+                                const status = 'status' in t ? t.status : null;
+                                return dd && dd > today && status !== 'completed' && status !== 'approved';
                               });
                             } else {
                               statusTasks = statusTasks.filter(t => {
@@ -995,11 +1019,11 @@ export default function TasksPage() {
 
                             if (statusTasks.length === 0) return null;
 
-                            const statusLabel = statusGroup === "today_tasks" ? "להיום" : COLUMNS.find(c => c.id === statusGroup)?.label || statusGroup;
+                            const statusLabel = statusGroup === "overdue_tasks" ? "⚠️ באיחור" : statusGroup === "today_tasks" ? "📅 להיום" : statusGroup === "future_tasks" ? "📌 קרובות" : COLUMNS.find(c => c.id === statusGroup)?.label || statusGroup;
 
                             return (
                               <div key={statusGroup}>
-                                <div style={{ fontSize: "0.8rem", fontWeight: 600, marginBottom: "0.5rem", color: "var(--foreground-muted)" }}>
+                                <div style={{ fontSize: "0.8rem", fontWeight: 600, marginBottom: "0.5rem", color: statusGroup === "overdue_tasks" ? "#f87171" : "var(--foreground-muted)" }}>
                                   {statusLabel} ({statusTasks.length})
                                 </div>
                                 <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }} className="ux-stagger">

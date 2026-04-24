@@ -17,12 +17,20 @@ const STATUS_LABELS: Record<string, string> = {
   needs_changes: 'דורש שינויים',
 };
 
-const TYPE_LABELS: Record<string, string> = {
-  video: 'וידאו',
-  post: 'פוסט',
-  gantt: 'גאנט',
-  design: 'עיצוב',
-  milestone: 'אבן דרך',
+const TYPE_LABELS: Record<string, { label: string; emoji: string; color: string }> = {
+  video: { label: 'וידאו', emoji: '🎬', color: '#f59e0b' },
+  post: { label: 'פוסט', emoji: '📱', color: '#3b82f6' },
+  gantt: { label: 'גאנט', emoji: '📊', color: '#22c55e' },
+  design: { label: 'עיצוב', emoji: '🎨', color: '#ec4899' },
+  milestone: { label: 'אבן דרך', emoji: '🏁', color: '#0092cc' },
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  draft: '#6b7280',
+  pending_approval: '#f59e0b',
+  approved: '#22c55e',
+  rejected: '#ef4444',
+  needs_changes: '#f97316',
 };
 
 const TYPE_OPTIONS = [
@@ -153,8 +161,13 @@ export default function ApprovalsPage() {
 
   return (
     <div dir="rtl" className="apr-page">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-        <h1 className="mod-page-title">מערכת אישורים</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+        <div>
+          <h1 className="mod-page-title">מערכת אישורים</h1>
+          <p style={{ fontSize: '0.8rem', color: 'var(--foreground-muted)', marginTop: '0.25rem' }}>
+            ניהול בקשות אישור — תוכן, גאנטים, עיצובים ופעולות שדורשות אישור
+          </p>
+        </div>
         <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={openCreateModal}>
           + אישור חדש
         </button>
@@ -184,77 +197,107 @@ export default function ApprovalsPage() {
           אין אישורים להצגה
         </div>
       ) : (
-        <div className="apr-board ux-stagger" style={{ marginTop: '1rem' }}>
-          {approvals.map((approval) => (
-            <div key={approval.id} className="apr-card premium-card ux-stagger-item">
-              {/* Card Header */}
-              <div className="apr-card-header" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                <span className={`apr-type-badge apr-st-${approval.status}`}>
-                  {TYPE_LABELS[approval.type] || approval.type}
-                </span>
-                <span className={`apr-type-badge apr-st-${approval.status}`}>
-                  {STATUS_LABELS[approval.status]}
-                </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', marginTop: '1rem' }}>
+          {/* Group by status — pending first */}
+          {(['pending_approval', 'needs_changes', 'draft', 'approved', 'rejected'] as const).map(statusGroup => {
+            const groupApprovals = approvals.filter(a => a.status === statusGroup);
+            if (groupApprovals.length === 0) return null;
+            const statusColor = STATUS_COLORS[statusGroup] || '#6b7280';
+            return (
+              <div key={statusGroup}>
+                <div style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.75rem', color: statusColor, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  {STATUS_LABELS[statusGroup]} ({groupApprovals.length})
+                </div>
+                <div className="apr-board ux-stagger">
+                  {groupApprovals.map((approval) => {
+                    const typeInfo = TYPE_LABELS[approval.type] || { label: approval.type, emoji: '📄', color: '#6b7280' };
+                    const stColor = STATUS_COLORS[approval.status] || '#6b7280';
+                    return (
+                      <div key={approval.id} className="apr-card premium-card ux-stagger-item" style={{ borderRight: `3px solid ${stColor}` }}>
+                        {/* Card Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                            fontSize: '0.7rem', fontWeight: 600, padding: '0.2rem 0.5rem',
+                            borderRadius: '0.25rem', background: `${typeInfo.color}15`, color: typeInfo.color,
+                            border: `1px solid ${typeInfo.color}30`,
+                          }}>
+                            {typeInfo.emoji} {typeInfo.label}
+                          </span>
+                          <span style={{
+                            fontSize: '0.65rem', fontWeight: 600, padding: '0.2rem 0.5rem',
+                            borderRadius: '0.25rem', background: `${stColor}15`, color: stColor,
+                          }}>
+                            {STATUS_LABELS[approval.status]}
+                          </span>
+                        </div>
+
+                        {/* Card Title */}
+                        <h3 className="apr-card-title" style={{ marginBottom: '0.35rem' }}>
+                          {approval.title}
+                        </h3>
+
+                        {/* Client Name */}
+                        <p className="apr-card-desc" style={{ marginBottom: '0.75rem' }}>
+                          {approval.clientName}
+                        </p>
+
+                        {/* Meta Info */}
+                        <div style={{
+                          fontSize: '0.72rem',
+                          color: 'var(--foreground-subtle)',
+                          marginBottom: '0.75rem',
+                          borderTop: '1px solid var(--border)',
+                          paddingTop: '0.6rem',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                        }}>
+                          <span>נוצר: {new Date(approval.createdAt).toLocaleDateString('he-IL')}</span>
+                          <span>עודכן: {new Date(approval.updatedAt).toLocaleDateString('he-IL')}</span>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="apr-actions" style={{ justifyContent: 'flex-start' }}>
+                          {approval.status === 'pending_approval' && (
+                            <>
+                              <button
+                                className="mod-btn-primary ux-btn ux-btn-glow"
+                                onClick={() => handleApprove(approval.id)}
+                                style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
+                              >
+                                אישור
+                              </button>
+                              <button
+                                className="mod-btn-ghost ux-btn"
+                                onClick={() => handleReject(approval.id)}
+                                style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', color: '#ef4444' }}
+                              >
+                                דחייה
+                              </button>
+                            </>
+                          )}
+                          <button
+                            className="mod-btn-ghost ux-btn"
+                            onClick={() => openEditModal(approval)}
+                            style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
+                          >
+                            עריכה
+                          </button>
+                          <button
+                            className="mod-btn-ghost ux-btn"
+                            onClick={() => handleDelete(approval.id)}
+                            style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', color: '#ef4444' }}
+                          >
+                            מחיקה
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-
-              {/* Card Title */}
-              <h3 className="apr-card-title" style={{ marginBottom: '0.35rem' }}>
-                {approval.title}
-              </h3>
-
-              {/* Client Name */}
-              <p className="apr-card-desc" style={{ marginBottom: '0.75rem' }}>
-                {approval.clientName}
-              </p>
-
-              {/* Meta Info */}
-              <div style={{
-                fontSize: '0.72rem',
-                color: 'var(--foreground-subtle)',
-                marginBottom: '0.75rem',
-                borderTop: '1px solid var(--border)',
-                paddingTop: '0.6rem',
-              }}>
-                <div>עדכון אחרון: {new Date(approval.updatedAt).toLocaleDateString('he-IL')}</div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="apr-actions" style={{ justifyContent: 'flex-start' }}>
-                {approval.status === 'pending_approval' && (
-                  <>
-                    <button
-                      className="mod-btn-primary ux-btn ux-btn-glow"
-                      onClick={() => handleApprove(approval.id)}
-                      style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
-                    >
-                      אישור
-                    </button>
-                    <button
-                      className="mod-btn-ghost ux-btn"
-                      onClick={() => handleReject(approval.id)}
-                      style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', color: '#ef4444' }}
-                    >
-                      דחייה
-                    </button>
-                  </>
-                )}
-                <button
-                  className="mod-btn-ghost ux-btn"
-                  onClick={() => openEditModal(approval)}
-                  style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
-                >
-                  עריכה
-                </button>
-                <button
-                  className="mod-btn-ghost ux-btn"
-                  onClick={() => handleDelete(approval.id)}
-                  style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', color: '#ef4444' }}
-                >
-                  מחיקה
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

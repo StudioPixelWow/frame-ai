@@ -2,107 +2,73 @@
 
 export const dynamic = "force-dynamic";
 
+import { useClients } from "@/lib/api/use-entity";
+import { useRouter } from "next/navigation";
+
 export default function PortalPage() {
-  const clients = [
-    {
-      id: 1,
-      name: "Studio Pixel",
-      projects: 12,
-      status: "פעיל",
-    },
-    {
-      id: 2,
-      name: "Brandify",
-      projects: 8,
-      status: "פעיל",
-    },
-    {
-      id: 3,
-      name: "TechBolt",
-      projects: 5,
-      status: "פעיל",
-    },
-    {
-      id: 4,
-      name: "GreenLeaf",
-      projects: 3,
-      status: "פעיל",
-    },
-  ];
+  const { data: clients, loading } = useClients();
+  const router = useRouter();
 
-  const getAvatarColor = (index: number): string => {
-    const colors = [
-      "#00B5FE", // cyan/blue (Studio Pixel)
-      "#a78bfa", // purple (Brandify)
-      "#34d399", // green (TechBolt)
-      "#fbbf24", // amber (GreenLeaf)
-    ];
-    return colors[index % colors.length];
-  };
-
-  const getInitial = (name: string): string => {
-    return name.charAt(0).toUpperCase();
-  };
+  const portalClients = clients.filter(c => c.portalEnabled && c.status === "active");
+  const allActiveClients = clients.filter(c => c.status === "active");
 
   return (
-    <main className="max-w-[1200px] mx-auto px-6 py-8">
-      <div className="space-y-6 cpt-page">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-[1.35rem] font-bold tracking-tight">
-              פורטל לקוח
-            </h1>
-            <p className="text-foreground-muted text-[0.92rem] mt-1">
-              צפה בכל הלקוחות שלך והנהל את הפרויקטים שלהם
-            </p>
-          </div>
-        </div>
-
-        {/* Client Grid */}
-        <div className="cpt-client-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {clients.map((client, index) => (
-            <div
-              key={client.id}
-              className="cpt-client-card rounded-xl border border-border bg-surface p-5 cursor-pointer transition-all hover:border-accent hover:shadow-lg hover:shadow-accent/20"
-            >
-              {/* Avatar */}
-              <div className="flex items-center justify-center mb-4">
-                <div
-                  className="cpt-client-avatar w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-xl"
-                  style={{ backgroundColor: getAvatarColor(index) }}
-                >
-                  {getInitial(client.name)}
-                </div>
-              </div>
-
-              {/* Client Name */}
-              <h2 className="cpt-client-name text-center text-[1.05rem] font-bold text-foreground mb-3">
-                {client.name}
-              </h2>
-
-              {/* Client Meta */}
-              <div className="cpt-client-meta space-y-2 text-center mb-4">
-                <p className="text-foreground-muted text-[0.9rem]">
-                  {client.projects} פרויקטים
-                </p>
-              </div>
-
-              {/* Status Badge */}
-              <div className="flex justify-center">
-                <span className="cpt-client-status badge-accent text-[0.75rem]">
-                  {client.status}
-                </span>
-              </div>
-
-              {/* Action Button */}
-              <button className="w-full mt-4 btn-ghost text-[0.85rem]">
-                פתח פורטל
-              </button>
-            </div>
-          ))}
+    <div dir="rtl" style={{ maxWidth: "1200px", margin: "0 auto", padding: "2rem 1.5rem" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "2rem", borderBottom: "1px solid var(--border)", paddingBottom: "1rem" }}>
+        <div>
+          <h1 className="mod-page-title">פורטל לקוח</h1>
+          <p style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>
+            לקוחות עם גישת פורטל מופעלת — {portalClients.length} מתוך {allActiveClients.length} לקוחות פעילים
+          </p>
         </div>
       </div>
-    </main>
+
+      {loading ? (
+        <div style={{ textAlign: "center", padding: "3rem", color: "var(--foreground-muted)" }}>טוען...</div>
+      ) : portalClients.length === 0 ? (
+        <div className="mod-empty ux-empty-state" style={{ minHeight: "300px" }}>
+          <div className="mod-empty-icon ux-empty-state-icon">🌐</div>
+          <div className="ux-empty-state-title" style={{ fontSize: "1rem", fontWeight: 500, marginBottom: "0.5rem" }}>
+            אין לקוחות עם פורטל מופעל
+          </div>
+          <div className="ux-empty-state-text" style={{ fontSize: "0.875rem", color: "var(--foreground-muted)" }}>
+            הפעל פורטל ללקוח דרך עמוד הלקוח הספציפי
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1.25rem" }}>
+          {portalClients.map(client => {
+            const initials = client.name.split(" ").map(w => w[0]).join("").slice(0, 2);
+            const color = client.color || "#00B5FE";
+            return (
+              <div
+                key={client.id}
+                className="agd-card premium-card"
+                onClick={() => router.push(`/clients/${client.id}?tab=portal`)}
+                style={{ padding: "1.5rem", cursor: "pointer", textAlign: "center" }}
+              >
+                <div style={{
+                  width: 56, height: 56, borderRadius: "50%",
+                  background: `${color}20`, border: `2px solid ${color}40`,
+                  color, display: "flex", alignItems: "center", justifyContent: "center",
+                  fontWeight: 700, fontSize: "1rem", margin: "0 auto 0.75rem",
+                }}>
+                  {initials}
+                </div>
+                <div style={{ fontWeight: 700, fontSize: "0.95rem", marginBottom: "0.25rem" }}>{client.name}</div>
+                {client.company && <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", marginBottom: "0.5rem" }}>{client.company}</div>}
+                <span style={{
+                  display: "inline-block", padding: "0.2rem 0.6rem", fontSize: "0.7rem",
+                  fontWeight: 600, borderRadius: "999px", background: "#22c55e15", color: "#22c55e",
+                  border: "1px solid #22c55e30",
+                }}>
+                  פורטל פעיל
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

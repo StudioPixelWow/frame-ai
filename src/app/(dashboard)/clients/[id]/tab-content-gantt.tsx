@@ -277,7 +277,16 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
     [ganttItems, selectedMonth, selectedYear]
   );
 
-  const annualItems = ganttItems.filter((item) => item.ganttType === "annual" && item.year === selectedYear);
+  // Annual view shows BOTH annual-typed items AND monthly items for the selected year
+  // This ensures the annual overview reflects the same source of truth as the monthly calendar
+  const annualItems = ganttItems.filter((item) => {
+    if (item.ganttType === "annual" && item.year === selectedYear) return true;
+    if (item.ganttType === "monthly" && item.date) {
+      const d = new Date(item.date);
+      return d.getFullYear() === selectedYear;
+    }
+    return false;
+  });
 
   const thisWeekPosts = ganttItems.filter(
     (item) =>
@@ -2059,7 +2068,11 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
             }}
           >
             {HEB_MONTHS.map((month, idx) => {
-              const monthAnnualItems = annualItems.filter((item) => item.month === idx + 1);
+              const monthAnnualItems = annualItems.filter((item) => {
+                if (item.ganttType === "annual") return item.month === idx + 1;
+                if (item.ganttType === "monthly" && item.date) return new Date(item.date).getMonth() === idx;
+                return false;
+              });
               const monthHasItems = monthAnnualItems.length > 0;
               return (
                 <div

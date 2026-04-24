@@ -363,21 +363,6 @@ export default function ClientsPage() {
             />
           </div>
 
-          {/* Client Type Filter */}
-          <select
-            className="form-select"
-            value={filterClientType}
-            onChange={(e) => setFilterClientType(e.target.value)}
-            style={{ minWidth: "130px", fontSize: "0.8rem", padding: "0.4rem 0.5rem" }}
-          >
-            <option value="all">סוג</option>
-            <option value="marketing">פרסום ושיווק</option>
-            <option value="branding">מיתוג</option>
-            <option value="websites">אתרים</option>
-            <option value="podcast">פודקאסט</option>
-            <option value="hosting">אחסון</option>
-          </select>
-
           {/* Status Filter */}
           <select
             className="form-select"
@@ -441,6 +426,71 @@ export default function ClientsPage() {
               ✕ נקה
             </button>
           )}
+        </div>
+
+        {/* Client Type Filter Buttons */}
+        <div
+          style={{
+            display: "flex",
+            gap: "0.5rem",
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
+          {[
+            { key: "all", label: "הכל", emoji: "👥", color: "var(--accent)" },
+            ...Object.entries(CLIENT_TYPE_LABELS).map(([key, val]) => ({
+              key,
+              label: val.label,
+              emoji: val.emoji || "",
+              color: val.color,
+            })),
+          ].map((item) => {
+            const isActive = filterClientType === item.key;
+            const count = item.key === "all"
+              ? clients.length
+              : clients.filter((c) => c.clientType === item.key).length;
+            return (
+              <button
+                key={item.key}
+                onClick={() => setFilterClientType(item.key)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  padding: "0.5rem 1rem",
+                  borderRadius: "999px",
+                  border: isActive ? `2px solid ${item.color}` : "1.5px solid var(--border)",
+                  background: isActive ? `${item.color}18` : "var(--surface-raised)",
+                  color: isActive ? item.color : "var(--foreground-muted)",
+                  fontSize: "0.8rem",
+                  fontWeight: isActive ? 700 : 500,
+                  cursor: "pointer",
+                  transition: "all 200ms ease",
+                  boxShadow: isActive ? `0 2px 8px ${item.color}25` : "none",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span style={{ fontSize: "1rem" }}>{item.emoji}</span>
+                <span>{item.label}</span>
+                <span
+                  style={{
+                    fontSize: "0.65rem",
+                    fontWeight: 700,
+                    background: isActive ? item.color : "var(--border)",
+                    color: isActive ? "white" : "var(--foreground-muted)",
+                    borderRadius: "999px",
+                    padding: "0.1rem 0.45rem",
+                    minWidth: "1.2rem",
+                    textAlign: "center",
+                    lineHeight: "1.4",
+                  }}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Smart Hints Section */}
@@ -543,6 +593,7 @@ export default function ClientsPage() {
                 <div
                   key={client.id}
                   className="agd-card premium-card ux-stagger-item"
+                  onClick={() => router.push(`/clients/${client.id}`)}
                   style={{
                     display: "flex",
                     flexDirection: "column",
@@ -608,18 +659,16 @@ export default function ClientsPage() {
 
                     {/* Name and company */}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <Link href={`/clients/${client.id}`} style={{ textDecoration: "none" }}>
-                        <div
-                          style={{
-                            fontWeight: 700,
-                            fontSize: "0.95rem",
-                            color: "var(--foreground)",
-                            lineHeight: 1.2,
-                          }}
-                        >
-                          {client.name}
-                        </div>
-                      </Link>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          fontSize: "0.95rem",
+                          color: "var(--foreground)",
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {client.name}
+                      </div>
                       {client.company && (
                         <div
                           style={{
@@ -707,13 +756,8 @@ export default function ClientsPage() {
                       {hasSocial && <span title="רשתות חברתיות">📱</span>}
                     </div>
 
-                    {/* Actions — 3 primary buttons only */}
+                    {/* Actions — secondary buttons only (card itself is clickable) */}
                     <div style={{ display: "flex", gap: "0.35rem" }}>
-                      <Link href={`/clients/${client.id}`} style={{ textDecoration: "none" }}>
-                        <button className="mod-btn-primary ux-btn ux-btn-glow" style={{ fontSize: "0.72rem", padding: "0.35rem 0.75rem" }}>
-                          פתח
-                        </button>
-                      </Link>
                       <button
                         className="mod-btn-ghost ux-btn"
                         style={{ fontSize: "0.72rem", padding: "0.35rem 0.6rem" }}
@@ -724,7 +768,7 @@ export default function ClientsPage() {
                       <button
                         className="mod-btn-ghost ux-btn"
                         style={{ fontSize: "0.72rem", padding: "0.35rem 0.6rem" }}
-                        onClick={() => router.push(`/clients/${client.id}?tab=content`)}
+                        onClick={(e) => { e.stopPropagation(); router.push(`/clients/${client.id}?tab=content`); }}
                       >
                         גאנט
                       </button>
@@ -769,9 +813,11 @@ export default function ClientsPage() {
                   return (
                     <tr
                       key={client.id}
+                      onClick={() => router.push(`/clients/${client.id}`)}
                       style={{
                         borderBottom: "1px solid var(--border)",
                         backgroundColor: idx % 2 === 0 ? "transparent" : "var(--surface-raised)",
+                        cursor: "pointer",
                       }}
                       className="ux-table-row premium-card"
                     >
@@ -842,18 +888,10 @@ export default function ClientsPage() {
                         {client.paymentStatus === "overdue" && <span title="תשלום באיחור">⚠️</span>}
                       </td>
                       <td style={{ padding: "1rem", display: "flex", gap: "0.3rem" }}>
-                        <Link href={`/clients/${client.id}`} style={{ textDecoration: "none" }}>
-                          <button
-                            className="mod-btn-ghost ux-btn"
-                            style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem" }}
-                          >
-                            פתח
-                          </button>
-                        </Link>
                         <button
                           className="mod-btn-ghost ux-btn"
                           style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem" }}
-                          onClick={() => openEdit(client)}
+                          onClick={(e) => { e.stopPropagation(); openEdit(client); }}
                         >
                           ערוך
                         </button>
@@ -865,21 +903,9 @@ export default function ClientsPage() {
                             color: "#ef4444",
                             borderColor: "rgba(239,68,68,0.3)",
                           }}
-                          onClick={() => handleDelete(client.id, client.name)}
+                          onClick={(e) => { e.stopPropagation(); handleDelete(client.id, client.name); }}
                         >
                           🗑
-                        </button>
-                        <button
-                          className="mod-btn-ghost ux-btn"
-                          style={{
-                            fontSize: "0.7rem",
-                            padding: "0.3rem 0.6rem",
-                            color: "#00B5FE",
-                            borderColor: "rgba(0,181,254,0.3)",
-                          }}
-                          onClick={() => router.push(`/clients/${client.id}?ugc=1`)}
-                        >
-                          🎬 UGC
                         </button>
                       </td>
                     </tr>

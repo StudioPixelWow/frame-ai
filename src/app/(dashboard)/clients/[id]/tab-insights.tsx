@@ -921,6 +921,14 @@ function CompetitorInsightsSection({ client, persisted, onRegenerate, terminalSt
 // WEEKLY RECOMMENDATIONS (Fallback)
 // ============================================================================
 
+const CLIENT_TYPE_DISPLAY: Record<string, string> = {
+  marketing: "פרסום ושיווק",
+  branding: "מיתוג",
+  websites: "בניית אתרים",
+  hosting: "אחסון",
+  podcast: "פודקאסט",
+};
+
 function WeeklyRecommendationsWidget({ client }: { client: Client }) {
   // Multiple recommendation pools per client type — rotate based on week number for variety
   const allRecommendations: Record<string, Array<Array<{ emoji: string; title: string; description: string; format: string }>>> = {
@@ -993,11 +1001,26 @@ function WeeklyRecommendationsWidget({ client }: { client: Client }) {
   const poolIndex = Math.abs(clientHash + weekNumber) % pool.length;
   const recommendations = pool[poolIndex];
 
+  // Build context-aware subtitle using client's actual data
+  const businessContext = client.businessField
+    ? `מותאם ל${client.name} — ${client.businessField}`
+    : `מותאם ל${client.name}`;
+
+  const ctLabel = CLIENT_TYPE_DISPLAY[client.clientType] || "פרסום ושיווק";
+
   return (
     <div style={{ padding: "2rem", borderRadius: "0.75rem", background: "linear-gradient(135deg, var(--accent) 0%, rgba(0, 181, 254, 0.8) 100%)", color: "white" }}>
-      <h3 style={{ fontSize: "1.125rem", fontWeight: 600, marginBottom: "1.5rem", color: "white", display: "flex", alignItems: "center", gap: "0.75rem" }}>
-        📅 מה כדאי לפרסם השבוע
-      </h3>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.25rem" }}>
+        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, color: "white", display: "flex", alignItems: "center", gap: "0.75rem", margin: 0 }}>
+          📅 מה כדאי לפרסם השבוע
+        </h3>
+        <span style={{ fontSize: "0.7rem", padding: "0.2rem 0.6rem", backgroundColor: "rgba(255,255,255,0.2)", borderRadius: "999px", fontWeight: 600 }}>
+          {ctLabel}
+        </span>
+      </div>
+      <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.75)", margin: "0.25rem 0 1.25rem 0" }}>
+        {businessContext}
+      </p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
         {recommendations.map((rec, idx) => (
           <div key={idx} style={{ padding: "1rem", backgroundColor: "rgba(255, 255, 255, 0.1)", borderRadius: "0.5rem", backdropFilter: "blur(10px)" }}>
@@ -1009,7 +1032,7 @@ function WeeklyRecommendationsWidget({ client }: { client: Client }) {
         ))}
       </div>
       <p style={{ fontSize: "0.75rem", color: "rgba(255, 255, 255, 0.7)", margin: 0, fontStyle: "italic" }}>
-        (מבוסס על ניתוח AI — מתעדכן אוטומטית)
+        מתעדכן אוטומטית בהתאם לסוג הלקוח ותחום העיסוק
       </p>
     </div>
   );
