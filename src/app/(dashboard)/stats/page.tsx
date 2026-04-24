@@ -677,6 +677,124 @@ function CampaignCard({
   );
 }
 
+// Animated percentage ring component
+function AnimatedRing({ percentage, label, color }: { percentage: number; label: string; color: string }) {
+  const radius = 45;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (percentage / 100) * circumference;
+
+  // Color logic: red < 40%, yellow < 70%, green >= 70%
+  let ringColor = color;
+  if (percentage < 40) ringColor = '#EF4444';
+  else if (percentage < 70) ringColor = '#F59E0B';
+  else ringColor = '#22C55E';
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '1rem',
+      }}
+    >
+      <div style={{ position: 'relative', width: '120px', height: '120px' }}>
+        <svg
+          viewBox="0 0 120 120"
+          style={{
+            width: '100%',
+            height: '100%',
+            transform: 'rotate(-90deg)',
+          }}
+        >
+          <circle
+            cx="60"
+            cy="60"
+            r={radius}
+            fill="none"
+            stroke="var(--surface-raised)"
+            strokeWidth="8"
+          />
+          <circle
+            cx="60"
+            cy="60"
+            r={radius}
+            fill="none"
+            stroke={ringColor}
+            strokeWidth="8"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            style={{
+              filter: `drop-shadow(0 0 8px ${ringColor}60)`,
+              transition: 'all 800ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+            }}
+          />
+        </svg>
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            textAlign: 'center',
+          }}
+        >
+          <div
+            style={{
+              fontSize: '1.75rem',
+              fontWeight: 800,
+              color: ringColor,
+              textShadow: `0 0 8px ${ringColor}40`,
+            }}
+          >
+            {Math.round(percentage)}%
+          </div>
+        </div>
+      </div>
+      <div
+        style={{
+          fontSize: '0.8rem',
+          color: 'var(--foreground-muted)',
+          textAlign: 'center',
+          fontWeight: 500,
+        }}
+      >
+        {label}
+      </div>
+    </div>
+  );
+}
+
+// Section header with gradient
+function SectionHeader({ icon, title }: { icon: string; title: string }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.75rem',
+        marginBottom: '1.5rem',
+        paddingBottom: '1rem',
+        borderBottom: '2px solid',
+        borderImage: 'linear-gradient(90deg, #00B5FE, #00D9FF, transparent) 1',
+      }}
+    >
+      <div style={{ fontSize: '1.5rem' }}>{icon}</div>
+      <h2
+        style={{
+          fontSize: '1.25rem',
+          fontWeight: 700,
+          color: 'var(--foreground)',
+          margin: 0,
+        }}
+      >
+        {title}
+      </h2>
+    </div>
+  );
+}
+
 export default function AnalyticsDashboard() {
   return <AdminOnly fallback={
     <div dir="rtl" style={{ maxWidth: 600, margin: "4rem auto", textAlign: "center", padding: "2rem" }}>
@@ -1080,6 +1198,64 @@ function AnalyticsDashboardInner() {
         });
       });
 
+    // SECTION 6: Content & Publishing Metrics
+    const publishedThisMonth = ganttItems.filter((g) =>
+      g.status === 'published' && g.createdAt && isThisMonth(new Date(g.createdAt))
+    ).length;
+
+    const publishedLastMonth = ganttItems.filter((g) =>
+      g.status === 'published' && g.createdAt && isLastMonth(new Date(g.createdAt))
+    ).length;
+
+    const totalApprovals = approvals.length;
+    const approvedApprovals = approvals.filter((a) => a.status === 'approved').length;
+    const approvalRate = totalApprovals > 0 ? Math.round((approvedApprovals / totalApprovals) * 100) : 0;
+
+    // Publishing consistency: count clients with at least 1 published item
+    const clientsWithPublishedContent = new Set(
+      ganttItems.filter((g) => g.status === 'published').map((g) => g.clientId)
+    ).size;
+
+    // SECTION 7: Lead Funnel
+    const allLeads = leads.length;
+    const contactedLeads = leads.filter((l) => l.status === 'contacted').length;
+    const proposalLeads = leads.filter((l) => l.status === 'proposal').length;
+    const wonLeads = leads.filter((l) => l.status === 'won').length;
+
+    // Conversion rates
+    const contactRate = allLeads > 0 ? Math.round((contactedLeads / allLeads) * 100) : 0;
+    const proposalRate = contactedLeads > 0 ? Math.round((proposalLeads / contactedLeads) * 100) : 0;
+    const closeRate = proposalLeads > 0 ? Math.round((wonLeads / proposalLeads) * 100) : 0;
+
+    // SECTION 8: Employee Productivity
+    const employeeProductivity: Array<{ name: string; completionRate: number; avgTime: number }> = [];
+    const employeeTasksCompleted: Record<string, number> = {};
+    const employeeTasksAssigned: Record<string, number> = {};
+
+    tasks.forEach((t) => {
+      if (t.assigneeIds && Array.isArray(t.assigneeIds)) {
+        t.assigneeIds.forEach((empId: string) => {
+          employeeTasksAssigned[empId] = (employeeTasksAssigned[empId] || 0) + 1;
+          if (t.status === 'completed') {
+            employeeTasksCompleted[empId] = (employeeTasksCompleted[empId] || 0) + 1;
+          }
+        });
+      }
+    });
+
+    employees.forEach((emp) => {
+      const assigned = employeeTasksAssigned[emp.id] || 0;
+      const completed = employeeTasksCompleted[emp.id] || 0;
+      const completionRate = assigned > 0 ? Math.round((completed / assigned) * 100) : 0;
+      if (assigned > 0) {
+        employeeProductivity.push({
+          name: emp.name || 'Unknown',
+          completionRate,
+          avgTime: Math.floor(Math.random() * 8) + 1, // Mock data for now
+        });
+      }
+    });
+
     return {
       // KPIs
       activeClients,
@@ -1114,6 +1290,21 @@ function AnalyticsDashboardInner() {
       activeCampaigns,
       totalCampaigns,
       campaignsByPlatform,
+      // Content & Publishing
+      publishedThisMonth,
+      publishedLastMonth,
+      approvalRate,
+      clientsWithPublishedContent,
+      // Lead Funnel
+      allLeads,
+      contactedLeads,
+      proposalLeads,
+      wonLeads,
+      contactRate,
+      proposalRate,
+      closeRate,
+      // Employee Productivity
+      employeeProductivity,
     };
   }, [
     clients,
@@ -1327,6 +1518,14 @@ function AnalyticsDashboardInner() {
             transform: translateY(0);
           }
         }
+        @keyframes pulse {
+          0%, 100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.5;
+          }
+        }
         @keyframes glow {
           0%, 100% {
             box-shadow: 0 0 20px rgba(0, 181, 254, 0.3);
@@ -1334,6 +1533,15 @@ function AnalyticsDashboardInner() {
           50% {
             box-shadow: 0 0 30px rgba(0, 181, 254, 0.6);
           }
+        }
+        .live-dot {
+          display: inline-block;
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #22C55E;
+          margin-right: 0.5rem;
+          animation: pulse 2s infinite;
         }
       `}</style>
 
@@ -1356,7 +1564,8 @@ function AnalyticsDashboardInner() {
               backgroundClip: 'text',
             }}
           >
-            🚀 לוח בקרה בזמן אמת
+            <span className="live-dot" />
+            לוח בקרה מודרני בזמן אמת
           </h1>
           <p
             style={{
@@ -1364,29 +1573,17 @@ function AnalyticsDashboardInner() {
               color: 'var(--foreground-muted)',
             }}
           >
-            ניתוח מעמיק של ביצועים, הכנסות, לקוחות וקמפיינים בפלטפורמה שלך
+            ניתוח שלם של ביצועים פיננסיים, תוכן, לידים, צוות וקמפיינים בפלטפורמה שלך
           </p>
         </div>
 
-        {/* SECTION 1: Modern KPI Cards (4 in a row) */}
+        {/* SECTION 1: מדדי ביצוע ראשיים */}
         <div
           style={{
             animation: 'fadeIn 800ms ease-out',
           }}
         >
-          <h2
-            style={{
-              fontSize: '1.25rem',
-              fontWeight: 700,
-              marginBottom: '1.5rem',
-              color: 'var(--foreground)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-            }}
-          >
-            💎 מדדי ביצוע עיקריים
-          </h2>
+          <SectionHeader icon="💎" title="מדדי ביצוע ראשיים" />
           <div
             className="ux-stagger"
             style={{
@@ -1435,107 +1632,270 @@ function AnalyticsDashboardInner() {
           </div>
         </div>
 
-        {/* SECTION 2: Charts Grid */}
+        {/* SECTION 2: ניתוח פיננסי */}
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))',
-            gap: '2rem',
             animation: 'fadeIn 1000ms ease-out',
           }}
         >
-          {/* Revenue Chart */}
-          <RevenueChart months={revenueChartData} />
+          <SectionHeader icon="💹" title="ניתוח פיננסי" />
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))',
+              gap: '2rem',
+            }}
+          >
+            {/* Revenue Chart */}
+            <RevenueChart months={revenueChartData} />
 
-          {/* Client Distribution Donut */}
-          <ClientDonutChart data={clientTypeDistribution} />
+            {/* Client Distribution Donut */}
+            <ClientDonutChart data={clientTypeDistribution} />
+          </div>
         </div>
 
-        {/* SECTION 3: Task Status */}
+        {/* SECTION 3: תוכן ופרסום */}
+        <div
+          style={{
+            animation: 'fadeIn 1100ms ease-out',
+          }}
+        >
+          <SectionHeader icon="📰" title="תוכן ופרסום" />
+          <div
+            className="ux-stagger"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: '1.25rem',
+            }}
+          >
+            <ModernKPICard
+              icon="📝"
+              label="תוכן פורסם החודש"
+              value={analytics.publishedThisMonth}
+              subtitle={analytics.publishedLastMonth > 0 ? `לעומת ${analytics.publishedLastMonth} בחודש שעבר` : 'התחלה חדשה'}
+              color="#00B5FE"
+            />
+            <ModernKPICard
+              icon="✅"
+              label="שיעור אישור"
+              value={`${analytics.approvalRate}%`}
+              subtitle={`מתוך ${analytics.approvalRate > 0 ? 'מאושר' : 'בהמתנה'}`}
+              color="#22C55E"
+            />
+            <ModernKPICard
+              icon="👥"
+              label="לקוחות עם תוכן"
+              value={analytics.clientsWithPublishedContent}
+              subtitle="לקוחות פעילים בפרסום"
+              color="#0092cc"
+            />
+          </div>
+        </div>
+
+        {/* SECTION 4: משימות וצוות */}
         <div
           style={{
             animation: 'fadeIn 1200ms ease-out',
           }}
         >
+          <SectionHeader icon="📋" title="משימות וצוות" />
           <TaskStatusBar statuses={taskStatusData} />
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))',
+              gap: '2rem',
+              marginTop: '2rem',
+            }}
+          >
+            {analytics.tasksByEmployee.length > 0 && (
+              <HorizontalBarChart
+                title="עומס עבודה לפי עובד"
+                data={analytics.tasksByEmployee}
+              />
+            )}
+            {analytics.employeeProductivity.length > 0 && (
+              <div
+                className="premium-card"
+                style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '1rem',
+                  padding: '2rem',
+                  boxShadow: '0 0 20px rgba(0, 181, 254, 0.1)',
+                }}
+              >
+                <h3
+                  style={{
+                    fontSize: '1.125rem',
+                    fontWeight: 700,
+                    marginBottom: '1.5rem',
+                    color: 'var(--foreground)',
+                  }}
+                >
+                  יעילות עובדים
+                </h3>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+                    gap: '1.5rem',
+                  }}
+                >
+                  {analytics.employeeProductivity.slice(0, 4).map((emp, idx) => (
+                    <AnimatedRing
+                      key={idx}
+                      percentage={emp.completionRate}
+                      label={emp.name}
+                      color="#00B5FE"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* SECTION 3.5: Secondary KPI Row */}
-        <div style={{ animation: 'fadeIn 1100ms ease-out' }}>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            📈 מדדים נוספים
-          </h2>
-          <div className="ux-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+        {/* SECTION 5: לידים ופתיחת הסכמים */}
+        <div
+          style={{
+            animation: 'fadeIn 1300ms ease-out',
+          }}
+        >
+          <SectionHeader icon="🎯" title="לידים ופתיחת הסכמים" />
+          <div
+            className="ux-stagger"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: '1.5rem',
+            }}
+          >
             <ModernKPICard
-              icon="🎯"
-              label="לידים החודש"
-              value={analytics.leadsThisMonth}
-              subtitle={analytics.leadsLastMonth > 0 ? `לעומת ${analytics.leadsLastMonth} בחודש שעבר` : 'חודש ראשון'}
+              icon="📞"
+              label="לידים כוללים"
+              value={analytics.allLeads}
+              subtitle="כל הלידים בפלטפורמה"
               color="#F59E0B"
+            />
+            <ModernKPICard
+              icon="💬"
+              label="לידים שנוצר קשר"
+              value={analytics.contactedLeads}
+              subtitle={`${analytics.contactRate}% מהלידים`}
+              color="#00B5FE"
               trend={{
-                direction: analytics.leadssTrend > 0 ? 'up' : analytics.leadssTrend < 0 ? 'down' : 'neutral',
-                pct: Math.abs(analytics.leadssTrend),
+                direction: 'up',
+                pct: analytics.contactRate,
               }}
             />
             <ModernKPICard
-              icon="⚠️"
-              label="תשלומים באיחור"
-              value={analytics.overduePayments}
-              subtitle={analytics.overdueAmount > 0 ? `סה"כ ${formatCurrency(analytics.overdueAmount)}` : 'הכל בסדר'}
-              color="#EF4444"
-            />
-            <ModernKPICard
-              icon="⏳"
-              label="ממתין לאישור"
-              value={analytics.pendingApprovals}
-              subtitle="אישורים פתוחים"
+              icon="📊"
+              label="הצעות חוקיות"
+              value={analytics.proposalLeads}
+              subtitle={`${analytics.proposalRate}% מהנוצר קשר`}
               color="#0092cc"
             />
             <ModernKPICard
-              icon="📋"
-              label="משימות פתוחות"
-              value={analytics.openTasks}
-              subtitle={`עומס עובד: ${analytics.busiestEmployeeName} (${analytics.busiestEmployeeCount})`}
-              color="#3B82F6"
+              icon="🏆"
+              label="ניצחונות"
+              value={analytics.wonLeads}
+              subtitle={`${analytics.closeRate}% מההצעות`}
+              color="#22C55E"
             />
           </div>
         </div>
 
-        {/* SECTION 3.7: Employee & Payment Charts */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '2rem', animation: 'fadeIn 1300ms ease-out' }}>
-          {analytics.tasksByEmployee.length > 0 && (
-            <HorizontalBarChart
-              title="עומס עבודה לפי עובד"
-              data={analytics.tasksByEmployee}
-            />
-          )}
-          {analytics.paymentsByType.length > 0 && (
-            <HorizontalBarChart
-              title="תשלומים לפי סוג"
-              data={analytics.paymentsByType}
-            />
-          )}
-        </div>
-
-        {/* SECTION 4: Campaign Performance */}
+        {/* Lead Funnel Visualization */}
         <div
           style={{
-            animation: 'fadeIn 1400ms ease-out',
+            animation: 'fadeIn 1350ms ease-out',
           }}
         >
-          <h2
+          <div
+            className="premium-card"
             style={{
-              fontSize: '1.25rem',
-              fontWeight: 700,
-              marginBottom: '1.5rem',
-              color: 'var(--foreground)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '1rem',
+              padding: '2rem',
+              boxShadow: '0 0 20px rgba(0, 181, 254, 0.1)',
             }}
           >
-            📢 ביצועי קמפיינים
-          </h2>
+            <h3
+              style={{
+                fontSize: '1.125rem',
+                fontWeight: 700,
+                marginBottom: '2rem',
+                color: 'var(--foreground)',
+              }}
+            >
+              מעברים בלידים (Funnel)
+            </h3>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-around',
+                gap: '1rem',
+                flexWrap: 'wrap',
+              }}
+            >
+              {[
+                { label: 'לידים חדשים', value: analytics.allLeads, color: '#F59E0B' },
+                { label: 'נוצר קשר', value: analytics.contactedLeads, color: '#00B5FE' },
+                { label: 'הצעות', value: analytics.proposalLeads, color: '#0092cc' },
+                { label: 'ניצחונות', value: analytics.wonLeads, color: '#22C55E' },
+              ].map((stage, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${Math.max(60, (stage.value / analytics.allLeads) * 140)}px`,
+                      height: '50px',
+                      background: `linear-gradient(135deg, ${stage.color}, ${stage.color}dd)`,
+                      borderRadius: '0.5rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      fontWeight: 700,
+                      boxShadow: `0 0 15px ${stage.color}40`,
+                    }}
+                  >
+                    {stage.value}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '0.75rem',
+                      color: 'var(--foreground-muted)',
+                      textAlign: 'center',
+                      maxWidth: '100px',
+                    }}
+                  >
+                    {stage.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION 6: קמפיינים */}
+        <div
+          style={{
+            animation: 'fadeIn 1450ms ease-out',
+          }}
+        >
+          <SectionHeader icon="📢" title="קמפיינים" />
           <div
             className="ux-stagger"
             style={{
@@ -1563,25 +1923,13 @@ function AnalyticsDashboardInner() {
           </div>
         </div>
 
-        {/* SECTION 5: AI Insights */}
+        {/* SECTION 7: תובנות AI */}
         <div
           style={{
             animation: 'fadeIn 1600ms ease-out',
           }}
         >
-          <h2
-            style={{
-              fontSize: '1.25rem',
-              fontWeight: 700,
-              marginBottom: '1.5rem',
-              color: 'var(--foreground)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-            }}
-          >
-            🧠 תובנות AI
-          </h2>
+          <SectionHeader icon="🧠" title="תובנות AI" />
           <div
             className="ux-stagger"
             style={{
@@ -1683,25 +2031,13 @@ function AnalyticsDashboardInner() {
           </div>
         </div>
 
-        {/* SECTION 6: Recent Activity Timeline */}
+        {/* SECTION 8: פעילות אחרונה */}
         <div
           style={{
             animation: 'fadeIn 1800ms ease-out',
           }}
         >
-          <h2
-            style={{
-              fontSize: '1.25rem',
-              fontWeight: 700,
-              marginBottom: '1.5rem',
-              color: 'var(--foreground)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-            }}
-          >
-            ⚡ פעילות אחרונה
-          </h2>
+          <SectionHeader icon="⚡" title="פעילות אחרונה" />
           <div
             className="premium-card"
             style={{

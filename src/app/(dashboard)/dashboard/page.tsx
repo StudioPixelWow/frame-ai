@@ -26,6 +26,7 @@ import { AIInsightsPanel, generateInsights } from "@/components/ai-insights-pane
 import SmartWeeklyCalendar from "@/components/ui/SmartWeeklyCalendar";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { useAuth } from "@/lib/auth/auth-context";
+import { generateWeeklyTrends, generateClientContentIdeas, type SmartTrend, type ContentIdea } from "@/lib/ai/smart-trends";
 
 /* ── Module definitions ── */
 const modules = [
@@ -461,69 +462,39 @@ function AdminDashboard() {
 
   const isLoading = cL || tL || pL || lL || eL || caL || aL || poL || ppL || bpL || spL;
 
-  // Trends
-  const [trends, setTrends] = useState<Array<{ id: string; name: string; relevanceScore: number; urgency: "high" | "medium" | "low"; contentIdea: string }>>([]);
-  const [trendsLoading, setTrendsLoading] = useState(false);
+  // Smart Trends — deterministic, context-aware, rotated weekly
+  const smartTrends = useMemo<SmartTrend[]>(() => {
+    if (isLoading) return [];
+    return generateWeeklyTrends({
+      clients,
+      ganttItems: [],
+      campaigns,
+      socialPosts,
+    });
+  }, [isLoading, clients, campaigns, socialPosts]);
 
-  // Fallback trends pool — rotated based on day of week so content feels dynamic
-  const FALLBACK_TRENDS: Array<{ id: string; name: string; relevanceScore: number; urgency: "high" | "medium" | "low"; contentIdea: string }>[] = [
-    [
-      { id: "fb1", name: "ריל אותנטי מאחורי הקלעים", relevanceScore: 92, urgency: "high", contentIdea: "הראו את תהליך העבודה האמיתי — לקוחות אוהבים שקיפות ואותנטיות" },
-      { id: "fb2", name: "קרוסלת טיפים מקצועיים", relevanceScore: 78, urgency: "medium", contentIdea: "שתפו 5 טיפים קצרים בתחום המומחיות שלכם בפורמט קרוסלה" },
-      { id: "fb3", name: "סיפור הצלחה של לקוח", relevanceScore: 85, urgency: "high", contentIdea: "תיעוד before/after או ציטוט מרגש מלקוח מרוצה" },
-      { id: "fb4", name: "שאלה מעוררת מחשבה", relevanceScore: 65, urgency: "low", contentIdea: "שאלו את הקהל שאלה פתוחה שקשורה לתחום — מעודד תגובות ושיתופים" },
-    ],
-    [
-      { id: "fb5", name: "תוכן UGC — תוכן גולשים", relevanceScore: 88, urgency: "high", contentIdea: "שתפו תוכן שיצרו הלקוחות שלכם — בונה אמינות וקהילה" },
-      { id: "fb6", name: "אינפוגרפיקה עם נתונים", relevanceScore: 72, urgency: "medium", contentIdea: "הפכו סטטיסטיקה מעניינת בתחום שלכם לויזואל מושך" },
-      { id: "fb7", name: "סטורי אינטראקטיבי", relevanceScore: 80, urgency: "medium", contentIdea: "צרו סקר, חידון או שאלון בסטוריז כדי להגביר engagement" },
-      { id: "fb8", name: "מבצע Flash Sale", relevanceScore: 95, urgency: "high", contentIdea: "מבצע מוגבל ב-24 שעות — יוצר דחיפות ומניע המרות מהירות" },
-    ],
-    [
-      { id: "fb9", name: "שיתוף פעולה עם משפיען", relevanceScore: 82, urgency: "medium", contentIdea: "תיאום פוסט משותף עם משפיען בנישה שלכם — חשיפה לקהל חדש" },
-      { id: "fb10", name: "ריל טרנדי עם אודיו פופולרי", relevanceScore: 90, urgency: "high", contentIdea: "הצטרפו לטרנד אודיו חם באינסטגרם/טיקטוק — חלון הזדמנות קצר" },
-      { id: "fb11", name: "פוסט ערך — מדריך מיני", relevanceScore: 75, urgency: "medium", contentIdea: "צרו מדריך קצר שפותר בעיה נפוצה של קהל היעד שלכם" },
-      { id: "fb12", name: "תזכורת עונתית", relevanceScore: 68, urgency: "low", contentIdea: "קשרו את השירות/מוצר שלכם לאירוע, חג או עונה קרובה" },
-    ],
-    [
-      { id: "fb13", name: "Live Q&A בשידור חי", relevanceScore: 87, urgency: "high", contentIdea: "צאו לשידור חי ותענו על שאלות נפוצות — בונה אמון ומומחיות" },
-      { id: "fb14", name: "פוסט לפני ואחרי", relevanceScore: 83, urgency: "medium", contentIdea: "הראו תוצאות מרשימות בפורמט before/after — תוכן שמושך תשומת לב" },
-      { id: "fb15", name: "הכירו את הצוות", relevanceScore: 70, urgency: "low", contentIdea: "הציגו חבר צוות — אנשים מתחברים לאנשים, לא למותגים" },
-      { id: "fb16", name: "טיפ מהיר ב-15 שניות", relevanceScore: 91, urgency: "high", contentIdea: "ריל קצר עם טיפ אחד ממוקד — פורמט שמקבל הכי הרבה שיתופים" },
-    ],
-    [
-      { id: "fb17", name: "סדרת תוכן שבועית", relevanceScore: 84, urgency: "medium", contentIdea: "התחילו סדרה קבועה (\"טיפ יום שני\") — יוצר ציפייה וחזרה" },
-      { id: "fb18", name: "ציטוט השראה ממותג", relevanceScore: 60, urgency: "low", contentIdea: "ציטוט מעורר השראה בעיצוב מותג — פשוט ויעיל לשיתופים" },
-      { id: "fb19", name: "תגובה לטרנד חדשותי", relevanceScore: 93, urgency: "high", contentIdea: "הגיבו על חדשות או שינוי בתעשייה — מראה שאתם עם היד על הדופק" },
-      { id: "fb20", name: "Reel עם המלצת כלי/אפליקציה", relevanceScore: 76, urgency: "medium", contentIdea: "שתפו כלי דיגיטלי שאתם משתמשים בו ביומיום — תוכן ערך שנשמר" },
-    ],
-  ];
-
-  useEffect(() => {
-    setTrendsLoading(true);
-    fetch("/api/ai/trend-engine", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ niche: "marketing", platforms: ["instagram", "tiktok", "facebook"], language: "he" }),
-    })
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(d => {
-        const apiTrends = d.trends || [];
-        if (apiTrends.length > 0) {
-          setTrends(apiTrends);
-        } else {
-          // Rotate fallback trends based on day of year
-          const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
-          setTrends(FALLBACK_TRENDS[dayOfYear % FALLBACK_TRENDS.length]);
-        }
-      })
-      .catch(() => {
-        // Use fallback on error too
-        const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
-        setTrends(FALLBACK_TRENDS[dayOfYear % FALLBACK_TRENDS.length]);
-      })
-      .finally(() => setTrendsLoading(false));
-  }, []);
+  // Client-specific content suggestions (top 3 clients)
+  const clientContentSuggestions = useMemo<Array<{ clientName: string; clientId: string; ideas: ContentIdea[] }>>(() => {
+    if (isLoading) return [];
+    const activeClients = clients.filter(c => c.status === "active").slice(0, 3);
+    return activeClients.map(client => ({
+      clientName: client.name,
+      clientId: client.id,
+      ideas: generateClientContentIdeas({
+        client: {
+          id: client.id,
+          name: client.name,
+          clientType: client.clientType || "marketing",
+          businessField: client.businessField || "",
+          status: client.status || "active",
+          marketingGoals: client.marketingGoals || "",
+          keyMarketingMessages: client.keyMarketingMessages || "",
+        },
+        recentGanttItems: [],
+        recentPosts: socialPosts.filter(p => p.clientId === client.id),
+      }),
+    }));
+  }, [isLoading, clients, socialPosts]);
 
   // Computed analytics
   const analytics = useMemo(() => {
@@ -652,14 +623,29 @@ function AdminDashboard() {
 
         {/* ═══ 1.5. AI CONTEXTUAL SUGGESTION ═══ */}
         {!isLoading && analytics && (() => {
+          const dayOfWeek = new Date().getDay();
+          const hour = new Date().getHours();
+          const completedTasks = tasks.filter(t => t.status === "completed").length;
+          const totalTasks = tasks.length;
+          const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+          // Priority-ordered suggestions — first match wins
           const suggestion = analytics.overdueTasks > 3
-            ? { icon: "🔥", text: `יש ${analytics.overdueTasks} משימות בפיגור — AI ממליץ לתעדף ולחלק מחדש`, action: "צפה במשימות", href: "/tasks" }
-            : analytics.clientsMissingGantt > 2
-            ? { icon: "📊", text: `${analytics.clientsMissingGantt} לקוחות ללא תוכנית חודשית — צור תוכניות כדי לשמור על הסדר`, action: "נהל לקוחות", href: "/clients" }
+            ? { icon: "🔥", text: `${analytics.overdueTasks} משימות בפיגור — הכי ארוכה עברה ${Math.max(...tasks.filter(t => t.dueDate && t.dueDate < new Date().toISOString().split("T")[0] && t.status !== "completed").map(t => Math.floor((Date.now() - new Date(t.dueDate).getTime()) / 86400000)).concat([0]))} ימים. תעדף ופנה לאחראים.`, action: "טפל עכשיו", href: "/tasks" }
             : analytics.overduePaymentsCount > 0
-            ? { icon: "💰", text: `${formatCurrency(analytics.overdueTotal)} בפיגור גבייה — צור קשר עם הלקוחות`, action: "צפה בתשלומים", href: "/accounting" }
+            ? { icon: "💰", text: `${formatCurrency(analytics.overdueTotal)} בפיגור גבייה מ-${analytics.overduePaymentsCount} תשלומים — כל יום עיכוב פוגע בתזרים`, action: "שלח תזכורת", href: "/accounting" }
+            : analytics.pendingApprovals > 3
+            ? { icon: "✋", text: `${analytics.pendingApprovals} אישורים ממתינים — עיכוב באישורים עוצר את כל צוות התוכן`, action: "אשר עכשיו", href: "/approvals" }
+            : analytics.clientsMissingGantt > 2
+            ? { icon: "📅", text: `${analytics.clientsMissingGantt} לקוחות ללא תוכנית חודשית — בלי תוכנית אין שליטה על הפרסום`, action: "צור תוכניות", href: "/clients" }
+            : analytics.activeLeads > 5 && dayOfWeek >= 0 && dayOfWeek <= 3
+            ? { icon: "🎯", text: `${analytics.activeLeads} לידים פעילים — תחילת שבוע זה הזמן הכי טוב לסגור עסקאות`, action: "נהל לידים", href: "/leads" }
             : analytics.activeLeads > 5
-            ? { icon: "🎯", text: `${analytics.activeLeads} לידים פעילים — AI מזהה הזדמנות לסגירת עסקאות`, action: "נהל לידים", href: "/leads" }
+            ? { icon: "🎯", text: `${analytics.activeLeads} לידים פעילים ממתינים לתשומת לב. זמן תגובה מהיר מעלה סיכויי המרה ב-50%`, action: "פעל עכשיו", href: "/leads" }
+            : completionRate > 80 && totalTasks > 5
+            ? { icon: "🏆", text: `${completionRate}% השלמת משימות — ביצועים מצוינים! שקול לקחת פרויקטים חדשים`, action: "צפה בדשבורד", href: "/stats" }
+            : analytics.activeCampaigns > 0 && hour >= 10 && hour <= 15
+            ? { icon: "📣", text: `${analytics.activeCampaigns} קמפיינים פעילים — זה הזמן לבדוק ביצועים ולבצע אופטימיזציה`, action: "נתח קמפיינים", href: "/campaigns" }
             : null;
           if (!suggestion) return null;
           return (
@@ -824,48 +810,67 @@ function AdminDashboard() {
           </div>
         )}
 
-        {/* ═══ 8. TRENDS WIDGET ═══ */}
+        {/* ═══ 8. SMART TRENDS WIDGET ═══ */}
         <div>
           <div className="mhd-section-label">🔥 מה חם השבוע</div>
           <div style={{
-            background: "linear-gradient(135deg, rgba(239,68,68,0.05), rgba(249,115,22,0.05))",
+            background: "linear-gradient(135deg, rgba(239,68,68,0.04), rgba(249,115,22,0.04))",
             border: "1px solid rgba(239,68,68,0.1)", borderRadius: "0.75rem",
             padding: "1.25rem", direction: "rtl",
           }}>
-            {trendsLoading ? (
-              <SkeletonGrid count={3} columns="repeat(auto-fit, minmax(250px, 1fr))" />
-            ) : trends.length === 0 ? (
+            {smartTrends.length === 0 ? (
               <div style={{ textAlign: "center", padding: "2rem", color: "var(--foreground-muted)", fontSize: "0.875rem" }}>
                 אין טרנדים זמינים כרגע
               </div>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1rem" }}>
-                {trends.slice(0, 4).map(trend => (
-                  <div key={trend.id} className="premium-card" style={{ padding: "1rem" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
-                      <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)", flex: 1 }}>
-                        {trend.name}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))", gap: "1rem" }}>
+                {smartTrends.slice(0, 6).map(trend => (
+                  <div key={trend.id} className="premium-card" style={{ padding: "1.25rem", transition: "all 200ms ease" }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(0)"; }}
+                  >
+                    <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start", marginBottom: "0.75rem" }}>
+                      <span style={{ fontSize: "1.25rem" }}>{trend.icon}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "0.25rem" }}>
+                          {trend.title}
+                        </div>
+                        <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+                          <span style={{
+                            fontSize: "0.6rem", fontWeight: 600, padding: "0.15rem 0.45rem", borderRadius: "999px",
+                            background: trend.urgency === "high" ? "rgba(239,68,68,0.12)" : trend.urgency === "medium" ? "rgba(249,115,22,0.12)" : "rgba(34,197,94,0.12)",
+                            color: trend.urgency === "high" ? "#ef4444" : trend.urgency === "medium" ? "#f97316" : "#22c55e",
+                          }}>
+                            {trend.urgency === "high" ? "חם עכשיו" : trend.urgency === "medium" ? "כדאי לתכנן" : "לשקול"}
+                          </span>
+                          <span style={{
+                            fontSize: "0.6rem", fontWeight: 500, padding: "0.15rem 0.45rem", borderRadius: "999px",
+                            background: "var(--background-muted, rgba(0,0,0,0.05))", color: "var(--foreground-muted)",
+                          }}>
+                            {trend.source === "calendar" ? "לוח שנה" : trend.source === "seasonal" ? "עונתי" : trend.source === "platform" ? "פלטפורמה" : trend.source === "data" ? "מבוסס נתונים" : "תעשייה"}
+                          </span>
+                        </div>
                       </div>
-                      <span style={{
-                        fontSize: "0.625rem", fontWeight: 700, padding: "0.25rem 0.5rem", borderRadius: "0.25rem",
-                        background: trend.urgency === "high" ? "rgba(239,68,68,0.15)" : trend.urgency === "medium" ? "rgba(249,115,22,0.15)" : "rgba(34,197,94,0.15)",
-                        color: trend.urgency === "high" ? "#ef4444" : trend.urgency === "medium" ? "#f97316" : "#22c55e",
-                        marginRight: "0.5rem",
-                      }}>
-                        {trend.urgency === "high" ? "דחוף" : trend.urgency === "medium" ? "בינוני" : "רגיל"}
-                      </span>
                     </div>
-                    <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", lineHeight: 1.5, marginBottom: "0.75rem" }}>
-                      {trend.contentIdea}
+                    <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", lineHeight: 1.6, marginBottom: "0.75rem" }}>
+                      {trend.description}
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.7rem", color: "var(--foreground-muted)" }}>
-                      <div style={{ flex: 1, height: "0.375rem", background: "var(--border)", borderRadius: "0.125rem", overflow: "hidden" }}>
-                        <div style={{
-                          height: "100%", width: `${Math.max(20, trend.relevanceScore)}%`, transition: "width 0.3s ease",
-                          background: trend.relevanceScore >= 75 ? "#22c55e" : trend.relevanceScore >= 50 ? "#f59e0b" : "#ef4444",
-                        }} />
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: 1 }}>
+                        <div style={{ flex: 1, maxWidth: "80px", height: "4px", background: "var(--border)", borderRadius: "2px", overflow: "hidden" }}>
+                          <div style={{
+                            height: "100%", width: `${Math.round(trend.relevanceScore * 100)}%`, transition: "width 600ms ease",
+                            background: trend.relevanceScore >= 0.75 ? "#22c55e" : trend.relevanceScore >= 0.5 ? "#f59e0b" : "#ef4444",
+                            borderRadius: "2px",
+                          }} />
+                        </div>
+                        <span style={{ fontSize: "0.65rem", color: "var(--foreground-muted)" }}>{Math.round(trend.relevanceScore * 100)}%</span>
                       </div>
-                      <span>{Math.round(trend.relevanceScore)}%</span>
+                      {trend.actionText && trend.actionHref && (
+                        <Link href={trend.actionHref} style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--accent)", textDecoration: "none" }}>
+                          {trend.actionText} ←
+                        </Link>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -873,6 +878,55 @@ function AdminDashboard() {
             )}
           </div>
         </div>
+
+        {/* ═══ 8.2. CLIENT CONTENT SUGGESTIONS ═══ */}
+        {clientContentSuggestions.length > 0 && (
+          <div>
+            <div className="mhd-section-label">💡 רעיונות תוכן ללקוחות</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              {clientContentSuggestions.map(cs => (
+                <div key={cs.clientId} className="premium-card" style={{ padding: "1.25rem", direction: "rtl" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
+                    <Link href={`/clients/${cs.clientId}`} style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--foreground)", textDecoration: "none" }}>
+                      {cs.clientName}
+                    </Link>
+                    <span style={{ fontSize: "0.6rem", fontWeight: 500, padding: "0.1rem 0.4rem", borderRadius: "999px", background: "rgba(56,189,248,0.1)", color: "#38bdf8" }}>
+                      3 רעיונות השבוע
+                    </span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.75rem" }}>
+                    {cs.ideas.map(idea => {
+                      const formatIcons: Record<string, string> = { reel: "🎬", carousel: "📸", story: "📱", post: "📝", video: "🎥" };
+                      const catColors: Record<string, string> = { value: "#22c55e", engagement: "#38bdf8", seasonal: "#f59e0b", trend: "#ef4444", social_proof: "#a78bfa", brand: "#f472b6" };
+                      return (
+                        <div key={idea.id} style={{
+                          background: "var(--background)", border: "1px solid var(--border)", borderRadius: "0.5rem",
+                          padding: "0.875rem", fontSize: "0.8rem",
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.5rem" }}>
+                            <span>{formatIcons[idea.format] || "📝"}</span>
+                            <span style={{ fontWeight: 600, fontSize: "0.82rem" }}>{idea.title}</span>
+                          </div>
+                          <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", lineHeight: 1.5, marginBottom: "0.5rem" }}>
+                            {idea.description}
+                          </div>
+                          <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
+                            <span style={{ fontSize: "0.6rem", fontWeight: 600, padding: "0.1rem 0.4rem", borderRadius: "999px", background: `${catColors[idea.category] || "#6b7280"}15`, color: catColors[idea.category] || "#6b7280" }}>
+                              {idea.platform}
+                            </span>
+                            <span style={{ fontSize: "0.6rem", fontWeight: 500, padding: "0.1rem 0.4rem", borderRadius: "999px", background: "var(--background-muted, rgba(0,0,0,0.05))", color: "var(--foreground-muted)" }}>
+                              {idea.urgencyLabel}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ═══ 8.5 SMART WEEKLY CALENDAR ═══ */}
         <SmartWeeklyCalendar />
