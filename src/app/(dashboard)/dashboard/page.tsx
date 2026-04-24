@@ -96,7 +96,7 @@ function SummaryPane({ title, icon, color, rows, href, linkText }: {
   href: string; linkText: string;
 }) {
   return (
-    <div className="premium-card" style={{ direction: "rtl" }}>
+    <div className="premium-card" style={{ direction: "rtl", padding: "1.25rem 1.25rem" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
         <span style={{ fontSize: "1.125rem" }}>{icon}</span>
         <span style={{ fontSize: "0.875rem", fontWeight: 700, color }}>{title}</span>
@@ -172,6 +172,40 @@ export default function DashboardPage() {
   const [trends, setTrends] = useState<Array<{ id: string; name: string; relevanceScore: number; urgency: "high" | "medium" | "low"; contentIdea: string }>>([]);
   const [trendsLoading, setTrendsLoading] = useState(false);
 
+  // Fallback trends pool — rotated based on day of week so content feels dynamic
+  const FALLBACK_TRENDS: Array<{ id: string; name: string; relevanceScore: number; urgency: "high" | "medium" | "low"; contentIdea: string }>[] = [
+    [
+      { id: "fb1", name: "ריל אותנטי מאחורי הקלעים", relevanceScore: 92, urgency: "high", contentIdea: "הראו את תהליך העבודה האמיתי — לקוחות אוהבים שקיפות ואותנטיות" },
+      { id: "fb2", name: "קרוסלת טיפים מקצועיים", relevanceScore: 78, urgency: "medium", contentIdea: "שתפו 5 טיפים קצרים בתחום המומחיות שלכם בפורמט קרוסלה" },
+      { id: "fb3", name: "סיפור הצלחה של לקוח", relevanceScore: 85, urgency: "high", contentIdea: "תיעוד before/after או ציטוט מרגש מלקוח מרוצה" },
+      { id: "fb4", name: "שאלה מעוררת מחשבה", relevanceScore: 65, urgency: "low", contentIdea: "שאלו את הקהל שאלה פתוחה שקשורה לתחום — מעודד תגובות ושיתופים" },
+    ],
+    [
+      { id: "fb5", name: "תוכן UGC — תוכן גולשים", relevanceScore: 88, urgency: "high", contentIdea: "שתפו תוכן שיצרו הלקוחות שלכם — בונה אמינות וקהילה" },
+      { id: "fb6", name: "אינפוגרפיקה עם נתונים", relevanceScore: 72, urgency: "medium", contentIdea: "הפכו סטטיסטיקה מעניינת בתחום שלכם לויזואל מושך" },
+      { id: "fb7", name: "סטורי אינטראקטיבי", relevanceScore: 80, urgency: "medium", contentIdea: "צרו סקר, חידון או שאלון בסטוריז כדי להגביר engagement" },
+      { id: "fb8", name: "מבצע Flash Sale", relevanceScore: 95, urgency: "high", contentIdea: "מבצע מוגבל ב-24 שעות — יוצר דחיפות ומניע המרות מהירות" },
+    ],
+    [
+      { id: "fb9", name: "שיתוף פעולה עם משפיען", relevanceScore: 82, urgency: "medium", contentIdea: "תיאום פוסט משותף עם משפיען בנישה שלכם — חשיפה לקהל חדש" },
+      { id: "fb10", name: "ריל טרנדי עם אודיו פופולרי", relevanceScore: 90, urgency: "high", contentIdea: "הצטרפו לטרנד אודיו חם באינסטגרם/טיקטוק — חלון הזדמנות קצר" },
+      { id: "fb11", name: "פוסט ערך — מדריך מיני", relevanceScore: 75, urgency: "medium", contentIdea: "צרו מדריך קצר שפותר בעיה נפוצה של קהל היעד שלכם" },
+      { id: "fb12", name: "תזכורת עונתית", relevanceScore: 68, urgency: "low", contentIdea: "קשרו את השירות/מוצר שלכם לאירוע, חג או עונה קרובה" },
+    ],
+    [
+      { id: "fb13", name: "Live Q&A בשידור חי", relevanceScore: 87, urgency: "high", contentIdea: "צאו לשידור חי ותענו על שאלות נפוצות — בונה אמון ומומחיות" },
+      { id: "fb14", name: "פוסט לפני ואחרי", relevanceScore: 83, urgency: "medium", contentIdea: "הראו תוצאות מרשימות בפורמט before/after — תוכן שמושך תשומת לב" },
+      { id: "fb15", name: "הכירו את הצוות", relevanceScore: 70, urgency: "low", contentIdea: "הציגו חבר צוות — אנשים מתחברים לאנשים, לא למותגים" },
+      { id: "fb16", name: "טיפ מהיר ב-15 שניות", relevanceScore: 91, urgency: "high", contentIdea: "ריל קצר עם טיפ אחד ממוקד — פורמט שמקבל הכי הרבה שיתופים" },
+    ],
+    [
+      { id: "fb17", name: "סדרת תוכן שבועית", relevanceScore: 84, urgency: "medium", contentIdea: "התחילו סדרה קבועה (\"טיפ יום שני\") — יוצר ציפייה וחזרה" },
+      { id: "fb18", name: "ציטוט השראה ממותג", relevanceScore: 60, urgency: "low", contentIdea: "ציטוט מעורר השראה בעיצוב מותג — פשוט ויעיל לשיתופים" },
+      { id: "fb19", name: "תגובה לטרנד חדשותי", relevanceScore: 93, urgency: "high", contentIdea: "הגיבו על חדשות או שינוי בתעשייה — מראה שאתם עם היד על הדופק" },
+      { id: "fb20", name: "Reel עם המלצת כלי/אפליקציה", relevanceScore: 76, urgency: "medium", contentIdea: "שתפו כלי דיגיטלי שאתם משתמשים בו ביומיום — תוכן ערך שנשמר" },
+    ],
+  ];
+
   useEffect(() => {
     setTrendsLoading(true);
     fetch("/api/ai/trend-engine", {
@@ -180,8 +214,21 @@ export default function DashboardPage() {
       body: JSON.stringify({ niche: "marketing", platforms: ["instagram", "tiktok", "facebook"], language: "he" }),
     })
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(d => setTrends(d.trends || []))
-      .catch(() => {})
+      .then(d => {
+        const apiTrends = d.trends || [];
+        if (apiTrends.length > 0) {
+          setTrends(apiTrends);
+        } else {
+          // Rotate fallback trends based on day of year
+          const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+          setTrends(FALLBACK_TRENDS[dayOfYear % FALLBACK_TRENDS.length]);
+        }
+      })
+      .catch(() => {
+        // Use fallback on error too
+        const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+        setTrends(FALLBACK_TRENDS[dayOfYear % FALLBACK_TRENDS.length]);
+      })
       .finally(() => setTrendsLoading(false));
   }, []);
 

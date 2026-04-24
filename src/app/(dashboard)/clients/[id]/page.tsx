@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useClients, useEmployees, useClientGanttItems, useClientTasks, useTasks, useClientFiles } from "@/lib/api/use-entity";
+import { useClients, useEmployees, useClientGanttItems, useClientTasks, useTasks, useClientFiles, useSocialPosts } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import type { Client, Employee } from "@/lib/db/schema";
 import TabOverview from "./tab-overview";
@@ -110,6 +110,7 @@ function ClientDetailContent() {
 
   const { data: clients, loading: clientsLoading, update: updateClient } = useClients();
   const { data: employees, loading: employeesLoading } = useEmployees();
+  const { data: allSocialPosts } = useSocialPosts();
   const toast = useToast();
 
   const searchParams = useSearchParams();
@@ -1190,23 +1191,83 @@ function ClientDetailContent() {
         {activeTab === "campaigns" && (
           <TabCampaigns client={client} />
         )}
-        {activeTab === "ads" && (
-          <div
-            style={{
-              background: "var(--surface-raised)",
-              border: "1px solid var(--border)",
-              borderRadius: "0.75rem",
-              padding: "2rem",
-              textAlign: "center",
-              color: "var(--foreground-muted)",
-            }}
-          >
-            <div style={{ fontSize: "1.125rem", fontWeight: 500, marginBottom: "0.5rem" }}>
-              פרסום ומודעות
+        {activeTab === "ads" && (() => {
+          const PLATFORM_ICONS: Record<string, string> = { facebook: "📘", instagram: "📸", tiktok: "🎵" };
+          const POST_TYPE_LABELS: Record<string, string> = { post: "פוסט", story: "סטורי", reel: "ריל", carousel: "קרוסלה", live: "שידור חי" };
+          const STATUS_LABELS_PUB: Record<string, { label: string; color: string }> = {
+            published: { label: "פורסם", color: "#22c55e" },
+            scheduled: { label: "מתוזמן", color: "#6366f1" },
+            draft: { label: "טיוטה", color: "#6b7280" },
+            failed: { label: "נכשל", color: "#ef4444" },
+          };
+          const clientPosts = (allSocialPosts || [])
+            .filter((p: any) => p.clientId === clientId)
+            .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          return (
+            <div style={{ direction: "rtl" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+                <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700, color: "var(--foreground)" }}>פרסום ומודעות</h3>
+                <span style={{ fontSize: "0.8rem", color: "var(--foreground-muted)" }}>{clientPosts.length} פוסטים</span>
+              </div>
+              {clientPosts.length === 0 ? (
+                <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "2.5rem", textAlign: "center" }}>
+                  <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>📢</div>
+                  <div style={{ fontWeight: 600, color: "var(--foreground)", marginBottom: "0.25rem" }}>אין פוסטים עדיין</div>
+                  <div style={{ fontSize: "0.85rem", color: "var(--foreground-muted)" }}>פוסטים שנוצרו ופורסמו יופיעו כאן</div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  {clientPosts.slice(0, 20).map((post: any) => {
+                    const statusInfo = STATUS_LABELS_PUB[post.status] || STATUS_LABELS_PUB.draft;
+                    const platformIcon = PLATFORM_ICONS[post.platform] || "📱";
+                    return (
+                      <div key={post.id} style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.625rem", padding: "0.875rem 1rem", display: "flex", gap: "0.875rem", alignItems: "flex-start" }}>
+                        {/* Media preview */}
+                        {post.mediaUrls && post.mediaUrls.length > 0 ? (
+                          <div style={{ width: 56, height: 56, borderRadius: "0.5rem", overflow: "hidden", flexShrink: 0, background: "var(--surface)" }}>
+                            <img src={post.mediaUrls[0]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          </div>
+                        ) : (
+                          <div style={{ width: 56, height: 56, borderRadius: "0.5rem", flexShrink: 0, background: "var(--surface)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.25rem" }}>
+                            {platformIcon}
+                          </div>
+                        )}
+                        {/* Content */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              <span style={{ fontSize: "0.85rem" }}>{platformIcon}</span>
+                              <span style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>{POST_TYPE_LABELS[post.postType] || post.postType}</span>
+                              <span style={{ fontSize: "0.68rem", padding: "0.1rem 0.4rem", borderRadius: "999px", background: statusInfo.color + "18", color: statusInfo.color, fontWeight: 500 }}>
+                                {statusInfo.label}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>
+                              {post.publishedAt ? formatDate(post.publishedAt) : formatDate(post.createdAt)}
+                            </span>
+                          </div>
+                          {post.content && (
+                            <div style={{ fontSize: "0.8rem", color: "var(--foreground)", lineHeight: 1.5, maxHeight: "2.25em", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {post.content}
+                            </div>
+                          )}
+                          {(post.likes > 0 || post.comments > 0 || post.views > 0) && (
+                            <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.375rem", fontSize: "0.72rem", color: "var(--foreground-muted)" }}>
+                              {post.likes > 0 && <span>❤️ {post.likes}</span>}
+                              {post.comments > 0 && <span>💬 {post.comments}</span>}
+                              {post.views > 0 && <span>👁️ {post.views.toLocaleString()}</span>}
+                              {post.shares > 0 && <span>🔁 {post.shares}</span>}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            <div style={{ fontSize: "0.9rem" }}>בקרוב...</div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Edit Client Modal */}

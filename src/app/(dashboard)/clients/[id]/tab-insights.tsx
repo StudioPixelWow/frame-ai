@@ -922,20 +922,76 @@ function CompetitorInsightsSection({ client, persisted, onRegenerate, terminalSt
 // ============================================================================
 
 function WeeklyRecommendationsWidget({ client }: { client: Client }) {
-  const fallbackRecommendations: Record<string, Array<{ emoji: string; title: string; description: string; format: string }>> = {
+  // Multiple recommendation pools per client type — rotate based on week number for variety
+  const allRecommendations: Record<string, Array<Array<{ emoji: string; title: string; description: string; format: string }>>> = {
     marketing: [
-      { emoji: "📚", title: "מדריך שימושי", description: "טיפים חדשים במקצוע שלך או בתחום העיסוק", format: "קרוסלה" },
-      { emoji: "😊", title: "סיפור לקוח", description: "חוויה חיובית של לקוח או מקרה של הצלחה", format: "ריל או סטורי" },
-      { emoji: "🎯", title: "הצעה מיוחדת", description: "קידוח או הצעה זמנית לעידוד קנייה", format: "ריל או אינפוגרפיקה" },
+      [
+        { emoji: "📚", title: "מדריך שימושי", description: "טיפים חדשים במקצוע שלך או בתחום העיסוק", format: "קרוסלה" },
+        { emoji: "😊", title: "סיפור לקוח", description: "חוויה חיובית של לקוח או מקרה של הצלחה", format: "ריל או סטורי" },
+        { emoji: "🎯", title: "הצעה מיוחדת", description: "קידום או הצעה זמנית לעידוד קנייה", format: "ריל או אינפוגרפיקה" },
+      ],
+      [
+        { emoji: "🔥", title: "טרנד חם בתעשייה", description: "הגיבו על שינוי או חדשות בתחום שלכם", format: "ריל" },
+        { emoji: "📊", title: "נתון מפתיע", description: "שתפו סטטיסטיקה מעניינת שקשורה לקהל היעד", format: "אינפוגרפיקה" },
+        { emoji: "💬", title: "Q&A עם הקהל", description: "ענו על 3 שאלות נפוצות שמקבלים מלקוחות", format: "סטורי אינטראקטיבי" },
+      ],
+      [
+        { emoji: "🎬", title: "מאחורי הקלעים", description: "הראו את תהליך העבודה האמיתי — לקוחות אוהבים שקיפות", format: "ריל" },
+        { emoji: "⭐", title: "ביקורת לקוח", description: "שתפו המלצה או תוצאה מרשימה של לקוח", format: "פוסט + סטורי" },
+        { emoji: "📱", title: "טיפ מהיר ב-15 שניות", description: "טיפ אחד ממוקד בפורמט קצר שמקבל הרבה שיתופים", format: "ריל קצר" },
+      ],
     ],
     branding: [
-      { emoji: "🏆", title: "הישגי מותג", description: "פרויקט או הישג שמשקף את ערכי המותג", format: "ריל" },
-      { emoji: "👥", title: "מאחורי הקלעים", description: "תהליך העבודה או צוות החברה", format: "סטורי או ריל" },
-      { emoji: "💡", title: "טיפ מקצועי", description: "ידע או בחינה בתחום המומחיות", format: "קרוסלה או פוסט" },
+      [
+        { emoji: "🏆", title: "הישגי מותג", description: "פרויקט או הישג שמשקף את ערכי המותג", format: "ריל" },
+        { emoji: "👥", title: "מאחורי הקלעים", description: "תהליך העבודה או צוות החברה", format: "סטורי או ריל" },
+        { emoji: "💡", title: "טיפ מקצועי", description: "ידע או בחינה בתחום המומחיות", format: "קרוסלה או פוסט" },
+      ],
+      [
+        { emoji: "🎨", title: "תהליך עיצוב", description: "הראו שלבים בפרויקט עיצוב — from concept to final", format: "קרוסלה" },
+        { emoji: "📐", title: "לפני ואחרי", description: "השוואת מותג לפני ואחרי עבודת המיתוג", format: "ריל" },
+        { emoji: "🗣️", title: "ערכי המותג", description: "ספרו על העקרונות שמנחים את העבודה שלכם", format: "פוסט + סטורי" },
+      ],
+    ],
+    websites: [
+      [
+        { emoji: "💻", title: "לפני ואחרי אתר", description: "הראו שדרוג אתר דרמטי — מרשים ומושך תשומת לב", format: "ריל" },
+        { emoji: "🔍", title: "טיפ SEO", description: "שתפו טיפ קצר לשיפור דירוג בגוגל", format: "קרוסלה" },
+        { emoji: "📱", title: "UX Tip", description: "טיפ לשיפור חוויית משתמש באתר", format: "ריל קצר" },
+      ],
+      [
+        { emoji: "🚀", title: "מהירות אתר", description: "הסבירו למה מהירות טעינה משפיעה על מכירות", format: "אינפוגרפיקה" },
+        { emoji: "🛒", title: "המרות בדף נחיתה", description: "3 טעויות נפוצות בדפי נחיתה ואיך לתקן", format: "קרוסלה" },
+        { emoji: "✨", title: "פרויקט חדש", description: "הציגו אתר שהושק לאחרונה עם תוצאות", format: "ריל + פוסט" },
+      ],
+    ],
+    hosting: [
+      [
+        { emoji: "🔒", title: "אבטחת אתרים", description: "טיפ לשמירה על אבטחת האתר והנתונים", format: "פוסט" },
+        { emoji: "⚡", title: "ביצועי שרת", description: "הסבירו איך אחסון איכותי משפר את האתר", format: "אינפוגרפיקה" },
+        { emoji: "📊", title: "סטטיסטיקות uptime", description: "שתפו נתוני זמינות ואמינות השירות", format: "פוסט" },
+      ],
+    ],
+    podcast: [
+      [
+        { emoji: "🎙️", title: "קטע מהפרק האחרון", description: "קליפ קצר ומעניין מתוך הפרק שיצא", format: "ריל" },
+        { emoji: "📢", title: "טיזר לפרק הבא", description: "רמזו על הנושא או האורח בפרק הקרוב", format: "סטורי" },
+        { emoji: "💭", title: "ציטוט מהפרק", description: "ציטוט חזק מאורח או מהמגיש בעיצוב מותג", format: "פוסט" },
+      ],
+      [
+        { emoji: "🎧", title: "מאחורי המיקרופון", description: "הראו את תהליך ההקלטה והעריכה", format: "סטורי" },
+        { emoji: "📋", title: "סיכום פרק ב-60 שניות", description: "תקציר ויזואלי של עיקרי הפרק", format: "ריל" },
+        { emoji: "❓", title: "שאלו את הקהל", description: "בקשו שאלות לפרק הבא — מגביר engagement", format: "סטורי אינטראקטיבי" },
+      ],
     ],
   };
 
-  const recommendations = fallbackRecommendations[client.clientType] || fallbackRecommendations.marketing;
+  // Rotate based on client ID hash + week number for variety per client
+  const weekNumber = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000));
+  const clientHash = client.id.split('').reduce((h, c) => c.charCodeAt(0) + ((h << 5) - h), 0);
+  const pool = allRecommendations[client.clientType] || allRecommendations.marketing;
+  const poolIndex = Math.abs(clientHash + weekNumber) % pool.length;
+  const recommendations = pool[poolIndex];
 
   return (
     <div style={{ padding: "2rem", borderRadius: "0.75rem", background: "linear-gradient(135deg, var(--accent) 0%, rgba(0, 181, 254, 0.8) 100%)", color: "white" }}>

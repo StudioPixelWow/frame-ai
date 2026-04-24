@@ -318,12 +318,25 @@ export default function TasksPage() {
     return '';
   };
 
+  // Priority sort helper: urgent → high → medium → low → undefined
+  const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+  const sortByPriority = (list: any[]) => {
+    return [...list].sort((a, b) => {
+      const pa = PRIORITY_ORDER[a.priority] ?? 4;
+      const pb = PRIORITY_ORDER[b.priority] ?? 4;
+      return pa - pb;
+    });
+  };
+
   const filtered = applyFilters(tasks);
   const filteredEmployeeTasks = applyFilters(employeeTasks || []);
 
-  const todayTasks = filtered.filter(t => t.dueDate === today && t.status !== 'completed' && t.status !== 'approved');
-  const overdueTasks = filtered.filter(t => t.dueDate && t.dueDate < today && t.status !== 'completed' && t.status !== 'approved');
+  const todayTasks = sortByPriority(filtered.filter(t => t.dueDate === today && t.status !== 'completed' && t.status !== 'approved'));
+  const overdueTasks = sortByPriority(filtered.filter(t => t.dueDate && t.dueDate < today && t.status !== 'completed' && t.status !== 'approved'));
   const underReviewTasks = filtered.filter(t => t.status === 'under_review');
+
+  // Future tasks: upcoming tasks with dueDate > today, not completed
+  const futureTasks = sortByPriority(filtered.filter(t => t.dueDate && t.dueDate > today && t.status !== 'completed' && t.status !== 'approved')).slice(0, 8);
 
   const toggleEmployeeExpand = (employeeId: string) => {
     const newExpanded = new Set(expandedEmployees);
@@ -605,6 +618,56 @@ export default function TasksPage() {
         </div>
       )}
 
+      {/* Future Tasks Section */}
+      {!loading && futureTasks.length > 0 && (
+        <div style={{ marginBottom: "2rem", background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1rem" }}>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, marginBottom: "1rem", color: "var(--foreground)" }}>
+            📌 משימות קרובות
+          </div>
+          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }} className="ux-stagger">
+            {futureTasks.map((task: any) => {
+              const pri = PRIORITIES.find((p) => p.id === task.priority);
+              const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+              const daysUntil = dueDate ? Math.ceil((dueDate.getTime() - Date.now()) / 86400000) : null;
+              return (
+                <div
+                  key={task.id}
+                  onClick={() => openEdit(task)}
+                  className="ux-stagger-item"
+                  style={{
+                    flex: "0 1 auto",
+                    minWidth: "200px",
+                    padding: "0.75rem",
+                    background: "var(--surface)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "0.5rem",
+                    cursor: "pointer",
+                    transition: "all 0.2s",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
+                >
+                  <div style={{ fontSize: "0.875rem", fontWeight: 700, marginBottom: "0.25rem" }}>
+                    {task.title}
+                  </div>
+                  <div style={{ fontSize: "0.75rem", display: "flex", gap: "0.5rem", alignItems: "center", color: "var(--foreground-muted)" }}>
+                    {resolveClientName(task) && <span>{resolveClientName(task)}</span>}
+                    <span style={{ display: "inline-block", padding: "0.125rem 0.375rem", background: pri?.color || "#6b7280", borderRadius: "2px", color: "#fff", fontSize: "0.65rem" }}>
+                      {PRIORITIES.find(p => p.id === task.priority)?.label || "רגיל"}
+                    </span>
+                    {daysUntil !== null && (
+                      <span style={{ fontSize: "0.68rem", color: daysUntil <= 2 ? "#f59e0b" : "var(--foreground-muted)" }}>
+                        {daysUntil === 1 ? "מחר" : `בעוד ${daysUntil} ימים`}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Kanban Board View */}
       {viewMode === 'board' && (
         <>
@@ -617,7 +680,7 @@ export default function TasksPage() {
               </div>
               <div className="tasks-board ux-stagger">
               {COLUMNS.map((col) => {
-                const colTasks = filtered.filter((t) => t.status === col.id);
+                const colTasks = sortByPriority(filtered.filter((t) => t.status === col.id));
                 return (
                   <div key={col.id} className="tasks-col ux-stagger-item">
                     <div className="tasks-col-header">
@@ -794,7 +857,7 @@ export default function TasksPage() {
                       <div style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
                         {/* Status Groups */}
                         {["today_tasks", "in_progress", "under_review", "returned", "approved", "completed"].map((statusGroup) => {
-                          let statusTasks = filtered.filter(t => (!Array.isArray(t.assigneeIds) || t.assigneeIds.length === 0) && !t.assigneeId);
+                          let statusTasks = sortByPriority(filtered.filter(t => (!Array.isArray(t.assigneeIds) || t.assigneeIds.length === 0) && !t.assigneeId));
 
                           if (statusGroup === "today_tasks") {
                             statusTasks = statusTasks.filter(t => t.dueDate === today && t.status !== 'completed' && t.status !== 'approved');
@@ -867,7 +930,7 @@ export default function TasksPage() {
                     return ids.includes(employee.id) || t.assigneeId === employee.id;
                   });
                   const empTasksFromOther = filteredEmployeeTasks.filter((t: any) => t.assignedEmployeeId === employee.id);
-                  const allEmpTasks = [...empTasks, ...empTasksFromOther];
+                  const allEmpTasks = sortByPriority([...empTasks, ...empTasksFromOther]);
 
                   if (allEmpTasks.length === 0) return null;
 

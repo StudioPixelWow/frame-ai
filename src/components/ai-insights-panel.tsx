@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import Link from 'next/link';
 
 export interface AIInsight {
   id: string;
@@ -9,6 +10,8 @@ export interface AIInsight {
   description: string;
   priority: 'high' | 'medium' | 'low';
   category: 'hot' | 'action' | 'warning' | 'opportunity';
+  actionText?: string;
+  actionHref?: string;
 }
 
 interface InsightPanelProps {
@@ -62,6 +65,8 @@ export function generateInsights(data: {
       description: 'משימות שממתינות לאישור. שחרר אותן כדי לשמור על הזרימה.',
       priority: 'high',
       category: 'hot',
+      actionText: 'צפה במשימות',
+      actionHref: '/tasks',
     });
   }
 
@@ -79,6 +84,8 @@ export function generateInsights(data: {
       description: `סה"כ ₪${total.toLocaleString()} בפיגור. צור קשר עם הלקוחות לגבייה.`,
       priority: 'high',
       category: 'warning',
+      actionText: 'נהל תשלומים',
+      actionHref: '/accounting',
     });
   }
 
@@ -92,6 +99,8 @@ export function generateInsights(data: {
       description: 'אשר או דחה כדי לא לעכב פרויקטים.',
       priority: 'medium',
       category: 'action',
+      actionText: 'טפל באישורים',
+      actionHref: '/approvals',
     });
   }
 
@@ -108,6 +117,8 @@ export function generateInsights(data: {
       description: `${missingGantt.slice(0, 3).map(c => c.name).join(', ')}${missingGantt.length > 3 ? ' ועוד' : ''} — עדכן את הגנט.`,
       priority: 'medium',
       category: 'warning',
+      actionText: 'נהל לקוחות',
+      actionHref: '/clients',
     });
   }
 
@@ -128,6 +139,8 @@ export function generateInsights(data: {
       description: 'פחות מ-2 פוסטים החודש — הזדמנות להציע תוכן נוסף.',
       priority: 'low',
       category: 'opportunity',
+      actionText: 'צפה בלקוחות',
+      actionHref: '/clients',
     });
   }
 
@@ -141,6 +154,8 @@ export function generateInsights(data: {
       description: 'בדוק ביצועים ואופטימיזציה.',
       priority: 'low',
       category: 'opportunity',
+      actionText: 'נהל קמפיינים',
+      actionHref: '/campaigns',
     });
   }
 
@@ -156,6 +171,8 @@ export function generateInsights(data: {
       description: 'עדכן עדיפויות או חלק מחדש כדי לעמוד בלוח הזמנים.',
       priority: 'high',
       category: 'hot',
+      actionText: 'צפה במשימות',
+      actionHref: '/tasks',
     });
   }
 
@@ -225,8 +242,8 @@ export function AIInsightsPanel({ insights, compact }: InsightPanelProps) {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.75rem' }}>
               {items.map(insight => (
-                <div key={insight.id} className="insight-card" data-priority={insight.priority}>
-                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                <div key={insight.id} className="insight-card" data-priority={insight.priority} style={{ display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', flex: 1 }}>
                     <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>{insight.icon}</span>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--foreground)', marginBottom: '0.35rem' }}>
@@ -237,6 +254,11 @@ export function AIInsightsPanel({ insights, compact }: InsightPanelProps) {
                       </div>
                     </div>
                   </div>
+                  {insight.actionText && insight.actionHref && (
+                    <Link href={insight.actionHref} style={{ display: 'inline-block', marginTop: '0.75rem', fontSize: '0.75rem', fontWeight: 700, color: CATEGORY_COLORS[insight.category] || 'var(--accent)', textDecoration: 'none' }}>
+                      {insight.actionText} ←
+                    </Link>
+                  )}
                 </div>
               ))}
             </div>

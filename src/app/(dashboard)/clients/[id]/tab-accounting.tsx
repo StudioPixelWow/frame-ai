@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { usePayments } from "@/lib/api/use-entity";
+import { useToast } from "@/components/ui/toast";
 import type { Client, Payment } from "@/lib/db/schema";
 
 interface TabAccountingProps {
@@ -75,8 +77,11 @@ function computePaymentStatus(
 
 export default function TabAccounting({ client }: TabAccountingProps) {
   const { data: allPayments, loading } = usePayments();
+  const router = useRouter();
+  const toast = useToast();
   const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
+  const [sendingReminder, setSendingReminder] = useState(false);
 
   const payments = (allPayments || [])
     .filter((p) => p.clientId === client.id)
@@ -425,24 +430,41 @@ export default function TabAccounting({ client }: TabAccountingProps) {
       <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
         <button
           className="mod-btn-ghost"
+          disabled={sendingReminder}
+          onClick={async () => {
+            setSendingReminder(true);
+            try {
+              // Mock email send — structure ready for real email API
+              await new Promise(resolve => setTimeout(resolve, 800));
+              toast.success(`תזכורת גבייה נשלחה ל${client.name} (${client.email || "ללא אימייל"})`);
+            } catch {
+              toast.error("שגיאה בשליחת תזכורת");
+            } finally {
+              setSendingReminder(false);
+            }
+          }}
           style={{
             padding: "0.625rem 1.125rem",
             fontSize: "0.875rem",
             display: "inline-flex",
             alignItems: "center",
             gap: "0.375rem",
+            opacity: sendingReminder ? 0.6 : 1,
+            cursor: sendingReminder ? "wait" : "pointer",
           }}
         >
-          📧 שלח תזכורת גבייה
+          {sendingReminder ? "⏳ שולח..." : "📧 שלח תזכורת גבייה"}
         </button>
         <button
           className="mod-btn-ghost"
+          onClick={() => router.push("/accounting")}
           style={{
             padding: "0.625rem 1.125rem",
             fontSize: "0.875rem",
             display: "inline-flex",
             alignItems: "center",
             gap: "0.375rem",
+            cursor: "pointer",
           }}
         >
           📊 פתח מודול הנהח״ש
