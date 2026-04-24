@@ -8,6 +8,8 @@ import Link from "next/link";
 import {
   useClients,
   useCampaigns,
+  useAdSets,
+  useAds,
   useClientFiles,
 } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
@@ -16,6 +18,7 @@ import type {
   CampaignStatus,
   CampaignPlatform,
   CampaignMediaType,
+  AdCreativeType,
   Client,
   ClientFile,
 } from "@/lib/db/schema";
@@ -23,10 +26,10 @@ import type {
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const STEPS = [
-  { key: 1, label: "בסיס קמפיין", icon: "📋" },
-  { key: 2, label: "קהל יעד", icon: "🎯" },
-  { key: 3, label: "קריאייטיב", icon: "🎨" },
-  { key: 4, label: "תקציב והפעלה", icon: "💰" },
+  { key: 1, label: "קמפיין", icon: "📋" },
+  { key: 2, label: "קבוצת מודעות", icon: "🎯" },
+  { key: 3, label: "מודעות", icon: "🎨" },
+  { key: 4, label: "סיכום והפעלה", icon: "🚀" },
 ] as const;
 
 const PLATFORM_OPTIONS: Array<{ value: CampaignPlatform; label: string; icon: string }> = [
@@ -89,15 +92,39 @@ interface GeoLocation {
 
 type TargetingMode = "living" | "recently" | "traveling" | "everyone";
 
+/** Single ad entry in the builder */
+interface WizardAd {
+  name: string;
+  mediaType: CampaignMediaType;
+  adFormat: string;
+  linkedClientFileId: string | null;
+  externalMediaUrl: string;
+  caption: string;
+  headline: string;
+  cta: string;
+}
+
+const EMPTY_AD: WizardAd = {
+  name: "",
+  mediaType: "image",
+  adFormat: "single",
+  linkedClientFileId: null,
+  externalMediaUrl: "",
+  caption: "",
+  headline: "",
+  cta: "",
+};
+
 interface WizardData {
-  // Step 1 — basics
+  // Step 1 — Campaign
   campaignName: string;
   clientId: string;
   platform: CampaignPlatform;
   campaignType: CampaignType;
   startDate: string;
   endDate: string;
-  // Step 2 — audience (structured)
+  // Step 2 — Ad Set (audience + budget)
+  adSetName: string;
   locations: GeoLocation[];
   excludedLocations: string[];
   targetingMode: TargetingMode;
@@ -106,17 +133,11 @@ interface WizardData {
   gender: string;
   interests: string[];
   audienceNotes: string;
-  // Step 3 — creative
-  mediaType: CampaignMediaType;
-  adFormat: string;
-  linkedClientFileId: string | null;
-  externalMediaUrl: string;
-  caption: string;
-  headline: string;
-  cta: string;
-  // Step 4 — budget
   budgetType: "daily" | "total";
   budget: number | "";
+  // Step 3 — Ads (multiple)
+  ads: WizardAd[];
+  // Step 4 — Review & Status
   finalStatus: CampaignStatus;
 }
 
@@ -127,6 +148,7 @@ const INITIAL_DATA: WizardData = {
   campaignType: "lead_gen",
   startDate: "",
   endDate: "",
+  adSetName: "",
   locations: [],
   excludedLocations: [],
   targetingMode: "living",
@@ -135,15 +157,9 @@ const INITIAL_DATA: WizardData = {
   gender: "all",
   interests: [],
   audienceNotes: "",
-  mediaType: "image",
-  adFormat: "single",
-  linkedClientFileId: null,
-  externalMediaUrl: "",
-  caption: "",
-  headline: "",
-  cta: "",
   budgetType: "daily",
   budget: "",
+  ads: [{ ...EMPTY_AD }],
   finalStatus: "draft",
 };
 
@@ -160,12 +176,15 @@ function validateStep(step: number, data: WizardData): StepErrors {
     if (!data.startDate) errors.startDate = "חובה לבחור תאריך התחלה";
   }
 
-  if (step === 3) {
-    if (!data.caption.trim()) errors.caption = "חובה להזין טקסט ראשי";
+  if (step === 2) {
+    if (data.budget === "" || data.budget <= 0) errors.budget = "חובה להזין תקציב תקין";
   }
 
-  if (step === 4) {
-    if (data.budget === "" || data.budget <= 0) errors.budget = "חובה להזין תקציב תקין";
+  if (step === 3) {
+    if (data.ads.length === 0) errors.ads = "חובה להוסיף לפחות מודעה אחת";
+    data.ads.forEach((ad, i) => {
+      if (!ad.caption.trim()) errors[`ad_${i}_caption`] = `מודעה ${i + 1}: חובה להזין טקסט ראשי`;
+    });
   }
 
   return errors;
@@ -523,9 +542,10 @@ function Step1Basics({
   );
 }
 
-function Step2Audience({
+function Step2AdSet({
   data,
   onChange,
+  errors,
   selectedClient,
   toast,
 }: {
@@ -695,8 +715,35 @@ function Step2Audience({
     transition: "background 100ms",
   };
 
+  const budgetNum = typeof data.budget === "number" ? data.budget : 0;
+  const days = data.startDate && data.endDate
+    ? Math.max(1, Math.ceil((new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / 86400000))
+    : 30;
+  const totalBudget = data.budgetType === "daily" ? budgetNum * days : budgetNum;
+  const dailyBudget = data.budgetType === "total" ? (days > 0 ? budgetNum / days : 0) : budgetNum;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+      {/* ── Ad Set Name ── */}
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
+        <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "1rem" }}>
+          🎯 קבוצת מודעות (Ad Set)
+        </div>
+        <div>
+          <FieldLabel label="שם קבוצת מודעות" />
+          <input
+            type="text"
+            value={data.adSetName}
+            onChange={(e) => onChange({ adSetName: e.target.value })}
+            placeholder={data.campaignName ? `${data.campaignName} — קבוצה ראשית` : "לדוגמה: קהל נשים 25-45 מרכז"}
+            style={inputStyle}
+          />
+          <div style={{ fontSize: "0.65rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>
+            אם ריק, ייווצר שם אוטומטי מתוך שם הקמפיין
+          </div>
+        </div>
+      </div>
+
       {/* ── Geographic Targeting ── */}
       <div className="premium-card" style={{ padding: "1.25rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
@@ -1091,11 +1138,77 @@ function Step2Audience({
           )}
         </div>
       )}
+
+      {/* ── Budget (moved from Step 4 — budget is an Ad Set concern) ── */}
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
+        <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "1rem" }}>
+          💰 תקציב
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          <div>
+            <FieldLabel label="סוג תקציב" />
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <button
+                type="button"
+                onClick={() => onChange({ budgetType: "daily" })}
+                className={data.budgetType === "daily" ? "mod-btn-primary" : "mod-btn-ghost"}
+                style={{ padding: "0.4rem 0.875rem", fontSize: "0.75rem", fontWeight: 600, borderRadius: "0.375rem", cursor: "pointer" }}
+              >
+                יומי
+              </button>
+              <button
+                type="button"
+                onClick={() => onChange({ budgetType: "total" })}
+                className={data.budgetType === "total" ? "mod-btn-primary" : "mod-btn-ghost"}
+                style={{ padding: "0.4rem 0.875rem", fontSize: "0.75rem", fontWeight: 600, borderRadius: "0.375rem", cursor: "pointer" }}
+              >
+                כולל
+              </button>
+            </div>
+          </div>
+          <div>
+            <FieldLabel label={data.budgetType === "daily" ? "תקציב יומי (₪)" : "תקציב כולל (₪)"} required />
+            <input
+              type="number"
+              min={0}
+              value={data.budget}
+              onChange={(e) => {
+                const v = e.target.value;
+                onChange({ budget: v === "" ? "" : Number(v) });
+              }}
+              placeholder="0"
+              style={{
+                ...inputStyle,
+                direction: "ltr",
+                textAlign: "left",
+                ...(errors.budget ? { borderColor: "#ef4444" } : {}),
+              }}
+            />
+            <FieldError error={errors.budget} />
+          </div>
+          {budgetNum > 0 && (
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+              gap: "0.5rem",
+            }}>
+              <div style={{ textAlign: "center", padding: "0.6rem", background: "var(--surface-raised)", borderRadius: "0.5rem", border: "1px solid var(--border)" }}>
+                <div style={{ fontSize: "1rem", fontWeight: 800, color: "#22c55e" }}>₪{Math.round(totalBudget).toLocaleString()}</div>
+                <div style={{ fontSize: "0.6rem", color: "var(--foreground-muted)", fontWeight: 600 }}>כולל</div>
+              </div>
+              <div style={{ textAlign: "center", padding: "0.6rem", background: "var(--surface-raised)", borderRadius: "0.5rem", border: "1px solid var(--border)" }}>
+                <div style={{ fontSize: "1rem", fontWeight: 800, color: "#3b82f6" }}>₪{Math.round(dailyBudget).toLocaleString()}</div>
+                <div style={{ fontSize: "0.6rem", color: "var(--foreground-muted)", fontWeight: 600 }}>יומי</div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
 
-function Step3Creative({
+function Step3Ads({
   data,
   onChange,
   errors,
@@ -1118,15 +1231,51 @@ function Step3Creative({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const [activeAdIndex, setActiveAdIndex] = useState(0);
 
   // AI state
-  const [aiLoading, setAiLoading] = useState<string | null>(null); // 'caption-improve' | 'caption-variations' | 'headline-improve' | 'headline-variations' | null
+  const [aiLoading, setAiLoading] = useState<string | null>(null);
   const [aiResults, setAiResults] = useState<{ field: string; results: string[] } | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
 
   const relevantFiles = clientFiles.filter(
     (f) => f.fileType === "image" || f.fileType === "video"
   );
+
+  // Current ad being edited
+  const currentAd = data.ads[activeAdIndex] || EMPTY_AD;
+
+  // Helper to update a field on the active ad
+  const updateAd = useCallback((partial: Partial<WizardAd>) => {
+    const newAds = [...data.ads];
+    newAds[activeAdIndex] = { ...newAds[activeAdIndex], ...partial };
+    onChange({ ads: newAds });
+  }, [data.ads, activeAdIndex, onChange]);
+
+  const addAd = useCallback(() => {
+    const newAd: WizardAd = { ...EMPTY_AD, name: `מודעה ${data.ads.length + 1}` };
+    onChange({ ads: [...data.ads, newAd] });
+    setActiveAdIndex(data.ads.length);
+  }, [data.ads, onChange]);
+
+  const removeAd = useCallback((index: number) => {
+    if (data.ads.length <= 1) {
+      toast("חובה לפחות מודעה אחת", "error");
+      return;
+    }
+    const newAds = data.ads.filter((_, i) => i !== index);
+    onChange({ ads: newAds });
+    if (activeAdIndex >= newAds.length) setActiveAdIndex(Math.max(0, newAds.length - 1));
+  }, [data.ads, activeAdIndex, onChange, toast]);
+
+  const duplicateAd = useCallback((index: number) => {
+    const source = data.ads[index];
+    const newAd: WizardAd = { ...source, name: `${source.name || "מודעה"} (עותק)` };
+    const newAds = [...data.ads];
+    newAds.splice(index + 1, 0, newAd);
+    onChange({ ads: newAds });
+    setActiveAdIndex(index + 1);
+  }, [data.ads, onChange]);
 
   // ── Upload handler (reuses real signed-URL pattern) ──
   const handleFileUpload = useCallback(async (file: File) => {
@@ -1193,7 +1342,7 @@ function Step3Creative({
 
       // Step 4: Refresh file list and auto-select
       await refetchClientFiles();
-      onChange({ linkedClientFileId: created.id });
+      updateAd({ linkedClientFileId: created.id });
 
       setUploadSuccess(file.name);
       toast(`הקובץ "${file.name}" הועלה בהצלחה`, "success");
@@ -1222,17 +1371,16 @@ function Step3Creative({
         body: JSON.stringify({
           mode,
           field,
-          currentText: field === "caption" ? data.caption : data.headline,
+          currentText: field === "caption" ? currentAd.caption : currentAd.headline,
           context: {
             clientId: data.clientId,
             clientName: selectedClient?.name || "",
             businessField: selectedClient?.businessField || "",
             campaignType: data.campaignType,
             platform: data.platform,
-            mediaType: data.mediaType,
-            adFormat: data.adFormat,
-            // Pass primary text as context for headline generation
-            ...(field === "headline" && data.caption.trim() ? { primaryText: data.caption } : {}),
+            mediaType: currentAd.mediaType,
+            adFormat: currentAd.adFormat,
+            ...(field === "headline" && currentAd.caption.trim() ? { primaryText: currentAd.caption } : {}),
           },
         }),
       });
@@ -1254,13 +1402,13 @@ function Step3Creative({
     } finally {
       setAiLoading(null);
     }
-  }, [data, selectedClient]);
+  }, [currentAd, data.clientId, data.campaignType, data.platform, selectedClient]);
 
   const applyAiResult = useCallback((field: string, text: string) => {
-    if (field === "caption") onChange({ caption: text });
-    else if (field === "headline") onChange({ headline: text });
+    if (field === "caption") updateAd({ caption: text });
+    else if (field === "headline") updateAd({ headline: text });
     setAiResults(null);
-  }, [onChange]);
+  }, [updateAd]);
 
   const dismissAiResults = useCallback(() => {
     setAiResults(null);
@@ -1327,7 +1475,7 @@ function Step3Creative({
   // ── AI buttons row ──
   const renderAiButtons = (field: "caption" | "headline", improveLabel: string, variationsLabel: string) => {
     const isFieldLoading = aiLoading?.startsWith(field);
-    const currentText = field === "caption" ? data.caption : data.headline;
+    const currentText = field === "caption" ? currentAd.caption : currentAd.headline;
     const hasText = currentText && currentText.trim().length > 5;
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", marginTop: "0.35rem" }}>
@@ -1388,28 +1536,120 @@ function Step3Creative({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+      {/* ── Ad Tabs ── */}
+      <div className="premium-card" style={{ padding: "1rem" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>
+            🎨 מודעות ({data.ads.length})
+          </div>
+          <button
+            type="button"
+            onClick={addAd}
+            className="mod-btn-primary"
+            style={{ padding: "0.35rem 0.75rem", fontSize: "0.72rem", fontWeight: 600, borderRadius: "0.375rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
+          >
+            + הוסף מודעה
+          </button>
+        </div>
+        <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+          {data.ads.map((ad, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: "0" }}>
+              <button
+                type="button"
+                onClick={() => setActiveAdIndex(i)}
+                style={{
+                  padding: "0.4rem 0.75rem",
+                  fontSize: "0.72rem",
+                  fontWeight: activeAdIndex === i ? 700 : 500,
+                  borderRadius: "0.375rem 0 0 0.375rem",
+                  border: `1px solid ${activeAdIndex === i ? "var(--accent)" : "var(--border)"}`,
+                  borderLeft: activeAdIndex === i ? `1px solid var(--accent)` : `1px solid var(--border)`,
+                  backgroundColor: activeAdIndex === i ? "rgba(0,181,254,0.08)" : "transparent",
+                  color: activeAdIndex === i ? "var(--accent)" : "var(--foreground-muted)",
+                  cursor: "pointer",
+                  transition: "all 150ms",
+                }}
+              >
+                {ad.name || `מודעה ${i + 1}`}
+              </button>
+              <div style={{ display: "flex", gap: "0" }}>
+                <button
+                  type="button"
+                  title="שכפל"
+                  onClick={() => duplicateAd(i)}
+                  style={{
+                    padding: "0.4rem 0.35rem",
+                    fontSize: "0.65rem",
+                    border: `1px solid var(--border)`,
+                    borderRight: "none",
+                    borderLeft: "none",
+                    backgroundColor: "transparent",
+                    color: "var(--foreground-muted)",
+                    cursor: "pointer",
+                  }}
+                >
+                  📋
+                </button>
+                {data.ads.length > 1 && (
+                  <button
+                    type="button"
+                    title="מחק"
+                    onClick={() => removeAd(i)}
+                    style={{
+                      padding: "0.4rem 0.35rem",
+                      fontSize: "0.65rem",
+                      border: `1px solid var(--border)`,
+                      borderRadius: "0 0.375rem 0.375rem 0",
+                      backgroundColor: "transparent",
+                      color: "#ef4444",
+                      cursor: "pointer",
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        {errors.ads && <FieldError error={errors.ads} />}
+      </div>
+
+      {/* ── Active Ad Editor ── */}
       <div className="premium-card" style={{ padding: "1.25rem" }}>
         <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "1rem" }}>
-          מדיה וקריאייטיב
+          מדיה וקריאייטיב — {currentAd.name || `מודעה ${activeAdIndex + 1}`}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          {/* Ad name */}
+          <div>
+            <FieldLabel label="שם מודעה" />
+            <input
+              type="text"
+              value={currentAd.name}
+              onChange={(e) => updateAd({ name: e.target.value })}
+              placeholder={`מודעה ${activeAdIndex + 1}`}
+              style={inputStyle}
+            />
+          </div>
+
           {/* Media type */}
           <div>
             <FieldLabel label="סוג מדיה" />
             <div style={{ display: "flex", gap: "0.5rem" }}>
               <button
                 type="button"
-                onClick={() => onChange({ mediaType: "image" })}
-                className={data.mediaType === "image" ? "mod-btn-primary" : "mod-btn-ghost"}
+                onClick={() => updateAd({ mediaType: "image" })}
+                className={currentAd.mediaType === "image" ? "mod-btn-primary" : "mod-btn-ghost"}
                 style={{ padding: "0.4rem 0.875rem", fontSize: "0.75rem", fontWeight: 600, borderRadius: "0.375rem", cursor: "pointer" }}
               >
                 🖼️ תמונה
               </button>
               <button
                 type="button"
-                onClick={() => onChange({ mediaType: "video" })}
-                className={data.mediaType === "video" ? "mod-btn-primary" : "mod-btn-ghost"}
+                onClick={() => updateAd({ mediaType: "video" })}
+                className={currentAd.mediaType === "video" ? "mod-btn-primary" : "mod-btn-ghost"}
                 style={{ padding: "0.4rem 0.875rem", fontSize: "0.75rem", fontWeight: 600, borderRadius: "0.375rem", cursor: "pointer" }}
               >
                 🎬 וידאו
@@ -1425,8 +1665,8 @@ function Step3Creative({
                 <button
                   key={opt.value}
                   type="button"
-                  onClick={() => onChange({ adFormat: opt.value })}
-                  className={data.adFormat === opt.value ? "mod-btn-primary" : "mod-btn-ghost"}
+                  onClick={() => updateAd({ adFormat: opt.value })}
+                  className={currentAd.adFormat === opt.value ? "mod-btn-primary" : "mod-btn-ghost"}
                   style={{ padding: "0.4rem 0.75rem", fontSize: "0.75rem", fontWeight: 600, borderRadius: "0.375rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}
                 >
                   {opt.icon} {opt.label}
@@ -1440,9 +1680,9 @@ function Step3Creative({
             <FieldLabel label="בחר קובץ מהלקוח" />
             {relevantFiles.length > 0 ? (
               <select
-                value={data.linkedClientFileId || ""}
+                value={currentAd.linkedClientFileId || ""}
                 onChange={(e) =>
-                  onChange({
+                  updateAd({
                     linkedClientFileId: e.target.value || null,
                   })
                 }
@@ -1536,8 +1776,8 @@ function Step3Creative({
             <FieldLabel label="או — קישור חיצוני למדיה" />
             <input
               type="url"
-              value={data.externalMediaUrl}
-              onChange={(e) => onChange({ externalMediaUrl: e.target.value })}
+              value={currentAd.externalMediaUrl}
+              onChange={(e) => updateAd({ externalMediaUrl: e.target.value })}
               placeholder="https://..."
               style={{ ...inputStyle, direction: "ltr", textAlign: "left" }}
             />
@@ -1555,21 +1795,21 @@ function Step3Creative({
           <div>
             <FieldLabel label="טקסט ראשי (Primary Text)" required />
             <textarea
-              value={data.caption}
-              onChange={(e) => onChange({ caption: e.target.value })}
+              value={currentAd.caption}
+              onChange={(e) => updateAd({ caption: e.target.value })}
               placeholder="הטקסט הראשי של המודעה..."
               rows={4}
               style={{
                 ...inputStyle,
                 resize: "vertical",
-                ...(errors.caption ? { borderColor: "#ef4444" } : {}),
+                ...(errors[`ad_${activeAdIndex}_caption`] ? { borderColor: "#ef4444" } : {}),
               }}
             />
-            <FieldError error={errors.caption} />
+            <FieldError error={errors[`ad_${activeAdIndex}_caption`]} />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginTop: "0.2rem" }}>
               <div>{renderAiButtons("caption", "שפר עם AI", "צור 3 גרסאות")}</div>
               <div style={{ fontSize: "0.65rem", color: "var(--foreground-muted)", direction: "ltr", minWidth: "4rem", textAlign: "left", paddingTop: "0.35rem" }}>
-                {data.caption.length} / 500
+                {currentAd.caption.length} / 500
               </div>
             </div>
             {renderAiChooser("caption")}
@@ -1580,8 +1820,8 @@ function Step3Creative({
             <FieldLabel label="כותרת (Headline)" />
             <input
               type="text"
-              value={data.headline}
-              onChange={(e) => onChange({ headline: e.target.value })}
+              value={currentAd.headline}
+              onChange={(e) => updateAd({ headline: e.target.value })}
               placeholder="כותרת קצרה ומושכת"
               style={inputStyle}
             />
@@ -1593,8 +1833,8 @@ function Step3Creative({
           <div>
             <FieldLabel label="כפתור CTA" />
             <select
-              value={data.cta}
-              onChange={(e) => onChange({ cta: e.target.value })}
+              value={currentAd.cta}
+              onChange={(e) => updateAd({ cta: e.target.value })}
               style={selectStyle}
             >
               {CTA_OPTIONS.map((opt) => (
@@ -1610,14 +1850,14 @@ function Step3Creative({
   );
 }
 
-function Step4Budget({
+function Step4Review({
   data,
   onChange,
-  errors,
+  selectedClient,
 }: {
   data: WizardData;
   onChange: (partial: Partial<WizardData>) => void;
-  errors: StepErrors;
+  selectedClient: Client | undefined;
 }) {
   const budgetNum = typeof data.budget === "number" ? data.budget : 0;
   const days = data.startDate && data.endDate
@@ -1625,149 +1865,93 @@ function Step4Budget({
     : 30;
   const totalBudget = data.budgetType === "daily" ? budgetNum * days : budgetNum;
   const dailyBudget = data.budgetType === "total" ? (days > 0 ? budgetNum / days : 0) : budgetNum;
-
-  // Mock calculation
   const estimatedLeads = dailyBudget > 0 ? Math.round((totalBudget / (dailyBudget > 50 ? 25 : 40))) : 0;
-  const estimatedCPL = estimatedLeads > 0 ? totalBudget / estimatedLeads : 0;
+
+  const reviewRow = (label: string, value: string) => (
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "0.45rem 0", borderBottom: "1px solid var(--border)" }}>
+      <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--foreground-muted)" }}>{label}</span>
+      <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--foreground)", maxWidth: "60%", textAlign: "left", direction: "ltr" }}>{value || "—"}</span>
+    </div>
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+      {/* Campaign summary */}
       <div className="premium-card" style={{ padding: "1.25rem" }}>
-        <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "1rem" }}>
-          תקציב
+        <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "0.75rem" }}>
+          📋 קמפיין
         </div>
+        {reviewRow("שם קמפיין", data.campaignName)}
+        {reviewRow("לקוח", selectedClient?.name || "—")}
+        {reviewRow("פלטפורמה", PLATFORM_OPTIONS.find(p => p.value === data.platform)?.label || data.platform)}
+        {reviewRow("סוג", GOAL_OPTIONS.find(g => g.value === data.campaignType)?.label || data.campaignType)}
+        {reviewRow("תאריכים", `${data.startDate || "—"} → ${data.endDate || "—"}`)}
+      </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          {/* Budget type toggle */}
-          <div>
-            <FieldLabel label="סוג תקציב" />
-            <div style={{ display: "flex", gap: "0.5rem" }}>
-              <button
-                type="button"
-                onClick={() => onChange({ budgetType: "daily" })}
-                className={data.budgetType === "daily" ? "mod-btn-primary" : "mod-btn-ghost"}
-                style={{ padding: "0.4rem 0.875rem", fontSize: "0.75rem", fontWeight: 600, borderRadius: "0.375rem", cursor: "pointer" }}
-              >
-                יומי
-              </button>
-              <button
-                type="button"
-                onClick={() => onChange({ budgetType: "total" })}
-                className={data.budgetType === "total" ? "mod-btn-primary" : "mod-btn-ghost"}
-                style={{ padding: "0.4rem 0.875rem", fontSize: "0.75rem", fontWeight: 600, borderRadius: "0.375rem", cursor: "pointer" }}
-              >
-                כולל
-              </button>
+      {/* Ad Set summary */}
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
+        <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "0.75rem" }}>
+          🎯 קבוצת מודעות
+        </div>
+        {reviewRow("שם", data.adSetName || `${data.campaignName} — קבוצה ראשית`)}
+        {reviewRow("מיקומים", data.locations.map(l => `${l.city}(+${l.radius}km)`).join(", ") || "—")}
+        {reviewRow("גילאים", `${data.ageMin}–${data.ageMax}`)}
+        {reviewRow("מגדר", GENDER_OPTIONS.find(g => g.value === data.gender)?.label || data.gender)}
+        {reviewRow("תחומי עניין", data.interests.join(", ") || "—")}
+        {reviewRow("תקציב", budgetNum > 0 ? `₪${budgetNum.toLocaleString()} (${data.budgetType === "daily" ? "יומי" : "כולל"})` : "—")}
+      </div>
+
+      {/* Ads summary */}
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
+        <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "0.75rem" }}>
+          🎨 מודעות ({data.ads.length})
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          {data.ads.map((ad, i) => (
+            <div key={i} style={{ padding: "0.75rem", borderRadius: "0.5rem", border: "1px solid var(--border)", background: "var(--surface-raised)" }}>
+              <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--accent)", marginBottom: "0.35rem" }}>
+                {ad.name || `מודעה ${i + 1}`}
+              </div>
+              <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+                <span>סוג: {ad.mediaType === "image" ? "תמונה" : "וידאו"}</span>
+                <span>פורמט: {AD_FORMAT_OPTIONS.find(f => f.value === ad.adFormat)?.label || ad.adFormat}</span>
+                {ad.cta && <span>CTA: {CTA_OPTIONS.find(c => c.value === ad.cta)?.label || ad.cta}</span>}
+              </div>
+              {ad.caption && (
+                <div style={{ fontSize: "0.72rem", color: "var(--foreground)", marginTop: "0.35rem", lineHeight: 1.5, maxHeight: "2.5rem", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {ad.caption.slice(0, 120)}{ad.caption.length > 120 ? "..." : ""}
+                </div>
+              )}
             </div>
-          </div>
-
-          {/* Budget input */}
-          <div>
-            <FieldLabel label={data.budgetType === "daily" ? "תקציב יומי (₪)" : "תקציב כולל (₪)"} required />
-            <input
-              type="number"
-              min={0}
-              value={data.budget}
-              onChange={(e) => {
-                const v = e.target.value;
-                onChange({ budget: v === "" ? "" : Number(v) });
-              }}
-              placeholder="0"
-              style={{
-                ...inputStyle,
-                direction: "ltr",
-                textAlign: "left",
-                ...(errors.budget ? { borderColor: "#ef4444" } : {}),
-              }}
-            />
-            <FieldError error={errors.budget} />
-          </div>
+          ))}
         </div>
       </div>
 
-      {/* Mock estimates */}
+      {/* Estimates */}
       {budgetNum > 0 && (
         <div className="premium-card" style={{ padding: "1.25rem" }}>
-          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "1rem" }}>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "0.75rem" }}>
             📊 תחזית (אומדן)
           </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-              gap: "0.75rem",
-            }}
-          >
-            <div style={{ textAlign: "center", padding: "0.75rem", background: "var(--surface-raised)", borderRadius: "0.5rem", border: "1px solid var(--border)" }}>
-              <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "#22c55e" }}>
-                ₪{Math.round(totalBudget).toLocaleString()}
-              </div>
-              <div style={{ fontSize: "0.65rem", color: "var(--foreground-muted)", fontWeight: 600, marginTop: "0.2rem" }}>תקציב כולל</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "0.5rem" }}>
+            <div style={{ textAlign: "center", padding: "0.6rem", background: "var(--surface)", borderRadius: "0.5rem", border: "1px solid var(--border)" }}>
+              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#22c55e" }}>₪{Math.round(totalBudget).toLocaleString()}</div>
+              <div style={{ fontSize: "0.6rem", color: "var(--foreground-muted)", fontWeight: 600 }}>כולל</div>
             </div>
-            <div style={{ textAlign: "center", padding: "0.75rem", background: "var(--surface-raised)", borderRadius: "0.5rem", border: "1px solid var(--border)" }}>
-              <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "#3b82f6" }}>
-                ₪{Math.round(dailyBudget).toLocaleString()}
-              </div>
-              <div style={{ fontSize: "0.65rem", color: "var(--foreground-muted)", fontWeight: 600, marginTop: "0.2rem" }}>יומי</div>
+            <div style={{ textAlign: "center", padding: "0.6rem", background: "var(--surface)", borderRadius: "0.5rem", border: "1px solid var(--border)" }}>
+              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#3b82f6" }}>₪{Math.round(dailyBudget).toLocaleString()}</div>
+              <div style={{ fontSize: "0.6rem", color: "var(--foreground-muted)", fontWeight: 600 }}>יומי</div>
             </div>
-            <div style={{ textAlign: "center", padding: "0.75rem", background: "var(--surface-raised)", borderRadius: "0.5rem", border: "1px solid var(--border)" }}>
-              <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "#a78bfa" }}>
-                ~{estimatedLeads}
-              </div>
-              <div style={{ fontSize: "0.65rem", color: "var(--foreground-muted)", fontWeight: 600, marginTop: "0.2rem" }}>לידים צפויים</div>
-            </div>
-            <div style={{ textAlign: "center", padding: "0.75rem", background: "var(--surface-raised)", borderRadius: "0.5rem", border: "1px solid var(--border)" }}>
-              <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "#f59e0b" }}>
-                ₪{Math.round(estimatedCPL)}
-              </div>
-              <div style={{ fontSize: "0.65rem", color: "var(--foreground-muted)", fontWeight: 600, marginTop: "0.2rem" }}>עלות לליד צפויה</div>
+            <div style={{ textAlign: "center", padding: "0.6rem", background: "var(--surface)", borderRadius: "0.5rem", border: "1px solid var(--border)" }}>
+              <div style={{ fontSize: "1rem", fontWeight: 800, color: "#a78bfa" }}>~{estimatedLeads}</div>
+              <div style={{ fontSize: "0.6rem", color: "var(--foreground-muted)", fontWeight: 600 }}>לידים צפויים</div>
             </div>
           </div>
-
-          <div
-            style={{
-              fontSize: "0.65rem",
-              color: "var(--foreground-muted)",
-              textAlign: "center",
-              marginTop: "0.75rem",
-              opacity: 0.6,
-            }}
-          >
-            * אומדן בלבד — תוצאות בפועל תלויות בקהל, קריאייטיב ותחרות
+          <div style={{ fontSize: "0.6rem", color: "var(--foreground-muted)", textAlign: "center", marginTop: "0.5rem", opacity: 0.6 }}>
+            * אומדן בלבד
           </div>
         </div>
       )}
-
-      {/* Platform breakdown mock */}
-      <div className="premium-card" style={{ padding: "1.25rem" }}>
-        <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "1rem" }}>
-          חלוקת פלטפורמה
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <span style={{ fontSize: "1.25rem" }}>
-            {PLATFORM_OPTIONS.find((p) => p.value === data.platform)?.icon || "📱"}
-          </span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--foreground)" }}>
-              {PLATFORM_OPTIONS.find((p) => p.value === data.platform)?.label || data.platform}
-            </div>
-            <div
-              style={{
-                width: "100%",
-                height: "6px",
-                borderRadius: "3px",
-                background: "var(--surface)",
-                overflow: "hidden",
-                marginTop: "0.35rem",
-              }}
-            >
-              <div style={{ width: "100%", height: "100%", borderRadius: "3px", background: "var(--accent)" }} />
-            </div>
-          </div>
-          <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--foreground)" }}>100%</span>
-        </div>
-      </div>
 
       {/* Final status toggle */}
       <div className="premium-card" style={{ padding: "1.25rem" }}>
@@ -1779,14 +1963,10 @@ function Step4Budget({
             type="button"
             onClick={() => onChange({ finalStatus: "draft" })}
             style={{
-              flex: 1,
-              padding: "1rem",
-              borderRadius: "0.5rem",
+              flex: 1, padding: "1rem", borderRadius: "0.5rem",
               border: `2px solid ${data.finalStatus === "draft" ? "#6b7280" : "var(--border)"}`,
               background: data.finalStatus === "draft" ? "rgba(107,114,128,0.08)" : "var(--surface-raised)",
-              cursor: "pointer",
-              textAlign: "center",
-              transition: "all 150ms",
+              cursor: "pointer", textAlign: "center", transition: "all 150ms",
             }}
           >
             <div style={{ fontSize: "1.25rem", marginBottom: "0.25rem" }}>📝</div>
@@ -1797,14 +1977,10 @@ function Step4Budget({
             type="button"
             onClick={() => onChange({ finalStatus: "waiting_approval" })}
             style={{
-              flex: 1,
-              padding: "1rem",
-              borderRadius: "0.5rem",
+              flex: 1, padding: "1rem", borderRadius: "0.5rem",
               border: `2px solid ${data.finalStatus === "waiting_approval" ? "#22c55e" : "var(--border)"}`,
               background: data.finalStatus === "waiting_approval" ? "rgba(34,197,94,0.08)" : "var(--surface-raised)",
-              cursor: "pointer",
-              textAlign: "center",
-              transition: "all 150ms",
+              cursor: "pointer", textAlign: "center", transition: "all 150ms",
             }}
           >
             <div style={{ fontSize: "1.25rem", marginBottom: "0.25rem" }}>🚀</div>
@@ -1824,6 +2000,8 @@ export default function CampaignBuilderPage() {
   const toast = useToast();
   const { data: clients, loading: clientsLoading, error: clientsError } = useClients();
   const { create: createCampaign } = useCampaigns();
+  const { create: createAdSet } = useAdSets();
+  const { create: createAd } = useAds();
   const { data: allClientFiles, refetch: refetchClientFiles, create: createClientFile } = useClientFiles();
 
   const [step, setStep] = useState(1);
@@ -1848,7 +2026,6 @@ export default function CampaignBuilderPage() {
   // Update handler
   const handleChange = useCallback((partial: Partial<WizardData>) => {
     setData((prev) => ({ ...prev, ...partial }));
-    // Clear errors for changed fields
     setErrors((prev) => {
       const next = { ...prev };
       for (const key of Object.keys(partial)) {
@@ -1874,45 +2051,109 @@ export default function CampaignBuilderPage() {
     setStep((s) => Math.max(s - 1, 1));
   }, []);
 
-  // Save as draft
+  // ── Helper: build structured records from wizard data ──
+  const buildRecords = useCallback((status: CampaignStatus) => {
+    const clientName = selectedClient?.name || "";
+    const firstAd = data.ads[0] || EMPTY_AD;
+
+    // Campaign record (backward-compatible: still store summary in objective/notes/caption)
+    const campaignPayload = {
+      campaignName: data.campaignName || "טיוטה חדשה",
+      clientId: data.clientId,
+      clientName,
+      campaignType: data.campaignType,
+      objective: [
+        data.locations.length > 0 && `מיקום: ${data.locations.map(l => `${l.city}(+${l.radius}km)`).join(", ")}`,
+        data.excludedLocations.length > 0 && `הוצא: ${data.excludedLocations.join(", ")}`,
+        data.targetingMode !== "living" && `מצב: ${TARGETING_MODES.find(m => m.value === data.targetingMode)?.label || data.targetingMode}`,
+        data.interests.length > 0 && `עניינים: ${data.interests.join(", ")}`,
+        data.audienceNotes,
+      ].filter(Boolean).join(" | ") || "",
+      platform: data.platform,
+      status,
+      mediaType: firstAd.mediaType,
+      budget: typeof data.budget === "number" ? data.budget : 0,
+      caption: firstAd.caption,
+      notes: [
+        firstAd.headline && `כותרת: ${firstAd.headline}`,
+        firstAd.cta && `CTA: ${firstAd.cta}`,
+        firstAd.adFormat && `פורמט: ${firstAd.adFormat}`,
+        `קהל: ${data.gender}, ${data.ageMin}-${data.ageMax}`,
+        data.budgetType === "daily" ? "תקציב יומי" : "תקציב כולל",
+      ].filter(Boolean).join(" | "),
+      startDate: data.startDate || null,
+      endDate: data.endDate || null,
+      linkedVideoProjectId: null as string | null,
+      linkedClientFileId: firstAd.linkedClientFileId,
+      externalMediaUrl: firstAd.externalMediaUrl,
+      adAccountId: "",
+      leadFormIds: [] as string[],
+    };
+
+    return { campaignPayload, clientName };
+  }, [data, selectedClient]);
+
+  // Save as draft — Campaign only (quick save)
   const handleSaveDraft = useCallback(async () => {
     setSubmitting(true);
     try {
-      const clientName = selectedClient?.name || "";
-      const locationStr = data.locations.map((l) => `${l.city}(+${l.radius}km)`).join(", ");
-      const excludeStr = data.excludedLocations.length > 0 ? ` | הוצא: ${data.excludedLocations.join(", ")}` : "";
-      const interestsStr = data.interests.join(", ");
-      await createCampaign({
-        campaignName: data.campaignName || "טיוטה חדשה",
-        clientId: data.clientId,
-        clientName,
-        campaignType: data.campaignType,
-        objective: [
-          locationStr && `מיקום: ${locationStr}${excludeStr}`,
-          data.targetingMode !== "living" && `מצב: ${TARGETING_MODES.find((m) => m.value === data.targetingMode)?.label || data.targetingMode}`,
-          interestsStr && `עניינים: ${interestsStr}`,
-          data.audienceNotes,
-        ].filter(Boolean).join(" | ") || "",
-        platform: data.platform,
-        status: "draft" as CampaignStatus,
-        mediaType: data.mediaType,
-        budget: typeof data.budget === "number" ? data.budget : 0,
-        caption: data.caption,
-        notes: [
-          data.headline && `כותרת: ${data.headline}`,
-          data.cta && `CTA: ${data.cta}`,
-          data.adFormat && `פורמט: ${data.adFormat}`,
-          `קהל: ${data.gender}, ${data.ageMin}-${data.ageMax}`,
-          data.budgetType === "daily" ? "תקציב יומי" : "תקציב כולל",
-        ].filter(Boolean).join(" | "),
-        startDate: data.startDate || null,
-        endDate: data.endDate || null,
-        linkedVideoProjectId: null,
-        linkedClientFileId: data.linkedClientFileId,
-        externalMediaUrl: data.externalMediaUrl,
-        adAccountId: "",
-        leadFormIds: [],
-      });
+      const { campaignPayload } = buildRecords("draft" as CampaignStatus);
+      const campaign = await createCampaign(campaignPayload);
+
+      // Also create AdSet + Ads if we have enough data
+      if (campaign && campaign.id) {
+        try {
+          const adSetName = data.adSetName || `${data.campaignName} — קבוצה ראשית`;
+          const adSet = await createAdSet({
+            campaignId: campaign.id,
+            name: adSetName,
+            status: "draft" as const,
+            ageMin: data.ageMin,
+            ageMax: data.ageMax,
+            genders: [data.gender as "male" | "female" | "all"],
+            geoLocations: data.locations.map(l => l.city),
+            interests: data.interests,
+            customAudiences: [],
+            excludedAudiences: data.excludedLocations,
+            placements: [],
+            dailyBudget: data.budgetType === "daily" ? (typeof data.budget === "number" ? data.budget : null) : null,
+            lifetimeBudget: data.budgetType === "total" ? (typeof data.budget === "number" ? data.budget : null) : null,
+            startDate: data.startDate || null,
+            endDate: data.endDate || null,
+            bidStrategy: null,
+            bidAmount: null,
+            notes: data.audienceNotes,
+          });
+
+          if (adSet && adSet.id) {
+            for (const wizAd of data.ads) {
+              if (!wizAd.caption.trim()) continue;
+              await createAd({
+                adSetId: adSet.id,
+                campaignId: campaign.id,
+                name: wizAd.name || `${data.campaignName} — מודעה`,
+                status: "draft" as const,
+                creativeType: (wizAd.adFormat === "carousel" ? "carousel" : wizAd.mediaType === "video" ? "video" : "image") as AdCreativeType,
+                mediaUrl: wizAd.externalMediaUrl || "",
+                thumbnailUrl: null,
+                primaryText: wizAd.caption,
+                headline: wizAd.headline,
+                description: "",
+                ctaType: wizAd.cta ? wizAd.cta.toUpperCase() : "",
+                ctaLink: "",
+                linkedVideoProjectId: null,
+                linkedClientFileId: wizAd.linkedClientFileId,
+                impressions: 0, clicks: 0, spend: 0, leads: 0, conversions: 0,
+                ctr: 0, cpl: 0, cpc: 0, roas: 0,
+                notes: "",
+              });
+            }
+          }
+        } catch {
+          // AdSet/Ad creation failed but campaign was saved — acceptable for draft
+        }
+      }
+
       toast("טיוטה נשמרה בהצלחה", "success");
       router.push("/campaigns");
     } catch {
@@ -1920,57 +2161,77 @@ export default function CampaignBuilderPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [data, selectedClient, createCampaign, toast, router]);
+  }, [data, buildRecords, createCampaign, createAdSet, createAd, toast, router]);
 
-  // Final submit
+  // Final submit — creates Campaign → AdSet → Ad(s)
   const handleSubmit = useCallback(async () => {
-    const stepErrors = validateStep(4, data);
-    if (Object.keys(stepErrors).length > 0) {
-      setErrors(stepErrors);
+    // Validate step 3 (ads) since step 4 is review-only
+    const step3Errors = validateStep(3, data);
+    if (Object.keys(step3Errors).length > 0) {
+      setErrors(step3Errors);
       return;
     }
 
     setSubmitting(true);
     try {
-      const clientName = selectedClient?.name || "";
-      const locationStr2 = data.locations.map((l) => `${l.city}(+${l.radius}km)`).join(", ");
-      const excludeStr2 = data.excludedLocations.length > 0 ? ` | הוצא: ${data.excludedLocations.join(", ")}` : "";
-      const interestsStr2 = data.interests.join(", ");
-      await createCampaign({
-        campaignName: data.campaignName,
-        clientId: data.clientId,
-        clientName,
-        campaignType: data.campaignType,
-        objective: [
-          locationStr2 && `מיקום: ${locationStr2}${excludeStr2}`,
-          data.targetingMode !== "living" && `מצב: ${TARGETING_MODES.find((m) => m.value === data.targetingMode)?.label || data.targetingMode}`,
-          interestsStr2 && `עניינים: ${interestsStr2}`,
-          data.audienceNotes,
-        ].filter(Boolean).join(" | ") || "",
-        platform: data.platform,
-        status: data.finalStatus,
-        mediaType: data.mediaType,
-        budget: typeof data.budget === "number" ? data.budget : 0,
-        caption: data.caption,
-        notes: [
-          data.headline && `כותרת: ${data.headline}`,
-          data.cta && `CTA: ${data.cta}`,
-          data.adFormat && `פורמט: ${data.adFormat}`,
-          `קהל: ${data.gender}, ${data.ageMin}-${data.ageMax}`,
-          data.budgetType === "daily" ? "תקציב יומי" : "תקציב כולל",
-        ].filter(Boolean).join(" | "),
+      const { campaignPayload } = buildRecords(data.finalStatus);
+
+      // 1. Create Campaign
+      const campaign = await createCampaign(campaignPayload);
+      if (!campaign || !campaign.id) throw new Error("Campaign creation failed");
+
+      // 2. Create AdSet
+      const adSetName = data.adSetName || `${data.campaignName} — קבוצה ראשית`;
+      const adSet = await createAdSet({
+        campaignId: campaign.id,
+        name: adSetName,
+        status: data.finalStatus === "draft" ? "draft" as const : "active" as const,
+        ageMin: data.ageMin,
+        ageMax: data.ageMax,
+        genders: [data.gender as "male" | "female" | "all"],
+        geoLocations: data.locations.map(l => l.city),
+        interests: data.interests,
+        customAudiences: [],
+        excludedAudiences: data.excludedLocations,
+        placements: [],
+        dailyBudget: data.budgetType === "daily" ? (typeof data.budget === "number" ? data.budget : null) : null,
+        lifetimeBudget: data.budgetType === "total" ? (typeof data.budget === "number" ? data.budget : null) : null,
         startDate: data.startDate || null,
         endDate: data.endDate || null,
-        linkedVideoProjectId: null,
-        linkedClientFileId: data.linkedClientFileId,
-        externalMediaUrl: data.externalMediaUrl,
-        adAccountId: "",
-        leadFormIds: [],
+        bidStrategy: null,
+        bidAmount: null,
+        notes: data.audienceNotes,
       });
+      if (!adSet || !adSet.id) throw new Error("AdSet creation failed");
+
+      // 3. Create Ads
+      for (let i = 0; i < data.ads.length; i++) {
+        const wizAd = data.ads[i];
+        await createAd({
+          adSetId: adSet.id,
+          campaignId: campaign.id,
+          name: wizAd.name || `${data.campaignName} — מודעה ${i + 1}`,
+          status: data.finalStatus === "draft" ? "draft" as const : "active" as const,
+          creativeType: (wizAd.adFormat === "carousel" ? "carousel" : wizAd.mediaType === "video" ? "video" : "image") as AdCreativeType,
+          mediaUrl: wizAd.externalMediaUrl || "",
+          thumbnailUrl: null,
+          primaryText: wizAd.caption,
+          headline: wizAd.headline,
+          description: "",
+          ctaType: wizAd.cta ? wizAd.cta.toUpperCase() : "",
+          ctaLink: "",
+          linkedVideoProjectId: null,
+          linkedClientFileId: wizAd.linkedClientFileId,
+          impressions: 0, clicks: 0, spend: 0, leads: 0, conversions: 0,
+          ctr: 0, cpl: 0, cpc: 0, roas: 0,
+          notes: "",
+        });
+      }
+
       toast(
         data.finalStatus === "draft"
           ? "קמפיין נשמר כטיוטה"
-          : "קמפיין נוצר בהצלחה — ממתין לאישור",
+          : `קמפיין נוצר בהצלחה — ${data.ads.length} מודעות, קבוצה אחת`,
         "success"
       );
       router.push("/campaigns");
@@ -1979,7 +2240,7 @@ export default function CampaignBuilderPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [data, selectedClient, createCampaign, toast, router]);
+  }, [data, buildRecords, createCampaign, createAdSet, createAd, toast, router]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -2016,7 +2277,7 @@ export default function CampaignBuilderPage() {
             🚀 בניית קמפיין חדש
           </h1>
           <p style={{ color: "var(--foreground-muted)", fontSize: "0.8rem", marginTop: "0.15rem" }}>
-            4 שלבים ליצירת קמפיין מושלם
+            קמפיין → קבוצת מודעות → מודעות → סיכום
           </p>
         </div>
         <Link
@@ -2050,7 +2311,7 @@ export default function CampaignBuilderPage() {
         />
       )}
       {step === 2 && (
-        <Step2Audience
+        <Step2AdSet
           data={data}
           onChange={handleChange}
           errors={errors}
@@ -2059,7 +2320,7 @@ export default function CampaignBuilderPage() {
         />
       )}
       {step === 3 && (
-        <Step3Creative
+        <Step3Ads
           data={data}
           onChange={handleChange}
           errors={errors}
@@ -2071,10 +2332,10 @@ export default function CampaignBuilderPage() {
         />
       )}
       {step === 4 && (
-        <Step4Budget
+        <Step4Review
           data={data}
           onChange={handleChange}
-          errors={errors}
+          selectedClient={selectedClient}
         />
       )}
 
