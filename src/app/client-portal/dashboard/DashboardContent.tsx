@@ -163,10 +163,10 @@ function DashboardContentInner() {
         }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', position: 'relative', zIndex: 1 }}>
           {client.logoUrl ? (
-            <img src={client.logoUrl} alt={client.name} style={{
+            <img src={client.logoUrl} alt={client.company || client.name} style={{
               height: '4.5rem', width: '4.5rem', borderRadius: '0.75rem', objectFit: 'cover',
               border: `2px solid ${color}30`, boxShadow: `0 4px 12px ${color}15`,
-            }} />
+            }} onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} />
           ) : (
             <div style={{
               width: '4.5rem', height: '4.5rem', borderRadius: '0.75rem',
@@ -179,10 +179,10 @@ function DashboardContentInner() {
           )}
           <div>
             <h1 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0 0 0.25rem 0', letterSpacing: '-0.01em' }}>
-              שלום, {client.name}
+              שלום, {client.contactPerson || client.name}
             </h1>
             <p style={{ fontSize: '0.9rem', color: 'var(--foreground-muted)', margin: 0 }}>
-              {[client.company, client.businessField].filter(Boolean).join(' • ')}
+              {[client.company || client.name, client.businessField].filter(Boolean).join(' • ')}
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
               <span style={{
