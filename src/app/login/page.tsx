@@ -12,10 +12,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [mounted, setMounted] = useState(false);
-  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
+    // Auto-seed: ensure at least one admin user exists
+    fetch('/api/auth/seed', { method: 'POST' }).catch(() => {});
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -62,51 +63,55 @@ export default function LoginPage() {
     <>
       <style>{`
         @keyframes fadeInUp {
-          from { opacity: 0; transform: translateY(24px); }
+          from { opacity: 0; transform: translateY(30px); }
           to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes fadeInLeft {
-          from { opacity: 0; transform: translateX(-30px); }
-          to { opacity: 1; transform: translateX(0); }
         }
         @keyframes float {
           0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-12px); }
-        }
-        @keyframes shimmer {
-          0% { background-position: -200% center; }
-          100% { background-position: 200% center; }
-        }
-        @keyframes pulse-ring {
-          0% { transform: scale(0.9); opacity: 0.5; }
-          50% { transform: scale(1.05); opacity: 0.3; }
-          100% { transform: scale(0.9); opacity: 0.5; }
+          50% { transform: translateY(-14px); }
         }
         @keyframes gradientShift {
           0% { background-position: 0% 50%; }
           50% { background-position: 100% 50%; }
           100% { background-position: 0% 50%; }
         }
+        @keyframes shimmer {
+          0% { background-position: -200% center; }
+          100% { background-position: 200% center; }
+        }
+        @keyframes pulse-ring {
+          0%, 100% { transform: scale(1); opacity: 0.15; }
+          50% { transform: scale(1.08); opacity: 0.08; }
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes statue-reveal {
+          from { opacity: 0; transform: scale(0.92) translateY(20px); }
+          to { opacity: 1; transform: scale(1) translateY(0); }
+        }
         .login-input {
           width: 100%;
           padding: 14px 16px;
           font-size: 14px;
-          background: rgba(255,255,255,0.06);
-          color: var(--foreground, #fff);
-          border: 1.5px solid rgba(255,255,255,0.12);
-          border-radius: 10px;
+          background: rgba(255,255,255,0.12);
+          color: #1a3a5c;
+          border: 1.5px solid rgba(255,255,255,0.35);
+          border-radius: 12px;
           box-sizing: border-box;
           transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
           outline: none;
           font-family: inherit;
+          backdrop-filter: blur(4px);
         }
         .login-input::placeholder {
-          color: rgba(255,255,255,0.3);
+          color: rgba(26,58,92,0.35);
         }
         .login-input:focus {
-          border-color: #F0FF02;
-          background: rgba(255,255,255,0.08);
-          box-shadow: 0 0 0 3px rgba(240, 255, 2, 0.12);
+          border-color: rgba(255,255,255,0.7);
+          background: rgba(255,255,255,0.22);
+          box-shadow: 0 0 0 3px rgba(255,255,255,0.15);
         }
         .login-cta {
           width: 100%;
@@ -117,7 +122,7 @@ export default function LoginPage() {
           background: linear-gradient(135deg, #F0FF02, #d4e000, #F0FF02);
           background-size: 200% 200%;
           border: none;
-          border-radius: 10px;
+          border-radius: 12px;
           cursor: pointer;
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           font-family: inherit;
@@ -126,8 +131,8 @@ export default function LoginPage() {
           overflow: hidden;
         }
         .login-cta:hover:not(:disabled) {
-          transform: translateY(-1px);
-          box-shadow: 0 8px 24px rgba(240, 255, 2, 0.35);
+          transform: translateY(-2px);
+          box-shadow: 0 10px 30px rgba(240, 255, 2, 0.4);
           animation: gradientShift 2s ease infinite;
         }
         .login-cta:active:not(:disabled) {
@@ -137,297 +142,313 @@ export default function LoginPage() {
           opacity: 0.6;
           cursor: not-allowed;
         }
-        @media (max-width: 900px) {
-          .login-split { flex-direction: column !important; }
-          .login-brand-panel { display: none !important; }
-          .login-form-panel { width: 100% !important; }
-        }
       `}</style>
 
       <div
-        className="login-split"
         style={{
-          display: 'flex',
           minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          position: 'relative',
+          overflow: 'hidden',
           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+          /* Cyan / light-blue gradient background */
+          background: 'linear-gradient(160deg, #e0f7fa 0%, #b2ebf2 20%, #80deea 45%, #4dd0e1 70%, #26c6da 100%)',
         }}
       >
-        {/* LEFT PANEL — Branding */}
+        {/* Decorative circles */}
+        <div style={{
+          position: 'absolute', top: '-120px', right: '-80px',
+          width: '400px', height: '400px', borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(255,255,255,0.3), transparent 70%)',
+          animation: 'pulse-ring 8s ease-in-out infinite',
+        }} />
+        <div style={{
+          position: 'absolute', bottom: '-100px', left: '-100px',
+          width: '350px', height: '350px', borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(255,255,255,0.25), transparent 70%)',
+          animation: 'pulse-ring 10s ease-in-out infinite 2s',
+        }} />
+        <div style={{
+          position: 'absolute', top: '30%', left: '10%',
+          width: '200px', height: '200px', borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(255,255,255,0.15), transparent 70%)',
+          animation: 'pulse-ring 7s ease-in-out infinite 1s',
+        }} />
+
+        {/* Greek statue visual — left side */}
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: '5%',
+          width: '320px',
+          height: '480px',
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'center',
+          animation: mounted ? 'statue-reveal 1.2s cubic-bezier(0.22,1,0.36,1) 0.3s backwards' : 'none',
+          pointerEvents: 'none',
+        }}>
+          {/* SVG Greek statue silhouette */}
+          <svg viewBox="0 0 300 450" width="300" height="450" style={{ opacity: 0.18, filter: 'drop-shadow(0 8px 32px rgba(0,0,0,0.1))' }}>
+            <defs>
+              <linearGradient id="statueGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#1a3a5c" stopOpacity="0.9" />
+                <stop offset="100%" stopColor="#1a3a5c" stopOpacity="0.3" />
+              </linearGradient>
+            </defs>
+            {/* Pedestal */}
+            <rect x="70" y="400" width="160" height="50" rx="4" fill="url(#statueGrad)" />
+            <rect x="85" y="385" width="130" height="18" rx="3" fill="url(#statueGrad)" />
+            {/* Body */}
+            <path d="M150,385 Q130,340 125,300 Q120,260 130,230 Q122,200 125,180 L175,180 Q178,200 170,230 Q180,260 175,300 Q170,340 150,385 Z" fill="url(#statueGrad)" />
+            {/* Left arm */}
+            <path d="M125,210 Q105,225 90,250 Q80,265 85,280 Q90,275 95,265 Q105,245 125,230" fill="url(#statueGrad)" />
+            {/* Right arm */}
+            <path d="M175,210 Q195,220 210,235 Q220,245 215,260 Q210,255 205,248 Q195,235 175,225" fill="url(#statueGrad)" />
+            {/* Neck */}
+            <rect x="140" y="160" width="20" height="22" rx="4" fill="url(#statueGrad)" />
+            {/* Head */}
+            <ellipse cx="150" cy="140" rx="28" ry="35" fill="url(#statueGrad)" />
+            {/* Hair/crown detail */}
+            <path d="M122,130 Q130,100 150,95 Q170,100 178,130 Q170,115 150,112 Q130,115 122,130 Z" fill="url(#statueGrad)" />
+            {/* Facial features (subtle) */}
+            <ellipse cx="140" cy="137" rx="3" ry="2" fill="rgba(255,255,255,0.3)" />
+            <ellipse cx="160" cy="137" rx="3" ry="2" fill="rgba(255,255,255,0.3)" />
+            <path d="M145,150 Q150,154 155,150" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" />
+            {/* Drape lines */}
+            <path d="M130,230 Q140,280 135,340" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+            <path d="M170,230 Q160,280 165,340" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+            <path d="M150,220 Q148,270 150,330" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="0.8" />
+          </svg>
+        </div>
+
+        {/* Greek statue visual — right side (mirrored, smaller) */}
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          right: '3%',
+          width: '200px',
+          height: '320px',
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'center',
+          animation: mounted ? 'statue-reveal 1.2s cubic-bezier(0.22,1,0.36,1) 0.5s backwards' : 'none',
+          pointerEvents: 'none',
+          transform: 'scaleX(-1)',
+        }}>
+          <svg viewBox="0 0 300 450" width="200" height="300" style={{ opacity: 0.1, filter: 'drop-shadow(0 8px 32px rgba(0,0,0,0.08))' }}>
+            <defs>
+              <linearGradient id="statueGrad2" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#1a3a5c" stopOpacity="0.8" />
+                <stop offset="100%" stopColor="#1a3a5c" stopOpacity="0.2" />
+              </linearGradient>
+            </defs>
+            <rect x="70" y="400" width="160" height="50" rx="4" fill="url(#statueGrad2)" />
+            <rect x="85" y="385" width="130" height="18" rx="3" fill="url(#statueGrad2)" />
+            <path d="M150,385 Q130,340 125,300 Q120,260 130,230 Q122,200 125,180 L175,180 Q178,200 170,230 Q180,260 175,300 Q170,340 150,385 Z" fill="url(#statueGrad2)" />
+            <path d="M125,210 Q105,225 90,250 Q80,265 85,280 Q90,275 95,265 Q105,245 125,230" fill="url(#statueGrad2)" />
+            <path d="M175,210 Q195,220 210,235 Q220,245 215,260 Q210,255 205,248 Q195,235 175,225" fill="url(#statueGrad2)" />
+            <rect x="140" y="160" width="20" height="22" rx="4" fill="url(#statueGrad2)" />
+            <ellipse cx="150" cy="140" rx="28" ry="35" fill="url(#statueGrad2)" />
+            <path d="M122,130 Q130,100 150,95 Q170,100 178,130 Q170,115 150,112 Q130,115 122,130 Z" fill="url(#statueGrad2)" />
+          </svg>
+        </div>
+
+        {/* ── Centered login card (glass-morphism) ── */}
         <div
-          className="login-brand-panel"
           style={{
-            flex: '1 1 50%',
-            background: 'linear-gradient(160deg, #e8f4fd 0%, #d0eaf8 30%, #b8dff3 60%, #a0d4ee 100%)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '3rem',
             position: 'relative',
-            overflow: 'hidden',
+            zIndex: 2,
+            width: '100%',
+            maxWidth: '400px',
+            padding: '2.5rem 2rem',
+            borderRadius: '20px',
+            background: 'rgba(255,255,255,0.18)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            border: '1px solid rgba(255,255,255,0.35)',
+            boxShadow: '0 20px 60px rgba(0,40,80,0.12), 0 0 0 1px rgba(255,255,255,0.1) inset',
+            direction: 'rtl',
+            animation: mounted ? 'fadeInUp 0.7s cubic-bezier(0.22,1,0.36,1)' : 'none',
           }}
         >
-          {/* Decorative circles */}
-          <div style={{
-            position: 'absolute', top: '-60px', left: '-60px',
-            width: '220px', height: '220px', borderRadius: '50%',
-            background: 'rgba(255,255,255,0.25)',
-            animation: 'pulse-ring 6s ease-in-out infinite',
-          }} />
-          <div style={{
-            position: 'absolute', bottom: '-40px', right: '-40px',
-            width: '180px', height: '180px', borderRadius: '50%',
-            background: 'rgba(255,255,255,0.2)',
-            animation: 'pulse-ring 8s ease-in-out infinite 1s',
-          }} />
-          <div style={{
-            position: 'absolute', top: '40%', right: '15%',
-            width: '100px', height: '100px', borderRadius: '50%',
-            background: 'rgba(255,255,255,0.15)',
-            animation: 'pulse-ring 7s ease-in-out infinite 2s',
-          }} />
-
-          {/* Content */}
-          <div style={{
-            textAlign: 'center',
-            zIndex: 1,
-            animation: mounted ? 'fadeInLeft 0.8s cubic-bezier(0.4, 0, 0.2, 1)' : 'none',
-          }}>
-            {/* Logo */}
+          {/* Logo */}
+          <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
             <div style={{
-              marginBottom: '2rem',
               animation: mounted ? 'float 6s ease-in-out infinite' : 'none',
+              marginBottom: '1rem',
             }}>
               <img
                 src="https://s-pixel.co.il/wp-content/uploads/2026/04/Asset-1.png"
                 alt="Studio Pixel"
-                style={{ height: '52px', width: 'auto', filter: 'brightness(0) saturate(100%)' }}
+                style={{ height: '44px', width: 'auto', filter: 'brightness(0) saturate(100%)' }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            </div>
+            <h1 style={{
+              fontSize: '1.6rem',
+              fontWeight: 800,
+              color: '#1a3a5c',
+              margin: '0 0 0.3rem 0',
+              letterSpacing: '-0.02em',
+            }}>
+              PixelManageAI
+            </h1>
+            <p style={{
+              fontSize: '0.85rem',
+              color: '#4a7a9b',
+              margin: 0,
+            }}>
+              כניסה למערכת הניהול
+            </p>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit}>
+            {/* Email */}
+            <div style={{ marginBottom: '1.15rem' }}>
+              <label
+                htmlFor="email"
+                style={{
+                  display: 'block',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  color: '#1a3a5c',
+                  marginBottom: '0.45rem',
+                }}
+              >
+                דואר אלקטרוני
+              </label>
+              <input
+                id="email"
+                type="email"
+                className="login-input"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@company.com"
+                required
+                autoComplete="email"
               />
             </div>
 
-            {/* Tagline */}
-            <h2 style={{
-              fontSize: '2rem',
-              fontWeight: 800,
-              color: '#1a3a5c',
-              margin: '0 0 0.75rem 0',
-              lineHeight: 1.2,
-              letterSpacing: '-0.02em',
-            }}>
-              ניהול חכם.
-              <br />
-              תוצאות מדויקות.
-            </h2>
-
-            <p style={{
-              fontSize: '1rem',
-              color: '#4a7a9b',
-              margin: '0 0 2.5rem 0',
-              lineHeight: 1.7,
-              maxWidth: '320px',
-            }}>
-              מערכת הניהול המתקדמת שלך — לקוחות, פרויקטים,
-              <br />
-              משימות וחשבונות במקום אחד.
-            </p>
-
-            {/* Feature pills */}
-            <div style={{
-              display: 'flex',
-              gap: '0.6rem',
-              justifyContent: 'center',
-              flexWrap: 'wrap',
-            }}>
-              {['ניהול לקוחות', 'מעקב משימות', 'דוחות חכמים', 'אוטומציה'].map((feature, i) => (
-                <span
-                  key={feature}
-                  style={{
-                    padding: '0.45rem 1rem',
-                    borderRadius: '999px',
-                    background: 'rgba(255,255,255,0.55)',
-                    backdropFilter: 'blur(8px)',
-                    color: '#1a3a5c',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    border: '1px solid rgba(255,255,255,0.6)',
-                    animation: mounted ? `fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) ${0.3 + i * 0.1}s backwards` : 'none',
-                  }}
-                >
-                  {feature}
-                </span>
-              ))}
+            {/* Password */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label
+                htmlFor="password"
+                style={{
+                  display: 'block',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  color: '#1a3a5c',
+                  marginBottom: '0.45rem',
+                }}
+              >
+                סיסמה
+              </label>
+              <input
+                id="password"
+                type="password"
+                className="login-input"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                autoComplete="current-password"
+              />
             </div>
+
+            {/* Error */}
+            {error && (
+              <div
+                style={{
+                  padding: '12px 14px',
+                  marginBottom: '1.15rem',
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  color: '#dc2626',
+                  borderRadius: '10px',
+                  fontSize: '0.82rem',
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                  animation: 'fadeInUp 0.3s ease',
+                }}
+              >
+                {error}
+              </div>
+            )}
+
+            {/* Submit */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="login-cta"
+            >
+              {loading ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{
+                    width: '16px', height: '16px', border: '2px solid rgba(0,0,0,0.2)',
+                    borderTopColor: '#0a0a0a', borderRadius: '50%',
+                    display: 'inline-block',
+                    animation: 'spin 0.6s linear infinite',
+                  }} />
+                  מתחבר...
+                </span>
+              ) : 'כניסה'}
+            </button>
+          </form>
+
+          {/* Feature pills */}
+          <div style={{
+            display: 'flex',
+            gap: '0.45rem',
+            justifyContent: 'center',
+            flexWrap: 'wrap',
+            marginTop: '1.5rem',
+          }}>
+            {['ניהול לקוחות', 'מעקב משימות', 'דוחות חכמים', 'אוטומציה'].map((feature, i) => (
+              <span
+                key={feature}
+                style={{
+                  padding: '0.3rem 0.7rem',
+                  borderRadius: '999px',
+                  background: 'rgba(255,255,255,0.3)',
+                  color: '#1a3a5c',
+                  fontSize: '0.68rem',
+                  fontWeight: 600,
+                  border: '1px solid rgba(255,255,255,0.4)',
+                  animation: mounted ? `fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) ${0.5 + i * 0.1}s backwards` : 'none',
+                }}
+              >
+                {feature}
+              </span>
+            ))}
           </div>
 
-          {/* Bottom attribution */}
+          {/* Footer */}
           <p style={{
-            position: 'absolute',
-            bottom: '1.5rem',
-            fontSize: '0.75rem',
-            color: '#6a9ab8',
-            margin: 0,
+            fontSize: '0.68rem',
+            color: '#4a7a9b',
+            margin: '1.5rem 0 0 0',
+            textAlign: 'center',
+            opacity: 0.7,
           }}>
-            Powered by Studio Pixel
+            ניהול חכם. תוצאות מדויקות.
           </p>
         </div>
 
-        {/* RIGHT PANEL — Login Form */}
-        <div
-          className="login-form-panel"
-          style={{
-            flex: '1 1 50%',
-            background: '#0c0c0f',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '3rem 2rem',
-            direction: 'rtl',
-          }}
-        >
-          <div
-            style={{
-              width: '100%',
-              maxWidth: '380px',
-              animation: mounted ? 'fadeInUp 0.6s cubic-bezier(0.4, 0, 0.2, 1)' : 'none',
-            }}
-          >
-            {/* Header */}
-            <div style={{ marginBottom: '2.5rem' }}>
-              <h1 style={{
-                fontSize: '1.75rem',
-                fontWeight: 800,
-                color: '#ffffff',
-                margin: '0 0 0.5rem 0',
-                letterSpacing: '-0.02em',
-              }}>
-                PixelManageAI
-              </h1>
-              <p style={{
-                fontSize: '0.9rem',
-                color: 'rgba(255,255,255,0.45)',
-                margin: 0,
-              }}>
-                כניסה למערכת הניהול
-              </p>
-            </div>
-
-            {/* Form */}
-            <form onSubmit={handleSubmit}>
-              {/* Email */}
-              <div style={{ marginBottom: '1.25rem' }}>
-                <label
-                  htmlFor="email"
-                  style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    color: 'rgba(255,255,255,0.6)',
-                    marginBottom: '0.5rem',
-                    letterSpacing: '0.03em',
-                  }}
-                >
-                  דואר אלקטרוני
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  className="login-input"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onFocus={() => setFocusedField('email')}
-                  onBlur={() => setFocusedField(null)}
-                  placeholder="name@company.com"
-                  required
-                  autoComplete="email"
-                />
-              </div>
-
-              {/* Password */}
-              <div style={{ marginBottom: '1.75rem' }}>
-                <label
-                  htmlFor="password"
-                  style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    color: 'rgba(255,255,255,0.6)',
-                    marginBottom: '0.5rem',
-                    letterSpacing: '0.03em',
-                  }}
-                >
-                  סיסמה
-                </label>
-                <input
-                  id="password"
-                  type="password"
-                  className="login-input"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onFocus={() => setFocusedField('password')}
-                  onBlur={() => setFocusedField(null)}
-                  placeholder="••••••••"
-                  required
-                  autoComplete="current-password"
-                />
-              </div>
-
-              {/* Error */}
-              {error && (
-                <div
-                  style={{
-                    padding: '12px 14px',
-                    marginBottom: '1.25rem',
-                    background: 'rgba(239, 68, 68, 0.1)',
-                    color: '#f87171',
-                    borderRadius: '10px',
-                    fontSize: '0.82rem',
-                    border: '1px solid rgba(239, 68, 68, 0.25)',
-                    animation: 'fadeInUp 0.3s ease',
-                  }}
-                >
-                  {error}
-                </div>
-              )}
-
-              {/* Submit */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="login-cta"
-              >
-                {loading ? (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{
-                      width: '16px', height: '16px', border: '2px solid rgba(0,0,0,0.2)',
-                      borderTopColor: '#0a0a0a', borderRadius: '50%',
-                      display: 'inline-block',
-                      animation: 'spin 0.6s linear infinite',
-                    }} />
-                    מתחבר...
-                  </span>
-                ) : 'כניסה'}
-              </button>
-            </form>
-
-            {/* Footer */}
-            <p style={{
-              fontSize: '0.72rem',
-              color: 'rgba(255,255,255,0.2)',
-              margin: '2.5rem 0 0 0',
-              textAlign: 'center',
-            }}>
-              סטודיו פיקסל © 2026 &middot; כל הזכויות שמורות
-            </p>
-          </div>
-        </div>
+        {/* Bottom attribution */}
+        <p style={{
+          position: 'absolute',
+          bottom: '1rem',
+          fontSize: '0.7rem',
+          color: 'rgba(26,58,92,0.4)',
+          margin: 0,
+          textAlign: 'center',
+          width: '100%',
+        }}>
+          Powered by Studio Pixel &middot; סטודיו פיקסל © 2026
+        </p>
       </div>
-
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </>
   );
 }

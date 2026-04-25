@@ -3,6 +3,12 @@ import { getSupabase } from '@/lib/db/store';
 import { hashPassword } from '@/lib/auth/passwords';
 import crypto from 'crypto';
 
+/**
+ * POST /api/auth/seed
+ *
+ * Ensures default admin + demo users exist.
+ * Safe to call multiple times — only creates users that don't exist yet.
+ */
 export async function POST() {
   try {
     const supabase = getSupabase();
@@ -18,20 +24,18 @@ export async function POST() {
       })
       .catch((e: any) => console.warn('[Auth/Seed] Table creation warning:', e.message));
 
-    // Check if users already exist
-    const { data: existing } = await supabase.from('app_users').select('id').limit(1);
-    if (existing && existing.length > 0) {
-      return NextResponse.json({
-        message: 'משתמשים כבר קיימים. מחק ידנית לפני seed חדש.',
-        skipped: true,
-      });
-    }
-
     const now = new Date().toISOString();
 
-    const users = [
+    const usersToSeed = [
       {
-        id: `usr_${crypto.randomBytes(8).toString('hex')}`,
+        email: 'admin@pixel.local',
+        password: 'PixelAdmin2026!',
+        role: 'admin' as const,
+        displayName: 'מנהל ראשי — Pixel',
+        linkedClientId: null,
+        linkedEmployeeId: null,
+      },
+      {
         email: 'admin@pixeld.co',
         password: 'admin123',
         role: 'admin' as const,
@@ -40,7 +44,6 @@ export async function POST() {
         linkedEmployeeId: null,
       },
       {
-        id: `usr_${crypto.randomBytes(8).toString('hex')}`,
         email: 'employee@pixeld.co',
         password: 'employee123',
         role: 'employee' as const,
@@ -49,7 +52,6 @@ export async function POST() {
         linkedEmployeeId: null,
       },
       {
-        id: `usr_${crypto.randomBytes(8).toString('hex')}`,
         email: 'client@pixeld.co',
         password: 'client123',
         role: 'client' as const,
@@ -59,11 +61,29 @@ export async function POST() {
       },
     ];
 
+    // Fetch existing users to check by email
+    const { data: existingRows } = await supabase.from('app_users').select('id, data');
+    const existingEmails = new Set(
+      (existingRows || []).map((r: any) => (r.data?.email || '').toLowerCase())
+    );
+
     const results = [];
-    for (const user of users) {
+    let created = 0;
+    let skipped = 0;
+
+    for (const user of usersToSeed) {
+      // Skip if this email already exists
+      if (existingEmails.has(user.email.toLowerCase())) {
+        results.push({ email: user.email, role: user.role, status: 'exists' });
+        skipped++;
+        continue;
+      }
+
+      const id = `usr_${crypto.randomBytes(8).toString('hex')}`;
       const passwordHash = await hashPassword(user.password);
+
       const { error } = await supabase.from('app_users').insert({
-        id: user.id,
+        id,
         data: {
           email: user.email,
           passwordHash,
@@ -77,18 +97,23 @@ export async function POST() {
           updatedAt: now,
         },
       });
+
       results.push({
         email: user.email,
         role: user.role,
-        password: user.password,
-        success: !error,
+        status: error ? 'error' : 'created',
         error: error?.message,
       });
+      if (!error) created++;
     }
 
     return NextResponse.json({
       success: true,
-      message: 'משתמשי ברירת מחדל נוצרו בהצלחה',
+      message: created > 0
+        ? `${created} משתמשים חדשים נוצרו`
+        : 'כל המשתמשים כבר קיימים',
+      created,
+      skipped,
       users: results,
     });
   } catch (error) {
