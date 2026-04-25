@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 
 /**
  * POST /api/auth/login
@@ -58,9 +58,22 @@ function buildSuccessResponse(user: {
   return response;
 }
 
+// ── Diagnostic GET ────────────────────────────────────────────────────
+
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    version: '2026-04-25-v5',
+    admin_email: ADMIN_EMAIL,
+    hint: 'POST with { email, password }',
+  });
+}
+
 // ── Route handler ─────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  console.log('[Auth/Login] ── POST hit ──');
+
   let email = '';
   let password = '';
 
@@ -68,25 +81,37 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     email = (body?.email || '').trim();
     password = body?.password || '';
-  } catch {
+    console.log('[Auth/Login] Parsed — email:', email);
+  } catch (parseErr) {
+    console.error('[Auth/Login] Body parse failed:', parseErr);
     return NextResponse.json({ success: false, error: 'גוף הבקשה לא תקין' }, { status: 400 });
   }
 
   if (!email || !password) {
+    console.log('[Auth/Login] Missing email or password');
     return NextResponse.json({ success: false, error: 'דואר אלקטרוני וסיסמה נדרשים' }, { status: 400 });
   }
 
   // ── STEP 1: Hardcoded admin — ALWAYS works ──────────────────────────
-  if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
-    console.log('[Auth/Login] Admin login success (hardcoded)');
-    return buildSuccessResponse({
-      id: 'usr_fallback_admin',
-      email: ADMIN_EMAIL,
-      role: 'admin',
-      displayName: 'מנהל ראשי — Pixel',
-      linkedClientId: null,
-      linkedEmployeeId: null,
-    });
+  const emailMatch = email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const passMatch = password === ADMIN_PASSWORD;
+  console.log('[Auth/Login] Admin check — emailMatch:', emailMatch, '| passMatch:', passMatch);
+
+  if (emailMatch && passMatch) {
+    console.log('[Auth/Login] ✅ Admin login success');
+    try {
+      return buildSuccessResponse({
+        id: 'usr_fallback_admin',
+        email: ADMIN_EMAIL,
+        role: 'admin',
+        displayName: 'מנהל ראשי — Pixel',
+        linkedClientId: null,
+        linkedEmployeeId: null,
+      });
+    } catch (tokenErr) {
+      console.error('[Auth/Login] Token/cookie error:', tokenErr);
+      return NextResponse.json({ success: false, error: 'שגיאה פנימית' }, { status: 500 });
+    }
   }
 
   // ── STEP 2: DB auth for other users ─────────────────────────────────
@@ -100,6 +125,8 @@ export async function POST(req: NextRequest) {
       .select('id, data')
       .order('id');
 
+    console.log('[Auth/Login] DB rows:', rows?.length || 0, '| error:', error?.message || 'none');
+
     if (!error && rows && rows.length > 0) {
       const userRow = (rows as any[]).find((r) => {
         const d = r.data || {};
@@ -112,7 +139,7 @@ export async function POST(req: NextRequest) {
         try { valid = await comparePassword(password, userData.passwordHash || ''); } catch {}
 
         if (valid) {
-          // Update last login (fire-and-forget)
+          console.log('[Auth/Login] ✅ DB user login:', userData.email);
           try {
             await supabase
               .from('app_users')
@@ -136,5 +163,6 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Wrong credentials ───────────────────────────────────────────────
+  console.log('[Auth/Login] ❌ No match for:', email);
   return NextResponse.json({ success: false, error: 'פרטי התחברות שגויים' }, { status: 401 });
 }
