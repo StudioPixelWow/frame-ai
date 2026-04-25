@@ -1099,3 +1099,26 @@ export interface AuditLog {
   errorMessage: string | null;
   createdAt: string;
 }
+
+// Ad Reference — real competitor ad examples for Gantt content inspiration
+export interface AdReference {
+  id: string;
+  // Content
+  imageUrl: string;
+  description: string;
+  source: string; // e.g. "Meta Ad Library", "TikTok Creative Center"
+  sourceUrl: string; // link to original ad
+  // Categorization
+  industry: string; // matches client.businessField
+  contentType: string; // social_post, reel, story, carousel, etc.
+  platform: string; // facebook, instagram, tiktok, all
+  style: string; // minimal, bold_text, lifestyle, etc.
+  tags: string[]; // free-form tags for matching
+  // Metadata
+  advertiserName: string;
+  engagementScore: number; // 0-100, manually set
+  isActive: boolean;
+  addedBy: string; // user who added it
+  createdAt: string;
+  updatedAt: string;
+}

@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import type { Client, Employee, ClientGanttItem } from "@/lib/db/schema";
 import { useClientGanttItems, useTasks, useEmployees, useProjects, useEmployeeTasks } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
-import { generateReferences, getStyleLabel, type ReferenceItem, type ReferenceQuery } from "@/lib/gantt/reference-engine";
+import { fetchReferences, getStyleLabel, type ReferenceItem, type ReferenceQuery } from "@/lib/gantt/reference-engine";
 
 const HEB_MONTHS = [
   "ינואר",
@@ -251,9 +251,11 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
   const [refModalOpen, setRefModalOpen] = useState(false);
   const [refModalItem, setRefModalItem] = useState<ReferenceItem | null>(null);
   const [expandedRefIds, setExpandedRefIds] = useState<Set<string>>(new Set());
+  const [itemRefsMap, setItemRefsMap] = useState<Record<string, ReferenceItem[]>>({});
 
-  /** Generate references for a Gantt item (memoized per item id) */
-  const getItemReferences = useCallback((item: ClientGanttItem): ReferenceItem[] => {
+  /** Load references for a gantt item */
+  const loadReferencesForItem = useCallback(async (item: ClientGanttItem) => {
+    if (itemRefsMap[item.id]) return; // already loaded
     const query: ReferenceQuery = {
       ideaTitle: item.title || '',
       ideaSummary: item.ideaSummary || '',
@@ -263,8 +265,16 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
       clientIndustry: client.businessField || '',
       clientName: client.name || '',
     };
-    return generateReferences(query);
-  }, [client.businessField, client.name]);
+    const refs = await fetchReferences(query);
+    setItemRefsMap(prev => ({ ...prev, [item.id]: refs }));
+  }, [client.businessField, client.name, itemRefsMap]);
+
+  // Load references for visible monthly items on mount or when items change
+  useEffect(() => {
+    monthlyItems.forEach(item => {
+      loadReferencesForItem(item);
+    });
+  }, [monthlyItems, loadReferencesForItem]);
 
   // Calculations
   const now = new Date();
@@ -1399,81 +1409,88 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
 
                       {/* ── Reference Previews ── */}
                       {(() => {
-                        const refs = getItemReferences(item);
-                        if (!refs || refs.length === 0) return null;
+                        const refs = itemRefsMap[item.id] || [];
                         const isExpanded = expandedRefIds.has(item.id);
                         const visibleRefs = isExpanded ? refs : refs.slice(0, 3);
                         return (
                           <div style={{ marginTop: "0.75rem" }}>
-                            <div
-                              style={{
-                                display: "flex", alignItems: "center", justifyContent: "space-between",
-                                marginBottom: "0.4rem",
-                              }}
-                            >
-                              <span style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)" }}>
-                                🔍 רפרנסים ({refs.length})
-                              </span>
-                              {refs.length > 3 && (
-                                <button
-                                  className="mod-btn-ghost"
-                                  onClick={() => {
-                                    setExpandedRefIds(prev => {
-                                      const next = new Set(prev);
-                                      if (next.has(item.id)) next.delete(item.id); else next.add(item.id);
-                                      return next;
-                                    });
-                                  }}
-                                  style={{ fontSize: "0.65rem", padding: "0.15rem 0.4rem", color: "var(--accent)" }}
-                                >
-                                  {isExpanded ? "הצג פחות" : `הצג הכל (${refs.length})`}
-                                </button>
-                              )}
-                            </div>
-                            <div style={{
-                              display: "grid",
-                              gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))",
-                              gap: "0.4rem",
-                            }}>
-                              {visibleRefs.map((ref) => (
+                            {refs.length === 0 ? (
+                              <div style={{ padding: "0.5rem 0", fontSize: "0.75rem", color: "var(--foreground-muted)", fontStyle: "italic" }}>
+                                אין רפרנסים — הוסף דרך הגדרות המערכת
+                              </div>
+                            ) : (
+                              <>
                                 <div
-                                  key={ref.id}
-                                  onClick={() => { setRefModalItem(ref); setRefModalOpen(true); }}
-                                  className="gantt-ref-thumb"
                                   style={{
-                                    position: "relative",
-                                    borderRadius: "0.375rem",
-                                    overflow: "hidden",
-                                    border: "1px solid var(--border)",
-                                    cursor: "pointer",
-                                    aspectRatio: "5 / 4",
-                                    background: "var(--surface)",
+                                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                                    marginBottom: "0.4rem",
                                   }}
                                 >
-                                  <img
-                                    src={ref.imageUrl}
-                                    alt={ref.description}
-                                    style={{
-                                      width: "100%", height: "100%",
-                                      objectFit: "cover",
-                                      display: "block",
-                                      transition: "transform 200ms ease",
-                                    }}
-                                    loading="lazy"
-                                  />
-                                  <div style={{
-                                    position: "absolute", bottom: 0, left: 0, right: 0,
-                                    padding: "0.15rem 0.3rem",
-                                    background: "linear-gradient(transparent, rgba(0,0,0,0.65))",
-                                    fontSize: "0.55rem", fontWeight: 600,
-                                    color: "#fff", lineHeight: 1.3,
-                                    pointerEvents: "none",
-                                  }}>
-                                    {getStyleLabel(ref.style)}
-                                  </div>
+                                  <span style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)" }}>
+                                    🔍 רפרנסים ({refs.length})
+                                  </span>
+                                  {refs.length > 3 && (
+                                    <button
+                                      className="mod-btn-ghost"
+                                      onClick={() => {
+                                        setExpandedRefIds(prev => {
+                                          const next = new Set(prev);
+                                          if (next.has(item.id)) next.delete(item.id); else next.add(item.id);
+                                          return next;
+                                        });
+                                      }}
+                                      style={{ fontSize: "0.65rem", padding: "0.15rem 0.4rem", color: "var(--accent)" }}
+                                    >
+                                      {isExpanded ? "הצג פחות" : `הצג הכל (${refs.length})`}
+                                    </button>
+                                  )}
                                 </div>
-                              ))}
-                            </div>
+                                <div style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))",
+                                  gap: "0.4rem",
+                                }}>
+                                  {visibleRefs.map((ref) => (
+                                    <div
+                                      key={ref.id}
+                                      onClick={() => { setRefModalItem(ref); setRefModalOpen(true); }}
+                                      className="gantt-ref-thumb"
+                                      style={{
+                                        position: "relative",
+                                        borderRadius: "0.375rem",
+                                        overflow: "hidden",
+                                        border: "1px solid var(--border)",
+                                        cursor: "pointer",
+                                        aspectRatio: "5 / 4",
+                                        background: "var(--surface)",
+                                      }}
+                                    >
+                                      <img
+                                        src={ref.imageUrl}
+                                        alt={ref.description}
+                                        style={{
+                                          width: "100%", height: "100%",
+                                          objectFit: "cover",
+                                          display: "block",
+                                          transition: "transform 200ms ease",
+                                        }}
+                                        loading="lazy"
+                                      />
+                                      <div style={{
+                                        position: "absolute", bottom: 0, left: 0, right: 0,
+                                        padding: "0.15rem 0.3rem",
+                                        background: "linear-gradient(transparent, rgba(0,0,0,0.65))",
+                                        fontSize: "0.55rem", fontWeight: 600,
+                                        color: "#fff", lineHeight: 1.3,
+                                        pointerEvents: "none",
+                                      }}>
+                                        {getStyleLabel(ref.style)}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            )}
                           </div>
                         );
                       })()}
