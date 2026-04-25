@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { wow } from '@/lib/wow';
 import { AnimatedCounter } from "@/components/ui/animated-counter";
@@ -344,6 +344,30 @@ export default function CommandCenterPage() {
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [platformFilter, setPlatformFilter] = useState<string>("all");
+  const [reportGenerating, setReportGenerating] = useState(false);
+
+  const handleGenerateReport = useCallback(async () => {
+    setReportGenerating(true);
+    try {
+      const res = await fetch('/api/reports/business-order', { cache: 'no-store' });
+      if (!res.ok) throw new Error('Failed to generate report');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const dateStr = new Date().toISOString().split('T')[0];
+      a.download = `business-order-report-${dateStr}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('[Report] Error:', err);
+      alert('שגיאה ביצירת הדוח');
+    } finally {
+      setReportGenerating(false);
+    }
+  }, []);
 
   const loading = l1 || l2 || l3 || l4 || l5;
   const isInitialLoad =
@@ -625,6 +649,28 @@ export default function CommandCenterPage() {
           >
             🎯 לידים
           </Link>
+          <button
+            onClick={handleGenerateReport}
+            disabled={reportGenerating || loading}
+            className="mod-btn-ghost ux-btn"
+            style={{
+              padding: "0.5rem 1rem",
+              fontSize: "0.8rem",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              cursor: reportGenerating ? "wait" : "pointer",
+              opacity: reportGenerating ? 0.6 : 1,
+              border: "1px solid var(--border)",
+              borderRadius: "0.5rem",
+              background: "var(--surface)",
+              color: "var(--foreground)",
+              fontWeight: 600,
+              transition: "all 200ms",
+            }}
+          >
+            {reportGenerating ? "...מייצר דוח" : "📋 צור דוח סדר עסקי"}
+          </button>
         </div>
       </div>
 
