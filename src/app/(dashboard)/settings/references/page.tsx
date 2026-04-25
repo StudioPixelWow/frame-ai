@@ -53,7 +53,7 @@ export default function ReferencesSettingsPage() {
   const [filterPlatform, setFilterPlatform] = useState("");
 
   const handleSubmit = async () => {
-    if (\!form.imageUrl || \!form.description) return;
+    if (!form.imageUrl || !form.description) return;
     setSaving(true);
     try {
       await create({
@@ -71,7 +71,7 @@ export default function ReferencesSettingsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (\!confirm("למחוק רפרנס זה?")) return;
+    if (!confirm("למחוק רפרנס זה?")) return;
     try {
       await remove(id);
       refresh();
@@ -81,8 +81,8 @@ export default function ReferencesSettingsPage() {
   };
 
   const filtered = (refs || []).filter(r => {
-    if (filterIndustry && \!r.industry?.toLowerCase().includes(filterIndustry.toLowerCase())) return false;
-    if (filterPlatform && r.platform \!== filterPlatform && r.platform \!== "all") return false;
+    if (filterIndustry && !r.industry?.toLowerCase().includes(filterIndustry.toLowerCase())) return false;
+    if (filterPlatform && r.platform !== filterPlatform && r.platform !== "all") return false;
     return true;
   });
 
@@ -99,7 +99,7 @@ export default function ReferencesSettingsPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowForm(\!showForm)}
+          onClick={() => setShowForm(!showForm)}
           style={{
             padding: "0.6rem 1.2rem", borderRadius: "10px",
             background: "var(--accent)", color: "#fff", border: "none",
@@ -175,9 +175,9 @@ export default function ReferencesSettingsPage() {
             </div>
           </div>
           <div style={{ marginTop: "1rem", display: "flex", gap: "0.75rem" }}>
-            <button onClick={handleSubmit} disabled={saving || \!form.imageUrl || \!form.description} style={{
+            <button onClick={handleSubmit} disabled={saving || !form.imageUrl || !form.description} style={{
               padding: "0.5rem 1.5rem", borderRadius: "8px",
-              background: \!form.imageUrl || \!form.description ? "var(--border)" : "var(--accent)",
+              background: !form.imageUrl || !form.description ? "var(--border)" : "var(--accent)",
               color: "#fff", border: "none", fontWeight: 600, cursor: "pointer",
             }}>
               {saving ? "שומר..." : "שמור"}
