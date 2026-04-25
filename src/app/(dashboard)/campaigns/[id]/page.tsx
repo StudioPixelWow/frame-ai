@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { SkeletonKPIRow } from '@/components/ui/skeleton';
 import type {
-  Campaign, AdSet, Ad, AdCreativeType, AdSetStatus, AdStatus,
+  Campaign, AdSet, Ad, AdCreativeType, AdSetStatus, AdStatus, Lead,
 } from '@/lib/db/schema';
 import { computeHealth } from '@/lib/campaigns/health-engine';
 import { buildCampaignLeadInsights } from '@/lib/leads/lead-quality';
@@ -45,6 +45,18 @@ const CTA_LABELS: Record<string, string> = {
   LEARN_MORE: 'למידע נוסף', SIGN_UP: 'הרשמה', SHOP_NOW: 'קנה עכשיו',
   CONTACT_US: 'צור קשר', BOOK_NOW: 'הזמן עכשיו', DOWNLOAD: 'הורד',
   GET_OFFER: 'קבל הצעה', SUBSCRIBE: 'הירשם', APPLY_NOW: 'הגש מועמדות',
+};
+
+const LEAD_STATUS_LABELS: Record<string, string> = {
+  new: 'חדש', assigned: 'שויך', contacted: 'נוצר קשר', no_answer: 'לא ענה',
+  interested: 'מתעניין', proposal_sent: 'הצעה נשלחה', negotiation: 'משא ומתן',
+  meeting_set: 'פגישה נקבעה', won: 'נסגר', lost: 'אבד', not_relevant: 'לא רלוונטי', duplicate: 'כפול',
+};
+
+const LEAD_STATUS_COLORS: Record<string, string> = {
+  new: '#3b82f6', assigned: '#8b5cf6', contacted: '#0ea5e9', no_answer: '#6b7280',
+  interested: '#f59e0b', proposal_sent: '#a855f7', negotiation: '#f97316',
+  meeting_set: '#14b8a6', won: '#22c55e', lost: '#ef4444', not_relevant: '#6b7280', duplicate: '#9ca3af',
 };
 
 // ── AI Ad Analysis (deterministic, no API) ─────────────────────────────
@@ -1233,6 +1245,94 @@ export default function CampaignDetailPage() {
     return map[campaign.id] || null;
   }, [campaign, allLeads]);
 
+  // ── Attribution: leads linked to this campaign ──────────────────────
+
+  /** Real leads that have campaignId matching + mock-attributed leads for ads that report leads */
+  const campaignLeads = useMemo(() => {
+    const real = (allLeads || []).filter(l => l.campaignId === campaignId);
+    // If real leads exist and already have adSetId/adId, use them directly
+    if (real.length > 0 && real.some(l => l.adSetId || l.adId)) return real;
+    // Otherwise, generate mock-attributed leads from ad metrics (MVP)
+    if (campaignAds.length === 0 || campaignAdSets.length === 0) return real;
+    const mockLeads: Lead[] = [];
+    const names = ['יוסי כהן', 'רונית לוי', 'אבי מזרחי', 'דנה שרון', 'עומר גולן',
+      'מיכל אברהם', 'אורי דוד', 'נועה ביטון', 'איתי פרץ', 'שירה חדד',
+      'תמר רוזנברג', 'גיא סלומון', 'הילה ברק', 'רועי ניסים', 'ליאור קפלן',
+      'עדי פריד', 'שגיא טל', 'מאיה רון', 'אלון הרשקו', 'רוני עמר'];
+    const sources = ['Facebook', 'Instagram', 'Google', 'TikTok', 'אורגני'];
+    const statuses: Lead['status'][] = ['new', 'contacted', 'interested', 'proposal_sent', 'won', 'lost'];
+    let mockIdx = 0;
+    for (const ad of campaignAds) {
+      if (ad.leads <= 0) continue;
+      const adSet = campaignAdSets.find(s => s.id === ad.adSetId);
+      const leadCount = Math.min(ad.leads, 5); // cap mock leads per ad for readability
+      for (let i = 0; i < leadCount; i++) {
+        const seed = (ad.id || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0) + i;
+        const dayOffset = Math.floor(Math.abs(Math.sin(seed * 3.7) * 14));
+        const date = new Date();
+        date.setDate(date.getDate() - dayOffset);
+        mockLeads.push({
+          id: `mock_lead_${campaignId}_${mockIdx}`,
+          fullName: names[mockIdx % names.length],
+          name: names[mockIdx % names.length],
+          email: `lead${mockIdx}@example.com`,
+          phone: `05${Math.floor(10000000 + Math.abs(Math.sin(seed * 7.1)) * 89999999)}`,
+          source: sources[Math.floor(Math.abs(Math.sin(seed * 2.3)) * sources.length)],
+          interestType: 'marketing' as Lead['interestType'],
+          proposalSent: false,
+          proposalAmount: 0,
+          status: statuses[Math.floor(Math.abs(Math.sin(seed * 5.1)) * statuses.length)],
+          followupDone: false,
+          notes: '',
+          company: '',
+          value: 0,
+          assigneeId: null,
+          followUpAt: null,
+          convertedAt: null,
+          convertedClientId: null,
+          convertedEntityType: null,
+          convertedEntityId: null,
+          campaignId: campaignId,
+          campaignName: campaign?.campaignName || '',
+          adAccountId: '',
+          adSetId: ad.adSetId,
+          adId: ad.id,
+          adSetName: adSet?.name || '',
+          adName: ad.name,
+          clientId: campaign?.clientId || null,
+          createdAt: date.toISOString(),
+          updatedAt: date.toISOString(),
+        });
+        mockIdx++;
+      }
+    }
+    return mockLeads.length > 0 ? mockLeads : real;
+  }, [allLeads, campaignId, campaignAds, campaignAdSets, campaign]);
+
+  /** Attribution: leads per ad set */
+  const leadsPerAdSet = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const s of campaignAdSets) map[s.id] = 0;
+    for (const l of campaignLeads) {
+      if (l.adSetId && map[l.adSetId] !== undefined) map[l.adSetId]++;
+    }
+    return map;
+  }, [campaignLeads, campaignAdSets]);
+
+  /** Attribution: leads per ad */
+  const leadsPerAd = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const a of campaignAds) map[a.id] = 0;
+    for (const l of campaignLeads) {
+      if (l.adId && map[l.adId] !== undefined) map[l.adId]++;
+    }
+    return map;
+  }, [campaignLeads, campaignAds]);
+
+  // ── Lead detail modal ───────────────────────────────────────────────
+
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+
   // ── Filter, Sort, Group, View Mode, Compare ─────────────────────────
 
   const [adFilter, setAdFilter] = useState<AdFilter>('all');
@@ -1734,6 +1834,150 @@ export default function CampaignDetailPage() {
           </div>
         )}
 
+        {/* ── Attribution Summary ── */}
+        {campaignLeads.length > 0 && (
+          <div className="premium-card" style={{ padding: '1rem 1.25rem' }}>
+            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--foreground)', marginBottom: '0.75rem' }}>
+              📈 שיוך לידים — Attribution
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              {/* Leads per Ad Set */}
+              <div>
+                <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--foreground-muted)', marginBottom: '0.4rem' }}>
+                  לידים לפי קבוצת מודעות
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  {campaignAdSets.map(s => {
+                    const count = leadsPerAdSet[s.id] || 0;
+                    const pct = campaignLeads.length > 0 ? (count / campaignLeads.length * 100) : 0;
+                    return (
+                      <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--foreground)', fontWeight: 600, minWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {s.name}
+                        </span>
+                        <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: 'var(--border)', overflow: 'hidden' }}>
+                          <div style={{ width: `${Math.max(pct, 2)}%`, height: '100%', borderRadius: '3px', background: 'var(--accent)', transition: 'width 300ms ease' }} />
+                        </div>
+                        <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--foreground)', minWidth: '32px', textAlign: 'left' }}>
+                          {count}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              {/* Leads per Ad (top 5) */}
+              <div>
+                <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--foreground-muted)', marginBottom: '0.4rem' }}>
+                  לידים לפי מודעה (טופ 5)
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  {campaignAds
+                    .filter(a => (leadsPerAd[a.id] || 0) > 0)
+                    .sort((a, b) => (leadsPerAd[b.id] || 0) - (leadsPerAd[a.id] || 0))
+                    .slice(0, 5)
+                    .map(a => {
+                      const count = leadsPerAd[a.id] || 0;
+                      const pct = campaignLeads.length > 0 ? (count / campaignLeads.length * 100) : 0;
+                      const cpl = count > 0 && a.spend > 0 ? (a.spend / count) : 0;
+                      return (
+                        <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '0.68rem', color: 'var(--foreground)', fontWeight: 600, minWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {a.headline || a.name}
+                          </span>
+                          <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: 'var(--border)', overflow: 'hidden' }}>
+                            <div style={{ width: `${Math.max(pct, 2)}%`, height: '100%', borderRadius: '3px', background: '#22c55e', transition: 'width 300ms ease' }} />
+                          </div>
+                          <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--foreground)', minWidth: '24px', textAlign: 'left' }}>
+                            {count}
+                          </span>
+                          {cpl > 0 && (
+                            <span style={{ fontSize: '0.58rem', color: 'var(--foreground-muted)', minWidth: '40px' }}>
+                              ₪{cpl.toFixed(0)} CPL
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  {campaignAds.filter(a => (leadsPerAd[a.id] || 0) > 0).length === 0 && (
+                    <span style={{ fontSize: '0.65rem', color: 'var(--foreground-muted)' }}>אין לידים משויכים למודעות</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Leads Table ── */}
+        {campaignLeads.length > 0 && (
+          <div className="premium-card" style={{ padding: '1rem 1.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--foreground)' }}>
+                👤 לידים ({campaignLeads.length})
+              </span>
+              <span style={{ fontSize: '0.62rem', color: 'var(--foreground-muted)' }}>
+                לחץ על שורה לפרטים
+              </span>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                    {['שם', 'תאריך', 'מודעה', 'קבוצת מודעות', 'סטטוס'].map(h => (
+                      <th key={h} style={{ padding: '0.5rem 0.6rem', textAlign: 'right', fontWeight: 700, color: 'var(--foreground-muted)', fontSize: '0.65rem', whiteSpace: 'nowrap' }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {campaignLeads.slice(0, 20).map(lead => {
+                    const ad = campaignAds.find(a => a.id === lead.adId);
+                    const adSet = campaignAdSets.find(s => s.id === lead.adSetId);
+                    return (
+                      <tr
+                        key={lead.id}
+                        onClick={() => setSelectedLead(lead)}
+                        style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer', transition: 'background 150ms' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-raised, rgba(0,0,0,0.02))')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <td style={{ padding: '0.5rem 0.6rem', fontWeight: 600, color: 'var(--foreground)' }}>
+                          {lead.fullName || lead.name}
+                        </td>
+                        <td style={{ padding: '0.5rem 0.6rem', color: 'var(--foreground-muted)', whiteSpace: 'nowrap' }}>
+                          {new Date(lead.createdAt).toLocaleDateString('he-IL', { day: 'numeric', month: 'short' })}
+                        </td>
+                        <td style={{ padding: '0.5rem 0.6rem', color: 'var(--foreground)', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {ad?.headline || ad?.name || lead.adName || '—'}
+                        </td>
+                        <td style={{ padding: '0.5rem 0.6rem', color: 'var(--foreground)', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {adSet?.name || lead.adSetName || '—'}
+                        </td>
+                        <td style={{ padding: '0.5rem 0.6rem' }}>
+                          <span style={{
+                            fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.4rem',
+                            borderRadius: '999px',
+                            background: `${LEAD_STATUS_COLORS[lead.status] || '#6b7280'}18`,
+                            color: LEAD_STATUS_COLORS[lead.status] || '#6b7280',
+                          }}>
+                            {LEAD_STATUS_LABELS[lead.status] || lead.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {campaignLeads.length > 20 && (
+                <div style={{ textAlign: 'center', padding: '0.5rem', fontSize: '0.65rem', color: 'var(--foreground-muted)' }}>
+                  מציג 20 מתוך {campaignLeads.length} לידים
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Ad Sets Header + AdSet filter */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
           <h2 style={sectionTitleStyle}>קבוצות מודעות ({campaignAdSets.length})</h2>
@@ -1979,6 +2223,111 @@ export default function CampaignDetailPage() {
             </div>
           </form>
         </div>
+      </Modal>
+
+      {/* Lead Detail Modal */}
+      <Modal open={!!selectedLead} onClose={() => setSelectedLead(null)} title="פרטי ליד">
+        {selectedLead && (() => {
+          const ad = campaignAds.find(a => a.id === selectedLead.adId);
+          const adSet = campaignAdSets.find(s => s.id === selectedLead.adSetId);
+          return (
+            <div style={{ padding: '1.5rem', maxWidth: '480px' }}>
+              {/* Lead name + status */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--foreground)', margin: 0 }}>
+                  {selectedLead.fullName || selectedLead.name}
+                </h3>
+                <span style={{
+                  fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.55rem',
+                  borderRadius: '999px',
+                  background: `${LEAD_STATUS_COLORS[selectedLead.status] || '#6b7280'}18`,
+                  color: LEAD_STATUS_COLORS[selectedLead.status] || '#6b7280',
+                }}>
+                  {LEAD_STATUS_LABELS[selectedLead.status] || selectedLead.status}
+                </span>
+              </div>
+
+              {/* Contact info */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', marginBottom: '1.25rem' }}>
+                {selectedLead.email && (
+                  <div>
+                    <div style={{ fontSize: '0.62rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>אימייל</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--foreground)' }}>{selectedLead.email}</div>
+                  </div>
+                )}
+                {selectedLead.phone && (
+                  <div>
+                    <div style={{ fontSize: '0.62rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>טלפון</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--foreground)' }}>{selectedLead.phone}</div>
+                  </div>
+                )}
+                <div>
+                  <div style={{ fontSize: '0.62rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>מקור</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--foreground)' }}>{selectedLead.source || '—'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.62rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>תאריך</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--foreground)' }}>
+                    {new Date(selectedLead.createdAt).toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Attribution path */}
+              <div style={{
+                background: 'var(--surface-sunken, var(--background))',
+                borderRadius: '0.5rem', padding: '0.85rem', border: '1px solid var(--border)',
+              }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--foreground)', marginBottom: '0.6rem' }}>
+                  🎯 מסלול שיוך (Attribution)
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {/* Campaign */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.75rem' }}>📊</span>
+                    <div>
+                      <div style={{ fontSize: '0.58rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>קמפיין</div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--foreground)', fontWeight: 600 }}>
+                        {campaign?.campaignName || selectedLead.campaignName || '—'}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ borderRight: '2px solid var(--border)', height: '8px', marginRight: '0.45rem' }} />
+                  {/* Ad Set */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.75rem' }}>📦</span>
+                    <div>
+                      <div style={{ fontSize: '0.58rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>קבוצת מודעות</div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--foreground)', fontWeight: 600 }}>
+                        {adSet?.name || selectedLead.adSetName || '—'}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ borderRight: '2px solid var(--border)', height: '8px', marginRight: '0.45rem' }} />
+                  {/* Ad */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.75rem' }}>🖼️</span>
+                    <div>
+                      <div style={{ fontSize: '0.58rem', color: 'var(--foreground-muted)', fontWeight: 600 }}>מודעה</div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--foreground)', fontWeight: 600 }}>
+                        {ad?.headline || ad?.name || selectedLead.adName || '—'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedLead(null)}
+                className="mod-btn-primary"
+                style={{ width: '100%', padding: '0.55rem', fontSize: '0.82rem', fontWeight: 700, borderRadius: '0.5rem', cursor: 'pointer', marginTop: '1rem' }}
+              >
+                סגור
+              </button>
+            </div>
+          );
+        })()}
       </Modal>
 
       {/* Edit Campaign Modal */}

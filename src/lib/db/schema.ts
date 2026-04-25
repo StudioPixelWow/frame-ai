@@ -347,10 +347,12 @@ export interface Lead {
   convertedClientId: string | null;
   convertedEntityType: 'client' | 'project' | null;
   convertedEntityId: string | null;
-  // Campaign-client binding
+  // Campaign-client binding (attribution)
   campaignId: string | null;
   campaignName: string;
   adAccountId: string;
+  adSetId: string | null;
+  adId: string | null;
   adSetName: string;
   adName: string;
   clientId: string | null;
