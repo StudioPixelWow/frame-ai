@@ -144,6 +144,9 @@ export default function LoginPage() {
         }
         .login-cta:active:not(:disabled) { transform: translateY(0px); }
         .login-cta:disabled { opacity: 0.6; cursor: not-allowed; }
+        @media (max-width: 768px) {
+          .login-statue { display: none !important; }
+        }
       `}</style>
 
       <div style={{
@@ -176,42 +179,59 @@ export default function LoginPage() {
           animation: 'pulse-ring 7s ease-in-out infinite 1s',
         }} />
 
-        {/* ── Greek statue image ── */}
-        {!imgError && (
-          <div style={{
-            position: 'absolute',
-            bottom: 0,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: '460px',
-            maxWidth: '55vw',
+        {/* ── Main content: statue left + card right ── */}
+        <div style={{
+          position: 'relative', zIndex: 2,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          gap: '2rem', width: '100%', maxWidth: '850px',
+          padding: '0 1.5rem',
+        }}>
+
+          {/* Statue — left of card */}
+          <div className="login-statue" style={{
+            flex: '0 0 280px',
+            maxHeight: '480px',
             pointerEvents: 'none',
             animation: mounted ? 'statue-float 6s ease-in-out infinite' : 'none',
-            opacity: imgLoaded ? 0.2 : 0,
-            transition: 'opacity 0.8s ease',
-            filter: 'drop-shadow(0 10px 40px rgba(0,40,80,0.15))',
+            opacity: imgLoaded || imgError ? 1 : 0,
+            transition: 'opacity 1s ease',
+            filter: 'drop-shadow(0 12px 48px rgba(0,30,60,0.2))',
           }}>
             <img
               src={STATUE_URL}
-              alt=""
+              alt="Greek Statue"
               onLoad={() => setImgLoaded(true)}
               onError={() => setImgError(true)}
               style={{
-                width: '100%',
-                height: 'auto',
-                display: 'block',
+                width: '100%', height: 'auto', display: imgError ? 'none' : 'block',
+                maxHeight: '480px', objectFit: 'contain',
               }}
             />
+            {imgError && (
+              <svg viewBox="0 0 300 450" width="100%" style={{ display: 'block', opacity: 0.4 }}>
+                <defs>
+                  <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#fff" stopOpacity="0.9" />
+                    <stop offset="100%" stopColor="#fff" stopOpacity="0.3" />
+                  </linearGradient>
+                </defs>
+                <rect x="70" y="400" width="160" height="50" rx="4" fill="url(#sg)" />
+                <rect x="85" y="385" width="130" height="18" rx="3" fill="url(#sg)" />
+                <path d="M150,385 Q130,340 125,300 Q120,260 130,230 Q122,200 125,180 L175,180 Q178,200 170,230 Q180,260 175,300 Q170,340 150,385 Z" fill="url(#sg)" />
+                <path d="M125,210 Q105,225 90,250 Q80,265 85,280 Q90,275 95,265 Q105,245 125,230" fill="url(#sg)" />
+                <path d="M175,210 Q195,220 210,235 Q220,245 215,260 Q210,255 205,248 Q195,235 175,225" fill="url(#sg)" />
+                <rect x="140" y="160" width="20" height="22" rx="4" fill="url(#sg)" />
+                <ellipse cx="150" cy="140" rx="28" ry="35" fill="url(#sg)" />
+                <path d="M122,130 Q130,100 150,95 Q170,100 178,130 Q170,115 150,112 Q130,115 122,130 Z" fill="url(#sg)" />
+              </svg>
+            )}
           </div>
-        )}
 
-        {/* ── Centered login card ── */}
-        <div style={{
-          position: 'relative',
-          zIndex: 2,
-          width: '100%',
-          maxWidth: '400px',
-          margin: '0 1.5rem',
+          {/* Login card — right of statue */}
+          <div style={{
+            width: '100%',
+            maxWidth: '400px',
+            flexShrink: 0,
           padding: '2.5rem 2rem',
           borderRadius: '20px',
           background: 'rgba(255,255,255,0.2)',
@@ -222,19 +242,8 @@ export default function LoginPage() {
           direction: 'rtl',
           animation: mounted ? 'fadeInUp 0.7s cubic-bezier(0.22,1,0.36,1)' : 'none',
         }}>
-          {/* Logo */}
+          {/* Title */}
           <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-            <div style={{
-              animation: mounted ? 'float 6s ease-in-out infinite' : 'none',
-              marginBottom: '0.75rem',
-            }}>
-              <img
-                src="https://s-pixel.co.il/wp-content/uploads/2026/04/Asset-1.png"
-                alt="Studio Pixel"
-                style={{ height: '44px', width: 'auto', filter: 'brightness(0) saturate(100%)' }}
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-              />
-            </div>
             <h1 style={{
               fontSize: '1.55rem', fontWeight: 800, color: '#0d3b5e',
               margin: '0 0 0.3rem 0', letterSpacing: '-0.02em',
@@ -328,6 +337,8 @@ export default function LoginPage() {
             ניהול חכם. תוצאות מדויקות.
           </p>
         </div>
+
+        </div>{/* end flex container */}
 
         {/* Bottom */}
         <p style={{

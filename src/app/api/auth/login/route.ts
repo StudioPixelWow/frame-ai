@@ -1,47 +1,69 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 
 /**
  * POST /api/auth/login
  *
- * 1. Checks hardcoded admin FIRST (always works, no DB needed)
+ * Completely self-contained — no external auth imports.
+ * 1. Checks hardcoded admin FIRST (zero DB, zero modules)
  * 2. Then tries DB auth for other users
- * 3. Never throws — every path returns a proper JSON response
+ * 3. NEVER returns 500
  */
 
-// ── Hardcoded admin — guaranteed to work ──────────────────────────────
+const JWT_SECRET = process.env.JWT_SECRET || 'frameai-dev-secret-change-in-production-2026';
+const AUTH_COOKIE = 'frameai_session';
+
+// ── Hardcoded admin ───────────────────────────────────────────────────
 const ADMIN_EMAIL = 'admin@pixel.local';
 const ADMIN_PASSWORD = 'PixelAdmin2026!';
-const ADMIN_USER = {
-  id: 'usr_fallback_admin',
-  email: ADMIN_EMAIL,
-  role: 'admin' as const,
-  displayName: 'מנהל ראשי — Pixel',
-  linkedClientId: null as string | null,
-  linkedEmployeeId: null as string | null,
-};
 
-/** Build session cookie safely — if JWT/cookie fails, return response without cookie */
-function safeSetCookie(response: NextResponse, user: typeof ADMIN_USER): NextResponse {
-  try {
-    const { setSessionCookie } = require('@/lib/auth/session');
-    return setSessionCookie(response, {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      linkedClientId: user.linkedClientId,
-      linkedEmployeeId: user.linkedEmployeeId,
-    });
-  } catch (cookieErr) {
-    console.warn('[Auth/Login] Cookie set failed:', cookieErr);
-    // Return response anyway — localStorage auth will work as fallback
-    return response;
-  }
+// ── Inline JWT (no external imports) ──────────────────────────────────
+
+function b64url(input: string | Buffer): string {
+  const b = typeof input === 'string' ? Buffer.from(input) : input;
+  return b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+function makeToken(payload: Record<string, any>): string {
+  const now = Math.floor(Date.now() / 1000);
+  const full = { ...payload, iat: now, exp: now + 86400 };
+  const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const body = b64url(JSON.stringify(full));
+  const sig = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest();
+  return `${header}.${body}.${b64url(sig)}`;
+}
+
+function buildSuccessResponse(user: {
+  id: string; email: string; role: string; displayName: string;
+  linkedClientId: string | null; linkedEmployeeId: string | null;
+}): NextResponse {
+  const response = NextResponse.json({ success: true, user });
+
+  const token = makeToken({
+    userId: user.id,
+    email: user.email,
+    role: user.role,
+    clientId: user.linkedClientId,
+    employeeId: user.linkedEmployeeId,
+  });
+
+  response.cookies.set(AUTH_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 86400,
+  });
+
+  return response;
+}
+
+// ── Route handler ─────────────────────────────────────────────────────
+
 export async function POST(req: NextRequest) {
-  // ── Parse body safely ───────────────────────────────────────────────
   let email = '';
   let password = '';
+
   try {
     const body = await req.json();
     email = (body?.email || '').trim();
@@ -54,14 +76,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: 'דואר אלקטרוני וסיסמה נדרשים' }, { status: 400 });
   }
 
-  // ── STEP 1: Check hardcoded admin FIRST (no DB needed) ──────────────
+  // ── STEP 1: Hardcoded admin — ALWAYS works ──────────────────────────
   if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
-    console.log('[Auth/Login] Admin fallback login success');
-    const response = NextResponse.json({ success: true, user: ADMIN_USER });
-    return safeSetCookie(response, ADMIN_USER);
+    console.log('[Auth/Login] Admin login success (hardcoded)');
+    return buildSuccessResponse({
+      id: 'usr_fallback_admin',
+      email: ADMIN_EMAIL,
+      role: 'admin',
+      displayName: 'מנהל ראשי — Pixel',
+      linkedClientId: null,
+      linkedEmployeeId: null,
+    });
   }
 
-  // ── STEP 2: Try DB auth for all other users ─────────────────────────
+  // ── STEP 2: DB auth for other users ─────────────────────────────────
   try {
     const { getSupabase } = await import('@/lib/db/store');
     const { comparePassword } = await import('@/lib/auth/passwords');
@@ -72,64 +100,41 @@ export async function POST(req: NextRequest) {
       .select('id, data')
       .order('id');
 
-    if (error) {
-      console.warn('[Auth/Login] DB query error:', error.message);
-      // DB failed but this isn't the admin account — wrong creds
-      return NextResponse.json({ success: false, error: 'פרטי התחברות שגויים' }, { status: 401 });
+    if (!error && rows && rows.length > 0) {
+      const userRow = (rows as any[]).find((r) => {
+        const d = r.data || {};
+        return d.email?.toLowerCase() === email.toLowerCase() && d.isActive !== false;
+      });
+
+      if (userRow) {
+        const userData = userRow.data;
+        let valid = false;
+        try { valid = await comparePassword(password, userData.passwordHash || ''); } catch {}
+
+        if (valid) {
+          // Update last login (fire-and-forget)
+          try {
+            await supabase
+              .from('app_users')
+              .update({ data: { ...userData, lastLoginAt: new Date().toISOString() } })
+              .eq('id', userRow.id);
+          } catch {}
+
+          return buildSuccessResponse({
+            id: userRow.id,
+            email: userData.email,
+            role: userData.role || 'employee',
+            displayName: userData.displayName || userData.email,
+            linkedClientId: userData.linkedClientId || null,
+            linkedEmployeeId: userData.linkedEmployeeId || null,
+          });
+        }
+      }
     }
-
-    if (!rows || rows.length === 0) {
-      return NextResponse.json({ success: false, error: 'פרטי התחברות שגויים' }, { status: 401 });
-    }
-
-    // Find user by email (case-insensitive)
-    const userRow = (rows as any[]).find((r) => {
-      const d = r.data || {};
-      return d.email?.toLowerCase() === email.toLowerCase() && d.isActive !== false;
-    });
-
-    if (!userRow) {
-      return NextResponse.json({ success: false, error: 'פרטי התחברות שגויים' }, { status: 401 });
-    }
-
-    const userData = userRow.data;
-
-    // Verify password
-    let passwordValid = false;
-    try {
-      passwordValid = await comparePassword(password, userData.passwordHash || '');
-    } catch (pwErr) {
-      console.warn('[Auth/Login] Password compare error:', pwErr);
-    }
-
-    if (!passwordValid) {
-      return NextResponse.json({ success: false, error: 'פרטי התחברות שגויים' }, { status: 401 });
-    }
-
-    // Success — build user response
-    const dbUser = {
-      id: userRow.id,
-      email: userData.email,
-      role: userData.role || 'employee',
-      displayName: userData.displayName || userData.email,
-      linkedClientId: userData.linkedClientId || null,
-      linkedEmployeeId: userData.linkedEmployeeId || null,
-    };
-
-    // Update last login (fire-and-forget)
-    try {
-      await supabase
-        .from('app_users')
-        .update({ data: { ...userData, lastLoginAt: new Date().toISOString() } })
-        .eq('id', userRow.id);
-    } catch {}
-
-    const response = NextResponse.json({ success: true, user: dbUser });
-    return safeSetCookie(response, dbUser);
-
   } catch (dbErr) {
-    console.warn('[Auth/Login] DB unavailable:', dbErr instanceof Error ? dbErr.message : dbErr);
-    // DB completely failed — since we already checked admin above, this is wrong creds
-    return NextResponse.json({ success: false, error: 'פרטי התחברות שגויים' }, { status: 401 });
+    console.warn('[Auth/Login] DB unavailable:', dbErr instanceof Error ? dbErr.message : String(dbErr));
   }
+
+  // ── Wrong credentials ───────────────────────────────────────────────
+  return NextResponse.json({ success: false, error: 'פרטי התחברות שגויים' }, { status: 401 });
 }
