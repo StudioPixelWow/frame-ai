@@ -2032,11 +2032,17 @@ function StepUpload({ data, patch }: { data: WizardData; patch: (p: Partial<Wiza
 
 function StepTrim({ data, patch }: { data: WizardData; patch: (p: Partial<WizardData>) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
   const [ct, setCt] = useState(0);
   const [dur, setDur] = useState(0);
   const [loopClip, setLoopClip] = useState(false);
   const raf = useRef(0);
+
+  // Drag state for handles + playhead
+  const [dragging, setDragging] = useState<"start" | "end" | "playhead" | "region" | null>(null);
+  const dragOrigin = useRef({ x: 0, startVal: 0, endVal: 0 });
+  const [showFineTune, setShowFineTune] = useState(false);
 
   const tick = useCallback(() => {
     const v = videoRef.current;
@@ -2052,17 +2058,115 @@ function StepTrim({ data, patch }: { data: WizardData; patch: (p: Partial<Wizard
   const toggle = () => { const v = videoRef.current; if (!v) return; v.paused ? (v.play(), setPlaying(true)) : (v.pause(), setPlaying(false)); };
   const seek = (t: number) => { const v = videoRef.current; if (v) { v.currentTime = t; setCt(t); } };
 
+  /** Convert mouse/touch clientX to time (seconds) relative to timeline */
+  const clientXToTime = useCallback((clientX: number): number => {
+    const el = timelineRef.current;
+    if (!el || dur <= 0) return 0;
+    const rect = el.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return ratio * dur;
+  }, [dur]);
+
+  /** Global mousemove while dragging */
+  useEffect(() => {
+    if (!dragging) return;
+    const MIN_CLIP = 0.5; // minimum clip length in seconds
+
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      e.preventDefault();
+      const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+      const t = clientXToTime(clientX);
+
+      if (dragging === "start") {
+        const clamped = Math.max(0, Math.min(data.trimEnd - MIN_CLIP, t));
+        patch({ trimStart: Math.round(clamped * 10) / 10 });
+        seek(clamped);
+      } else if (dragging === "end") {
+        const clamped = Math.max(data.trimStart + MIN_CLIP, Math.min(dur, t));
+        patch({ trimEnd: Math.round(clamped * 10) / 10 });
+        seek(clamped);
+      } else if (dragging === "playhead") {
+        const clamped = Math.max(0, Math.min(dur, t));
+        seek(clamped);
+      } else if (dragging === "region") {
+        const dx = clientX - dragOrigin.current.x;
+        const el = timelineRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const dt = (dx / rect.width) * dur;
+        const origStart = dragOrigin.current.startVal;
+        const origEnd = dragOrigin.current.endVal;
+        const regionLen = origEnd - origStart;
+        let newStart = origStart + dt;
+        let newEnd = origEnd + dt;
+        if (newStart < 0) { newStart = 0; newEnd = regionLen; }
+        if (newEnd > dur) { newEnd = dur; newStart = dur - regionLen; }
+        patch({ trimStart: Math.round(newStart * 10) / 10, trimEnd: Math.round(newEnd * 10) / 10 });
+        seek(newStart);
+      }
+    };
+
+    const onUp = () => setDragging(null);
+
+    window.addEventListener("mousemove", onMove, { passive: false });
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onUp);
+    };
+  }, [dragging, data.trimStart, data.trimEnd, dur, clientXToTime, patch, seek]);
+
+  /** Handle start-drag on a handle */
+  const startDrag = (type: "start" | "end" | "playhead" | "region", e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+    dragOrigin.current = { x: clientX, startVal: data.trimStart, endVal: data.trimEnd };
+    setDragging(type);
+    // Pause video while dragging handles
+    const v = videoRef.current;
+    if (v && !v.paused) { v.pause(); setPlaying(false); }
+  };
+
+  /** Click on timeline track to seek */
+  const handleTimelineClick = (e: React.MouseEvent) => {
+    if (dragging) return;
+    const t = clientXToTime(e.clientX);
+    seek(t);
+  };
+
   const clipDur = data.trimMode === "clip" ? data.trimEnd - data.trimStart : dur;
   const hint = clipDur < 5 ? { t: "קצר מדי", c: "#ef4444" } : clipDur <= 15 ? { t: "Reel מושלם", c: "#22c55e" } : clipDur <= 60 ? { t: "אידיאלי", c: "#22c55e" } : clipDur <= 180 ? { t: "ארוך", c: "#f59e0b" } : { t: "ארוך מדי", c: "#ef4444" };
+
+  // Generate time markers for the ruler
+  const timeMarkers = useMemo(() => {
+    if (dur <= 0) return [];
+    const marks: { time: number; label: string; major: boolean }[] = [];
+    const step = dur > 300 ? 30 : dur > 120 ? 10 : dur > 60 ? 5 : dur > 20 ? 2 : 1;
+    for (let i = 0; i <= dur; i += step) {
+      marks.push({ time: i, label: fmtTimeShort(i), major: i % (step * 5) === 0 || step >= 10 });
+    }
+    return marks;
+  }, [dur]);
+
+  const pct = (t: number) => dur > 0 ? `${(t / dur) * 100}%` : "0%";
 
   return (
     <div className="wiz-step-content">
       <h2 className="wiz-step-heading">חיתוך קליפ</h2>
-      <p className="wiz-step-sub">בחר האם להשתמש בוידאו המלא או לחתוך קטע.</p>
+      <p className="wiz-step-sub">בחר האם להשתמש בוידאו המלא או לחתוך קטע. גרור את הידיות בטיימליין לבחירת הקטע.</p>
+
+      {/* Mode toggle */}
       <div className="wiz-trim-mode">
         <button className={`wiz-chip wiz-chip-lg ${data.trimMode === "full" ? "active" : ""}`} onClick={() => patch({ trimMode: "full" })}>🎬 וידאו מלא</button>
         <button className={`wiz-chip wiz-chip-lg ${data.trimMode === "clip" ? "active" : ""}`} onClick={() => patch({ trimMode: "clip" })}>✂️ חיתוך קליפ</button>
       </div>
+
+      {/* Video player */}
       <div className="wiz-player">
         <video ref={videoRef} src={data.uploadedVideoUrl || data.videoUrl}
           onLoadedMetadata={(e) => {
@@ -2078,36 +2182,148 @@ function StepTrim({ data, patch }: { data: WizardData; patch: (p: Partial<Wizard
           className="wiz-player-video" onClick={toggle} playsInline />
         {!playing && <div className="wiz-player-overlay" onClick={toggle}><div className="wiz-player-play">▶</div></div>}
       </div>
-      <div className="wiz-player-controls">
-        <button className="wiz-ctrl-btn" onClick={toggle}>{playing ? "⏸" : "▶"}</button>
-        <span className="wiz-time">{fmtTime(ct)}</span>
-        <div className="wiz-timeline-wrap">
-          <div className="wiz-timeline" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); seek(((e.clientX - r.left) / r.width) * dur); }}>
-            {data.trimMode === "clip" && dur > 0 && <div className="wiz-trim-region" style={{ left: `${(data.trimStart / dur) * 100}%`, width: `${((data.trimEnd - data.trimStart) / dur) * 100}%` }} />}
-            <div className="wiz-playhead" style={{ left: `${(ct / dur) * 100}%` }} />
+
+      {/* ── Visual Timeline Trimmer ── */}
+      <div className="vtrim-container" style={{ userSelect: dragging ? "none" : "auto" }}>
+
+        {/* Time ruler */}
+        <div className="vtrim-ruler">
+          {timeMarkers.map((m) => (
+            <div key={m.time} className={`vtrim-ruler-mark ${m.major ? "major" : ""}`} style={{ left: pct(m.time) }}>
+              <div className="vtrim-ruler-tick" />
+              {m.major && <span className="vtrim-ruler-label">{m.label}</span>}
+            </div>
+          ))}
+        </div>
+
+        {/* Timeline track */}
+        <div className="vtrim-track" ref={timelineRef} onClick={handleTimelineClick}>
+
+          {/* Waveform placeholder — subtle background pattern */}
+          <div className="vtrim-wave-bg" />
+
+          {/* Dimmed regions outside trim selection */}
+          {data.trimMode === "clip" && dur > 0 && (
+            <>
+              <div className="vtrim-dim" style={{ left: 0, width: pct(data.trimStart) }} />
+              <div className="vtrim-dim" style={{ left: pct(data.trimEnd), right: 0, width: "auto" }} />
+            </>
+          )}
+
+          {/* Active trim region (draggable) */}
+          {data.trimMode === "clip" && dur > 0 && (
+            <div
+              className={`vtrim-region ${dragging === "region" ? "dragging" : ""}`}
+              style={{ left: pct(data.trimStart), width: `${((data.trimEnd - data.trimStart) / dur) * 100}%` }}
+              onMouseDown={(e) => startDrag("region", e)}
+              onTouchStart={(e) => startDrag("region", e)}
+            />
+          )}
+
+          {/* Start handle */}
+          {data.trimMode === "clip" && dur > 0 && (
+            <div
+              className={`vtrim-handle vtrim-handle-start ${dragging === "start" ? "active" : ""}`}
+              style={{ left: pct(data.trimStart) }}
+              onMouseDown={(e) => startDrag("start", e)}
+              onTouchStart={(e) => startDrag("start", e)}
+            >
+              <div className="vtrim-handle-grip">
+                <div className="vtrim-handle-line" /><div className="vtrim-handle-line" /><div className="vtrim-handle-line" />
+              </div>
+              <div className="vtrim-handle-tooltip">{fmtTime(data.trimStart)}</div>
+            </div>
+          )}
+
+          {/* End handle */}
+          {data.trimMode === "clip" && dur > 0 && (
+            <div
+              className={`vtrim-handle vtrim-handle-end ${dragging === "end" ? "active" : ""}`}
+              style={{ left: pct(data.trimEnd) }}
+              onMouseDown={(e) => startDrag("end", e)}
+              onTouchStart={(e) => startDrag("end", e)}
+            >
+              <div className="vtrim-handle-grip">
+                <div className="vtrim-handle-line" /><div className="vtrim-handle-line" /><div className="vtrim-handle-line" />
+              </div>
+              <div className="vtrim-handle-tooltip">{fmtTime(data.trimEnd)}</div>
+            </div>
+          )}
+
+          {/* Playhead scrubber */}
+          <div
+            className={`vtrim-playhead ${dragging === "playhead" ? "active" : ""}`}
+            style={{ left: pct(ct) }}
+            onMouseDown={(e) => startDrag("playhead", e)}
+            onTouchStart={(e) => startDrag("playhead", e)}
+          >
+            <div className="vtrim-playhead-cap" />
+            <div className="vtrim-playhead-line" />
           </div>
         </div>
-        <span className="wiz-time">{fmtTime(dur)}</span>
-      </div>
-      {data.trimMode === "clip" && (
-        <div className="wiz-trim-controls">
-          <div className="wiz-trim-actions">
-            <button className="wiz-btn wiz-btn-ghost wiz-btn-sm" onClick={() => patch({ trimStart: ct, trimMode: "clip" })}>📍 סמן התחלה ({fmtTime(data.trimStart)})</button>
-            <button className="wiz-btn wiz-btn-ghost wiz-btn-sm" onClick={() => patch({ trimEnd: ct > data.trimStart ? ct : dur, trimMode: "clip" })}>📍 סמן סוף ({fmtTime(data.trimEnd)})</button>
-            <button className="wiz-btn wiz-btn-ghost wiz-btn-sm" onClick={() => { seek(data.trimStart); videoRef.current?.play(); setPlaying(true); }}>🔁 נגן קליפ</button>
-            <label className="wiz-toggle-label"><input type="checkbox" checked={loopClip} onChange={(e) => setLoopClip(e.target.checked)} />🔄 לופ</label>
+
+        {/* Controls bar */}
+        <div className="vtrim-controls">
+          <div className="vtrim-controls-left">
+            <button className="wiz-ctrl-btn" onClick={toggle}>{playing ? "⏸" : "▶"}</button>
+            {data.trimMode === "clip" && (
+              <button className="wiz-ctrl-btn" onClick={() => { seek(data.trimStart); videoRef.current?.play(); setPlaying(true); }} title="נגן קליפ">🔁</button>
+            )}
+            {data.trimMode === "clip" && (
+              <label className="vtrim-loop-toggle">
+                <input type="checkbox" checked={loopClip} onChange={(e) => setLoopClip(e.target.checked)} />
+                <span>לופ</span>
+              </label>
+            )}
           </div>
-          <div className="wiz-trim-info">
-            <div className="wiz-trim-range"><label className="wiz-label" style={{ marginBottom: 0 }}>התחלה</label><input className="wiz-input wiz-input-sm" type="number" step="0.1" min="0" max={data.trimEnd} value={data.trimStart.toFixed(1)} onChange={(e) => patch({ trimStart: Number(e.target.value) })} dir="ltr" /></div>
-            <div className="wiz-trim-range"><label className="wiz-label" style={{ marginBottom: 0 }}>סוף</label><input className="wiz-input wiz-input-sm" type="number" step="0.1" min={data.trimStart} max={dur} value={data.trimEnd.toFixed(1)} onChange={(e) => patch({ trimEnd: Number(e.target.value) })} dir="ltr" /></div>
-            <div className="wiz-trim-dur">
-              <span style={{ color: "var(--foreground-muted)", fontSize: "0.72rem" }}>משך</span>
-              <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>{fmtTime(clipDur)}</span>
-              <span className="wiz-dur-hint" style={{ color: hint.c }}>{hint.t}</span>
+
+          <div className="vtrim-time-display">
+            <span className="vtrim-time-current">{fmtTime(ct)}</span>
+            <span className="vtrim-time-sep">/</span>
+            <span className="vtrim-time-total">{fmtTime(dur)}</span>
+          </div>
+
+          {data.trimMode === "clip" && (
+            <div className="vtrim-clip-info">
+              <span className="vtrim-clip-duration" style={{ color: hint.c }}>{fmtTime(clipDur)}</span>
+              <span className="vtrim-clip-hint" style={{ color: hint.c }}>{hint.t}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Quick actions */}
+        {data.trimMode === "clip" && (
+          <div className="vtrim-quick-actions">
+            <button className="vtrim-action-btn" onClick={() => { patch({ trimStart: ct }); }}>
+              סמן התחלה כאן
+            </button>
+            <button className="vtrim-action-btn" onClick={() => { if (ct > data.trimStart) patch({ trimEnd: ct }); }}>
+              סמן סוף כאן
+            </button>
+            <button className="vtrim-action-btn vtrim-action-secondary" onClick={() => setShowFineTune(!showFineTune)}>
+              {showFineTune ? "הסתר כיוון עדין" : "כיוון עדין"}
+            </button>
+          </div>
+        )}
+
+        {/* Fine-tune number inputs — optional */}
+        {data.trimMode === "clip" && showFineTune && (
+          <div className="vtrim-finetune">
+            <div className="vtrim-finetune-field">
+              <label className="vtrim-finetune-label">התחלה</label>
+              <input className="vtrim-finetune-input" type="number" step="0.1" min="0" max={data.trimEnd} value={data.trimStart.toFixed(1)} onChange={(e) => { const v = Number(e.target.value); patch({ trimStart: v }); seek(v); }} dir="ltr" />
+            </div>
+            <div className="vtrim-finetune-field">
+              <label className="vtrim-finetune-label">סוף</label>
+              <input className="vtrim-finetune-input" type="number" step="0.1" min={data.trimStart} max={dur} value={data.trimEnd.toFixed(1)} onChange={(e) => { const v = Number(e.target.value); patch({ trimEnd: v }); seek(v); }} dir="ltr" />
+            </div>
+            <div className="vtrim-finetune-field">
+              <label className="vtrim-finetune-label">משך</label>
+              <span className="vtrim-finetune-value">{fmtTime(clipDur)}</span>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

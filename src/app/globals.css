@@ -1877,7 +1877,7 @@
   color: #000; padding-inline-start: 3px;
 }
 
-/* ── Player controls ── */
+/* ── Player controls (legacy) ── */
 .wiz-player-controls {
   display: flex; align-items: center; gap: 0.6rem; padding: 0.75rem 0; max-width: 640px;
 }
@@ -1885,33 +1885,219 @@
   width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border);
   background: var(--surface); color: var(--foreground); display: flex; align-items: center;
   justify-content: center; cursor: pointer; font-size: 0.85rem; flex-shrink: 0;
+  transition: background 150ms, border-color 150ms;
 }
-.wiz-ctrl-btn:hover { background: var(--surface-raised); }
+.wiz-ctrl-btn:hover { background: var(--surface-raised); border-color: var(--foreground-muted); }
 .wiz-time { font-size: 0.7rem; color: var(--foreground-muted); font-family: monospace; min-width: 42px; white-space: nowrap; }
 
-/* ── Timeline ── */
-.wiz-timeline-wrap { flex: 1; padding: 4px 0; }
-.wiz-timeline {
-  position: relative; height: 6px; background: var(--border); border-radius: 999px;
-  cursor: pointer; overflow: visible;
-}
-.wiz-trim-region {
-  position: absolute; top: -2px; height: 10px; background: var(--accent-muted);
-  border: 1px solid var(--accent-border); border-radius: 2px;
-}
-.wiz-playhead {
-  position: absolute; top: -5px; width: 4px; height: 16px; background: var(--accent);
-  border-radius: 2px; transform: translateX(-50%); pointer-events: none;
+/* ── Trim mode toggle ── */
+.wiz-trim-mode { display: flex; gap: 0.5rem; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VISUAL TIMELINE TRIMMER
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.vtrim-container {
+  display: flex; flex-direction: column; gap: 0; max-width: 640px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 0.75rem;
+  padding: 0.75rem 1rem 1rem; margin-top: 0.25rem;
 }
 
-/* ── Trim controls ── */
-.wiz-trim-mode { display: flex; gap: 0.5rem; }
-.wiz-trim-controls { display: flex; flex-direction: column; gap: 1rem; margin-top: 0.5rem; }
-.wiz-trim-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
-.wiz-trim-info { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; }
-.wiz-trim-range { display: flex; flex-direction: column; gap: 0.2rem; }
-.wiz-trim-dur { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; padding: 0.5rem 1rem; background: var(--surface-raised); border-radius: 0.5rem; border: 1px solid var(--border); }
-.wiz-dur-hint { font-size: 0.68rem; font-weight: 600; }
+/* ── Time ruler ── */
+.vtrim-ruler {
+  position: relative; height: 20px; margin-bottom: 2px;
+}
+.vtrim-ruler-mark {
+  position: absolute; top: 0; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  transform: translateX(-50%);
+}
+.vtrim-ruler-tick {
+  width: 1px; height: 6px; background: var(--foreground-muted); opacity: 0.3;
+}
+.vtrim-ruler-mark.major .vtrim-ruler-tick {
+  height: 10px; opacity: 0.5;
+}
+.vtrim-ruler-label {
+  font-size: 0.6rem; color: var(--foreground-muted); margin-top: 1px;
+  font-family: monospace; white-space: nowrap; opacity: 0.7;
+}
+
+/* ── Timeline track ── */
+.vtrim-track {
+  position: relative; height: 48px; background: var(--surface-raised);
+  border-radius: 6px; cursor: pointer; overflow: visible;
+  border: 1px solid var(--border);
+}
+
+.vtrim-wave-bg {
+  position: absolute; inset: 0; border-radius: 6px; opacity: 0.15;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--foreground-muted) 0px,
+    transparent 1px,
+    transparent 3px,
+    var(--foreground-muted) 4px
+  );
+  mask-image: linear-gradient(0deg, transparent 15%, currentColor 50%, transparent 85%);
+  -webkit-mask-image: linear-gradient(0deg, transparent 15%, currentColor 50%, transparent 85%);
+  pointer-events: none;
+}
+
+/* ── Dimmed regions ── */
+.vtrim-dim {
+  position: absolute; top: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.45); z-index: 1;
+  pointer-events: none;
+}
+.vtrim-dim:first-of-type { border-radius: 6px 0 0 6px; }
+.vtrim-dim:last-of-type { border-radius: 0 6px 6px 0; }
+
+/* ── Selected region ── */
+.vtrim-region {
+  position: absolute; top: 0; bottom: 0; z-index: 2;
+  background: transparent;
+  border-top: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  cursor: grab;
+  transition: border-color 150ms;
+}
+.vtrim-region.dragging { cursor: grabbing; border-color: var(--accent-hover); }
+
+/* ── Drag handles ── */
+.vtrim-handle {
+  position: absolute; top: 0; bottom: 0; width: 16px; z-index: 5;
+  cursor: col-resize; display: flex; align-items: center; justify-content: center;
+  transform: translateX(-50%);
+  -webkit-tap-highlight-color: transparent;
+}
+.vtrim-handle-start { }
+.vtrim-handle-end { }
+
+.vtrim-handle-grip {
+  width: 12px; height: 32px; border-radius: 4px;
+  background: var(--accent); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+.vtrim-handle:hover .vtrim-handle-grip,
+.vtrim-handle.active .vtrim-handle-grip {
+  transform: scaleY(1.08); background: var(--accent-hover);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.vtrim-handle-line {
+  width: 4px; height: 1px; background: rgba(0,0,0,0.4); border-radius: 1px;
+}
+
+/* Handle tooltip */
+.vtrim-handle-tooltip {
+  position: absolute; top: -26px; left: 50%; transform: translateX(-50%);
+  background: var(--foreground); color: var(--background); font-size: 0.62rem;
+  padding: 2px 6px; border-radius: 4px; white-space: nowrap;
+  font-family: monospace; pointer-events: none;
+  opacity: 0; transition: opacity 150ms;
+}
+.vtrim-handle:hover .vtrim-handle-tooltip,
+.vtrim-handle.active .vtrim-handle-tooltip { opacity: 1; }
+
+/* ── Playhead ── */
+.vtrim-playhead {
+  position: absolute; top: -4px; bottom: -4px; z-index: 8;
+  width: 16px; transform: translateX(-50%);
+  cursor: col-resize; display: flex; flex-direction: column; align-items: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.vtrim-playhead-cap {
+  width: 12px; height: 12px; background: #ff4444; border-radius: 3px 3px 50% 50%;
+  box-shadow: 0 1px 4px rgba(255,68,68,0.4);
+  transition: transform 100ms;
+}
+.vtrim-playhead:hover .vtrim-playhead-cap,
+.vtrim-playhead.active .vtrim-playhead-cap { transform: scale(1.2); }
+.vtrim-playhead-line {
+  width: 2px; flex: 1; background: #ff4444;
+  box-shadow: 0 0 4px rgba(255,68,68,0.3);
+}
+
+/* ── Controls bar ── */
+.vtrim-controls {
+  display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0 0;
+  flex-wrap: wrap;
+}
+.vtrim-controls-left { display: flex; align-items: center; gap: 0.4rem; }
+
+.vtrim-loop-toggle {
+  display: flex; align-items: center; gap: 0.3rem; cursor: pointer;
+  font-size: 0.72rem; color: var(--foreground-muted);
+}
+.vtrim-loop-toggle input { width: 14px; height: 14px; cursor: pointer; accent-color: var(--accent); }
+.vtrim-loop-toggle span { white-space: nowrap; }
+
+.vtrim-time-display {
+  display: flex; align-items: center; gap: 0.2rem; font-family: monospace;
+  font-size: 0.75rem; color: var(--foreground-muted);
+  margin-inline-start: auto;
+}
+.vtrim-time-current { color: var(--foreground); font-weight: 600; }
+.vtrim-time-sep { opacity: 0.4; }
+
+.vtrim-clip-info {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.25rem 0.6rem; border-radius: 6px;
+  background: var(--surface-raised); border: 1px solid var(--border);
+}
+.vtrim-clip-duration { font-family: monospace; font-weight: 700; font-size: 0.85rem; }
+.vtrim-clip-hint { font-size: 0.68rem; font-weight: 600; }
+
+/* ── Quick actions ── */
+.vtrim-quick-actions {
+  display: flex; gap: 0.35rem; flex-wrap: wrap; padding-top: 0.4rem;
+}
+.vtrim-action-btn {
+  padding: 0.35rem 0.7rem; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--foreground); font-size: 0.72rem;
+  cursor: pointer; font-weight: 500; transition: background 150ms, border-color 150ms;
+  white-space: nowrap;
+}
+.vtrim-action-btn:hover { background: var(--surface-raised); border-color: var(--foreground-muted); }
+.vtrim-action-secondary { color: var(--foreground-muted); }
+
+/* ── Fine-tune inputs ── */
+.vtrim-finetune {
+  display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;
+  padding: 0.5rem 0 0;
+  animation: vtrim-slide-in 200ms ease;
+}
+@keyframes vtrim-slide-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+.vtrim-finetune-field { display: flex; flex-direction: column; gap: 0.15rem; }
+.vtrim-finetune-label {
+  font-size: 0.65rem; color: var(--foreground-muted); font-weight: 600;
+}
+.vtrim-finetune-input {
+  width: 80px; padding: 0.3rem 0.5rem; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--background); color: var(--foreground);
+  font-size: 0.8rem; font-family: monospace; text-align: center;
+  transition: border-color 200ms;
+}
+.vtrim-finetune-input:focus { border-color: var(--accent); outline: none; }
+.vtrim-finetune-value {
+  font-family: monospace; font-size: 0.8rem; font-weight: 700;
+  color: var(--foreground); padding: 0.3rem 0;
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .vtrim-track { height: 56px; }
+  .vtrim-handle-grip { width: 16px; height: 40px; }
+  .vtrim-handle { width: 24px; }
+  .vtrim-playhead-cap { width: 14px; height: 14px; }
+  .vtrim-controls { gap: 0.5rem; }
+  .vtrim-finetune { gap: 0.6rem; }
+  .vtrim-finetune-input { width: 70px; }
+}
 
 /* ── Format grid ── */
 .wiz-format-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
