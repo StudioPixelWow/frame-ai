@@ -171,7 +171,7 @@ const mainNavItems: NavItem[] = [
 
 export function SideNav() {
   const pathname = usePathname();
-  const { role } = useAuth();
+  const { role, email, logout } = useAuth();
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Filter nav items based on role
@@ -434,55 +434,48 @@ export function SideNav() {
           <ThemeToggle />
         </div>
 
-        {/* User Avatar Link */}
-        {isExpanded && (
-          <Link
-            href="/profile"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.75rem",
-              padding: "0.5rem 0.75rem",
-              borderRadius: "0.375rem",
-              border: "1px solid var(--border)",
-              backgroundColor: "var(--surface)",
-              color: "var(--foreground)",
-              textDecoration: "none",
-              fontSize: "0.75rem",
-              fontWeight: "500",
-              transition: "all 150ms",
-              cursor: "pointer",
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.backgroundColor = "var(--surface-raised)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.backgroundColor = "var(--surface)";
-            }}
-          >
-            <div
-              style={{
-                width: "1.75rem",
-                height: "1.75rem",
-                borderRadius: "50%",
-                backgroundColor: "var(--accent)",
-                opacity: 0.2,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "0.625rem",
-                fontWeight: "700",
-                color: "var(--accent-text)",
-                flexShrink: 0,
-              }}
-            >
-              T
-            </div>
+        {/* Logout Button */}
+        <button
+          onClick={() => logout()}
+          title="התנתק"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: isExpanded ? "flex-start" : "center",
+            gap: "0.75rem",
+            padding: isExpanded ? "0.5rem 0.75rem" : "0.5rem",
+            borderRadius: "0.375rem",
+            border: "1px solid var(--border)",
+            backgroundColor: "var(--surface)",
+            color: "var(--foreground)",
+            fontSize: "0.75rem",
+            fontWeight: "500",
+            transition: "all 150ms",
+            cursor: "pointer",
+            width: "100%",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(239,68,68,0.1)";
+            (e.currentTarget as HTMLElement).style.borderColor = "#ef4444";
+            (e.currentTarget as HTMLElement).style.color = "#ef4444";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.backgroundColor = "var(--surface)";
+            (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
+            (e.currentTarget as HTMLElement).style.color = "var(--foreground)";
+          }}
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, width: 16, height: 16 }}>
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          {isExpanded && (
             <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              טל
+              {email || "התנתק"}
             </span>
-          </Link>
-        )}
+          )}
+        </button>
       </div>
     </nav>
   );
