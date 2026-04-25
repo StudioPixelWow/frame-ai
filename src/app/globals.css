@@ -1894,6 +1894,22 @@
 .wiz-trim-mode { display: flex; gap: 0.5rem; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   GANTT REFERENCE THUMBNAILS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.gantt-ref-thumb {
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+.gantt-ref-thumb:hover {
+  transform: scale(1.06);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  z-index: 2;
+}
+.gantt-ref-thumb:hover img {
+  transform: scale(1.04);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    VISUAL TIMELINE TRIMMER
    ═══════════════════════════════════════════════════════════════════════════ */
 
