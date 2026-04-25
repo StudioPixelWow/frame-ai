@@ -118,6 +118,7 @@ const EMPTY_AD: WizardAd = {
 interface WizardData {
   // Step 1 — Campaign
   campaignName: string;
+  objective: string;
   clientId: string;
   platform: CampaignPlatform;
   campaignType: CampaignType;
@@ -143,6 +144,7 @@ interface WizardData {
 
 const INITIAL_DATA: WizardData = {
   campaignName: "",
+  objective: "",
   clientId: "",
   platform: "facebook",
   campaignType: "lead_gen",
@@ -509,6 +511,22 @@ function Step1Basics({
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Objective — free-text description */}
+          <div>
+            <FieldLabel label="מטרה / תיאור הקמפיין" />
+            <textarea
+              value={data.objective}
+              onChange={(e) => onChange({ objective: e.target.value })}
+              placeholder="תאר את מטרת הקמפיין, קהל יעד רצוי, מסרים מרכזיים..."
+              rows={3}
+              style={{
+                ...inputStyle,
+                resize: "vertical" as const,
+                minHeight: "4rem",
+              }}
+            />
           </div>
 
           {/* Date range */}
@@ -2052,40 +2070,28 @@ export default function CampaignBuilderPage() {
   }, []);
 
   // ── Helper: build structured records from wizard data ──
+  // Campaign holds ONLY campaign-level data. AdSet/Ad data stays in their own records.
   const buildRecords = useCallback((status: CampaignStatus) => {
     const clientName = selectedClient?.name || "";
-    const firstAd = data.ads[0] || EMPTY_AD;
+    const goalLabel = GOAL_OPTIONS.find(g => g.value === data.campaignType)?.label || data.campaignType;
 
-    // Campaign record (backward-compatible: still store summary in objective/notes/caption)
     const campaignPayload = {
       campaignName: data.campaignName || "טיוטה חדשה",
       clientId: data.clientId,
       clientName,
       campaignType: data.campaignType,
-      objective: [
-        data.locations.length > 0 && `מיקום: ${data.locations.map(l => `${l.city}(+${l.radius}km)`).join(", ")}`,
-        data.excludedLocations.length > 0 && `הוצא: ${data.excludedLocations.join(", ")}`,
-        data.targetingMode !== "living" && `מצב: ${TARGETING_MODES.find(m => m.value === data.targetingMode)?.label || data.targetingMode}`,
-        data.interests.length > 0 && `עניינים: ${data.interests.join(", ")}`,
-        data.audienceNotes,
-      ].filter(Boolean).join(" | ") || "",
+      objective: data.objective || goalLabel,
       platform: data.platform,
       status,
-      mediaType: firstAd.mediaType,
+      mediaType: "image" as CampaignMediaType,
       budget: typeof data.budget === "number" ? data.budget : 0,
-      caption: firstAd.caption,
-      notes: [
-        firstAd.headline && `כותרת: ${firstAd.headline}`,
-        firstAd.cta && `CTA: ${firstAd.cta}`,
-        firstAd.adFormat && `פורמט: ${firstAd.adFormat}`,
-        `קהל: ${data.gender}, ${data.ageMin}-${data.ageMax}`,
-        data.budgetType === "daily" ? "תקציב יומי" : "תקציב כולל",
-      ].filter(Boolean).join(" | "),
+      caption: "",
+      notes: "",
       startDate: data.startDate || null,
       endDate: data.endDate || null,
       linkedVideoProjectId: null as string | null,
-      linkedClientFileId: firstAd.linkedClientFileId,
-      externalMediaUrl: firstAd.externalMediaUrl,
+      linkedClientFileId: null as string | null,
+      externalMediaUrl: "",
       adAccountId: "",
       leadFormIds: [] as string[],
     };

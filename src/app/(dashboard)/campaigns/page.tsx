@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { wow } from '@/lib/wow';
-import { useCampaigns, useClients, useLeads } from '@/lib/api/use-entity';
+import { useCampaigns, useClients, useLeads, useAdSets, useAds } from '@/lib/api/use-entity';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { SkeletonKPIRow, SkeletonGrid } from '@/components/ui/skeleton';
@@ -655,11 +655,26 @@ export default function CampaignsPage() {
   const { data: rawCampaigns, loading, error, create, update, remove } = useCampaigns();
   const { data: rawLeads } = useLeads();
   const { data: rawClients } = useClients();
+  const { data: rawAdSets } = useAdSets();
+  const { data: rawAds } = useAds();
 
   // Safe fallbacks — never let undefined reach .filter/.map/.reduce/.length
   const campaigns = rawCampaigns ?? [];
   const allLeads = rawLeads ?? [];
   const clients = rawClients ?? [];
+  const adSets = rawAdSets ?? [];
+  const ads = rawAds ?? [];
+
+  // Build counts per campaign for hierarchy display
+  const campaignChildCounts = useMemo(() => {
+    const counts: Record<string, { adSetCount: number; adCount: number }> = {};
+    for (const c of campaigns) {
+      const cAdSets = adSets.filter(as => as.campaignId === c.id);
+      const cAds = ads.filter(a => a.campaignId === c.id);
+      counts[c.id] = { adSetCount: cAdSets.length, adCount: cAds.length };
+    }
+    return counts;
+  }, [campaigns, adSets, ads]);
   const toast = useToast();
 
   // Filters
@@ -1159,6 +1174,22 @@ export default function CampaignsPage() {
                       {c.objective}
                     </p>
                   )}
+
+                  {/* Hierarchy counts — Ad Sets & Ads */}
+                  {(() => {
+                    const cc = campaignChildCounts[c.id];
+                    if (!cc || (cc.adSetCount === 0 && cc.adCount === 0)) return null;
+                    return (
+                      <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.68rem', color: 'var(--foreground-muted)' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', padding: '0.12rem 0.4rem', borderRadius: '0.25rem', background: 'var(--surface-raised)', border: '1px solid var(--border)' }}>
+                          <span style={{ fontWeight: 700 }}>{cc.adSetCount}</span> קבוצות מודעות
+                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', padding: '0.12rem 0.4rem', borderRadius: '0.25rem', background: 'var(--surface-raised)', border: '1px solid var(--border)' }}>
+                          <span style={{ fontWeight: 700 }}>{cc.adCount}</span> מודעות
+                        </span>
+                      </div>
+                    );
+                  })()}
 
                   {/* Smart Summary */}
                   {(() => {

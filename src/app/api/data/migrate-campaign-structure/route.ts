@@ -31,6 +31,7 @@ export async function POST() {
 
     let migrated = 0;
     let skipped = 0;
+    let cleaned = 0;
     const errors: string[] = [];
 
     for (const c of allCampaigns) {
@@ -103,6 +104,17 @@ export async function POST() {
           notes: c.notes || '',
         });
 
+        // 3. Clean up campaign objective if it contains targeting data dump
+        if (hasTargetingDataInObjective(c.objective || '')) {
+          await campaigns.updateAsync(c.id, {
+            objective: '',
+            // Clear creative fields that belong to Ad level
+            caption: '',
+            notes: '',
+          });
+          cleaned++;
+        }
+
         migrated++;
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -110,10 +122,25 @@ export async function POST() {
       }
     }
 
+    // Also clean objective on already-migrated campaigns (skipped above)
+    for (const c of allCampaigns) {
+      if (!campaignIdsWithAdSets.has(c.id)) continue; // already handled
+      if (hasTargetingDataInObjective(c.objective || '')) {
+        try {
+          await campaigns.updateAsync(c.id, { objective: '', caption: '', notes: '' });
+          cleaned++;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Unknown error';
+          errors.push(`Cleanup ${c.id}: ${msg}`);
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       migrated,
       skipped,
+      cleaned,
       total: allCampaigns.length,
       errors,
     });
@@ -143,4 +170,11 @@ function extractInterestsFromObjective(objective: string): string[] {
 function extractHeadlineFromNotes(notes: string): string {
   const match = notes.match(/כותרת:\s*([^\n]+)/);
   return match ? match[1].trim() : '';
+}
+
+/** Check if objective field contains targeting data dump (old buildRecords bug) */
+function hasTargetingDataInObjective(objective: string): boolean {
+  if (!objective) return false;
+  // Old buildRecords dumped targeting data like "מיקום: ... | עניינים: ..."
+  return /מיקום[י]?:\s*/.test(objective) && /עניינים|תחומי עניין/.test(objective);
 }
