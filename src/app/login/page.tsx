@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
-const STATUE_URL = '/statue.svg';
+const STATUE_URL = '/statue.png';
 
 export default function LoginPage() {
   const router = useRouter();
