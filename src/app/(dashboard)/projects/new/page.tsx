@@ -1282,7 +1282,7 @@ export default function NewProjectWizard() {
     <div className="wiz-root">
       <aside className="wiz-sidebar">
         <div className="wiz-sidebar-logo">
-          <img src="/logo.png" alt="PixelManageAI" style={{ height: 32, marginLeft: 8 }} />
+          <img src="https://s-pixel.co.il/wp-content/uploads/2025/12/Layer-47.png" alt="PixelManageAI" style={{ height: 32, marginLeft: 8 }} />
           PixelManage<span className="wiz-sidebar-ai">AI</span>
         </div>
         <div className="wiz-sidebar-title">פרויקט חדש</div>
@@ -1447,7 +1447,7 @@ export default function NewProjectWizard() {
                   <span>▾</span>
                 </button>
                 <div className="render-modal-logo">
-                  <img src="/logo.png" alt="PixelManageAI" style={{ width: 40, height: 40, borderRadius: 10 }} />
+                  <img src="https://s-pixel.co.il/wp-content/uploads/2025/12/Layer-47.png" alt="PixelManageAI" style={{ width: 40, height: 40, borderRadius: 10 }} />
                 </div>
                 <h2 className="render-modal-title">מכינים את הסרטון שלך...</h2>
                 <p className="render-modal-subtitle">{renderProjectName}</p>
