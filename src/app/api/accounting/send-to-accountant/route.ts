@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientFiles } from "@/lib/db";
 
-const PERIODS: Record<string, string> = {
-  "jan-feb": "ינואר-פברואר",
-  "mar-apr": "מרץ-אפריל",
-  "may-jun": "מאי-יוני",
-  "jul-aug": "יולי-אוגוסט",
-  "sep-oct": "ספטמבר-אוקטובר",
-  "nov-dec": "נובמבר-דצמבר",
+const PERIODS: Record<string, { name: string; startMonth: number; endMonth: number }> = {
+  "jan-feb": { name: "ינואר-פברואר", startMonth: 0, endMonth: 1 },
+  "mar-apr": { name: "מרץ-אפריל", startMonth: 2, endMonth: 3 },
+  "may-jun": { name: "מאי-יוני", startMonth: 4, endMonth: 5 },
+  "jul-aug": { name: "יולי-אוגוסט", startMonth: 6, endMonth: 7 },
+  "sep-oct": { name: "ספטמבר-אוקטובר", startMonth: 8, endMonth: 9 },
+  "nov-dec": { name: "נובמבר-דצמבר", startMonth: 10, endMonth: 11 },
 };
 
 /**
@@ -18,14 +18,14 @@ const PERIODS: Record<string, string> = {
  * and sends (or simulates sending) an email to the accountant
  * with the actual files attached.
  *
- * Body: { period: string, year: number, accountantEmail?: string, message?: string }
+ * Body: { period: string, year: number, documentIds?: string[], accountantEmail?: string, message?: string }
  *
  * Returns: { success, emailPreview: { to, subject, body, attachments[] } }
  */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { period, year, accountantEmail, message } = body;
+    const { period, year, documentIds, accountantEmail, message } = body;
 
     if (!period || !year) {
       return NextResponse.json(
@@ -34,17 +34,38 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const periodName = PERIODS[period] || period;
+    const periodInfo = PERIODS[period];
+    const periodName = periodInfo?.name || period;
 
-    // ── Fetch all documents for this period ──
+    // ── Fetch documents ──
+    // Strategy: if client sent documentIds, use those (guaranteed match with UI).
+    // Otherwise, replicate the EXACT same filtering the UI uses.
     const allFiles = await clientFiles.getAllAsync();
-    const docs = allFiles.filter((f: any) => {
-      if (f.category !== "accountant") return false;
-      if (f.period && f.year) {
-        return f.period === period && Number(f.year) === Number(year);
-      }
-      return false;
-    });
+    let docs: any[];
+
+    if (documentIds && Array.isArray(documentIds) && documentIds.length > 0) {
+      // Direct ID match — client already filtered, just verify they exist
+      const idSet = new Set(documentIds);
+      docs = allFiles.filter((f: any) => idSet.has(f.id) && f.category === "accountant");
+      console.log(`[SendToAccountant] Using ${docs.length} docs from ${documentIds.length} provided IDs`);
+    } else {
+      // Fallback: replicate the UI's getDocumentsForPeriod logic EXACTLY
+      docs = allFiles.filter((f: any) => {
+        if (f.category !== "accountant") return false;
+        // Primary: match by explicit period + year fields
+        if (f.period && f.year) {
+          return f.period === period && Number(f.year) === Number(year);
+        }
+        // Fallback for legacy documents: match by createdAt date
+        if (!periodInfo) return false;
+        const docDate = new Date(f.createdAt || f.uploadDate);
+        if (isNaN(docDate.getTime())) return false;
+        const docYear = docDate.getFullYear();
+        const docMonth = docDate.getMonth();
+        return docYear === Number(year) && docMonth >= periodInfo.startMonth && docMonth <= periodInfo.endMonth;
+      });
+      console.log(`[SendToAccountant] Filtered ${docs.length} docs from ${allFiles.length} total files for period=${period} year=${year}`);
+    }
 
     // ── Validate: must have files ──
     if (docs.length === 0) {

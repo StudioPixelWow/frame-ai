@@ -74,7 +74,8 @@ export default function DocumentsPage() {
     return Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
   }, []);
 
-  const getDocumentsForPeriod = (periodId: string) => {
+  /** Shared filtering logic — used by both UI display AND send action */
+  const getDocumentsForPeriod = useCallback((periodId: string) => {
     if (!allDocuments || !Array.isArray(allDocuments)) return [];
     const period = PERIODS.find((p) => p.id === periodId);
     if (!period) return [];
@@ -92,7 +93,7 @@ export default function DocumentsPage() {
       const docMonth = docDate.getMonth();
       return docYear === selectedYear && docMonth >= period.startMonth && docMonth <= period.endMonth;
     });
-  };
+  }, [allDocuments, selectedYear]);
 
   const getDocTypeLabel = (type: string): string => {
     const labels: Record<string, string> = {
@@ -236,21 +237,32 @@ export default function DocumentsPage() {
   /** Send files to accountant — calls API, shows preview modal with real attachments */
   const handleSendToAccountant = useCallback(async (periodId: string) => {
     const docs = getDocumentsForPeriod(periodId);
+    console.log(`[SendToAccountant] Period: ${periodId}, Year: ${selectedYear}, Documents found: ${docs.length}`, docs.map((d: any) => d.id));
+
     if (docs.length === 0) {
-      toast("אין מסמכים לתקופה זו — העלה מסמכים לפני שליחה", "error");
+      const period = PERIODS.find(p => p.id === periodId);
+      toast(`לא נמצאו מסמכים לתקופה ${period?.nameHebrew || periodId} ${selectedYear}`, "error");
       return;
     }
+
+    // Confirmation before sending
+    const period = PERIODS.find(p => p.id === periodId);
+    const confirmed = window.confirm(`נשלחים ${docs.length} מסמכים לתקופה ${period?.nameHebrew || periodId} ${selectedYear} לרואה חשבון. להמשיך?`);
+    if (!confirmed) return;
 
     setIsSending(true);
     setSendingPeriod(periodId);
 
     try {
+      // Send the actual document IDs so the API uses the exact same documents
+      const docIds = docs.map((d: any) => d.id);
       const res = await fetch("/api/accounting/send-to-accountant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           period: periodId,
           year: selectedYear,
+          documentIds: docIds,
           message: sendMessage || undefined,
         }),
       });
@@ -272,7 +284,7 @@ export default function DocumentsPage() {
     } finally {
       setIsSending(false);
     }
-  }, [selectedYear, sendMessage, refetch, toast]);
+  }, [getDocumentsForPeriod, selectedYear, sendMessage, refetch, toast]);
 
   /** Close preview modal */
   const closePreview = () => {
