@@ -3,6 +3,7 @@ import { useState, useCallback } from "react";
 import { usePortalUsers, usePortalComments, useClientEmailLogs, useClients } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import type { Client } from "@/lib/db/schema";
+import UserAccessSection from "@/components/user-access-section";
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "";
@@ -209,6 +210,14 @@ export default function TabPortal({ client }: TabPortalProps) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+
+      {/* ═══ SYSTEM ACCESS (AUTH) ═══ */}
+      <UserAccessSection
+        entityType="client"
+        entityId={client.id}
+        entityEmail={client.email}
+        entityName={client.name}
+      />
 
       {/* ═══ PORTAL LOGIN CREDENTIALS SECTION ═══ */}
       {hasPortalAccess ? (

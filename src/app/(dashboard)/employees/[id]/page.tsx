@@ -6,6 +6,7 @@ import { use, useState, useMemo } from "react";
 import Link from "next/link";
 import { useEmployees, useEmployeeTasks, useTasks } from "@/lib/api/use-entity";
 import type { EmployeeTask } from "@/lib/db/schema";
+import UserAccessSection from "@/components/user-access-section";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   new: { label: "חדש", color: "#3b82f6", bg: "rgba(59, 130, 246, 0.12)" },
@@ -213,6 +214,14 @@ export default function EmployeeDashboardPage({ params }: { params: Promise<{ id
           </div>
         ))}
       </div>
+
+      {/* System Access */}
+      <UserAccessSection
+        entityType="employee"
+        entityId={employeeId}
+        entityEmail={employee.email}
+        entityName={employee.name}
+      />
 
       {/* Task Tabs */}
       <div style={{ display: "flex", gap: "0.5rem", borderBottom: "1px solid var(--border)" }}>
