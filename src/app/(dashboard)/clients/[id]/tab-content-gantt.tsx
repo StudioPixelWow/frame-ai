@@ -1413,14 +1413,35 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                         </div>
                       )}
 
-                      {/* ── Reference Previews ── */}
+                      {/* ── Reference Previews (REAL DATA ONLY) ── */}
                       {(() => {
                         const refs = itemRefsMap[item.id] || [];
                         const isExpanded = expandedRefIds.has(item.id);
                         const visibleRefs = isExpanded ? refs : refs.slice(0, 3);
                         return (
                           <div style={{ marginTop: "0.75rem" }}>
-                            {refs.length === 0 ? null : (
+                            {refs.length === 0 ? (
+                              <div style={{
+                                padding: "0.6rem 0.75rem",
+                                background: "var(--surface)",
+                                borderRadius: "0.375rem",
+                                border: "1px dashed var(--border)",
+                                textAlign: "center",
+                              }}>
+                                <p style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", margin: "0 0 0.4rem 0" }}>
+                                  אין רפרנסים מספריית מודעות למשימה זו
+                                </p>
+                                <a
+                                  href="/settings/references"
+                                  style={{
+                                    fontSize: "0.7rem", color: "var(--accent)",
+                                    textDecoration: "none", fontWeight: 600,
+                                  }}
+                                >
+                                  חפש רפרנסים בספריית המודעות →
+                                </a>
+                              </div>
+                            ) : (
                               <>
                                 <div
                                   style={{
@@ -1486,7 +1507,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                                         color: "#fff", lineHeight: 1.3,
                                         pointerEvents: "none",
                                       }}>
-                                        {getStyleLabel(ref.style)}
+                                        {ref.advertiserName || getStyleLabel(ref.style)}
                                       </div>
                                     </div>
                                   ))}
@@ -2474,71 +2495,101 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
               </div>
             )}
 
-            {/* References */}
-            {refs.length > 0 && (
-              <div style={{ marginTop: "0.5rem" }}>
+            {/* References (REAL DATA ONLY — no mock/fake) */}
+            <div style={{ marginTop: "0.5rem" }}>
+              {refs.length === 0 ? (
                 <div style={{
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                  marginBottom: "0.4rem",
+                  padding: "0.75rem",
+                  background: "var(--surface)",
+                  borderRadius: "0.375rem",
+                  border: "1px dashed var(--border)",
+                  textAlign: "center",
                 }}>
-                  <span style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)" }}>
-                    🔍 רפרנסים ({refs.length})
-                  </span>
-                  {refs.length > 3 && (
-                    <button
-                      className="mod-btn-ghost"
-                      onClick={() => {
-                        setExpandedRefIds(prev => {
-                          const next = new Set(prev);
-                          if (next.has(selectedItem.id)) next.delete(selectedItem.id); else next.add(selectedItem.id);
-                          return next;
-                        });
-                      }}
-                      style={{ fontSize: "0.65rem", padding: "0.15rem 0.4rem", color: "var(--accent)" }}
-                    >
-                      {isExpanded ? "הצג פחות" : `הצג הכל (${refs.length})`}
-                    </button>
-                  )}
+                  <p style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", margin: "0 0 0.5rem 0" }}>
+                    אין רפרנסים מספריית מודעות למשימה זו
+                  </p>
+                  <a
+                    href="/settings/references"
+                    style={{
+                      display: "inline-block",
+                      padding: "0.4rem 0.8rem",
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      color: "var(--accent)",
+                      background: "var(--accent-muted)",
+                      borderRadius: "0.375rem",
+                      textDecoration: "none",
+                      transition: "opacity 150ms ease",
+                    }}
+                  >
+                    🔍 חפש רפרנסים בספריית המודעות
+                  </a>
                 </div>
-                <div style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))",
-                  gap: "0.4rem",
-                }}>
-                  {visibleRefs.map((ref) => (
-                    <div
-                      key={ref.id}
-                      onClick={() => { setRefModalItem(ref); setRefModalOpen(true); }}
-                      className="gantt-ref-thumb"
-                      style={{
-                        position: "relative", borderRadius: "0.375rem", overflow: "hidden",
-                        border: "1px solid var(--border)", cursor: "pointer",
-                        aspectRatio: "5 / 4", background: "var(--surface)",
-                      }}
-                    >
-                      <img
-                        src={ref.imageUrl}
-                        alt={ref.description}
-                        style={{
-                          width: "100%", height: "100%", objectFit: "cover",
-                          display: "block", transition: "transform 200ms ease",
+              ) : (
+                <>
+                  <div style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    marginBottom: "0.4rem",
+                  }}>
+                    <span style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)" }}>
+                      🔍 רפרנסים ({refs.length})
+                    </span>
+                    {refs.length > 3 && (
+                      <button
+                        className="mod-btn-ghost"
+                        onClick={() => {
+                          setExpandedRefIds(prev => {
+                            const next = new Set(prev);
+                            if (next.has(selectedItem.id)) next.delete(selectedItem.id); else next.add(selectedItem.id);
+                            return next;
+                          });
                         }}
-                        loading="lazy"
-                      />
-                      <div style={{
-                        position: "absolute", bottom: 0, left: 0, right: 0,
-                        padding: "0.15rem 0.3rem",
-                        background: "linear-gradient(transparent, rgba(0,0,0,0.65))",
-                        fontSize: "0.55rem", fontWeight: 600,
-                        color: "#fff", lineHeight: 1.3, pointerEvents: "none",
-                      }}>
-                        {getStyleLabel(ref.style)}
+                        style={{ fontSize: "0.65rem", padding: "0.15rem 0.4rem", color: "var(--accent)" }}
+                      >
+                        {isExpanded ? "הצג פחות" : `הצג הכל (${refs.length})`}
+                      </button>
+                    )}
+                  </div>
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))",
+                    gap: "0.4rem",
+                  }}>
+                    {visibleRefs.map((ref) => (
+                      <div
+                        key={ref.id}
+                        onClick={() => { setRefModalItem(ref); setRefModalOpen(true); }}
+                        className="gantt-ref-thumb"
+                        style={{
+                          position: "relative", borderRadius: "0.375rem", overflow: "hidden",
+                          border: "1px solid var(--border)", cursor: "pointer",
+                          aspectRatio: "5 / 4", background: "var(--surface)",
+                        }}
+                      >
+                        <img
+                          src={ref.imageUrl}
+                          alt={ref.description}
+                          style={{
+                            width: "100%", height: "100%", objectFit: "cover",
+                            display: "block", transition: "transform 200ms ease",
+                          }}
+                          loading="lazy"
+                        />
+                        <div style={{
+                          position: "absolute", bottom: 0, left: 0, right: 0,
+                          padding: "0.15rem 0.3rem",
+                          background: "linear-gradient(transparent, rgba(0,0,0,0.65))",
+                          fontSize: "0.55rem", fontWeight: 600,
+                          color: "#fff", lineHeight: 1.3, pointerEvents: "none",
+                        }}>
+                          {ref.advertiserName || getStyleLabel(ref.style)}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
 
             {/* Switch to list for full editing */}
             <div style={{ marginTop: "0.75rem", textAlign: "center" }}>
@@ -3405,7 +3456,18 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
 
             {/* Info */}
             <div style={{ padding: "1.25rem" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+              {/* Advertiser name */}
+              {refModalItem.advertiserName && (
+                <p style={{
+                  fontSize: "0.95rem", fontWeight: 700,
+                  color: "var(--foreground)", margin: "0 0 0.5rem 0",
+                }}>
+                  {refModalItem.advertiserName}
+                </p>
+              )}
+
+              {/* Badges row: style, source, platform, active status, engagement */}
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
                 <span style={{
                   fontSize: "0.68rem", fontWeight: 600,
                   padding: "0.15rem 0.45rem", borderRadius: "0.25rem",
@@ -3422,6 +3484,26 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                 }}>
                   {refModalItem.source}
                 </span>
+                {refModalItem.platform && (
+                  <span style={{
+                    fontSize: "0.65rem", fontWeight: 500,
+                    padding: "0.15rem 0.4rem", borderRadius: "0.25rem",
+                    background: "var(--surface)", border: "1px solid var(--border)",
+                    color: "var(--foreground-muted)",
+                  }}>
+                    {refModalItem.platform}
+                  </span>
+                )}
+                {/* Active / inactive status */}
+                <span style={{
+                  fontSize: "0.62rem", fontWeight: 600,
+                  padding: "0.15rem 0.4rem", borderRadius: "0.25rem",
+                  background: refModalItem.isActive ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+                  color: refModalItem.isActive ? "#22c55e" : "#ef4444",
+                  border: `1px solid ${refModalItem.isActive ? "#22c55e" : "#ef4444"}`,
+                }}>
+                  {refModalItem.isActive ? "פעיל" : "לא פעיל"}
+                </span>
                 <span style={{
                   fontSize: "0.65rem", fontWeight: 600, marginInlineStart: "auto",
                   color: refModalItem.engagementScore > 70 ? "#22c55e" : refModalItem.engagementScore > 50 ? "#f59e0b" : "var(--foreground-muted)",
@@ -3430,11 +3512,61 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                 </span>
               </div>
 
-              <p style={{ fontSize: "0.82rem", color: "var(--foreground)", lineHeight: 1.5, margin: "0 0 1rem 0" }}>
+              {/* Description */}
+              <p style={{ fontSize: "0.82rem", color: "var(--foreground)", lineHeight: 1.5, margin: "0 0 0.75rem 0" }}>
                 {refModalItem.description}
               </p>
 
+              {/* Metadata: dates + source link */}
+              <div style={{
+                display: "flex", flexDirection: "column", gap: "0.3rem",
+                fontSize: "0.7rem", color: "var(--foreground-muted)",
+                marginBottom: "1rem", paddingTop: "0.5rem",
+                borderTop: "1px solid var(--border)",
+              }}>
+                {refModalItem.sourceUrl && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                    <span style={{ fontWeight: 600 }}>🔗 מקור:</span>
+                    <a
+                      href={refModalItem.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "var(--accent)", textDecoration: "underline", wordBreak: "break-all" }}
+                    >
+                      צפה במודעה המקורית
+                    </a>
+                  </div>
+                )}
+                {refModalItem.createdAt && (
+                  <div>
+                    <span style={{ fontWeight: 600 }}>📥 נוסף:</span>{" "}
+                    {new Date(refModalItem.createdAt).toLocaleDateString("he-IL")}
+                  </div>
+                )}
+                {refModalItem.updatedAt && (
+                  <div>
+                    <span style={{ fontWeight: 600 }}>🔄 עודכן:</span>{" "}
+                    {new Date(refModalItem.updatedAt).toLocaleDateString("he-IL")}
+                  </div>
+                )}
+              </div>
+
               <div style={{ display: "flex", gap: "0.5rem" }}>
+                {refModalItem.sourceUrl && (
+                  <a
+                    href={refModalItem.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mod-btn-ghost"
+                    style={{
+                      fontSize: "0.78rem", fontWeight: 600,
+                      padding: "0.55rem 0.75rem", borderRadius: "0.375rem",
+                      cursor: "pointer", textDecoration: "none", textAlign: "center",
+                    }}
+                  >
+                    פתח מקור ↗
+                  </a>
+                )}
                 <button
                   className="mod-btn-primary"
                   onClick={() => {
