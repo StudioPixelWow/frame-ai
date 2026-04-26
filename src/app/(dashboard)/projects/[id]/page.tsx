@@ -332,6 +332,34 @@ export default function ProjectDetailPage() {
               📝 המשך עריכה
             </Link>
           )}
+          {(project.sourceVideoKey || wsAny?.videoUrl || wsAny?.uploadedVideoUrl) && (
+            <Link
+              href={`/editor/${project.id}`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.375rem",
+                padding: "0.5rem 1.125rem",
+                backgroundColor: "#8b5cf6",
+                color: "white",
+                borderRadius: "0.5rem",
+                textDecoration: "none",
+                fontSize: "0.875rem",
+                fontWeight: 600,
+                border: "none",
+                cursor: "pointer",
+                transition: "opacity 150ms ease",
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLElement).style.opacity = "0.9";
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLElement).style.opacity = "1";
+              }}
+            >
+              🎬 עריכת וידאו מתקדמת
+            </Link>
+          )}
           {videoUrl && (
             <button
               onClick={() => {
