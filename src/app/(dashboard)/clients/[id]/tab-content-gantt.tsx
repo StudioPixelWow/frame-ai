@@ -255,19 +255,25 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
 
   /** Load references for a gantt item */
   const loadReferencesForItem = useCallback(async (item: ClientGanttItem) => {
-    if (itemRefsMap[item.id]) return; // already loaded
-    const query: ReferenceQuery = {
-      ideaTitle: item.title || '',
-      ideaSummary: item.ideaSummary || '',
-      contentType: item.itemType || 'social_post',
-      format: item.format || 'image',
-      platform: item.platform || 'instagram',
-      clientIndustry: client.businessField || '',
-      clientName: client.name || '',
-    };
-    const refs = await fetchReferences(query);
-    setItemRefsMap(prev => ({ ...prev, [item.id]: refs }));
-  }, [client.businessField, client.name, itemRefsMap]);
+    // Use functional state check to avoid itemRefsMap in deps (prevents infinite loop)
+    setItemRefsMap(prev => {
+      if (prev[item.id]) return prev; // already loaded — skip
+      // Fire async fetch outside setState
+      const query: ReferenceQuery = {
+        ideaTitle: item.title || '',
+        ideaSummary: item.ideaSummary || '',
+        contentType: item.itemType || 'social_post',
+        format: item.format || 'image',
+        platform: item.platform || 'instagram',
+        clientIndustry: client.businessField || '',
+        clientName: client.name || '',
+      };
+      fetchReferences(query).then(refs => {
+        setItemRefsMap(p => ({ ...p, [item.id]: refs }));
+      }).catch(() => {});
+      return { ...prev, [item.id]: [] }; // mark as loading with empty array
+    });
+  }, [client.businessField, client.name]);
 
   // Calculations
   const now = new Date();

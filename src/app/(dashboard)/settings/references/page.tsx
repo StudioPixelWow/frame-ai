@@ -45,7 +45,7 @@ const emptyForm = {
 };
 
 export default function ReferencesSettingsPage() {
-  const { data: refs, refresh, create, remove } = useData<AdReference>("/api/data/ad-references");
+  const { data: refs, refetch, create, remove } = useData<AdReference>("/api/data/ad-references");
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -63,7 +63,7 @@ export default function ReferencesSettingsPage() {
       } as any);
       setForm(emptyForm);
       setShowForm(false);
-      refresh();
+      refetch();
     } catch (err) {
       console.error("Failed to create reference:", err);
     }
@@ -74,7 +74,7 @@ export default function ReferencesSettingsPage() {
     if (!confirm("למחוק רפרנס זה?")) return;
     try {
       await remove(id);
-      refresh();
+      refetch();
     } catch (err) {
       console.error("Failed to delete:", err);
     }
