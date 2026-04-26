@@ -269,13 +269,6 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
     setItemRefsMap(prev => ({ ...prev, [item.id]: refs }));
   }, [client.businessField, client.name, itemRefsMap]);
 
-  // Load references for visible monthly items on mount or when items change
-  useEffect(() => {
-    monthlyItems.forEach(item => {
-      loadReferencesForItem(item);
-    });
-  }, [monthlyItems, loadReferencesForItem]);
-
   // Calculations
   const now = new Date();
   const currentWeek = getWeekNumber(now);
@@ -296,6 +289,13 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
       }),
     [ganttItems, selectedMonth, selectedYear]
   );
+
+  // Load references for visible monthly items on mount or when items change
+  useEffect(() => {
+    monthlyItems.forEach(item => {
+      loadReferencesForItem(item);
+    });
+  }, [monthlyItems, loadReferencesForItem]);
 
   const calendarItems = useMemo(
     () =>
