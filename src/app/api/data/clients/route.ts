@@ -14,7 +14,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
-import { requireRole } from '@/lib/auth/api-guard';
+import { requireRole, getRequestRole, getRequestClientId } from '@/lib/auth/api-guard';
 
 /* ── helpers ─────────────────────────────────────────────────────────── */
 
@@ -66,16 +66,27 @@ function rowToClient(r: ClientRow) {
 /* ── GET ──────────────────────────────────────────────────────────────── */
 
 export async function GET(req: NextRequest) {
-  const roleErr = requireRole(req, 'admin', 'employee');
-  if (roleErr) return roleErr;
+  const role = getRequestRole(req);
+
+  // Clients can fetch their own record; admin/employee can fetch all
+  if (role !== 'client') {
+    const roleErr = requireRole(req, 'admin', 'employee');
+    if (roleErr) return roleErr;
+  }
 
   try {
     const sb = getSupabase();
     console.log('[API] GET /api/data/clients — Supabase client OK, querying clients...');
-    const { data: rows, error } = await sb
-      .from('clients')
-      .select('*')
-      .order('id');
+    let query = sb.from('clients').select('*').order('id');
+
+    // Client role: only return their own record
+    if (role === 'client') {
+      const clientId = getRequestClientId(req);
+      if (!clientId) return NextResponse.json([]);
+      query = query.eq('id', clientId);
+    }
+
+    const { data: rows, error } = await query;
 
     if (error) {
       console.error('[API] GET /api/data/clients error:', error);

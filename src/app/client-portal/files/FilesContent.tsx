@@ -310,21 +310,7 @@ function FilesContentInner() {
                 </p>
               </div>
 
-              {/* Notes (optional) */}
-              {file.notes && (
-                <p
-                  style={{
-                    fontSize: '0.85rem',
-                    color: 'var(--foreground-muted)',
-                    margin: 0,
-                    paddingTop: '0.5rem',
-                    borderTop: `1px solid var(--border)`,
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {file.notes}
-                </p>
-              )}
+              {/* Notes intentionally hidden from client portal — may contain internal staff notes */}
 
               {/* Download indicator */}
               <div

@@ -6,18 +6,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { leads } from '@/lib/db';
 import { ensureSeeded } from '@/lib/db/seed';
-import { requireRole } from '@/lib/auth/api-guard';
+import { requireRole, getRequestRole, getRequestClientId } from '@/lib/auth/api-guard';
 import { persistenceLog } from '@/lib/db/persistence-logger';
 
 export async function GET(req: NextRequest) {
-  const roleErr = requireRole(req, 'admin', 'employee');
-  if (roleErr) return roleErr;
+  const role = getRequestRole(req);
+
+  // Clients can see their own leads; admin/employee see all
+  if (role !== 'client') {
+    const roleErr = requireRole(req, 'admin', 'employee');
+    if (roleErr) return roleErr;
+  }
 
   ensureSeeded();
   const log = persistenceLog('leads', 'select', '/api/data/leads', 'leads.json');
   try {
     log.start();
     const data = await leads.getAllAsync();
+
+    // Client scoping: only return leads belonging to this client
+    if (role === 'client') {
+      const clientId = getRequestClientId(req);
+      if (!clientId) return NextResponse.json([]);
+      const filtered = data.filter((l: any) => l.clientId === clientId || l.convertedClientId === clientId);
+      log.ok(filtered);
+      return NextResponse.json(filtered);
+    }
+
     log.ok(data);
     return NextResponse.json(data);
   } catch (error) {

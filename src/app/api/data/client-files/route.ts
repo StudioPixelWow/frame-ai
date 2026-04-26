@@ -6,11 +6,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { clientFiles } from '@/lib/db';
 import { ensureSeeded } from '@/lib/db/seed';
+import { scopeForClient } from '@/lib/auth/api-guard';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   ensureSeeded();
   try {
-    return NextResponse.json(await clientFiles.getAllAsync());
+    const all = await clientFiles.getAllAsync();
+    const scoped = scopeForClient(req, all, (item: any) => item.clientId);
+    return NextResponse.json(scoped);
   } catch (error) {
     return NextResponse.json(
       { error: 'Failed to fetch client files' },

@@ -59,7 +59,15 @@ function LayoutContentInner({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!clientId || pathname === '/client-portal') return;
 
-    fetch('/api/data/clients', { cache: 'no-store' })
+    const headers: Record<string, string> = { 'Cache-Control': 'no-store' };
+    try {
+      const role = localStorage.getItem('frameai_role');
+      const cId = localStorage.getItem('frameai_client_id');
+      if (role) headers['x-app-role'] = role;
+      if (cId) headers['x-app-client-id'] = cId;
+    } catch {}
+
+    fetch('/api/data/clients', { cache: 'no-store', headers })
       .then(res => res.json())
       .then((clients: any[]) => {
         if (!Array.isArray(clients)) return;

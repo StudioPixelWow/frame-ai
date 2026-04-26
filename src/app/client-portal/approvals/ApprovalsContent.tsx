@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useMemo, Suspense } from 'react';
+import { useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useApprovals, usePortalComments, useClients } from '@/lib/api/use-entity';
+import { useApprovals, usePortalComments } from '@/lib/api/use-entity';
 import { useToast } from '@/components/ui/toast';
 
 const TYPE_META: Record<string, { icon: string; label: string; color: string }> = {
@@ -27,21 +27,17 @@ function ApprovalsContentInner() {
   const clientId = searchParams.get('clientId');
 
   const { data: approvals, update: updateApproval } = useApprovals();
-  const { data: clients } = useClients();
   const { create: createComment } = usePortalComments();
   const toast = useToast();
-
-  const client = useMemo(() => clients.find(c => c.id === clientId), [clients, clientId]);
 
   const [selectedApprovalId, setSelectedApprovalId] = useState<string | null>(null);
   const [commentText, setCommentText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
 
-  // Filter approvals by client
-  const clientApprovals = useMemo(() => {
-    return approvals.filter(a => a.clientName === client?.name);
-  }, [approvals, client]);
+  // Server-side scoping ensures we only receive approvals for this client.
+  // No additional client filtering needed on the frontend.
+  const clientApprovals = approvals;
 
   const pendingApprovals = clientApprovals.filter(a => a.status === 'pending_approval' || a.status === 'needs_changes');
   const historyApprovals = clientApprovals.filter(a => a.status === 'approved' || a.status === 'rejected');

@@ -68,19 +68,13 @@ function ActivityInner() {
 
   const { data: activities } = useActivities();
 
+  // Server-side scoping ensures we only receive activities belonging to this client.
+  // Frontend filter: only show relevant types and sort by date.
   const filteredActivities = useMemo(() => {
     return activities
-      .filter(a => {
-        if (!['client', 'project', 'payment', 'render'].includes(a.type)) {
-          return false;
-        }
-        if (a.type === 'client' && a.entityId !== clientId) {
-          return false;
-        }
-        return true;
-      })
+      .filter(a => ['client', 'project', 'payment', 'render'].includes(a.type))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [activities, clientId]);
+  }, [activities]);
 
   return (
     <div style={{ direction: 'rtl' }}>

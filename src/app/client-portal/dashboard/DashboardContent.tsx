@@ -66,15 +66,17 @@ function DashboardContentInner() {
   const client = useMemo(() => clients.find(c => c.id === clientId), [clients, clientId]);
 
   const clientGanttItems = useMemo(() => ganttItems.filter(g => g.clientId === clientId), [ganttItems, clientId]);
-  const clientApprovals = useMemo(() => approvals.filter(a => a.clientName === client?.name), [approvals, client]);
+  // Server-side scoping ensures approvals are already filtered for this client
+  const clientApprovals = approvals;
   const clientFiles = useMemo(() => files.filter(f => f.clientId === clientId && f.category !== 'accountant'), [files, clientId]);
   const clientProjects = useMemo(() => projects.filter(p => p.clientId === clientId), [projects, clientId]);
   const clientLeads = useMemo(() => leads.filter(l => l.convertedClientId === clientId || l.clientId === clientId), [leads, clientId]);
   const clientCampaigns = useMemo(() => campaigns.filter((c: any) => c.clientId === clientId), [campaigns, clientId]);
 
+  // Server-side scoping ensures activities are already filtered for this client
   const recentActivities = useMemo(
-    () => activities.filter(a => a.entityId === clientId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 6),
-    [activities, clientId]
+    () => [...activities].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 6),
+    [activities]
   );
 
   const clientProjectIds = useMemo(() => clientProjects.map(p => p.id), [clientProjects]);

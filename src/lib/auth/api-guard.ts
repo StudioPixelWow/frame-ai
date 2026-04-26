@@ -4,14 +4,49 @@ export type AppRole = 'admin' | 'employee' | 'client';
 
 /* ── Header readers ──────────────────────────────────────────────── */
 
+/**
+ * Returns the caller's role. Falls back to 'admin' for backwards compat
+ * with admin dashboard (which may not set the header yet).
+ * For portal-facing routes, prefer `getRequestRoleStrict()`.
+ */
 export function getRequestRole(req: NextRequest): AppRole {
   const role = req.headers.get('x-app-role') as AppRole;
   if (role && ['admin', 'employee', 'client'].includes(role)) return role;
   return 'admin';
 }
 
+/**
+ * Strict version — returns null when no role header is present.
+ * Use in routes that need to differentiate "no role set" from "admin".
+ */
+export function getRequestRoleStrict(req: NextRequest): AppRole | null {
+  const role = req.headers.get('x-app-role') as AppRole;
+  if (role && ['admin', 'employee', 'client'].includes(role)) return role;
+  return null;
+}
+
 export function getRequestClientId(req: NextRequest): string | null {
   return req.headers.get('x-app-client-id') || null;
+}
+
+/* ── Client-scoping helper ───────────────────────────────────────── */
+
+/**
+ * For GET list endpoints: if the caller is a client, filter the array
+ * to only items belonging to that client.
+ * `getClientId` extracts the clientId from each item.
+ * Returns the (possibly filtered) array.
+ */
+export function scopeForClient<T>(
+  req: NextRequest,
+  items: T[],
+  getClientId: (item: T) => string | null | undefined
+): T[] {
+  const role = getRequestRole(req);
+  if (role !== 'client') return items;
+  const userClientId = getRequestClientId(req);
+  if (!userClientId) return []; // no clientId → no data
+  return items.filter(item => getClientId(item) === userClientId);
 }
 
 /** The employee ID of the currently logged-in user (set when role is employee). */

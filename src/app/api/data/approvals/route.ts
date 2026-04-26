@@ -6,11 +6,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { approvals } from '@/lib/db';
 import { ensureSeeded } from '@/lib/db/seed';
+import { scopeForClient } from '@/lib/auth/api-guard';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   ensureSeeded();
   try {
-    return NextResponse.json(await approvals.getAllAsync());
+    const all = await approvals.getAllAsync();
+    const scoped = scopeForClient(req, all, (item: any) => item.clientId);
+    return NextResponse.json(scoped);
   } catch (error) {
     return NextResponse.json(
       { error: 'Failed to fetch approvals' },

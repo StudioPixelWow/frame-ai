@@ -50,11 +50,13 @@ export default function ClientPortalLoginPage() {
         return;
       }
 
-      // Store session info
+      // Store session info — set role to 'client' for RBAC
       try {
         localStorage.setItem('portal_client_id', portalUser.clientId);
         localStorage.setItem('portal_user_id', portalUser.id);
         localStorage.setItem('portal_email', portalUser.email);
+        localStorage.setItem('frameai_role', 'client');
+        localStorage.setItem('frameai_client_id', portalUser.clientId);
       } catch {}
 
       // Update last login

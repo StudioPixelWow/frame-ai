@@ -7,15 +7,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { campaigns } from '@/lib/db';
 import { ensureSeeded } from '@/lib/db/seed';
 import { persistenceLog } from '@/lib/db/persistence-logger';
+import { scopeForClient } from '@/lib/auth/api-guard';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   ensureSeeded();
   const log = persistenceLog('campaigns', 'select', '/api/data/campaigns', 'campaigns.json');
   try {
     log.start();
     const data = await campaigns.getAllAsync();
-    log.ok(data);
-    return NextResponse.json(data);
+    const scoped = scopeForClient(req, data, (item: any) => item.clientId);
+    log.ok(scoped);
+    return NextResponse.json(scoped);
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     log.fail(msg);
