@@ -6,10 +6,15 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
   ensureSeeded();
   try {
     const { id } = await context.params;
+    console.log(`[podcast-strategies/${id}] GET`);
     const item = await podcastStrategies.getByIdAsync(id);
-    if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!item) {
+      console.warn(`[podcast-strategies/${id}] GET → not found`);
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
     return NextResponse.json(item);
   } catch (error) {
+    console.error('[podcast-strategies] GET by id error:', error);
     return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
   }
 }
@@ -19,11 +24,21 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
   try {
     const { id } = await context.params;
     const body = await req.json();
+    console.log(`[podcast-strategies/${id}] PUT keys:`, Object.keys(body));
+    body.updatedAt = new Date().toISOString();
     const updated = await podcastStrategies.updateAsync(id, body);
-    if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!updated) {
+      console.warn(`[podcast-strategies/${id}] PUT → not found`);
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    console.log(`[podcast-strategies/${id}] PUT → success`);
     return NextResponse.json(updated);
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to update' }, { status: 400 });
+    console.error('[podcast-strategies] PUT error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to update' },
+      { status: 400 }
+    );
   }
 }
 
@@ -31,10 +46,12 @@ export async function DELETE(_req: NextRequest, context: { params: Promise<{ id:
   ensureSeeded();
   try {
     const { id } = await context.params;
+    console.log(`[podcast-strategies/${id}] DELETE`);
     const deleted = await podcastStrategies.deleteAsync(id);
     if (!deleted) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (error) {
+    console.error('[podcast-strategies] DELETE error:', error);
     return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });
   }
 }

@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useRouter, useParams } from 'next/navigation';
-import { Suspense, useState, useMemo } from 'react';
+import { Suspense, useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { usePodcastSessions, usePodcastStrategies } from '@/lib/api/use-entity';
 import { useToast } from '@/components/ui/toast';
@@ -105,6 +105,26 @@ function StrategyWizardContent() {
   const [useRealAI, setUseRealAI] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [strategyId, setStrategyId] = useState<string | null>(null);
+  const loadedRef = useRef(false);
+
+  // ── Load existing strategy from DB on mount ───────────���──────────
+  useEffect(() => {
+    if (loadedRef.current || !strategies || strategies.length === 0 || !sessionId) return;
+
+    const existing = strategies.find((s) => s.sessionId === sessionId);
+    if (existing) {
+      console.log('[Strategy Wizard] Loading existing strategy from DB:', existing.id);
+      loadedRef.current = true;
+      setStrategyId(existing.id);
+      if (existing.episodeType) setEpisodeType(existing.episodeType);
+      if (existing.goals?.length) setGoals(existing.goals);
+      if (existing.persona) setPersona(existing.persona);
+      if (existing.episodeStructure) setStructure(existing.episodeStructure);
+      if (existing.questions?.length) setQuestions(existing.questions);
+      if (existing.clipIdeas?.length) setClipIdeas(existing.clipIdeas);
+      if (existing.useRealAI !== undefined) setUseRealAI(existing.useRealAI);
+    }
+  }, [strategies, sessionId]);
 
   // Scroll to top on step change
   const handleNextStep = () => {
@@ -277,19 +297,31 @@ function StrategyWizardContent() {
       status: 'draft',
       useRealAI,
       clientApproved: false,
+      clientApprovedAt: null,
     };
 
     try {
       if (strategyId) {
-        await updateStrategy(strategyId, strategyData);
+        console.log('[Strategy Wizard] UPDATE draft id:', strategyId);
+        const updated = await updateStrategy(strategyId, strategyData);
+        console.log('[Strategy Wizard] UPDATE response:', updated?.id);
         toast('אסטרטגיה עודכנה!', 'success');
       } else {
-        const newId = await createStrategy(strategyData);
-        setStrategyId(newId);
+        console.log('[Strategy Wizard] CREATE draft for session:', session.id);
+        const created = await createStrategy(strategyData);
+        console.log('[Strategy Wizard] CREATE response id:', created?.id);
+        if (created?.id) {
+          setStrategyId(created.id);
+        } else {
+          console.error('[Strategy Wizard] CREATE returned no id!', created);
+          toast('אירעה שגיאה בשמירה — אין מזהה', 'error');
+          return;
+        }
         toast('אסטרטגיה שמורה כטיוטה!', 'success');
       }
     } catch (error) {
-      toast('שגיאה בעת שמירת האסטרטגיה', 'error');
+      console.error('[Strategy Wizard] Save draft error:', error);
+      toast('אירעה שגיאה בשמירה', 'error');
     }
   };
 
@@ -312,19 +344,30 @@ function StrategyWizardContent() {
       status: 'ready',
       useRealAI,
       clientApproved: false,
+      clientApprovedAt: null,
     };
 
     try {
       if (strategyId) {
+        console.log('[Strategy Wizard] UPDATE complete id:', strategyId);
         await updateStrategy(strategyId, strategyData);
       } else {
-        const newId = await createStrategy(strategyData);
-        setStrategyId(newId);
+        console.log('[Strategy Wizard] CREATE complete for session:', session.id);
+        const created = await createStrategy(strategyData);
+        console.log('[Strategy Wizard] CREATE response id:', created?.id);
+        if (created?.id) {
+          setStrategyId(created.id);
+        } else {
+          console.error('[Strategy Wizard] CREATE returned no id!', created);
+          toast('אירעה שגיאה בשמירה — אין מזהה', 'error');
+          return;
+        }
       }
       toast('אסטרטגיה שמורה בהצלחה!', 'success');
       router.push('/accounting/podcast');
     } catch (error) {
-      toast('שגיאה בעת שמירת האסטרטגיה', 'error');
+      console.error('[Strategy Wizard] Save complete error:', error);
+      toast('אירעה שגיאה בשמירה', 'error');
     }
   };
 
