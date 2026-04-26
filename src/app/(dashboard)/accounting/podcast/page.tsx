@@ -7,6 +7,7 @@ import { usePodcastSessions } from "@/lib/api/use-entity"
 import { useToast } from "@/components/ui/toast"
 import { Modal } from "@/components/ui/modal"
 import { useState, useMemo } from "react"
+import PodcastStrategySection from "@/components/podcast-strategy-section"
 
 const STATUS_LABELS = {
   booked: "מאושר",
@@ -56,6 +57,7 @@ export default function PodcastPage() {
   const [filterStatus, setFilterStatus] = useState<string | null>(null)
   const [filterClient, setFilterClient] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
+  const [expandedSession, setExpandedSession] = useState<string | null>(null)
 
   const stats = useMemo(() => {
     if (!sessions) return { totalSessions: 0, todaySessions: 0, completedSessions: 0, upcomingSessions: 0 }
@@ -420,6 +422,54 @@ export default function PodcastPage() {
                       {session.notes}
                     </div>
                   )}
+
+                  {/* Strategy Toggle + Section */}
+                  <div style={{ borderTop: "1px solid var(--border)", marginTop: "1rem", paddingTop: "0.75rem" }}>
+                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setExpandedSession(expandedSession === session.id ? null : session.id)
+                        }}
+                        style={{
+                          padding: "0.4rem 0.8rem",
+                          borderRadius: "0.375rem",
+                          border: "1px solid var(--border)",
+                          backgroundColor: expandedSession === session.id ? "var(--accent)" : "transparent",
+                          color: expandedSession === session.id ? "white" : "var(--foreground)",
+                          cursor: "pointer",
+                          fontSize: "0.8rem",
+                          fontWeight: 600,
+                          transition: "all 150ms ease",
+                        }}
+                      >
+                        🎙️ {expandedSession === session.id ? "הסתר אסטרטגיה" : "אסטרטגיית פרק"}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          router.push(`/accounting/podcast/strategy/${session.id}`)
+                        }}
+                        style={{
+                          padding: "0.4rem 0.8rem",
+                          borderRadius: "0.375rem",
+                          border: "1px solid var(--border)",
+                          backgroundColor: "transparent",
+                          color: "var(--foreground)",
+                          cursor: "pointer",
+                          fontSize: "0.8rem",
+                          fontWeight: 600,
+                        }}
+                      >
+                        ✏️ צור/ערוך אסטרטגיה
+                      </button>
+                    </div>
+                    {expandedSession === session.id && (
+                      <div style={{ marginTop: "1rem" }}>
+                        <PodcastStrategySection sessionId={session.id} />
+                      </div>
+                    )}
+                  </div>
                 </div>
               )
             })}

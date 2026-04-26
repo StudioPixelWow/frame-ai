@@ -1122,3 +1122,81 @@ export interface AdReference {
   createdAt: string;
   updatedAt: string;
 }
+
+// ── Podcast Strategy Engine ──────────────────────────────────────────
+
+export type PodcastEpisodeType = 'deep_interview' | 'sales' | 'educational' | 'viral_short' | 'authority';
+
+export type PodcastGoal =
+  | 'personal_exposure' | 'trust_building' | 'professional_differentiation'
+  | 'lead_generation' | 'sales' | 'market_education'
+  | 'storytelling' | 'objection_handling';
+
+export type PodcastTone = 'formal' | 'casual' | 'sharp';
+
+export type PodcastQuestionType = 'hook' | 'story' | 'authority' | 'objection' | 'cta';
+
+export type PodcastQuestionLabel = 'viral' | 'emotional' | 'sales';
+
+export type PodcastStrategyStatus = 'draft' | 'ready' | 'in_recording' | 'completed';
+
+export interface PodcastGuestPersona {
+  tone: PodcastTone;
+  expertiseLevel: 'beginner' | 'intermediate' | 'expert' | 'thought_leader';
+  speakingStyle: string;
+  industry: string;
+  audience: string;
+}
+
+export interface PodcastQuestion {
+  id: string;
+  text: string;
+  type: PodcastQuestionType;
+  score: number; // 1–100
+  labels: PodcastQuestionLabel[];
+  selected: boolean;
+  order: number;
+  status: 'pending' | 'done' | 'skipped'; // for host mode
+}
+
+export interface PodcastClipIdea {
+  questionId: string;
+  clipTitle: string;
+  hookLine: string;
+  captionIdea: string;
+  platformFit: ('reels' | 'tiktok' | 'youtube_shorts')[];
+}
+
+export interface PodcastEpisodeStructure {
+  openingHook: string;
+  intro: string;
+  segments: { title: string; description: string; durationMinutes: number }[];
+  transitions: string[];
+  closingCTA: string;
+}
+
+export interface PodcastStrategy {
+  id: string;
+  sessionId: string; // links to PodcastSession
+  clientId: string;
+  clientName: string;
+  // Step 1
+  episodeType: PodcastEpisodeType;
+  // Step 2
+  goals: PodcastGoal[];
+  // Step 3
+  persona: PodcastGuestPersona;
+  // Step 4
+  episodeStructure: PodcastEpisodeStructure | null;
+  // Step 5 + 6
+  questions: PodcastQuestion[];
+  // Step 7
+  clipIdeas: PodcastClipIdea[];
+  // Meta
+  status: PodcastStrategyStatus;
+  useRealAI: boolean;
+  clientApproved: boolean;
+  clientApprovedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

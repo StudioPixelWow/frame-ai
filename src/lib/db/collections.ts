@@ -43,6 +43,7 @@ import type {
   SystemEvent,
   AuditLog,
   AdReference,
+  PodcastStrategy,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -71,6 +72,7 @@ export const hostingRecords = new JsonStore<HostingRecord>('hosting-records', 'h
 // accountantDocuments — REMOVED. Accountant docs now stored in app_client_files with category='accountant'.
 // The /api/data/accountant-documents route queries clientFiles filtered by category.
 export const podcastSessions = new SupabaseCrud<PodcastSession>('app_podcast_sessions', 'pcs');
+export const podcastStrategies = new SupabaseCrud<PodcastStrategy>('app_podcast_strategies', 'pst');
 export const aiSettings = new JsonStore<AISettings>('ai-settings', 'ais');
 export const clientKnowledge = new SupabaseCrud<ClientKnowledge>('app_client_knowledge', 'ckn');
 export const clientInsights = new SupabaseCrud<ClientInsight>('app_client_insights', 'cin');

@@ -156,6 +156,7 @@ function LayoutContentInner({ children }: { children: React.ReactNode }) {
                 { label: 'פרויקטים', href: '/client-portal/projects' },
                 { label: 'לידים', href: '/client-portal/leads' },
                 { label: 'פעילות', href: '/client-portal/activity' },
+                { label: 'פודקאסט', href: '/client-portal/podcast' },
               ].map(item => {
                 const isActive = pathname?.startsWith(item.href);
                 return (

@@ -44,6 +44,7 @@ import type {
   ProjectNotification,
   SystemEvent,
   AuditLog,
+  PodcastStrategy,
 } from '@/lib/db/schema';
 
 // Core entities — relaxed polling (3 min) + no refetch on focus to avoid jankiness
@@ -71,6 +72,7 @@ export const useProjectPayments = () => useData<ProjectPayment>('project-payment
 export const useHostingRecords = () => useData<HostingRecord>('hosting-records');
 export const useAccountantDocuments = () => useData<AccountantDocument>('accountant-documents');
 export const usePodcastSessions = () => useData<PodcastSession>('podcast-sessions');
+export const usePodcastStrategies = () => useData<PodcastStrategy>('podcast-strategies');
 export const useAISettings = () => useData<AISettings>('ai-settings');
 export const useClientKnowledge = () => useData<ClientKnowledge>('client-knowledge');
 export const useEmployeeTasks = () => useData<EmployeeTask>('employee-tasks');

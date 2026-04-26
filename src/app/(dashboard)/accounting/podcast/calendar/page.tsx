@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { usePodcastSessions, useClients } from "@/lib/api/use-entity"
 import { useToast } from "@/components/ui/toast"
 import type { PodcastSession } from "@/lib/db/schema"
@@ -45,7 +46,14 @@ interface SessionDetailState {
   session: PodcastSession | null
 }
 
+interface StrategyPromptState {
+  isOpen: boolean
+  sessionId: string | null
+  clientName: string
+}
+
 export default function PodcastCalendarPage() {
+  const router = useRouter()
   const toast = useToast()
   const { data: sessions, refetch: refreshSessions, create: createSession } = usePodcastSessions()
   const { data: clients } = useClients()
@@ -59,6 +67,11 @@ export default function PodcastCalendarPage() {
   const [sessionDetail, setSessionDetail] = useState<SessionDetailState>({
     isOpen: false,
     session: null,
+  })
+  const [strategyPrompt, setStrategyPrompt] = useState<StrategyPromptState>({
+    isOpen: false,
+    sessionId: null,
+    clientName: "",
   })
   const [bookingForm, setBookingForm] = useState<BookingFormData>({
     clientId: "",
@@ -220,7 +233,7 @@ export default function PodcastCalendarPage() {
         recording_10_videos: 10,
       }
 
-      await createSession({
+      const newSession = await createSession({
         clientId: bookingForm.isNewClient ? "" : bookingForm.clientId,
         clientName: bookingForm.isNewClient
           ? bookingForm.newClientName
@@ -254,6 +267,13 @@ export default function PodcastCalendarPage() {
         packageType: "recording_only",
         price: 497,
         notes: "",
+      })
+
+      // Show strategy prompt with newly created session info
+      setStrategyPrompt({
+        isOpen: true,
+        sessionId: (newSession as any)?.id || null,
+        clientName: bookingForm.isNewClient ? bookingForm.newClientName : clients?.find(c => c.id === bookingForm.clientId)?.name || "",
       })
     } catch (err: any) {
       console.error("[Podcast Booking] Error:", err)
@@ -1115,6 +1135,177 @@ export default function PodcastCalendarPage() {
             >
               סגור
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Strategy Prompt Modal */}
+      {strategyPrompt.isOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 60,
+            padding: "1rem",
+            direction: "rtl",
+          }}
+          onClick={() => setStrategyPrompt({ isOpen: false, sessionId: null, clientName: "" })}
+        >
+          <div
+            style={{
+              background: "var(--surface-raised)",
+              border: "1px solid var(--border)",
+              borderRadius: "12px",
+              padding: "2rem",
+              maxWidth: "450px",
+              width: "100%",
+              boxShadow: "0 10px 40px rgba(0, 0, 0, 0.3)",
+              borderTop: "3px solid #10b981",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header with icon */}
+            <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
+              <div style={{ fontSize: "2.5rem", marginBottom: "1rem" }}>
+                🎙️
+              </div>
+              <h2
+                style={{
+                  fontSize: "1.25rem",
+                  fontWeight: "700",
+                  margin: "0 0 0.5rem 0",
+                  color: "var(--foreground)",
+                }}
+              >
+                להפוך את ההקלטה למכונת תוכן?
+              </h2>
+              <p
+                style={{
+                  color: "var(--foreground-muted)",
+                  fontSize: "0.9rem",
+                  margin: "0",
+                  lineHeight: "1.5",
+                }}
+              >
+                צור אסטרטגיית פודקאסט מלאה, שאלות חכמות ורעיונות לתוכן
+              </p>
+            </div>
+
+            {/* Buttons Container */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.75rem",
+              }}
+            >
+              {/* Primary Button - Full Strategy */}
+              <button
+                onClick={() => {
+                  setStrategyPrompt({ isOpen: false, sessionId: null, clientName: "" })
+                  router.push(`/accounting/podcast/strategy/${strategyPrompt.sessionId}?mode=full`)
+                }}
+                style={{
+                  padding: "1rem",
+                  background: "#10b981",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontWeight: "600",
+                  fontSize: "0.95rem",
+                  transition: "all 0.2s",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.5rem",
+                }}
+                onMouseEnter={(e) => {
+                  ;(e.currentTarget as HTMLButtonElement).style.background = "#059669"
+                  ;(e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"
+                  ;(e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 12px rgba(16, 185, 129, 0.3)"
+                }}
+                onMouseLeave={(e) => {
+                  ;(e.currentTarget as HTMLButtonElement).style.background = "#10b981"
+                  ;(e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"
+                  ;(e.currentTarget as HTMLButtonElement).style.boxShadow = "none"
+                }}
+              >
+                <span>🚀</span>
+                כן, צור אסטרטגיה מלאה
+              </button>
+
+              {/* Secondary Button - Questions Only */}
+              <button
+                onClick={() => {
+                  setStrategyPrompt({ isOpen: false, sessionId: null, clientName: "" })
+                  router.push(`/accounting/podcast/strategy/${strategyPrompt.sessionId}?mode=questions`)
+                }}
+                style={{
+                  padding: "1rem",
+                  background: "color-mix(in srgb, #3b82f6 10%, var(--surface))",
+                  color: "#3b82f6",
+                  border: "2px solid #3b82f6",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontWeight: "600",
+                  fontSize: "0.95rem",
+                  transition: "all 0.2s",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.5rem",
+                }}
+                onMouseEnter={(e) => {
+                  ;(e.currentTarget as HTMLButtonElement).style.background = "#3b82f6"
+                  ;(e.currentTarget as HTMLButtonElement).style.color = "white"
+                  ;(e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"
+                }}
+                onMouseLeave={(e) => {
+                  ;(e.currentTarget as HTMLButtonElement).style.background = "color-mix(in srgb, #3b82f6 10%, var(--surface))"
+                  ;(e.currentTarget as HTMLButtonElement).style.color = "#3b82f6"
+                  ;(e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"
+                }}
+              >
+                <span>❓</span>
+                רק שאלות
+              </button>
+
+              {/* Ghost Button - Skip */}
+              <button
+                onClick={() => setStrategyPrompt({ isOpen: false, sessionId: null, clientName: "" })}
+                style={{
+                  padding: "1rem",
+                  background: "transparent",
+                  color: "var(--foreground-muted)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontWeight: "600",
+                  fontSize: "0.95rem",
+                  transition: "all 0.2s",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.5rem",
+                }}
+                onMouseEnter={(e) => {
+                  ;(e.currentTarget as HTMLButtonElement).style.background = "var(--surface)"
+                  ;(e.currentTarget as HTMLButtonElement).style.borderColor = "var(--foreground-muted)"
+                }}
+                onMouseLeave={(e) => {
+                  ;(e.currentTarget as HTMLButtonElement).style.background = "transparent"
+                  ;(e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)"
+                }}
+              >
+                <span>←</span>
+                דלג
+              </button>
+            </div>
           </div>
         </div>
       )}
