@@ -232,16 +232,17 @@ export default function LoginPage() {
             width: '100%',
             maxWidth: '400px',
             flexShrink: 0,
-          padding: '2.5rem 2rem',
-          borderRadius: '20px',
-          background: 'rgba(255,255,255,0.2)',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
-          border: '1px solid rgba(255,255,255,0.35)',
-          boxShadow: '0 24px 64px rgba(0,40,80,0.12), 0 0 0 1px rgba(255,255,255,0.1) inset',
-          direction: 'rtl',
-          animation: mounted ? 'fadeInUp 0.7s cubic-bezier(0.22,1,0.36,1)' : 'none',
-        }}>
+            padding: '2.5rem 2rem',
+            borderRadius: '20px',
+            background: 'rgba(255,255,255,0.38)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            border: '1px solid rgba(255,255,255,0.45)',
+            boxShadow: '0 24px 64px rgba(0,40,80,0.15), 0 0 0 1px rgba(255,255,255,0.15) inset',
+            direction: 'rtl',
+            opacity: 1,
+            animation: mounted ? 'fadeInUp 0.7s cubic-bezier(0.22,1,0.36,1)' : 'none',
+          }}>
           {/* Title */}
           <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
             <h1 style={{

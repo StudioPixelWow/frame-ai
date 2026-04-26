@@ -1420,11 +1420,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                         const visibleRefs = isExpanded ? refs : refs.slice(0, 3);
                         return (
                           <div style={{ marginTop: "0.75rem" }}>
-                            {refs.length === 0 ? (
-                              <div style={{ padding: "0.5rem 0", fontSize: "0.75rem", color: "var(--foreground-muted)", fontStyle: "italic" }}>
-                                אין רפרנסים — הוסף דרך הגדרות המערכת
-                              </div>
-                            ) : (
+                            {refs.length === 0 ? null : (
                               <>
                                 <div
                                   style={{

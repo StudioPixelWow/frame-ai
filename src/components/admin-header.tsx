@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
+import { NotificationCenter } from '@/components/notification-center';
 
 interface AdminHeaderProps {
   onLogout: () => void;
@@ -625,15 +626,14 @@ export default function AdminHeader({
           </div>
 
           {/* Notifications */}
-          <button className="adm-icon-btn" title="הודעות">
-            <div style={{ position: 'relative' }}>
-              <BellIcon />
-              <div className="adm-notification-badge" />
-            </div>
-          </button>
+          <NotificationCenter />
 
           {/* AI Copilot */}
-          <button className="adm-copilot-btn" title="AI עוזר">
+          <button
+            className="adm-copilot-btn"
+            title="AI עוזר"
+            onClick={() => window.dispatchEvent(new CustomEvent('toggle-ai-copilot'))}
+          >
             <SparkleIcon />
             <span>AI</span>
           </button>

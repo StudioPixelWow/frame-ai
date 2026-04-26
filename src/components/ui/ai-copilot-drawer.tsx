@@ -1119,6 +1119,13 @@ interface AICopilotContainerProps {
 const AICopilotContainer: React.FC<AICopilotContainerProps> = ({ children }) => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
+  // Listen for toggle event from header button
+  useEffect(() => {
+    const handler = () => setIsDrawerOpen(prev => !prev);
+    window.addEventListener('toggle-ai-copilot', handler);
+    return () => window.removeEventListener('toggle-ai-copilot', handler);
+  }, []);
+
   return (
     <>
       <AICopilotToggle
