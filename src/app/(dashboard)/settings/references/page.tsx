@@ -145,7 +145,7 @@ export default function ReferencesSettingsPage() {
             </div>
             <div>
               <label style={labelStyle}>תעשייה</label>
-              <input style={inputStyle} value={form.industry} onChange={e => setForm({ ...form, industry: e.target.value })} placeholder="נדל\"ן, מזון, טכנולוגיה..." />
+              <input style={inputStyle} value={form.industry} onChange={e => setForm({ ...form, industry: e.target.value })} placeholder={'נדל"ן, מזון, טכנולוגיה...'} />
             </div>
             <div>
               <label style={labelStyle}>סוג תוכן</label>
