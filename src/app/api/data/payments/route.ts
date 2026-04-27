@@ -7,8 +7,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { payments } from '@/lib/db';
 import { ensureSeeded } from '@/lib/db/seed';
 import { persistenceLog } from '@/lib/db/persistence-logger';
+import { requireRole } from '@/lib/auth/api-guard';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const roleErr = requireRole(req, 'admin');
+  if (roleErr) return roleErr;
+
   ensureSeeded();
   const log = persistenceLog('payments', 'select', '/api/data/payments', 'payments.json');
   try {

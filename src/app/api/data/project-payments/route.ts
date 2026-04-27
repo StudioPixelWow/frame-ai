@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 import { insertTimelineEvent } from '@/lib/timeline';
+import { requireRole } from '@/lib/auth/api-guard';
 
 const TABLE = 'business_project_payments';
 
@@ -135,6 +136,10 @@ async function ensureTable(sb: ReturnType<typeof getSupabase>) {
 
 /* ── GET ─────────────────────────────────────────────── */
 export async function GET(req: NextRequest) {
+  // Financial data — admin only
+  const roleErr = requireRole(req, 'admin');
+  if (roleErr) return roleErr;
+
   try {
     const sb = getSupabase();
     await ensureTable(sb);

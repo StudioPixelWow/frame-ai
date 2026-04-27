@@ -23,6 +23,7 @@ const ADMIN_ROUTES = [
 
 // Routes that require at least staff (admin or employee)
 const STAFF_ROUTES = [
+  '/dashboard',
   '/clients',
   '/campaigns',
   '/tasks',
@@ -31,6 +32,7 @@ const STAFF_ROUTES = [
   '/mailing',
   '/projects',
   '/podcast',
+  '/editor',
 ];
 
 function base64urlDecode(input: string): string {

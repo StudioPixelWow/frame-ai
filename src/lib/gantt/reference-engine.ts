@@ -76,53 +76,59 @@ const STYLE_LABELS: Record<ReferenceStyle, string> = {
 
 /* ── Curated fallback dataset (used when Meta Ads API is not connected) ── */
 
+/**
+ * CURATED FALLBACK — clearly labeled as temporary inspiration examples.
+ * These are NOT real competitor ads. They are generic stock-photo examples
+ * shown ONLY when Meta Ads Library is not connected.
+ * The UI must label these as "דוגמאות השראה זמניות" (temporary inspiration).
+ */
 const CURATED_REFERENCES: ReferenceItem[] = [
   {
     id: 'curated-1', imageUrl: 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=400&h=400&fit=crop',
-    description: 'פוסט מותג מינימליסטי עם טיפוגרפיה נקייה ומסר ממוקד — ביצועים גבוהים בפיד',
-    source: 'curated_library', sourceUrl: '', advertiserName: 'דוגמת רפרנס — מינימליסטי',
+    description: '⚠️ דוגמת השראה בלבד — פוסט מותג מינימליסטי עם טיפוגרפיה נקייה',
+    source: 'demo_inspiration', sourceUrl: '', advertiserName: '💡 דוגמת השראה (לא מודעה אמיתית)',
     style: 'minimal', contentType: 'social_post', platform: 'instagram', industry: 'general',
-    tags: ['minimal', 'clean', 'typography', 'brand'], engagementScore: 82, isActive: true,
+    tags: ['minimal', 'clean', 'typography', 'brand'], engagementScore: 0, isActive: false,
     createdAt: '2026-01-15T00:00:00Z', updatedAt: '2026-01-15T00:00:00Z',
   },
   {
     id: 'curated-2', imageUrl: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=400&h=400&fit=crop',
-    description: 'סטורי אינטראקטיבי עם CTA ברור — מתאים לקידום מוצרים ושירותים',
-    source: 'curated_library', sourceUrl: '', advertiserName: 'דוגמת רפרנס — מוצר',
+    description: '⚠️ דוגמת השראה בלבד — סטורי אינטראקטיבי עם CTA ברור',
+    source: 'demo_inspiration', sourceUrl: '', advertiserName: '💡 דוגמת השראה (לא מודעה אמיתית)',
     style: 'product_focus', contentType: 'story', platform: 'instagram', industry: 'ecommerce',
-    tags: ['product', 'cta', 'story', 'ecommerce'], engagementScore: 78, isActive: true,
+    tags: ['product', 'cta', 'story', 'ecommerce'], engagementScore: 0, isActive: false,
     createdAt: '2026-01-15T00:00:00Z', updatedAt: '2026-01-15T00:00:00Z',
   },
   {
     id: 'curated-3', imageUrl: 'https://images.unsplash.com/photo-1542744173-8e7e53415bb0?w=400&h=400&fit=crop',
-    description: 'סרטון UGC אותנטי — עדות לקוח עם מסר אישי שמייצר אמון',
-    source: 'curated_library', sourceUrl: '', advertiserName: 'דוגמת רפרנס — UGC',
+    description: '⚠️ דוגמת השראה בלבד — סרטון UGC אותנטי עם מסר אישי',
+    source: 'demo_inspiration', sourceUrl: '', advertiserName: '💡 דוגמת השראה (לא מודעה אמיתית)',
     style: 'ugc', contentType: 'reel', platform: 'instagram', industry: 'general',
-    tags: ['ugc', 'testimonial', 'authentic', 'video'], engagementScore: 85, isActive: true,
+    tags: ['ugc', 'testimonial', 'authentic', 'video'], engagementScore: 0, isActive: false,
     createdAt: '2026-01-15T00:00:00Z', updatedAt: '2026-01-15T00:00:00Z',
   },
   {
     id: 'curated-4', imageUrl: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=400&fit=crop',
-    description: 'אינפוגרפיקה עם נתונים ותוצאות — מתאים לתוכן חינוכי ובניית סמכות',
-    source: 'curated_library', sourceUrl: '', advertiserName: 'דוגמת רפרנס — אינפוגרפיקה',
+    description: '⚠️ דוגמת השראה בלבד — אינפוגרפיקה עם נתונים ותוצאות',
+    source: 'demo_inspiration', sourceUrl: '', advertiserName: '💡 דוגמת השראה (לא מודעה אמיתית)',
     style: 'infographic', contentType: 'social_post', platform: 'facebook', industry: 'general',
-    tags: ['infographic', 'data', 'education', 'authority'], engagementScore: 71, isActive: true,
+    tags: ['infographic', 'data', 'education', 'authority'], engagementScore: 0, isActive: false,
     createdAt: '2026-01-15T00:00:00Z', updatedAt: '2026-01-15T00:00:00Z',
   },
   {
     id: 'curated-5', imageUrl: 'https://images.unsplash.com/photo-1551434678-e076c223a692?w=400&h=400&fit=crop',
-    description: 'לייפסטייל — תמונת אווירה שמתחברת לעולם המותג ומעוררת רגש',
-    source: 'curated_library', sourceUrl: '', advertiserName: 'דוגמת רפרנס — לייפסטייל',
+    description: '⚠️ דוגמת השראה בלבד — לייפסטייל, תמונת אווירה למותג',
+    source: 'demo_inspiration', sourceUrl: '', advertiserName: '💡 דוגמת השראה (לא מודעה אמיתית)',
     style: 'lifestyle', contentType: 'social_post', platform: 'instagram', industry: 'lifestyle',
-    tags: ['lifestyle', 'mood', 'brand', 'emotional'], engagementScore: 76, isActive: true,
+    tags: ['lifestyle', 'mood', 'brand', 'emotional'], engagementScore: 0, isActive: false,
     createdAt: '2026-01-15T00:00:00Z', updatedAt: '2026-01-15T00:00:00Z',
   },
   {
     id: 'curated-6', imageUrl: 'https://images.unsplash.com/photo-1559136555-9303baea8ebd?w=400&h=400&fit=crop',
-    description: 'טקסט בולט עם מסר ויראלי — נוסחה שעובדת לתוכן מעורר שיתוף',
-    source: 'curated_library', sourceUrl: '', advertiserName: 'דוגמת רפרנס — טקסט בולט',
+    description: '⚠️ דוגמת השראה בלבד — טקסט בולט עם מסר ויראלי',
+    source: 'demo_inspiration', sourceUrl: '', advertiserName: '💡 דוגמת השראה (לא מודעה אמיתית)',
     style: 'bold_text', contentType: 'social_post', platform: 'facebook', industry: 'general',
-    tags: ['bold', 'text', 'viral', 'shareable'], engagementScore: 80, isActive: true,
+    tags: ['bold', 'text', 'viral', 'shareable'], engagementScore: 0, isActive: false,
     createdAt: '2026-01-15T00:00:00Z', updatedAt: '2026-01-15T00:00:00Z',
   },
 ];
@@ -171,6 +177,14 @@ export function getStyleLabel(style: ReferenceStyle): string {
  */
 export function isValidReference(ref: ReferenceItem): boolean {
   return !!(ref.imageUrl || ref.sourceUrl) && !!ref.source;
+}
+
+/**
+ * Check if a reference is from the demo/curated fallback (not real ad data).
+ * The UI should label these clearly as "דוגמאות השראה זמניות".
+ */
+export function isDemoReference(ref: ReferenceItem): boolean {
+  return ref.source === 'demo_inspiration' || ref.id.startsWith('curated-');
 }
 
 /* ── Async fetcher for REAL DB data ── */

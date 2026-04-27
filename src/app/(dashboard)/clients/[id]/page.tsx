@@ -14,6 +14,7 @@ import TabFiles from "./tab-files";
 import TabAccounting from "./tab-accounting";
 import TabPortal from "./tab-portal";
 import TabActivity from "./tab-activity";
+import TabIntegrations from "./tab-integrations";
 import TabInsights from "./tab-insights";
 import TabContentGantt from "./tab-content-gantt";
 import TabLeads from "./tab-leads";
@@ -65,7 +66,7 @@ const GANTT_STATUS_COLORS: Record<string, { label: string; color: string }> = {
   none: { label: "לא יוצר", color: "#9ca3af" },
 };
 
-type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "campaigns" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos" | "automations";
+type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "campaigns" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos" | "automations" | "integrations";
 
 const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "overview", label: "סקירה" },
@@ -82,6 +83,7 @@ const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "accounting", label: "הנהח״ש" },
   { id: "portal", label: "פורטל" },
   { id: "automations", label: "אוטומציות" },
+  { id: "integrations", label: "חיבורים" },
   { id: "activity", label: "פעילות" },
 ];
 
@@ -1090,16 +1092,20 @@ function ClientDetailContent() {
         }}
       >
         {TABS.map((tab) => {
-          // Determine if tab should be visible based on client type
+          // Determine if tab should be visible based on client type and role
+          const userRole = typeof window !== 'undefined' ? localStorage.getItem('frameai_role') || 'admin' : 'admin';
           let shouldShow = true;
           if (tab.showFor === "all") {
             shouldShow = true;
           } else if (tab.id === "content" || tab.id === "social" || tab.id === "ads" || tab.id === "portal") {
             shouldShow = client.clientType === "marketing";
           } else if (tab.id === "accounting") {
-            shouldShow = client.clientType === "marketing" || client.clientType === "hosting";
+            // Accounting — admin only, employees should not see financial data
+            shouldShow = (client.clientType === "marketing" || client.clientType === "hosting") && userRole === 'admin';
           }
-          // "overview", "tasks", "files", "activity" show for all types
+          // Hide portal management tab from employees (admin-only)
+          if (tab.id === "portal" && userRole === 'employee') shouldShow = false;
+          // "overview", "tasks", "files", "activity" show for all types and roles
 
           return (
             shouldShow && (
@@ -1197,6 +1203,9 @@ function ClientDetailContent() {
         )}
         {activeTab === "automations" && (
           <TabAutomations clientId={client.id} clientName={client.name} />
+        )}
+        {activeTab === "integrations" && (
+          <TabIntegrations client={client} />
         )}
         {activeTab === "activity" && (
           <TabActivity client={client} />

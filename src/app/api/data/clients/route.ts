@@ -14,7 +14,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
-import { requireRole, getRequestRole, getRequestClientId } from '@/lib/auth/api-guard';
+import { requireRole, getRequestRole, getRequestClientId, getRequestEmployeeId } from '@/lib/auth/api-guard';
 
 /* ── helpers ─────────────────────────────────────────────────────────── */
 
@@ -84,6 +84,14 @@ export async function GET(req: NextRequest) {
       const clientId = getRequestClientId(req);
       if (!clientId) return NextResponse.json([]);
       query = query.eq('id', clientId);
+    }
+
+    // Employee role: only return clients assigned to this employee
+    if (role === 'employee') {
+      const employeeId = getRequestEmployeeId(req);
+      if (employeeId) {
+        query = query.eq('assigned_manager_id', employeeId);
+      }
     }
 
     const { data: rows, error } = await query;
