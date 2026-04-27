@@ -1451,7 +1451,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                                     borderRadius: "0.375rem", fontSize: "0.65rem", color: "#b45309",
                                     textAlign: "center",
                                   }}>
-                                    ⚠️ דוגמאות השראה זמניות — ספריית המודעות לא מחוברת עדיין
+                                    ⚠️ דוגמאות השראה זמניות — חבר Meta Ads Library בהגדרות כדי לראות מודעות אמיתיות
                                   </div>
                                 )}
                                 <div
@@ -2546,7 +2546,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                       borderRadius: "0.375rem", fontSize: "0.75rem", color: "#b45309",
                       textAlign: "center",
                     }}>
-                      ⚠️ דוגמאות השראה זמניות — ספריית המודעות לא מחוברת עדיין
+                      ⚠️ דוגמאות השראה זמניות — חבר Meta Ads Library בהגדרות כדי לראות מודעות אמיתיות
                     </div>
                   )}
                   <div style={{

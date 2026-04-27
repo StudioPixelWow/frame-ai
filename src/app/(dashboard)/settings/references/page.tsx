@@ -44,6 +44,14 @@ const emptyForm = {
   style: "lifestyle", tags: "", advertiserName: "", engagementScore: 70,
 };
 
+interface MetaAdsStatus {
+  connected: boolean;
+  hasToken: boolean;
+  tokenValid: boolean;
+  error?: string;
+  lastChecked: string;
+}
+
 export default function ReferencesSettingsPage() {
   const { data: refs, refetch, create, remove } = useData<AdReference>("/api/data/ad-references");
   const [form, setForm] = useState(emptyForm);
@@ -51,6 +59,54 @@ export default function ReferencesSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [filterIndustry, setFilterIndustry] = useState("");
   const [filterPlatform, setFilterPlatform] = useState("");
+  const [metaStatus, setMetaStatus] = useState<MetaAdsStatus | null>(null);
+  const [metaSearchQuery, setMetaSearchQuery] = useState("");
+  const [metaSearching, setMetaSearching] = useState(false);
+
+  // Check Meta Ads connection status on mount
+  useEffect(() => {
+    fetch("/api/data/meta-ads?status=true", {
+      headers: {
+        "x-app-role": typeof window !== "undefined" ? localStorage.getItem("frameai_role") || "" : "",
+      },
+    })
+      .then(r => r.json())
+      .then(setMetaStatus)
+      .catch(() => setMetaStatus({ connected: false, hasToken: false, tokenValid: false, lastChecked: new Date().toISOString() }));
+  }, []);
+
+  const handleMetaSearch = async () => {
+    if (!metaSearchQuery.trim()) return;
+    setMetaSearching(true);
+    try {
+      const res = await fetch(`/api/data/meta-ads?q=${encodeURIComponent(metaSearchQuery)}&limit=10`, {
+        headers: {
+          "x-app-role": typeof window !== "undefined" ? localStorage.getItem("frameai_role") || "" : "",
+        },
+      });
+      const data = await res.json();
+      if (data.error) {
+        alert(data.error);
+      } else {
+        alert(`נמצאו ${data.count} מודעות מ-Meta Ads Library`);
+        // Optionally save to DB
+        if (data.count > 0 && confirm("לשמור את המודעות למאגר הרפרנסים?")) {
+          await fetch("/api/data/meta-ads", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-app-role": typeof window !== "undefined" ? localStorage.getItem("frameai_role") || "" : "",
+            },
+            body: JSON.stringify({ searchTerms: metaSearchQuery, saveToDb: true, limit: 25 }),
+          });
+          refetch();
+        }
+      }
+    } catch (err) {
+      console.error("Meta search error:", err);
+    }
+    setMetaSearching(false);
+  };
 
   const handleSubmit = async () => {
     if (!form.imageUrl || !form.description) return;
@@ -108,6 +164,70 @@ export default function ReferencesSettingsPage() {
         >
           {showForm ? "ביטול" : "+ הוסף רפרנס"}
         </button>
+      </div>
+
+      {/* Meta Ads Library Connection Status */}
+      <div style={{
+        padding: "1rem 1.25rem", borderRadius: "12px", marginBottom: "1.25rem",
+        background: metaStatus?.connected
+          ? "rgba(34, 197, 94, 0.06)"
+          : "rgba(245, 158, 11, 0.06)",
+        border: `1px solid ${metaStatus?.connected ? "rgba(34, 197, 94, 0.2)" : "rgba(245, 158, 11, 0.2)"}`,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span style={{
+              width: 10, height: 10, borderRadius: "50%", display: "inline-block",
+              background: metaStatus?.connected ? "#22c55e" : metaStatus?.hasToken ? "#f59e0b" : "#6b7280",
+            }} />
+            <span style={{ fontWeight: 600, fontSize: "0.9rem", color: "var(--foreground)" }}>
+              Meta Ads Library
+            </span>
+          </div>
+          <span style={{
+            fontSize: "0.75rem", fontWeight: 600,
+            color: metaStatus?.connected ? "#22c55e" : "#f59e0b",
+          }}>
+            {metaStatus?.connected ? "מחובר" : metaStatus?.hasToken ? "טוקן לא תקין" : "לא מחובר"}
+          </span>
+        </div>
+
+        {!metaStatus?.connected && (
+          <p style={{ fontSize: "0.78rem", color: "var(--foreground-muted)", margin: "0 0 0.75rem" }}>
+            {metaStatus?.hasToken
+              ? `שגיאה: ${metaStatus.error || "טוקן לא תקין"} — יש לעדכן את META_ACCESS_TOKEN ב-.env.local`
+              : "הגדר META_ACCESS_TOKEN ב-.env.local כדי לחבר את ספריית המודעות של Meta ולקבל רפרנסים אמיתיים."}
+          </p>
+        )}
+
+        {metaStatus?.connected && (
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <input
+              type="text"
+              value={metaSearchQuery}
+              onChange={e => setMetaSearchQuery(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleMetaSearch()}
+              placeholder="חפש מודעות ב-Meta Ads Library..."
+              style={{
+                flex: 1, padding: "0.5rem 0.75rem", borderRadius: "8px",
+                border: "1px solid var(--border)", background: "var(--surface)",
+                fontSize: "0.82rem", color: "var(--foreground)",
+              }}
+            />
+            <button
+              onClick={handleMetaSearch}
+              disabled={metaSearching}
+              style={{
+                padding: "0.5rem 1rem", borderRadius: "8px",
+                background: "var(--accent)", color: "#fff", border: "none",
+                fontWeight: 600, cursor: "pointer", fontSize: "0.82rem",
+                opacity: metaSearching ? 0.6 : 1,
+              }}
+            >
+              {metaSearching ? "מחפש..." : "חפש"}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Add Form */}

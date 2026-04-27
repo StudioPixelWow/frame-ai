@@ -1,10 +1,13 @@
 /**
  * Reference Engine — fetches ad reference examples for Gantt content ideas.
  *
- * Priority: Real DB data (app_ad_references) → Curated fallback dataset.
- * Real references come from Meta Ads Library via Supabase.
- * When no real data exists (e.g. Meta API not connected), provides curated
- * industry-relevant examples so the user always sees useful references.
+ * Priority:
+ *   1. Real DB data (app_ad_references) — populated by Meta Ads Library sync
+ *   2. Live Meta Ads Library search (when token is configured)
+ *   3. Curated fallback dataset (clearly labeled as "דוגמאות השראה זמניות")
+ *
+ * When Meta Ads Library is not connected, the UI shows a CTA:
+ *   "חבר Meta Ads Library" to encourage setup.
  */
 
 /* ── Types ── */
