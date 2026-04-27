@@ -287,6 +287,12 @@ export class PDFBuilder {
   private startNewPage() {
     this.y = this.H - this.MARGIN_TOP;
     this.currentContent = '';
+    // Brand header on every page — right-aligned for RTL
+    this.drawText('PixelManageAI  |  Studio Pixel', 7, false, 0.35);
+    this.y -= 8;
+    // Thin separator line below brand
+    this.drawDivider();
+    this.y -= 12;
   }
 
   private finishPage() {

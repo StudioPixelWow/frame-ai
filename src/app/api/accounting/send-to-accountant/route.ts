@@ -93,7 +93,11 @@ export async function POST(req: NextRequest) {
     const to = accountantEmail || "accountant@example.com";
     const subject = `מסמכים לתקופה ${periodName} ${year} — סטודיו פיקסל`;
     const totalSize = attachments.reduce((sum: number, a: any) => sum + (a.fileSize || 0), 0);
+    const logoUrl = 'https://s-pixel.co.il/wp-content/uploads/2025/12/rdgik.png';
     const emailBody = [
+      `── PixelManageAI | Studio Pixel ──`,
+      `Logo: ${logoUrl}`,
+      ``,
       `שלום,`,
       ``,
       `מצורפים ${docs.length} מסמכים לתקופה ${periodName} ${year}.`,

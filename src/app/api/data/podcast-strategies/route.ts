@@ -36,11 +36,33 @@ export async function POST(req: NextRequest) {
     const created = await podcastStrategies.createAsync(body);
     console.log('[podcast-strategies] POST created id:', created.id, '| temp?', created.id?.startsWith('temp-'));
 
-    // Safety: if we got a temp-* id, the table doesn't exist — tell the client
+    // Safety: if we got a temp-* id, the table doesn't exist — auto-migrate and retry
     if (created.id?.startsWith('temp-')) {
-      console.error('[podcast-strategies] POST FAILED — table app_podcast_strategies does not exist. Run /api/data/migrate-collections');
+      console.warn('[podcast-strategies] POST got temp-* id — table missing. Auto-migrating...');
+      try {
+        // Auto-create the table
+        const { getSupabase } = await import('@/lib/db/store');
+        const sb = getSupabase();
+        await sb.rpc('exec_sql', {
+          query: `CREATE TABLE IF NOT EXISTS public.app_podcast_strategies (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            data JSONB NOT NULL DEFAULT '{}',
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          );`
+        });
+        console.log('[podcast-strategies] Auto-migration done — retrying insert');
+        // Retry the insert
+        const retried = await podcastStrategies.createAsync(body);
+        if (!retried.id?.startsWith('temp-')) {
+          console.log('[podcast-strategies] Retry succeeded id:', retried.id);
+          return NextResponse.json(retried, { status: 201 });
+        }
+      } catch (migErr) {
+        console.error('[podcast-strategies] Auto-migration failed:', migErr);
+      }
       return NextResponse.json(
-        { error: 'Database table not ready. Run migration first: GET /api/data/migrate-collections' },
+        { error: 'Database table not ready. Run migration: GET /api/data/migrate-collections' },
         { status: 503 }
       );
     }

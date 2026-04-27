@@ -36,6 +36,8 @@ const TABLES = [
   'app_client_insights',
   'app_ad_references',
   'app_podcast_strategies',
+  'app_system_events',
+  'app_audit_log',
   // app_accountant_documents — REMOVED. Accountant docs use app_client_files (category='accountant').
 ];
 

@@ -141,6 +141,13 @@ const Icons = {
       <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m3.08 3.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m3.08-3.08l4.24-4.24M19.78 19.78l-4.24-4.24m-3.08-3.08l-4.24-4.24" />
     </svg>
   ),
+  Video: (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+      <polyline points="8 21 12 17 16 21" />
+      <line x1="12" y1="17" x2="12" y2="14" />
+    </svg>
+  ),
 };
 
 const mainNavItems: NavItem[] = [
@@ -154,6 +161,7 @@ const mainNavItems: NavItem[] = [
   { href: "/employees", label: "צוות", id: "nav-employees", icon: Icons.Team, allowedRoles: ['admin'] },
   { href: "/business-projects", label: "פרויקטים", id: "nav-otp", icon: Icons.BusinessProjects, allowedRoles: ['admin', 'employee'] },
   { href: "/business-projects/dashboard", label: "דשבורד פרויקטים", id: "nav-biz-dash", icon: Icons.BarChart, allowedRoles: ['admin'] },
+  { href: "/editor", label: "PixelFrameAI", id: "nav-editor", icon: Icons.Video, allowedRoles: ['admin', 'employee'] },
   { href: "/accounting", label: "חשבונות", id: "nav-payments", icon: Icons.CreditCard, allowedRoles: ['admin'] },
   { href: "/accounting/timeline", label: "גבייה חכמה", id: "nav-timeline", icon: Icons.BarChart, allowedRoles: ['admin'] },
   { href: "/accounting/podcast", label: "פודקאסט", id: "nav-podcast", icon: Icons.Mic, allowedRoles: ['admin', 'employee'] },

@@ -5,7 +5,8 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
-const STATUE_URL = '/statue.png';
+const STATUE_URL = 'https://s-pixel.co.il/wp-content/uploads/2025/12/Layer-47.png';
+const LOGO_URL = 'https://s-pixel.co.il/wp-content/uploads/2025/12/rdgik.png';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -243,8 +244,16 @@ export default function LoginPage() {
             opacity: 1,
             animation: mounted ? 'fadeInUp 0.7s cubic-bezier(0.22,1,0.36,1)' : 'none',
           }}>
-          {/* Title */}
+          {/* Logo + Title */}
           <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+            <img
+              src={LOGO_URL}
+              alt="Studio Pixel"
+              style={{
+                height: '52px', width: 'auto', objectFit: 'contain',
+                marginBottom: '0.6rem', display: 'inline-block',
+              }}
+            />
             <h1 style={{
               fontSize: '1.55rem', fontWeight: 800, color: '#0d3b5e',
               margin: '0 0 0.3rem 0', letterSpacing: '-0.02em',
