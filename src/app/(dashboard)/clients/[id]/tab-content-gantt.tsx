@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import type { Client, Employee, ClientGanttItem } from "@/lib/db/schema";
 import { useClientGanttItems, useTasks, useEmployees, useProjects, useEmployeeTasks } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
-import { fetchReferences, getStyleLabel, isDemoReference, type ReferenceItem, type ReferenceQuery } from "@/lib/gantt/reference-engine";
+import { fetchReferences, getStyleLabel, type ReferenceItem, type ReferenceQuery } from "@/lib/gantt/reference-engine";
 
 const HEB_MONTHS = [
   "ינואר",
@@ -1443,15 +1443,15 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                               </div>
                             ) : (
                               <>
-                                {/* Demo references banner */}
-                                {refs.length > 0 && refs.every(r => isDemoReference(r)) && (
+                                {/* No references message */}
+                                {refs.length === 0 && (
                                   <div style={{
                                     padding: "0.4rem 0.6rem", marginBottom: "0.4rem",
                                     background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.3)",
                                     borderRadius: "0.375rem", fontSize: "0.65rem", color: "#b45309",
                                     textAlign: "center",
                                   }}>
-                                    ⚠️ דוגמאות השראה זמניות — חבר Meta Ads Library בהגדרות כדי לראות מודעות אמיתיות
+                                    חבר Meta Ads Library בהגדרות כדי לראות מודעות אמיתיות
                                   </div>
                                 )}
                                 <div
@@ -1461,7 +1461,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                                   }}
                                 >
                                   <span style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)" }}>
-                                    {refs.every(r => isDemoReference(r)) ? '💡 דוגמאות השראה' : '🔍 רפרנסים'} ({refs.length})
+                                    {refs.length > 0 ? `🔍 רפרנסים (${refs.length})` : '🔍 רפרנסים'}
                                   </span>
                                   {refs.length > 3 && (
                                     <button
@@ -2538,15 +2538,15 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                 </div>
               ) : (
                 <>
-                  {/* Demo references banner */}
-                  {refs.length > 0 && refs.every(r => isDemoReference(r)) && (
+                  {/* No references message */}
+                  {refs.length === 0 && (
                     <div style={{
                       padding: "0.5rem 0.75rem", marginBottom: "0.5rem",
                       background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.3)",
                       borderRadius: "0.375rem", fontSize: "0.75rem", color: "#b45309",
                       textAlign: "center",
                     }}>
-                      ⚠️ דוגמאות השראה זמניות — חבר Meta Ads Library בהגדרות כדי לראות מודעות אמיתיות
+                      חבר Meta Ads Library בהגדרות כדי לראות מודעות אמיתיות
                     </div>
                   )}
                   <div style={{
@@ -2554,7 +2554,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                     marginBottom: "0.4rem",
                   }}>
                     <span style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)" }}>
-                      {refs.every(r => isDemoReference(r)) ? '💡 דוגמאות השראה' : '🔍 רפרנסים'} ({refs.length})
+                      {refs.length > 0 ? `🔍 רפרנסים (${refs.length})` : '🔍 רפרנסים'}
                     </span>
                     {refs.length > 3 && (
                       <button

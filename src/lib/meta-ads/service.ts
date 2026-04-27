@@ -1,59 +1,31 @@
 /**
  * Meta Ads Library Integration Service
  *
- * Connects to the REAL Meta (Facebook) Ads Library API
- * to fetch competitor ad references for content inspiration.
+ * REAL integration with Meta (Facebook) Ads Library API.
+ * NO mocks. NO fake data. NO fallbacks.
  *
- * API: https://graph.facebook.com/v18.0/ads_archive
- * Docs: https://www.facebook.com/ads/library/api
+ * Endpoint: https://graph.facebook.com/v18.0/ads_archive
  *
- * Required env vars:
- *   META_ACCESS_TOKEN     — long-lived user/system access token
- *
- * Optional env vars:
- *   META_ADS_LIBRARY_API  — override base URL (defaults to graph.facebook.com)
+ * Required env var:
+ *   META_ACCESS_TOKEN — long-lived user/system access token
  */
+
+import type { ReferenceItem, ReferenceStyle } from '@/lib/gantt/reference-engine';
+
+/* ── Types ── */
 
 export interface MetaAd {
   id: string;
-  ad_creation_time: string;
+  ad_creative_body?: string;
   ad_creative_bodies?: string[];
-  ad_creative_link_captions?: string[];
-  ad_creative_link_descriptions?: string[];
-  ad_creative_link_titles?: string[];
+  ad_snapshot_url?: string;
+  page_name?: string;
+  page_id?: string;
+  ad_creation_time?: string;
   ad_delivery_start_time?: string;
   ad_delivery_stop_time?: string;
-  ad_snapshot_url?: string;
-  page_id?: string;
-  page_name?: string;
   publisher_platforms?: string[];
-  impressions?: { lower_bound: string; upper_bound: string };
-  spend?: { lower_bound: string; upper_bound: string };
-  currency?: string;
-  demographic_distribution?: Array<{
-    age: string;
-    gender: string;
-    percentage: string;
-  }>;
-  // Image data from ad_creative_images field
   byline?: string;
-}
-
-export interface MetaAdsSearchParams {
-  /** Search terms to find ads */
-  searchTerms: string;
-  /** Country code (ISO 2-letter), defaults to 'IL' for Israel */
-  adReachedCountries?: string[];
-  /** Filter by active/inactive/all */
-  adActiveStatus?: 'ACTIVE' | 'INACTIVE' | 'ALL';
-  /** Number of results to fetch (max 1000) */
-  limit?: number;
-  /** Fields to request from the API */
-  fields?: string[];
-  /** Filter by ad type */
-  adType?: 'POLITICAL_AND_ISSUE_ADS' | 'ALL';
-  /** Search by page ID */
-  searchPageIds?: string[];
 }
 
 export interface MetaAdsConnectionStatus {
@@ -66,26 +38,8 @@ export interface MetaAdsConnectionStatus {
 
 /* ── Config ── */
 
-const DEFAULT_API_BASE = 'https://graph.facebook.com/v18.0';
-const DEFAULT_FIELDS = [
-  'id',
-  'ad_creation_time',
-  'ad_creative_bodies',
-  'ad_creative_link_captions',
-  'ad_creative_link_descriptions',
-  'ad_creative_link_titles',
-  'ad_delivery_start_time',
-  'ad_delivery_stop_time',
-  'ad_snapshot_url',
-  'page_id',
-  'page_name',
-  'publisher_platforms',
-  'byline',
-].join(',');
-
-function getApiBase(): string {
-  return process.env.META_ADS_LIBRARY_API || DEFAULT_API_BASE;
-}
+const API_BASE = 'https://graph.facebook.com/v18.0';
+const FIELDS = 'ad_creative_body,ad_snapshot_url,page_name';
 
 function getAccessToken(): string | null {
   return process.env.META_ACCESS_TOKEN || null;
@@ -118,19 +72,18 @@ export async function checkConnection(): Promise<MetaAdsConnectionStatus> {
     if (age < 5 * 60 * 1000) return _lastStatus;
   }
 
-  // Test the token with a minimal request
   try {
-    const url = new URL(`${getApiBase()}/ads_archive`);
+    const url = new URL(`${API_BASE}/ads_archive`);
     url.searchParams.set('access_token', token);
     url.searchParams.set('search_terms', 'test');
     url.searchParams.set('ad_reached_countries', "['IL']");
     url.searchParams.set('ad_type', 'ALL');
+    url.searchParams.set('ad_active_status', 'ACTIVE');
     url.searchParams.set('limit', '1');
     url.searchParams.set('fields', 'id');
 
     const res = await fetch(url.toString(), {
       method: 'GET',
-      headers: { 'User-Agent': 'PixelManageAI/1.0' },
       signal: AbortSignal.timeout(10000),
     });
 
@@ -165,45 +118,33 @@ export async function checkConnection(): Promise<MetaAdsConnectionStatus> {
   return _lastStatus;
 }
 
-/* ── Search ads ── */
+/* ── Core search ── */
 
 /**
- * Search the Meta Ads Library for real ad data.
+ * Search Meta Ads Library.
  *
- * @throws Error if no token is configured
- * @returns Array of MetaAd objects from the API
+ * @throws Error if no token or API fails
  */
-export async function searchAds(params: MetaAdsSearchParams): Promise<MetaAd[]> {
+export async function searchAds(searchTerms: string, limit = 6): Promise<MetaAd[]> {
   const token = getAccessToken();
 
   if (!token) {
-    throw new Error('META_ACCESS_TOKEN not configured. Set it in .env.local to connect Meta Ads Library.');
+    throw new Error('NO_TOKEN');
   }
 
-  const url = new URL(`${getApiBase()}/ads_archive`);
+  const url = new URL(`${API_BASE}/ads_archive`);
   url.searchParams.set('access_token', token);
-  url.searchParams.set('search_terms', params.searchTerms);
-  url.searchParams.set(
-    'ad_reached_countries',
-    JSON.stringify(params.adReachedCountries || ['IL'])
-  );
-  url.searchParams.set('ad_active_status', params.adActiveStatus || 'ACTIVE');
-  url.searchParams.set('ad_type', params.adType || 'ALL');
-  url.searchParams.set('limit', String(params.limit || 25));
-  url.searchParams.set('fields', (params.fields || []).length > 0
-    ? params.fields!.join(',')
-    : DEFAULT_FIELDS
-  );
+  url.searchParams.set('search_terms', searchTerms);
+  url.searchParams.set('ad_reached_countries', "['IL']");
+  url.searchParams.set('ad_type', 'ALL');
+  url.searchParams.set('ad_active_status', 'ACTIVE');
+  url.searchParams.set('limit', String(Math.min(limit, 25)));
+  url.searchParams.set('fields', FIELDS);
 
-  if (params.searchPageIds && params.searchPageIds.length > 0) {
-    url.searchParams.set('search_page_ids', JSON.stringify(params.searchPageIds));
-  }
-
-  console.log(`[meta-ads] Searching: "${params.searchTerms}" countries=${params.adReachedCountries || ['IL']} limit=${params.limit || 25}`);
+  console.log(`[meta-ads] Searching: "${searchTerms}" limit=${limit}`);
 
   const res = await fetch(url.toString(), {
     method: 'GET',
-    headers: { 'User-Agent': 'PixelManageAI/1.0' },
     signal: AbortSignal.timeout(15000),
   });
 
@@ -211,56 +152,98 @@ export async function searchAds(params: MetaAdsSearchParams): Promise<MetaAd[]> 
     const body = await res.json().catch(() => ({}));
     const errorMsg = (body as any)?.error?.message || `HTTP ${res.status}`;
     console.error(`[meta-ads] API error: ${errorMsg}`);
-    throw new Error(`Meta Ads Library API error: ${errorMsg}`);
+    throw new Error(errorMsg);
   }
 
   const json = await res.json();
   const ads: MetaAd[] = (json as any)?.data ?? [];
 
-  console.log(`[meta-ads] Got ${ads.length} results for "${params.searchTerms}"`);
+  console.log(`[meta-ads] Got ${ads.length} results for "${searchTerms}"`);
   return ads;
 }
 
+/* ── Map to ReferenceItem ── */
+
 /**
- * Convert a MetaAd from the API into our internal ReferenceItem format.
- * This can be used to populate the app_ad_references table.
+ * Convert a single MetaAd → ReferenceItem for the reference engine.
  */
-export function metaAdToReference(ad: MetaAd): Record<string, unknown> {
-  const body = ad.ad_creative_bodies?.[0] || '';
-  const title = ad.ad_creative_link_titles?.[0] || '';
-  const description = body || title || 'Meta Ad';
+function mapAdToReference(ad: MetaAd, index: number): ReferenceItem {
+  const body = ad.ad_creative_body || ad.ad_creative_bodies?.[0] || '';
+  const snapshotUrl = ad.ad_snapshot_url || '';
+  const pageName = ad.page_name || ad.byline || '';
   const platforms = ad.publisher_platforms || [];
 
-  // Determine primary platform
   let platform = 'facebook';
   if (platforms.includes('instagram')) platform = 'instagram';
-  if (platforms.includes('audience_network')) platform = 'audience_network';
 
   return {
-    imageUrl: '', // Meta API doesn't provide direct image URLs — use ad_snapshot_url
-    description,
+    id: `meta-${ad.id || index}`,
+    imageUrl: snapshotUrl,        // ad_snapshot_url serves as preview
+    description: body,
     source: 'meta_ads_library',
-    sourceUrl: ad.ad_snapshot_url || '',
-    advertiserName: ad.page_name || ad.byline || '',
-    style: 'minimal',
+    sourceUrl: snapshotUrl,
+    advertiserName: pageName,
+    style: 'minimal' as ReferenceStyle,
     contentType: 'social_post',
     platform,
     industry: '',
-    tags: [
-      'meta_ads_library',
-      ...(platforms.map(p => `platform:${p}`)),
-      ad.page_name ? `page:${ad.page_name}` : '',
-    ].filter(Boolean),
+    tags: ['meta_ads_library'],
     engagementScore: 50,
-    isActive: !ad.ad_delivery_stop_time,
+    isActive: true,
     createdAt: ad.ad_creation_time || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    // Extra Meta-specific fields stored for reference
-    metaAdId: ad.id,
-    metaPageId: ad.page_id,
-    metaSnapshotUrl: ad.ad_snapshot_url,
-    metaPublisherPlatforms: platforms,
-    metaDeliveryStart: ad.ad_delivery_start_time,
-    metaDeliveryStop: ad.ad_delivery_stop_time,
   };
+}
+
+/* ── Public API for reference engine ── */
+
+export interface MetaAdsResult {
+  /** 'ok' = real data, 'no_token' = token missing, 'error' = API failed */
+  status: 'ok' | 'no_token' | 'error';
+  /** Hebrew error message for the UI */
+  message: string;
+  /** Real references (empty on error) */
+  references: ReferenceItem[];
+}
+
+/**
+ * Fetch real ad references from Meta Ads Library.
+ *
+ * Returns max 6 items.
+ * Never returns fake data.
+ *
+ * On no token:  status='no_token', message='חבר Meta Ads Library'
+ * On API error:  status='error', message='לא ניתן לטעון נתונים מספריית המודעות'
+ * On success:    status='ok', references=[...up to 6 items]
+ */
+export async function fetchMetaAdsReferences(query: string): Promise<MetaAdsResult> {
+  const token = getAccessToken();
+
+  if (!token) {
+    return {
+      status: 'no_token',
+      message: 'חבר Meta Ads Library',
+      references: [],
+    };
+  }
+
+  try {
+    const ads = await searchAds(query, 6);
+    const references = ads.slice(0, 6).map(mapAdToReference);
+
+    return {
+      status: 'ok',
+      message: `${references.length} מודעות נמצאו`,
+      references,
+    };
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : 'Unknown';
+    console.error(`[meta-ads] fetchMetaAdsReferences error: ${raw}`);
+
+    return {
+      status: 'error',
+      message: 'לא ניתן לטעון נתונים מספריית המודעות',
+      references: [],
+    };
+  }
 }
