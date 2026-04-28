@@ -106,6 +106,65 @@ export function generateReferences(_query: ReferenceQuery): ReferenceItem[] {
   return [];
 }
 
+/* ── Auth headers helper ── */
+
+function getRoleHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  try {
+    if (typeof window !== 'undefined') {
+      const role = localStorage.getItem('frameai_role');
+      if (role) headers['x-app-role'] = role;
+      const clientId = localStorage.getItem('frameai_client_id');
+      if (clientId) headers['x-app-client-id'] = clientId;
+    }
+  } catch {}
+  return headers;
+}
+
+/* ── Search query builder ── */
+
+/**
+ * Extract clean search keywords from Hebrew/English content idea titles.
+ * Meta Ads Library works best with short English queries or brand names.
+ * Falls back to industry + client name if title is purely Hebrew.
+ */
+function buildSearchQueries(query: ReferenceQuery): string[] {
+  const queries: string[] = [];
+
+  // Extract English words from title (brand names, product names)
+  const englishWords = (query.ideaTitle || '').match(/[a-zA-Z]{2,}/g) || [];
+  if (englishWords.length > 0) {
+    queries.push(englishWords.slice(0, 5).join(' '));
+  }
+
+  // Client name (often English / brand name)
+  if (query.clientName) {
+    queries.push(query.clientName);
+  }
+
+  // Client industry (may be English or Hebrew)
+  if (query.clientIndustry) {
+    queries.push(query.clientIndustry);
+  }
+
+  // Content type as keyword
+  if (query.contentType && query.contentType !== 'social_post') {
+    queries.push(query.contentType.replace(/_/g, ' '));
+  }
+
+  // Full title as last resort
+  if (query.ideaTitle && queries.length === 0) {
+    // Take first 3 meaningful words (skip very short words)
+    const words = query.ideaTitle.split(/\s+/).filter(w => w.length > 2).slice(0, 3);
+    if (words.length > 0) {
+      queries.push(words.join(' '));
+    }
+  }
+
+  // Deduplicate and filter empty
+  return [...new Set(queries.filter(q => q.trim().length > 0))];
+}
+
 /* ── Async fetcher — REAL DATA ONLY ── */
 
 /**
@@ -113,7 +172,7 @@ export function generateReferences(_query: ReferenceQuery): ReferenceItem[] {
  *
  * Priority:
  *   1. DB data from app_ad_references (previously synced from Meta)
- *   2. Live Meta Ads Library search
+ *   2. Live Meta Ads Library search (with keyword extraction + fallback queries)
  *
  * Returns max 6 results.
  * Never returns fake/mock/curated data.
@@ -133,6 +192,7 @@ export async function fetchReferencesWithStatus(
   query: ReferenceQuery
 ): Promise<ReferenceFetchResult> {
   const logPrefix = '[fetchReferences]';
+  const authHeaders = getRoleHeaders();
 
   // ── Step 1: Try DB (previously synced data) ──
   try {
@@ -144,7 +204,7 @@ export async function fetchReferencesWithStatus(
     const url = `/api/data/ad-references?${params.toString()}`;
     console.log(`${logPrefix} Checking DB: ${url}`);
 
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: authHeaders });
     if (response.ok) {
       const data = await response.json();
       const rawItems = Array.isArray(data) ? data : [];
@@ -183,83 +243,97 @@ export async function fetchReferencesWithStatus(
     console.warn(`${logPrefix} DB check failed:`, err);
   }
 
-  // ── Step 2: Live Meta Ads Library search ──
-  try {
-    // Build search query from the content idea
-    const searchTerms = query.ideaTitle || query.clientName || query.clientIndustry || '';
-    if (!searchTerms) {
-      return {
-        status: 'empty',
-        message: 'אין מונח חיפוש — הזן שם רעיון או תעשייה',
-        references: [],
-      };
-    }
+  // ── Step 2: Live Meta Ads Library search with fallback queries ──
+  const searchQueries = buildSearchQueries(query);
+  console.log(`${logPrefix} Search queries to try:`, searchQueries);
 
-    // Call Meta Ads API route (server-side)
-    const metaUrl = `/api/data/meta-ads?q=${encodeURIComponent(searchTerms)}&limit=6`;
-    console.log(`${logPrefix} Live Meta search: ${metaUrl}`);
-
-    const metaRes = await fetch(metaUrl);
-    const metaData = await metaRes.json();
-
-    if (metaData.needsToken) {
-      return {
-        status: 'no_token',
-        message: 'חבר Meta Ads Library',
-        references: [],
-      };
-    }
-
-    if (metaData.error) {
-      console.error(`${logPrefix} Meta API error: ${metaData.error}`);
-      return {
-        status: 'error',
-        message: 'לא ניתן לטעון נתונים מספריית המודעות',
-        references: [],
-      };
-    }
-
-    const results: ReferenceItem[] = (metaData.results || [])
-      .slice(0, 6)
-      .map((ref: any): ReferenceItem => ({
-        id: ref.metaAdId || ref.id || `meta-${Math.random().toString(36).slice(2)}`,
-        imageUrl: ref.metaSnapshotUrl || ref.sourceUrl || ref.imageUrl || '',
-        description: ref.description || '',
-        source: 'meta_ads_library',
-        sourceUrl: ref.metaSnapshotUrl || ref.sourceUrl || '',
-        advertiserName: ref.advertiserName || '',
-        style: 'minimal' as ReferenceStyle,
-        contentType: ref.contentType || 'social_post',
-        platform: ref.platform || 'facebook',
-        industry: ref.industry || '',
-        tags: ref.tags || ['meta_ads_library'],
-        engagementScore: ref.engagementScore || 50,
-        isActive: ref.isActive !== false,
-        createdAt: ref.createdAt || new Date().toISOString(),
-        updatedAt: ref.updatedAt || new Date().toISOString(),
-      }))
-      .filter(isValidReference);
-
-    if (results.length > 0) {
-      console.log(`${logPrefix} Got ${results.length} live results from Meta`);
-      return {
-        status: 'ok',
-        message: `${results.length} מודעות מ-Meta Ads Library`,
-        references: results,
-      };
-    }
-
+  if (searchQueries.length === 0) {
     return {
       status: 'empty',
-      message: 'לא נמצאו מודעות עבור חיפוש זה',
-      references: [],
-    };
-  } catch (err) {
-    console.error(`${logPrefix} Meta search error:`, err);
-    return {
-      status: 'error',
-      message: 'לא ניתן לטעון נתונים מספריית המודעות',
+      message: 'אין מונח חיפוש — הזן שם רעיון או תעשייה',
       references: [],
     };
   }
+
+  let lastError: string | null = null;
+  let needsToken = false;
+
+  for (const searchTerm of searchQueries) {
+    try {
+      const metaUrl = `/api/data/meta-ads?q=${encodeURIComponent(searchTerm)}&limit=6`;
+      console.log(`${logPrefix} Live Meta search: ${metaUrl}`);
+
+      const metaRes = await fetch(metaUrl, { headers: authHeaders });
+      const metaData = await metaRes.json();
+
+      if (metaData.needsToken) {
+        needsToken = true;
+        break; // No point trying more queries without a token
+      }
+
+      if (metaData.error) {
+        lastError = metaData.error;
+        console.warn(`${logPrefix} Meta query "${searchTerm}" error: ${metaData.error}`);
+        continue; // Try next query
+      }
+
+      const results: ReferenceItem[] = (metaData.results || [])
+        .slice(0, 6)
+        .map((ref: any): ReferenceItem => ({
+          id: ref.metaAdId || ref.id || `meta-${Math.random().toString(36).slice(2)}`,
+          imageUrl: ref.metaSnapshotUrl || ref.sourceUrl || ref.imageUrl || '',
+          description: ref.description || '',
+          source: 'meta_ads_library',
+          sourceUrl: ref.metaSnapshotUrl || ref.sourceUrl || '',
+          advertiserName: ref.advertiserName || '',
+          style: 'minimal' as ReferenceStyle,
+          contentType: ref.contentType || 'social_post',
+          platform: ref.platform || 'facebook',
+          industry: ref.industry || '',
+          tags: ref.tags || ['meta_ads_library'],
+          engagementScore: ref.engagementScore || 50,
+          isActive: ref.isActive !== false,
+          createdAt: ref.createdAt || new Date().toISOString(),
+          updatedAt: ref.updatedAt || new Date().toISOString(),
+        }))
+        .filter(isValidReference);
+
+      if (results.length > 0) {
+        console.log(`${logPrefix} Got ${results.length} results from Meta for "${searchTerm}"`);
+        return {
+          status: 'ok',
+          message: `${results.length} מודעות מ-Meta Ads Library`,
+          references: results,
+        };
+      }
+
+      console.log(`${logPrefix} No results for "${searchTerm}", trying next query...`);
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : 'Unknown';
+      console.warn(`${logPrefix} Meta search error for "${searchTerm}":`, lastError);
+    }
+  }
+
+  // All queries tried — return appropriate status
+  if (needsToken) {
+    return {
+      status: 'no_token',
+      message: 'חבר Meta Ads Library',
+      references: [],
+    };
+  }
+
+  if (lastError) {
+    return {
+      status: 'error',
+      message: `לא ניתן לטעון נתונים מספריית המודעות: ${lastError}`,
+      references: [],
+    };
+  }
+
+  return {
+    status: 'empty',
+    message: 'לא נמצאו מודעות עבור חיפוש זה',
+    references: [],
+  };
 }
