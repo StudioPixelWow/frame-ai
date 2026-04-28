@@ -1,8 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { usePodcastStrategies } from '@/lib/api/use-entity';
 import type { PodcastStrategy } from '@/lib/db/schema';
 
 interface PodcastStrategySectionProps {
@@ -10,16 +9,56 @@ interface PodcastStrategySectionProps {
 }
 
 export default function PodcastStrategySection({ sessionId }: PodcastStrategySectionProps) {
-  const { data: strategies } = usePodcastStrategies();
+  const [strategy, setStrategy] = useState<PodcastStrategy | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState({
     structure: true,
     questions: true,
     clips: true,
   });
 
-  const strategy = useMemo(() => {
-    return strategies?.find((s) => s.sessionId === sessionId);
-  }, [strategies, sessionId]);
+  // Fetch strategy by sessionId directly
+  const fetchStrategy = useCallback(async () => {
+    if (!sessionId) {
+      setLoading(false);
+      return;
+    }
+
+    console.log('[PodcastStrategySection] Fetching strategy for sessionId:', sessionId);
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/data/podcast-strategies?sessionId=${encodeURIComponent(sessionId)}`, {
+        cache: 'no-store',
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      console.log('[PodcastStrategySection] Fetch result:', data ? `found id=${data.id}` : 'null (no strategy)');
+
+      if (data && data.id) {
+        setStrategy(data as PodcastStrategy);
+      } else {
+        setStrategy(null);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[PodcastStrategySection] Fetch error:', msg);
+      setError(msg);
+      setStrategy(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
+    fetchStrategy();
+  }, [fetchStrategy]);
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections((prev) => ({
@@ -28,7 +67,78 @@ export default function PodcastStrategySection({ sessionId }: PodcastStrategySec
     }));
   };
 
+  // ── Loading state ──
+  if (loading) {
+    return (
+      <div
+        style={{
+          padding: '2rem',
+          backgroundColor: '#f8f8f8',
+          borderRadius: '0.75rem',
+          border: '1px solid #e0e0e0',
+          textAlign: 'center',
+          direction: 'rtl',
+        }}
+      >
+        <div style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: '0.5rem', color: '#333' }}>
+          🎙️ טוען אסטרטגיית פרק...
+        </div>
+        <div
+          style={{
+            width: '2rem',
+            height: '2rem',
+            border: '3px solid #e0e0e0',
+            borderTopColor: '#3b82f6',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+            margin: '1rem auto 0',
+          }}
+        />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  // ── Error state ──
+  if (error) {
+    return (
+      <div
+        style={{
+          padding: '2rem',
+          backgroundColor: '#fef2f2',
+          borderRadius: '0.75rem',
+          border: '1px solid #fecaca',
+          textAlign: 'center',
+          direction: 'rtl',
+        }}
+      >
+        <div style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: '0.5rem', color: '#991b1b' }}>
+          ❌ לא ניתן לטעון את אסטרטגיית הפרק
+        </div>
+        <p style={{ margin: 0, color: '#b91c1c', fontSize: '0.85rem' }}>{error}</p>
+        <button
+          onClick={fetchStrategy}
+          style={{
+            marginTop: '1rem',
+            padding: '0.5rem 1.25rem',
+            backgroundColor: '#ef4444',
+            color: 'white',
+            border: 'none',
+            borderRadius: '0.5rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            fontSize: '0.9rem',
+          }}
+        >
+          🔄 נסה שוב
+        </button>
+      </div>
+    );
+  }
+
+  // ── No strategy exists — show CTA ──
   if (!strategy) {
+    console.log('[PodcastStrategySection] No strategy found for sessionId:', sessionId, '→ showing create CTA');
     return (
       <div
         style={{
@@ -63,11 +173,14 @@ export default function PodcastStrategySection({ sessionId }: PodcastStrategySec
           onMouseEnter={(e) => (e.currentTarget.style.background = '#2563eb')}
           onMouseLeave={(e) => (e.currentTarget.style.background = '#3b82f6')}
         >
-          ✏️ יצירת אסטרטגיה
+          צור אסטרטגיית פרק
         </Link>
       </div>
     );
   }
+
+  // ── Strategy exists — render it ──
+  console.log('[PodcastStrategySection] Rendering saved strategy id:', strategy.id, 'for sessionId:', sessionId);
 
   const selectedQuestions = (strategy.questions || []).filter((q) => q.selected === true);
   const sortedQuestions = [...selectedQuestions].sort((a, b) => a.order - b.order);
@@ -95,6 +208,87 @@ export default function PodcastStrategySection({ sessionId }: PodcastStrategySec
         direction: 'rtl',
       }}
     >
+      {/* Strategy Overview */}
+      <div
+        style={{
+          padding: '1.25rem',
+          backgroundColor: '#f0f9ff',
+          borderRadius: '0.75rem',
+          border: '1px solid #bae6fd',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+          <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0c4a6e' }}>
+            🎙️ אסטרטגיית פרק
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <span
+              style={{
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                padding: '0.2rem 0.5rem',
+                borderRadius: '999px',
+                backgroundColor: strategy.status === 'ready' ? '#dcfce7' : '#fef3c7',
+                color: strategy.status === 'ready' ? '#166534' : '#92400e',
+              }}
+            >
+              {strategy.status === 'ready' ? '✅ מוכן' : strategy.status === 'draft' ? '📝 טיוטה' : strategy.status}
+            </span>
+            {strategy.createdAt && (
+              <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                {new Date(strategy.createdAt).toLocaleDateString('he-IL', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </span>
+            )}
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
+          {strategy.episodeType && (
+            <div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#6b7280', marginBottom: '0.2rem' }}>סוג פרק</div>
+              <div style={{ fontSize: '0.85rem', color: '#1f2937', fontWeight: 600 }}>
+                {strategy.episodeType === 'deep_interview' ? '🎤 ראיון עומק' :
+                 strategy.episodeType === 'sales' ? '💰 פרק מכירתי' :
+                 strategy.episodeType === 'educational' ? '📚 פרק חינוכי' :
+                 strategy.episodeType === 'viral_short' ? '🔥 פרק ויראלי קצר' :
+                 strategy.episodeType === 'authority' ? '👑 פרק סמכות' : strategy.episodeType}
+              </div>
+            </div>
+          )}
+          {strategy.goals && strategy.goals.length > 0 && (
+            <div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#6b7280', marginBottom: '0.2rem' }}>יעדים</div>
+              <div style={{ fontSize: '0.85rem', color: '#1f2937' }}>
+                {strategy.goals.length} יעדים
+              </div>
+            </div>
+          )}
+          {sortedQuestions.length > 0 && (
+            <div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#6b7280', marginBottom: '0.2rem' }}>שאלות נבחרות</div>
+              <div style={{ fontSize: '0.85rem', color: '#1f2937' }}>
+                {sortedQuestions.length} שאלות
+              </div>
+            </div>
+          )}
+          {(strategy.clipIdeas || []).length > 0 && (
+            <div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#6b7280', marginBottom: '0.2rem' }}>רעיונות קליפים</div>
+              <div style={{ fontSize: '0.85rem', color: '#1f2937' }}>
+                {strategy.clipIdeas.length} קליפים
+              </div>
+            </div>
+          )}
+        </div>
+        {(strategy as any).strategySummary && (
+          <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #bae6fd' }}>
+            <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#6b7280', marginBottom: '0.25rem' }}>תקציר אסטרטגיה</div>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: '#1f2937', lineHeight: 1.5 }}>
+              {(strategy as any).strategySummary}
+            </p>
+          </div>
+        )}
+      </div>
+
       {/* Quick Actions */}
       <div
         style={{

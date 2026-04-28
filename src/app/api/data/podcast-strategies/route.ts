@@ -13,10 +13,22 @@ import {
   createStrategy,
 } from '@/lib/db/podcast-db';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     await ensurePodcastTables();
+
+    const { searchParams } = new URL(req.url);
+    const sessionId = searchParams.get('sessionId');
+
     const all = await getAllStrategies();
+
+    // Filter by sessionId if provided
+    if (sessionId) {
+      const match = all.find((s: any) => s.sessionId === sessionId);
+      console.log(`[podcast-strategies] GET ?sessionId=${sessionId} → ${match ? 'found' : 'not found'}`);
+      return NextResponse.json(match || null);
+    }
+
     console.log(`[podcast-strategies] GET → ${all.length} strategies found`);
     return NextResponse.json(all);
   } catch (error) {
