@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useCampaigns, useAdSets, useAds, useLeads } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import type { Client, Campaign, AdSet, Ad, Lead, CampaignStatus } from "@/lib/db/schema";
+import { getCampaignSummaryRec, RECOMMENDATION_TYPE_META, SEVERITY_META } from "@/lib/optimization/engine";
 
 // ── Constants ──
 
@@ -345,6 +346,28 @@ export default function TabCampaigns({ client }: { client: Client }) {
                 {metrics.ctr > 0 && <span>CTR: <strong style={{ color: "var(--foreground)" }}>{metrics.ctr.toFixed(1)}%</strong></span>}
                 {metrics.conversionRate > 0 && <span>המרה: <strong style={{ color: "var(--foreground)" }}>{metrics.conversionRate.toFixed(1)}%</strong></span>}
               </div>
+
+              {/* AI Recommendation summary */}
+              {(() => {
+                const cmpAdSets = getCampaignAdSets(campaign.id);
+                const cmpAds = getCampaignAds(campaign.id);
+                const summaryRec = getCampaignSummaryRec(campaign, cmpAdSets, cmpAds);
+                if (!summaryRec) return null;
+                const typeMeta = RECOMMENDATION_TYPE_META[summaryRec.type];
+                const sevMeta = SEVERITY_META[summaryRec.severity];
+                return (
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginTop: "0.35rem", fontSize: "0.72rem" }}>
+                    <span style={{ fontSize: "0.7rem" }}>{typeMeta.icon}</span>
+                    <span style={{ color: typeMeta.color, fontWeight: 500 }}>{summaryRec.text}</span>
+                    <span style={{
+                      fontSize: "0.55rem", padding: "0.08rem 0.3rem", borderRadius: "999px",
+                      background: sevMeta.bgColor, color: sevMeta.color, fontWeight: 600,
+                    }}>
+                      {sevMeta.label}
+                    </span>
+                  </div>
+                );
+              })()}
 
               {/* Bottom row: dates + sync info + quick actions */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.5rem" }}>

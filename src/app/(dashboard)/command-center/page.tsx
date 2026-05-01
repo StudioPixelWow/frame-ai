@@ -11,6 +11,8 @@ import {
   useCampaigns,
   useLeads,
   usePayments,
+  useAdSets,
+  useAds,
 } from "@/lib/api/use-entity";
 import { useOperationalAlerts } from "@/lib/alerts/use-alerts";
 import { SkeletonKPIRow, SkeletonGrid } from "@/components/ui/skeleton";
@@ -33,6 +35,7 @@ import {
   SEVERITY_LABELS,
 } from "@/lib/campaigns/health-engine";
 import { generateLeadHighlights } from "@/lib/leads/lead-quality";
+import { analyzeClient, RECOMMENDATION_TYPE_META, SEVERITY_META, type Recommendation } from "@/lib/optimization/engine";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -327,6 +330,8 @@ export default function CommandCenterPage() {
   const { data: rawCampaigns, loading: l2 } = useCampaigns();
   const { data: rawLeads, loading: l3 } = useLeads();
   const { data: rawPayments, loading: l4 } = usePayments();
+  const { data: rawAdSets } = useAdSets();
+  const { data: rawAds } = useAds();
   const {
     alerts: rawAlerts,
     criticalCount,
@@ -1560,6 +1565,61 @@ export default function CommandCenterPage() {
           })()}
         </div>
       </div>
+
+      {/* ── Optimization Queue ──────────────────────────────────────────────── */}
+      {(() => {
+        const allAdSets = rawAdSets || [];
+        const allAds = rawAds || [];
+        const allCampaigns = rawCampaigns || [];
+        if (allCampaigns.length === 0 || allAds.length === 0) return null;
+        const optRecs = analyzeClient({ campaigns: allCampaigns, adSets: allAdSets, ads: allAds });
+        const highPriority = optRecs.filter((r: Recommendation) => r.severity === 'high' || r.severity === 'medium').slice(0, 5);
+        if (highPriority.length === 0) return null;
+        return (
+          <div style={{ marginTop: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <span style={{ fontSize: '1rem' }}>🧠</span>
+              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--foreground)', margin: 0 }}>
+                תור אופטימיזציה ({highPriority.length})
+              </h2>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {highPriority.map((rec: Recommendation) => {
+                const typeMeta = RECOMMENDATION_TYPE_META[rec.type];
+                const sevMeta = SEVERITY_META[rec.severity];
+                return (
+                  <div
+                    key={rec.id}
+                    style={{
+                      background: 'var(--surface-raised)', border: '1px solid var(--border)',
+                      borderRadius: '0.625rem', padding: '0.75rem 1rem', direction: 'rtl',
+                      borderRight: `3px solid ${typeMeta.color}`,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span style={{ fontSize: '0.85rem' }}>{typeMeta.icon}</span>
+                        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--foreground)' }}>{rec.title}</span>
+                        <span style={{
+                          fontSize: '0.55rem', padding: '0.08rem 0.3rem', borderRadius: '999px',
+                          background: sevMeta.bgColor, color: sevMeta.color, fontWeight: 600,
+                        }}>
+                          {sevMeta.label}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.65rem', color: 'var(--foreground-muted)' }}>{rec.campaignName}</span>
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--foreground-muted)', lineHeight: 1.4 }}>
+                      {rec.reason}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
     </main>
   );
 }

@@ -14,6 +14,16 @@ import type {
 } from '@/lib/db/schema';
 import { computeHealth } from '@/lib/campaigns/health-engine';
 import { buildCampaignLeadInsights } from '@/lib/leads/lead-quality';
+import {
+  analyzeCampaignFull,
+  getAdSetBadge,
+  getAdNote,
+  RECOMMENDATION_TYPE_META,
+  SEVERITY_META,
+  ACTION_LABELS,
+  type Recommendation,
+  type RecommendationAction,
+} from '@/lib/optimization/engine';
 
 // ── Labels ─────────────────────────────────────────────────────────────
 
@@ -248,7 +258,7 @@ const pillBtn = (active: boolean): React.CSSProperties => ({
 
 function AdCard({
   ad, onEdit, onDuplicate, onCreateVariation, onInlineEdit, viewMode,
-  isWinner, isSelected, onToggleSelect,
+  isWinner, isSelected, onToggleSelect, aiNote,
 }: {
   ad: Ad;
   onEdit: (ad: Ad) => void;
@@ -259,6 +269,7 @@ function AdCard({
   isWinner?: boolean;
   isSelected?: boolean;
   onToggleSelect?: (ad: Ad) => void;
+  aiNote?: { title: string; icon: string; color: string } | null;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -663,6 +674,18 @@ function AdCard({
             </div>
           )}
         </div>
+
+        {/* AI Optimization Note */}
+        {aiNote && (
+          <div style={{
+            padding: '0.3rem 0.5rem', fontSize: '0.6rem',
+            background: `${aiNote.color}08`, borderTop: `1px solid ${aiNote.color}20`,
+            color: aiNote.color, fontWeight: 500,
+            display: 'flex', alignItems: 'center', gap: '0.25rem',
+          }}>
+            {aiNote.icon} {aiNote.title}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -952,6 +975,8 @@ function AdSetSection({
   groupMode,
   selectedAdIds,
   onToggleSelect,
+  recBadge,
+  adNotes,
 }: {
   adSet: AdSet;
   adsForSet: Ad[];
@@ -966,6 +991,8 @@ function AdSetSection({
   groupMode: AdGroupMode;
   selectedAdIds: Set<string>;
   onToggleSelect: (ad: Ad) => void;
+  recBadge?: { title: string; icon: string; color: string } | null;
+  adNotes?: Record<string, { title: string; icon: string; color: string }>;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const statusColor = STATUS_COLORS[adSet.status] || '#6b7280';
@@ -1086,6 +1113,15 @@ function AdSetSection({
                   {adSetPerf.icon} {adSetPerf.label}
                 </span>
               )}
+              {recBadge && (
+                <span style={{
+                  fontSize: '0.58rem', fontWeight: 600, padding: '0.12rem 0.4rem',
+                  borderRadius: '999px', background: `${recBadge.color}12`,
+                  color: recBadge.color, display: 'flex', alignItems: 'center', gap: '0.15rem',
+                }}>
+                  {recBadge.icon} {recBadge.title}
+                </span>
+              )}
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
               {adSet.geoLocations.length > 0 && (
@@ -1182,6 +1218,7 @@ function AdSetSection({
                         isWinner={ad.id === winnerId}
                         isSelected={selectedAdIds.has(ad.id)}
                         onToggleSelect={onToggleSelect}
+                        aiNote={adNotes?.[ad.id] || null}
                       />
                     </div>
                   ))}
@@ -1721,6 +1758,28 @@ export default function CampaignDetailPage() {
     return withScores.reduce((worst, a) => getAdPerformanceScore(a) < getAdPerformanceScore(worst) ? a : worst);
   }, [campaignAds]);
 
+  // Optimization recommendations
+  const recommendations = useMemo(() => {
+    if (!campaign || !hasPerformanceData) return [];
+    return analyzeCampaignFull(campaign, campaignAdSets, campaignAds);
+  }, [campaign, campaignAdSets, campaignAds, hasPerformanceData]);
+
+  const topRecommendations = recommendations.slice(0, 3);
+
+  const [dismissedRecs, setDismissedRecs] = useState<Set<string>>(new Set());
+  const handleRecAction = useCallback((rec: Recommendation, action: RecommendationAction) => {
+    if (action === 'ignore') {
+      setDismissedRecs(prev => new Set(prev).add(rec.id));
+      toast.info('ההמלצה הוסתרה');
+    } else if (action === 'send_to_approval') {
+      toast.success('ההמלצה נשלחה לאישור');
+    } else if (action === 'mark_for_review') {
+      toast.info('סומן לבדיקה');
+    } else if (action === 'create_variation') {
+      toast.info('יצירת וריאציה — בקרוב...');
+    }
+  }, [toast]);
+
   const fieldStyle: React.CSSProperties = {
     width: '100%', padding: '0.5rem 0.75rem', fontSize: '0.82rem',
     borderRadius: '0.375rem', border: '1px solid var(--border)',
@@ -1860,6 +1919,97 @@ export default function CampaignDetailPage() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* AI Optimization Recommendations */}
+        {hasPerformanceData && topRecommendations.filter(r => !dismissedRecs.has(r.id)).length > 0 && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.625rem' }}>
+              <span style={{ fontSize: '0.9rem' }}>🧠</span>
+              <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: 'var(--foreground)' }}>
+                המלצות אופטימיזציה ({recommendations.length})
+              </h3>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {topRecommendations.filter(r => !dismissedRecs.has(r.id)).map((rec) => {
+                const typeMeta = RECOMMENDATION_TYPE_META[rec.type];
+                const sevMeta = SEVERITY_META[rec.severity];
+                return (
+                  <div key={rec.id} className="premium-card" style={{
+                    padding: '0.85rem 1rem',
+                    borderRight: `3px solid ${typeMeta.color}`,
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.3rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span style={{ fontSize: '0.85rem' }}>{typeMeta.icon}</span>
+                        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--foreground)' }}>{rec.title}</span>
+                        <span style={{
+                          fontSize: '0.58rem', padding: '0.1rem 0.35rem', borderRadius: '999px',
+                          background: sevMeta.bgColor, color: sevMeta.color, fontWeight: 600,
+                        }}>
+                          {sevMeta.label}
+                        </span>
+                        <span style={{
+                          fontSize: '0.58rem', padding: '0.1rem 0.35rem', borderRadius: '999px',
+                          background: typeMeta.bgColor, color: typeMeta.color, fontWeight: 500,
+                        }}>
+                          {typeMeta.label}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.6rem', color: 'var(--foreground-muted)', whiteSpace: 'nowrap' }}>
+                        ביטחון {rec.confidence}%
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)', marginBottom: '0.25rem', lineHeight: 1.5 }}>
+                      {rec.reason}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--foreground)', fontWeight: 500, marginBottom: '0.4rem' }}>
+                      💡 {rec.recommendedAction}
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
+                      {rec.actions.map((action) => (
+                        <button
+                          key={action}
+                          onClick={() => handleRecAction(rec, action)}
+                          style={{
+                            fontSize: '0.65rem', padding: '0.2rem 0.5rem', borderRadius: '0.3rem',
+                            border: action === 'ignore' ? '1px solid var(--border)' : `1px solid ${typeMeta.color}30`,
+                            background: action === 'ignore' ? 'transparent' : typeMeta.bgColor,
+                            color: action === 'ignore' ? 'var(--foreground-muted)' : typeMeta.color,
+                            cursor: 'pointer', fontWeight: 500,
+                          }}
+                        >
+                          {ACTION_LABELS[action]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* No performance, no recommendations empty state */}
+        {!hasPerformanceData && campaignAds.length > 0 && campaign.metaSyncSource === 'meta_sync' && (
+          <div className="premium-card" style={{ padding: '1rem', textAlign: 'center' }}>
+            <span style={{ fontSize: '0.85rem', color: '#1877F2', fontWeight: 500 }}>ממתין לנתוני ביצועים ממטא</span>
+            <div style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)', marginTop: '0.2rem' }}>
+              המלצות אופטימיזציה יופיעו כאן לאחר סנכרון נתוני ביצועים
+            </div>
+          </div>
+        )}
+
+        {hasPerformanceData && recommendations.length === 0 && (
+          <div className="premium-card" style={{ padding: '1rem', textAlign: 'center' }}>
+            <span style={{ fontSize: '1rem' }}>✅</span>
+            <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--foreground)', marginTop: '0.2rem' }}>
+              לא נמצאו בעיות משמעותיות כרגע
+            </div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)', marginTop: '0.15rem' }}>
+              הקמפיין פועל כראוי — המערכת תתריע אם יזוהו בעיות
+            </div>
           </div>
         )}
 
@@ -2223,6 +2373,26 @@ export default function CampaignDetailPage() {
                 groupMode={adGroupMode}
                 selectedAdIds={selectedAdIds}
                 onToggleSelect={handleToggleSelect}
+                recBadge={(() => {
+                  if (!campaign) return null;
+                  const badge = getAdSetBadge(adSet, campaignAds, campaign);
+                  if (!badge) return null;
+                  const meta = RECOMMENDATION_TYPE_META[badge.type];
+                  return { title: badge.title, icon: meta.icon, color: meta.color };
+                })()}
+                adNotes={(() => {
+                  if (!campaign) return {};
+                  const notes: Record<string, { title: string; icon: string; color: string }> = {};
+                  const adsInSet = filteredAdsByAdSet[adSet.id] || [];
+                  for (const ad of adsInSet) {
+                    const note = getAdNote(ad, adsInSet, campaign);
+                    if (note) {
+                      const meta = RECOMMENDATION_TYPE_META[note.type];
+                      notes[ad.id] = { title: note.title, icon: meta.icon, color: meta.color };
+                    }
+                  }
+                  return notes;
+                })()}
               />
             ))}
           </div>
