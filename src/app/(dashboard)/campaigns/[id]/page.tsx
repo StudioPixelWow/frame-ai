@@ -1588,6 +1588,71 @@ export default function CampaignDetailPage() {
     toast('🧠 ניתוח AI בקרוב — הפיצ\'ר בפיתוח', 'info');
   }, [toast]);
 
+  // ── Publish to Meta ──────────────────────────────────────────────────
+
+  const [publishLoading, setPublishLoading] = useState(false);
+  const [publishResult, setPublishResult] = useState<{
+    show: boolean;
+    success: boolean;
+    message: string;
+    results: Array<{ step: string; entity: string; success: boolean; metaId?: string; error?: string; skipped?: boolean }>;
+  } | null>(null);
+
+  const handlePublishToMeta = useCallback(async () => {
+    if (!campaign) return;
+    if (publishLoading) return;
+
+    // Safety: prevent double-publish
+    if (campaign.metaCampaignId && campaign.status === 'active') {
+      toast('הקמפיין כבר פורסם למטא', 'info');
+      return;
+    }
+
+    // Validate: must have ad sets
+    if (campaignAdSets.length === 0) {
+      toast('יש להוסיף קבוצת מודעות לפחות אחת לפני פרסום', 'error');
+      return;
+    }
+
+    // Validate: must have ads
+    if (campaignAds.length === 0) {
+      toast('יש להוסיף מודעה לפחות אחת לפני פרסום', 'error');
+      return;
+    }
+
+    setPublishLoading(true);
+    try {
+      const res = await fetch('/api/data/meta-publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaignId: campaign.id }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast(data.error || 'שגיאה בפרסום למטא', 'error');
+        setPublishLoading(false);
+        return;
+      }
+
+      setPublishResult({
+        show: true,
+        success: data.success,
+        message: data.message,
+        results: data.results || [],
+      });
+
+      if (data.success) {
+        toast('הקמפיין פורסם בהצלחה למטא!', 'success');
+      } else {
+        toast(data.message || 'פרסום חלקי — בדוק את הפרטים', 'error');
+      }
+    } catch {
+      toast('שגיאה בחיבור לשרת', 'error');
+    }
+    setPublishLoading(false);
+  }, [campaign, publishLoading, campaignAdSets, campaignAds, toast]);
+
   // ── Mock Trend Data (deterministic from campaign metrics) ────────────
 
   const trendData = useMemo(() => {
@@ -1972,6 +2037,20 @@ export default function CampaignDetailPage() {
                   style={{ fontSize: '0.7rem', padding: '0.3rem 0.55rem', fontWeight: 600, cursor: 'pointer', color: 'var(--accent)' }}
                 >
                   🧠 שיפור AI
+                </button>
+                <button
+                  onClick={handlePublishToMeta}
+                  disabled={publishLoading}
+                  style={{
+                    fontSize: '0.7rem', padding: '0.3rem 0.7rem', fontWeight: 700, cursor: publishLoading ? 'wait' : 'pointer',
+                    background: campaign.metaCampaignId ? 'var(--success, #22c55e)' : 'var(--accent)',
+                    color: '#fff', border: 'none', borderRadius: '0.375rem',
+                    opacity: publishLoading ? 0.6 : 1,
+                    display: 'flex', alignItems: 'center', gap: '0.3rem',
+                  }}
+                  title={campaign.metaCampaignId ? 'הקמפיין כבר פורסם — לחץ לסנכרון מחדש' : 'פרסם את הקמפיין למטא'}
+                >
+                  {publishLoading ? '⏳ מפרסם...' : campaign.metaCampaignId ? '✅ פורסם למטא' : '🚀 פרסם למטא'}
                 </button>
               </div>
             </div>
@@ -2887,6 +2966,65 @@ export default function CampaignDetailPage() {
               </button>
               <button className="mod-btn-ghost ux-btn" onClick={() => setVariationPreview({ show: false, variation: null, ad: null, rec: null })} style={{ padding: '0.5rem 0.75rem', fontSize: '0.8rem', color: '#6b7280' }}>
                 ביטול
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Publish to Meta Result Modal ──────────────────────────── */}
+      {publishResult?.show && (
+        <Modal open={publishResult.show} onClose={() => setPublishResult(null)} title={publishResult.success ? '🎉 פורסם בהצלחה' : '⚠️ תוצאות פרסום'}>
+          <div style={{ direction: 'rtl', padding: '0.5rem' }}>
+            <div style={{
+              padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem',
+              background: publishResult.success ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+              border: `1px solid ${publishResult.success ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+              fontSize: '0.82rem', fontWeight: 600,
+              color: publishResult.success ? '#22c55e' : '#ef4444',
+            }}>
+              {publishResult.message}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+              {publishResult.results.map((r, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  fontSize: '0.72rem', padding: '0.4rem 0.5rem',
+                  borderRadius: '0.375rem', background: 'var(--surface-sunken, var(--background))',
+                  border: '1px solid var(--border)',
+                }}>
+                  <span>{r.success ? (r.skipped ? '⏭️' : '✅') : '❌'}</span>
+                  <span style={{
+                    fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+                    color: r.step === 'campaign' ? '#3b82f6' : r.step === 'adset' ? '#8b5cf6' : '#f59e0b',
+                    minWidth: '4rem',
+                  }}>
+                    {r.step === 'campaign' ? 'קמפיין' : r.step === 'adset' ? 'קבוצה' : 'מודעה'}
+                  </span>
+                  <span style={{ fontWeight: 600, color: 'var(--foreground)', flex: 1 }}>{r.entity}</span>
+                  {r.metaId && (
+                    <span style={{ fontSize: '0.6rem', color: 'var(--foreground-muted)', fontFamily: 'monospace' }}>
+                      {r.metaId.slice(0, 12)}...
+                    </span>
+                  )}
+                  {r.error && (
+                    <span style={{ fontSize: '0.65rem', color: '#ef4444' }}>{r.error}</span>
+                  )}
+                  {r.skipped && (
+                    <span style={{ fontSize: '0.6rem', color: 'var(--foreground-muted)' }}>כבר קיים</span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+              <button
+                className="mod-btn-primary"
+                onClick={() => setPublishResult(null)}
+                style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem', borderRadius: '0.5rem', cursor: 'pointer' }}
+              >
+                סגור
               </button>
             </div>
           </div>

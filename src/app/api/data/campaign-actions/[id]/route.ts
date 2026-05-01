@@ -10,9 +10,15 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { campaignActions, campaignActionApprovals, ads, adSets } from '@/lib/db';
+import { campaignActions, campaignActionApprovals, ads, adSets, campaigns } from '@/lib/db';
 import { logCampaignActivity } from '@/lib/optimization/activity-log';
 import type { CampaignAction } from '@/lib/db/schema';
+import { getSupabase } from '@/lib/db/store';
+import {
+  createMetaAd, pauseMetaAd, resumeMetaAd,
+  mapCtaToMeta,
+  type MetaCredentials, type MetaWriteResult,
+} from '@/lib/meta-ads/write-service';
 
 export async function GET(
   req: NextRequest,
@@ -93,14 +99,15 @@ export async function PUT(
 
     // ── Execute ────────────────────────────────────────────────
     if (body.action === 'execute') {
-      // Only admin can execute
-      if (role === 'client') {
-        return NextResponse.json({ error: 'לקוח לא יכול לבצע פעולות — רק אישור/דחייה' }, { status: 403 });
+      // Only admin can execute — employee cannot write to Meta either
+      if (role === 'client' || role === 'employee') {
+        return NextResponse.json({ error: role === 'client' ? 'לקוח לא יכול לבצע פעולות — רק אישור/דחייה' : 'עובד לא יכול לבצע פעולות מול מטא — רק מנהל' }, { status: 403 });
       }
       if (existing.status !== 'approved') {
         return NextResponse.json({ error: 'Only approved actions can be executed' }, { status: 400 });
       }
 
+      // Step 1: Local DB execution
       const execResult = await executeAction(existing);
       if (execResult.error) {
         await campaignActions.updateAsync(id, {
@@ -116,6 +123,31 @@ export async function PUT(
         return NextResponse.json({ error: execResult.error }, { status: 500 });
       }
 
+      // Step 2: Meta API write (if publishToMeta flag is set and credentials exist)
+      let metaResult: MetaWriteResult | null = null;
+      const publishToMeta = body.publishToMeta === true;
+
+      if (publishToMeta) {
+        const creds = await getClientMetaCreds(existing.clientId);
+        if (!creds) {
+          console.warn(`[execute] No Meta credentials for client ${existing.clientId} — skipping Meta write`);
+        } else {
+          metaResult = await executeMetaAction(existing, creds, execResult.newEntityId);
+          if (metaResult && !metaResult.success) {
+            // Meta failed but local succeeded — mark as executed with warning
+            console.error(`[execute] Meta write failed:`, metaResult.error);
+            await logCampaignActivity(
+              existing.campaignId, existing.clientId,
+              'action_failed', `פרסום למטא נכשל: ${existing.title || existing.description}`,
+              metaResult.error || 'Unknown Meta error', userId, id,
+            );
+          } else if (metaResult?.success && metaResult.metaId) {
+            // Save the Meta ID back to the local entity
+            await saveMetaId(existing, execResult.newEntityId, metaResult.metaId);
+          }
+        }
+      }
+
       const updated = await campaignActions.updateAsync(id, {
         status: 'executed',
         executedAt: now,
@@ -124,14 +156,22 @@ export async function PUT(
 
       // Log specific activity type based on action type
       const activityType = getExecutionActivityType(existing.type as string);
+      const logDesc = metaResult?.success
+        ? `בוצע ופורסם למטא (${metaResult.metaId})`
+        : publishToMeta && metaResult && !metaResult.success
+          ? `בוצע מקומית — פרסום למטא נכשל: ${metaResult.error}`
+          : `פעולה פנימית — טרם פורסם למטא`;
       await logCampaignActivity(
         existing.campaignId, existing.clientId,
         activityType, `בוצע: ${existing.title || existing.description}`,
-        `פעולה פנימית — טרם פורסם למטא`, userId, id,
-        null, execResult.newEntityId ? { newEntityId: execResult.newEntityId } : undefined,
+        logDesc, userId, id,
+        null, {
+          ...(execResult.newEntityId ? { newEntityId: execResult.newEntityId } : {}),
+          ...(metaResult ? { metaResult: { success: metaResult.success, metaId: metaResult.metaId, error: metaResult.error } } : {}),
+        },
       );
 
-      return NextResponse.json({ ...updated, executionResult: execResult });
+      return NextResponse.json({ ...updated, executionResult: execResult, metaResult });
     }
 
     // ── Generic update ─────────────────────────────────────────
@@ -324,5 +364,144 @@ async function executeAction(action: CampaignAction): Promise<ExecResult> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Execution failed';
     return { success: false, error: msg };
+  }
+}
+
+// ── Meta Write Integration Helpers ───────────────────────────────────
+
+async function getClientMetaCreds(clientId: string): Promise<MetaCredentials | null> {
+  try {
+    const sb = getSupabase();
+    const { data } = await sb
+      .from('clients')
+      .select('meta_ad_account_id, meta_access_token, meta_page_id')
+      .eq('id', clientId)
+      .maybeSingle();
+
+    if (!data) return null;
+    const adAccountId = (data as Record<string, unknown>).meta_ad_account_id as string;
+    const accessToken = (data as Record<string, unknown>).meta_access_token as string;
+    if (!adAccountId || !accessToken) return null;
+
+    return { adAccountId, accessToken };
+  } catch {
+    return null;
+  }
+}
+
+async function getClientMetaPageId(clientId: string): Promise<string | null> {
+  try {
+    const sb = getSupabase();
+    const { data } = await sb
+      .from('clients')
+      .select('meta_page_id')
+      .eq('id', clientId)
+      .maybeSingle();
+    return (data as Record<string, unknown>)?.meta_page_id as string || null;
+  } catch {
+    return null;
+  }
+}
+
+async function executeMetaAction(
+  action: CampaignAction,
+  creds: MetaCredentials,
+  newLocalEntityId?: string,
+): Promise<MetaWriteResult> {
+  const type = action.type;
+  const payload = action.payload || {};
+
+  try {
+    switch (type) {
+      case 'duplicate_ad':
+      case 'create_variation': {
+        // Get the newly created local ad
+        const localAdId = newLocalEntityId;
+        if (!localAdId) return { success: false, error: 'No local ad created to publish' };
+        const localAd = await ads.getByIdAsync(localAdId);
+        if (!localAd) return { success: false, error: 'Local ad not found' };
+
+        // Need the adset's Meta ID
+        const localAdSet = await adSets.getByIdAsync(localAd.adSetId);
+        if (!localAdSet?.metaAdSetId) return { success: false, error: 'Parent ad set has no Meta ID — publish the ad set first' };
+
+        // Need the Page ID
+        const pageId = await getClientMetaPageId(action.clientId);
+        if (!pageId) return { success: false, error: 'Missing Meta Page ID — configure in client integrations' };
+
+        return createMetaAd(creds, {
+          adSetId: localAdSet.metaAdSetId,
+          name: localAd.name,
+          status: 'PAUSED',
+          creative: {
+            pageId,
+            message: localAd.primaryText,
+            headline: localAd.headline,
+            description: localAd.description,
+            linkUrl: localAd.ctaLink,
+            imageUrl: localAd.mediaUrl || undefined,
+            callToAction: mapCtaToMeta(localAd.ctaType),
+          },
+        });
+      }
+
+      case 'pause_ad': {
+        const adId = (payload.adIdToPause as string) || action.adId;
+        if (!adId) return { success: false, error: 'Missing ad ID' };
+        const ad = await ads.getByIdAsync(adId);
+        if (!ad?.metaAdId) return { success: false, error: 'Ad has no Meta ID — not yet published' };
+        return pauseMetaAd(creds, ad.metaAdId);
+      }
+
+      case 'resume_ad': {
+        const adId = (payload.adIdToResume as string) || action.adId;
+        if (!adId) return { success: false, error: 'Missing ad ID' };
+        const ad = await ads.getByIdAsync(adId);
+        if (!ad?.metaAdId) return { success: false, error: 'Ad has no Meta ID — not yet published' };
+        return resumeMetaAd(creds, ad.metaAdId);
+      }
+
+      case 'increase_budget':
+      case 'decrease_budget':
+      case 'test_new_audience':
+      case 'create_new_adset':
+      case 'mark_for_review':
+        // These require manual Meta management or extended implementation
+        return { success: true, metaId: undefined };
+
+      default:
+        return { success: false, error: `Meta write not supported for action type: ${type}` };
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Meta execution failed';
+    return { success: false, error: msg };
+  }
+}
+
+async function saveMetaId(
+  action: CampaignAction,
+  localEntityId: string | undefined,
+  metaId: string,
+): Promise<void> {
+  try {
+    const type = action.type;
+    const now = new Date().toISOString();
+
+    if ((type === 'duplicate_ad' || type === 'create_variation') && localEntityId) {
+      await ads.updateAsync(localEntityId, {
+        metaAdId: metaId,
+        status: 'active',
+        lastSyncedAt: now,
+        updatedAt: now,
+      });
+    } else if (type === 'pause_ad' || type === 'resume_ad') {
+      // Status already updated locally — just update lastSyncedAt
+      const adId = (action.payload?.adIdToPause as string) || (action.payload?.adIdToResume as string) || action.adId;
+      if (adId) {
+        await ads.updateAsync(adId, { lastSyncedAt: now, updatedAt: now });
+      }
+    }
+  } catch (err) {
+    console.error('[saveMetaId] Failed:', err);
   }
 }
