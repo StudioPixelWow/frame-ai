@@ -968,6 +968,43 @@ export interface ApprovalQueueItem {
   updatedAt: string;
 }
 
+// Campaign Action — pending automation actions from optimization engine
+export type CampaignActionType =
+  | 'duplicate_ad'
+  | 'create_variation'
+  | 'pause_ad'
+  | 'increase_budget'
+  | 'decrease_budget'
+  | 'test_new_audience';
+
+export type CampaignActionStatus = 'pending' | 'approved' | 'rejected' | 'executed';
+
+export interface CampaignAction {
+  id: string;
+  type: CampaignActionType;
+  objectType: 'campaign' | 'adset' | 'ad';
+  objectId: string;
+  objectName: string;
+  campaignId: string;
+  campaignName: string;
+  clientId: string;
+  clientName: string;
+  payload: Record<string, unknown>;
+  status: CampaignActionStatus;
+  sourceRecommendationId: string | null;
+  sourceRecommendationType: string | null;
+  description: string;
+  previewBefore: string;
+  previewAfter: string;
+  createdBy: string;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  rejectionReason: string | null;
+  executedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // WhatsApp Message
 export type WhatsAppMessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
 

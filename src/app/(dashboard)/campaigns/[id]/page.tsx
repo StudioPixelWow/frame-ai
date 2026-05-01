@@ -24,6 +24,13 @@ import {
   type Recommendation,
   type RecommendationAction,
 } from '@/lib/optimization/engine';
+import {
+  buildCreateVariationAction,
+  buildDuplicateAdAction,
+  buildPauseAdAction,
+  ACTION_TYPE_META,
+} from '@/lib/optimization/actions';
+import { generateVariation, VARIATION_STRATEGY_META } from '@/lib/optimization/variations';
 
 // ── Labels ─────────────────────────────────────────────────────────────
 
@@ -1767,18 +1774,58 @@ export default function CampaignDetailPage() {
   const topRecommendations = recommendations.slice(0, 3);
 
   const [dismissedRecs, setDismissedRecs] = useState<Set<string>>(new Set());
-  const handleRecAction = useCallback((rec: Recommendation, action: RecommendationAction) => {
+  const handleRecAction = useCallback(async (rec: Recommendation, action: RecommendationAction) => {
     if (action === 'ignore') {
       setDismissedRecs(prev => new Set(prev).add(rec.id));
       toast.info('ההמלצה הוסתרה');
-    } else if (action === 'send_to_approval') {
-      toast.success('ההמלצה נשלחה לאישור');
-    } else if (action === 'mark_for_review') {
-      toast.info('סומן לבדיקה');
-    } else if (action === 'create_variation') {
-      toast.info('יצירת וריאציה — בקרוב...');
+      return;
     }
-  }, [toast]);
+
+    // Find the ad/adset this recommendation targets
+    const targetAd = campaignAds.find(a => a.id === rec.objectId);
+
+    if (action === 'create_variation' && targetAd && campaign) {
+      // Generate a variation using the engine
+      const variation = generateVariation(targetAd);
+      const actionObj = buildCreateVariationAction(
+        targetAd, campaign,
+        campaign.clientId, campaign.clientName || '',
+        { newPrimaryText: variation.newPrimaryText, newHeadline: variation.newHeadline, newDescription: variation.newDescription, newCtaType: variation.newCtaType, newMediaSuggestion: variation.newMediaSuggestion },
+        rec,
+      );
+      try {
+        await fetch('/api/data/campaign-actions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(actionObj),
+        });
+        toast.success(`וריאציה נוצרה ונשלחה לאישור — ${VARIATION_STRATEGY_META[variation.strategy]?.label || ''}`);
+      } catch { toast.error('שגיאה ביצירת וריאציה'); }
+      return;
+    }
+
+    if (action === 'send_to_approval' && targetAd && campaign) {
+      // Create a "duplicate_ad" action and send to approval queue
+      const actionObj = buildDuplicateAdAction(
+        targetAd, campaign,
+        campaign.clientId, campaign.clientName || '',
+        rec,
+      );
+      try {
+        await fetch('/api/data/campaign-actions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(actionObj),
+        });
+        toast.success('הפעולה נשלחה לתור האישורים');
+      } catch { toast.error('שגיאה בשליחה לאישור'); }
+      return;
+    }
+
+    if (action === 'mark_for_review') {
+      toast.info('סומן לבדיקה');
+    }
+  }, [toast, campaignAds, campaign]);
 
   const fieldStyle: React.CSSProperties = {
     width: '100%', padding: '0.5rem 0.75rem', fontSize: '0.82rem',

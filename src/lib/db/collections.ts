@@ -44,6 +44,7 @@ import type {
   AuditLog,
   AdReference,
   PodcastStrategy,
+  CampaignAction,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -93,3 +94,4 @@ export const projectNotifications = new JsonStore<ProjectNotification>('project-
 export const systemEvents = new SupabaseCrud<SystemEvent>('app_system_events', 'sys');
 export const auditLog = new SupabaseCrud<AuditLog>('app_audit_log', 'aud');
 export const adReferences = new SupabaseCrud<AdReference>('app_ad_references', 'adr');
+export const campaignActions = new JsonStore<CampaignAction>('campaign-actions', 'cac');

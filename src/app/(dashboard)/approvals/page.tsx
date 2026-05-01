@@ -2,12 +2,13 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useApprovals } from '@/lib/api/use-entity';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
-import type { Approval } from '@/lib/db/schema';
+import type { Approval, CampaignAction } from '@/lib/db/schema';
 import { fireConfetti } from '@/lib/confetti';
+import { ACTION_TYPE_META, ACTION_STATUS_META } from '@/lib/optimization/actions';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'טיוטה',
@@ -67,6 +68,54 @@ export default function ApprovalsPage() {
     clientName: '',
     status: '',
   });
+
+  // ── Campaign Actions ──────────────────────────────────────────────
+  const [campaignActionsData, setCampaignActionsData] = useState<CampaignAction[]>([]);
+  const [actionsLoading, setActionsLoading] = useState(true);
+
+  const fetchActions = useCallback(async () => {
+    try {
+      const res = await fetch('/api/data/campaign-actions');
+      if (res.ok) {
+        const data = await res.json();
+        setCampaignActionsData(data.actions || []);
+      }
+    } catch { /* silent */ }
+    setActionsLoading(false);
+  }, []);
+
+  useEffect(() => { fetchActions(); }, [fetchActions]);
+
+  const handleActionDecision = useCallback(async (actionId: string, decision: 'approve' | 'reject' | 'execute', reason?: string) => {
+    try {
+      const body: Record<string, string> = { action: decision };
+      if (reason) body.rejectionReason = reason;
+      const res = await fetch(`/api/data/campaign-actions/${actionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        if (decision === 'approve') {
+          toast('הפעולה אושרה', 'success');
+          fireConfetti(20);
+        } else if (decision === 'reject') {
+          toast('הפעולה נדחתה', 'info');
+        } else if (decision === 'execute') {
+          toast('הפעולה בוצעה בהצלחה', 'success');
+          fireConfetti(30);
+        }
+        fetchActions();
+      } else {
+        const err = await res.json();
+        toast(err.error || 'שגיאה', 'error');
+      }
+    } catch { toast('שגיאה בעדכון הפעולה', 'error'); }
+  }, [toast, fetchActions]);
+
+  const pendingActions = campaignActionsData.filter(a => a.status === 'pending');
+  const approvedActions = campaignActionsData.filter(a => a.status === 'approved');
+  const completedActions = campaignActionsData.filter(a => a.status === 'executed' || a.status === 'rejected');
 
   // Calculate KPIs
   const pendingCount = approvals.filter(a => a.status === 'pending_approval').length;
@@ -298,6 +347,154 @@ export default function ApprovalsPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ── Campaign Actions Queue ─────────────────────────────────── */}
+      {!actionsLoading && campaignActionsData.length > 0 && (
+        <div style={{ marginTop: '2.5rem', borderTop: '2px solid var(--border)', paddingTop: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <div>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--foreground)', margin: 0 }}>
+                🤖 פעולות קמפיין — מנוע אופטימיזציה
+              </h2>
+              <p style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)', marginTop: '0.2rem' }}>
+                פעולות שנוצרו מתוך המלצות AI — אשרו, דחו, או בצעו
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.75rem' }}>
+              <span style={{ color: '#f59e0b', fontWeight: 600 }}>⏳ {pendingActions.length} ממתינים</span>
+              <span style={{ color: '#22c55e', fontWeight: 600 }}>✅ {approvedActions.length} מאושרים</span>
+              <span style={{ color: '#6b7280', fontWeight: 600 }}>📦 {completedActions.length} הושלמו</span>
+            </div>
+          </div>
+
+          {/* Pending Actions */}
+          {pendingActions.length > 0 && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem', color: '#f59e0b' }}>
+                ממתינים לאישור ({pendingActions.length})
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '0.75rem' }}>
+                {pendingActions.map(act => {
+                  const meta = ACTION_TYPE_META[act.type] || { icon: '⚙️', label: act.type, color: '#6b7280', description: '' };
+                  return (
+                    <div key={act.id} className="premium-card" style={{ padding: '1rem', borderRight: `3px solid ${meta.color}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: meta.color }}>
+                          {meta.icon} {meta.label}
+                        </span>
+                        <span style={{ fontSize: '0.65rem', color: 'var(--foreground-muted)' }}>
+                          {act.clientName}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--foreground)', marginBottom: '0.35rem' }}>
+                        {act.description}
+                      </p>
+                      <p style={{ fontSize: '0.72rem', color: 'var(--foreground-muted)', marginBottom: '0.5rem' }}>
+                        קמפיין: {act.campaignName}
+                      </p>
+
+                      {/* Before / After Preview */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                        <div style={{ padding: '0.4rem 0.5rem', borderRadius: '0.25rem', background: 'rgba(239,68,68,0.06)', fontSize: '0.68rem', color: 'var(--foreground-muted)' }}>
+                          <div style={{ fontWeight: 600, marginBottom: '0.15rem', color: '#ef4444' }}>לפני:</div>
+                          {act.previewBefore}
+                        </div>
+                        <div style={{ padding: '0.4rem 0.5rem', borderRadius: '0.25rem', background: 'rgba(34,197,94,0.06)', fontSize: '0.68rem', color: 'var(--foreground-muted)' }}>
+                          <div style={{ fontWeight: 600, marginBottom: '0.15rem', color: '#22c55e' }}>אחרי:</div>
+                          {act.previewAfter}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div style={{ display: 'flex', gap: '0.4rem' }}>
+                        <button
+                          className="mod-btn-primary ux-btn"
+                          onClick={() => handleActionDecision(act.id, 'approve')}
+                          style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem' }}
+                        >
+                          ✅ אישור
+                        </button>
+                        <button
+                          className="mod-btn-ghost ux-btn"
+                          onClick={() => {
+                            const reason = prompt('סיבת דחייה:');
+                            if (reason !== null) handleActionDecision(act.id, 'reject', reason);
+                          }}
+                          style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', color: '#ef4444' }}
+                        >
+                          ❌ דחייה
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Approved — ready to execute */}
+          {approvedActions.length > 0 && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem', color: '#22c55e' }}>
+                מאושרים — מוכנים לביצוע ({approvedActions.length})
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '0.75rem' }}>
+                {approvedActions.map(act => {
+                  const meta = ACTION_TYPE_META[act.type] || { icon: '⚙️', label: act.type, color: '#6b7280', description: '' };
+                  return (
+                    <div key={act.id} className="premium-card" style={{ padding: '1rem', borderRight: `3px solid #22c55e` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: meta.color }}>
+                          {meta.icon} {meta.label}
+                        </span>
+                        <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem', borderRadius: '0.2rem', background: 'rgba(34,197,94,0.1)', color: '#22c55e', fontWeight: 600 }}>
+                          מאושר
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--foreground)', marginBottom: '0.35rem' }}>
+                        {act.description}
+                      </p>
+                      <button
+                        className="mod-btn-primary ux-btn ux-btn-glow"
+                        onClick={() => handleActionDecision(act.id, 'execute')}
+                        style={{ fontSize: '0.75rem', padding: '0.35rem 0.85rem', marginTop: '0.5rem' }}
+                      >
+                        🚀 בצע עכשיו
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Completed Actions (collapsed) */}
+          {completedActions.length > 0 && (
+            <details style={{ marginTop: '0.5rem' }}>
+              <summary style={{ fontSize: '0.8rem', color: 'var(--foreground-muted)', cursor: 'pointer', fontWeight: 600 }}>
+                היסטוריה ({completedActions.length})
+              </summary>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '0.5rem', marginTop: '0.5rem' }}>
+                {completedActions.slice(0, 10).map(act => {
+                  const meta = ACTION_TYPE_META[act.type] || { icon: '⚙️', label: act.type, color: '#6b7280', description: '' };
+                  const stMeta = ACTION_STATUS_META[act.status] || { label: act.status, color: '#6b7280', bgColor: 'transparent' };
+                  return (
+                    <div key={act.id} className="premium-card" style={{ padding: '0.75rem', opacity: 0.7 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.72rem', color: meta.color }}>{meta.icon} {meta.label}</span>
+                        <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.35rem', borderRadius: '0.2rem', background: stMeta.bgColor, color: stMeta.color, fontWeight: 600 }}>
+                          {stMeta.label}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '0.72rem', color: 'var(--foreground-muted)', marginTop: '0.25rem' }}>{act.description}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </details>
+          )}
         </div>
       )}
 
