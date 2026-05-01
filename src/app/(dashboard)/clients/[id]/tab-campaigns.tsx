@@ -127,7 +127,28 @@ export default function TabCampaigns({ client }: { client: Client }) {
     const leadsCount = cmpLeads.length || cmpAds.reduce((s, a) => s + (a.leads || 0), 0);
     const cpl = leadsCount > 0 ? spend / leadsCount : 0;
     const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
-    return { spend, impressions, clicks, leadsCount, cpl, ctr, adsCount: cmpAds.length, adSetsCount: getCampaignAdSets(campaignId).length };
+    const conversionRate = clicks > 0 ? (leadsCount / clicks) * 100 : 0;
+    return { spend, impressions, clicks, leadsCount, cpl, ctr, conversionRate, adsCount: cmpAds.length, adSetsCount: getCampaignAdSets(campaignId).length };
+  }
+
+  /** Simple composite score for ad ranking */
+  function getAdScore(ad: Ad): number {
+    let score = 0;
+    score += Math.min(ad.ctr * 10, 30);
+    score += Math.min(ad.leads * 5, 25);
+    if (ad.cpl > 0 && ad.cpl < 30) score += 25;
+    else if (ad.cpl > 0 && ad.cpl < 60) score += 15;
+    else if (ad.cpl > 0 && ad.cpl < 100) score += 5;
+    if (ad.impressions > 10000) score += 20;
+    else if (ad.impressions > 5000) score += 12;
+    else if (ad.impressions > 1000) score += 6;
+    return Math.min(score, 100);
+  }
+
+  function getBestAd(campaignId: string): Ad | null {
+    const cmpAds = getCampaignAds(campaignId).filter(a => a.impressions > 0 || a.leads > 0);
+    if (cmpAds.length === 0) return null;
+    return cmpAds.reduce((best, a) => getAdScore(a) > getAdScore(best) ? a : best);
   }
 
   function getAdSetMetrics(adSetId: string) {
@@ -308,6 +329,7 @@ export default function TabCampaigns({ client }: { client: Client }) {
                 <span>הוצאה: <strong style={{ color: "var(--foreground)" }}>{formatCurrency(metrics.spend)}</strong></span>
                 {metrics.cpl > 0 && <span>CPL: <strong style={{ color: "var(--foreground)" }}>{formatCurrency(metrics.cpl)}</strong></span>}
                 {metrics.ctr > 0 && <span>CTR: <strong style={{ color: "var(--foreground)" }}>{metrics.ctr.toFixed(1)}%</strong></span>}
+                {metrics.conversionRate > 0 && <span>המרה: <strong style={{ color: "var(--foreground)" }}>{metrics.conversionRate.toFixed(1)}%</strong></span>}
               </div>
 
               {/* Bottom row: dates + quick actions */}
@@ -392,6 +414,24 @@ export default function TabCampaigns({ client }: { client: Client }) {
             ))}
           </div>
         </div>
+
+        {/* Best performing ad highlight */}
+        {(() => {
+          const best = getBestAd(selectedCampaign.id);
+          if (!best) return null;
+          return (
+            <div style={{ background: "var(--surface-raised)", border: "1px solid #22c55e30", borderRadius: "0.75rem", padding: "0.875rem 1rem", marginBottom: "1rem", borderRight: "3px solid #22c55e" }}>
+              <div style={{ fontSize: "0.7rem", fontWeight: 600, color: "#22c55e", marginBottom: "0.25rem" }}>🏆 מודעה מובילה</div>
+              <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "0.25rem" }}>{best.headline || best.name}</div>
+              <div style={{ display: "flex", gap: "1rem", fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
+                {best.ctr > 0 && <span>CTR {best.ctr.toFixed(1)}%</span>}
+                {best.leads > 0 && <span>{best.leads} לידים</span>}
+                {best.cpl > 0 && <span>CPL {formatCurrency(best.cpl)}</span>}
+                <span style={{ color: "#22c55e", fontWeight: 700 }}>ציון {getAdScore(best)}</span>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Ad Sets list */}
         <h4 style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.625rem" }}>
