@@ -2,6 +2,7 @@
 export type ClientType = 'marketing' | 'branding' | 'websites' | 'hosting' | 'podcast' | 'lead';
 export type PaymentStatus = 'current' | 'overdue' | 'pending' | 'none';
 export type GanttStatus = 'draft' | 'approved' | 'sent_to_client' | 'client_approved' | 'none';
+export type MetaConnectionStatus = 'connected' | 'not_connected' | 'token_expired' | 'missing_permissions' | 'sync_error';
 
 export interface Client {
   id: string;
@@ -52,6 +53,16 @@ export interface Client {
   // Planning
   monthlyGanttStatus: GanttStatus;
   annualGanttStatus: GanttStatus;
+  // Meta Ad Account Connection
+  metaBusinessId: string;
+  metaAdAccountId: string;
+  metaAccessToken: string;
+  metaPageId: string;
+  metaInstagramAccountId: string;
+  metaPixelId: string;
+  metaConnectionStatus: MetaConnectionStatus;
+  metaLastSyncedAt: string | null;
+  metaLastSyncError: string;
 }
 
 // AI Settings
@@ -464,6 +475,10 @@ export interface Campaign {
   notes: string;
   adAccountId: string;
   leadFormIds: string[];
+  // Meta sync
+  metaCampaignId: string;
+  metaSyncSource: 'local' | 'meta_sync';
+  lastSyncedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -495,7 +510,11 @@ export interface AdSet {
   bidStrategy: 'lowest_cost' | 'cost_cap' | 'bid_cap' | null;
   bidAmount: number | null;
 
-  // Meta
+  // Meta sync
+  metaAdSetId: string;
+  lastSyncedAt: string | null;
+
+  // Notes
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -536,6 +555,13 @@ export interface Ad {
   cpl: number;                  // cost per lead
   cpc: number;                  // cost per click
   roas: number;                 // return on ad spend
+  reach: number;                // unique people who saw the ad
+  frequency: number;            // average times each person saw the ad
+  cpm: number;                  // cost per 1000 impressions
+
+  // Meta sync
+  metaAdId: string;
+  lastSyncedAt: string | null;
 
   notes: string;
   createdAt: string;

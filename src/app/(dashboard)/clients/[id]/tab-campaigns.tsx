@@ -67,6 +67,7 @@ export default function TabCampaigns({ client }: { client: Client }) {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [objectiveFilter, setObjectiveFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<string>("all");
 
   // Client-scoped data
   const campaigns = useMemo(() => {
@@ -93,12 +94,13 @@ export default function TabCampaigns({ client }: { client: Client }) {
     let list = campaigns;
     if (statusFilter !== "all") list = list.filter((c) => c.status === statusFilter);
     if (objectiveFilter !== "all") list = list.filter((c) => c.campaignType === objectiveFilter);
+    if (sourceFilter !== "all") list = list.filter((c) => (c.metaSyncSource || "local") === sourceFilter);
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       list = list.filter((c) => c.campaignName.toLowerCase().includes(q));
     }
     return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [campaigns, statusFilter, objectiveFilter, searchQuery]);
+  }, [campaigns, statusFilter, objectiveFilter, sourceFilter, searchQuery]);
 
   // Performance helpers
   function getCampaignLeads(campaignId: string): Lead[] {
@@ -217,8 +219,10 @@ export default function TabCampaigns({ client }: { client: Client }) {
     const avgCpl = totalLeads > 0 ? totalSpend / totalLeads : 0;
     const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
 
+    const metaSyncedCount = campaigns.filter((c) => c.metaSyncSource === "meta_sync").length;
+
     const metrics = [
-      { label: "קמפיינים", value: campaigns.length.toString() },
+      { label: "קמפיינים", value: campaigns.length.toString() + (metaSyncedCount > 0 ? ` (${metaSyncedCount} Meta)` : "") },
       { label: "לידים", value: totalLeads.toString() },
       { label: "הוצאה כוללת", value: formatCurrency(totalSpend) },
       { label: "עלות לליד", value: avgCpl > 0 ? formatCurrency(avgCpl) : "—" },
@@ -263,6 +267,11 @@ export default function TabCampaigns({ client }: { client: Client }) {
           {Object.entries(OBJECTIVE_LABELS).map(([k, v]) => (
             <option key={k} value={k}>{v}</option>
           ))}
+        </select>
+        <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} style={selectStyle}>
+          <option value="all">כל המקורות</option>
+          <option value="meta_sync">מסונכרן ממטא</option>
+          <option value="local">נוצר ידנית</option>
         </select>
       </div>
     );
@@ -310,6 +319,11 @@ export default function TabCampaigns({ client }: { client: Client }) {
                   <span style={{ fontSize: "0.7rem", padding: "0.15rem 0.5rem", borderRadius: "999px", background: statusInfo.bg, color: statusInfo.text, fontWeight: 500 }}>
                     {statusInfo.label}
                   </span>
+                  {campaign.metaSyncSource === "meta_sync" && (
+                    <span style={{ fontSize: "0.65rem", padding: "0.125rem 0.4rem", borderRadius: "999px", background: "rgba(24,119,242,0.1)", color: "#1877F2", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.2rem" }}>
+                      <span style={{ fontSize: "0.55rem" }}>🔄</span> Meta synced
+                    </span>
+                  )}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                   <span style={{ fontSize: "0.75rem", padding: "0.125rem 0.4rem", borderRadius: "0.25rem", background: platformInfo.color + "18", color: platformInfo.color, fontWeight: 500 }}>
@@ -332,11 +346,18 @@ export default function TabCampaigns({ client }: { client: Client }) {
                 {metrics.conversionRate > 0 && <span>המרה: <strong style={{ color: "var(--foreground)" }}>{metrics.conversionRate.toFixed(1)}%</strong></span>}
               </div>
 
-              {/* Bottom row: dates + quick actions */}
+              {/* Bottom row: dates + sync info + quick actions */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.5rem" }}>
-                <span style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
-                  {formatDate(campaign.startDate)} {campaign.endDate ? ` — ${formatDate(campaign.endDate)}` : ""}
-                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
+                    {formatDate(campaign.startDate)} {campaign.endDate ? ` — ${formatDate(campaign.endDate)}` : ""}
+                  </span>
+                  {campaign.lastSyncedAt && (
+                    <span style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", opacity: 0.7 }}>
+                      סנכרון אחרון: {formatDate(campaign.lastSyncedAt)}
+                    </span>
+                  )}
+                </div>
                 <div style={{ display: "flex", gap: "0.375rem" }} onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={() => toggleCampaignStatus(campaign)}
@@ -376,16 +397,26 @@ export default function TabCampaigns({ client }: { client: Client }) {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
             <div>
               <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, color: "var(--foreground)" }}>{selectedCampaign.campaignName}</h3>
-              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.375rem", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
                 <span style={{ fontSize: "0.7rem", padding: "0.15rem 0.5rem", borderRadius: "999px", background: statusInfo.bg, color: statusInfo.text, fontWeight: 500 }}>
                   {statusInfo.label}
                 </span>
+                {selectedCampaign.metaSyncSource === "meta_sync" && (
+                  <span style={{ fontSize: "0.65rem", padding: "0.15rem 0.5rem", borderRadius: "999px", background: "rgba(24,119,242,0.1)", color: "#1877F2", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.2rem" }}>
+                    <span style={{ fontSize: "0.55rem" }}>🔄</span> Meta synced
+                  </span>
+                )}
                 <span style={{ fontSize: "0.8rem", color: "var(--foreground-muted)" }}>
                   {OBJECTIVE_LABELS[selectedCampaign.campaignType] || selectedCampaign.campaignType}
                 </span>
                 <span style={{ fontSize: "0.8rem", color: "var(--foreground-muted)" }}>
                   • {PLATFORM_LABELS[selectedCampaign.platform]?.label || selectedCampaign.platform}
                 </span>
+                {selectedCampaign.lastSyncedAt && (
+                  <span style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", opacity: 0.7 }}>
+                    • סנכרון: {formatDate(selectedCampaign.lastSyncedAt)}
+                  </span>
+                )}
               </div>
             </div>
             <div style={{ display: "flex", gap: "0.375rem" }}>
@@ -414,6 +445,14 @@ export default function TabCampaigns({ client }: { client: Client }) {
             ))}
           </div>
         </div>
+
+        {/* Sync status banner */}
+        {selectedCampaign.metaSyncSource === "meta_sync" && metrics.spend === 0 && metrics.leadsCount === 0 && metrics.adsCount === 0 && (
+          <div style={{ background: "rgba(24,119,242,0.06)", border: "1px solid rgba(24,119,242,0.15)", borderRadius: "0.625rem", padding: "0.75rem 1rem", marginBottom: "1rem", textAlign: "center", direction: "rtl" }}>
+            <span style={{ fontSize: "0.85rem", color: "#1877F2", fontWeight: 500 }}>ממתין לסנכרון נתונים...</span>
+            <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>הקמפיין סונכרן ממטא — נתוני ביצועים יופיעו לאחר הסנכרון הבא</div>
+          </div>
+        )}
 
         {/* Best performing ad highlight */}
         {(() => {
@@ -461,6 +500,9 @@ export default function TabCampaigns({ client }: { client: Client }) {
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                       <span style={{ fontWeight: 600, fontSize: "0.9rem", color: "var(--foreground)" }}>{adSet.name}</span>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: asStatusColor, display: "inline-block" }} />
+                      {adSet.metaAdSetId && (
+                        <span style={{ fontSize: "0.6rem", padding: "0.1rem 0.35rem", borderRadius: "999px", background: "rgba(24,119,242,0.08)", color: "#1877F2", fontWeight: 500 }}>Meta</span>
+                      )}
                     </div>
                     <span style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
                       {asMetrics.adsCount} מודעות
@@ -577,7 +619,12 @@ export default function TabCampaigns({ client }: { client: Client }) {
                   )}
                   <div style={{ padding: "0.75rem" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.375rem" }}>
-                      <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--foreground)" }}>{ad.name}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                        <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--foreground)" }}>{ad.name}</span>
+                        {ad.metaAdId && (
+                          <span style={{ fontSize: "0.6rem", padding: "0.1rem 0.35rem", borderRadius: "999px", background: "rgba(24,119,242,0.08)", color: "#1877F2", fontWeight: 500 }}>Meta</span>
+                        )}
+                      </div>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: adStatusColor, display: "inline-block" }} />
                     </div>
                     {ad.primaryText && (
