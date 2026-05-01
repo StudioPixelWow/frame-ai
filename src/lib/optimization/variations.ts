@@ -17,6 +17,10 @@ export interface VariationSuggestion {
   newMediaSuggestion: string;
   strategy: VariationStrategy;
   rationale: string;
+  explanation: string; // "מה השתנה ולמה" — human-readable change summary
+  originalAdId: string;
+  linkedAdSetId: string;
+  linkedCampaignId: string;
 }
 
 export type VariationStrategy =
@@ -279,6 +283,9 @@ export function generateVariation(
   const ctaLabel = CTA_LABELS[newCta] || newCta;
   const rationale = buildRationale(strategy, perf, meta);
 
+  // Build explanation — "מה השתנה ולמה"
+  const explanation = buildExplanation(strategy, ad, result, newCta, mediaSuggestion);
+
   return {
     newPrimaryText: result.primaryText,
     newHeadline: result.headline,
@@ -287,6 +294,10 @@ export function generateVariation(
     newMediaSuggestion: mediaSuggestion,
     strategy,
     rationale,
+    explanation,
+    originalAdId: ad.id,
+    linkedAdSetId: ad.adSetId || '',
+    linkedCampaignId: ad.campaignId || '',
   };
 }
 
@@ -309,6 +320,36 @@ function buildRationale(
     case 'emotional':
       return `ערעור רגשי — שיפור חיבור רגשי עם הקהל`;
   }
+}
+
+function buildExplanation(
+  strategy: VariationStrategy,
+  ad: Ad,
+  result: { primaryText: string; headline: string; description: string },
+  newCta: string,
+  mediaSuggestion: string,
+): string {
+  const changes: string[] = [];
+
+  if (result.headline !== ad.headline) {
+    changes.push(`כותרת שונתה מ-"${(ad.headline || '—').substring(0, 30)}" ל-"${result.headline.substring(0, 30)}"`);
+  }
+  if (result.primaryText !== ad.primaryText) {
+    changes.push(`טקסט ראשי עודכן בגישת ${VARIATION_STRATEGY_META[strategy].label}`);
+  }
+  if (newCta && newCta !== (ad.ctaType || '')) {
+    const oldLabel = CTA_LABELS[ad.ctaType || ''] || ad.ctaType || 'ללא';
+    const newLabel = CTA_LABELS[newCta] || newCta;
+    changes.push(`CTA שונה מ-"${oldLabel}" ל-"${newLabel}"`);
+  }
+  if (mediaSuggestion) {
+    changes.push(`המלצת מדיה: ${mediaSuggestion.substring(0, 50)}`);
+  }
+
+  if (changes.length === 0) {
+    return `אסטרטגיית ${VARIATION_STRATEGY_META[strategy].label} — ללא שינויים משמעותיים`;
+  }
+  return `מה השתנה ולמה:\n${changes.map(c => `• ${c}`).join('\n')}`;
 }
 
 // ── Generate multiple variations ─────────────────────────────────────

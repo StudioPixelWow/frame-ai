@@ -1774,6 +1774,25 @@ export default function CampaignDetailPage() {
   const topRecommendations = recommendations.slice(0, 3);
 
   const [dismissedRecs, setDismissedRecs] = useState<Set<string>>(new Set());
+
+  // Variation preview modal state
+  const [variationPreview, setVariationPreview] = useState<{
+    show: boolean;
+    variation: ReturnType<typeof generateVariation> | null;
+    ad: Ad | null;
+    rec: Recommendation | null;
+  }>({ show: false, variation: null, ad: null, rec: null });
+
+  // Activity log state
+  const [activityEntries, setActivityEntries] = useState<Array<{ id: string; activityType: string; title: string; description: string; createdAt: string }>>([]);
+  useEffect(() => {
+    if (!campaign) return;
+    fetch(`/api/data/campaign-activity?campaignId=${campaign.id}&limit=10`)
+      .then(r => r.ok ? r.json() : { entries: [] })
+      .then(d => setActivityEntries(d.entries || []))
+      .catch(() => {});
+  }, [campaign]);
+
   const handleRecAction = useCallback(async (rec: Recommendation, action: RecommendationAction) => {
     if (action === 'ignore') {
       setDismissedRecs(prev => new Set(prev).add(rec.id));
@@ -1781,31 +1800,16 @@ export default function CampaignDetailPage() {
       return;
     }
 
-    // Find the ad/adset this recommendation targets
     const targetAd = campaignAds.find(a => a.id === rec.objectId);
 
     if (action === 'create_variation' && targetAd && campaign) {
-      // Generate a variation using the engine
+      // Show preview modal instead of immediately creating
       const variation = generateVariation(targetAd);
-      const actionObj = buildCreateVariationAction(
-        targetAd, campaign,
-        campaign.clientId, campaign.clientName || '',
-        { newPrimaryText: variation.newPrimaryText, newHeadline: variation.newHeadline, newDescription: variation.newDescription, newCtaType: variation.newCtaType, newMediaSuggestion: variation.newMediaSuggestion },
-        rec,
-      );
-      try {
-        await fetch('/api/data/campaign-actions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(actionObj),
-        });
-        toast.success(`וריאציה נוצרה ונשלחה לאישור — ${VARIATION_STRATEGY_META[variation.strategy]?.label || ''}`);
-      } catch { toast.error('שגיאה ביצירת וריאציה'); }
+      setVariationPreview({ show: true, variation, ad: targetAd, rec });
       return;
     }
 
     if (action === 'send_to_approval' && targetAd && campaign) {
-      // Create a "duplicate_ad" action and send to approval queue
       const actionObj = buildDuplicateAdAction(
         targetAd, campaign,
         campaign.clientId, campaign.clientName || '',
@@ -1822,10 +1826,80 @@ export default function CampaignDetailPage() {
       return;
     }
 
-    if (action === 'mark_for_review') {
-      toast.info('סומן לבדיקה');
+    if (action === 'mark_for_review' && campaign) {
+      const actionObj = {
+        id: `act_${Date.now()}`,
+        type: 'mark_for_review',
+        title: `בדיקה: ${rec.objectName}`,
+        objectType: rec.objectType,
+        objectId: rec.objectId,
+        objectName: rec.objectName,
+        campaignId: campaign.id,
+        campaignName: campaign.campaignName,
+        adSetId: null,
+        adId: targetAd?.id || null,
+        clientId: campaign.clientId,
+        clientName: campaign.clientName || '',
+        recommendationId: rec.id,
+        payload: { reviewReason: rec.reason, reviewPriority: rec.severity },
+        status: 'pending',
+        sourceRecommendationId: rec.id,
+        sourceRecommendationType: rec.type,
+        description: `סימון "${rec.objectName}" לבדיקה — ${rec.reason}`,
+        previewBefore: `פריט: ${rec.objectName}`,
+        previewAfter: `סומן לבדיקה`,
+        createdBy: 'system',
+        approvedBy: null, approvedAt: null, rejectionReason: null, executedAt: null, failedReason: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      try {
+        await fetch('/api/data/campaign-actions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(actionObj),
+        });
+        toast.info('סומן לבדיקה ונשלח לתור');
+      } catch { toast.error('שגיאה'); }
+      return;
     }
   }, [toast, campaignAds, campaign]);
+
+  // Variation preview — save draft or send for approval
+  const handleVariationSave = useCallback(async (sendForApproval: boolean) => {
+    const { variation, ad, rec } = variationPreview;
+    if (!variation || !ad || !campaign) return;
+
+    const actionObj = buildCreateVariationAction(
+      ad, campaign,
+      campaign.clientId, campaign.clientName || '',
+      {
+        newPrimaryText: variation.newPrimaryText,
+        newHeadline: variation.newHeadline,
+        newDescription: variation.newDescription,
+        newCtaType: variation.newCtaType,
+        newMediaSuggestion: variation.newMediaSuggestion,
+        explanation: variation.explanation,
+        strategy: variation.strategy,
+      },
+      rec,
+    );
+    if (sendForApproval) {
+      actionObj.status = 'approval_required';
+    }
+
+    try {
+      await fetch('/api/data/campaign-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(actionObj),
+      });
+      toast.success(sendForApproval
+        ? `וריאציה נשלחה לאישור — ${VARIATION_STRATEGY_META[variation.strategy]?.label || ''}`
+        : 'טיוטת וריאציה נשמרה');
+      setVariationPreview({ show: false, variation: null, ad: null, rec: null });
+    } catch { toast.error('שגיאה ביצירת וריאציה'); }
+  }, [variationPreview, campaign, toast]);
 
   const fieldStyle: React.CSSProperties = {
     width: '100%', padding: '0.5rem 0.75rem', fontSize: '0.82rem',
@@ -2743,6 +2817,81 @@ export default function CampaignDetailPage() {
           </form>
         </div>
       </Modal>
+
+      {/* ── Activity Log Section ──────────────────────────────────── */}
+      {activityEntries.length > 0 && (
+        <div style={{ marginTop: '1.5rem', padding: '1rem', borderRadius: '0.75rem', background: 'var(--surface)', border: '1px solid var(--border)' }}>
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--foreground)' }}>
+            📋 פעילות אחרונה
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+            {activityEntries.slice(0, 8).map(entry => (
+              <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.72rem', color: 'var(--foreground-muted)', padding: '0.3rem 0', borderBottom: '1px solid var(--border)' }}>
+                <span style={{ fontSize: '0.8rem' }}>
+                  {entry.activityType === 'action_approved' ? '✅' : entry.activityType === 'action_rejected' ? '❌' : entry.activityType === 'action_executed' ? '🚀' : entry.activityType === 'draft_ad_created' ? '📝' : entry.activityType === 'action_generated' ? '⚡' : '📋'}
+                </span>
+                <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{entry.title}</span>
+                <span style={{ marginRight: 'auto' }}>{new Date(entry.createdAt).toLocaleDateString('he-IL')} {new Date(entry.createdAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Variation Preview Modal ───────────────────────────────── */}
+      {variationPreview.show && variationPreview.variation && variationPreview.ad && (
+        <Modal open={variationPreview.show} onClose={() => setVariationPreview({ show: false, variation: null, ad: null, rec: null })} title="תצוגה מקדימה — וריאציה חדשה">
+          <div style={{ direction: 'rtl' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1rem', fontSize: '0.75rem', color: '#8b5cf6', fontWeight: 600 }}>
+              {VARIATION_STRATEGY_META[variationPreview.variation.strategy]?.icon} אסטרטגיה: {VARIATION_STRATEGY_META[variationPreview.variation.strategy]?.label}
+            </div>
+
+            {/* Before / After comparison */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+              <div style={{ padding: '0.75rem', borderRadius: '0.5rem', background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.15)' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#ef4444', marginBottom: '0.4rem' }}>מקור (לפני)</div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.25rem' }}>{variationPreview.ad.headline || '—'}</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)', whiteSpace: 'pre-wrap' }}>{(variationPreview.ad.primaryText || '').substring(0, 120)}</div>
+                <div style={{ fontSize: '0.65rem', color: 'var(--foreground-subtle)', marginTop: '0.3rem' }}>CTA: {variationPreview.ad.ctaType || '—'}</div>
+              </div>
+              <div style={{ padding: '0.75rem', borderRadius: '0.5rem', background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.15)' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#22c55e', marginBottom: '0.4rem' }}>וריאציה (אחרי)</div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.25rem' }}>{variationPreview.variation.newHeadline}</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)', whiteSpace: 'pre-wrap' }}>{variationPreview.variation.newPrimaryText.substring(0, 120)}</div>
+                <div style={{ fontSize: '0.65rem', color: 'var(--foreground-subtle)', marginTop: '0.3rem' }}>CTA: {variationPreview.variation.newCtaType || '—'}</div>
+              </div>
+            </div>
+
+            {/* Explanation */}
+            <div style={{ padding: '0.6rem', borderRadius: '0.375rem', background: 'var(--surface-sunken, var(--background))', fontSize: '0.72rem', color: 'var(--foreground-muted)', marginBottom: '1rem', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+              {variationPreview.variation.explanation}
+            </div>
+
+            {variationPreview.variation.newMediaSuggestion && (
+              <div style={{ padding: '0.5rem', borderRadius: '0.375rem', background: 'rgba(59,130,246,0.06)', fontSize: '0.7rem', color: '#3b82f6', marginBottom: '1rem' }}>
+                🖼️ {variationPreview.variation.newMediaSuggestion}
+              </div>
+            )}
+
+            <p style={{ fontSize: '0.68rem', color: 'var(--foreground-subtle)', marginBottom: '0.75rem' }}>
+              פעולה פנימית — טרם פורסם למטא
+            </p>
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={() => handleVariationSave(true)} style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem' }}>
+                📤 שלח לאישור
+              </button>
+              <button className="mod-btn-ghost ux-btn" onClick={() => handleVariationSave(false)} style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem' }}>
+                💾 שמור טיוטה
+              </button>
+              <button className="mod-btn-ghost ux-btn" onClick={() => setVariationPreview({ show: false, variation: null, ad: null, rec: null })} style={{ padding: '0.5rem 0.75rem', fontSize: '0.8rem', color: '#6b7280' }}>
+                ביטול
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </main>
   );
 }

@@ -113,9 +113,13 @@ export default function ApprovalsPage() {
     } catch { toast('שגיאה בעדכון הפעולה', 'error'); }
   }, [toast, fetchActions]);
 
-  const pendingActions = campaignActionsData.filter(a => a.status === 'pending');
+  // ── Role-based visibility ──────────────────────────────────────
+  // In production this comes from auth context; for now read from a simple toggle
+  const [userRole, setUserRole] = useState<'admin' | 'client' | 'employee'>('admin');
+
+  const pendingActions = campaignActionsData.filter(a => a.status === 'pending' || a.status === 'approval_required');
   const approvedActions = campaignActionsData.filter(a => a.status === 'approved');
-  const completedActions = campaignActionsData.filter(a => a.status === 'executed' || a.status === 'rejected');
+  const completedActions = campaignActionsData.filter(a => a.status === 'executed' || a.status === 'rejected' || a.status === 'failed');
 
   // Calculate KPIs
   const pendingCount = approvals.filter(a => a.status === 'pending_approval').length;
@@ -362,10 +366,20 @@ export default function ApprovalsPage() {
                 פעולות שנוצרו מתוך המלצות AI — אשרו, דחו, או בצעו
               </p>
             </div>
-            <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.75rem' }}>
+            <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.75rem', alignItems: 'center' }}>
               <span style={{ color: '#f59e0b', fontWeight: 600 }}>⏳ {pendingActions.length} ממתינים</span>
               <span style={{ color: '#22c55e', fontWeight: 600 }}>✅ {approvedActions.length} מאושרים</span>
               <span style={{ color: '#6b7280', fontWeight: 600 }}>📦 {completedActions.length} הושלמו</span>
+              {/* Role toggle */}
+              <select
+                value={userRole}
+                onChange={e => setUserRole(e.target.value as 'admin' | 'client' | 'employee')}
+                style={{ fontSize: '0.7rem', padding: '0.2rem 0.4rem', borderRadius: '0.25rem', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--foreground)', marginRight: '0.5rem' }}
+              >
+                <option value="admin">תפקיד: מנהל</option>
+                <option value="client">תפקיד: לקוח</option>
+                <option value="employee">תפקיד: עובד</option>
+              </select>
             </div>
           </div>
 
@@ -388,7 +402,14 @@ export default function ApprovalsPage() {
                           {act.clientName}
                         </span>
                       </div>
-                      <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--foreground)', marginBottom: '0.35rem' }}>
+
+                      {/* Title + Description */}
+                      {act.title && (
+                        <p style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--foreground)', marginBottom: '0.2rem' }}>
+                          {act.title}
+                        </p>
+                      )}
+                      <p style={{ fontSize: '0.78rem', color: 'var(--foreground)', marginBottom: '0.35rem' }}>
                         {act.description}
                       </p>
                       <p style={{ fontSize: '0.72rem', color: 'var(--foreground-muted)', marginBottom: '0.5rem' }}>
@@ -396,18 +417,29 @@ export default function ApprovalsPage() {
                       </p>
 
                       {/* Before / After Preview */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                        <div style={{ padding: '0.4rem 0.5rem', borderRadius: '0.25rem', background: 'rgba(239,68,68,0.06)', fontSize: '0.68rem', color: 'var(--foreground-muted)' }}>
-                          <div style={{ fontWeight: 600, marginBottom: '0.15rem', color: '#ef4444' }}>לפני:</div>
-                          {act.previewBefore}
+                      {(act.previewBefore || act.previewAfter) && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                          <div style={{ padding: '0.4rem 0.5rem', borderRadius: '0.25rem', background: 'rgba(239,68,68,0.06)', fontSize: '0.68rem', color: 'var(--foreground-muted)' }}>
+                            <div style={{ fontWeight: 600, marginBottom: '0.15rem', color: '#ef4444' }}>לפני:</div>
+                            {act.previewBefore || '—'}
+                          </div>
+                          <div style={{ padding: '0.4rem 0.5rem', borderRadius: '0.25rem', background: 'rgba(34,197,94,0.06)', fontSize: '0.68rem', color: 'var(--foreground-muted)' }}>
+                            <div style={{ fontWeight: 600, marginBottom: '0.15rem', color: '#22c55e' }}>אחרי:</div>
+                            {act.previewAfter || '—'}
+                          </div>
                         </div>
-                        <div style={{ padding: '0.4rem 0.5rem', borderRadius: '0.25rem', background: 'rgba(34,197,94,0.06)', fontSize: '0.68rem', color: 'var(--foreground-muted)' }}>
-                          <div style={{ fontWeight: 600, marginBottom: '0.15rem', color: '#22c55e' }}>אחרי:</div>
-                          {act.previewAfter}
-                        </div>
+                      )}
+
+                      {/* Internal-only label */}
+                      <div style={{
+                        fontSize: '0.65rem', color: '#a855f7', fontWeight: 600,
+                        marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem',
+                      }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a855f7', display: 'inline-block' }} />
+                        פעולה פנימית — טרם פורסם למטא
                       </div>
 
-                      {/* Action Buttons */}
+                      {/* Action Buttons — role-based */}
                       <div style={{ display: 'flex', gap: '0.4rem' }}>
                         <button
                           className="mod-btn-primary ux-btn"
@@ -453,16 +485,41 @@ export default function ApprovalsPage() {
                           מאושר
                         </span>
                       </div>
-                      <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--foreground)', marginBottom: '0.35rem' }}>
+                      {act.title && (
+                        <p style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--foreground)', marginBottom: '0.2rem' }}>
+                          {act.title}
+                        </p>
+                      )}
+                      <p style={{ fontSize: '0.8rem', color: 'var(--foreground)', marginBottom: '0.35rem' }}>
                         {act.description}
                       </p>
-                      <button
-                        className="mod-btn-primary ux-btn ux-btn-glow"
-                        onClick={() => handleActionDecision(act.id, 'execute')}
-                        style={{ fontSize: '0.75rem', padding: '0.35rem 0.85rem', marginTop: '0.5rem' }}
-                      >
-                        🚀 בצע עכשיו
-                      </button>
+                      {act.approvedBy && (
+                        <p style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)', marginBottom: '0.35rem' }}>
+                          אושר ע&quot;י: {act.approvedBy} • {act.approvedAt ? new Date(act.approvedAt).toLocaleDateString('he-IL') : ''}
+                        </p>
+                      )}
+                      {/* Internal-only label */}
+                      <div style={{
+                        fontSize: '0.65rem', color: '#a855f7', fontWeight: 600,
+                        marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem',
+                      }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a855f7', display: 'inline-block' }} />
+                        פעולה פנימית — טרם פורסם למטא
+                      </div>
+                      {/* Only admin/employee can execute — client sees "ממתין לביצוע" */}
+                      {userRole === 'client' ? (
+                        <p style={{ fontSize: '0.72rem', color: '#f59e0b', fontWeight: 600, marginTop: '0.3rem' }}>
+                          ⏳ ממתין לביצוע על ידי מנהל
+                        </p>
+                      ) : (
+                        <button
+                          className="mod-btn-primary ux-btn ux-btn-glow"
+                          onClick={() => handleActionDecision(act.id, 'execute')}
+                          style={{ fontSize: '0.75rem', padding: '0.35rem 0.85rem', marginTop: '0.3rem' }}
+                        >
+                          🚀 בצע עכשיו
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -488,7 +545,23 @@ export default function ApprovalsPage() {
                           {stMeta.label}
                         </span>
                       </div>
-                      <p style={{ fontSize: '0.72rem', color: 'var(--foreground-muted)', marginTop: '0.25rem' }}>{act.description}</p>
+                      {act.title && (
+                        <p style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--foreground)', marginTop: '0.25rem' }}>{act.title}</p>
+                      )}
+                      <p style={{ fontSize: '0.72rem', color: 'var(--foreground-muted)', marginTop: '0.15rem' }}>{act.description}</p>
+                      {act.status === 'rejected' && act.rejectionReason && (
+                        <p style={{ fontSize: '0.68rem', color: '#ef4444', marginTop: '0.2rem' }}>
+                          סיבת דחייה: {act.rejectionReason}
+                        </p>
+                      )}
+                      {act.status === 'failed' && act.failedReason && (
+                        <p style={{ fontSize: '0.68rem', color: '#dc2626', marginTop: '0.2rem' }}>
+                          סיבת כשלון: {act.failedReason}
+                        </p>
+                      )}
+                      <p style={{ fontSize: '0.65rem', color: 'var(--foreground-subtle)', marginTop: '0.15rem' }}>
+                        {new Date(act.updatedAt).toLocaleDateString('he-IL')} {new Date(act.updatedAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
                     </div>
                   );
                 })}

@@ -973,22 +973,35 @@ export type CampaignActionType =
   | 'duplicate_ad'
   | 'create_variation'
   | 'pause_ad'
+  | 'resume_ad'
   | 'increase_budget'
   | 'decrease_budget'
-  | 'test_new_audience';
+  | 'test_new_audience'
+  | 'create_new_adset'
+  | 'mark_for_review';
 
-export type CampaignActionStatus = 'pending' | 'approved' | 'rejected' | 'executed';
+export type CampaignActionStatus =
+  | 'pending'
+  | 'approval_required'
+  | 'approved'
+  | 'rejected'
+  | 'executed'
+  | 'failed';
 
 export interface CampaignAction {
   id: string;
   type: CampaignActionType;
+  title: string;
   objectType: 'campaign' | 'adset' | 'ad';
   objectId: string;
   objectName: string;
   campaignId: string;
   campaignName: string;
+  adSetId: string | null;
+  adId: string | null;
   clientId: string;
   clientName: string;
+  recommendationId: string | null;
   payload: Record<string, unknown>;
   status: CampaignActionStatus;
   sourceRecommendationId: string | null;
@@ -1001,8 +1014,61 @@ export interface CampaignAction {
   approvedAt: string | null;
   rejectionReason: string | null;
   executedAt: string | null;
+  failedReason: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+// Campaign Action Approval — approval items linked to actions
+export type CampaignActionApprovalStatus = 'pending' | 'approved' | 'rejected';
+
+export interface CampaignActionApproval {
+  id: string;
+  actionId: string;
+  clientId: string;
+  campaignId: string;
+  title: string;
+  description: string;
+  previewBefore: string;
+  previewAfter: string;
+  affectedObjectType: 'campaign' | 'adset' | 'ad';
+  affectedObjectId: string;
+  status: CampaignActionApprovalStatus;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNotes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Campaign Activity Log — traceable log of all campaign actions
+export type CampaignActivityType =
+  | 'recommendation_created'
+  | 'action_generated'
+  | 'approval_requested'
+  | 'action_approved'
+  | 'action_rejected'
+  | 'action_executed'
+  | 'action_failed'
+  | 'draft_ad_created'
+  | 'ad_paused'
+  | 'ad_resumed'
+  | 'budget_changed'
+  | 'adset_created'
+  | 'marked_for_review';
+
+export interface CampaignActivityLog {
+  id: string;
+  campaignId: string;
+  clientId: string;
+  actionId: string | null;
+  approvalId: string | null;
+  activityType: CampaignActivityType;
+  title: string;
+  description: string;
+  performedBy: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
 }
 
 // WhatsApp Message

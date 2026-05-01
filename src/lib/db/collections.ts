@@ -45,6 +45,8 @@ import type {
   AdReference,
   PodcastStrategy,
   CampaignAction,
+  CampaignActionApproval,
+  CampaignActivityLog,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -94,4 +96,6 @@ export const projectNotifications = new JsonStore<ProjectNotification>('project-
 export const systemEvents = new SupabaseCrud<SystemEvent>('app_system_events', 'sys');
 export const auditLog = new SupabaseCrud<AuditLog>('app_audit_log', 'aud');
 export const adReferences = new SupabaseCrud<AdReference>('app_ad_references', 'adr');
-export const campaignActions = new JsonStore<CampaignAction>('campaign-actions', 'cac');
+export const campaignActions = new SupabaseCrud<CampaignAction>('campaign_actions', 'cac');
+export const campaignActionApprovals = new SupabaseCrud<CampaignActionApproval>('campaign_action_approvals', 'caa');
+export const campaignActivityLog = new SupabaseCrud<CampaignActivityLog>('campaign_activity_log', 'cal');
