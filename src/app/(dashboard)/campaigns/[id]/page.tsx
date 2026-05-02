@@ -1695,6 +1695,46 @@ export default function CampaignDetailPage() {
     setReportGenerating(false);
   }, [campaign, clients, reportGenerating, toast]);
 
+  // ── AI Content → Ads Generation ────────────────────────────────────
+
+  const [aiAdsGenerating, setAiAdsGenerating] = useState(false);
+
+  const handleGenerateAiAds = useCallback(async () => {
+    if (!campaign || aiAdsGenerating) return;
+    const firstAdSet = (allAdSets || []).find((as: any) => as.campaignId === campaign.id);
+    if (!firstAdSet) { toast('אין קבוצת מודעות — צור קבוצה קודם', 'error'); return; }
+
+    setAiAdsGenerating(true);
+    try {
+      const clientObj = (clients as any[])?.find((c: any) => c.id === campaign.clientId);
+      const res = await fetch('/api/data/content-to-ads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: {
+            type: 'manual',
+            title: campaign.name || campaign.campaignName || 'קמפיין',
+            description: (campaign as any).objective || campaign.name || '',
+            businessField: clientObj?.businessField || '',
+            clientName: clientObj?.name || '',
+          },
+          campaignId: campaign.id,
+          adSetId: firstAdSet.id,
+          save: true,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.saved > 0) {
+        toast(`נוצרו ${data.saved} מודעות AI כטיוטה`, 'success');
+      } else {
+        toast(data.error || 'שגיאה ביצירת מודעות', 'error');
+      }
+    } catch {
+      toast('שגיאה בחיבור לשרת', 'error');
+    }
+    setAiAdsGenerating(false);
+  }, [campaign, allAdSets, clients, aiAdsGenerating, toast]);
+
   // ── Auto Engine State ──────────────────────────────────────────────
 
   const [autoFindings, setAutoFindings] = useState<Array<{
@@ -2143,6 +2183,21 @@ export default function CampaignDetailPage() {
                   title="הפקת דוח ביצועים לקמפיין"
                 >
                   {reportGenerating ? '⏳ מפיק...' : '📊 הפק דוח'}
+                </button>
+                <button
+                  onClick={handleGenerateAiAds}
+                  disabled={aiAdsGenerating}
+                  style={{
+                    fontSize: '0.7rem', padding: '0.3rem 0.7rem', fontWeight: 700, cursor: aiAdsGenerating ? 'wait' : 'pointer',
+                    background: 'linear-gradient(135deg, #8b5cf6, #6366f1)', color: '#fff',
+                    border: 'none', borderRadius: '0.375rem',
+                    opacity: aiAdsGenerating ? 0.6 : 1,
+                    display: 'flex', alignItems: 'center', gap: '0.3rem',
+                    transition: 'all 0.2s ease',
+                  }}
+                  title="צור מודעות AI אוטומטיות מתוכן הקמפיין"
+                >
+                  {aiAdsGenerating ? '⏳ יוצר...' : '🤖 צור מודעות AI'}
                 </button>
               </div>
             </div>
