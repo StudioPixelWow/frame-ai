@@ -162,6 +162,12 @@ const Icons = {
       <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
     </svg>
   ),
+  Brain: (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7z" />
+      <line x1="9" y1="21" x2="15" y2="21" />
+    </svg>
+  ),
 };
 
 const mainNavItems: NavItem[] = [
@@ -186,6 +192,7 @@ const mainNavItems: NavItem[] = [
   { href: "/mailing", label: "דיוור", id: "nav-mailing", icon: Icons.Mail, allowedRoles: ['admin'] },
   { href: "/growth", label: "מנוע צמיחה", id: "nav-growth", icon: Icons.Growth, allowedRoles: ['admin'] },
   { href: "/knowledge", label: "בסיס ידע", id: "nav-knowledge", icon: Icons.Knowledge, allowedRoles: ['admin'] },
+  { href: "/strategy", label: "מוח אסטרטגי", id: "nav-strategy", icon: Icons.Brain, allowedRoles: ['admin'] },
   { href: "/stats", label: "סטטיסטיקות", id: "nav-stats", icon: Icons.TrendingUp, allowedRoles: ['admin'] },
   { href: "/exec-dashboard", label: "מנהלים", id: "nav-exec", icon: Icons.Briefcase, allowedRoles: ['admin'] },
   { href: "/settings", label: "הגדרות", id: "nav-settings", icon: Icons.Settings, allowedRoles: ['admin'] },
