@@ -14,7 +14,14 @@ export async function GET(req: NextRequest) {
   const log = persistenceLog('campaigns', 'select', '/api/data/campaigns', 'campaigns.json');
   try {
     log.start();
-    const data = await campaigns.getAllAsync();
+    let data: any[] = [];
+    try {
+      data = await campaigns.getAllAsync();
+    } catch (e) {
+      // If table doesn't exist, return empty instead of 500
+      console.warn('[API] GET /api/data/campaigns getAllAsync failed, returning empty:', e instanceof Error ? e.message : e);
+      data = [];
+    }
     const scoped = scopeForClient(req, data, (item: any) => item.clientId);
     log.ok(scoped);
     return NextResponse.json(scoped);

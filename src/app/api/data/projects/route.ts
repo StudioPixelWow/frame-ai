@@ -17,7 +17,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabase } from '@/lib/db/store';
+import { getSupabase, isTableMissingError } from '@/lib/db/store';
 
 function generateId(): string {
   const ts = Date.now().toString(36);
@@ -166,6 +166,11 @@ export async function GET() {
         const projects = (rows ?? []).map((r) => rowToProject(r as ProjectRow));
         console.log(`[API] GET /api/data/projects ✅ returning ${projects.length} projects`);
         return NextResponse.json(projects);
+      }
+      // If the table itself doesn't exist, return empty array gracefully
+      if (isTableMissingError(error.message)) {
+        console.warn('[API] GET /api/data/projects table video_projects not found — returning empty');
+        return NextResponse.json([]);
       }
       const m = error.message.match(/column .*?\.?['"]?([a-z_]+)['"]? does not exist|Could not find the '([^']+)' column/i);
       const bad = m?.[1] || m?.[2];
