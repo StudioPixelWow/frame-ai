@@ -118,7 +118,8 @@ export async function invokeLambdaRender(req: LambdaRenderRequest): Promise<{
         inputProps: req.inputProps,
         codec: qs.codec,
         crf: qs.crf,
-        framesPerLambda: 40, // fewer chunks = fewer concurrent Lambdas
+        framesPerLambda: 200, // large value = render in very few chunks to avoid concurrency limit
+        maxRetries: 3,        // Remotion's built-in retry for transient errors
         privacy: "no-acl",
         logLevel: "verbose",
         downloadBehavior: { type: "play-in-browser" },

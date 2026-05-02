@@ -96,6 +96,31 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
+    // ── Guard: prevent duplicate renders for the same project ──
+    try {
+      const existingJobs = await listRenderJobs();
+      const activeJob = existingJobs.find(
+        (j: any) =>
+          j.project_id === projectId &&
+          ["queued", "preparing", "rendering", "processing"].includes(j.status)
+      );
+      if (activeJob) {
+        console.warn(`${tag} ⚠️ Project ${projectId} already has active render job ${activeJob.job_id} (status=${activeJob.status})`);
+        return NextResponse.json({
+          job: {
+            id: activeJob.job_id,
+            status: activeJob.status,
+            progress: activeJob.progress || 0,
+            currentStage: activeJob.stage || "כבר ברינדור",
+            projectId,
+          },
+          duplicate: true,
+        });
+      }
+    } catch (dupErr) {
+      console.warn(`${tag} Could not check for duplicates:`, dupErr instanceof Error ? dupErr.message : dupErr);
+    }
+
     // ── Create job in Supabase (DB only — no rendering here) ──
     const jobId = `rj_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
