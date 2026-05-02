@@ -168,6 +168,13 @@ const Icons = {
       <line x1="9" y1="21" x2="15" y2="21" />
     </svg>
   ),
+  Autopilot: (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+      <path d="M16 16l2 2" />
+    </svg>
+  ),
 };
 
 const mainNavItems: NavItem[] = [
@@ -193,6 +200,7 @@ const mainNavItems: NavItem[] = [
   { href: "/growth", label: "מנוע צמיחה", id: "nav-growth", icon: Icons.Growth, allowedRoles: ['admin'] },
   { href: "/knowledge", label: "בסיס ידע", id: "nav-knowledge", icon: Icons.Knowledge, allowedRoles: ['admin'] },
   { href: "/strategy", label: "מוח אסטרטגי", id: "nav-strategy", icon: Icons.Brain, allowedRoles: ['admin'] },
+  { href: "/autopilot", label: "אוטופיילוט", id: "nav-autopilot", icon: Icons.Autopilot, allowedRoles: ['admin'] },
   { href: "/stats", label: "סטטיסטיקות", id: "nav-stats", icon: Icons.TrendingUp, allowedRoles: ['admin'] },
   { href: "/exec-dashboard", label: "מנהלים", id: "nav-exec", icon: Icons.Briefcase, allowedRoles: ['admin'] },
   { href: "/settings", label: "הגדרות", id: "nav-settings", icon: Icons.Settings, allowedRoles: ['admin'] },

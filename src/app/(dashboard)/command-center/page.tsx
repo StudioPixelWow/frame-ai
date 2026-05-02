@@ -1723,6 +1723,9 @@ export default function CommandCenterPage() {
       {/* ── Strategic Brain Quick View ── */}
       <StrategyWidget />
 
+      {/* ── Autopilot Quick View ── */}
+      <AutopilotWidget />
+
     </main>
   );
 }
@@ -1959,6 +1962,80 @@ function StrategyWidget() {
       {/* Trust banner */}
       <div style={{ marginTop: '0.5rem', fontSize: '0.68rem', color: '#166534', background: 'rgba(34,197,94,0.06)', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', textAlign: 'center' }}>
         🔒 אישור נדרש לפני כל פעולה
+      </div>
+    </div>
+  );
+}
+
+// ── Autopilot Widget (lazy-loaded) ──
+
+function AutopilotWidget() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/data/autopilot')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setData(d); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return null;
+  if (!data || !data.kpis) return null;
+
+  const hasData = data.kpis.clientsMonitored > 0 || (data.pendingApprovals || []).length > 0;
+  if (!hasData) return null;
+
+  const pending = (data.pendingApprovals || []).slice(0, 3);
+
+  return (
+    <div style={{
+      marginTop: '1.2rem',
+      background: 'var(--surface)',
+      border: '1px solid var(--border)',
+      borderRadius: '0.75rem',
+      padding: '1rem 1.2rem',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+        <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--foreground)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          🤖 אוטופיילוט — Agency Autopilot
+        </h3>
+        <Link href="/autopilot" style={{ fontSize: '0.72rem', color: '#2563eb', textDecoration: 'none' }}>
+          לוח בקרה ←
+        </Link>
+      </div>
+
+      {/* KPIs */}
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem', fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>
+        <span>👥 {data.kpis.clientsMonitored} לקוחות</span>
+        <span>⏳ {data.kpis.approvalsPending} ממתינות</span>
+        <span>✅ {data.kpis.executedThisWeek} בוצעו השבוע</span>
+        <span>📈 {data.kpis.successRate}% הצלחה</span>
+      </div>
+
+      {/* Pending approvals */}
+      {pending.map((action: any, idx: number) => (
+        <div key={action.id || idx} style={{
+          padding: '0.5rem 0.75rem',
+          borderRadius: '0.5rem',
+          background: 'var(--surface-raised)',
+          border: '1px solid var(--border)',
+          marginBottom: '0.4rem',
+          fontSize: '0.78rem',
+        }}>
+          <div style={{ fontWeight: 600, color: 'var(--foreground)' }}>
+            ⏳ {action.title}
+          </div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)', marginTop: '0.15rem' }}>
+            {action.clientName} · ביטחון {action.confidence}%
+          </div>
+        </div>
+      ))}
+
+      {/* Safety banner */}
+      <div style={{ marginTop: '0.5rem', fontSize: '0.68rem', color: '#166534', background: 'rgba(34,197,94,0.06)', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', textAlign: 'center' }}>
+        🔒 לא תבוצע פעולה חיה ללא אישור
       </div>
     </div>
   );
