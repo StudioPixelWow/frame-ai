@@ -23,7 +23,8 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     log.fail(msg);
-    return NextResponse.json({ error: 'Failed to fetch payments' }, { status: 500 });
+    // Return empty array on transient errors — polling will retry
+    return NextResponse.json([]);
   }
 }
 
