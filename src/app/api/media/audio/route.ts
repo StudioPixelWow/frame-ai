@@ -14,42 +14,81 @@ import path from "path";
 const CACHE_DIR = path.join(process.cwd(), "public/media/audio");
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const trackId = searchParams.get("trackId") || "default";
-  const bpm = parseInt(searchParams.get("bpm") || "100");
-  const mood = searchParams.get("mood") || "neutral";
-  const durationSec = Math.min(180, parseInt(searchParams.get("duration") || "30"));
+  try {
+    const { searchParams } = new URL(req.url);
+    const trackId = searchParams.get("trackId") || "default";
+    const bpm = parseInt(searchParams.get("bpm") || "100");
+    const mood = searchParams.get("mood") || "neutral";
+    const durationSec = Math.min(180, parseInt(searchParams.get("duration") || "30"));
 
-  // Check cache
-  if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
-  // v2 suffix ensures old seedless cache files are ignored
-  const cacheFile = path.join(CACHE_DIR, `${trackId}_v2.wav`);
+    // Validate inputs
+    if (isNaN(bpm) || bpm < 40 || bpm > 240) {
+      return new NextResponse(JSON.stringify({ error: "Invalid BPM" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (isNaN(durationSec) || durationSec < 1) {
+      return new NextResponse(JSON.stringify({ error: "Invalid duration" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
-  if (fs.existsSync(cacheFile)) {
-    const buffer = fs.readFileSync(cacheFile);
-    return new NextResponse(buffer, {
+    // Try to check cache (non-critical if it fails in serverless)
+    let cacheFile: string | null = null;
+    try {
+      if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
+      // v2 suffix ensures old seedless cache files are ignored
+      cacheFile = path.join(CACHE_DIR, `${trackId}_v2.wav`);
+
+      if (fs.existsSync(cacheFile)) {
+        const buffer = fs.readFileSync(cacheFile);
+        return new NextResponse(buffer, {
+          headers: {
+            "Content-Type": "audio/wav",
+            "Cache-Control": "public, max-age=86400",
+          },
+        });
+      }
+    } catch (cacheErr) {
+      console.warn("[audio] Cache check failed (non-critical):", cacheErr instanceof Error ? cacheErr.message : cacheErr);
+      cacheFile = null; // Continue without caching
+    }
+
+    // Generate audio
+    const sampleRate = 44100;
+    const numSamples = sampleRate * durationSec;
+    const buffer = generateProceduralAudio(numSamples, sampleRate, bpm, mood, trackId);
+
+    // Encode to WAV
+    const wavBuffer = encodeWav(buffer, sampleRate);
+
+    // Try to cache (non-critical if it fails in serverless)
+    if (cacheFile) {
+      try {
+        fs.writeFileSync(cacheFile, Buffer.from(wavBuffer));
+      } catch (writeErr) {
+        console.warn("[audio] Cache write failed (non-critical):", writeErr instanceof Error ? writeErr.message : writeErr);
+      }
+    }
+
+    return new NextResponse(Buffer.from(wavBuffer), {
       headers: {
         "Content-Type": "audio/wav",
-        "Cache-Control": "public, max-age=86400",
+        "Cache-Control": "public, max-age=3600",
       },
     });
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const errStack = err instanceof Error ? err.stack : undefined;
+    console.error("[audio] GET failed:", errMsg);
+    if (errStack) console.error("[audio] Stack:", errStack);
+    return new NextResponse(
+      JSON.stringify({ error: "Failed to generate audio", details: errMsg }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
-
-  // Generate audio
-  const sampleRate = 44100;
-  const numSamples = sampleRate * durationSec;
-  const buffer = generateProceduralAudio(numSamples, sampleRate, bpm, mood, trackId);
-
-  // Write WAV file
-  const wavBuffer = encodeWav(buffer, sampleRate);
-  fs.writeFileSync(cacheFile, Buffer.from(wavBuffer));
-
-  return new NextResponse(Buffer.from(wavBuffer), {
-    headers: {
-      "Content-Type": "audio/wav",
-      "Cache-Control": "public, max-age=86400",
-    },
-  });
 }
 
 /** Simple deterministic pseudo-random from seed — returns 0..1 */

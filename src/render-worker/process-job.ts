@@ -76,12 +76,37 @@ export async function processJob(jobId: string): Promise<void> {
     // ── 4. Select composition (resolves dimensions + duration from inputProps) ──
     console.log(`${tag} Selecting composition: ${data.compositionId}`);
     console.log(`${tag}   Expected: ${data.width}x${data.height} (${data.format})`);
+    console.log(`${tag}   serveUrl: ${serveUrl}`);
+    console.log(`${tag}   inputProps keys: ${Object.keys(data.inputProps).join(", ")}`);
 
-    const composition = await selectComposition({
-      serveUrl,
-      id: data.compositionId,
-      inputProps: data.inputProps,
-    });
+    let composition;
+    try {
+      composition = await selectComposition({
+        serveUrl,
+        id: data.compositionId,
+        inputProps: data.inputProps,
+      });
+    } catch (compErr) {
+      // Properly extract error details
+      let errorMsg = "Unknown error";
+      let errorStack = "";
+
+      if (compErr instanceof Error) {
+        errorMsg = compErr.message;
+        errorStack = compErr.stack || "";
+      } else if (typeof compErr === "object" && compErr !== null) {
+        errorMsg = (compErr as any).message || (compErr as any).error || JSON.stringify(compErr);
+        if ((compErr as any).stack) {
+          errorStack = (compErr as any).stack;
+        }
+      } else {
+        errorMsg = String(compErr);
+      }
+
+      console.error(`${tag} ❌ selectComposition CRASHED: ${errorMsg}`);
+      if (errorStack) console.error(`${tag}   Stack: ${errorStack}`);
+      throw new Error(`selectComposition failed: ${errorMsg}`);
+    }
 
     console.log(
       `${tag} ✅ Composition resolved: ${composition.width}x${composition.height}, ` +
@@ -147,9 +172,24 @@ export async function processJob(jobId: string): Promise<void> {
     console.log(`${tag} ═══════════════════════════════════════`);
 
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`${tag} ❌ RENDER FAILED: ${msg}`);
-    await updateJob(jobId, { status: "failed", error: msg, stage: "נכשל" }).catch(() => {});
+    let errorMsg = "Unknown render error";
+    let errorStack = "";
+
+    if (err instanceof Error) {
+      errorMsg = err.message;
+      errorStack = err.stack || "";
+    } else if (typeof err === "object" && err !== null) {
+      errorMsg = (err as any).message || (err as any).error || JSON.stringify(err);
+      if ((err as any).stack) {
+        errorStack = (err as any).stack;
+      }
+    } else {
+      errorMsg = String(err);
+    }
+
+    console.error(`${tag} ❌ RENDER FAILED: ${errorMsg}`);
+    if (errorStack) console.error(`${tag}   Stack: ${errorStack}`);
+    await updateJob(jobId, { status: "failed", error: errorMsg.substring(0, 1000), stage: "נכשל" }).catch(() => {});
   } finally {
     // Clean up local file
     try { if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath); } catch { /* */ }

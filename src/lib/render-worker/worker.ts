@@ -296,6 +296,8 @@ async function renderJob(jobId: string): Promise<void> {
 
     // ── Stage: selectComposition ──
     console.log(`${tag} [STEP] selectComposition: ${compositionId}`);
+    console.log(`${tag}   serveUrl: ${serveUrl}`);
+    console.log(`${tag}   inputProps keys: ${Object.keys(inputProps).join(", ")}`);
     let composition;
     try {
       composition = await selectComposition({
@@ -306,9 +308,27 @@ async function renderJob(jobId: string): Promise<void> {
         timeoutInMilliseconds: 30000,
       });
     } catch (compErr) {
-      const msg = compErr instanceof Error ? compErr.message : String(compErr);
-      console.error(`${tag} ❌ selectComposition CRASHED: ${msg}`);
-      throw new Error(`selectComposition failed: ${msg}`);
+      // Properly extract error details
+      let errorMsg = "Unknown error";
+      let errorStack = "";
+
+      if (compErr instanceof Error) {
+        errorMsg = compErr.message;
+        errorStack = compErr.stack || "";
+      } else if (typeof compErr === "object" && compErr !== null) {
+        // Try to extract message from object
+        errorMsg = (compErr as any).message || (compErr as any).error || JSON.stringify(compErr);
+        if ((compErr as any).stack) {
+          errorStack = (compErr as any).stack;
+        }
+      } else {
+        errorMsg = String(compErr);
+      }
+
+      console.error(`${tag} ❌ selectComposition CRASHED`);
+      console.error(`${tag}    Error: ${errorMsg}`);
+      if (errorStack) console.error(`${tag}    Stack: ${errorStack}`);
+      throw new Error(`selectComposition failed: ${errorMsg}`);
     }
 
     console.log(

@@ -81,16 +81,36 @@ export const RemotionRoot: React.FC = () => {
         height={1920}
         defaultProps={defaultProps as unknown as Record<string, unknown>}
         calculateMetadata={async ({ props }) => {
-          const p = props as unknown as CompositionProps;
-          const dims = FORMAT_DIMENSIONS[p.format] || FORMAT_DIMENSIONS["9:16"];
-          const totalDur = p.durationSec || 15;
-          return {
-            durationInFrames: Math.max(1, Math.ceil(totalDur * FPS)),
-            width: dims.width,
-            height: dims.height,
-            fps: FPS,
-            props,
-          };
+          try {
+            const p = props as unknown as CompositionProps;
+            const dims = FORMAT_DIMENSIONS[p.format] || FORMAT_DIMENSIONS["9:16"];
+            const totalDur = p.durationSec || 15;
+
+            // Validate minimal required props
+            if (!p.videoUrl && !p.segments) {
+              console.warn(
+                "[PixelManageEdit] Warning: no videoUrl or segments provided, using defaults"
+              );
+            }
+
+            return {
+              durationInFrames: Math.max(1, Math.ceil(totalDur * FPS)),
+              width: dims.width,
+              height: dims.height,
+              fps: FPS,
+              props,
+            };
+          } catch (err) {
+            console.error("[PixelManageEdit] calculateMetadata error:", err);
+            // Return safe defaults to prevent composition selection from failing
+            return {
+              durationInFrames: FPS * 15,
+              width: 1080,
+              height: 1920,
+              fps: FPS,
+              props: defaultProps as unknown as Record<string, unknown>,
+            };
+          }
         }}
       />
       <Composition
@@ -102,16 +122,29 @@ export const RemotionRoot: React.FC = () => {
         height={1920}
         defaultProps={defaultUGCProps as unknown as Record<string, unknown>}
         calculateMetadata={async ({ props }) => {
-          const p = props as unknown as UGCCompositionProps;
-          const dims = FORMAT_DIMENSIONS[p.format] || FORMAT_DIMENSIONS["9:16"];
-          const totalDur = p.durationSec || 30;
-          return {
-            durationInFrames: Math.max(1, Math.ceil(totalDur * FPS)),
-            width: dims.width,
-            height: dims.height,
-            fps: FPS,
-            props,
-          };
+          try {
+            const p = props as unknown as UGCCompositionProps;
+            const dims = FORMAT_DIMENSIONS[p.format] || FORMAT_DIMENSIONS["9:16"];
+            const totalDur = p.durationSec || 30;
+
+            return {
+              durationInFrames: Math.max(1, Math.ceil(totalDur * FPS)),
+              width: dims.width,
+              height: dims.height,
+              fps: FPS,
+              props,
+            };
+          } catch (err) {
+            console.error("[UGCBrandedVideo] calculateMetadata error:", err);
+            // Return safe defaults
+            return {
+              durationInFrames: FPS * 30,
+              width: 1080,
+              height: 1920,
+              fps: FPS,
+              props: defaultUGCProps as unknown as Record<string, unknown>,
+            };
+          }
         }}
       />
     </>
