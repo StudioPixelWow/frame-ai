@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabase } from '@/lib/db/store';
+import { getSupabase, isTableMissingError } from '@/lib/db/store';
 import { requireRole, getRequestRole, getRequestClientId, getRequestEmployeeId } from '@/lib/auth/api-guard';
 import { insertTimelineEvent } from '@/lib/timeline';
 import { ensureBusinessProjectColumns } from '@/lib/db/ensure-columns';
@@ -103,7 +103,12 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     const { id } = await context.params;
     const sb = getSupabase();
     const { data, error } = await sb.from(TABLE).select('*').eq('id', id).maybeSingle();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      if (isTableMissingError(error.message)) {
+        return NextResponse.json({ error: 'Not found', projectId: id }, { status: 404 });
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
     if (!data) return NextResponse.json({ error: 'Not found', projectId: id }, { status: 404 });
 
     // Clients can only view their own projects

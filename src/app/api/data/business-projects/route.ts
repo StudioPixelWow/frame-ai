@@ -15,7 +15,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabase } from '@/lib/db/store';
+import { getSupabase, isTableMissingError } from '@/lib/db/store';
 import { requireRole, getRequestRole, getRequestClientId, getRequestEmployeeId } from '@/lib/auth/api-guard';
 import { insertTimelineEvent } from '@/lib/timeline';
 import { ensureBusinessProjectColumns } from '@/lib/db/ensure-columns';
@@ -121,6 +121,11 @@ export async function GET(req: NextRequest) {
 
     const { data: rows, error } = await query;
     if (error) {
+      // If the table doesn't exist yet, return empty instead of crashing
+      if (isTableMissingError(error.message)) {
+        console.warn('[API] GET /api/data/business-projects table not found — returning empty');
+        return NextResponse.json([]);
+      }
       console.error('[API] GET /api/data/business-projects supabase error:', error);
       return NextResponse.json({ error: error.message, code: (error as any).code ?? null }, { status: 500 });
     }
