@@ -1653,6 +1653,42 @@ export default function CampaignDetailPage() {
     setPublishLoading(false);
   }, [campaign, publishLoading, campaignAdSets, campaignAds, toast]);
 
+  // ── Auto Engine State ──────────────────────────────────────────────
+
+  const [autoFindings, setAutoFindings] = useState<Array<{
+    id: string; type: string; severity: string; confidence: number;
+    reason: string; expectedImpact: string; adName: string | null;
+    adSetName: string | null; suggestedAction: string;
+  }>>([]);
+  const [autoScanning, setAutoScanning] = useState(false);
+
+  const handleAutoScan = useCallback(async () => {
+    if (!campaign || autoScanning) return;
+    setAutoScanning(true);
+    try {
+      const res = await fetch('/api/data/auto-campaign/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaignId: campaign.id, triggeredBy: 'manual' }),
+      });
+      const data = await res.json();
+      setAutoFindings(data.findings || []);
+      toast(data.summary || 'סריקה הושלמה', data.findings?.length > 0 ? 'info' : 'success');
+    } catch {
+      toast('שגיאה בסריקה אוטומטית', 'error');
+    }
+    setAutoScanning(false);
+  }, [campaign, autoScanning, toast]);
+
+  // Load findings on mount
+  useEffect(() => {
+    if (!campaign) return;
+    fetch(`/api/data/auto-campaign/findings?campaignId=${campaign.id}&limit=10`)
+      .then(r => r.ok ? r.json() : { findings: [] })
+      .then(d => setAutoFindings(d.findings || []))
+      .catch(() => {});
+  }, [campaign]);
+
   // ── Mock Trend Data (deterministic from campaign metrics) ────────────
 
   const trendData = useMemo(() => {
@@ -2916,6 +2952,66 @@ export default function CampaignDetailPage() {
           </div>
         </div>
       )}
+
+      {/* ── Auto Campaign Engine Panel ────────────────────────────── */}
+      <div style={{ marginTop: '1.5rem', padding: '1rem', borderRadius: '0.75rem', background: 'var(--surface)', border: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 700, margin: 0, color: 'var(--foreground)' }}>
+            🤖 מנוע אוטומטי
+          </h3>
+          <button
+            onClick={handleAutoScan}
+            disabled={autoScanning}
+            className="mod-btn-ghost"
+            style={{ fontSize: '0.68rem', padding: '0.25rem 0.5rem', fontWeight: 600, cursor: autoScanning ? 'wait' : 'pointer', opacity: autoScanning ? 0.6 : 1 }}
+          >
+            {autoScanning ? '⏳ סורק...' : '🔍 סרוק עכשיו'}
+          </button>
+        </div>
+
+        {autoFindings.length === 0 && !autoScanning && (
+          <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--foreground-muted)', fontSize: '0.78rem' }}>
+            {hasPerformanceData ? '✅ לא זוהו בעיות — הקמפיין נראה תקין' : 'ממתין לנתוני ביצועים ממטא'}
+          </div>
+        )}
+
+        {autoFindings.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            {autoFindings.slice(0, 5).map(f => {
+              const typeIcons: Record<string, string> = {
+                creative_fatigue: '🎨', budget_waste: '💸', scale_opportunity: '📈',
+                weak_audience: '🎯', winning_ad: '🏆', tracking_issue: '🔍',
+              };
+              const sevColors: Record<string, string> = {
+                critical: '#dc2626', high: '#ef4444', medium: '#f59e0b', low: '#6b7280',
+              };
+              return (
+                <div key={f.id} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: '0.5rem', padding: '0.5rem 0.6rem',
+                  borderRadius: '0.5rem', background: 'var(--surface-sunken, var(--background))',
+                  border: '1px solid var(--border)', fontSize: '0.72rem',
+                }}>
+                  <span style={{ fontSize: '0.85rem', flexShrink: 0, marginTop: '0.05rem' }}>{typeIcons[f.type] || '📋'}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.15rem' }}>
+                      <span style={{ fontWeight: 700, color: 'var(--foreground)' }}>{f.adName || f.adSetName || ''}</span>
+                      <span style={{
+                        fontSize: '0.55rem', padding: '0.05rem 0.25rem', borderRadius: '999px',
+                        background: `${sevColors[f.severity] || '#6b7280'}15`,
+                        color: sevColors[f.severity] || '#6b7280', fontWeight: 600,
+                      }}>
+                        {f.severity === 'critical' ? 'קריטי' : f.severity === 'high' ? 'גבוה' : f.severity === 'medium' ? 'בינוני' : 'נמוך'}
+                      </span>
+                      <span style={{ fontSize: '0.6rem', color: 'var(--foreground-muted)' }}>ביטחון {f.confidence}%</span>
+                    </div>
+                    <div style={{ color: 'var(--foreground-muted)', lineHeight: 1.4 }}>{f.reason}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* ── Variation Preview Modal ───────────────────────────────── */}
       {variationPreview.show && variationPreview.variation && variationPreview.ad && (

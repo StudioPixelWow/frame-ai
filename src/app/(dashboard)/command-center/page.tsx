@@ -1620,6 +1620,100 @@ export default function CommandCenterPage() {
         );
       })()}
 
+      {/* ── Auto Campaign Engine ─────────────────────────────── */}
+      {(() => {
+        const activeCampaigns = campaigns.filter(c => c.status === 'active' || c.status === 'in_progress');
+        const allAds = rawAds ?? [];
+        const highRisk = activeCampaigns.filter(c => {
+          const cAds = allAds.filter(a => a.campaignId === c.id);
+          const totalSpend = cAds.reduce((s, a) => s + (a.spend || 0), 0);
+          const totalLeads = cAds.reduce((s, a) => s + (a.leads || 0), 0);
+          return totalSpend > 100 && totalLeads === 0;
+        });
+        const scaleOps = activeCampaigns.filter(c => {
+          const cAds = allAds.filter(a => a.campaignId === c.id);
+          const totalSpend = cAds.reduce((s, a) => s + (a.spend || 0), 0);
+          const totalLeads = cAds.reduce((s, a) => s + (a.leads || 0), 0);
+          if (totalLeads < 3 || totalSpend < 30) return false;
+          return (totalSpend / totalLeads) < 40;
+        });
+
+        return (
+          <div style={{
+            background: 'var(--surface-raised)', border: '1px solid var(--border)',
+            borderRadius: '0.75rem', padding: '1.25rem', direction: 'rtl',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h2 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>
+                🤖 מנוע קמפיינים אוטומטי
+              </h2>
+              <button
+                className="mod-btn-primary"
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/data/auto-campaign/scan', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ triggeredBy: 'manual' }),
+                    });
+                    const data = await res.json();
+                    alert(data.summary || 'סריקה הושלמה');
+                  } catch { alert('שגיאה בהרצת סריקה'); }
+                }}
+                style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 700 }}
+              >
+                🔍 הרץ בדיקה חכמה עכשיו
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
+              <div style={{ padding: '0.75rem', borderRadius: '0.5rem', background: 'var(--surface)', border: '1px solid var(--border)', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--accent)' }}>{activeCampaigns.length}</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)' }}>קמפיינים פעילים</div>
+              </div>
+              <div style={{ padding: '0.75rem', borderRadius: '0.5rem', background: 'var(--surface)', border: '1px solid var(--border)', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#ef4444' }}>{highRisk.length}</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)' }}>סיכון גבוה</div>
+              </div>
+              <div style={{ padding: '0.75rem', borderRadius: '0.5rem', background: 'var(--surface)', border: '1px solid var(--border)', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#22c55e' }}>{scaleOps.length}</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)' }}>הזדמנויות סקייל</div>
+              </div>
+              <div style={{ padding: '0.75rem', borderRadius: '0.5rem', background: 'var(--surface)', border: '1px solid var(--border)', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#f59e0b' }}>—</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)' }}>ממתין לאישור</div>
+              </div>
+            </div>
+
+            {highRisk.length > 0 && (
+              <div style={{ marginTop: '0.75rem', padding: '0.6rem', borderRadius: '0.5rem', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#ef4444', marginBottom: '0.3rem' }}>⚠️ קמפיינים בסיכון</div>
+                {highRisk.slice(0, 3).map(c => (
+                  <div key={c.id} style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)', padding: '0.15rem 0' }}>
+                    <Link href={`/campaigns/${c.id}`} style={{ color: '#ef4444', textDecoration: 'none', fontWeight: 600 }}>
+                      {c.campaignName}
+                    </Link>
+                    {' — '}{c.clientName || 'ללא לקוח'}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeCampaigns.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--foreground-muted)', fontSize: '0.8rem' }}>
+                ממתין לנתוני ביצועים ממטא
+              </div>
+            )}
+
+            {activeCampaigns.length > 0 && highRisk.length === 0 && scaleOps.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--foreground-muted)', fontSize: '0.78rem', marginTop: '0.5rem' }}>
+                ✅ הקמפיינים נראים תקינים כרגע
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
     </main>
   );
 }

@@ -1055,7 +1055,13 @@ export type CampaignActivityType =
   | 'ad_resumed'
   | 'budget_changed'
   | 'adset_created'
-  | 'marked_for_review';
+  | 'marked_for_review'
+  | 'auto_scan_started'
+  | 'auto_scan_completed'
+  | 'auto_finding_detected'
+  | 'auto_action_created'
+  | 'publish_complete'
+  | 'publish_partial';
 
 export interface CampaignActivityLog {
   id: string;
@@ -1067,6 +1073,57 @@ export interface CampaignActivityLog {
   title: string;
   description: string;
   performedBy: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+// ── Auto Campaign System ────────────────────────────────────────────
+
+export type AutoCampaignRunStatus = 'running' | 'completed' | 'failed';
+
+export interface AutoCampaignRun {
+  id: string;
+  clientId: string;
+  campaignId: string | null;        // null = scanned all client campaigns
+  status: AutoCampaignRunStatus;
+  triggeredBy: 'manual' | 'scheduled' | 'system';
+  campaignsScanned: number;
+  findingsCount: number;
+  actionsCreated: number;
+  summary: string;
+  startedAt: string;
+  finishedAt: string | null;
+  createdAt: string;
+}
+
+export type AutoFindingType =
+  | 'creative_fatigue'
+  | 'budget_waste'
+  | 'scale_opportunity'
+  | 'weak_audience'
+  | 'winning_ad'
+  | 'tracking_issue';
+
+export type AutoFindingSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+export interface AutoCampaignFinding {
+  id: string;
+  runId: string;
+  clientId: string;
+  campaignId: string;
+  campaignName: string;
+  adSetId: string | null;
+  adSetName: string | null;
+  adId: string | null;
+  adName: string | null;
+  type: AutoFindingType;
+  severity: AutoFindingSeverity;
+  confidence: number;               // 0–100
+  reason: string;
+  expectedImpact: string;
+  suggestedAction: string;
+  actionCreated: boolean;
+  actionId: string | null;
   metadata: Record<string, unknown>;
   createdAt: string;
 }

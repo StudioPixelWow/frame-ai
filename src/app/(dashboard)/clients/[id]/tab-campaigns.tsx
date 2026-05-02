@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useCampaigns, useAdSets, useAds, useLeads } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
-import type { Client, Campaign, AdSet, Ad, Lead, CampaignStatus } from "@/lib/db/schema";
+import type { Client, Campaign, AdSet, Ad, Lead, CampaignStatus, AutoCampaignFinding } from "@/lib/db/schema";
 import { getCampaignSummaryRec, RECOMMENDATION_TYPE_META, SEVERITY_META } from "@/lib/optimization/engine";
+import { FINDING_TYPE_META, SEVERITY_META as AUTO_SEVERITY_META } from "@/lib/optimization/auto-monitor";
 
 // ── Constants ──
 
@@ -63,6 +64,27 @@ export default function TabCampaigns({ client }: { client: Client }) {
   const [view, setView] = useState<DrillView>("list");
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [selectedAdSetId, setSelectedAdSetId] = useState<string | null>(null);
+
+  // Auto-campaign findings (read-only for clients)
+  const [autoFindings, setAutoFindings] = useState<AutoCampaignFinding[]>([]);
+  const [autoFindingsLoading, setAutoFindingsLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAutoFindings() {
+      setAutoFindingsLoading(true);
+      try {
+        const res = await fetch(`/api/data/auto-campaign/findings?clientId=${client.id}&limit=20`);
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          setAutoFindings(data.findings || []);
+        }
+      } catch { /* silent */ }
+      if (!cancelled) setAutoFindingsLoading(false);
+    }
+    loadAutoFindings();
+    return () => { cancelled = true; };
+  }, [client.id]);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -274,6 +296,97 @@ export default function TabCampaigns({ client }: { client: Client }) {
           <option value="meta_sync">מסונכרן ממטא</option>
           <option value="local">נוצר ידנית</option>
         </select>
+      </div>
+    );
+  }
+
+  // ── Auto Recommendations Panel (read-only for clients) ──
+  function renderAutoRecommendations() {
+    if (autoFindingsLoading) {
+      return (
+        <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1rem", marginBottom: "1rem", textAlign: "center", color: "var(--foreground-muted)", fontSize: "0.85rem" }}>
+          טוען המלצות חכמות...
+        </div>
+      );
+    }
+    if (autoFindings.length === 0) return null;
+
+    const pendingCount = autoFindings.filter(f => !f.actionCreated).length;
+    const criticalCount = autoFindings.filter(f => f.severity === "critical" || f.severity === "high").length;
+
+    return (
+      <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1rem 1.25rem", marginBottom: "1rem", direction: "rtl" }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span style={{ fontSize: "1rem" }}>🤖</span>
+            <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--foreground)" }}>המלצות חכמות</span>
+          </div>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            {pendingCount > 0 && (
+              <span style={{ fontSize: "0.7rem", padding: "0.15rem 0.5rem", borderRadius: "999px", background: "rgba(245,158,11,0.12)", color: "#f59e0b", fontWeight: 600 }}>
+                {pendingCount} ממתינות לאישור
+              </span>
+            )}
+            {criticalCount > 0 && (
+              <span style={{ fontSize: "0.7rem", padding: "0.15rem 0.5rem", borderRadius: "999px", background: "rgba(239,68,68,0.12)", color: "#ef4444", fontWeight: 600 }}>
+                {criticalCount} דחופות
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Summary stats */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.5rem", marginBottom: "0.75rem" }}>
+          <div style={{ background: "var(--surface)", borderRadius: "0.5rem", padding: "0.5rem", textAlign: "center" }}>
+            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--foreground)" }}>{autoFindings.length}</div>
+            <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>ממצאים</div>
+          </div>
+          <div style={{ background: "var(--surface)", borderRadius: "0.5rem", padding: "0.5rem", textAlign: "center" }}>
+            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: criticalCount > 0 ? "#ef4444" : "var(--foreground)" }}>{criticalCount}</div>
+            <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>דחופים</div>
+          </div>
+          <div style={{ background: "var(--surface)", borderRadius: "0.5rem", padding: "0.5rem", textAlign: "center" }}>
+            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: pendingCount > 0 ? "#f59e0b" : "var(--foreground)" }}>{pendingCount}</div>
+            <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>ממתינות</div>
+          </div>
+        </div>
+
+        {/* Findings list (latest 5) */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+          {autoFindings.slice(0, 5).map((finding) => {
+            const typeMeta = FINDING_TYPE_META[finding.type] || { icon: "📊", label: finding.type, color: "#6b7280", bgColor: "rgba(107,114,128,0.1)" };
+            const sevMeta = AUTO_SEVERITY_META[finding.severity] || { label: finding.severity, color: "#6b7280", bgColor: "rgba(107,114,128,0.1)" };
+            return (
+              <div key={finding.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 0.625rem", background: typeMeta.bgColor, borderRadius: "0.5rem" }}>
+                <span style={{ fontSize: "0.9rem" }}>{typeMeta.icon}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {typeMeta.label} — {finding.campaignName || finding.adName || "קמפיין"}
+                  </div>
+                  <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {finding.reason}
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexShrink: 0 }}>
+                  <span style={{ fontSize: "0.6rem", padding: "0.1rem 0.35rem", borderRadius: "999px", background: sevMeta.bgColor, color: sevMeta.color, fontWeight: 600 }}>
+                    {sevMeta.label}
+                  </span>
+                  <span style={{ fontSize: "0.65rem", color: "var(--foreground-muted)" }}>{finding.confidence}%</span>
+                  {finding.actionCreated && (
+                    <span style={{ fontSize: "0.6rem", padding: "0.1rem 0.3rem", borderRadius: "999px", background: "rgba(34,197,94,0.12)", color: "#22c55e", fontWeight: 500 }}>פעולה נוצרה</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {autoFindings.length > 5 && (
+          <div style={{ textAlign: "center", marginTop: "0.5rem", fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
+            +{autoFindings.length - 5} ממצאים נוספים
+          </div>
+        )}
       </div>
     );
   }
@@ -689,6 +802,7 @@ export default function TabCampaigns({ client }: { client: Client }) {
       {view === "list" && (
         <>
           {renderPerformanceSummary()}
+          {renderAutoRecommendations()}
           {renderFilters()}
           {renderCampaignList()}
         </>

@@ -80,4 +80,10 @@ export const ACTIVITY_TYPE_META: Record<CampaignActivityType, {
   budget_changed: { icon: '💰', label: 'שינוי תקציב', color: '#10b981' },
   adset_created: { icon: '📦', label: 'סדרת מודעות', color: '#6366f1' },
   marked_for_review: { icon: '🔍', label: 'סומן לבדיקה', color: '#a855f7' },
+  auto_scan_started: { icon: '🤖', label: 'סריקה אוטומטית', color: '#6366f1' },
+  auto_scan_completed: { icon: '✅', label: 'סריקה הושלמה', color: '#22c55e' },
+  auto_finding_detected: { icon: '🔎', label: 'ממצא זוהה', color: '#f59e0b' },
+  auto_action_created: { icon: '⚡', label: 'פעולה אוטומטית', color: '#3b82f6' },
+  publish_complete: { icon: '🚀', label: 'פורסם למטא', color: '#22c55e' },
+  publish_partial: { icon: '⚠️', label: 'פרסום חלקי', color: '#f59e0b' },
 };

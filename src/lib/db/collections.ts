@@ -47,6 +47,8 @@ import type {
   CampaignAction,
   CampaignActionApproval,
   CampaignActivityLog,
+  AutoCampaignRun,
+  AutoCampaignFinding,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -99,3 +101,5 @@ export const adReferences = new SupabaseCrud<AdReference>('app_ad_references', '
 export const campaignActions = new SupabaseCrud<CampaignAction>('campaign_actions', 'cac');
 export const campaignActionApprovals = new SupabaseCrud<CampaignActionApproval>('campaign_action_approvals', 'caa');
 export const campaignActivityLog = new SupabaseCrud<CampaignActivityLog>('campaign_activity_log', 'cal');
+export const autoCampaignRuns = new SupabaseCrud<AutoCampaignRun>('auto_campaign_runs', 'acr');
+export const autoCampaignFindings = new SupabaseCrud<AutoCampaignFinding>('auto_campaign_findings', 'acf');
