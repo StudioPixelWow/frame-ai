@@ -861,9 +861,8 @@ export default function NewProjectWizard() {
                 body: data.videoFile,
               });
               if (putRes.ok) {
-                patch({ uploadedVideoUrl: publicUrl, videoUrl: publicUrl });
+                patch({ uploadedVideoUrl: publicUrl });
                 data.uploadedVideoUrl = publicUrl;
-                data.videoUrl = publicUrl;
                 console.log("[createProject] ✅ Video uploaded:", publicUrl);
               } else {
                 console.error("[createProject] ❌ Direct upload failed:", putRes.status);
@@ -1932,7 +1931,9 @@ function StepUpload({ data, patch }: { data: WizardData; patch: (p: Partial<Wiza
       });
 
       // ── Step 3: Done ──
-      patch({ uploadedVideoUrl: publicUrl, videoUrl: publicUrl });
+      // Keep blob URL in videoUrl for instant local playback; only set
+      // uploadedVideoUrl for server-side operations (Remotion, transcription).
+      patch({ uploadedVideoUrl: publicUrl });
       setUploadProgress(100);
       console.log(`[StepUpload] ✅ Complete: ${publicUrl}`);
 
@@ -1976,7 +1977,7 @@ function StepUpload({ data, patch }: { data: WizardData; patch: (p: Partial<Wiza
         <input ref={fileRef} type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
         {data.videoFile ? (
           <div className="wiz-upload-done">
-            <div className="wiz-upload-thumb"><video src={data.uploadedVideoUrl || data.videoUrl} muted style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} /></div>
+            <div className="wiz-upload-thumb"><video src={data.videoUrl || data.uploadedVideoUrl} muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} /></div>
             <div className="wiz-upload-info">
               <div className="wiz-upload-name">{data.videoFile.name}</div>
               <div className="wiz-upload-size">{(data.videoFile.size / 1024 / 1024).toFixed(1)} MB</div>
@@ -2168,7 +2169,7 @@ function StepTrim({ data, patch }: { data: WizardData; patch: (p: Partial<Wizard
 
       {/* Video player */}
       <div className="wiz-player">
-        <video ref={videoRef} src={data.uploadedVideoUrl || data.videoUrl}
+        <video ref={videoRef} src={data.videoUrl || data.uploadedVideoUrl}
           onLoadedMetadata={(e) => {
             const v = e.target as HTMLVideoElement;
             const d = v.duration;
@@ -2349,8 +2350,8 @@ function StepFormat({ data, patch }: { data: WizardData; patch: (p: Partial<Wiza
         {formats.map((f) => (
           <button key={f.id} className={`wiz-format-card ${data.format === f.id ? "active" : ""}`} onClick={() => patch({ format: f.id })}>
             <div className="wiz-format-video-wrap" style={{ aspectRatio: f.css }}>
-              {(data.uploadedVideoUrl || data.videoUrl) ? (
-                <video src={data.uploadedVideoUrl || data.videoUrl} muted playsInline loop autoPlay style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6 }} />
+              {(data.videoUrl || data.uploadedVideoUrl) ? (
+                <video src={data.videoUrl || data.uploadedVideoUrl} muted playsInline loop autoPlay style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6 }} />
               ) : (
                 <div className="wiz-format-box" style={{ aspectRatio: f.css }} />
               )}
@@ -3109,7 +3110,7 @@ function StepTranscriptReview({ data, patch, videoSrc: parentVideoSrc }: { data:
         }
 
         transcriptionUrl = finalUrl;
-        patch({ uploadedVideoUrl: finalUrl, videoUrl: finalUrl });
+        patch({ uploadedVideoUrl: finalUrl });
         console.log(`[runTranscription] ✅ Fallback upload SUCCESS: ${transcriptionUrl}`);
       } else if (data.videoUrl && !data.videoUrl.startsWith("blob:")) {
         transcriptionUrl = data.videoUrl;
