@@ -63,6 +63,20 @@ export interface Client {
   metaConnectionStatus: MetaConnectionStatus;
   metaLastSyncedAt: string | null;
   metaLastSyncError: string;
+  // TikTok Ads Connection
+  tiktokAdvertiserId: string;
+  tiktokAccessToken: string;
+  tiktokConnectionStatus: MetaConnectionStatus;
+  tiktokLastSyncedAt: string | null;
+  tiktokLastSyncError: string;
+  // Google Ads Connection
+  googleCustomerId: string;
+  googleRefreshToken: string;
+  googleDeveloperToken: string;
+  googleManagerId: string;
+  googleConnectionStatus: MetaConnectionStatus;
+  googleLastSyncedAt: string | null;
+  googleLastSyncError: string;
 }
 
 // AI Settings
@@ -453,7 +467,7 @@ export interface Meeting {
 export type CampaignType = 'paid_social' | 'organic_social' | 'lead_gen' | 'awareness' | 'remarketing' | 'podcast_promo' | 'custom';
 export type CampaignStatus = 'draft' | 'in_progress' | 'waiting_approval' | 'approved' | 'scheduled' | 'active' | 'completed';
 export type CampaignMediaType = 'image' | 'video';
-export type CampaignPlatform = 'facebook' | 'instagram' | 'tiktok' | 'multi_platform';
+export type CampaignPlatform = 'facebook' | 'instagram' | 'tiktok' | 'google' | 'multi_platform';
 
 export interface Campaign {
   id: string;

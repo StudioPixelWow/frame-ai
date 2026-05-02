@@ -19,8 +19,9 @@ import { analyzeContentIntelligence } from '@/lib/bi/content-intelligence';
 import { analyzeCrossClient } from '@/lib/bi/cross-client';
 import { detectEarlyWarnings } from '@/lib/bi/early-warnings';
 import { generateAIInsights } from '@/lib/bi/ai-insights';
+import { comparePlatforms, compareClientPlatforms } from '@/lib/bi/platform-comparison';
 
-type BISection = 'health' | 'profitability' | 'content' | 'cross-client' | 'warnings' | 'insights' | 'all';
+type BISection = 'health' | 'profitability' | 'content' | 'cross-client' | 'warnings' | 'insights' | 'platforms' | 'all';
 
 async function fetchAllData() {
   const [allClients, allCampaigns, allAds, allLeads] = await Promise.all([
@@ -42,7 +43,7 @@ async function buildBI(section: BISection, clientId?: string) {
   const result: Record<string, unknown> = {};
 
   const sections = section === 'all'
-    ? ['health', 'profitability', 'content', 'cross-client', 'warnings', 'insights']
+    ? ['health', 'profitability', 'content', 'cross-client', 'warnings', 'insights', 'platforms']
     : [section];
 
   // Health
@@ -89,6 +90,18 @@ async function buildBI(section: BISection, clientId?: string) {
       warningResult.mediumCount = warningResult.warnings.filter(w => w.severity === 'medium').length;
     }
     result.warnings = warningResult;
+  }
+
+  // Platform comparison
+  if (sections.includes('platforms')) {
+    if (clientId) {
+      const client = data.clients.find((c: any) => c.id === clientId);
+      result.platforms = client
+        ? compareClientPlatforms(clientId, (client as any).name || '', data.campaigns as any, data.ads as any)
+        : { platforms: [], bestPlatform: null, bestPlatformReason: '', hasSufficientData: false };
+    } else {
+      result.platforms = comparePlatforms(data.campaigns as any, data.ads as any);
+    }
   }
 
   // AI insights

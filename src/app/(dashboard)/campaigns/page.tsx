@@ -51,10 +51,11 @@ const TYPE_OPTIONS: Array<{ value: CampaignType; label: string }> = [
 ];
 
 const PLATFORM_OPTIONS: Array<{ value: CampaignPlatform; label: string }> = [
-  { value: 'facebook', label: 'Facebook' },
-  { value: 'instagram', label: 'Instagram' },
-  { value: 'tiktok', label: 'TikTok' },
-  { value: 'multi_platform', label: 'מולטי-פלטפורמה' },
+  { value: 'facebook', label: '📘 Facebook' },
+  { value: 'instagram', label: '📸 Instagram' },
+  { value: 'tiktok', label: '🎵 TikTok' },
+  { value: 'google', label: '🔍 Google Ads' },
+  { value: 'multi_platform', label: '🌐 מולטי-פלטפורמה' },
 ];
 
 const MEDIA_TYPE_OPTIONS: Array<{ value: CampaignMediaType; label: string }> = [
@@ -96,6 +97,7 @@ const PLATFORM_LABELS: Record<CampaignPlatform, string> = {
   facebook: 'Facebook',
   instagram: 'Instagram',
   tiktok: 'TikTok',
+  google: 'Google Ads',
   multi_platform: 'מולטי-פלטפורמה',
 };
 
@@ -103,7 +105,16 @@ const PLATFORM_ICONS: Record<CampaignPlatform, string> = {
   facebook: '📘',
   instagram: '📸',
   tiktok: '🎵',
+  google: '🔍',
   multi_platform: '🌐',
+};
+
+const PLATFORM_COLORS: Record<CampaignPlatform, string> = {
+  facebook: '#1877f2',
+  instagram: '#e4405f',
+  tiktok: '#000000',
+  google: '#4285f4',
+  multi_platform: '#6366f1',
 };
 
 const MEDIA_TYPE_LABELS: Record<CampaignMediaType, string> = {

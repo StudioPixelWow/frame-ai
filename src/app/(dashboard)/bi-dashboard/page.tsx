@@ -59,7 +59,7 @@ interface AIInsight {
 export default function BIDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [biData, setBiData] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'health' | 'profit' | 'content' | 'cross' | 'warnings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'health' | 'profit' | 'content' | 'cross' | 'warnings' | 'platforms'>('overview');
 
   const fetchBI = useCallback(async () => {
     setLoading(true);
@@ -82,6 +82,7 @@ export default function BIDashboardPage() {
     { key: 'content', label: 'תוכן', icon: '🎨' },
     { key: 'cross', label: 'חוצה-לקוחות', icon: '🔗' },
     { key: 'warnings', label: 'התראות', icon: '⚠️' },
+    { key: 'platforms', label: 'פלטפורמות', icon: '📡' },
   ] as const;
 
   return (
@@ -133,6 +134,7 @@ export default function BIDashboardPage() {
           {activeTab === 'content' && <ContentTab content={biData.content} />}
           {activeTab === 'cross' && <CrossClientTab crossClient={biData.crossClient} />}
           {activeTab === 'warnings' && <WarningsTab warnings={biData.warnings} />}
+          {activeTab === 'platforms' && <PlatformsTab platforms={biData.platforms} />}
         </>
       )}
 
@@ -577,6 +579,145 @@ function WarningsTab({ warnings }: { warnings: any }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PLATFORMS TAB
+// ═══════════════════════════════════════════════════════════════════
+
+const PLATFORM_ICONS: Record<string, string> = {
+  facebook: '📘', instagram: '📸', tiktok: '🎵', google: '🔍', multi_platform: '🌐',
+};
+const PLATFORM_COLORS: Record<string, string> = {
+  facebook: '#1877f2', instagram: '#e4405f', tiktok: '#000000', google: '#4285f4', multi_platform: '#6366f1',
+};
+
+function PlatformsTab({ platforms }: { platforms: any }) {
+  if (!platforms) {
+    return <EmptyState message="אין מספיק נתונים להשוואת פלטפורמות" />;
+  }
+
+  // Handle both global (comparePlatforms) and client-specific (compareClientPlatforms) shapes
+  const platformList: any[] = platforms.platforms || [];
+  const bestBy = platforms.bestBy || {};
+  const insights: any[] = platforms.insights || [];
+  const hasSufficientData = platforms.hasSufficientData ?? (platformList.length >= 2);
+
+  if (platformList.length === 0) {
+    return <EmptyState message="אין נתוני פלטפורמות — חברו פלטפורמת פרסום כדי לצפות בהשוואה" />;
+  }
+
+  const totalSpend = platformList.reduce((s: number, p: any) => s + (p.totalSpend || 0), 0);
+
+  return (
+    <div>
+      <h2 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem' }}>📡 השוואת פלטפורמות פרסום</h2>
+
+      {/* KPI strip — best by */}
+      {hasSufficientData && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+          {bestBy.cpl && (
+            <div style={{ background: 'var(--surface)', borderRadius: '0.75rem', padding: '0.85rem', border: '1px solid var(--border)', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)', marginBottom: '0.15rem' }}>CPL הכי נמוך</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{PLATFORM_ICONS[bestBy.cpl]} {bestBy.cpl}</div>
+            </div>
+          )}
+          {bestBy.ctr && (
+            <div style={{ background: 'var(--surface)', borderRadius: '0.75rem', padding: '0.85rem', border: '1px solid var(--border)', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)', marginBottom: '0.15rem' }}>CTR הכי גבוה</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{PLATFORM_ICONS[bestBy.ctr]} {bestBy.ctr}</div>
+            </div>
+          )}
+          {bestBy.cpc && (
+            <div style={{ background: 'var(--surface)', borderRadius: '0.75rem', padding: '0.85rem', border: '1px solid var(--border)', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)', marginBottom: '0.15rem' }}>CPC הכי נמוך</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{PLATFORM_ICONS[bestBy.cpc]} {bestBy.cpc}</div>
+            </div>
+          )}
+          {bestBy.conversions && (
+            <div style={{ background: 'var(--surface)', borderRadius: '0.75rem', padding: '0.85rem', border: '1px solid var(--border)', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)', marginBottom: '0.15rem' }}>הכי הרבה המרות</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{PLATFORM_ICONS[bestBy.conversions]} {bestBy.conversions}</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Platform cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+        {platformList.map((p: any) => {
+          const spendShare = totalSpend > 0 ? ((p.totalSpend || 0) / totalSpend * 100).toFixed(0) : '0';
+          const color = PLATFORM_COLORS[p.platform] || '#6366f1';
+          return (
+            <div key={p.platform} style={{
+              background: 'var(--surface)', borderRadius: '0.75rem', padding: '1.25rem',
+              border: '1px solid var(--border)', borderTop: `3px solid ${color}`,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <span style={{ fontSize: '1.5rem' }}>{PLATFORM_ICONS[p.platform] || '📊'}</span>
+                <div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>{p.label || p.platform}</div>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)' }}>
+                    {p.campaignCount} קמפיינים, {p.adCount} מודעות
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                <MetricBox label="הוצאה" value={`₪${(p.totalSpend || 0).toLocaleString()}`} sub={`${spendShare}% מהכולל`} />
+                <MetricBox label="CTR" value={`${(p.avgCtr || 0).toFixed(2)}%`} />
+                <MetricBox label="CPC" value={`₪${(p.avgCpc || 0).toFixed(1)}`} />
+                <MetricBox label="CPM" value={`₪${(p.avgCpm || 0).toFixed(0)}`} />
+                <MetricBox label="המרות" value={String(p.totalConversions || 0)} />
+                <MetricBox label="CPL" value={p.avgCpl > 0 ? `₪${(p.avgCpl).toFixed(0)}` : '—'} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Insights */}
+      {insights.length > 0 && (
+        <div>
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.5rem' }}>💡 תובנות פלטפורמה</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {insights.map((ins: any) => {
+              const typeColors: Record<string, string> = {
+                winner: '#22c55e', trend: '#3b82f6', warning: '#f59e0b', recommendation: '#8b5cf6',
+              };
+              const typeIcons: Record<string, string> = {
+                winner: '🏆', trend: '📈', warning: '⚠️', recommendation: '💡',
+              };
+              return (
+                <div key={ins.id} style={{
+                  background: 'var(--surface)', borderRadius: '0.75rem', padding: '1rem',
+                  border: '1px solid var(--border)',
+                  borderRight: `3px solid ${typeColors[ins.type] || '#6b7280'}`,
+                }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.2rem' }}>
+                    {typeIcons[ins.type] || '📊'} {ins.title}
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--foreground-muted)' }}>{ins.detail}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MetricBox({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div style={{
+      background: 'var(--surface-raised, var(--background))', borderRadius: '0.375rem',
+      padding: '0.5rem', textAlign: 'center',
+    }}>
+      <div style={{ fontSize: '0.62rem', color: 'var(--foreground-muted)', marginBottom: '0.1rem' }}>{label}</div>
+      <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{value}</div>
+      {sub && <div style={{ fontSize: '0.58rem', color: 'var(--foreground-muted)' }}>{sub}</div>}
     </div>
   );
 }
