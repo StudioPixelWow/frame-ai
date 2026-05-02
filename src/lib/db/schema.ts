@@ -1128,6 +1128,107 @@ export interface AutoCampaignFinding {
   createdAt: string;
 }
 
+// ── Reports ──────────────────────────────────────────────────────────
+
+export type ReportType = 'campaign' | 'client_monthly' | 'internal_manager';
+export type ReportStatus = 'generating' | 'ready' | 'failed' | 'sent';
+export type ReportMode = 'client_facing' | 'internal';
+
+export interface Report {
+  id: string;
+  type: ReportType;
+  mode: ReportMode;
+  title: string;
+  status: ReportStatus;
+  // Scope
+  clientId: string;
+  clientName: string;
+  campaignId: string | null;       // null for client/manager reports
+  campaignName: string | null;
+  // Date range
+  periodStart: string;
+  periodEnd: string;
+  // Generated data snapshot
+  data: ReportData;
+  // File
+  pdfUrl: string | null;           // Supabase Storage URL if generated
+  // Meta
+  generatedBy: string;
+  sentTo: string | null;           // email address if sent
+  sentAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReportData {
+  // Campaign-level
+  campaignSummary?: ReportCampaignSummary;
+  adSetSummaries?: ReportAdSetSummary[];
+  adPerformance?: ReportAdPerformance[];
+  // Aggregated metrics
+  totalSpend: number;
+  totalLeads: number;
+  totalImpressions: number;
+  totalClicks: number;
+  avgCpl: number;
+  avgCtr: number;
+  // Insights
+  bestPerformingAd?: { name: string; headline: string; ctr: number; leads: number; cpl: number } | null;
+  weakPoints: string[];
+  recommendations: string[];
+  actionsTaken: string[];
+  pendingActions: string[];
+  // Monthly extras
+  campaignsActive?: number;
+  approvalsCompleted?: number;
+  approvalsPending?: number;
+  nextMonthRecommendations?: string[];
+  executiveSummary?: string;
+  // Manager extras
+  clientHealth?: string;
+  budgetWasteRisks?: string[];
+  automationActions?: string[];
+  employeeFollowUps?: string[];
+  // Data sufficiency
+  hasEnoughData: boolean;
+}
+
+export interface ReportCampaignSummary {
+  id: string;
+  name: string;
+  status: string;
+  platform: string;
+  spend: number;
+  leads: number;
+  cpl: number;
+  ctr: number;
+  adSetsCount: number;
+  adsCount: number;
+}
+
+export interface ReportAdSetSummary {
+  id: string;
+  name: string;
+  status: string;
+  spend: number;
+  leads: number;
+  cpl: number;
+  adsCount: number;
+}
+
+export interface ReportAdPerformance {
+  id: string;
+  name: string;
+  headline: string;
+  status: string;
+  impressions: number;
+  clicks: number;
+  spend: number;
+  leads: number;
+  ctr: number;
+  cpl: number;
+}
+
 // WhatsApp Message
 export type WhatsAppMessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
 

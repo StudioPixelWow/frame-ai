@@ -1653,6 +1653,48 @@ export default function CampaignDetailPage() {
     setPublishLoading(false);
   }, [campaign, publishLoading, campaignAdSets, campaignAds, toast]);
 
+  // ── Report Generation ────────────────────────────────────────────────
+
+  const [reportGenerating, setReportGenerating] = useState(false);
+
+  const handleGenerateReport = useCallback(async () => {
+    if (!campaign || reportGenerating) return;
+    setReportGenerating(true);
+    try {
+      const now = new Date();
+      const periodEnd = now.toISOString().split('T')[0];
+      const periodStart = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString().split('T')[0];
+
+      const clientObj = clients?.find(c => c.id === campaign.clientId);
+
+      const res = await fetch('/api/data/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'campaign',
+          mode: 'client_facing',
+          clientId: campaign.clientId,
+          clientName: clientObj?.name || campaign.clientName || '',
+          campaignId: campaign.id,
+          campaignName: campaign.campaignName,
+          periodStart,
+          periodEnd,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.report) {
+        toast('הדוח הופק בהצלחה!', 'success');
+        // Open preview in new tab
+        window.open(`/api/data/reports/${data.report.id}?format=html`, '_blank');
+      } else {
+        toast(data.error || 'שגיאה בהפקת דוח', 'error');
+      }
+    } catch {
+      toast('שגיאה בחיבור לשרת', 'error');
+    }
+    setReportGenerating(false);
+  }, [campaign, clients, reportGenerating, toast]);
+
   // ── Auto Engine State ──────────────────────────────────────────────
 
   const [autoFindings, setAutoFindings] = useState<Array<{
@@ -2087,6 +2129,20 @@ export default function CampaignDetailPage() {
                   title={campaign.metaCampaignId ? 'הקמפיין כבר פורסם — לחץ לסנכרון מחדש' : 'פרסם את הקמפיין למטא'}
                 >
                   {publishLoading ? '⏳ מפרסם...' : campaign.metaCampaignId ? '✅ פורסם למטא' : '🚀 פרסם למטא'}
+                </button>
+                <button
+                  onClick={handleGenerateReport}
+                  disabled={reportGenerating}
+                  style={{
+                    fontSize: '0.7rem', padding: '0.3rem 0.7rem', fontWeight: 700, cursor: reportGenerating ? 'wait' : 'pointer',
+                    background: 'var(--surface-raised)', color: 'var(--foreground)',
+                    border: '1px solid var(--border)', borderRadius: '0.375rem',
+                    opacity: reportGenerating ? 0.6 : 1,
+                    display: 'flex', alignItems: 'center', gap: '0.3rem',
+                  }}
+                  title="הפקת דוח ביצועים לקמפיין"
+                >
+                  {reportGenerating ? '⏳ מפיק...' : '📊 הפק דוח'}
                 </button>
               </div>
             </div>

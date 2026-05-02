@@ -273,6 +273,40 @@ function ClientDetailContent() {
     }
   };
 
+  // ── Report Generation ──
+  const [reportGenerating, setReportGenerating] = useState(false);
+  const handleGenerateClientReport = useCallback(async (type: 'client_monthly' | 'internal_manager') => {
+    if (!client || reportGenerating) return;
+    setReportGenerating(true);
+    try {
+      const now = new Date();
+      const periodEnd = now.toISOString().split('T')[0];
+      const periodStart = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString().split('T')[0];
+      const res = await fetch('/api/data/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type,
+          mode: type === 'internal_manager' ? 'internal' : 'client_facing',
+          clientId: client.id,
+          clientName: client.name,
+          periodStart,
+          periodEnd,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.report) {
+        toast.success('הדוח הופק בהצלחה!');
+        window.open(`/api/data/reports/${data.report.id}?format=html`, '_blank');
+      } else {
+        toast.error(data.error || 'שגיאה בהפקת דוח');
+      }
+    } catch {
+      toast.error('שגיאה בחיבור לשרת');
+    }
+    setReportGenerating(false);
+  }, [client, reportGenerating, toast]);
+
   // ── UGC Video Handlers ──
   const openUgcModal = useCallback(async () => {
     setUgcModalOpen(true);
@@ -955,6 +989,36 @@ function ClientDetailContent() {
                   onClick={() => router.push(`/business-projects/new?clientId=${clientId}`)}
                 >
                   📂 צור פרויקט
+                </button>
+                <button
+                  className="mod-btn-ghost"
+                  disabled={reportGenerating}
+                  style={{
+                    fontSize: "0.875rem",
+                    padding: "0.5rem 1.125rem",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    opacity: reportGenerating ? 0.6 : 1,
+                  }}
+                  onClick={() => handleGenerateClientReport('client_monthly')}
+                >
+                  {reportGenerating ? '⏳ מפיק...' : '📋 דוח חודשי'}
+                </button>
+                <button
+                  className="mod-btn-ghost"
+                  disabled={reportGenerating}
+                  style={{
+                    fontSize: "0.875rem",
+                    padding: "0.5rem 1.125rem",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    opacity: reportGenerating ? 0.6 : 1,
+                  }}
+                  onClick={() => handleGenerateClientReport('internal_manager')}
+                >
+                  {reportGenerating ? '⏳ מפיק...' : '🔒 דוח מנהל'}
                 </button>
               </div>
             </div>
