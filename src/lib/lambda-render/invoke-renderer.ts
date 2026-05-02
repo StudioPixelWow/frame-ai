@@ -17,9 +17,27 @@ import { updateRenderJob } from "@/lib/render-worker/job-manager";
 
 const tag = "[LambdaRender]";
 
+/* ── Ensure AWS SDK can find credentials ───────────────────────────────── */
+// @remotion/lambda uses the AWS SDK internally, which reads from standard
+// AWS_* env vars. We store them as REMOTION_AWS_* to avoid conflicts,
+// so we bridge them here.
+function ensureAwsEnv() {
+  if (process.env.REMOTION_AWS_ACCESS_KEY_ID && !process.env.AWS_ACCESS_KEY_ID) {
+    process.env.AWS_ACCESS_KEY_ID = process.env.REMOTION_AWS_ACCESS_KEY_ID;
+  }
+  if (process.env.REMOTION_AWS_SECRET_ACCESS_KEY && !process.env.AWS_SECRET_ACCESS_KEY) {
+    process.env.AWS_SECRET_ACCESS_KEY = process.env.REMOTION_AWS_SECRET_ACCESS_KEY;
+  }
+  if (process.env.REMOTION_AWS_REGION && !process.env.AWS_REGION) {
+    process.env.AWS_REGION = process.env.REMOTION_AWS_REGION;
+  }
+}
+
 /* ── Config from env ────────────────────────────────────────────────────── */
 
 function getConfig() {
+  ensureAwsEnv();
+
   const region = process.env.REMOTION_AWS_REGION || "us-east-1";
   const functionName = process.env.REMOTION_LAMBDA_FUNCTION_NAME;
   const serveUrl = process.env.REMOTION_SERVE_URL;
