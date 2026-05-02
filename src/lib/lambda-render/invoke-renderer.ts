@@ -104,6 +104,7 @@ export async function invokeLambdaRender(req: LambdaRenderRequest): Promise<{
     crf: qs.crf,
     // framesPerLambda: 20,  // tune for cost/speed tradeoff
     privacy: "no-acl",
+    logLevel: "verbose",
     downloadBehavior: { type: "play-in-browser" },
   });
 
@@ -154,8 +155,19 @@ export async function pollLambdaProgress(opts: {
       }
 
       if (progress.fatalErrorEncountered) {
-        const errMsg = progress.errors?.[0]?.message || "Unknown Lambda render error";
+        const allErrors = progress.errors || [];
+        const errMsg = allErrors[0]?.message || "Unknown Lambda render error";
+        const errStack = allErrors[0]?.stack || "";
         console.error(`${tag} ❌ Fatal error during render: ${errMsg}`);
+        if (errStack) console.error(`${tag}   Stack: ${errStack}`);
+        if (allErrors.length > 1) {
+          console.error(`${tag}   All errors (${allErrors.length}):`, JSON.stringify(allErrors.map(e => e.message)));
+        }
+        // Log additional progress info for debugging
+        console.error(`${tag}   renderId: ${opts.renderId}`);
+        console.error(`${tag}   overallProgress: ${progress.overallProgress}`);
+        console.error(`${tag}   chunks: ${progress.chunks ?? "N/A"}`);
+        console.error(`${tag}   framesRendered: ${progress.framesRendered ?? "N/A"}`);
         throw new Error(`Lambda render failed: ${errMsg}`);
       }
     } catch (err) {

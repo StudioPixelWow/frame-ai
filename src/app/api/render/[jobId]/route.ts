@@ -69,6 +69,7 @@ function mapStatus(s: string): string {
     done: "completed",
     completed: "completed",
     failed: "failed",
+    error: "failed",
   };
   return map[s] || s;
 }
