@@ -24,6 +24,7 @@ import { useOperationalAlerts } from '@/lib/alerts/use-alerts';
 import { SEVERITY_CONFIG, CATEGORY_LABELS } from '@/lib/alerts/engine';
 import { INSIGHT_TYPE_CONFIG } from '@/lib/ai/insights';
 import { AnimatedCounter } from '@/components/ui/animated-counter';
+import { PremiumBarChart, PremiumStatGrid, PremiumRadialMetric, BRAND } from '@/components/charts';
 
 const HEBREW_MONTHS = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ'];
 
@@ -388,55 +389,6 @@ function ExecDashboardInner() {
     direction: 'rtl' as const,
   };
 
-  const chartTitleStyle = {
-    fontSize: '1rem',
-    fontWeight: '700',
-    color: 'var(--foreground)',
-    margin: '0 0 20px 0',
-  };
-
-  const barChartStyle = {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '12px',
-  };
-
-  const barItemStyle = {
-    display: 'grid',
-    gridTemplateColumns: '80px 1fr 60px',
-    gap: '12px',
-    alignItems: 'center',
-    direction: 'rtl' as const,
-  };
-
-  const barLabelStyle = {
-    fontSize: '0.8rem',
-    color: 'var(--foreground-muted)',
-    fontWeight: '600',
-  };
-
-  const barContainerStyle = {
-    backgroundColor: 'var(--surface)',
-    borderRadius: '4px',
-    height: '28px',
-    position: 'relative' as const,
-    overflow: 'hidden',
-  };
-
-  const barFillStyle = (color: string, percentage: number) => ({
-    backgroundColor: color,
-    height: '100%',
-    width: `${percentage}%`,
-    borderRadius: '4px',
-    transition: 'width 0.3s ease',
-  });
-
-  const barValueStyle = {
-    fontSize: '0.75rem',
-    color: 'var(--foreground-muted)',
-    fontWeight: '700',
-    textAlign: 'right' as const,
-  };
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SECTION 6: QUICK NAVIGATION
@@ -744,99 +696,59 @@ function ExecDashboardInner() {
       <div className="ux-stagger" style={chartsContainerStyle}>
         {/* Tasks by Status */}
         <div className="ux-stagger-item premium-card" style={chartCardStyle}>
-          <h3 style={chartTitleStyle}>משימות לפי סטטוס</h3>
-          <div style={barChartStyle}>
-            {[
+          <PremiumBarChart
+            title="משימות לפי סטטוס"
+            data={[
               { label: 'חדש', value: chartData.tasksByStatus.new, color: '#3B82F6' },
               { label: 'בביצוע', value: chartData.tasksByStatus.in_progress, color: '#0092cc' },
               { label: 'בבדיקה', value: chartData.tasksByStatus.under_review, color: '#F59E0B' },
               { label: 'הושלמה', value: chartData.tasksByStatus.completed, color: '#10B981' },
-            ].map(item => {
-              const max = Object.values(chartData.tasksByStatus).reduce((a, b) => a + b, 0) || 1;
-              const percentage = (item.value / max) * 100;
-              return (
-                <div key={item.label} style={barItemStyle}>
-                  <span style={barLabelStyle}>{item.label}</span>
-                  <div style={barContainerStyle}>
-                    <div style={barFillStyle(item.color, percentage)} />
-                  </div>
-                  <span style={barValueStyle}>{item.value}</span>
-                </div>
-              );
-            })}
-          </div>
+            ]}
+            format="number"
+          />
         </div>
 
         {/* Employee Workload */}
         <div className="ux-stagger-item premium-card" style={chartCardStyle}>
-          <h3 style={chartTitleStyle}>עומס עבודה לפי עובד</h3>
-          <div style={barChartStyle}>
-            {chartData.employeeWorkload.slice(0, 5).map(emp => {
-              const maxTasks = Math.max(...chartData.employeeWorkload.map(e => e.taskCount), 1);
-              const percentage = (emp.taskCount / maxTasks) * 100;
-              return (
-                <div key={emp.id} style={barItemStyle}>
-                  <span style={barLabelStyle}>{emp.name}</span>
-                  <div style={barContainerStyle}>
-                    <div style={barFillStyle('var(--accent)', percentage)} />
-                  </div>
-                  <span style={barValueStyle}>{emp.taskCount}</span>
-                </div>
-              );
-            })}
-          </div>
+          <PremiumBarChart
+            title="עומס עבודה לפי עובד"
+            data={chartData.employeeWorkload.slice(0, 5).map(emp => ({
+              label: emp.name,
+              value: emp.taskCount,
+              color: 'var(--accent)',
+            }))}
+            format="number"
+          />
         </div>
 
         {/* Leads by Status */}
         <div className="ux-stagger-item premium-card" style={chartCardStyle}>
-          <h3 style={chartTitleStyle}>לידים לפי שלב</h3>
-          <div style={barChartStyle}>
-            {[
+          <PremiumBarChart
+            title="לידים לפי שלב"
+            data={[
               { label: 'חדש', value: chartData.leadsByStatus.new, color: '#3B82F6' },
               { label: 'יצור קשר', value: chartData.leadsByStatus.contacted, color: '#0092cc' },
               { label: 'הצעה', value: chartData.leadsByStatus.proposal_sent, color: '#F59E0B' },
               { label: 'משא ומתן', value: chartData.leadsByStatus.negotiation, color: '#EC4899' },
               { label: 'נסגר', value: chartData.leadsByStatus.won, color: '#10B981' },
-            ].map(item => {
-              const max = Object.values(chartData.leadsByStatus).reduce((a, b) => a + b, 0) || 1;
-              const percentage = (item.value / max) * 100;
-              return (
-                <div key={item.label} style={barItemStyle}>
-                  <span style={barLabelStyle}>{item.label}</span>
-                  <div style={barContainerStyle}>
-                    <div style={barFillStyle(item.color, percentage)} />
-                  </div>
-                  <span style={barValueStyle}>{item.value}</span>
-                </div>
-              );
-            })}
-          </div>
+            ]}
+            format="number"
+          />
         </div>
 
         {/* Client Types */}
         <div className="ux-stagger-item premium-card" style={chartCardStyle}>
-          <h3 style={chartTitleStyle}>התפלגות סוגי לקוחות</h3>
-          <div style={barChartStyle}>
-            {[
+          <PremiumBarChart
+            title="התפלגות סוגי לקוחות"
+            data={[
               { label: 'שיווק', value: chartData.clientTypeDistribution.marketing, color: '#3B82F6' },
               { label: 'ברנדינג', value: chartData.clientTypeDistribution.branding, color: '#0092cc' },
               { label: 'אתרים', value: chartData.clientTypeDistribution.websites, color: '#10B981' },
               { label: 'הוסטינג', value: chartData.clientTypeDistribution.hosting, color: '#F59E0B' },
               { label: 'פודקאסט', value: chartData.clientTypeDistribution.podcast, color: '#EC4899' },
-            ].map(item => {
-              const max = Object.values(chartData.clientTypeDistribution).reduce((a, b) => a + b, 0) || 1;
-              const percentage = (item.value / max) * 100;
-              return (
-                <div key={item.label} style={barItemStyle}>
-                  <span style={barLabelStyle}>{item.label}</span>
-                  <div style={barContainerStyle}>
-                    <div style={barFillStyle(item.color, percentage)} />
-                  </div>
-                  <span style={barValueStyle}>{item.value}</span>
-                </div>
-              );
-            })}
-          </div>
+            ]}
+            format="number"
+          />
         </div>
       </div>
 

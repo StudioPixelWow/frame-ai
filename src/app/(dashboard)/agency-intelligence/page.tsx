@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { PremiumStatGrid, PremiumKpiCard, PremiumRadialMetric, BRAND } from '@/components/charts';
 
 // ── Types ──
 
@@ -205,13 +206,17 @@ export default function AgencyIntelligencePage() {
       </div>
 
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, marginBottom: 24 }}>
-        <KPICard label="פלייבוקים" value={stats.totalPlaybooks} color="#6366f1" />
-        <KPICard label="תבניות קמפיין" value={stats.totalCampaignTemplates} color="#0ea5e9" />
-        <KPICard label="תבניות מודעה" value={stats.totalAdTemplates} color="#10b981" />
-        <KPICard label="תבניות תוכן" value={stats.totalContentTemplates} color="#f59e0b" />
-        <KPICard label="הצעות ממתינות" value={stats.pendingSuggestionsCount} color={stats.pendingSuggestionsCount > 0 ? '#ef4444' : '#94a3b8'} />
-      </div>
+      <PremiumStatGrid
+        cards={[
+          { label: 'פלייבוקים', value: stats.totalPlaybooks, color: '#6366f1' },
+          { label: 'תבניות קמפיין', value: stats.totalCampaignTemplates, color: '#0ea5e9' },
+          { label: 'תבניות מודעה', value: stats.totalAdTemplates, color: '#10b981' },
+          { label: 'תבניות תוכן', value: stats.totalContentTemplates, color: '#f59e0b' },
+          { label: 'הצעות ממתינות', value: stats.pendingSuggestionsCount, color: stats.pendingSuggestionsCount > 0 ? '#ef4444' : '#94a3b8' },
+        ]}
+        style={{ marginBottom: 24 }}
+      />
+
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 24, borderBottom: '1px solid #e2e8f0', paddingBottom: 8 }}>
@@ -257,23 +262,6 @@ export default function AgencyIntelligencePage() {
         />
       )}
       {activeTab === 'performance' && calibration && <PerformanceTab calibration={calibration} />}
-    </div>
-  );
-}
-
-// ── KPI Card ──
-
-function KPICard({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div style={{
-      background: '#fff',
-      borderRadius: 12,
-      padding: 16,
-      border: '1px solid #e2e8f0',
-      textAlign: 'center',
-    }}>
-      <div style={{ fontSize: 28, fontWeight: 700, color }}>{value}</div>
-      <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>{label}</div>
     </div>
   );
 }
@@ -645,8 +633,8 @@ function LearningTab({
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ fontSize: 11, color: '#94a3b8' }}>{s.source}</div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <span style={{ fontSize: 12, color: '#64748b' }}>ביטחון: {s.confidence}%</span>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <PremiumRadialMetric value={s.confidence} label="ביטחון" />
                     <button
                       onClick={() => onAction(s.id, 'accepted')}
                       style={{ padding: '4px 12px', borderRadius: 6, border: 'none', background: '#10b981', color: '#fff', cursor: 'pointer', fontSize: 12 }}

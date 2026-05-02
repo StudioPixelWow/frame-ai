@@ -27,6 +27,7 @@ import SmartWeeklyCalendar from "@/components/ui/SmartWeeklyCalendar";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { useAuth } from "@/lib/auth/auth-context";
 import { generateWeeklyTrends, generateClientContentIdeas, type SmartTrend, type ContentIdea } from "@/lib/ai/smart-trends";
+import { PremiumKpiCard, PremiumStatGrid, BRAND } from '@/components/charts';
 
 /* ── Module definitions ── */
 const modules = [
@@ -74,23 +75,6 @@ function getDateLabel(): string {
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", minimumFractionDigits: 0 }).format(amount);
-}
-
-/* ── KPI Card ── */
-function KPICard({ value, label, color, icon, href }: {
-  value: string | number; label: string; color: string; icon: string; href: string;
-}) {
-  return (
-    <Link href={href} className="premium-card" style={{ textDecoration: "none", textAlign: "center", padding: "1.25rem 1rem" }}>
-      <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>{icon}</div>
-      <div className="ux-kpi-value" style={{ fontSize: "2rem", fontWeight: 800, color, lineHeight: 1, marginBottom: "0.35rem", letterSpacing: "-0.02em" }}>
-        {typeof value === "number" ? <AnimatedCounter value={value} /> : value}
-      </div>
-      <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-        {label}
-      </div>
-    </Link>
-  );
 }
 
 /* ── Summary pane ── */
@@ -237,14 +221,17 @@ function EmployeeDashboard({ employeeId }: { employeeId: string }) {
         {/* ═══ KPI ROW ═══ */}
         <div>
           <div className="mhd-section-label">סקירה מהירה</div>
-          <div className="ux-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.75rem" }}>
-            <KPICard icon="📋" value={allMyTaskCount} label="משימות פתוחות" color="#2dd4bf" href="/tasks" />
-            <KPICard icon="🔴" value={overdueCount} label="באיחור" color="#ef4444" href="/tasks" />
-            <KPICard icon="📅" value={todayTaskCount} label="משימות היום" color="#38bdf8" href="/tasks" />
-            <KPICard icon="👥" value={myClients.length} label="לקוחות שלי" color="#a78bfa" href="/clients" />
-            <KPICard icon="⏳" value={myApprovals.length} label="ממתינים לאישור" color="#f59e0b" href="/approvals" />
-            <KPICard icon="📊" value={`${publishedGantt}/${currentMonthGantt.length}`} label="תוכן החודש" color="#22c55e" href="/clients" />
-          </div>
+          <PremiumStatGrid
+            items={[
+              { icon: "📋", value: allMyTaskCount, label: "משימות פתוחות", color: "#2dd4bf" },
+              { icon: "🔴", value: overdueCount, label: "באיחור", color: "#ef4444" },
+              { icon: "📅", value: todayTaskCount, label: "משימות היום", color: "#38bdf8" },
+              { icon: "👥", value: myClients.length, label: "לקוחות שלי", color: "#a78bfa" },
+              { icon: "⏳", value: myApprovals.length, label: "ממתינים לאישור", color: "#f59e0b" },
+            ]}
+            columns={6}
+            variant="light"
+          />
         </div>
 
         {/* ═══ URGENT ACTIONS ═══ */}
@@ -708,16 +695,20 @@ function AdminDashboard() {
           {isLoading ? (
             <SkeletonKPIRow count={8} />
           ) : analytics ? (
-            <div className="ux-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "0.75rem" }}>
-              <KPICard icon="👥" value={analytics.activeClients} label="לקוחות פעילים" color="#38bdf8" href="/clients" />
-              <KPICard icon="🎯" value={analytics.leadsThisMonth} label="לידים החודש" color="#34d399" href="/leads" />
-              <KPICard icon="💰" value={formatCurrency(analytics.revenue)} label="הכנסה החודש" color="#10b981" href="/accounting" />
-              <KPICard icon="⚠️" value={analytics.overduePaymentsCount} label="תשלומים בפיגור" color="#ef4444" href="/accounting" />
-              <KPICard icon="📋" value={analytics.openTasks} label="משימות פתוחות" color="#2dd4bf" href="/tasks" />
-              <KPICard icon="⏳" value={analytics.pendingApprovals} label="אישורים ממתינים" color="#f59e0b" href="/approvals" />
-              <KPICard icon="📣" value={analytics.activeCampaigns} label="קמפיינים פעילים" color="#a78bfa" href="/campaigns" />
-              <KPICard icon="🎙️" value={analytics.podcastThisMonth} label="פודקאסטים החודש" color="#E8F401" href="/accounting/podcast" />
-            </div>
+            <PremiumStatGrid
+              items={[
+                { icon: "👥", value: analytics.activeClients, label: "לקוחות פעילים", color: "#38bdf8" },
+                { icon: "🎯", value: analytics.leadsThisMonth, label: "לידים החודש", color: "#34d399" },
+                { icon: "💰", value: analytics.revenue, label: "הכנסה החודש", color: "#10b981", format: "currency" },
+                { icon: "⚠️", value: analytics.overduePaymentsCount, label: "תשלומים בפיגור", color: "#ef4444" },
+                { icon: "📋", value: analytics.openTasks, label: "משימות פתוחות", color: "#2dd4bf" },
+                { icon: "⏳", value: analytics.pendingApprovals, label: "אישורים ממתינים", color: "#f59e0b" },
+                { icon: "📣", value: analytics.activeCampaigns, label: "קמפיינים פעילים", color: "#a78bfa" },
+                { icon: "🎙️", value: analytics.podcastThisMonth, label: "פודקאסטים החודש", color: "#E8F401" },
+              ]}
+              columns={8}
+              variant="light"
+            />
           ) : null}
         </div>
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { PremiumStatGrid, PremiumKpiCard, BRAND } from '@/components/charts';
 
 // ── Types ──
 
@@ -160,14 +161,17 @@ export default function SystemHealthPage() {
       </div>
 
       {/* KPI Strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0.6rem', marginBottom: '1.2rem' }}>
-        <KPICard label="שגיאות 24ש" value={stats.totalErrors24h} icon="⚠️" color={stats.totalErrors24h > 0 ? '#ca8a04' : undefined} />
-        <KPICard label="קריטיות" value={stats.criticalErrors24h} icon="🔴" color={stats.criticalErrors24h > 0 ? '#dc2626' : undefined} />
-        <KPICard label="פעולות נכשלות" value={stats.failedActions24h} icon="❌" />
-        <KPICard label="סנכרון נכשל" value={stats.failedSyncs24h} icon="🔗" />
-        <KPICard label="בעיות אוטופיילוט" value={stats.autopilotIssues24h} icon="🤖" />
-        <KPICard label="התראות פעילות" value={admin?.activeAlerts || 0} icon="🔔" color={(admin?.activeAlerts || 0) > 0 ? '#ca8a04' : undefined} />
-      </div>
+      <PremiumStatGrid
+        stats={[
+          { label: 'שגיאות 24ש', value: stats.totalErrors24h, icon: '⚠️', color: stats.totalErrors24h > 0 ? '#ca8a04' : undefined },
+          { label: 'קריטיות', value: stats.criticalErrors24h, icon: '🔴', color: stats.criticalErrors24h > 0 ? '#dc2626' : undefined },
+          { label: 'פעולות נכשלות', value: stats.failedActions24h, icon: '❌' },
+          { label: 'סנכרון נכשל', value: stats.failedSyncs24h, icon: '🔗' },
+          { label: 'בעיות אוטופיילוט', value: stats.autopilotIssues24h, icon: '🤖' },
+          { label: 'התראות פעילות', value: admin?.activeAlerts || 0, icon: '🔔', color: (admin?.activeAlerts || 0) > 0 ? '#ca8a04' : undefined },
+        ]}
+        columns={6}
+      />
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
@@ -208,22 +212,6 @@ export default function SystemHealthPage() {
 }
 
 // ── Components ──
-
-function KPICard({ label, value, icon, color }: { label: string; value: number; icon: string; color?: string }) {
-  return (
-    <div style={{
-      background: 'var(--surface)',
-      border: '1px solid var(--border)',
-      borderRadius: '0.5rem',
-      padding: '0.6rem',
-      textAlign: 'center',
-    }}>
-      <div style={{ fontSize: '1.1rem' }}>{icon}</div>
-      <div style={{ fontSize: '1.3rem', fontWeight: 800, color: color || 'var(--foreground)', marginTop: '0.15rem' }}>{value}</div>
-      <div style={{ fontSize: '0.65rem', color: 'var(--foreground-muted)' }}>{label}</div>
-    </div>
-  );
-}
 
 function StatusTab({ checks }: { checks: HealthCheck[] }) {
   if (checks.length === 0) {

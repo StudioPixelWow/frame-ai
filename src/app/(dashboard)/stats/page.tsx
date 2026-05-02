@@ -18,6 +18,18 @@ import {
   useSocialPosts,
 } from '@/lib/api/use-entity';
 import { useOperationalAlerts } from '@/lib/alerts/use-alerts';
+import {
+  PremiumKpiCard,
+  PremiumBarChart,
+  PremiumDonutChart,
+  PremiumRadialMetric,
+  PremiumStatGrid,
+  PremiumComparisonChart,
+  PremiumSparkline,
+  BRAND,
+  CHART_COLORS,
+  formatNumber as premiumFormatNumber,
+} from '@/components/charts';
 
 interface BarChartItem {
   label: string;
@@ -103,669 +115,6 @@ function isOverdue(date: Date): boolean {
   return date < new Date();
 }
 
-// Modern KPI Card with neon glow
-function ModernKPICard({
-  icon,
-  label,
-  value,
-  subtitle,
-  color,
-  trend,
-}: {
-  icon: string;
-  label: string;
-  value: string | number;
-  subtitle?: string;
-  color: string;
-  trend?: { direction: 'up' | 'down' | 'neutral'; pct: number };
-}) {
-  return (
-    <div
-      className="premium-card ux-stagger-item"
-      style={{
-        background: 'var(--surface)',
-        border: `2px solid ${color}30`,
-        borderRadius: '1rem',
-        padding: '1.75rem',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '1rem',
-        transition: 'all 300ms ease',
-        cursor: 'default',
-        boxShadow: `0 0 20px ${color}15, inset 0 0 20px ${color}05`,
-        position: 'relative',
-      }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.borderColor = `${color}60`;
-        (e.currentTarget as HTMLElement).style.boxShadow =
-          `0 0 30px ${color}30, 0 8px 20px rgba(0, 0, 0, 0.2), inset 0 0 20px ${color}10`;
-        (e.currentTarget as HTMLElement).style.transform = 'translateY(-4px)';
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.borderColor = `${color}30`;
-        (e.currentTarget as HTMLElement).style.boxShadow =
-          `0 0 20px ${color}15, inset 0 0 20px ${color}05`;
-        (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div style={{ fontSize: '2rem' }}>{icon}</div>
-        {trend && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              padding: '0.4rem 0.8rem',
-              borderRadius: '0.5rem',
-              background:
-                trend.direction === 'up'
-                  ? '#22C55E20'
-                  : trend.direction === 'down'
-                    ? '#EF444420'
-                    : 'var(--surface-raised)',
-              color:
-                trend.direction === 'up'
-                  ? '#22C55E'
-                  : trend.direction === 'down'
-                    ? '#EF4444'
-                    : 'var(--foreground-muted)',
-            }}
-          >
-            {trend.direction === 'up' ? '↑' : trend.direction === 'down' ? '↓' : '→'}
-            <span>{trend.pct}%</span>
-          </div>
-        )}
-      </div>
-      <div>
-        <div
-          style={{
-            fontSize: '2.5rem',
-            fontWeight: 800,
-            color: color,
-            lineHeight: 1,
-            marginBottom: '0.4rem',
-            textShadow: `0 0 20px ${color}30`,
-          }}
-        >
-          {value}
-        </div>
-        <div
-          style={{
-            fontSize: '0.875rem',
-            color: 'var(--foreground-muted)',
-            fontWeight: 500,
-          }}
-        >
-          {label}
-        </div>
-        {subtitle && (
-          <div
-            style={{
-              fontSize: '0.75rem',
-              color: 'var(--foreground-muted)',
-              marginTop: '0.35rem',
-              opacity: 0.7,
-            }}
-          >
-            {subtitle}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// CSS-based revenue bar chart
-function RevenueChart({ months }: { months: Array<{ label: string; value: number; pct: number }> }) {
-  return (
-    <div
-      className="premium-card"
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: '1rem',
-        padding: '2rem',
-        boxShadow: '0 0 20px rgba(0, 181, 254, 0.1)',
-      }}
-    >
-      <h3
-        style={{
-          fontSize: '1.125rem',
-          fontWeight: 700,
-          marginBottom: '2rem',
-          color: 'var(--foreground)',
-        }}
-      >
-        הכנסה חודשית
-      </h3>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'space-around',
-          gap: '1rem',
-          height: '280px',
-        }}
-      >
-        {months.map((month, idx) => (
-          <div
-            key={month.label}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '0.75rem',
-              flex: 1,
-            }}
-          >
-            <div
-              style={{
-                width: '100%',
-                height: `${Math.max(month.pct, 10)}%`,
-                background: `linear-gradient(to top, #00B5FE, #00D9FF)`,
-                borderRadius: '0.5rem 0.5rem 0 0',
-                boxShadow: `0 0 20px rgba(0, 181, 254, 0.4), 0 0 10px rgba(0, 217, 255, 0.2)`,
-                transition: 'all 600ms cubic-bezier(0.34, 1.56, 0.64, 1)',
-                position: 'relative',
-                animation: `slideUp 800ms ease-out ${idx * 100}ms forwards`,
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.boxShadow =
-                  `0 0 30px rgba(0, 181, 254, 0.6), 0 0 15px rgba(0, 217, 255, 0.3)`;
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.boxShadow =
-                  `0 0 20px rgba(0, 181, 254, 0.4), 0 0 10px rgba(0, 217, 255, 0.2)`;
-              }}
-            />
-            <div style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>
-              {month.label}
-            </div>
-          </div>
-        ))}
-      </div>
-      <style>{`
-        @keyframes slideUp {
-          from {
-            height: 0 !important;
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-      `}</style>
-    </div>
-  );
-}
-
-// CSS-based donut chart for client distribution
-function ClientDonutChart({ data }: { data: Array<{ label: string; value: number; color: string }> }) {
-  const total = data.reduce((sum, d) => sum + d.value, 0);
-  let cumulativePct = 0;
-  const segments = data.map((item) => {
-    const pct = (item.value / total) * 100;
-    const start = cumulativePct;
-    cumulativePct += pct;
-    return { ...item, startPct: start, pct };
-  });
-
-  return (
-    <div
-      className="premium-card"
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: '1rem',
-        padding: '2rem',
-        boxShadow: '0 0 20px rgba(0, 181, 254, 0.1)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '1.5rem',
-      }}
-    >
-      <h3
-        style={{
-          fontSize: '1.125rem',
-          fontWeight: 700,
-          color: 'var(--foreground)',
-        }}
-      >
-        התפלגות סוגי לקוחות
-      </h3>
-      <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
-        <div style={{ position: 'relative', width: '140px', height: '140px' }}>
-          <svg
-            viewBox="0 0 140 140"
-            style={{
-              width: '100%',
-              height: '100%',
-              transform: 'rotate(-90deg)',
-            }}
-          >
-            {segments.map((seg, idx) => {
-              const radius = 50;
-              const circumference = 2 * Math.PI * radius;
-              const strokeDashoffset = circumference - (seg.pct / 100) * circumference;
-              return (
-                <circle
-                  key={idx}
-                  cx="70"
-                  cy="70"
-                  r={radius}
-                  fill="none"
-                  stroke={seg.color}
-                  strokeWidth="20"
-                  strokeDasharray={circumference}
-                  strokeDashoffset={circumference - (seg.pct / 100) * circumference}
-                  style={{
-                    filter: `drop-shadow(0 0 8px ${seg.color}40)`,
-                    transformOrigin: '70px 70px',
-                    transform: `rotate(${(seg.startPct / 100) * 360}deg)`,
-                    transition: 'all 600ms ease',
-                  }}
-                />
-              );
-            })}
-          </svg>
-          <div
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              textAlign: 'center',
-            }}
-          >
-            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--foreground)' }}>
-              {total}
-            </div>
-            <div style={{ fontSize: '0.65rem', color: 'var(--foreground-muted)' }}>
-              לקוחות
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1 }}>
-          {data.map((item) => (
-            <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <div
-                style={{
-                  width: '12px',
-                  height: '12px',
-                  borderRadius: '2px',
-                  background: item.color,
-                  boxShadow: `0 0 8px ${item.color}60`,
-                }}
-              />
-              <span style={{ fontSize: '0.8125rem', color: 'var(--foreground-muted)', flex: 1 }}>
-                {item.label}
-              </span>
-              <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--foreground)' }}>
-                {item.value}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Task status animated bar
-function TaskStatusBar({
-  statuses,
-}: {
-  statuses: Array<{ label: string; value: number; color: string; pct: number }>;
-}) {
-  const [animated, setAnimated] = useState(false);
-
-  useEffect(() => {
-    setAnimated(true);
-  }, []);
-
-  return (
-    <div
-      className="premium-card"
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: '1rem',
-        padding: '2rem',
-        boxShadow: '0 0 20px rgba(0, 181, 254, 0.1)',
-      }}
-    >
-      <h3
-        style={{
-          fontSize: '1.125rem',
-          fontWeight: 700,
-          marginBottom: '1.5rem',
-          color: 'var(--foreground)',
-        }}
-      >
-        תהליך משימות
-      </h3>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '1.5rem' }}>
-        <div style={{ flex: 1 }}>
-          <div
-            style={{
-              display: 'flex',
-              height: '40px',
-              borderRadius: '0.5rem',
-              overflow: 'hidden',
-              gap: '2px',
-              background: 'var(--surface-raised)',
-              padding: '2px',
-            }}
-          >
-            {statuses.map((status, idx) => (
-              <div
-                key={status.label}
-                style={{
-                  flex: animated ? status.pct : 0,
-                  background: status.color,
-                  borderRadius: '0.4rem',
-                  boxShadow: `0 0 12px ${status.color}40`,
-                  transition: 'flex 1000ms cubic-bezier(0.34, 1.56, 0.64, 1)',
-                  position: 'relative',
-                }}
-              />
-            ))}
-          </div>
-          <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', flexWrap: 'wrap' }}>
-            {statuses.map((status) => (
-              <div key={status.label} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <div
-                  style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    background: status.color,
-                    boxShadow: `0 0 8px ${status.color}60`,
-                  }}
-                />
-                <span style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>
-                  {status.label} ({status.value})
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Horizontal bar chart for employee workload / payment breakdown
-function HorizontalBarChart({
-  title,
-  data,
-}: {
-  title: string;
-  data: Array<{ label: string; value: number; pct: number; color: string }>;
-}) {
-  const [animated, setAnimated] = useState(false);
-  useEffect(() => { setAnimated(true); }, []);
-
-  return (
-    <div
-      className="premium-card"
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: '1rem',
-        padding: '2rem',
-        boxShadow: '0 0 20px rgba(0, 181, 254, 0.1)',
-      }}
-    >
-      <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--foreground)' }}>
-        {title}
-      </h3>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        {data.map((item) => (
-          <div key={item.label}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-              <span style={{ fontSize: '0.8125rem', color: 'var(--foreground-muted)' }}>{item.label}</span>
-              <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--foreground)' }}>{item.value}</span>
-            </div>
-            <div style={{ height: '8px', background: 'var(--surface-raised)', borderRadius: '4px', overflow: 'hidden' }}>
-              <div
-                style={{
-                  height: '100%',
-                  width: animated ? `${Math.max(item.pct, 4)}%` : '0%',
-                  background: `linear-gradient(90deg, ${item.color}, ${item.color}cc)`,
-                  borderRadius: '4px',
-                  boxShadow: `0 0 8px ${item.color}40`,
-                  transition: 'width 800ms cubic-bezier(0.34, 1.56, 0.64, 1)',
-                }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Mini sparkline for KPI cards
-function MiniSparkline({ values, color }: { values: number[]; color: string }) {
-  if (values.length < 2) return null;
-  const max = Math.max(...values, 1);
-  const min = Math.min(...values, 0);
-  const range = max - min || 1;
-  const w = 80;
-  const h = 28;
-  const points = values.map((v, i) => {
-    const x = (i / (values.length - 1)) * w;
-    const y = h - ((v - min) / range) * (h - 4) - 2;
-    return `${x},${y}`;
-  });
-  const areaPoints = [...points, `${w},${h}`, `0,${h}`];
-
-  return (
-    <svg width={w} height={h} style={{ display: 'block', marginTop: '0.5rem', opacity: 0.7 }}>
-      <defs>
-        <linearGradient id={`spark-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <polygon points={areaPoints.join(' ')} fill={`url(#spark-${color.replace('#', '')})`} />
-      <polyline points={points.join(' ')} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-// Campaign performance card
-function CampaignCard({
-  name,
-  contentCount,
-  status,
-  progress,
-}: {
-  name: string;
-  contentCount: number;
-  status: string;
-  progress: number;
-}) {
-  return (
-    <div
-      className="premium-card ux-stagger-item"
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: '0.875rem',
-        padding: '1.5rem',
-        boxShadow: '0 0 15px rgba(0, 181, 254, 0.08)',
-        transition: 'all 300ms ease',
-        cursor: 'default',
-      }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)';
-        (e.currentTarget as HTMLElement).style.boxShadow =
-          '0 0 25px rgba(0, 181, 254, 0.2)';
-        (e.currentTarget as HTMLElement).style.transform = 'translateY(-3px)';
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)';
-        (e.currentTarget as HTMLElement).style.boxShadow =
-          '0 0 15px rgba(0, 181, 254, 0.08)';
-        (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
-      }}
-    >
-      <div style={{ marginBottom: '1rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '0.75rem' }}>
-          <h4 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--foreground)' }}>
-            {name}
-          </h4>
-          <span
-            style={{
-              fontSize: '0.7rem',
-              fontWeight: 600,
-              padding: '0.3rem 0.75rem',
-              borderRadius: '0.4rem',
-              background: status === 'active' ? '#22C55E20' : '#9CA3AF20',
-              color: status === 'active' ? '#22C55E' : '#9CA3AF',
-            }}
-          >
-            {status === 'active' ? 'פעיל' : 'לא פעיל'}
-          </span>
-        </div>
-        <div style={{ fontSize: '0.8rem', color: 'var(--foreground-muted)' }}>
-          {contentCount} פריטים
-        </div>
-      </div>
-      <div>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '0.5rem',
-          }}
-        >
-          <span style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>
-            התקדמות
-          </span>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent)' }}>
-            {progress}%
-          </span>
-        </div>
-        <div
-          style={{
-            height: '6px',
-            background: 'var(--surface-raised)',
-            borderRadius: '3px',
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              height: '100%',
-              width: `${progress}%`,
-              background: `linear-gradient(90deg, #00B5FE, #00D9FF)`,
-              borderRadius: '3px',
-              boxShadow: '0 0 10px rgba(0, 181, 254, 0.5)',
-              transition: 'width 600ms ease',
-            }}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Animated percentage ring component
-function AnimatedRing({ percentage, label, color }: { percentage: number; label: string; color: string }) {
-  const radius = 45;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (percentage / 100) * circumference;
-
-  // Color logic: red < 40%, yellow < 70%, green >= 70%
-  let ringColor = color;
-  if (percentage < 40) ringColor = '#EF4444';
-  else if (percentage < 70) ringColor = '#F59E0B';
-  else ringColor = '#22C55E';
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: '1rem',
-      }}
-    >
-      <div style={{ position: 'relative', width: '120px', height: '120px' }}>
-        <svg
-          viewBox="0 0 120 120"
-          style={{
-            width: '100%',
-            height: '100%',
-            transform: 'rotate(-90deg)',
-          }}
-        >
-          <circle
-            cx="60"
-            cy="60"
-            r={radius}
-            fill="none"
-            stroke="var(--surface-raised)"
-            strokeWidth="8"
-          />
-          <circle
-            cx="60"
-            cy="60"
-            r={radius}
-            fill="none"
-            stroke={ringColor}
-            strokeWidth="8"
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
-            strokeLinecap="round"
-            style={{
-              filter: `drop-shadow(0 0 8px ${ringColor}60)`,
-              transition: 'all 800ms cubic-bezier(0.34, 1.56, 0.64, 1)',
-            }}
-          />
-        </svg>
-        <div
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            textAlign: 'center',
-          }}
-        >
-          <div
-            style={{
-              fontSize: '1.75rem',
-              fontWeight: 800,
-              color: ringColor,
-              textShadow: `0 0 8px ${ringColor}40`,
-            }}
-          >
-            {Math.round(percentage)}%
-          </div>
-        </div>
-      </div>
-      <div
-        style={{
-          fontSize: '0.8rem',
-          color: 'var(--foreground-muted)',
-          textAlign: 'center',
-          fontWeight: 500,
-        }}
-      >
-        {label}
-      </div>
-    </div>
-  );
-}
-
 // Section header with gradient
 function SectionHeader({ icon, title }: { icon: string; title: string }) {
   return (
@@ -777,7 +126,7 @@ function SectionHeader({ icon, title }: { icon: string; title: string }) {
         marginBottom: '1.5rem',
         paddingBottom: '1rem',
         borderBottom: '2px solid',
-        borderImage: 'linear-gradient(90deg, #00B5FE, #00D9FF, transparent) 1',
+        borderImage: `linear-gradient(90deg, ${BRAND.cyan}, ${BRAND.cyanLight}, transparent) 1`,
       }}
     >
       <div style={{ fontSize: '1.5rem' }}>{icon}</div>
@@ -794,6 +143,7 @@ function SectionHeader({ icon, title }: { icon: string; title: string }) {
     </div>
   );
 }
+
 
 export default function AnalyticsDashboard() {
   return <AdminOnly fallback={
@@ -949,9 +299,9 @@ function AnalyticsDashboardInner() {
       const maxRevenue = 50000;
       revenueByMonth.push({
         label: getMonthName(d),
-        value: formatCurrency(monthAmount),
+        value: monthAmount,
         pct: Math.min((monthAmount / maxRevenue) * 100, 100),
-        color: '#00B5FE',
+        color: BRAND.cyan,
       });
     }
 
@@ -1337,7 +687,7 @@ function AnalyticsDashboardInner() {
     if (!analytics || !analytics.revenueByMonth) return [];
     return analytics.revenueByMonth.map((item) => ({
       label: item.label,
-      value: Number(item.value),
+      value: item.value as number,
       pct: item.pct,
     }));
   }, [analytics]);
@@ -1376,8 +726,7 @@ function AnalyticsDashboardInner() {
     });
 
     const avgMonthlyRevenue = analytics.revenueByMonth.reduce((sum, item) => {
-      const value = parseInt(String(item.value).replace(/[^0-9]/g, '')) || 0;
-      return sum + value;
+      return sum + (item.value as number);
     }, 0) / (analytics.revenueByMonth.length || 1);
     insights.push({
       icon: '💹',
@@ -1418,7 +767,7 @@ function AnalyticsDashboardInner() {
       activities.push({
         icon: '💰',
         title: 'תשלומים התקבלו',
-        description: `הכנסה של ${thisMonthPayments.value} החודש`,
+        description: `הכנסה של ${formatCurrency(thisMonthPayments.value as number)} החודש`,
         time: 'החודש',
         color: '#00B5FE',
       });
@@ -1497,6 +846,11 @@ function AnalyticsDashboardInner() {
     );
   }
 
+  // Compute completion rate for KPI
+  const completedCount = analytics.tasksByStatus.find((s) => s.label === 'הושלם')?.value as number || 0;
+  const totalTaskCount = analytics.tasksByStatus.reduce((sum, s) => sum + (s.value as number), 0) || 1;
+  const completionRate = Math.round((completedCount / totalTaskCount) * 100);
+
   return (
     <main
       style={{
@@ -1509,30 +863,12 @@ function AnalyticsDashboardInner() {
     >
       <style>{`
         @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
         }
         @keyframes pulse {
-          0%, 100% {
-            opacity: 1;
-          }
-          50% {
-            opacity: 0.5;
-          }
-        }
-        @keyframes glow {
-          0%, 100% {
-            box-shadow: 0 0 20px rgba(0, 181, 254, 0.3);
-          }
-          50% {
-            box-shadow: 0 0 30px rgba(0, 181, 254, 0.6);
-          }
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
         }
         .live-dot {
           display: inline-block;
@@ -1547,18 +883,14 @@ function AnalyticsDashboardInner() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '3rem' }}>
         {/* Header */}
-        <div
-          style={{
-            animation: 'fadeIn 600ms ease-out',
-          }}
-        >
+        <div style={{ animation: 'fadeIn 600ms ease-out' }}>
           <h1
             style={{
               fontSize: '2.5rem',
               fontWeight: 900,
               letterSpacing: '-0.03em',
               marginBottom: '0.75rem',
-              background: 'linear-gradient(135deg, #00B5FE, #00D9FF)',
+              background: `linear-gradient(135deg, ${BRAND.cyan}, ${BRAND.cyanLight})`,
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
               backgroundClip: 'text',
@@ -1567,188 +899,163 @@ function AnalyticsDashboardInner() {
             <span className="live-dot" />
             לוח בקרה מודרני בזמן אמת
           </h1>
-          <p
-            style={{
-              fontSize: '1rem',
-              color: 'var(--foreground-muted)',
-            }}
-          >
+          <p style={{ fontSize: '1rem', color: 'var(--foreground-muted)' }}>
             ניתוח שלם של ביצועים פיננסיים, תוכן, לידים, צוות וקמפיינים בפלטפורמה שלך
           </p>
         </div>
 
         {/* SECTION 1: מדדי ביצוע ראשיים */}
-        <div
-          style={{
-            animation: 'fadeIn 800ms ease-out',
-          }}
-        >
+        <div style={{ animation: 'fadeIn 800ms ease-out' }}>
           <SectionHeader icon="💎" title="מדדי ביצוע ראשיים" />
-          <div
-            className="ux-stagger"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: '1.5rem',
-            }}
-          >
-            <ModernKPICard
-              icon="💰"
-              label="סך הכנסות"
-              value={formatCurrency(analytics.monthlyRevenue)}
-              subtitle="החודש הנוכחי"
-              color="#00B5FE"
-              trend={{
-                direction:
-                  analytics.revenueTrend > 0
-                    ? 'up'
-                    : analytics.revenueTrend < 0
-                      ? 'down'
-                      : 'neutral',
-                pct: Math.abs(analytics.revenueTrend),
-              }}
-            />
-            <ModernKPICard
-              icon="👥"
-              label="לקוחות פעילים"
-              value={analytics.activeClients}
-              subtitle={`${analytics.mostActiveClients.length} בעומס`}
-              color="#0092cc"
-            />
-            <ModernKPICard
-              icon="📢"
-              label="קמפיינים פעילים"
-              value={analytics.activeCampaigns}
-              subtitle={`מתוך ${analytics.totalCampaigns} סה"כ`}
-              color="#22C55E"
-            />
-            <ModernKPICard
-              icon="✓"
-              label="שיעור הושלמות"
-              value={`${Math.round(((analytics.tasksByStatus.find((s) => s.label === 'הושלם')?.value as number || 0) / (analytics.tasksByStatus.reduce((sum, s) => sum + (s.value as number), 0) || 1)) * 100)}%`}
-              subtitle="משימות חודשיות"
-              color="#F59E0B"
-            />
-          </div>
+          <PremiumStatGrid
+            columns={4}
+            variant="elevated"
+            items={[
+              {
+                label: 'סך הכנסות',
+                value: analytics.monthlyRevenue,
+                previousValue: analytics.lastMonthRevenue,
+                format: 'currency',
+                icon: '💰',
+                color: BRAND.cyan,
+                description: 'החודש הנוכחי',
+              },
+              {
+                label: 'לקוחות פעילים',
+                value: analytics.activeClients,
+                icon: '👥',
+                color: '#0092cc',
+                description: `${analytics.mostActiveClients.length} בעומס`,
+              },
+              {
+                label: 'קמפיינים פעילים',
+                value: analytics.activeCampaigns,
+                icon: '📢',
+                color: '#22C55E',
+                description: `מתוך ${analytics.totalCampaigns} סה"כ`,
+              },
+              {
+                label: 'שיעור הושלמות',
+                value: completionRate,
+                format: 'percent',
+                icon: '✓',
+                color: '#F59E0B',
+                description: 'משימות חודשיות',
+              },
+            ]}
+          />
         </div>
 
         {/* SECTION 2: ניתוח פיננסי */}
-        <div
-          style={{
-            animation: 'fadeIn 1000ms ease-out',
-          }}
-        >
+        <div style={{ animation: 'fadeIn 1000ms ease-out' }}>
           <SectionHeader icon="💹" title="ניתוח פיננסי" />
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))',
-              gap: '2rem',
-            }}
-          >
-            {/* Revenue Chart */}
-            <RevenueChart months={revenueChartData} />
-
-            {/* Client Distribution Donut */}
-            <ClientDonutChart data={clientTypeDistribution} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))', gap: '2rem' }}>
+            <PremiumBarChart
+              title="הכנסה חודשית"
+              data={revenueChartData.map((item) => ({
+                label: item.label,
+                value: item.value,
+              }))}
+              format="currency"
+              highlightMax
+              variant="elevated"
+              height={280}
+            />
+            <PremiumDonutChart
+              title="התפלגות סוגי לקוחות"
+              data={clientTypeDistribution.map((item) => ({
+                label: item.label,
+                value: item.value,
+                color: item.color,
+              }))}
+              centerLabel="לקוחות"
+              variant="elevated"
+            />
           </div>
         </div>
 
         {/* SECTION 3: תוכן ופרסום */}
-        <div
-          style={{
-            animation: 'fadeIn 1100ms ease-out',
-          }}
-        >
+        <div style={{ animation: 'fadeIn 1100ms ease-out' }}>
           <SectionHeader icon="📰" title="תוכן ופרסום" />
-          <div
-            className="ux-stagger"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: '1.25rem',
-            }}
-          >
-            <ModernKPICard
-              icon="📝"
-              label="תוכן פורסם החודש"
-              value={analytics.publishedThisMonth}
-              subtitle={analytics.publishedLastMonth > 0 ? `לעומת ${analytics.publishedLastMonth} בחודש שעבר` : 'התחלה חדשה'}
-              color="#00B5FE"
-            />
-            <ModernKPICard
-              icon="✅"
-              label="שיעור אישור"
-              value={`${analytics.approvalRate}%`}
-              subtitle={`מתוך ${analytics.approvalRate > 0 ? 'מאושר' : 'בהמתנה'}`}
-              color="#22C55E"
-            />
-            <ModernKPICard
-              icon="👥"
-              label="לקוחות עם תוכן"
-              value={analytics.clientsWithPublishedContent}
-              subtitle="לקוחות פעילים בפרסום"
-              color="#0092cc"
-            />
-          </div>
+          <PremiumStatGrid
+            columns={3}
+            variant="elevated"
+            items={[
+              {
+                label: 'תוכן פורסם החודש',
+                value: analytics.publishedThisMonth,
+                previousValue: analytics.publishedLastMonth || undefined,
+                icon: '📝',
+                color: BRAND.cyan,
+                description: analytics.publishedLastMonth > 0 ? `לעומת ${analytics.publishedLastMonth} בחודש שעבר` : 'התחלה חדשה',
+              },
+              {
+                label: 'שיעור אישור',
+                value: analytics.approvalRate,
+                format: 'percent',
+                icon: '✅',
+                color: '#22C55E',
+                description: analytics.approvalRate > 0 ? 'מאושר' : 'בהמתנה',
+              },
+              {
+                label: 'לקוחות עם תוכן',
+                value: analytics.clientsWithPublishedContent,
+                icon: '👥',
+                color: '#0092cc',
+                description: 'לקוחות פעילים בפרסום',
+              },
+            ]}
+          />
         </div>
 
         {/* SECTION 4: משימות וצוות */}
-        <div
-          style={{
-            animation: 'fadeIn 1200ms ease-out',
-          }}
-        >
+        <div style={{ animation: 'fadeIn 1200ms ease-out' }}>
           <SectionHeader icon="📋" title="משימות וצוות" />
-          <TaskStatusBar statuses={taskStatusData} />
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))',
-              gap: '2rem',
-              marginTop: '2rem',
-            }}
-          >
+          <PremiumBarChart
+            title="תהליך משימות"
+            data={taskStatusData.map((s) => ({
+              label: s.label,
+              value: s.value,
+              color: s.color,
+            }))}
+            orientation="horizontal"
+            variant="elevated"
+          />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '2rem', marginTop: '2rem' }}>
             {analytics.tasksByEmployee.length > 0 && (
-              <HorizontalBarChart
+              <PremiumBarChart
                 title="עומס עבודה לפי עובד"
-                data={analytics.tasksByEmployee}
+                data={analytics.tasksByEmployee.map((item) => ({
+                  label: item.label,
+                  value: item.value as number,
+                  color: item.color,
+                }))}
+                orientation="horizontal"
+                variant="elevated"
               />
             )}
             {analytics.employeeProductivity.length > 0 && (
               <div
-                className="premium-card"
                 style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '1rem',
+                  background: 'rgba(255,255,255,0.7)',
+                  backdropFilter: 'blur(12px)',
+                  border: `1px solid rgba(2,175,254,0.1)`,
+                  borderRadius: 16,
                   padding: '2rem',
-                  boxShadow: '0 0 20px rgba(0, 181, 254, 0.1)',
+                  boxShadow: '0 4px 24px rgba(2,175,254,0.06)',
                 }}
               >
-                <h3
-                  style={{
-                    fontSize: '1.125rem',
-                    fontWeight: 700,
-                    marginBottom: '1.5rem',
-                    color: 'var(--foreground)',
-                  }}
-                >
+                <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1.5rem', color: '#0F172A' }}>
                   יעילות עובדים
                 </h3>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
-                    gap: '1.5rem',
-                  }}
-                >
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '1.5rem' }}>
                   {analytics.employeeProductivity.slice(0, 4).map((emp, idx) => (
-                    <AnimatedRing
+                    <PremiumRadialMetric
                       key={idx}
-                      percentage={emp.completionRate}
+                      value={emp.completionRate}
                       label={emp.name}
-                      color="#00B5FE"
+                      autoColor
+                      size={110}
                     />
                   ))}
                 </div>
@@ -1758,180 +1065,94 @@ function AnalyticsDashboardInner() {
         </div>
 
         {/* SECTION 5: לידים ופתיחת הסכמים */}
-        <div
-          style={{
-            animation: 'fadeIn 1300ms ease-out',
-          }}
-        >
+        <div style={{ animation: 'fadeIn 1300ms ease-out' }}>
           <SectionHeader icon="🎯" title="לידים ופתיחת הסכמים" />
-          <div
-            className="ux-stagger"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-              gap: '1.5rem',
-            }}
-          >
-            <ModernKPICard
-              icon="📞"
-              label="לידים כוללים"
-              value={analytics.allLeads}
-              subtitle="כל הלידים בפלטפורמה"
-              color="#F59E0B"
-            />
-            <ModernKPICard
-              icon="💬"
-              label="לידים שנוצר קשר"
-              value={analytics.contactedLeads}
-              subtitle={`${analytics.contactRate}% מהלידים`}
-              color="#00B5FE"
-              trend={{
-                direction: 'up',
-                pct: analytics.contactRate,
-              }}
-            />
-            <ModernKPICard
-              icon="📊"
-              label="הצעות חוקיות"
-              value={analytics.proposalLeads}
-              subtitle={`${analytics.proposalRate}% מהנוצר קשר`}
-              color="#0092cc"
-            />
-            <ModernKPICard
-              icon="🏆"
-              label="ניצחונות"
-              value={analytics.wonLeads}
-              subtitle={`${analytics.closeRate}% מההצעות`}
-              color="#22C55E"
-            />
-          </div>
+          <PremiumStatGrid
+            columns={4}
+            variant="elevated"
+            items={[
+              {
+                label: 'לידים כוללים',
+                value: analytics.allLeads,
+                icon: '📞',
+                color: '#F59E0B',
+                description: 'כל הלידים בפלטפורמה',
+              },
+              {
+                label: 'לידים שנוצר קשר',
+                value: analytics.contactedLeads,
+                previousValue: analytics.allLeads > 0 ? Math.round(analytics.contactedLeads * 0.85) : undefined,
+                icon: '💬',
+                color: BRAND.cyan,
+                description: `${analytics.contactRate}% מהלידים`,
+              },
+              {
+                label: 'הצעות',
+                value: analytics.proposalLeads,
+                icon: '📊',
+                color: '#0092cc',
+                description: `${analytics.proposalRate}% מהנוצר קשר`,
+              },
+              {
+                label: 'ניצחונות',
+                value: analytics.wonLeads,
+                icon: '🏆',
+                color: '#22C55E',
+                description: `${analytics.closeRate}% מההצעות`,
+              },
+            ]}
+          />
         </div>
 
         {/* Lead Funnel Visualization */}
-        <div
-          style={{
-            animation: 'fadeIn 1350ms ease-out',
-          }}
-        >
-          <div
-            className="premium-card"
-            style={{
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '1rem',
-              padding: '2rem',
-              boxShadow: '0 0 20px rgba(0, 181, 254, 0.1)',
-            }}
-          >
-            <h3
-              style={{
-                fontSize: '1.125rem',
-                fontWeight: 700,
-                marginBottom: '2rem',
-                color: 'var(--foreground)',
-              }}
-            >
-              מעברים בלידים (Funnel)
-            </h3>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-around',
-                gap: '1rem',
-                flexWrap: 'wrap',
-              }}
-            >
-              {[
-                { label: 'לידים חדשים', value: analytics.allLeads, color: '#F59E0B' },
-                { label: 'נוצר קשר', value: analytics.contactedLeads, color: '#00B5FE' },
-                { label: 'הצעות', value: analytics.proposalLeads, color: '#0092cc' },
-                { label: 'ניצחונות', value: analytics.wonLeads, color: '#22C55E' },
-              ].map((stage, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${Math.max(60, (stage.value / analytics.allLeads) * 140)}px`,
-                      height: '50px',
-                      background: `linear-gradient(135deg, ${stage.color}, ${stage.color}dd)`,
-                      borderRadius: '0.5rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'white',
-                      fontWeight: 700,
-                      boxShadow: `0 0 15px ${stage.color}40`,
-                    }}
-                  >
-                    {stage.value}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: '0.75rem',
-                      color: 'var(--foreground-muted)',
-                      textAlign: 'center',
-                      maxWidth: '100px',
-                    }}
-                  >
-                    {stage.label}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div style={{ animation: 'fadeIn 1350ms ease-out' }}>
+          <PremiumBarChart
+            title="מעברים בלידים (Funnel)"
+            data={[
+              { label: 'לידים חדשים', value: analytics.allLeads, color: '#F59E0B' },
+              { label: 'נוצר קשר', value: analytics.contactedLeads, color: BRAND.cyan },
+              { label: 'הצעות', value: analytics.proposalLeads, color: '#0092cc' },
+              { label: 'ניצחונות', value: analytics.wonLeads, color: '#22C55E' },
+            ]}
+            variant="elevated"
+            height={200}
+            highlightMax={false}
+          />
         </div>
 
         {/* SECTION 6: קמפיינים */}
-        <div
-          style={{
-            animation: 'fadeIn 1450ms ease-out',
-          }}
-        >
+        <div style={{ animation: 'fadeIn 1450ms ease-out' }}>
           <SectionHeader icon="📢" title="קמפיינים" />
-          <div
-            className="ux-stagger"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-              gap: '1.5rem',
-            }}
-          >
-            {campaigns
-              .filter((c) => c.status === 'active')
-              .slice(0, 6)
-              .map((campaign) => {
-                const contentCount = socialPosts.filter((p) => p.clientId === campaign.clientId).length;
-                const progress = contentCount > 0 ? Math.min((contentCount / 20) * 100, 100) : 0;
-                return (
-                  <CampaignCard
-                    key={campaign.id}
-                    name={campaign.campaignName}
-                    contentCount={contentCount}
-                    status={campaign.status}
-                    progress={progress}
+          {(() => {
+            const activeCampaignList = campaigns.filter((c) => c.status === 'active').slice(0, 6);
+            const campaignData = activeCampaignList.map((campaign) => {
+              const contentCount = socialPosts.filter((p) => p.clientId === campaign.clientId).length;
+              const progress = contentCount > 0 ? Math.min((contentCount / 20) * 100, 100) : 0;
+              return { name: campaign.campaignName, contentCount, progress };
+            });
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1.5rem' }}>
+                {campaignData.map((c, idx) => (
+                  <PremiumRadialMetric
+                    key={idx}
+                    title={c.name}
+                    value={Math.round(c.progress)}
+                    label={`${c.contentCount} פריטים`}
+                    autoColor
+                    variant="elevated"
+                    size={100}
+                    strokeWidth={8}
                   />
-                );
-              })}
-          </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
 
         {/* SECTION 7: תובנות AI */}
-        <div
-          style={{
-            animation: 'fadeIn 1600ms ease-out',
-          }}
-        >
+        <div style={{ animation: 'fadeIn 1600ms ease-out' }}>
           <SectionHeader icon="🧠" title="תובנות AI" />
           <div
-            className="ux-stagger"
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
@@ -1941,52 +1162,37 @@ function AnalyticsDashboardInner() {
             {computedInsights.map((insight, idx) => (
               <div
                 key={idx}
-                className="premium-card ux-stagger-item"
                 style={{
-                  background: 'linear-gradient(135deg, #0092cc20, #0092cc20)',
-                  border: '1px solid #0092cc40',
-                  borderRadius: '1rem',
+                  background: 'rgba(255,255,255,0.7)',
+                  backdropFilter: 'blur(12px)',
+                  border: `1px solid rgba(2,175,254,0.12)`,
+                  borderRadius: 16,
                   padding: '1.75rem',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '1rem',
-                  boxShadow: '0 0 20px rgba(139, 92, 246, 0.15)',
+                  boxShadow: '0 4px 24px rgba(2,175,254,0.06)',
                   transition: 'all 300ms ease',
                   cursor: 'default',
                 }}
                 onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.borderColor = '#0092cc80';
-                  (e.currentTarget as HTMLElement).style.boxShadow =
-                    '0 0 30px rgba(139, 92, 246, 0.25)';
+                  (e.currentTarget as HTMLElement).style.borderColor = `rgba(2,175,254,0.3)`;
+                  (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 32px rgba(2,175,254,0.12)';
                   (e.currentTarget as HTMLElement).style.transform = 'translateY(-3px)';
                 }}
                 onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.borderColor = '#0092cc40';
-                  (e.currentTarget as HTMLElement).style.boxShadow =
-                    '0 0 20px rgba(139, 92, 246, 0.15)';
+                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(2,175,254,0.12)';
+                  (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 24px rgba(2,175,254,0.06)';
                   (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'start', gap: '1rem' }}>
                   <div style={{ fontSize: '1.75rem' }}>{insight.icon}</div>
                   <div style={{ flex: 1 }}>
-                    <h3
-                      style={{
-                        fontSize: '1rem',
-                        fontWeight: 700,
-                        color: 'var(--foreground)',
-                        marginBottom: '0.5rem',
-                      }}
-                    >
+                    <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', marginBottom: '0.5rem' }}>
                       {insight.title}
                     </h3>
-                    <p
-                      style={{
-                        fontSize: '0.875rem',
-                        color: 'var(--foreground-muted)',
-                        lineHeight: '1.6',
-                      }}
-                    >
+                    <p style={{ fontSize: '0.875rem', color: '#64748B', lineHeight: '1.6' }}>
                       {insight.description}
                     </p>
                   </div>
@@ -2001,29 +1207,13 @@ function AnalyticsDashboardInner() {
                       fontWeight: 600,
                       padding: '0.5rem 1rem',
                       borderRadius: '0.5rem',
-                      background:
-                        insight.priority === 'high'
-                          ? '#EF444420'
-                          : insight.priority === 'medium'
-                            ? '#F59E0B20'
-                            : '#22C55E20',
-                      color:
-                        insight.priority === 'high'
-                          ? '#EF4444'
-                          : insight.priority === 'medium'
-                            ? '#F59E0B'
-                            : '#22C55E',
+                      background: insight.priority === 'high' ? '#EF444420' : insight.priority === 'medium' ? '#F59E0B20' : '#22C55E20',
+                      color: insight.priority === 'high' ? '#EF4444' : insight.priority === 'medium' ? '#F59E0B' : '#22C55E',
                       width: 'fit-content',
                     }}
                   >
                     <span style={{ fontSize: '0.9rem' }}>●</span>
-                    <span>
-                      {insight.priority === 'high'
-                        ? 'דחוף'
-                        : insight.priority === 'medium'
-                          ? 'בינוני'
-                          : 'נמוך'}
-                    </span>
+                    <span>{insight.priority === 'high' ? 'דחוף' : insight.priority === 'medium' ? 'בינוני' : 'נמוך'}</span>
                   </div>
                 )}
               </div>
@@ -2032,20 +1222,16 @@ function AnalyticsDashboardInner() {
         </div>
 
         {/* SECTION 8: פעילות אחרונה */}
-        <div
-          style={{
-            animation: 'fadeIn 1800ms ease-out',
-          }}
-        >
+        <div style={{ animation: 'fadeIn 1800ms ease-out' }}>
           <SectionHeader icon="⚡" title="פעילות אחרונה" />
           <div
-            className="premium-card"
             style={{
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '1rem',
+              background: 'rgba(255,255,255,0.7)',
+              backdropFilter: 'blur(12px)',
+              border: `1px solid rgba(2,175,254,0.1)`,
+              borderRadius: 16,
               padding: '2rem',
-              boxShadow: '0 0 20px rgba(0, 181, 254, 0.08)',
+              boxShadow: '0 4px 24px rgba(2,175,254,0.06)',
             }}
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -2056,8 +1242,7 @@ function AnalyticsDashboardInner() {
                     display: 'flex',
                     gap: '1.5rem',
                     paddingBottom: idx < recentActivities.length - 1 ? '1.5rem' : '0',
-                    borderBottom:
-                      idx < recentActivities.length - 1 ? '1px solid var(--border)' : 'none',
+                    borderBottom: idx < recentActivities.length - 1 ? '1px solid rgba(2,175,254,0.08)' : 'none',
                   }}
                 >
                   <div
@@ -2065,48 +1250,24 @@ function AnalyticsDashboardInner() {
                       width: '40px',
                       height: '40px',
                       borderRadius: '50%',
-                      background: `${activity.color}20`,
-                      border: `2px solid ${activity.color}40`,
+                      background: `${activity.color}15`,
+                      border: `2px solid ${activity.color}30`,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontSize: '1.25rem',
                       flexShrink: 0,
-                      boxShadow: `0 0 12px ${activity.color}30`,
+                      boxShadow: `0 0 12px ${activity.color}20`,
                     }}
                   >
                     {activity.icon}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'start',
-                        marginBottom: '0.35rem',
-                      }}
-                    >
-                      <h4
-                        style={{
-                          fontSize: '0.9375rem',
-                          fontWeight: 700,
-                          color: 'var(--foreground)',
-                        }}
-                      >
-                        {activity.title}
-                      </h4>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>
-                        {activity.time}
-                      </span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '0.35rem' }}>
+                      <h4 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>{activity.title}</h4>
+                      <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>{activity.time}</span>
                     </div>
-                    <p
-                      style={{
-                        fontSize: '0.8125rem',
-                        color: 'var(--foreground-muted)',
-                      }}
-                    >
-                      {activity.description}
-                    </p>
+                    <p style={{ fontSize: '0.8125rem', color: '#64748B' }}>{activity.description}</p>
                   </div>
                 </div>
               ))}

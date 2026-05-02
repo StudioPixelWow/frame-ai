@@ -13,6 +13,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { PremiumKpiCard, PremiumStatGrid, PremiumRadialMetric, PremiumBarChart, BRAND } from '@/components/charts';
 
 interface HealthScore {
   clientId: string; clientName: string; score: number;
@@ -169,25 +170,19 @@ function OverviewTab({ data }: { data: any }) {
   return (
     <div>
       {/* KPI Strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
-        {[
-          { label: 'לקוחות פעילים', value: totalClients, color: 'var(--accent)' },
-          { label: 'לקוחות בריאים', value: healthyCount, color: '#22c55e' },
-          { label: 'קריטיים', value: criticalCount, color: '#ef4444' },
-          { label: 'סה"כ הוצאה', value: `₪${totalSpend.toLocaleString('he-IL')}`, color: '#3b82f6' },
-          { label: 'סה"כ לידים', value: totalLeads, color: '#8b5cf6' },
-          { label: 'CPL ממוצע', value: avgCpl > 0 ? `₪${avgCpl.toFixed(0)}` : '—', color: '#f59e0b' },
-          { label: 'התראות קריטיות', value: warnings.criticalCount || 0, color: '#ef4444' },
-        ].map((kpi, i) => (
-          <div key={i} style={{
-            background: 'var(--surface)', borderRadius: '0.75rem', padding: '1rem',
-            border: '1px solid var(--border)',
-          }}>
-            <div style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)', marginBottom: '0.25rem' }}>{kpi.label}</div>
-            <div style={{ fontSize: '1.3rem', fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
-          </div>
-        ))}
-      </div>
+      <PremiumStatGrid
+        stats={[
+          { label: 'לקוחות פעילים', value: String(totalClients), variant: 'accent' },
+          { label: 'לקוחות בריאים', value: String(healthyCount), variant: 'success' },
+          { label: 'קריטיים', value: String(criticalCount), variant: 'danger' },
+          { label: 'סה"כ הוצאה', value: `₪${totalSpend.toLocaleString('he-IL')}`, variant: 'info' },
+          { label: 'סה"כ לידים', value: String(totalLeads), variant: 'primary' },
+          { label: 'CPL ממוצע', value: avgCpl > 0 ? `₪${avgCpl.toFixed(0)}` : '—', variant: 'warning' },
+          { label: 'התראות קריטיות', value: String(warnings.criticalCount || 0), variant: 'danger' },
+        ]}
+        variant="compact"
+        direction="rtl"
+      />
 
       {/* AI Insights */}
       {insights.length > 0 && (
@@ -244,28 +239,35 @@ function HealthTab({ health }: { health: HealthScore[] }) {
   return (
     <div>
       <h2 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.75rem' }}>💚 בריאות לקוחות</h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         {health.map(h => (
           <div key={h.clientId} style={{
-            background: 'var(--surface)', borderRadius: '0.75rem', padding: '1rem',
+            background: 'var(--surface)', borderRadius: '0.75rem', padding: '1.5rem',
             border: '1px solid var(--border)',
-            borderRight: `3px solid ${h.statusColor}`,
             opacity: h.hasEnoughData ? 1 : 0.6,
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{h.clientName}</span>
-                <span style={{
-                  fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px',
-                  background: `${h.statusColor}15`, color: h.statusColor,
-                }}>{h.statusLabel}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{h.clientName}</span>
+                  <span style={{
+                    fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px',
+                    background: `${h.statusColor}15`, color: h.statusColor,
+                  }}>{h.statusLabel}</span>
+                </div>
               </div>
-              <div style={{
-                fontSize: '1.2rem', fontWeight: 800, color: h.statusColor,
-                minWidth: '3rem', textAlign: 'center',
-              }}>
-                {h.hasEnoughData ? h.score : '—'}
-              </div>
+              {h.hasEnoughData && (
+                <PremiumRadialMetric
+                  value={h.score}
+                  maxValue={100}
+                  label="בריאות"
+                  autoColor
+                  size="sm"
+                />
+              )}
+              {!h.hasEnoughData && (
+                <div style={{ fontSize: '0.78rem', color: 'var(--foreground-muted)' }}>אין מספיק נתונים</div>
+              )}
             </div>
             {h.hasEnoughData && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
@@ -288,9 +290,6 @@ function HealthTab({ health }: { health: HealthScore[] }) {
                   </div>
                 ))}
               </div>
-            )}
-            {!h.hasEnoughData && (
-              <div style={{ fontSize: '0.78rem', color: 'var(--foreground-muted)' }}>אין מספיק נתונים</div>
             )}
           </div>
         ))}
@@ -331,21 +330,19 @@ function ProfitTab({ profitability }: { profitability: Profitability[] }) {
 
             {p.hasEnoughData ? (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  {[
-                    { label: 'הוצאה', value: `₪${p.totalSpend.toLocaleString('he-IL')}` },
-                    { label: 'לידים', value: p.totalLeads },
-                    { label: 'CPL', value: p.cpl > 0 ? `₪${p.cpl.toFixed(0)}` : '—' },
-                    { label: 'ריטיינר', value: p.retainerAmount > 0 ? `₪${p.retainerAmount.toLocaleString('he-IL')}` : '—' },
-                    { label: 'רווח מוערך', value: `₪${p.estimatedProfit.toLocaleString('he-IL')}` },
-                    { label: 'ROI', value: p.roi !== 0 ? `${p.roi.toFixed(0)}%` : '—' },
-                  ].map((item, i) => (
-                    <div key={i} style={{ background: 'rgba(0,0,0,0.02)', borderRadius: '0.4rem', padding: '0.4rem 0.6rem' }}>
-                      <div style={{ fontSize: '0.62rem', color: 'var(--foreground-muted)' }}>{item.label}</div>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{item.value}</div>
-                    </div>
-                  ))}
-                </div>
+                <PremiumStatGrid
+                  stats={[
+                    { label: 'הוצאה', value: `₪${p.totalSpend.toLocaleString('he-IL')}`, variant: 'info' },
+                    { label: 'לידים', value: String(p.totalLeads), variant: 'success' },
+                    { label: 'CPL', value: p.cpl > 0 ? `₪${p.cpl.toFixed(0)}` : '—', variant: 'warning' },
+                    { label: 'ריטיינר', value: p.retainerAmount > 0 ? `₪${p.retainerAmount.toLocaleString('he-IL')}` : '—', variant: 'primary' },
+                    { label: 'רווח מוערך', value: `₪${p.estimatedProfit.toLocaleString('he-IL')}`, variant: 'success' },
+                    { label: 'ROI', value: p.roi !== 0 ? `${p.roi.toFixed(0)}%` : '—', variant: 'accent' },
+                  ]}
+                  variant="compact"
+                  direction="rtl"
+                  style={{ marginBottom: '0.5rem' }}
+                />
                 {p.warning && (
                   <div style={{
                     fontSize: '0.75rem', color: '#f59e0b', background: 'rgba(245,158,11,0.06)',
@@ -617,32 +614,17 @@ function PlatformsTab({ platforms }: { platforms: any }) {
 
       {/* KPI strip — best by */}
       {hasSufficientData && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
-          {bestBy.cpl && (
-            <div style={{ background: 'var(--surface)', borderRadius: '0.75rem', padding: '0.85rem', border: '1px solid var(--border)', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)', marginBottom: '0.15rem' }}>CPL הכי נמוך</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{PLATFORM_ICONS[bestBy.cpl]} {bestBy.cpl}</div>
-            </div>
-          )}
-          {bestBy.ctr && (
-            <div style={{ background: 'var(--surface)', borderRadius: '0.75rem', padding: '0.85rem', border: '1px solid var(--border)', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)', marginBottom: '0.15rem' }}>CTR הכי גבוה</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{PLATFORM_ICONS[bestBy.ctr]} {bestBy.ctr}</div>
-            </div>
-          )}
-          {bestBy.cpc && (
-            <div style={{ background: 'var(--surface)', borderRadius: '0.75rem', padding: '0.85rem', border: '1px solid var(--border)', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)', marginBottom: '0.15rem' }}>CPC הכי נמוך</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{PLATFORM_ICONS[bestBy.cpc]} {bestBy.cpc}</div>
-            </div>
-          )}
-          {bestBy.conversions && (
-            <div style={{ background: 'var(--surface)', borderRadius: '0.75rem', padding: '0.85rem', border: '1px solid var(--border)', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.68rem', color: 'var(--foreground-muted)', marginBottom: '0.15rem' }}>הכי הרבה המרות</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{PLATFORM_ICONS[bestBy.conversions]} {bestBy.conversions}</div>
-            </div>
-          )}
-        </div>
+        <PremiumStatGrid
+          stats={[
+            ...(bestBy.cpl ? [{ label: 'CPL הכי נמוך', value: `${PLATFORM_ICONS[bestBy.cpl]} ${bestBy.cpl}`, variant: 'success' as const }] : []),
+            ...(bestBy.ctr ? [{ label: 'CTR הכי גבוה', value: `${PLATFORM_ICONS[bestBy.ctr]} ${bestBy.ctr}`, variant: 'accent' as const }] : []),
+            ...(bestBy.cpc ? [{ label: 'CPC הכי נמוך', value: `${PLATFORM_ICONS[bestBy.cpc]} ${bestBy.cpc}`, variant: 'warning' as const }] : []),
+            ...(bestBy.conversions ? [{ label: 'הכי הרבה המרות', value: `${PLATFORM_ICONS[bestBy.conversions]} ${bestBy.conversions}`, variant: 'primary' as const }] : []),
+          ]}
+          variant="compact"
+          direction="rtl"
+          style={{ marginBottom: '1.5rem' }}
+        />
       )}
 
       {/* Platform cards */}
@@ -665,12 +647,18 @@ function PlatformsTab({ platforms }: { platforms: any }) {
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                <MetricBox label="הוצאה" value={`₪${(p.totalSpend || 0).toLocaleString()}`} sub={`${spendShare}% מהכולל`} />
-                <MetricBox label="CTR" value={`${(p.avgCtr || 0).toFixed(2)}%`} />
-                <MetricBox label="CPC" value={`₪${(p.avgCpc || 0).toFixed(1)}`} />
-                <MetricBox label="CPM" value={`₪${(p.avgCpm || 0).toFixed(0)}`} />
-                <MetricBox label="המרות" value={String(p.totalConversions || 0)} />
-                <MetricBox label="CPL" value={p.avgCpl > 0 ? `₪${(p.avgCpl).toFixed(0)}` : '—'} />
+                <PremiumKpiCard
+                  label="הוצאה"
+                  value={`₪${(p.totalSpend || 0).toLocaleString()}`}
+                  sublabel={`${spendShare}% מהכולל`}
+                  variant="info"
+                  size="sm"
+                />
+                <PremiumKpiCard label="CTR" value={`${(p.avgCtr || 0).toFixed(2)}%`} variant="accent" size="sm" />
+                <PremiumKpiCard label="CPC" value={`₪${(p.avgCpc || 0).toFixed(1)}`} variant="warning" size="sm" />
+                <PremiumKpiCard label="CPM" value={`₪${(p.avgCpm || 0).toFixed(0)}`} variant="primary" size="sm" />
+                <PremiumKpiCard label="המרות" value={String(p.totalConversions || 0)} variant="success" size="sm" />
+                <PremiumKpiCard label="CPL" value={p.avgCpl > 0 ? `₪${(p.avgCpl).toFixed(0)}` : '—'} variant="danger" size="sm" />
               </div>
             </div>
           );
@@ -705,19 +693,6 @@ function PlatformsTab({ platforms }: { platforms: any }) {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function MetricBox({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div style={{
-      background: 'var(--surface-raised, var(--background))', borderRadius: '0.375rem',
-      padding: '0.5rem', textAlign: 'center',
-    }}>
-      <div style={{ fontSize: '0.62rem', color: 'var(--foreground-muted)', marginBottom: '0.1rem' }}>{label}</div>
-      <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{value}</div>
-      {sub && <div style={{ fontSize: '0.58rem', color: 'var(--foreground-muted)' }}>{sub}</div>}
     </div>
   );
 }

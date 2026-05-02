@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { PremiumStatGrid, PremiumKpiCard, BRAND } from '@/components/charts';
 
 // ── Types ──
 
@@ -160,13 +161,18 @@ export default function AutopilotPage() {
       </div>
 
       {/* KPI Strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem', marginBottom: '1.5rem' }}>
-        <KPICard label="לקוחות מנוטרים" value={kpis.clientsMonitored} icon="👥" />
-        <KPICard label="פעולות היום" value={kpis.actionsToday} icon="📋" />
-        <KPICard label="ממתינות לאישור" value={kpis.approvalsPending} icon="⏳" color={kpis.approvalsPending > 0 ? '#ca8a04' : undefined} />
-        <KPICard label="בוצעו השבוע" value={kpis.executedThisWeek} icon="✅" />
-        <KPICard label="אחוז הצלחה" value={`${kpis.successRate}%`} icon="📈" />
-      </div>
+      <PremiumStatGrid
+        items={[
+          { label: 'לקוחות מנוטרים', value: kpis.clientsMonitored, icon: '👥', format: 'number' },
+          { label: 'פעולות היום', value: kpis.actionsToday, icon: '📋', format: 'number' },
+          { label: 'ממתינות לאישור', value: kpis.approvalsPending, icon: '⏳', format: 'number', color: kpis.approvalsPending > 0 ? '#ca8a04' : undefined },
+          { label: 'בוצעו השבוע', value: kpis.executedThisWeek, icon: '✅', format: 'number' },
+          { label: 'אחוז הצלחה', value: kpis.successRate, icon: '📈', format: 'percent' },
+        ]}
+        columns={5}
+        variant="light"
+      />
+
 
       {/* High Risk Clients */}
       {(data?.highRiskClients || []).length > 0 && (
@@ -229,22 +235,6 @@ export default function AutopilotPage() {
 }
 
 // ── Components ──
-
-function KPICard({ label, value, icon, color }: { label: string; value: string | number; icon: string; color?: string }) {
-  return (
-    <div style={{
-      background: 'var(--surface)',
-      border: '1px solid var(--border)',
-      borderRadius: '0.6rem',
-      padding: '0.8rem',
-      textAlign: 'center',
-    }}>
-      <div style={{ fontSize: '1.3rem' }}>{icon}</div>
-      <div style={{ fontSize: '1.4rem', fontWeight: 800, color: color || 'var(--foreground)', marginTop: '0.2rem' }}>{value}</div>
-      <div style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)' }}>{label}</div>
-    </div>
-  );
-}
 
 function EmptyState() {
   return (

@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { wow } from '@/lib/wow';
-import { AnimatedCounter } from "@/components/ui/animated-counter";
+import { PremiumKpiCard, PremiumRadialMetric, BRAND } from '@/components/charts';
 import {
   useClients,
   useCampaigns,
@@ -147,72 +147,6 @@ function getHealthLabel(score: number): string {
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function KPICard({
-  value,
-  label,
-  icon,
-  color,
-  subtext,
-}: {
-  value: string | number;
-  label: string;
-  icon: string;
-  color: string;
-  subtext?: string;
-}) {
-  // For numeric values, use AnimatedCounter; for strings (currency, percentages), show as-is
-  const isNumeric = typeof value === "number";
-
-  return (
-    <div
-      className="premium-card"
-      style={{
-        textAlign: "center",
-        padding: "1.25rem 1rem",
-        minWidth: 0,
-      }}
-    >
-      <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>{icon}</div>
-      <div
-        className="ux-kpi-value"
-        style={{
-          fontSize: "2rem",
-          fontWeight: 800,
-          color,
-          lineHeight: 1,
-          marginBottom: "0.35rem",
-          letterSpacing: "-0.02em",
-        }}
-      >
-        {isNumeric ? <AnimatedCounter value={value} /> : value}
-      </div>
-      <div
-        style={{
-          fontSize: "0.72rem",
-          color: "var(--foreground-muted)",
-          fontWeight: 600,
-          textTransform: "uppercase",
-          letterSpacing: "0.04em",
-        }}
-      >
-        {label}
-      </div>
-      {subtext && (
-        <div
-          style={{
-            fontSize: "0.68rem",
-            color: "var(--foreground-muted)",
-            marginTop: "0.25rem",
-            opacity: 0.7,
-          }}
-        >
-          {subtext}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function AlertRow({
   severity,
   title,
@@ -294,31 +228,6 @@ function AlertRow({
           {time}
         </span>
       )}
-    </div>
-  );
-}
-
-function HealthBar({ score }: { score: number }) {
-  const color = getHealthColor(score);
-  return (
-    <div
-      style={{
-        width: "100%",
-        height: "6px",
-        borderRadius: "3px",
-        background: "var(--surface)",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          width: `${score}%`,
-          height: "100%",
-          borderRadius: "3px",
-          background: color,
-          transition: "width 0.5s ease",
-        }}
-      />
     </div>
   );
 }
@@ -739,54 +648,57 @@ export default function CommandCenterPage() {
           gap: "1rem",
         }}
       >
-        <KPICard
+        <PremiumKpiCard
           icon="👤"
           label="לקוחות פעילים"
           value={kpis.activeClients}
           color="#38bdf8"
-          subtext={`מתוך ${kpis.totalClients}`}
+          description={`מתוך ${kpis.totalClients}`}
         />
-        <KPICard
+        <PremiumKpiCard
           icon="📣"
           label="קמפיינים פעילים"
           value={kpis.activeCampaigns}
           color="#a78bfa"
-          subtext={`מתוך ${kpis.totalCampaigns}`}
+          description={`מתוך ${kpis.totalCampaigns}`}
         />
-        <KPICard
+        <PremiumKpiCard
           icon="💰"
           label="תקציב פעיל"
-          value={formatCurrency(kpis.activeBudget)}
+          value={kpis.activeBudget}
+          format="currency"
           color="#22c55e"
-          subtext={`סה״כ ${formatCurrency(kpis.totalBudget)}`}
+          description={`סה״כ ${formatCurrency(kpis.totalBudget)}`}
         />
-        <KPICard
+        <PremiumKpiCard
           icon="🎯"
           label="לידים החודש"
           value={kpis.leadsThisMonth}
           color="#34d399"
-          subtext={`סה״כ ${kpis.totalLeads}`}
+          description={`סה״כ ${kpis.totalLeads}`}
         />
-        <KPICard
+        <PremiumKpiCard
           icon="📊"
           label="עלות לליד"
-          value={kpis.cpl > 0 ? formatCurrency(kpis.cpl) : "—"}
+          value={kpis.cpl > 0 ? kpis.cpl : 0}
+          format="currency"
           color="#f59e0b"
-          subtext="ממוצע"
+          description="ממוצע"
         />
-        <KPICard
+        <PremiumKpiCard
           icon="🏆"
           label="שיעור המרה"
-          value={`${kpis.conversionRate}%`}
+          value={parseFloat(kpis.conversionRate)}
+          format="percent"
           color="#ec4899"
-          subtext={`${kpis.wonLeads} נסגרו`}
+          description={`${kpis.wonLeads} נסגרו`}
         />
-        <KPICard
+        <PremiumKpiCard
           icon="❤️‍🩹"
           label="בריאות ממוצעת"
           value={avgHealth}
           color={getHealthColor(avgHealth)}
-          subtext={getHealthLabel(avgHealth)}
+          description={getHealthLabel(avgHealth)}
         />
       </div>
 
@@ -1262,28 +1174,14 @@ export default function CommandCenterPage() {
                     }}
                   >
                     {/* Health Score */}
-                    <td style={{ padding: "0.625rem 0.5rem", width: "90px" }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.5rem",
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: "0.75rem",
-                            fontWeight: 700,
-                            color: getHealthColor(row.healthScore),
-                            minWidth: "28px",
-                          }}
-                        >
-                          {row.healthScore}
-                        </span>
-                        <div style={{ flex: 1 }}>
-                          <HealthBar score={row.healthScore} />
-                        </div>
-                      </div>
+                    <td style={{ padding: "0.625rem 0.5rem", width: "110px" }}>
+                      <PremiumRadialMetric
+                        value={row.healthScore}
+                        autoColor={true}
+                        variant="light"
+                        size={48}
+                        strokeWidth={5}
+                      />
                     </td>
 
                     {/* Campaign Name + Type */}
