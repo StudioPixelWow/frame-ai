@@ -13,8 +13,12 @@ import { updateRenderJob } from "@/lib/render-worker/job-manager";
 const tag = "[LambdaOutput]";
 
 /**
- * Download from S3 output URL, upload to Supabase Storage,
- * and update all relevant DB records.
+ * Use the S3 output URL directly (video is already publicly accessible
+ * via Remotion's "no-acl" privacy + "play-in-browser" download behavior).
+ *
+ * Previously this downloaded from S3 and re-uploaded to Supabase Storage,
+ * but that times out on Vercel for large video files. Instead we just
+ * store the S3 URL as the result — the video is already playable there.
  */
 export async function handleLambdaOutput(opts: {
   jobId: string;
@@ -26,50 +30,11 @@ export async function handleLambdaOutput(opts: {
   console.log(`${tag} Handling output for job ${jobId}`);
   console.log(`${tag}   S3 URL: ${s3OutputUrl}`);
 
-  // ── 1. Download from S3 ───────────────────────────────────────────────
-  await updateRenderJob(jobId, {
-    progress: 96,
-    stage: "מוריד מ-S3",
-  });
+  // Use the S3 URL directly — no download/re-upload needed.
+  // The file is already publicly accessible in the Remotion Lambda S3 bucket.
+  const publicUrl = s3OutputUrl;
 
-  const response = await fetch(s3OutputUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to download from S3: ${response.status} ${response.statusText}`);
-  }
-
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  const sizeMB = (buffer.length / (1024 * 1024)).toFixed(1);
-  console.log(`${tag} Downloaded ${sizeMB}MB from S3`);
-
-  // ── 2. Upload to Supabase Storage ─────────────────────────────────────
-  await updateRenderJob(jobId, {
-    progress: 98,
-    stage: "מעלה לאחסון",
-  });
-
-  const sb = getSupabase();
-  const fileName = `renders/${projectId}/${jobId}.mp4`;
-
-  const { error: uploadErr } = await sb.storage
-    .from("project-files")
-    .upload(fileName, buffer, {
-      contentType: "video/mp4",
-      upsert: true,
-    });
-
-  if (uploadErr) {
-    console.error(`${tag} ❌ Upload to Supabase Storage failed:`, uploadErr.message);
-    throw new Error(`Storage upload failed: ${uploadErr.message}`);
-  }
-
-  // Get public URL
-  const { data: urlData } = sb.storage.from("project-files").getPublicUrl(fileName);
-  const publicUrl = urlData?.publicUrl || "";
-
-  console.log(`${tag} ✅ Uploaded to Supabase Storage: ${publicUrl}`);
-
-  // ── 3. Update render job as done ──────────────────────────────────────
+  // ── 1. Update render job as done ──────────────────────────────────────
   await updateRenderJob(jobId, {
     status: "done",
     progress: 100,
@@ -77,7 +42,10 @@ export async function handleLambdaOutput(opts: {
     result_url: publicUrl,
   });
 
-  // ── 4. Update video project with result ───────────────────────────────
+  console.log(`${tag} ✅ Render complete: ${publicUrl}`);
+
+  // ── 2. Update video project with result ───────────────────────────────
+  const sb = getSupabase();
   try {
     await sb.from("video_projects").update({
       status: "completed",
