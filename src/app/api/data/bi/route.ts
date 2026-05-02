@@ -12,7 +12,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { clients, campaigns, ads, leads } from '@/lib/db';
+import { createClient } from '@supabase/supabase-js';
+import { campaigns, ads, leads } from '@/lib/db';
 import { computeAllClientHealth, computeClientHealth } from '@/lib/bi/client-health';
 import { computeAllProfitability, computeClientProfitability } from '@/lib/bi/profitability';
 import { analyzeContentIntelligence } from '@/lib/bi/content-intelligence';
@@ -21,15 +22,21 @@ import { detectEarlyWarnings } from '@/lib/bi/early-warnings';
 import { generateAIInsights } from '@/lib/bi/ai-insights';
 import { comparePlatforms, compareClientPlatforms } from '@/lib/bi/platform-comparison';
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+);
+
 type BISection = 'health' | 'profitability' | 'content' | 'cross-client' | 'warnings' | 'insights' | 'platforms' | 'all';
 
 async function fetchAllData() {
-  const [allClients, allCampaigns, allAds, allLeads] = await Promise.all([
-    clients.getAllAsync(),
+  const [clientsResult, allCampaigns, allAds, allLeads] = await Promise.all([
+    supabase.from('clients').select('*'),
     campaigns.getAllAsync(),
     ads.getAllAsync(),
     leads.getAllAsync(),
   ]);
+  const allClients = clientsResult.data || [];
   return {
     clients: allClients || [],
     campaigns: allCampaigns || [],
