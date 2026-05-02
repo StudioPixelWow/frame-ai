@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiKeys, getApiKeyStatus } from "@/lib/db/api-keys";
 import { DATA_DIR as FRAMEAI_DATA_DIR } from "@/lib/db/paths";
+import { getSupabase } from "@/lib/db/store";
 
 // ── Force Node.js runtime for filesystem access ──
 export const runtime = "nodejs";
@@ -58,9 +59,44 @@ function mime(p: string): string {
    Download file from URL to buffer (for Whisper which needs file bytes)
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/**
+ * Extract the storage path from a Supabase public URL.
+ * e.g. "https://xxx.supabase.co/storage/v1/object/public/project-files/uploads/123.mp4"
+ *   → "uploads/123.mp4"
+ * Returns null if not a Supabase storage URL.
+ */
+function extractSupabaseStoragePath(url: string): string | null {
+  const marker = "/storage/v1/object/public/project-files/";
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null;
+  return url.slice(idx + marker.length);
+}
+
 async function downloadFileFromUrl(url: string): Promise<{ buffer: Buffer; size: number; contentType: string } | { error: string }> {
   try {
-    console.log(`[download] Fetching: ${url.slice(0, 120)}...`);
+    // ── Try Supabase service-role download first (bypasses public URL / CDN issues) ──
+    const storagePath = extractSupabaseStoragePath(url);
+    if (storagePath) {
+      console.log(`[download] Detected Supabase URL → downloading via service role: path="${storagePath}"`);
+      try {
+        const sb = getSupabase();
+        const { data, error } = await sb.storage.from("project-files").download(storagePath);
+        if (error) {
+          console.warn(`[download] Supabase download error: ${error.message} — falling back to fetch`);
+        } else if (data) {
+          const arrayBuffer = await data.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          const contentType = data.type || "application/octet-stream";
+          console.log(`[download] ✅ Supabase download OK: ${(buffer.length / 1024).toFixed(0)}KB, type=${contentType}`);
+          return { buffer, size: buffer.length, contentType };
+        }
+      } catch (sbErr) {
+        console.warn(`[download] Supabase download threw: ${sbErr instanceof Error ? sbErr.message : sbErr} — falling back to fetch`);
+      }
+    }
+
+    // ── Fallback: plain fetch (works for non-Supabase URLs) ──
+    console.log(`[download] Fetching via HTTP: ${url.slice(0, 120)}...`);
     const res = await fetch(url);
     if (!res.ok) {
       return { error: `Download failed: ${res.status} ${res.statusText}` };
@@ -130,7 +166,25 @@ async function whisperTranscribe(
 async function assemblyaiTranscribe(
   key: string, audioUrl: string, lang: string,
 ): Promise<{ segments: SubSegment[]; error?: string }> {
-  console.log(`[assemblyai] Using public URL directly: ${audioUrl.slice(0, 120)}...`);
+  // AssemblyAI fetches the URL itself — if it's a Supabase URL, create a signed one
+  let resolvedAudioUrl = audioUrl;
+  const storagePath = extractSupabaseStoragePath(audioUrl);
+  if (storagePath) {
+    try {
+      console.log(`[assemblyai] Generating signed URL for Supabase file: ${storagePath}`);
+      const sb = getSupabase();
+      const { data, error } = await sb.storage.from("project-files").createSignedUrl(storagePath, 3600);
+      if (!error && data?.signedUrl) {
+        resolvedAudioUrl = data.signedUrl;
+        console.log(`[assemblyai] ✅ Using signed URL for AssemblyAI`);
+      } else {
+        console.warn(`[assemblyai] Could not sign URL: ${error?.message} — using original`);
+      }
+    } catch (e) {
+      console.warn(`[assemblyai] Sign URL threw: ${e instanceof Error ? e.message : e} — using original`);
+    }
+  }
+  console.log(`[assemblyai] Audio URL: ${resolvedAudioUrl.slice(0, 120)}...`);
 
   // AssemblyAI can fetch from a public URL directly — no need to download + re-upload
   const transcriptRes = await fetch("https://api.assemblyai.com/v2/transcript", {
@@ -140,7 +194,7 @@ async function assemblyaiTranscribe(
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      audio_url: audioUrl,
+      audio_url: resolvedAudioUrl,
       language_code: assemblyLang(lang),
     }),
   });

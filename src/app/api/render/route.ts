@@ -17,6 +17,7 @@ import { createRenderJob, listRenderJobs, updateRenderJob } from "@/lib/render-w
 import { getSupabase } from "@/lib/db/store";
 import { invokeLambdaRender, pollLambdaProgress } from "@/lib/lambda-render/invoke-renderer";
 import { handleLambdaOutput } from "@/lib/lambda-render/handle-output";
+import { getSignedDownloadUrl } from "@/lib/storage/upload";
 
 const tag = "[Render API]";
 
@@ -190,6 +191,16 @@ async function triggerLambdaRender(opts: {
 }) {
   try {
     console.log(`${tag} 🚀 Starting Lambda render for job ${opts.jobId}`);
+
+    // Replace Supabase public video URL with a signed URL so Lambda can access it.
+    // Public URLs return 544 from server-side fetches; signed URLs bypass that.
+    const videoUrl = opts.inputProps.videoUrl as string | undefined;
+    if (videoUrl && videoUrl.includes("supabase.co/storage/")) {
+      console.log(`${tag} Generating signed URL for video...`);
+      const signedUrl = await getSignedDownloadUrl(videoUrl, 3600); // 1 hour
+      opts.inputProps = { ...opts.inputProps, videoUrl: signedUrl };
+      console.log(`${tag} ✅ Signed URL ready (expires in 1h)`);
+    }
 
     // 1. Invoke Lambda
     const { renderId, bucketName } = await invokeLambdaRender({

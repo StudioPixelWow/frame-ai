@@ -203,6 +203,59 @@ export async function getSignedUploadUrl(opts: {
  * ⚠️  Only use for files < 4MB (Vercel body limit).
  *     For larger files, use getSignedUploadUrl() + client-side PUT.
  */
+/* ══════════════════════════════════════════════════════════════════════════
+   Utility: Create a SIGNED download URL for an existing file
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Extract the storage path from a Supabase public URL.
+ * e.g. "https://xxx.supabase.co/storage/v1/object/public/project-files/uploads/123.mp4"
+ *   → "uploads/123.mp4"
+ * Returns null if not a Supabase storage URL for our bucket.
+ */
+export function extractStoragePath(publicUrl: string): string | null {
+  const marker = `/storage/v1/object/public/${BUCKET}/`;
+  const idx = publicUrl.indexOf(marker);
+  if (idx === -1) return null;
+  return publicUrl.slice(idx + marker.length);
+}
+
+/**
+ * Generate a time-limited signed download URL for a file in Supabase Storage.
+ * This bypasses any public-URL / CDN issues (status 544 etc.).
+ *
+ * @param publicUrl — the public URL of the file
+ * @param expiresInSec — how long the signed URL is valid (default 1 hour)
+ * @returns signed URL string, or the original URL if path extraction fails
+ */
+export async function getSignedDownloadUrl(
+  publicUrl: string,
+  expiresInSec = 3600,
+): Promise<string> {
+  const storagePath = extractStoragePath(publicUrl);
+  if (!storagePath) {
+    console.warn(`[storage:signedDownload] Not a Supabase URL, returning as-is: ${publicUrl.slice(0, 80)}`);
+    return publicUrl;
+  }
+
+  const sb = getSupabase();
+  const { data, error } = await sb.storage
+    .from(BUCKET)
+    .createSignedUrl(storagePath, expiresInSec);
+
+  if (error || !data?.signedUrl) {
+    console.error(`[storage:signedDownload] Failed to sign "${storagePath}": ${error?.message || "no URL returned"}`);
+    return publicUrl; // fallback to original
+  }
+
+  console.log(`[storage:signedDownload] ✅ Signed URL for "${storagePath}" (${expiresInSec}s)`);
+  return data.signedUrl;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Pattern 2: SERVER-SIDE UPLOAD (for small files < 4MB only)
+   ══════════════════════════════════════════════════════════════════════════ */
+
 export async function uploadToStorage(opts: UploadOptions): Promise<UploadResult> {
   const storagePath = opts.storagePath || makeStoragePath(opts.fileName || "file.mp4");
   const contentType = opts.contentType || "application/octet-stream";
