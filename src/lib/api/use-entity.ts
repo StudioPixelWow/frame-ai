@@ -45,6 +45,7 @@ import type {
   SystemEvent,
   AuditLog,
   PodcastStrategy,
+  ClientNotification,
 } from '@/lib/db/schema';
 
 // Core entities — relaxed polling (3 min) + no refetch on focus to avoid jankiness
@@ -91,3 +92,4 @@ export const useSystemEvents = () => useData<SystemEvent>('system-events', { pol
 export const useAuditLog = () => useData<AuditLog>('audit-log', { pollInterval: 180000, refetchOnFocus: false });
 export const useAutomationRuns = () => useData<AutomationRun>('automation-runs', { pollInterval: 60000, refetchOnFocus: false });
 export const useApprovalQueue = () => useData<ApprovalQueueItem>('approval-queue', { pollInterval: 30000, refetchOnFocus: false });
+export const useClientNotifications = () => useData<ClientNotification>('client-notifications', { pollInterval: 60000, refetchOnFocus: false });

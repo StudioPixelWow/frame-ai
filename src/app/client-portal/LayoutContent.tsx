@@ -150,13 +150,13 @@ function LayoutContentInner({ children }: { children: React.ReactNode }) {
             }}>
               {[
                 { label: 'דשבורד', href: '/client-portal/dashboard' },
-                { label: 'לוח תוכן', href: '/client-portal/gantt' },
+                { label: 'פעילות', href: '/client-portal/timeline' },
                 { label: 'אישורים', href: '/client-portal/approvals' },
+                { label: 'דוחות', href: '/client-portal/reports' },
+                { label: 'לידים', href: '/client-portal/leads' },
+                { label: 'לוח תוכן', href: '/client-portal/gantt' },
                 { label: 'קבצים', href: '/client-portal/files' },
                 { label: 'פרויקטים', href: '/client-portal/projects' },
-                { label: 'לידים', href: '/client-portal/leads' },
-                { label: 'פעילות', href: '/client-portal/activity' },
-                { label: 'פודקאסט', href: '/client-portal/podcast' },
               ].map(item => {
                 const isActive = pathname?.startsWith(item.href);
                 return (

@@ -50,6 +50,7 @@ import type {
   AutoCampaignRun,
   AutoCampaignFinding,
   Report,
+  ClientNotification,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -105,3 +106,4 @@ export const campaignActivityLog = new SupabaseCrud<CampaignActivityLog>('campai
 export const autoCampaignRuns = new SupabaseCrud<AutoCampaignRun>('auto_campaign_runs', 'acr');
 export const autoCampaignFindings = new SupabaseCrud<AutoCampaignFinding>('auto_campaign_findings', 'acf');
 export const reports = new SupabaseCrud<Report>('app_reports', 'rpt');
+export const clientNotifications = new SupabaseCrud<ClientNotification>('app_client_notifications', 'cnf');

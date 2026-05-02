@@ -1229,6 +1229,23 @@ export interface ReportAdPerformance {
   cpl: number;
 }
 
+// Client Notification
+export type ClientNotificationType = 'campaign_created' | 'approval_required' | 'report_ready' | 'performance_alert' | 'optimization_applied' | 'ad_created' | 'general';
+
+export interface ClientNotification {
+  id: string;
+  clientId: string;
+  type: ClientNotificationType;
+  title: string;
+  body: string;
+  icon: string;
+  read: boolean;
+  actionUrl?: string;
+  relatedEntityType?: string;
+  relatedEntityId?: string;
+  createdAt: string;
+}
+
 // WhatsApp Message
 export type WhatsAppMessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
 
