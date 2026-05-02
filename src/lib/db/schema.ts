@@ -1631,3 +1631,71 @@ export interface GrowthActionResult {
   measuredAt: string;
   createdAt: string;
 }
+
+// ─── Agency Knowledge Layer ───────────────────────────────────────────
+
+export type KnowledgeItemType =
+  | 'hook'
+  | 'cta'
+  | 'visual'
+  | 'audience'
+  | 'content_angle'
+  | 'platform'
+  | 'failure'
+  | 'pattern';
+
+export type KnowledgeSourceType =
+  | 'ad_performance'
+  | 'campaign_performance'
+  | 'lead_quality'
+  | 'gantt_idea'
+  | 'podcast_clip'
+  | 'video_performance'
+  | 'approval_history'
+  | 'growth_action'
+  | 'report_insight'
+  | 'manual';
+
+export interface KnowledgeItem {
+  id: string;
+  type: KnowledgeItemType;
+  industry: string;
+  clientId: string | null;
+  clientName: string | null;
+  sourceType: KnowledgeSourceType;
+  sourceId: string | null;
+  title: string;
+  summary: string;
+  evidenceData: Record<string, unknown>;
+  performanceMetrics: Record<string, number>;
+  usageCount: number;
+  confidenceScore: number; // 0-100
+  decayScore: number; // 0-100, higher = more decayed
+  tags: string[];
+  platform: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IndustryPlaybook {
+  id: string;
+  industry: string;
+  topHooks: PlaybookEntry[];
+  bestCTAs: PlaybookEntry[];
+  winningContentAngles: PlaybookEntry[];
+  bestVisualPatterns: PlaybookEntry[];
+  bestPlatforms: PlaybookEntry[];
+  audienceNotes: PlaybookEntry[];
+  failurePatterns: PlaybookEntry[];
+  clientCount: number;
+  campaignCount: number;
+  lastUpdated: string;
+  createdAt: string;
+}
+
+export interface PlaybookEntry {
+  text: string;
+  confidenceScore: number;
+  evidenceCount: number;
+  sourceIds: string[];
+}

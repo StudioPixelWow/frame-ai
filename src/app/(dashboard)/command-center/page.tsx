@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { wow } from '@/lib/wow';
 import { AnimatedCounter } from "@/components/ui/animated-counter";
@@ -1717,6 +1717,9 @@ export default function CommandCenterPage() {
       {/* ── Growth Engine Quick View ── */}
       <GrowthEngineWidget />
 
+      {/* ── Knowledge Layer Quick View ── */}
+      <KnowledgeWidget />
+
     </main>
   );
 }
@@ -1794,6 +1797,77 @@ function GrowthEngineWidget() {
       <div style={{ marginTop: '0.5rem', fontSize: '0.68rem', color: '#166534', background: 'rgba(34,197,94,0.06)', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', textAlign: 'center' }}>
         🔒 לא תבוצע פעולה חיה ללא אישור
       </div>
+    </div>
+  );
+}
+
+// ── Knowledge Layer Widget (lazy-loaded) ──
+
+function KnowledgeWidget() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/data/knowledge')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setData(d); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return null;
+  if (!data || !data.kpis || data.kpis.totalItems === 0) return null;
+
+  const topItems = (data.topItems || []).slice(0, 3);
+
+  const TYPE_ICONS: Record<string, string> = {
+    hook: '🪝', cta: '🎯', visual: '🎨', audience: '👥',
+    content_angle: '📐', platform: '📊', failure: '⚠️', pattern: '🔗',
+  };
+
+  return (
+    <div style={{
+      marginTop: '1.2rem',
+      background: 'var(--surface)',
+      border: '1px solid var(--border)',
+      borderRadius: '0.75rem',
+      padding: '1rem 1.2rem',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+        <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--foreground)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          🧠 בסיס ידע — תובנות חוצות-לקוחות
+        </h3>
+        <Link href="/knowledge" style={{ fontSize: '0.72rem', color: '#2563eb', textDecoration: 'none' }}>
+          הצג הכל ←
+        </Link>
+      </div>
+
+      {/* KPIs */}
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem', fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>
+        <span>📚 {data.kpis.totalItems} פריטי ידע</span>
+        <span>📈 ביטחון ממוצע {data.kpis.avgConfidence}%</span>
+        <span>🔗 {data.kpis.crossClientPatterns} תבניות חוצות-לקוחות</span>
+        <span>🏭 {data.kpis.industriesCovered} תעשיות</span>
+      </div>
+
+      {/* Top items */}
+      {topItems.map((item: any) => (
+        <div key={item.id} style={{
+          padding: '0.5rem 0.75rem',
+          borderRadius: '0.5rem',
+          background: 'var(--surface-raised)',
+          border: '1px solid var(--border)',
+          marginBottom: '0.4rem',
+          fontSize: '0.78rem',
+        }}>
+          <div style={{ fontWeight: 600, color: 'var(--foreground)' }}>
+            {TYPE_ICONS[item.type] || '📄'} {item.title}
+          </div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)', marginTop: '0.15rem' }}>
+            {item.summary?.substring(0, 100)}{item.summary?.length > 100 ? '...' : ''}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

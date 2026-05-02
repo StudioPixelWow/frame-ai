@@ -156,6 +156,12 @@ const Icons = {
       <circle cx="12" cy="12" r="2" />
     </svg>
   ),
+  Knowledge: (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+    </svg>
+  ),
 };
 
 const mainNavItems: NavItem[] = [
@@ -179,6 +185,7 @@ const mainNavItems: NavItem[] = [
   { href: "/whatsapp", label: "וואטסאפ", id: "nav-whatsapp", icon: Icons.MessageCircle, allowedRoles: ['admin', 'employee'] },
   { href: "/mailing", label: "דיוור", id: "nav-mailing", icon: Icons.Mail, allowedRoles: ['admin'] },
   { href: "/growth", label: "מנוע צמיחה", id: "nav-growth", icon: Icons.Growth, allowedRoles: ['admin'] },
+  { href: "/knowledge", label: "בסיס ידע", id: "nav-knowledge", icon: Icons.Knowledge, allowedRoles: ['admin'] },
   { href: "/stats", label: "סטטיסטיקות", id: "nav-stats", icon: Icons.TrendingUp, allowedRoles: ['admin'] },
   { href: "/exec-dashboard", label: "מנהלים", id: "nav-exec", icon: Icons.Briefcase, allowedRoles: ['admin'] },
   { href: "/settings", label: "הגדרות", id: "nav-settings", icon: Icons.Settings, allowedRoles: ['admin'] },

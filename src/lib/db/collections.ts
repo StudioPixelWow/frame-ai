@@ -55,6 +55,8 @@ import type {
   GrowthOpportunity,
   GrowthAction,
   GrowthActionResult,
+  KnowledgeItem,
+  IndustryPlaybook,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -117,3 +119,7 @@ export const growthRuns = new SupabaseCrud<GrowthRun>('growth_runs', 'grn');
 export const growthOpportunities = new SupabaseCrud<GrowthOpportunity>('growth_opportunities', 'gop');
 export const growthActions = new SupabaseCrud<GrowthAction>('growth_actions', 'gac');
 export const growthActionResults = new SupabaseCrud<GrowthActionResult>('growth_action_results', 'gar');
+
+// Agency Knowledge Layer
+export const knowledgeItems = new SupabaseCrud<KnowledgeItem>('agency_knowledge_items', 'kni');
+export const industryPlaybooks = new SupabaseCrud<IndustryPlaybook>('industry_playbooks', 'ipb');
