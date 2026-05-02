@@ -123,7 +123,14 @@ export default function SystemHealthPage() {
 
   const overall = data?.overallStatus || 'healthy';
   const overallMeta = STATUS_META[overall];
-  const stats = data?.stats || { totalErrors24h: 0, criticalErrors24h: 0, failedActions24h: 0, failedSyncs24h: 0, autopilotIssues24h: 0, resolvedErrors24h: 0 };
+  const stats = {
+    totalErrors24h: Math.max(0, data?.stats?.totalErrors24h ?? 0),
+    criticalErrors24h: Math.max(0, data?.stats?.criticalErrors24h ?? 0),
+    failedActions24h: Math.max(0, data?.stats?.failedActions24h ?? 0),
+    failedSyncs24h: Math.max(0, data?.stats?.failedSyncs24h ?? 0),
+    autopilotIssues24h: Math.max(0, data?.stats?.autopilotIssues24h ?? 0),
+    resolvedErrors24h: Math.max(0, data?.stats?.resolvedErrors24h ?? 0),
+  };
 
   return (
     <main dir="rtl" style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
@@ -162,13 +169,13 @@ export default function SystemHealthPage() {
 
       {/* KPI Strip */}
       <PremiumStatGrid
-        stats={[
-          { label: 'שגיאות 24ש', value: stats.totalErrors24h, icon: '⚠️', color: stats.totalErrors24h > 0 ? '#ca8a04' : undefined },
-          { label: 'קריטיות', value: stats.criticalErrors24h, icon: '🔴', color: stats.criticalErrors24h > 0 ? '#dc2626' : undefined },
-          { label: 'פעולות נכשלות', value: stats.failedActions24h, icon: '❌' },
-          { label: 'סנכרון נכשל', value: stats.failedSyncs24h, icon: '🔗' },
-          { label: 'בעיות אוטופיילוט', value: stats.autopilotIssues24h, icon: '🤖' },
-          { label: 'התראות פעילות', value: admin?.activeAlerts || 0, icon: '🔔', color: (admin?.activeAlerts || 0) > 0 ? '#ca8a04' : undefined },
+        items={[
+          { label: 'שגיאות 24ש', value: Math.max(0, stats.totalErrors24h || 0), icon: '⚠️', color: (stats.totalErrors24h || 0) > 0 ? '#ca8a04' : undefined },
+          { label: 'קריטיות', value: Math.max(0, stats.criticalErrors24h || 0), icon: '🔴', color: (stats.criticalErrors24h || 0) > 0 ? '#dc2626' : undefined },
+          { label: 'פעולות נכשלות', value: Math.max(0, stats.failedActions24h || 0), icon: '❌' },
+          { label: 'סנכרון נכשל', value: Math.max(0, stats.failedSyncs24h || 0), icon: '🔗' },
+          { label: 'בעיות אוטופיילוט', value: Math.max(0, stats.autopilotIssues24h || 0), icon: '🤖' },
+          { label: 'התראות פעילות', value: Math.max(0, admin?.activeAlerts || 0), icon: '🔔', color: (admin?.activeAlerts || 0) > 0 ? '#ca8a04' : undefined },
         ]}
         columns={6}
       />

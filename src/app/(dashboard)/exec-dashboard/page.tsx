@@ -72,27 +72,27 @@ function ExecDashboardInner() {
     const now = new Date();
     const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    const activeClientsCount = clients.filter(c => c.status === 'active').length;
-    const openLeadsCount = leads.filter(l => l.status !== 'won' && l.status !== 'not_relevant').length;
-    const openTasksCount = employeeTasks.filter(t => t.status !== 'completed').length;
-    const overdueTasks = employeeTasks.filter(t => {
+    const activeClientsCount = (clients || []).filter(c => c.status === 'active').length;
+    const openLeadsCount = (leads || []).filter(l => l.status !== 'won' && l.status !== 'not_relevant').length;
+    const openTasksCount = (employeeTasks || []).filter(t => t.status !== 'completed').length;
+    const overdueTasks = (employeeTasks || []).filter(t => {
       if (t.status === 'completed') return false;
       if (!t.dueDate) return false;
       const dueDate = new Date(t.dueDate);
       return dueDate < now;
     });
     const overdueTasksCount = overdueTasks.length;
-    const monthlyRevenue = clients
+    const monthlyRevenue = (clients || [])
       .filter(c => c.status === 'active')
       .reduce((sum, c) => sum + (c.retainerAmount || 0), 0);
-    const overduePaymentsCount = payments.filter(p => p.status === 'overdue').length;
-    const overdueProjectPaymentsCount = projectPayments.filter(p => {
+    const overduePaymentsCount = (payments || []).filter(p => p.status === 'overdue').length;
+    const overdueProjectPaymentsCount = (projectPayments || []).filter(p => {
       if (p.status !== 'pending') return false;
       const dueDate = new Date(p.dueDate);
       return dueDate < now;
     }).length;
     const totalOverduePayments = overduePaymentsCount + overdueProjectPaymentsCount;
-    const upcomingPayments = payments.filter(p => {
+    const upcomingPayments = (payments || []).filter(p => {
       if (p.status === 'paid' || p.status === 'draft') return false;
       if (!p.dueDate) return false;
       const dueDate = new Date(p.dueDate);
@@ -109,34 +109,34 @@ function ExecDashboardInner() {
 
   const chartData = useMemo(() => {
     const tasksByStatus = {
-      new: employeeTasks.filter(t => t.status === 'new').length,
-      in_progress: employeeTasks.filter(t => t.status === 'in_progress').length,
-      under_review: employeeTasks.filter(t => t.status === 'under_review').length,
-      completed: employeeTasks.filter(t => t.status === 'completed').length,
+      new: (employeeTasks || []).filter(t => t.status === 'new').length,
+      in_progress: (employeeTasks || []).filter(t => t.status === 'in_progress').length,
+      under_review: (employeeTasks || []).filter(t => t.status === 'under_review').length,
+      completed: (employeeTasks || []).filter(t => t.status === 'completed').length,
     };
 
-    const employeeWorkload = employees.map(emp => ({
+    const employeeWorkload = (employees || []).map(emp => ({
       id: emp.id,
       name: emp.name,
       workload: emp.workload || 0,
-      taskCount: employeeTasks.filter(t => t.assignedEmployeeId === emp.id && t.status !== 'completed').length,
+      taskCount: (employeeTasks || []).filter(t => t.assignedEmployeeId === emp.id && t.status !== 'completed').length,
     }));
 
     const leadsByStatus = {
-      new: leads.filter(l => l.status === 'new').length,
-      contacted: leads.filter(l => l.status === 'contacted').length,
-      proposal_sent: leads.filter(l => l.status === 'proposal_sent').length,
-      negotiation: leads.filter(l => l.status === 'negotiation').length,
-      won: leads.filter(l => l.status === 'won').length,
-      not_relevant: leads.filter(l => l.status === 'not_relevant').length,
+      new: (leads || []).filter(l => l.status === 'new').length,
+      contacted: (leads || []).filter(l => l.status === 'contacted').length,
+      proposal_sent: (leads || []).filter(l => l.status === 'proposal_sent').length,
+      negotiation: (leads || []).filter(l => l.status === 'negotiation').length,
+      won: (leads || []).filter(l => l.status === 'won').length,
+      not_relevant: (leads || []).filter(l => l.status === 'not_relevant').length,
     };
 
     const clientTypeDistribution = {
-      marketing: clients.filter(c => c.clientType === 'marketing').length,
-      branding: clients.filter(c => c.clientType === 'branding').length,
-      websites: clients.filter(c => c.clientType === 'websites').length,
-      hosting: clients.filter(c => c.clientType === 'hosting').length,
-      podcast: clients.filter(c => c.clientType === 'podcast').length,
+      marketing: (clients || []).filter(c => c.clientType === 'marketing').length,
+      branding: (clients || []).filter(c => c.clientType === 'branding').length,
+      websites: (clients || []).filter(c => c.clientType === 'websites').length,
+      hosting: (clients || []).filter(c => c.clientType === 'hosting').length,
+      podcast: (clients || []).filter(c => c.clientType === 'podcast').length,
     };
 
     return { tasksByStatus, employeeWorkload, leadsByStatus, clientTypeDistribution };
@@ -555,11 +555,11 @@ function ExecDashboardInner() {
         <div style={summaryBadgeStyle}>
           <div style={badgeItemStyle}>
             <span>🔴</span>
-            <span>{alerts.filter(a => a.severity === 'critical').length} התראות קריטיות</span>
+            <span>{(alerts || []).filter(a => a.severity === 'critical').length} התראות קריטיות</span>
           </div>
           <div style={badgeItemStyle}>
             <span>🟡</span>
-            <span>{alerts.filter(a => a.severity === 'warning').length} אזהרות</span>
+            <span>{(alerts || []).filter(a => a.severity === 'warning').length} אזהרות</span>
           </div>
         </div>
       </div>
@@ -635,7 +635,7 @@ function ExecDashboardInner() {
           <h2 style={{ ...sectionTitleStyle, marginBottom: '0' }}>
             <span>⚡</span>
             <span>התראות תפעוליות</span>
-            <span style={badgeItemStyle}>{alerts.length}</span>
+            <span style={badgeItemStyle}>{(alerts || []).length}</span>
           </h2>
         </div>
 
@@ -667,7 +667,7 @@ function ExecDashboardInner() {
         </div>
 
         <div style={alertsGridStyle}>
-          {alerts
+          {(alerts || [])
             .filter(a => filterSeverity === 'all' || a.severity === filterSeverity)
             .slice(0, 10)
             .map(alert => (
@@ -683,10 +683,10 @@ function ExecDashboardInner() {
             ))}
         </div>
 
-        {alerts.length > 10 && (
+        {(alerts || []).length > 10 && (
           <div style={{ marginTop: '20px', textAlign: 'center' }}>
             <Link href="/alerts" style={{ color: 'var(--accent)', textDecoration: 'none', fontSize: '0.9rem', fontWeight: '600' }}>
-              צפה בכל {alerts.length} ההתראות →
+              צפה בכל {(alerts || []).length} ההתראות →
             </Link>
           </div>
         )}
@@ -712,7 +712,7 @@ function ExecDashboardInner() {
         <div className="ux-stagger-item premium-card" style={chartCardStyle}>
           <PremiumBarChart
             title="עומס עבודה לפי עובד"
-            data={chartData.employeeWorkload.slice(0, 5).map(emp => ({
+            data={(chartData.employeeWorkload || []).slice(0, 5).map(emp => ({
               label: emp.name,
               value: emp.taskCount,
               color: 'var(--accent)',
@@ -772,7 +772,7 @@ function ExecDashboardInner() {
           <Link href="/employees" className="ux-stagger-item premium-card" style={navCardStyle}>
             <span style={navIconStyle}>👨‍💼</span>
             <p style={navTitleStyle}>עובדים</p>
-            <p style={navCountStyle}>{formatCount(employees.length)}</p>
+            <p style={navCountStyle}>{formatCount((employees || []).length)}</p>
           </Link>
           <Link href="/accounting" className="ux-stagger-item premium-card" style={navCardStyle}>
             <span style={navIconStyle}>💰</span>
@@ -782,7 +782,7 @@ function ExecDashboardInner() {
           <Link href="/approvals" className="ux-stagger-item premium-card" style={navCardStyle}>
             <span style={navIconStyle}>✅</span>
             <p style={navTitleStyle}>אישורים</p>
-            <p style={navCountStyle}>{formatCount(approvals.filter(a => a.status === 'pending_approval').length)}</p>
+            <p style={navCountStyle}>{formatCount((approvals || []).filter(a => a.status === 'pending_approval').length)}</p>
           </Link>
           <Link href="/accounting/podcast" className="ux-stagger-item premium-card" style={navCardStyle}>
             <span style={navIconStyle}>🎙️</span>
@@ -845,7 +845,7 @@ function ExecDashboardInner() {
             </tr>
           </thead>
           <tbody>
-            {clients
+            {(clients || [])
               .filter(c => c.status === 'active')
               .slice(0, 8)
               .map(client => {
@@ -863,7 +863,7 @@ function ExecDashboardInner() {
                       </span>
                     </td>
                     <td style={tdStyle}>
-                      {ganttItems.filter(g => g.clientId === client.id && g.month === new Date().getMonth() + 1).length}
+                      {(ganttItems || []).filter(g => g.clientId === client.id && g.month === new Date().getMonth() + 1).length}
                     </td>
                     <td style={tdStyle}>
                       <span style={healthBadgeStyle('good')}>✅ בתאריך</span>

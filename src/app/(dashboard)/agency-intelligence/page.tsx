@@ -207,14 +207,13 @@ export default function AgencyIntelligencePage() {
 
       {/* KPI Cards */}
       <PremiumStatGrid
-        cards={[
-          { label: 'פלייבוקים', value: stats.totalPlaybooks, color: '#6366f1' },
-          { label: 'תבניות קמפיין', value: stats.totalCampaignTemplates, color: '#0ea5e9' },
-          { label: 'תבניות מודעה', value: stats.totalAdTemplates, color: '#10b981' },
-          { label: 'תבניות תוכן', value: stats.totalContentTemplates, color: '#f59e0b' },
-          { label: 'הצעות ממתינות', value: stats.pendingSuggestionsCount, color: stats.pendingSuggestionsCount > 0 ? '#ef4444' : '#94a3b8' },
+        items={[
+          { label: 'פלייבוקים', value: Number(stats.totalPlaybooks) || 0, color: '#6366f1' },
+          { label: 'תבניות קמפיין', value: Number(stats.totalCampaignTemplates) || 0, color: '#0ea5e9' },
+          { label: 'תבניות מודעה', value: Number(stats.totalAdTemplates) || 0, color: '#10b981' },
+          { label: 'תבניות תוכן', value: Number(stats.totalContentTemplates) || 0, color: '#f59e0b' },
+          { label: 'הצעות ממתינות', value: Number(stats.pendingSuggestionsCount) || 0, color: (Number(stats.pendingSuggestionsCount) || 0) > 0 ? '#ef4444' : '#94a3b8' },
         ]}
-        style={{ marginBottom: 24 }}
       />
 
 
@@ -634,7 +633,7 @@ function LearningTab({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ fontSize: 11, color: '#94a3b8' }}>{s.source}</div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <PremiumRadialMetric value={s.confidence} label="ביטחון" />
+                    <PremiumRadialMetric value={Math.max(0, Math.min(100, Number(s.confidence) || 0))} label="ביטחון" size={80} />
                     <button
                       onClick={() => onAction(s.id, 'accepted')}
                       style={{ padding: '4px 12px', borderRadius: 6, border: 'none', background: '#10b981', color: '#fff', cursor: 'pointer', fontSize: 12 }}
@@ -662,15 +661,15 @@ function LearningTab({
 
 function PerformanceTab({ calibration }: { calibration: CalibrationData }) {
   const [testIndustry, setTestIndustry] = useState('real_estate');
-  const [testCPL, setTestCPL] = useState('100');
-  const [testCTR, setTestCTR] = useState('2.5');
+  const [testCPL, setTestCPL] = useState<string | number>('100');
+  const [testCTR, setTestCTR] = useState<string | number>('2.5');
   const [result, setResult] = useState<{ verdict: string; label: string; suggestions: string[] } | null>(null);
 
   function evaluate() {
-    const cpl = parseFloat(testCPL) || 0;
-    const ctr = parseFloat(testCTR) || 0;
+    const cpl = parseFloat(String(testCPL)) || 0;
+    const ctr = parseFloat(String(testCTR)) || 0;
     const idealCPL = calibration.idealCplPerIndustry[testIndustry] || 100;
-    const cplRatio = cpl / idealCPL;
+    const cplRatio = idealCPL > 0 ? cpl / idealCPL : 0;
 
     const suggestions: string[] = [];
     let verdict: string;
@@ -680,13 +679,17 @@ function PerformanceTab({ calibration }: { calibration: CalibrationData }) {
     else if (cplRatio > 2.0) suggestions.push(`CPL קריטי (₪${Math.round(cpl)}) — כפול מהאידיאל (₪${idealCPL})`);
     else if (cplRatio > 1.3) suggestions.push(`CPL גבוה (₪${Math.round(cpl)}) — מעל האידיאל (₪${idealCPL})`);
 
-    if (ctr >= calibration.highPerformanceThreshold) suggestions.push(`CTR מצוין (${ctr.toFixed(1)}%)`);
-    else if (ctr <= calibration.lowPerformanceThreshold) suggestions.push(`CTR נמוך (${ctr.toFixed(1)}%)`);
+    if (ctr >= (calibration.highPerformanceThreshold || 5)) suggestions.push(`CTR מצוין (${ctr.toFixed(1)}%)`);
+    else if (ctr <= (calibration.lowPerformanceThreshold || 1)) suggestions.push(`CTR נמוך (${ctr.toFixed(1)}%)`);
 
-    if (cplRatio <= 0.7 && ctr >= calibration.highPerformanceThreshold) { verdict = 'excellent'; label = 'ביצועים מצוינים'; }
-    else if (cplRatio <= 1.0 && ctr >= calibration.acceptableCtrRange.min) { verdict = 'good'; label = 'ביצועים טובים'; }
-    else if (cplRatio <= 1.5 && ctr >= calibration.lowPerformanceThreshold) { verdict = 'average'; label = 'ביצועים סבירים'; }
-    else if (cplRatio > 2.0 || ctr < calibration.lowPerformanceThreshold) { verdict = 'critical'; label = 'ביצועים קריטיים'; }
+    const highThreshold = calibration.highPerformanceThreshold || 5;
+    const lowThreshold = calibration.lowPerformanceThreshold || 1;
+    const minCtrRange = calibration.acceptableCtrRange?.min || 2;
+
+    if (cplRatio <= 0.7 && ctr >= highThreshold) { verdict = 'excellent'; label = 'ביצועים מצוינים'; }
+    else if (cplRatio <= 1.0 && ctr >= minCtrRange) { verdict = 'good'; label = 'ביצועים טובים'; }
+    else if (cplRatio <= 1.5 && ctr >= lowThreshold) { verdict = 'average'; label = 'ביצועים סבירים'; }
+    else if (cplRatio > 2.0 || ctr < lowThreshold) { verdict = 'critical'; label = 'ביצועים קריטיים'; }
     else { verdict = 'poor'; label = 'ביצועים חלשים'; }
 
     setResult({ verdict, label, suggestions });

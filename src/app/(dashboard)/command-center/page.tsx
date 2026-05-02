@@ -688,7 +688,7 @@ export default function CommandCenterPage() {
         <PremiumKpiCard
           icon="🏆"
           label="שיעור המרה"
-          value={parseFloat(kpis.conversionRate)}
+          value={parseFloat(kpis.conversionRate) || 0}
           format="percent"
           color="#ec4899"
           description={`${kpis.wonLeads} נסגרו`}
@@ -1456,7 +1456,9 @@ export default function CommandCenterPage() {
                     {formatCurrency(data.totalBudget)}
                   </div>
 
-                  <HealthBar score={avgScore} />
+                  <div style={{ width: '100%', height: '4px', borderRadius: '2px', background: 'var(--surface)', overflow: 'hidden' }}>
+                    <div style={{ width: `${avgScore}%`, height: '100%', background: getHealthColor(avgScore), borderRadius: '2px', transition: 'width 300ms ease' }} />
+                  </div>
                 </div>
               );
             });
@@ -1640,12 +1642,12 @@ function GrowthEngineWidget() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  useState(() => {
+  useEffect(() => {
     fetch('/api/data/growth')
       .then(r => r.ok ? r.json() : null)
       .then(d => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
-  });
+  }, []);
 
   if (loading || !data) return null;
 

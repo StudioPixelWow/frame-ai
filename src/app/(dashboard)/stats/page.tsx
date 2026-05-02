@@ -33,7 +33,7 @@ import {
 
 interface BarChartItem {
   label: string;
-  value: string | number;
+  value: number;
   pct: number;
   color: string;
 }
@@ -674,11 +674,11 @@ function AnalyticsDashboardInner() {
     if (!analytics || !analytics.clientTypeDistribution) return [];
     const typeCounts: Record<string, number> = {};
     analytics.clientTypeDistribution.forEach((item) => {
-      typeCounts[item.label] = item.value as number;
+      typeCounts[item.label] = typeof item.value === 'number' ? item.value : parseInt(String(item.value)) || 0;
     });
     return Object.entries(typeCounts).map(([label, value]) => ({
       label,
-      value,
+      value: typeof value === 'number' ? value : 0,
       color: analytics.clientTypeDistribution.find((item) => item.label === label)?.color || '#0092cc',
     }));
   }, [analytics]);
@@ -687,7 +687,7 @@ function AnalyticsDashboardInner() {
     if (!analytics || !analytics.revenueByMonth) return [];
     return analytics.revenueByMonth.map((item) => ({
       label: item.label,
-      value: item.value as number,
+      value: typeof item.value === 'number' ? item.value : parseInt(String(item.value)) || 0,
       pct: item.pct,
     }));
   }, [analytics]);
@@ -696,7 +696,7 @@ function AnalyticsDashboardInner() {
     if (!analytics || !analytics.tasksByStatus) return [];
     return analytics.tasksByStatus.map((item) => ({
       label: item.label,
-      value: item.value as number,
+      value: typeof item.value === 'number' ? item.value : parseInt(String(item.value)) || 0,
       color: item.color,
       pct: (item.pct / 100) * 100,
     }));
@@ -715,9 +715,13 @@ function AnalyticsDashboardInner() {
       });
     }
 
-    const completedTasks = analytics.tasksByStatus.find((s) => s.label === 'הושלם')?.value || 0;
-    const totalTasks = analytics.tasksByStatus.reduce((sum, s) => sum + (s.value as number), 0);
-    const completionRate = totalTasks > 0 ? Math.round((parseInt(String(completedTasks)) / totalTasks) * 100) : 0;
+    const completedTasksItem = analytics.tasksByStatus.find((s) => s.label === 'הושלם');
+    const completedTasks = completedTasksItem ? (typeof completedTasksItem.value === 'number' ? completedTasksItem.value : parseInt(String(completedTasksItem.value)) || 0) : 0;
+    const totalTasks = analytics.tasksByStatus.reduce((sum, s) => {
+      const val = typeof s.value === 'number' ? s.value : parseInt(String(s.value)) || 0;
+      return sum + val;
+    }, 0);
+    const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
     insights.push({
       icon: '✅',
       title: 'שיעור השלמת משימות',
@@ -726,7 +730,8 @@ function AnalyticsDashboardInner() {
     });
 
     const avgMonthlyRevenue = analytics.revenueByMonth.reduce((sum, item) => {
-      return sum + (item.value as number);
+      const val = typeof item.value === 'number' ? item.value : parseInt(String(item.value)) || 0;
+      return sum + val;
     }, 0) / (analytics.revenueByMonth.length || 1);
     insights.push({
       icon: '💹',
@@ -751,8 +756,9 @@ function AnalyticsDashboardInner() {
     if (!analytics) return [];
     const activities = [];
 
-    const completedTasks = analytics.tasksByStatus.find((s) => s.label === 'הושלם')?.value || 0;
-    if (parseInt(String(completedTasks)) > 0) {
+    const completedTasksItem = analytics.tasksByStatus.find((s) => s.label === 'הושלם');
+    const completedTasks = completedTasksItem ? (typeof completedTasksItem.value === 'number' ? completedTasksItem.value : parseInt(String(completedTasksItem.value)) || 0) : 0;
+    if (completedTasks > 0) {
       activities.push({
         icon: '✓',
         title: 'משימות הושלמו',
@@ -764,10 +770,11 @@ function AnalyticsDashboardInner() {
 
     const thisMonthPayments = analytics.revenueByMonth[analytics.revenueByMonth.length - 1];
     if (thisMonthPayments && thisMonthPayments.pct > 0) {
+      const paymentValue = typeof thisMonthPayments.value === 'number' ? thisMonthPayments.value : parseInt(String(thisMonthPayments.value)) || 0;
       activities.push({
         icon: '💰',
         title: 'תשלומים התקבלו',
-        description: `הכנסה של ${formatCurrency(thisMonthPayments.value as number)} החודש`,
+        description: `הכנסה של ${formatCurrency(paymentValue)} החודש`,
         time: 'החודש',
         color: '#00B5FE',
       });
@@ -847,8 +854,12 @@ function AnalyticsDashboardInner() {
   }
 
   // Compute completion rate for KPI
-  const completedCount = analytics.tasksByStatus.find((s) => s.label === 'הושלם')?.value as number || 0;
-  const totalTaskCount = analytics.tasksByStatus.reduce((sum, s) => sum + (s.value as number), 0) || 1;
+  const completedCountItem = analytics.tasksByStatus.find((s) => s.label === 'הושלם');
+  const completedCount = completedCountItem ? (typeof completedCountItem.value === 'number' ? completedCountItem.value : parseInt(String(completedCountItem.value)) || 0) : 0;
+  const totalTaskCount = analytics.tasksByStatus.reduce((sum, s) => {
+    const val = typeof s.value === 'number' ? s.value : parseInt(String(s.value)) || 0;
+    return sum + val;
+  }, 0) || 1;
   const completionRate = Math.round((completedCount / totalTaskCount) * 100);
 
   return (
@@ -952,10 +963,10 @@ function AnalyticsDashboardInner() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))', gap: '2rem' }}>
             <PremiumBarChart
               title="הכנסה חודשית"
-              data={revenueChartData.map((item) => ({
+              data={revenueChartData && revenueChartData.length > 0 ? revenueChartData.map((item) => ({
                 label: item.label,
-                value: item.value,
-              }))}
+                value: typeof item.value === 'number' ? item.value : 0,
+              })) : []}
               format="currency"
               highlightMax
               variant="elevated"
@@ -963,11 +974,11 @@ function AnalyticsDashboardInner() {
             />
             <PremiumDonutChart
               title="התפלגות סוגי לקוחות"
-              data={clientTypeDistribution.map((item) => ({
+              data={clientTypeDistribution && clientTypeDistribution.length > 0 ? clientTypeDistribution.map((item) => ({
                 label: item.label,
-                value: item.value,
+                value: typeof item.value === 'number' ? item.value : 0,
                 color: item.color,
-              }))}
+              })) : []}
               centerLabel="לקוחות"
               variant="elevated"
             />
@@ -1013,28 +1024,28 @@ function AnalyticsDashboardInner() {
           <SectionHeader icon="📋" title="משימות וצוות" />
           <PremiumBarChart
             title="תהליך משימות"
-            data={taskStatusData.map((s) => ({
+            data={taskStatusData && taskStatusData.length > 0 ? taskStatusData.map((s) => ({
               label: s.label,
-              value: s.value,
+              value: typeof s.value === 'number' ? s.value : 0,
               color: s.color,
-            }))}
+            })) : []}
             orientation="horizontal"
             variant="elevated"
           />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '2rem', marginTop: '2rem' }}>
-            {analytics.tasksByEmployee.length > 0 && (
+            {analytics && analytics.tasksByEmployee && analytics.tasksByEmployee.length > 0 && (
               <PremiumBarChart
                 title="עומס עבודה לפי עובד"
                 data={analytics.tasksByEmployee.map((item) => ({
                   label: item.label,
-                  value: item.value as number,
+                  value: typeof item.value === 'number' ? item.value : parseInt(String(item.value)) || 0,
                   color: item.color,
                 }))}
                 orientation="horizontal"
                 variant="elevated"
               />
             )}
-            {analytics.employeeProductivity.length > 0 && (
+            {analytics && analytics.employeeProductivity && analytics.employeeProductivity.length > 0 && (
               <div
                 style={{
                   background: 'rgba(255,255,255,0.7)',
@@ -1052,8 +1063,8 @@ function AnalyticsDashboardInner() {
                   {analytics.employeeProductivity.slice(0, 4).map((emp, idx) => (
                     <PremiumRadialMetric
                       key={idx}
-                      value={emp.completionRate}
-                      label={emp.name}
+                      value={typeof emp.completionRate === 'number' ? emp.completionRate : parseInt(String(emp.completionRate)) || 0}
+                      label={emp.name || 'Unknown'}
                       autoColor
                       size={110}
                     />

@@ -171,17 +171,17 @@ function OverviewTab({ data }: { data: any }) {
     <div>
       {/* KPI Strip */}
       <PremiumStatGrid
-        stats={[
-          { label: 'לקוחות פעילים', value: String(totalClients), variant: 'accent' },
-          { label: 'לקוחות בריאים', value: String(healthyCount), variant: 'success' },
-          { label: 'קריטיים', value: String(criticalCount), variant: 'danger' },
-          { label: 'סה"כ הוצאה', value: `₪${totalSpend.toLocaleString('he-IL')}`, variant: 'info' },
-          { label: 'סה"כ לידים', value: String(totalLeads), variant: 'primary' },
-          { label: 'CPL ממוצע', value: avgCpl > 0 ? `₪${avgCpl.toFixed(0)}` : '—', variant: 'warning' },
-          { label: 'התראות קריטיות', value: String(warnings.criticalCount || 0), variant: 'danger' },
+        items={[
+          { label: 'לקוחות פעילים', value: totalClients, format: 'number' },
+          { label: 'לקוחות בריאים', value: healthyCount, format: 'number' },
+          { label: 'קריטיים', value: criticalCount, format: 'number' },
+          { label: 'סה"כ הוצאה', value: totalSpend, format: 'currency' },
+          { label: 'סה"כ לידים', value: totalLeads, format: 'number' },
+          { label: 'CPL ממוצע', value: avgCpl, format: 'currency' },
+          { label: 'התראות קריטיות', value: warnings.criticalCount || 0, format: 'number' },
         ]}
-        variant="compact"
-        direction="rtl"
+        variant="elevated"
+        columns={7}
       />
 
       {/* AI Insights */}
@@ -331,17 +331,17 @@ function ProfitTab({ profitability }: { profitability: Profitability[] }) {
             {p.hasEnoughData ? (
               <>
                 <PremiumStatGrid
-                  stats={[
-                    { label: 'הוצאה', value: `₪${p.totalSpend.toLocaleString('he-IL')}`, variant: 'info' },
-                    { label: 'לידים', value: String(p.totalLeads), variant: 'success' },
-                    { label: 'CPL', value: p.cpl > 0 ? `₪${p.cpl.toFixed(0)}` : '—', variant: 'warning' },
-                    { label: 'ריטיינר', value: p.retainerAmount > 0 ? `₪${p.retainerAmount.toLocaleString('he-IL')}` : '—', variant: 'primary' },
-                    { label: 'רווח מוערך', value: `₪${p.estimatedProfit.toLocaleString('he-IL')}`, variant: 'success' },
-                    { label: 'ROI', value: p.roi !== 0 ? `${p.roi.toFixed(0)}%` : '—', variant: 'accent' },
+                  items={[
+                    { label: 'הוצאה', value: p.totalSpend, format: 'currency' },
+                    { label: 'לידים', value: p.totalLeads, format: 'number' },
+                    { label: 'CPL', value: p.cpl || 0, format: 'currency' },
+                    { label: 'ריטיינר', value: p.retainerAmount || 0, format: 'currency' },
+                    { label: 'רווח מוערך', value: p.estimatedProfit, format: 'currency' },
+                    { label: 'ROI', value: p.roi || 0, format: 'percent' },
                   ]}
-                  variant="compact"
-                  direction="rtl"
-                  style={{ marginBottom: '0.5rem' }}
+                  variant="elevated"
+                  columns={6}
+                  gap={12}
                 />
                 {p.warning && (
                   <div style={{
@@ -615,15 +615,15 @@ function PlatformsTab({ platforms }: { platforms: any }) {
       {/* KPI strip — best by */}
       {hasSufficientData && (
         <PremiumStatGrid
-          stats={[
-            ...(bestBy.cpl ? [{ label: 'CPL הכי נמוך', value: `${PLATFORM_ICONS[bestBy.cpl]} ${bestBy.cpl}`, variant: 'success' as const }] : []),
-            ...(bestBy.ctr ? [{ label: 'CTR הכי גבוה', value: `${PLATFORM_ICONS[bestBy.ctr]} ${bestBy.ctr}`, variant: 'accent' as const }] : []),
-            ...(bestBy.cpc ? [{ label: 'CPC הכי נמוך', value: `${PLATFORM_ICONS[bestBy.cpc]} ${bestBy.cpc}`, variant: 'warning' as const }] : []),
-            ...(bestBy.conversions ? [{ label: 'הכי הרבה המרות', value: `${PLATFORM_ICONS[bestBy.conversions]} ${bestBy.conversions}`, variant: 'primary' as const }] : []),
+          items={[
+            ...(bestBy.cpl ? [{ label: 'CPL הכי נמוך', value: 0, icon: PLATFORM_ICONS[bestBy.cpl] }] : []),
+            ...(bestBy.ctr ? [{ label: 'CTR הכי גבוה', value: 0, icon: PLATFORM_ICONS[bestBy.ctr] }] : []),
+            ...(bestBy.cpc ? [{ label: 'CPC הכי נמוך', value: 0, icon: PLATFORM_ICONS[bestBy.cpc] }] : []),
+            ...(bestBy.conversions ? [{ label: 'הכי הרבה המרות', value: 0, icon: PLATFORM_ICONS[bestBy.conversions] }] : []),
           ]}
-          variant="compact"
-          direction="rtl"
-          style={{ marginBottom: '1.5rem' }}
+          variant="elevated"
+          columns={4}
+          gap={12}
         />
       )}
 
@@ -649,16 +649,15 @@ function PlatformsTab({ platforms }: { platforms: any }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                 <PremiumKpiCard
                   label="הוצאה"
-                  value={`₪${(p.totalSpend || 0).toLocaleString()}`}
-                  sublabel={`${spendShare}% מהכולל`}
-                  variant="info"
-                  size="sm"
+                  value={p.totalSpend || 0}
+                  description={`${spendShare}% מהכולל`}
+                  format="currency"
                 />
-                <PremiumKpiCard label="CTR" value={`${(p.avgCtr || 0).toFixed(2)}%`} variant="accent" size="sm" />
-                <PremiumKpiCard label="CPC" value={`₪${(p.avgCpc || 0).toFixed(1)}`} variant="warning" size="sm" />
-                <PremiumKpiCard label="CPM" value={`₪${(p.avgCpm || 0).toFixed(0)}`} variant="primary" size="sm" />
-                <PremiumKpiCard label="המרות" value={String(p.totalConversions || 0)} variant="success" size="sm" />
-                <PremiumKpiCard label="CPL" value={p.avgCpl > 0 ? `₪${(p.avgCpl).toFixed(0)}` : '—'} variant="danger" size="sm" />
+                <PremiumKpiCard label="CTR" value={p.avgCtr || 0} format="percent" />
+                <PremiumKpiCard label="CPC" value={p.avgCpc || 0} format="currency" />
+                <PremiumKpiCard label="CPM" value={p.avgCpm || 0} format="currency" />
+                <PremiumKpiCard label="המרות" value={p.totalConversions || 0} format="number" />
+                <PremiumKpiCard label="CPL" value={p.avgCpl || 0} format="currency" />
               </div>
             </div>
           );

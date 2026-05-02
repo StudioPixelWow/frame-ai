@@ -223,11 +223,11 @@ function EmployeeDashboard({ employeeId }: { employeeId: string }) {
           <div className="mhd-section-label">סקירה מהירה</div>
           <PremiumStatGrid
             items={[
-              { icon: "📋", value: allMyTaskCount, label: "משימות פתוחות", color: "#2dd4bf" },
-              { icon: "🔴", value: overdueCount, label: "באיחור", color: "#ef4444" },
-              { icon: "📅", value: todayTaskCount, label: "משימות היום", color: "#38bdf8" },
-              { icon: "👥", value: myClients.length, label: "לקוחות שלי", color: "#a78bfa" },
-              { icon: "⏳", value: myApprovals.length, label: "ממתינים לאישור", color: "#f59e0b" },
+              { icon: "📋", value: Number(allMyTaskCount) || 0, label: "משימות פתוחות", color: "#2dd4bf" },
+              { icon: "🔴", value: Number(overdueCount) || 0, label: "באיחור", color: "#ef4444" },
+              { icon: "📅", value: Number(todayTaskCount) || 0, label: "משימות היום", color: "#38bdf8" },
+              { icon: "👥", value: Number(myClients.length) || 0, label: "לקוחות שלי", color: "#a78bfa" },
+              { icon: "⏳", value: Number(myApprovals.length) || 0, label: "ממתינים לאישור", color: "#f59e0b" },
             ]}
             columns={6}
             variant="light"
@@ -497,18 +497,18 @@ function AdminDashboard() {
     const underReview = tasks.filter(t => t.status === "under_review").length;
     const pendingApprovals = approvals.filter(a => a.status === "pending_approval").length;
 
-    const generalPending = payments.filter(p => p.status === "pending" || p.status === "overdue").reduce((s, p) => s + p.amount, 0);
+    const generalPending = payments.filter(p => p.status === "pending" || p.status === "overdue").reduce((s, p) => s + (Number(p.amount) || 0), 0);
     const projectPending = (projectPayments || []).filter((p: any) => ["pending", "overdue", "collection_needed"].includes(p.status)).reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
-    const pendingPayments = generalPending + projectPending;
+    const pendingPayments = Math.max(0, Number(generalPending) || 0) + Math.max(0, Number(projectPending) || 0);
 
-    const generalRevenue = payments.filter(p => p.status === "paid" && p.paidAt && new Date(p.paidAt) >= monthStart && new Date(p.paidAt) <= monthEnd).reduce((s, p) => s + p.amount, 0);
+    const generalRevenue = payments.filter(p => p.status === "paid" && p.paidAt && new Date(p.paidAt) >= monthStart && new Date(p.paidAt) <= monthEnd).reduce((s, p) => s + (Number(p.amount) || 0), 0);
     const projectRevenue = (projectPayments || []).filter((p: any) => p.status === "paid" && p.paidAt && new Date(p.paidAt) >= monthStart && new Date(p.paidAt) <= monthEnd).reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
-    const revenue = generalRevenue + projectRevenue;
+    const revenue = Math.max(0, Number(generalRevenue) || 0) + Math.max(0, Number(projectRevenue) || 0);
 
     const generalOverdue = payments.filter(p => p.status === "overdue");
     const projectOverdue = (projectPayments || []).filter((p: any) => p.status === "overdue");
     const overduePaymentsCount = generalOverdue.length + projectOverdue.length;
-    const overdueTotal = generalOverdue.reduce((s, p) => s + p.amount, 0) + projectOverdue.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
+    const overdueTotal = generalOverdue.reduce((s, p) => s + (Number(p.amount) || 0), 0) + projectOverdue.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
 
     const leadsThisMonth = leads.filter(l => { const d = new Date(l.createdAt); return d >= monthStart && d <= monthEnd; }).length;
     const activeLeads = leads.filter(l => ["new", "contacted", "proposal_sent", "negotiation"].includes(l.status || "")).length;
@@ -521,8 +521,9 @@ function AdminDashboard() {
     const clientsMissingGantt = clients.filter(c => !c.monthlyGanttStatus || c.monthlyGanttStatus === "none" || c.monthlyGanttStatus === "draft").length;
     const noManagerCount = clients.filter(c => !c.assignedManagerId).length;
 
-    const generalUpcoming = payments.filter(p => { if (!p.dueDate) return false; const d = new Date(p.dueDate); return d > now && d <= new Date(now.getTime() + 30 * 86400000); }).reduce((s, p) => s + p.amount, 0);
+    const generalUpcoming = payments.filter(p => { if (!p.dueDate) return false; const d = new Date(p.dueDate); return d > now && d <= new Date(now.getTime() + 30 * 86400000); }).reduce((s, p) => s + (Number(p.amount) || 0), 0);
     const projectUpcoming = (projectPayments || []).filter((p: any) => { if (!p.dueDate) return false; const d = new Date(p.dueDate); return d > now && d <= new Date(now.getTime() + 30 * 86400000); }).reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
+    const upcomingCollections = Math.max(0, Number(generalUpcoming) || 0) + Math.max(0, Number(projectUpcoming) || 0);
 
     const projectsTotalValue = (businessProjects || []).filter((p: any) => p.projectStatus !== "completed").reduce((s: number, p: any) => s + (Number(p.budget) || 0), 0);
 
@@ -537,13 +538,26 @@ function AdminDashboard() {
     const todayPodcasts = podcastSessions.filter(s => new Date(s.sessionDate).toDateString() === today).slice(0, 3);
 
     return {
-      activeClients, openTasks, overdueTasks, underReview, pendingApprovals,
-      pendingPayments, revenue, overduePaymentsCount, overdueTotal,
-      leadsThisMonth, activeLeads, wonLeads, activeCampaigns, podcastThisMonth,
-      dueTodayFollowUps, clientsMissingGantt, noManagerCount,
-      upcomingCollections: generalUpcoming + projectUpcoming,
-      projectsTotalValue,
-      busiestEmployee: busiestEmp ? { name: busiestEmp.name, count: empCounts[busiestId] } : { name: "—", count: 0 },
+      activeClients: Number(activeClients) || 0,
+      openTasks: Number(openTasks) || 0,
+      overdueTasks: Number(overdueTasks) || 0,
+      underReview: Number(underReview) || 0,
+      pendingApprovals: Number(pendingApprovals) || 0,
+      pendingPayments: Number(pendingPayments) || 0,
+      revenue: Number(revenue) || 0,
+      overduePaymentsCount: Number(overduePaymentsCount) || 0,
+      overdueTotal: Number(overdueTotal) || 0,
+      leadsThisMonth: Number(leadsThisMonth) || 0,
+      activeLeads: Number(activeLeads) || 0,
+      wonLeads: Number(wonLeads) || 0,
+      activeCampaigns: Number(activeCampaigns) || 0,
+      podcastThisMonth: Number(podcastThisMonth) || 0,
+      dueTodayFollowUps: Number(dueTodayFollowUps) || 0,
+      clientsMissingGantt: Number(clientsMissingGantt) || 0,
+      noManagerCount: Number(noManagerCount) || 0,
+      upcomingCollections: Number(upcomingCollections) || 0,
+      projectsTotalValue: Number(projectsTotalValue) || 0,
+      busiestEmployee: busiestEmp ? { name: busiestEmp.name, count: Number(empCounts[busiestId]) || 0 } : { name: "—", count: 0 },
       todayTasks, todayPodcasts,
     };
   }, [isLoading, clients, tasks, payments, leads, employees, campaigns, approvals, podcastSessions, projectPayments, businessProjects, socialPosts]);
@@ -697,14 +711,14 @@ function AdminDashboard() {
           ) : analytics ? (
             <PremiumStatGrid
               items={[
-                { icon: "👥", value: analytics.activeClients, label: "לקוחות פעילים", color: "#38bdf8" },
-                { icon: "🎯", value: analytics.leadsThisMonth, label: "לידים החודש", color: "#34d399" },
-                { icon: "💰", value: analytics.revenue, label: "הכנסה החודש", color: "#10b981", format: "currency" },
-                { icon: "⚠️", value: analytics.overduePaymentsCount, label: "תשלומים בפיגור", color: "#ef4444" },
-                { icon: "📋", value: analytics.openTasks, label: "משימות פתוחות", color: "#2dd4bf" },
-                { icon: "⏳", value: analytics.pendingApprovals, label: "אישורים ממתינים", color: "#f59e0b" },
-                { icon: "📣", value: analytics.activeCampaigns, label: "קמפיינים פעילים", color: "#a78bfa" },
-                { icon: "🎙️", value: analytics.podcastThisMonth, label: "פודקאסטים החודש", color: "#E8F401" },
+                { icon: "👥", value: Number(analytics.activeClients) || 0, label: "לקוחות פעילים", color: "#38bdf8" },
+                { icon: "🎯", value: Number(analytics.leadsThisMonth) || 0, label: "לידים החודש", color: "#34d399" },
+                { icon: "💰", value: Number(analytics.revenue) || 0, label: "הכנסה החודש", color: "#10b981", format: "currency" },
+                { icon: "⚠️", value: Number(analytics.overduePaymentsCount) || 0, label: "תשלומים בפיגור", color: "#ef4444" },
+                { icon: "📋", value: Number(analytics.openTasks) || 0, label: "משימות פתוחות", color: "#2dd4bf" },
+                { icon: "⏳", value: Number(analytics.pendingApprovals) || 0, label: "אישורים ממתינים", color: "#f59e0b" },
+                { icon: "📣", value: Number(analytics.activeCampaigns) || 0, label: "קמפיינים פעילים", color: "#a78bfa" },
+                { icon: "🎙️", value: Number(analytics.podcastThisMonth) || 0, label: "פודקאסטים החודש", color: "#E8F401" },
               ]}
               columns={8}
               variant="light"

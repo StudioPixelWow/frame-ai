@@ -32,6 +32,14 @@ interface DashboardData {
   }>;
 }
 
+// ── Utilities ──
+
+function ensureNumber(val: any): number {
+  if (typeof val === 'number') return val;
+  const num = Number(val);
+  return isNaN(num) ? 0 : num;
+}
+
 // ── Metadata ──
 
 const MODE_LABELS: Record<string, { label: string; icon: string; color: string }> = {
@@ -161,17 +169,22 @@ export default function AutopilotPage() {
       </div>
 
       {/* KPI Strip */}
-      <PremiumStatGrid
-        items={[
-          { label: 'לקוחות מנוטרים', value: kpis.clientsMonitored, icon: '👥', format: 'number' },
-          { label: 'פעולות היום', value: kpis.actionsToday, icon: '📋', format: 'number' },
-          { label: 'ממתינות לאישור', value: kpis.approvalsPending, icon: '⏳', format: 'number', color: kpis.approvalsPending > 0 ? '#ca8a04' : undefined },
-          { label: 'בוצעו השבוע', value: kpis.executedThisWeek, icon: '✅', format: 'number' },
-          { label: 'אחוז הצלחה', value: kpis.successRate, icon: '📈', format: 'percent' },
-        ]}
-        columns={5}
-        variant="light"
-      />
+      {(() => {
+        const approvalsVal = ensureNumber(kpis.approvalsPending);
+        return (
+          <PremiumStatGrid
+            items={[
+              { label: 'לקוחות מנוטרים', value: ensureNumber(kpis.clientsMonitored), icon: '👥', format: 'number' },
+              { label: 'פעולות היום', value: ensureNumber(kpis.actionsToday), icon: '📋', format: 'number' },
+              { label: 'ממתינות לאישור', value: approvalsVal, icon: '⏳', format: 'number', color: approvalsVal > 0 ? '#ca8a04' : undefined },
+              { label: 'בוצעו השבוע', value: ensureNumber(kpis.executedThisWeek), icon: '✅', format: 'number' },
+              { label: 'אחוז הצלחה', value: ensureNumber(kpis.successRate), icon: '📈', format: 'percent' },
+            ]}
+            columns={5}
+            variant="light"
+          />
+        );
+      })()}
 
 
       {/* High Risk Clients */}
@@ -289,7 +302,7 @@ function OverviewTab({ data, onAction }: { data: DashboardData; onAction: (id: s
               }}>
                 <span>{meta.icon} {entry.title}</span>
                 <div style={{ color: 'var(--foreground-muted)', fontSize: '0.68rem', marginTop: '0.1rem' }}>
-                  {entry.details?.substring(0, 80)}
+                  {entry.details ? entry.details.substring(0, 80) : ''}
                 </div>
               </div>
             );
@@ -376,10 +389,10 @@ function ActionsList({ actions, onAction }: { actions: any[]; onAction: (id: str
               </span>
             </div>
             <div style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)', marginTop: '0.2rem' }}>
-              {action.clientName} · ביטחון {action.confidence}% · סיכון {action.riskLevel === 'low' ? 'נמוך' : action.riskLevel === 'medium' ? 'בינוני' : 'גבוה'}
+              {action.clientName} · ביטחון {action.confidence ?? '—'}% · סיכון {action.riskLevel === 'low' ? 'נמוך' : action.riskLevel === 'medium' ? 'בינוני' : 'גבוה'}
             </div>
             <div style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)', marginTop: '0.1rem' }}>
-              {action.reason?.substring(0, 100)}
+              {action.reason ? action.reason.substring(0, 100) : ''}
             </div>
             {action.status === 'pending_approval' && (
               <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.4rem' }}>
@@ -416,7 +429,7 @@ function ActivityTab({ log }: { log: any[] }) {
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0.6rem', padding: '1rem' }}>
       {log.map((entry: any) => {
         const meta = ACTIVITY_META[entry.activityType] || { label: entry.activityType, icon: '📄' };
-        const time = entry.createdAt ? new Date(entry.createdAt).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+        const time = entry.createdAt ? (new Date(entry.createdAt)).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
         return (
           <div key={entry.id} style={{
             padding: '0.5rem 0',
