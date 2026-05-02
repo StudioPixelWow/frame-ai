@@ -1,0 +1,41 @@
+/**
+ * GET /api/data/client-files - Get all client files
+ * POST /api/data/client-files - Create a new client file
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { clientFiles } from '@/lib/db';
+import { ensureSeeded } from '@/lib/db/seed';
+import { scopeForClient } from '@/lib/auth/api-guard';
+
+export async function GET(req: NextRequest) {
+  ensureSeeded();
+  try {
+    const all = await clientFiles.getAllAsync();
+    const scoped = scopeForClient(req, all, (item: any) => item.clientId);
+    return NextResponse.json(scoped);
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Failed to fetch client files' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(req: NextRequest) {
+  ensureSeeded();
+  try {
+    const body = await req.json();
+    // Ensure timestamps are always set
+    const now = new Date().toISOString();
+    if (!body.createdAt) body.createdAt = now;
+    if (!body.updatedAt) body.updatedAt = now;
+    const created = await clientFiles.createAsync(body);
+    return NextResponse.json(created, { status: 201 });
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Failed to create client file' },
+      { status: 400 }
+    );
+  }
+}

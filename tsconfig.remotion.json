@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "noEmit": false,
+    "outDir": "dist/remotion",
+    "plugins": []
+  },
+  "include": ["src/remotion/**/*.ts", "src/remotion/**/*.tsx"],
+  "exclude": ["node_modules"]
+}

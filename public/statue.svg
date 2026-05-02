@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 500" fill="none">
+  <defs>
+    <linearGradient id="body" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#e8f4f8" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#b8d8e8" stop-opacity="0.7"/>
+    </linearGradient>
+    <linearGradient id="shadow" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#a0c8d8" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#7eb0c8" stop-opacity="0.3"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Base/pedestal -->
+  <rect x="85" y="440" width="130" height="16" rx="4" fill="url(#shadow)"/>
+  <rect x="70" y="450" width="160" height="40" rx="6" fill="url(#body)" stroke="#c8dce8" stroke-width="1"/>
+
+  <!-- Legs -->
+  <path d="M120,355 Q118,380 115,410 Q113,430 110,448 L140,448 Q138,430 137,410 Q136,385 135,355" fill="url(#body)" stroke="#c0d4e0" stroke-width="0.5"/>
+  <path d="M165,355 Q167,380 168,410 Q169,430 172,448 L195,448 Q192,430 190,410 Q188,385 180,355" fill="url(#body)" stroke="#c0d4e0" stroke-width="0.5"/>
+
+  <!-- Draped cloth -->
+  <path d="M108,250 Q100,290 105,330 Q108,350 110,355 L190,355 Q192,345 195,330 Q200,290 192,250 Z" fill="url(#body)" stroke="#c0d4e0" stroke-width="0.5"/>
+  <path d="M105,300 Q120,310 150,308 Q180,305 195,295" stroke="#b8ccd8" stroke-width="0.8" fill="none" opacity="0.5"/>
+  <path d="M108,320 Q125,328 150,326 Q175,323 192,315" stroke="#b8ccd8" stroke-width="0.6" fill="none" opacity="0.4"/>
+
+  <!-- Torso -->
+  <path d="M118,170 Q112,200 110,230 Q108,245 108,250 L192,250 Q192,245 190,230 Q188,200 182,170 Z" fill="url(#body)" stroke="#c0d4e0" stroke-width="0.5"/>
+
+  <!-- Chest detail -->
+  <path d="M130,190 Q150,195 170,190" stroke="#c8dce8" stroke-width="0.8" fill="none" opacity="0.6"/>
+
+  <!-- Neck -->
+  <rect x="140" y="135" width="20" height="38" rx="8" fill="url(#body)" stroke="#c0d4e0" stroke-width="0.5"/>
+
+  <!-- Head -->
+  <ellipse cx="150" cy="110" rx="32" ry="40" fill="url(#body)" stroke="#c0d4e0" stroke-width="0.5" filter="url(#glow)"/>
+
+  <!-- Hair -->
+  <path d="M118,100 Q125,68 150,62 Q175,68 182,100 Q175,82 150,78 Q125,82 118,100 Z" fill="url(#shadow)"/>
+  <path d="M115,108 Q118,85 125,75" stroke="#a0bcc8" stroke-width="1" fill="none" opacity="0.4"/>
+  <path d="M185,108 Q182,85 175,75" stroke="#a0bcc8" stroke-width="1" fill="none" opacity="0.4"/>
+
+  <!-- Face features -->
+  <ellipse cx="140" cy="105" rx="3.5" ry="2" fill="#a0b8c8" opacity="0.5"/>
+  <ellipse cx="160" cy="105" rx="3.5" ry="2" fill="#a0b8c8" opacity="0.5"/>
+  <path d="M146,115 Q150,118 154,115" stroke="#a8bcc8" stroke-width="1" fill="none" opacity="0.5"/>
+  <line x1="143" y1="120" x2="157" y2="120" stroke="#b0c4d0" stroke-width="0.6" opacity="0.4"/>
+
+  <!-- Left arm (holding something) -->
+  <path d="M118,175 Q100,190 88,210 Q78,230 82,250 Q85,260 92,255 Q95,245 98,230 Q105,210 118,198" fill="url(#body)" stroke="#c0d4e0" stroke-width="0.5"/>
+
+  <!-- Right arm -->
+  <path d="M182,175 Q198,188 210,205 Q218,218 215,235 Q212,242 205,238 Q208,225 202,210 Q195,195 182,185" fill="url(#body)" stroke="#c0d4e0" stroke-width="0.5"/>
+
+  <!-- Laurel wreath hint -->
+  <path d="M122,88 Q130,82 138,85" stroke="#90b8a0" stroke-width="1.2" fill="none" opacity="0.5"/>
+  <path d="M162,85 Q170,82 178,88" stroke="#90b8a0" stroke-width="1.2" fill="none" opacity="0.5"/>
+</svg>
