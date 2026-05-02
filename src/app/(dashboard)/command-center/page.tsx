@@ -1726,6 +1726,9 @@ export default function CommandCenterPage() {
       {/* ── Autopilot Quick View ── */}
       <AutopilotWidget />
 
+      {/* ── System Health Quick View ── */}
+      <HealthWidget />
+
     </main>
   );
 }
@@ -2037,6 +2040,71 @@ function AutopilotWidget() {
       <div style={{ marginTop: '0.5rem', fontSize: '0.68rem', color: '#166534', background: 'rgba(34,197,94,0.06)', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', textAlign: 'center' }}>
         🔒 לא תבוצע פעולה חיה ללא אישור
       </div>
+    </div>
+  );
+}
+
+// ── System Health Widget (lazy-loaded) ──
+
+function HealthWidget() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/data/system-health')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setData(d); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return null;
+  if (!data) return null;
+
+  const statusMeta: Record<string, { label: string; icon: string; color: string; bg: string }> = {
+    healthy: { label: 'תקין', icon: '✅', color: '#16a34a', bg: 'rgba(34,197,94,0.06)' },
+    warning: { label: 'אזהרה', icon: '⚠️', color: '#ca8a04', bg: 'rgba(202,138,4,0.06)' },
+    critical: { label: 'קריטי', icon: '🔴', color: '#dc2626', bg: 'rgba(220,38,38,0.06)' },
+  };
+
+  const meta = statusMeta[data.overallStatus] || statusMeta.healthy;
+  const stats = data.stats || {};
+  const alerts = (data.activeAlerts || []).slice(0, 2);
+
+  return (
+    <div style={{
+      marginTop: '1.2rem',
+      background: meta.bg,
+      border: `1px solid ${meta.color}22`,
+      borderRadius: '0.75rem',
+      padding: '1rem 1.2rem',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+        <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--foreground)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          {meta.icon} בריאות המערכת — {meta.label}
+        </h3>
+        <Link href="/system-health" style={{ fontSize: '0.72rem', color: '#2563eb', textDecoration: 'none' }}>
+          לוח בקרה ←
+        </Link>
+      </div>
+
+      <div style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)', marginBottom: '0.4rem' }}>
+        {data.statusMessage}
+      </div>
+
+      {alerts.length > 0 && alerts.map((alert: any) => (
+        <div key={alert.id} style={{
+          padding: '0.35rem 0.6rem',
+          borderRadius: '0.4rem',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          marginBottom: '0.3rem',
+          fontSize: '0.72rem',
+          color: 'var(--foreground)',
+        }}>
+          ⚠️ {alert.title}
+        </div>
+      ))}
     </div>
   );
 }

@@ -175,6 +175,11 @@ const Icons = {
       <path d="M16 16l2 2" />
     </svg>
   ),
+  Health: (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+    </svg>
+  ),
 };
 
 const mainNavItems: NavItem[] = [
@@ -201,6 +206,7 @@ const mainNavItems: NavItem[] = [
   { href: "/knowledge", label: "בסיס ידע", id: "nav-knowledge", icon: Icons.Knowledge, allowedRoles: ['admin'] },
   { href: "/strategy", label: "מוח אסטרטגי", id: "nav-strategy", icon: Icons.Brain, allowedRoles: ['admin'] },
   { href: "/autopilot", label: "אוטופיילוט", id: "nav-autopilot", icon: Icons.Autopilot, allowedRoles: ['admin'] },
+  { href: "/system-health", label: "בריאות המערכת", id: "nav-health", icon: Icons.Health, allowedRoles: ['admin'] },
   { href: "/stats", label: "סטטיסטיקות", id: "nav-stats", icon: Icons.TrendingUp, allowedRoles: ['admin'] },
   { href: "/exec-dashboard", label: "מנהלים", id: "nav-exec", icon: Icons.Briefcase, allowedRoles: ['admin'] },
   { href: "/settings", label: "הגדרות", id: "nav-settings", icon: Icons.Settings, allowedRoles: ['admin'] },
