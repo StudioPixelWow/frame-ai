@@ -76,6 +76,45 @@ const LEAD_STATUS_COLORS: Record<string, string> = {
   meeting_set: '#14b8a6', won: '#22c55e', lost: '#ef4444', not_relevant: '#6b7280', duplicate: '#9ca3af',
 };
 
+// ── BI Campaign Warnings (inline component) ────────────────────────────
+
+function CampaignBIWarnings({ clientId, campaignId }: { clientId: string; campaignId: string }) {
+  const [warnings, setWarnings] = useState<Array<{ title: string; detail: string; severity: string; actionSuggestion: string }>>([]);
+  useEffect(() => {
+    if (!clientId) return;
+    fetch(`/api/data/bi?section=warnings&clientId=${clientId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        const w = (d?.warnings?.warnings || [])
+          .filter((w: any) => !w.campaignId || w.campaignId === campaignId)
+          .slice(0, 3);
+        setWarnings(w);
+      })
+      .catch(() => {});
+  }, [clientId, campaignId]);
+
+  if (warnings.length === 0) return null;
+
+  const sevColors: Record<string, string> = { critical: '#ef4444', high: '#f97316', medium: '#f59e0b', low: '#6b7280' };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+      {warnings.map((w, i) => (
+        <div key={i} style={{
+          display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem',
+          background: `${sevColors[w.severity] || '#6b7280'}08`, borderRadius: '0.5rem',
+          border: `1px solid ${sevColors[w.severity] || '#6b7280'}20`,
+          fontSize: '0.75rem',
+        }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: sevColors[w.severity], flexShrink: 0 }} />
+          <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{w.title}</span>
+          <span style={{ color: 'var(--foreground-muted)', fontSize: '0.68rem' }}>— {w.actionSuggestion}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── AI Ad Analysis (deterministic, no API) ─────────────────────────────
 
 type AIAdStatus = 'scale' | 'fatigued' | 'improve';
@@ -2223,6 +2262,9 @@ export default function CampaignDetailPage() {
             </div>
           ))}
         </div>
+
+        {/* BI Early Warnings Strip */}
+        <CampaignBIWarnings clientId={campaign.clientId} campaignId={campaign.id} />
 
         {/* No performance data empty state */}
         {!hasPerformanceData && campaignAds.length > 0 && (

@@ -24,6 +24,35 @@ import TabVideos from "./tab-videos";
 import { TabAutomations } from "@/components/client/tab-automations";
 import TabCampaigns from "./tab-campaigns";
 
+// ── BI Health Badge (inline component) ──
+
+function ClientHealthBadge({ clientId }: { clientId: string }) {
+  const [health, setHealth] = useState<{ score: number; status: string; statusLabel: string; statusColor: string; hasEnoughData: boolean } | null>(null);
+  useEffect(() => {
+    if (!clientId) return;
+    fetch(`/api/data/bi?section=health&clientId=${clientId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.health) setHealth(d.health); })
+      .catch(() => {});
+  }, [clientId]);
+
+  if (!health || !health.hasEnoughData) return null;
+
+  return (
+    <span style={{
+      fontSize: '0.6rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px',
+      background: `${health.statusColor}15`, color: health.statusColor,
+      display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
+    }}>
+      <span style={{
+        width: 6, height: 6, borderRadius: '50%', background: health.statusColor,
+        display: 'inline-block',
+      }} />
+      {health.statusLabel} ({health.score})
+    </span>
+  );
+}
+
 const AVATAR_COLORS = ["#00B5FE", "#00B5FE", "#22c55e", "#f59e0b", "#ec4899", "#14b8a6"];
 
 function avatarColor(id: string) {
@@ -909,8 +938,9 @@ function ClientDetailContent() {
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1.5rem", marginBottom: "1rem" }}>
               <div>
-                <h1 style={{ fontSize: "2rem", fontWeight: 700, color: "var(--foreground)", margin: "0 0 0.25rem 0" }}>
+                <h1 style={{ fontSize: "2rem", fontWeight: 700, color: "var(--foreground)", margin: "0 0 0.25rem 0", display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   {client.name}
+                  <ClientHealthBadge clientId={client.id} />
                 </h1>
                 <p style={{ fontSize: "0.95rem", color: "var(--foreground-muted)", margin: 0 }}>
                   {client.company}
