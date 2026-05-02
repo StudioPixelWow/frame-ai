@@ -23,6 +23,7 @@ import TabResearch from "./tab-research";
 import TabVideos from "./tab-videos";
 import { TabAutomations } from "@/components/client/tab-automations";
 import TabCampaigns from "./tab-campaigns";
+import TabGrowth from "./tab-growth";
 
 // ── BI Health Badge (inline component) ──
 
@@ -112,6 +113,7 @@ const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "accounting", label: "הנהח״ש" },
   { id: "portal", label: "פורטל" },
   { id: "automations", label: "אוטומציות" },
+  { id: "growth", label: "צמיחה" },
   { id: "integrations", label: "חיבורים" },
   { id: "activity", label: "פעילות" },
 ];
@@ -1297,6 +1299,9 @@ function ClientDetailContent() {
         )}
         {activeTab === "automations" && (
           <TabAutomations clientId={client.id} clientName={client.name} />
+        )}
+        {activeTab === "growth" && (
+          <TabGrowth clientId={client.id} />
         )}
         {activeTab === "integrations" && (
           <TabIntegrations client={client} />

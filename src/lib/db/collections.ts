@@ -51,6 +51,10 @@ import type {
   AutoCampaignFinding,
   Report,
   ClientNotification,
+  GrowthRun,
+  GrowthOpportunity,
+  GrowthAction,
+  GrowthActionResult,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -107,3 +111,9 @@ export const autoCampaignRuns = new SupabaseCrud<AutoCampaignRun>('auto_campaign
 export const autoCampaignFindings = new SupabaseCrud<AutoCampaignFinding>('auto_campaign_findings', 'acf');
 export const reports = new SupabaseCrud<Report>('app_reports', 'rpt');
 export const clientNotifications = new SupabaseCrud<ClientNotification>('app_client_notifications', 'cnf');
+
+// Auto Growth Engine
+export const growthRuns = new SupabaseCrud<GrowthRun>('growth_runs', 'grn');
+export const growthOpportunities = new SupabaseCrud<GrowthOpportunity>('growth_opportunities', 'gop');
+export const growthActions = new SupabaseCrud<GrowthAction>('growth_actions', 'gac');
+export const growthActionResults = new SupabaseCrud<GrowthActionResult>('growth_action_results', 'gar');

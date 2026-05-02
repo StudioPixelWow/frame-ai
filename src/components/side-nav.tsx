@@ -148,6 +148,14 @@ const Icons = {
       <line x1="12" y1="17" x2="12" y2="14" />
     </svg>
   ),
+  Growth: (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 22V8" />
+      <path d="M5 12H2a10 10 0 0 0 20 0h-3" />
+      <path d="m8 8 4-4 4 4" />
+      <circle cx="12" cy="12" r="2" />
+    </svg>
+  ),
 };
 
 const mainNavItems: NavItem[] = [
@@ -170,6 +178,7 @@ const mainNavItems: NavItem[] = [
   { href: "/approvals", label: "אישורים", id: "nav-approvals", icon: Icons.Shield, allowedRoles: ['admin', 'employee'] },
   { href: "/whatsapp", label: "וואטסאפ", id: "nav-whatsapp", icon: Icons.MessageCircle, allowedRoles: ['admin', 'employee'] },
   { href: "/mailing", label: "דיוור", id: "nav-mailing", icon: Icons.Mail, allowedRoles: ['admin'] },
+  { href: "/growth", label: "מנוע צמיחה", id: "nav-growth", icon: Icons.Growth, allowedRoles: ['admin'] },
   { href: "/stats", label: "סטטיסטיקות", id: "nav-stats", icon: Icons.TrendingUp, allowedRoles: ['admin'] },
   { href: "/exec-dashboard", label: "מנהלים", id: "nav-exec", icon: Icons.Briefcase, allowedRoles: ['admin'] },
   { href: "/settings", label: "הגדרות", id: "nav-settings", icon: Icons.Settings, allowedRoles: ['admin'] },

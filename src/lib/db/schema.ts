@@ -1518,3 +1518,116 @@ export interface PodcastStrategy {
   createdAt: string;
   updatedAt: string;
 }
+
+// ─── Auto Growth Engine ───────────────────────────────────────────
+
+export type GrowthRunStatus = 'running' | 'completed' | 'failed';
+
+export type GrowthOpportunityType =
+  | 'scale'
+  | 'creative_replacement'
+  | 'budget_waste'
+  | 'platform_shift'
+  | 'audience_expansion'
+  | 'funnel_leak'
+  | 'content_to_campaign'
+  | 'client_risk';
+
+export type GrowthOpportunitySeverity = 'low' | 'medium' | 'high' | 'critical';
+export type GrowthOpportunityStatus = 'new' | 'acknowledged' | 'acted_on' | 'dismissed' | 'resolved';
+
+export type GrowthActionType =
+  | 'create_ad_variation'
+  | 'duplicate_winning_ad'
+  | 'create_new_adset'
+  | 'suggest_budget_increase'
+  | 'suggest_budget_reduction'
+  | 'pause_weak_ad'
+  | 'create_campaign_from_content'
+  | 'create_campaign_from_podcast'
+  | 'create_retargeting_campaign'
+  | 'create_report'
+  | 'create_followup_task';
+
+export type GrowthApprovalStatus = 'draft' | 'pending_admin' | 'pending_client' | 'approved' | 'rejected';
+export type GrowthExecutionStatus = 'not_started' | 'in_progress' | 'completed' | 'failed' | 'skipped';
+
+export type GrowthActionOutcome = 'improved' | 'no_change' | 'declined' | 'too_early' | 'unknown';
+
+export interface GrowthRun {
+  id: string;
+  status: GrowthRunStatus;
+  triggeredBy: 'manual' | 'scheduled' | 'system';
+  clientsScanned: number;
+  campaignsScanned: number;
+  opportunitiesFound: number;
+  actionsGenerated: number;
+  summary: string;
+  startedAt: string;
+  finishedAt: string | null;
+  createdAt: string;
+}
+
+export interface GrowthOpportunity {
+  id: string;
+  runId: string;
+  clientId: string;
+  clientName: string;
+  campaignId: string | null;
+  campaignName: string | null;
+  adSetId: string | null;
+  adId: string | null;
+  platform: string | null;
+  type: GrowthOpportunityType;
+  severity: GrowthOpportunitySeverity;
+  confidence: number; // 0-100
+  title: string;
+  reason: string;
+  expectedImpact: string;
+  status: GrowthOpportunityStatus;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface GrowthAction {
+  id: string;
+  opportunityId: string;
+  clientId: string;
+  clientName: string;
+  campaignId: string | null;
+  campaignName: string | null;
+  platform: string | null;
+  actionType: GrowthActionType;
+  title: string;
+  reason: string;
+  expectedImpact: string;
+  confidenceScore: number; // 0-100
+  riskLevel: 'low' | 'medium' | 'high';
+  approvalMode: 'recommend_only' | 'admin_approval' | 'client_approval' | 'safe_internal';
+  approvalStatus: GrowthApprovalStatus;
+  executionStatus: GrowthExecutionStatus;
+  payload: Record<string, unknown>;
+  suggestedNextStep: string;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  rejectedBy: string | null;
+  rejectedAt: string | null;
+  rejectionReason: string | null;
+  executedAt: string | null;
+  failedReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GrowthActionResult {
+  id: string;
+  actionId: string;
+  clientId: string;
+  beforeMetrics: Record<string, number>;
+  afterMetrics: Record<string, number>;
+  outcome: GrowthActionOutcome;
+  impactSummary: string;
+  notes: string;
+  measuredAt: string;
+  createdAt: string;
+}

@@ -1714,6 +1714,86 @@ export default function CommandCenterPage() {
         );
       })()}
 
+      {/* ── Growth Engine Quick View ── */}
+      <GrowthEngineWidget />
+
     </main>
+  );
+}
+
+// ── Growth Engine Widget (lazy-loaded) ──
+
+function GrowthEngineWidget() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useState(() => {
+    fetch('/api/data/growth')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  });
+
+  if (loading || !data) return null;
+
+  const newOpps = (data.opportunities || []).filter((o: any) => o.status === 'new');
+  const pendingActions = (data.actions || []).filter((a: any) => a.approvalStatus === 'pending_admin' || a.approvalStatus === 'pending_client');
+  const risks = newOpps.filter((o: any) => o.type === 'client_risk' || o.severity === 'critical');
+
+  if (newOpps.length === 0 && pendingActions.length === 0) return null;
+
+  return (
+    <div style={{
+      marginTop: '1.5rem',
+      padding: '1.25rem',
+      borderRadius: '0.75rem',
+      background: 'var(--surface)',
+      border: '1px solid var(--border)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+        <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--foreground)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          🌱 מנוע צמיחה — מה הכי חשוב לעשות עכשיו
+        </h3>
+        <Link href="/growth" style={{ fontSize: '0.72rem', color: '#2563eb', textDecoration: 'none' }}>
+          צפייה בכל ←
+        </Link>
+      </div>
+
+      {/* Quick KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
+        <div style={{ padding: '0.5rem', background: 'rgba(59,130,246,0.06)', borderRadius: '0.5rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#3b82f6' }}>{newOpps.length}</div>
+          <div style={{ fontSize: '0.65rem', color: 'var(--foreground-muted)' }}>הזדמנויות</div>
+        </div>
+        <div style={{ padding: '0.5rem', background: 'rgba(245,158,11,0.06)', borderRadius: '0.5rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#f59e0b' }}>{pendingActions.length}</div>
+          <div style={{ fontSize: '0.65rem', color: 'var(--foreground-muted)' }}>ממתין לאישור</div>
+        </div>
+        <div style={{ padding: '0.5rem', background: risks.length > 0 ? 'rgba(239,68,68,0.06)' : 'rgba(34,197,94,0.06)', borderRadius: '0.5rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.1rem', fontWeight: 800, color: risks.length > 0 ? '#ef4444' : '#22c55e' }}>{risks.length}</div>
+          <div style={{ fontSize: '0.65rem', color: 'var(--foreground-muted)' }}>סיכונים</div>
+        </div>
+      </div>
+
+      {/* Top opportunities */}
+      {newOpps.slice(0, 3).map((opp: any) => (
+        <div key={opp.id} style={{
+          padding: '0.5rem 0.75rem',
+          borderRadius: '0.5rem',
+          background: opp.severity === 'critical' ? 'rgba(239,68,68,0.06)' : 'var(--surface-raised)',
+          border: '1px solid var(--border)',
+          marginBottom: '0.4rem',
+          fontSize: '0.78rem',
+        }}>
+          <div style={{ fontWeight: 600, color: 'var(--foreground)' }}>{opp.title}</div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)', marginTop: '0.15rem' }}>{opp.reason}</div>
+        </div>
+      ))}
+
+      {/* Trust banner */}
+      <div style={{ marginTop: '0.5rem', fontSize: '0.68rem', color: '#166534', background: 'rgba(34,197,94,0.06)', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', textAlign: 'center' }}>
+        🔒 לא תבוצע פעולה חיה ללא אישור
+      </div>
+    </div>
   );
 }
