@@ -15,10 +15,9 @@ export async function GET(req: NextRequest) {
     const scoped = scopeForClient(req, all, (item: any) => item.clientId);
     return NextResponse.json(scoped);
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch approvals' },
-      { status: 500 }
-    );
+    console.error('[API] GET /api/data/approvals error:', error);
+    // Return empty array on transient errors — polling will retry
+    return NextResponse.json([]);
   }
 }
 

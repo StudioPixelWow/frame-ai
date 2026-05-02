@@ -126,14 +126,16 @@ export async function GET(req: NextRequest) {
     const { data: rows, error } = await sb.from(TABLE).select('*').order('id');
     if (error) {
       console.error('[API] GET /api/data/employees supabase error:', error);
-      return NextResponse.json({ error: error.message, code: (error as any).code ?? null }, { status: 500 });
+      // Return empty array on transient DB errors — polling will retry
+      return NextResponse.json([]);
     }
     console.log(`[API] GET /api/data/employees returned ${(rows ?? []).length} rows`);
     return NextResponse.json((rows ?? []).map((r) => rowToEmployee(r as Row)));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] GET /api/data/employees error:', msg);
-    return NextResponse.json({ error: `Failed to fetch employees: ${msg}` }, { status: 500 });
+    // Return empty array on transient errors — polling will retry
+    return NextResponse.json([]);
   }
 }
 

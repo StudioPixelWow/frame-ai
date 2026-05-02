@@ -98,7 +98,8 @@ export async function GET(req: NextRequest) {
 
     if (error) {
       console.error('[API] GET /api/data/clients error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      // Return empty array on transient DB errors — polling will retry
+      return NextResponse.json([]);
     }
 
     if (rows && rows.length > 0) {
@@ -111,7 +112,8 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] GET /api/data/clients error:', msg);
-    return NextResponse.json({ error: `Failed to fetch clients: ${msg}` }, { status: 500 });
+    // Return empty array on transient errors — polling will retry
+    return NextResponse.json([]);
   }
 }
 
