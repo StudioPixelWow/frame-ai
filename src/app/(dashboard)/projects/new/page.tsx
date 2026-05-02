@@ -572,6 +572,8 @@ export default function NewProjectWizard() {
   const [renderProjectName, setRenderProjectName] = useState("");
   const [renderJobId, setRenderJobId] = useState<string | null>(null);
   const [renderStageLabel, setRenderStageLabel] = useState("");
+  const [renderOutputUrl, setRenderOutputUrl] = useState<string | null>(null);
+  const [savedProjectId, setSavedProjectId] = useState<string | null>(null);
 
   const patch = useCallback((p: Partial<WizardData>) => setData((d) => ({ ...d, ...p })), []);
 
@@ -1059,6 +1061,8 @@ export default function NewProjectWizard() {
       setRenderStage(0);
       setRenderStageLabel("ממתין בתור");
       setRenderComplete(false);
+      setRenderOutputUrl(null);
+      setSavedProjectId(savedProject.id);
       setCreating(false);
 
       // POST to render API with composition data
@@ -1148,6 +1152,7 @@ export default function NewProjectWizard() {
               setRenderStageLabel("הושלם");
               // Use Supabase public URL (set by server) or fall back to outputPath
               const renderUrl = updatedJob.publicUrl || updatedJob.outputPath;
+              setRenderOutputUrl(renderUrl || null);
               console.log(`[render-poll] ✅ Render complete: publicUrl=${updatedJob.publicUrl || "(none)"} outputPath=${updatedJob.outputPath || "(none)"}`);
               // Update project with render output URL and mark as complete
               // (server-side route also does this, but we do it client-side too as backup)
@@ -1489,15 +1494,23 @@ export default function NewProjectWizard() {
                 <h2 className="render-complete-title">תתחדש! הפרויקט מוכן!</h2>
                 <p className="render-complete-subtitle">{renderProjectName}</p>
                 <div className="render-complete-actions">
-                  <button className="wiz-btn wiz-btn-primary" onClick={() => router.push("/projects")}>
+                  <button className="wiz-btn wiz-btn-primary" onClick={() => router.push(savedProjectId ? `/projects/${savedProjectId}` : "/projects")}>
                     👁️ צפה בסרטון
                   </button>
-                  <button className="wiz-btn wiz-btn-ghost" onClick={() => {
-                    toast("הסרטון מוכן להורדה", "success");
-                    router.push("/projects");
-                  }}>
-                    ⬇️ הורד סרטון
-                  </button>
+                  {renderOutputUrl && (
+                    <button className="wiz-btn wiz-btn-ghost" onClick={() => {
+                      const link = document.createElement("a");
+                      link.href = renderOutputUrl;
+                      link.download = `${renderProjectName || "video"}.mp4`;
+                      link.target = "_blank";
+                      link.rel = "noopener noreferrer";
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    }}>
+                      ⬇️ הורד סרטון
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -1537,8 +1550,18 @@ export default function NewProjectWizard() {
           <div className="render-widget-info">
             <div className="render-widget-stage">הפרויקט מוכן!</div>
             <div className="render-widget-actions">
-              <button className="render-widget-btn" onClick={(e) => { e.stopPropagation(); router.push("/projects"); }}>צפה</button>
-              <button className="render-widget-btn" onClick={(e) => { e.stopPropagation(); toast("הסרטון מוכן להורדה", "success"); }}>הורד</button>
+              <button className="render-widget-btn" onClick={(e) => { e.stopPropagation(); router.push(savedProjectId ? `/projects/${savedProjectId}` : "/projects"); }}>צפה</button>
+              {renderOutputUrl && <button className="render-widget-btn" onClick={(e) => {
+                e.stopPropagation();
+                const link = document.createElement("a");
+                link.href = renderOutputUrl;
+                link.download = `${renderProjectName || "video"}.mp4`;
+                link.target = "_blank";
+                link.rel = "noopener noreferrer";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }}>הורד</button>}
             </div>
           </div>
         </div>

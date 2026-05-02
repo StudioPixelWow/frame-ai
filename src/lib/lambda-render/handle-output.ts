@@ -49,7 +49,8 @@ export async function handleLambdaOutput(opts: {
   try {
     await sb.from("video_projects").update({
       status: "completed",
-      output_url: publicUrl,
+      render_output_key: publicUrl,
+      video_url: publicUrl,
       render_job_id: jobId,
       updated_at: new Date().toISOString(),
     }).eq("id", projectId);

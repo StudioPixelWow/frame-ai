@@ -82,12 +82,14 @@ export async function GET(
             result_url: progress.outputFile,
           });
 
-          // Also update the video project
+          // Also update the video project with the rendered output URL
+          // IMPORTANT: write to render_output_key + video_url (the columns the detail page reads)
           try {
             const sb = getSupabase();
             await sb.from("video_projects").update({
               status: "completed",
-              output_url: progress.outputFile,
+              render_output_key: progress.outputFile,
+              video_url: progress.outputFile,
               render_job_id: jobId,
               updated_at: new Date().toISOString(),
             }).eq("id", job.project_id);
