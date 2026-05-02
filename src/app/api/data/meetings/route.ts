@@ -12,10 +12,8 @@ export async function GET() {
   try {
     return NextResponse.json(await meetings.getAllAsync());
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch meetings' },
-      { status: 500 }
-    );
+    // Return empty array on transient errors — polling will retry
+    return NextResponse.json([]);
   }
 }
 
