@@ -563,6 +563,7 @@ export default function NewProjectWizard() {
   const [step, setStep] = useState(0);
   const [data, setData] = useState<WizardData>(INITIAL);
   const [creating, setCreating] = useState(false);
+  const createLockRef = useRef(false);
   const [renderModalOpen, setRenderModalOpen] = useState(false);
   const [renderMinimized, setRenderMinimized] = useState(false);
   const [renderProgress, setRenderProgress] = useState(0);
@@ -829,6 +830,9 @@ export default function NewProjectWizard() {
   }, [reEditResult, patch]);
 
   const handleCreate = async () => {
+    // Prevent double-submit (ref survives re-renders; state alone has race windows)
+    if (createLockRef.current) return;
+    createLockRef.current = true;
     setCreating(true);
     try {
       const client = clients.find((c) => c.id === data.clientId);
@@ -1190,6 +1194,7 @@ export default function NewProjectWizard() {
       toast("שגיאה ביצירת הפרויקט", "error");
       setRenderModalOpen(false);
       setCreating(false);
+      createLockRef.current = false;
     }
   };
 
@@ -1269,7 +1274,7 @@ export default function NewProjectWizard() {
       case "transitions": return <StepTransitions data={data} patch={patch} videoSrc={originalVideoSource} />;
       case "music":       return <StepMusic data={data} patch={patch} videoSrc={originalVideoSource} />;
       case "preview":     return <StepPreview data={data} videoSrc={originalVideoSource} />;
-      case "approve":     return <StepApprove data={data} patch={patch} clients={clients} onApprove={handleCreate} onSaveDraft={handleSaveDraft} onBack={() => setStep(STEPS.findIndex(s => s.id === "preview"))} videoSrc={originalVideoSource} />;
+      case "approve":     return <StepApprove data={data} patch={patch} clients={clients} onApprove={handleCreate} onSaveDraft={handleSaveDraft} onBack={() => setStep(STEPS.findIndex(s => s.id === "preview"))} videoSrc={originalVideoSource} creating={creating} />;
       default: return null;
     }
   })();
@@ -5909,9 +5914,9 @@ function StepAiDirection({ data, patch }: { data: WizardData; patch: (p: Partial
    STEP — Approve & Export
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function StepApprove({ data, patch, clients, onApprove, onSaveDraft, onBack, videoSrc: parentVideoSrc }: {
+function StepApprove({ data, patch, clients, onApprove, onSaveDraft, onBack, videoSrc: parentVideoSrc, creating }: {
   data: WizardData; patch: (p: Partial<WizardData>) => void; clients: Client[];
-  onApprove: () => void; onSaveDraft: () => void; onBack: () => void; videoSrc?: string;
+  onApprove: () => void; onSaveDraft: () => void; onBack: () => void; videoSrc?: string; creating?: boolean;
 }) {
   const client = clients.find((c) => c.id === data.clientId);
   const durationSec = data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : 30;
@@ -6339,8 +6344,8 @@ function StepApprove({ data, patch, clients, onApprove, onSaveDraft, onBack, vid
       <div className="wiz-approve-actions" style={{ display: "flex", gap: "1rem", marginTop: "2rem", justifyContent: "flex-end" }}>
         <button className="wiz-btn wiz-btn-ghost" onClick={onBack}>⬅ חזור לעריכה</button>
         <button className="wiz-btn wiz-btn-ghost" onClick={onSaveDraft}>💾 שמור כטיוטה</button>
-        <button className="wiz-btn wiz-btn-primary" onClick={onApprove}>
-          ✨ אשר וצור פרויקט {aiScore ? `(${aiScore.overall}/100)` : ""} {data.premiumMode ? "💎" : ""}
+        <button className="wiz-btn wiz-btn-primary" onClick={onApprove} disabled={creating}>
+          {creating ? "⏳ יוצר..." : `✨ אשר וצור פרויקט ${aiScore ? `(${aiScore.overall}/100)` : ""} ${data.premiumMode ? "💎" : ""}`}
         </button>
       </div>
     </div>

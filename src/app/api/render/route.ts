@@ -93,25 +93,24 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // ── Guard: prevent duplicate renders for the same project ──
+    // ── Guard: only ONE render at a time (globally) to avoid AWS rate limits ──
     try {
       const existingJobs = await listRenderJobs();
       const activeJob = existingJobs.find(
-        (j: any) =>
-          j.project_id === projectId &&
-          ["queued", "preparing", "rendering", "processing"].includes(j.status)
+        (j: any) => ["queued", "preparing", "rendering", "processing"].includes(j.status)
       );
       if (activeJob) {
-        console.warn(`${tag} ⚠️ Project ${projectId} already has active render job ${activeJob.job_id} (status=${activeJob.status})`);
+        console.warn(`${tag} ⚠️ Blocking new render — active job ${activeJob.job_id} exists (project=${activeJob.project_id}, status=${activeJob.status})`);
         return NextResponse.json({
           job: {
             id: activeJob.job_id,
             status: activeJob.status,
             progress: activeJob.progress || 0,
             currentStage: activeJob.stage || "כבר ברינדור",
-            projectId,
+            projectId: activeJob.project_id,
           },
           duplicate: true,
+          message: "A render is already in progress. Please wait for it to finish.",
         });
       }
     } catch (dupErr) {
