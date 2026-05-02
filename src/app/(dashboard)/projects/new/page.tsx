@@ -619,8 +619,9 @@ export default function NewProjectWizard() {
   /** For Remotion composition — NEVER returns blob: URLs */
   const videoSrcForComposition = useMemo(() => {
     const result = (() => {
+      // Prefer blob URL for browser-side preview (Supabase public URLs return 544)
+      if (data.videoUrl) return data.videoUrl;
       if (data.uploadedVideoUrl) return data.uploadedVideoUrl;
-      if (data.videoUrl && !data.videoUrl.startsWith("blob:")) return data.videoUrl;
       return "";
     })();
     if (process.env.NODE_ENV === "development") {
@@ -630,9 +631,10 @@ export default function NewProjectWizard() {
   }, [data.uploadedVideoUrl, data.videoUrl]);
 
   /** originalVideoSource — the SINGLE source of truth for ALL preview/editing steps.
-   *  Uses ONLY data.uploadedVideoUrl (server path from StepUpload early upload).
-   *  Transcription NEVER writes to this field. */
-  const originalVideoSource = data.uploadedVideoUrl;
+   *  Prefers the local blob URL (data.videoUrl) for browser playback — Supabase public
+   *  URLs return 544 and can't be played by <video> or Remotion Player.
+   *  Falls back to uploadedVideoUrl (signed URL or proxy) only if blob is gone. */
+  const originalVideoSource = data.videoUrl || data.uploadedVideoUrl;
 
   if (process.env.NODE_ENV === "development") {
     console.debug("[originalVideoSource]", originalVideoSource || "(empty)")

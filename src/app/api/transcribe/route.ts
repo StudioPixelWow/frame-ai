@@ -76,13 +76,13 @@ async function downloadFileFromUrl(url: string): Promise<{ buffer: Buffer; size:
   try {
     // ── Try Supabase service-role download first (bypasses public URL / CDN issues) ──
     const storagePath = extractSupabaseStoragePath(url);
-    if (storagePath) {
-      console.log(`[download] Detected Supabase URL → downloading via service role: path="${storagePath}"`);
+    if (storagePath && storagePath.length > 1) {
+      console.log(`[download] Detected Supabase URL → downloading via service role: path="${storagePath}" (url=${url.slice(0, 100)})`);
       try {
         const sb = getSupabase();
         const { data, error } = await sb.storage.from("project-files").download(storagePath);
         if (error) {
-          console.warn(`[download] Supabase download error: ${error.message} — falling back to fetch`);
+          console.warn(`[download] Supabase download error: ${error.message} (path="${storagePath}") — falling back to fetch`);
         } else if (data) {
           const arrayBuffer = await data.arrayBuffer();
           const buffer = Buffer.from(arrayBuffer);
@@ -95,9 +95,25 @@ async function downloadFileFromUrl(url: string): Promise<{ buffer: Buffer; size:
       }
     }
 
-    // ── Fallback: plain fetch (works for non-Supabase URLs) ──
-    console.log(`[download] Fetching via HTTP: ${url.slice(0, 120)}...`);
-    const res = await fetch(url);
+    // ── Fallback: try signed URL if it's a Supabase URL ──
+    let fetchUrl = url;
+    if (storagePath && storagePath.length > 1) {
+      try {
+        console.log(`[download] Trying signed URL for "${storagePath}"...`);
+        const sb = getSupabase();
+        const { data: signData, error: signErr } = await sb.storage
+          .from("project-files")
+          .createSignedUrl(storagePath, 3600);
+        if (!signErr && signData?.signedUrl) {
+          fetchUrl = signData.signedUrl;
+          console.log(`[download] ✅ Using signed URL for fetch fallback`);
+        }
+      } catch { /* continue with original URL */ }
+    }
+
+    // ── Fallback: plain fetch (works for non-Supabase URLs, or signed URLs) ──
+    console.log(`[download] Fetching via HTTP: ${fetchUrl.slice(0, 120)}...`);
+    const res = await fetch(fetchUrl);
     if (!res.ok) {
       return { error: `Download failed: ${res.status} ${res.statusText}` };
     }
