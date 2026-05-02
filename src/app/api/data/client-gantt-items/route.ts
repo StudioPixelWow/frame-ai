@@ -15,10 +15,8 @@ export async function GET(req: NextRequest) {
     const scoped = scopeForClient(req, all, (item: any) => item.clientId);
     return NextResponse.json(scoped);
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch client gantt items' },
-      { status: 500 }
-    );
+    console.error('[client-gantt-items GET] error:', error instanceof Error ? error.message : error);
+    return NextResponse.json([], { status: 200 });
   }
 }
 
@@ -29,6 +27,7 @@ export async function POST(req: NextRequest) {
     const created = await clientGanttItems.createAsync(body);
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
+    console.error('[client-gantt-items POST] error:', error instanceof Error ? error.message : error);
     return NextResponse.json(
       { error: 'Failed to create client gantt item' },
       { status: 400 }

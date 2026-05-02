@@ -10,12 +10,11 @@ import { ensureSeeded } from '@/lib/db/seed';
 export async function GET() {
   ensureSeeded();
   try {
-    return NextResponse.json(await employeeTasks.getAllAsync());
+    const tasks = await employeeTasks.getAllAsync();
+    return NextResponse.json(tasks);
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch employee tasks' },
-      { status: 500 }
-    );
+    console.error('[employee-tasks GET] error:', error instanceof Error ? error.message : error);
+    return NextResponse.json([], { status: 200 });
   }
 }
 
@@ -26,6 +25,7 @@ export async function POST(req: NextRequest) {
     const created = await employeeTasks.createAsync(body);
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
+    console.error('[employee-tasks POST] error:', error instanceof Error ? error.message : error);
     return NextResponse.json(
       { error: 'Failed to create employee task' },
       { status: 400 }

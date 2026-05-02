@@ -125,6 +125,7 @@ async function ensureTable(sb: ReturnType<typeof getSupabase>) {
         `[project-payments] ❌ Table "${TABLE}" does not exist and exec_sql RPC is unavailable.\n` +
         `Run this SQL in Supabase Dashboard → SQL Editor:\n\n${TABLE_DDL}`
       );
+      _tableReady = true; // Mark ready even if table missing to avoid infinite retries
       return; // cannot proceed
     }
     console.warn(`[project-payments] probe error: ${probe.message}`);
@@ -156,6 +157,7 @@ export async function GET(req: NextRequest) {
     if (error) {
       const code = (error as any)?.code ?? '';
       if (code === '42P01' || error.message?.includes('does not exist')) {
+        console.warn(`[project-payments] GET: table missing, returning empty array`);
         return NextResponse.json([]);
       }
       // Retry without client_id filter if schema-cache says column missing
@@ -172,13 +174,14 @@ export async function GET(req: NextRequest) {
       }
       if (error) {
         console.error('[project-payments] GET error:', error.message);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json([], { status: 200 });
       }
     }
     return NextResponse.json((rows ?? []).map((r) => rowToPayment(r as Row)));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error('[project-payments] GET catch:', msg);
+    return NextResponse.json([], { status: 200 });
   }
 }
 
@@ -231,7 +234,10 @@ export async function POST(req: NextRequest) {
 
     if (!inserted) {
       console.error('[project-payments] insert error:', lastErr);
-      return NextResponse.json({ error: lastErr?.message ?? 'Insert failed' }, { status: 500 });
+      return NextResponse.json(
+        { error: lastErr?.message ?? 'Insert failed' },
+        { status: 400 }
+      );
     }
 
     console.log(`[project-payments] ✅ created id=${inserted.id} project=${body.projectId || body.business_project_id}`);
@@ -251,6 +257,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(rowToPayment(inserted), { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error('[project-payments] POST catch:', msg);
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
 }
