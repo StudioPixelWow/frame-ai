@@ -1,21 +1,22 @@
 /**
- * POST /api/render — Create a render job (DB only, no rendering here)
+ * POST /api/render — Create a render job + invoke Remotion Lambda
  * GET  /api/render — List all render jobs
  *
- * This route ONLY writes to the database. It does NOT run Remotion.
- * Remotion rendering happens in the external worker:
- *   npm run render:worker   (or: npx tsx src/render-worker/index.ts)
- *
- * Architecture:
+ * Architecture (Remotion Lambda):
  *   1. Client POSTs compositionData → this route creates a "queued" job in Supabase
- *   2. Worker (separate process) polls Supabase for queued jobs
- *   3. Worker runs bundle() + renderMedia() + uploads output
- *   4. Worker updates render_jobs status → "done" + result_url
+ *   2. This route fires off a Lambda render (non-blocking)
+ *   3. A background async function polls Lambda progress and updates the job
+ *   4. When Lambda finishes, the output is downloaded and uploaded to Supabase Storage
  *   5. Client polls GET /api/render/[jobId] and sees completion
+ *
+ * Fallback: if REMOTION_LAMBDA_FUNCTION_NAME is not set, the job stays
+ * "queued" for the external worker to pick up (legacy mode).
  */
 import { NextRequest, NextResponse } from "next/server";
-import { createRenderJob, listRenderJobs } from "@/lib/render-worker/job-manager";
+import { createRenderJob, listRenderJobs, updateRenderJob } from "@/lib/render-worker/job-manager";
 import { getSupabase } from "@/lib/db/store";
+import { invokeLambdaRender, pollLambdaProgress } from "@/lib/lambda-render/invoke-renderer";
+import { handleLambdaOutput } from "@/lib/lambda-render/handle-output";
 
 const tag = "[Render API]";
 
@@ -127,8 +128,35 @@ export async function POST(req: NextRequest) {
       console.warn(`${tag} ⚠️ Could not link job to project:`, linkErr instanceof Error ? linkErr.message : linkErr);
     }
 
-    // ── No rendering here — the external worker picks up queued jobs ──
-    // Start worker with: npx tsx src/lib/render-worker/worker.ts
+    // ── Trigger Remotion Lambda (fire-and-forget) ──────────────────────
+    const lambdaEnabled = !!process.env.REMOTION_LAMBDA_FUNCTION_NAME;
+
+    if (lambdaEnabled) {
+      // Fire-and-forget: start Lambda render in background
+      // The async function updates the job status as it progresses
+      triggerLambdaRender({
+        jobId,
+        projectId,
+        compositionId: "PixelManageEdit",
+        inputProps: inputProps as Record<string, unknown>,
+        quality: quality || "premium",
+      }).catch((err) => {
+        console.error(`${tag} ❌ Lambda render failed for ${jobId}:`, err instanceof Error ? err.message : err);
+      });
+
+      return NextResponse.json({
+        job: {
+          id: jobId,
+          status: "rendering",
+          progress: 5,
+          currentStage: "מתחיל רינדור Lambda",
+          projectId,
+        },
+      });
+    }
+
+    // Legacy fallback: no Lambda configured — job stays queued for external worker
+    console.warn(`${tag} ⚠️ REMOTION_LAMBDA_FUNCTION_NAME not set — job ${jobId} stays queued`);
 
     return NextResponse.json({
       job: {
@@ -148,5 +176,63 @@ export async function POST(req: NextRequest) {
       { error: errMsg, stack: process.env.NODE_ENV === "development" ? errStack : undefined },
       { status: 500 }
     );
+  }
+}
+
+/* ── Background Lambda render (fire-and-forget) ────────────────────────── */
+
+async function triggerLambdaRender(opts: {
+  jobId: string;
+  projectId: string;
+  compositionId: string;
+  inputProps: Record<string, unknown>;
+  quality: "standard" | "premium" | "max";
+}) {
+  try {
+    console.log(`${tag} 🚀 Starting Lambda render for job ${opts.jobId}`);
+
+    // 1. Invoke Lambda
+    const { renderId, bucketName } = await invokeLambdaRender({
+      jobId: opts.jobId,
+      projectId: opts.projectId,
+      compositionId: opts.compositionId,
+      inputProps: opts.inputProps,
+      quality: opts.quality,
+    });
+
+    // 2. Poll until complete — returns S3 output URL
+    const s3OutputUrl = await pollLambdaProgress({
+      renderId,
+      bucketName,
+      jobId: opts.jobId,
+    });
+
+    // 3. Download from S3 → upload to Supabase Storage → update DB
+    await handleLambdaOutput({
+      jobId: opts.jobId,
+      projectId: opts.projectId,
+      s3OutputUrl,
+    });
+
+    console.log(`${tag} ✅ Lambda render complete for job ${opts.jobId}`);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`${tag} ❌ Lambda render failed for job ${opts.jobId}: ${errMsg}`);
+
+    // Mark job as failed
+    await updateRenderJob(opts.jobId, {
+      status: "error",
+      error: errMsg,
+      stage: "שגיאת Lambda",
+    }).catch(() => {}); // don't throw from error handler
+
+    // Also update project status
+    try {
+      const sb = getSupabase();
+      await sb.from("video_projects").update({
+        status: "error",
+        updated_at: new Date().toISOString(),
+      }).eq("id", opts.projectId);
+    } catch { /* ignore */ }
   }
 }
