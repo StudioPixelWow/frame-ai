@@ -94,22 +94,52 @@ export async function invokeLambdaRender(req: LambdaRenderRequest): Promise<{
     progress: 5,
   });
 
-  const { renderId, bucketName } = await renderMediaOnLambda({
-    region: config.region,
-    functionName: config.functionName,
-    serveUrl: config.serveUrl,
-    composition: req.compositionId,
-    inputProps: req.inputProps,
-    codec: qs.codec,
-    crf: qs.crf,
-    // framesPerLambda: 20,  // tune for cost/speed tradeoff
-    privacy: "no-acl",
-    logLevel: "verbose",
-    downloadBehavior: { type: "play-in-browser" },
-  });
+  // Retry with exponential backoff for AWS rate limits
+  const MAX_RETRIES = 3;
+  let lastError: Error | null = null;
 
-  console.log(`${tag} ✅ Lambda render started: renderId=${renderId} bucket=${bucketName}`);
-  return { renderId, bucketName };
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      if (attempt > 1) {
+        const delay = Math.min(5000 * Math.pow(2, attempt - 1), 30000); // 10s, 20s, 30s
+        console.log(`${tag} ⏳ Retry ${attempt}/${MAX_RETRIES} after ${delay / 1000}s backoff...`);
+        await updateRenderJob(req.jobId, {
+          stage: `ממתין לניסיון ${attempt}/${MAX_RETRIES}`,
+          progress: 3,
+        });
+        await sleep(delay);
+      }
+
+      const { renderId, bucketName } = await renderMediaOnLambda({
+        region: config.region,
+        functionName: config.functionName,
+        serveUrl: config.serveUrl,
+        composition: req.compositionId,
+        inputProps: req.inputProps,
+        codec: qs.codec,
+        crf: qs.crf,
+        framesPerLambda: 40, // fewer chunks = fewer concurrent Lambdas
+        privacy: "no-acl",
+        logLevel: "verbose",
+        downloadBehavior: { type: "play-in-browser" },
+      });
+
+      console.log(`${tag} ✅ Lambda render started: renderId=${renderId} bucket=${bucketName}`);
+      return { renderId, bucketName };
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      const msg = lastError.message;
+      const isRateLimit = msg.includes("Rate Exceeded") || msg.includes("Concurrency") || msg.includes("TooManyRequestsException") || msg.includes("throttl");
+
+      if (isRateLimit && attempt < MAX_RETRIES) {
+        console.warn(`${tag} ⚠️ Rate limited on attempt ${attempt}: ${msg}`);
+        continue;
+      }
+      throw lastError;
+    }
+  }
+
+  throw lastError || new Error("Lambda invoke failed after retries");
 }
 
 /* ── Poll progress until done ──────────────────────────────────────────── */
