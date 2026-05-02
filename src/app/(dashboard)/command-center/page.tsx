@@ -1729,6 +1729,9 @@ export default function CommandCenterPage() {
       {/* ── System Health Quick View ── */}
       <HealthWidget />
 
+      {/* ── Agency Intelligence Quick View ── */}
+      <AgencyIntelligenceWidget />
+
     </main>
   );
 }
@@ -2105,6 +2108,58 @@ function HealthWidget() {
           ⚠️ {alert.title}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Agency Intelligence Widget (lazy-loaded) ──
+
+function AgencyIntelligenceWidget() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/data/agency-intelligence')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setData(d); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return null;
+  if (!data || !data.stats) return null;
+
+  const s = data.stats;
+  const hasPending = s.pendingSuggestionsCount > 0;
+
+  return (
+    <div style={{
+      marginTop: '1.2rem',
+      background: 'var(--surface)',
+      border: '1px solid var(--border)',
+      borderRadius: '0.75rem',
+      padding: '1rem 1.2rem',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+        <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--foreground)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          🧠 Agency Intelligence
+        </h3>
+        <Link href="/agency-intelligence" style={{ fontSize: '0.72rem', color: '#2563eb', textDecoration: 'none' }}>
+          לוח בקרה ←
+        </Link>
+      </div>
+
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.5rem', fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>
+        <span>📚 {s.totalPlaybooks} פלייבוקים</span>
+        <span>📋 {s.totalCampaignTemplates + s.totalAdTemplates + s.totalContentTemplates} תבניות</span>
+        {hasPending && <span style={{ color: '#f59e0b' }}>📝 {s.pendingSuggestionsCount} הצעות ממתינות</span>}
+      </div>
+
+      {hasPending && (
+        <div style={{ fontSize: '0.72rem', color: '#92400e', background: 'rgba(245,158,11,0.06)', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', textAlign: 'center' }}>
+          💡 יש הצעות חדשות מלמידה אוטומטית — בדוק ואשר
+        </div>
+      )}
     </div>
   );
 }
