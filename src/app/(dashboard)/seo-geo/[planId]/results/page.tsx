@@ -2,13 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import ChevronLeftIcon from '@/components/icons/ChevronLeftIcon';
-import GoogleIcon from '@/components/icons/GoogleIcon';
-import ChatGPTIcon from '@/components/icons/ChatGPTIcon';
-import ClaudeIcon from '@/components/icons/ClaudeIcon';
-import BingIcon from '@/components/icons/BingIcon';
-import PerplexityIcon from '@/components/icons/PerplexityIcon';
-import WikipediaIcon from '@/components/icons/WikipediaIcon';
+// Inline icon components — no external dependency
+const IconSpan = ({ children, size = 48 }: { children: string; size?: number }) => (
+  <span style={{ fontSize: size * 0.6, lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: size, height: size }}>{children}</span>
+);
+const GoogleIcon = ({ width = 48, height = 48 }: { width?: number; height?: number }) => <IconSpan size={width}>🔍</IconSpan>;
+const ChatGPTIcon = ({ width = 48, height = 48 }: { width?: number; height?: number }) => <IconSpan size={width}>🤖</IconSpan>;
+const ClaudeIcon = ({ width = 48, height = 48 }: { width?: number; height?: number }) => <IconSpan size={width}>🧠</IconSpan>;
+const BingIcon = ({ width = 48, height = 48 }: { width?: number; height?: number }) => <IconSpan size={width}>✨</IconSpan>;
+const PerplexityIcon = ({ width = 48, height = 48 }: { width?: number; height?: number }) => <IconSpan size={width}>🔮</IconSpan>;
+const WikipediaIcon = ({ width = 48, height = 48 }: { width?: number; height?: number }) => <IconSpan size={width}>📚</IconSpan>;
+const ChevronLeftIcon = ({ width = 16, height = 16, style }: { width?: number; height?: number; style?: React.CSSProperties }) => (
+  <span style={{ fontSize: width, lineHeight: 1, ...style }}>‹</span>
+);
 
 const C = {
   primary: '#00B5FE',
