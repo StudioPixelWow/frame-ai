@@ -519,7 +519,6 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
   });
 
   // Day 15: Landing pages for location
-  const locStr = loc ? ` in ${loc}` : "";
   days.push(mkDay(15, `Location-Based Landing Pages${locStr}`, [
     mkTask("content", "high", "high",
       `Create Location Landing Page: "${keywords[0] || "Services"}${locStr}"`,
