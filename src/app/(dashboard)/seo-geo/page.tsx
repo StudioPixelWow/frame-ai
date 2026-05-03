@@ -1,7 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 // ══════════════════════════════════════════════════════════════
@@ -272,7 +272,15 @@ const INITIAL_DATA: WizardData = {
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════
 
-export default function SeoGeoWizard() {
+export default function SeoGeoPage() {
+  return (
+    <Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", direction: "rtl", fontFamily: "'Segoe UI', system-ui, sans-serif", color: "#5A5A7A" }}>טוען...</div>}>
+      <SeoGeoWizard />
+    </Suspense>
+  );
+}
+
+function SeoGeoWizard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [step, setStep] = useState(1);
