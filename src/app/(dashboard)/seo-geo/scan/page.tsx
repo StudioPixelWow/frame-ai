@@ -1,7 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -108,6 +108,14 @@ const C = {
 // ── Main Page Component ────────────────────────────────────────────────────────
 
 export default function PixelSeoScanPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', direction: 'rtl' }}>טוען...</div>}>
+      <ScanPageInner />
+    </Suspense>
+  );
+}
+
+function ScanPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlParam = searchParams.get("url") || "";
