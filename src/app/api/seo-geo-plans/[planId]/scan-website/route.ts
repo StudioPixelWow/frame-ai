@@ -6,82 +6,349 @@ import {
   loadPlan,
   updatePlanSafe,
   logActivity,
-  generateId,
   withErrorBoundary,
 } from '@/lib/seo/api-helpers';
 
-// Mock scan generator
-function generateMockScan(url: string): SeoWebsiteScan {
-  const now = new Date().toISOString();
-  const domain = new URL(url).hostname;
+const TIMEOUT_MS = 10000;
+const MAX_PAGES_TO_SCAN = 5;
+
+// ── Types ───────────────────────────────────────────────────────────────────
+
+interface ParsedPage {
+  title: string;
+  metaDescription: string;
+  h1Tags: string[];
+  h2Tags: string[];
+  hasSchema: boolean;
+  hasOG: boolean;
+  hasCanonical: boolean;
+  wordCount: number;
+  links: string[];
+}
+
+interface ScanPageResult {
+  url: string;
+  title: string;
+  missingMeta: boolean;
+  missingH1: boolean;
+  missingAlt: boolean;
+  wordCount: number;
+  hasSchema: boolean;
+  scannedAt: string;
+}
+
+// ── Fetch wrapper with timeout ──────────────────────────────────────────────
+
+async function fetchWithTimeout(url: string, timeoutMs: number = TIMEOUT_MS): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; WebScanner/1.0)',
+      },
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) return null;
+    return await response.text();
+  } catch (error) {
+    return null;
+  }
+}
+
+// ── HTML parser using regex ────────────────────────────────────────────────
+
+function parseHtml(html: string, pageUrl: string): ParsedPage {
+  // Extract title
+  const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+  const title = titleMatch ? titleMatch[1].trim() : '';
+
+  // Extract meta description
+  const metaDescMatch = html.match(/<meta\s+name=["']?description["']?\s+content=["']([^"']+)["']/i);
+  const metaDescription = metaDescMatch ? metaDescMatch[1].trim() : '';
+
+  // Extract h1 tags
+  const h1Regex = /<h1[^>]*>([^<]+)<\/h1>/gi;
+  const h1Tags: string[] = [];
+  let h1Match;
+  while ((h1Match = h1Regex.exec(html)) !== null) {
+    h1Tags.push(h1Match[1].trim());
+  }
+
+  // Extract h2 tags
+  const h2Regex = /<h2[^>]*>([^<]+)<\/h2>/gi;
+  const h2Tags: string[] = [];
+  let h2Match;
+  while ((h2Match = h2Regex.exec(html)) !== null) {
+    h2Tags.push(h2Match[1].trim());
+  }
+
+  // Check for structured data (JSON-LD)
+  const hasSchema = /<script\s+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/i.test(html);
+
+  // Check for Open Graph tags
+  const hasOG = /<meta\s+property=["']og:/.test(html);
+
+  // Check for canonical tag
+  const hasCanonical = /<link\s+rel=["']?canonical["']?/i.test(html);
+
+  // Count words (rough estimate: text content between tags)
+  const textContent = html.replace(/<[^>]+>/g, ' ');
+  const wordCount = textContent.trim().split(/\s+/).length;
+
+  // Extract internal links
+  const linkRegex = /href=["']([^"']+)["']/gi;
+  const links: string[] = [];
+  let linkMatch;
+  while ((linkMatch = linkRegex.exec(html)) !== null) {
+    const link = linkMatch[1];
+    if (link && !link.startsWith('#') && !link.startsWith('mailto:') && !link.startsWith('tel:')) {
+      try {
+        const resolved = new URL(link, pageUrl).href;
+        const resolvedUrl = new URL(resolved);
+        const pageUrlObj = new URL(pageUrl);
+        // Only include same-domain links
+        if (resolvedUrl.hostname === pageUrlObj.hostname) {
+          links.push(resolved);
+        }
+      } catch {
+        // Skip invalid URLs
+      }
+    }
+  }
 
   return {
-    url,
-    scannedAt: now,
-    hasSSL: true,
-    loadTimeMs: Math.floor(Math.random() * 2000) + 500,
-    mobileOptimized: Math.random() > 0.3,
-    metaTitle: `Home | ${domain}`,
-    metaDescription: `Welcome to ${domain}. High-quality products and services.`,
-    h1Tags: ['Welcome to our website', 'Quality Services & Products'],
-    totalPages: Math.floor(Math.random() * 50) + 10,
-    indexedPages: Math.floor(Math.random() * 45) + 5,
-    brokenLinks: Math.floor(Math.random() * 15),
-    hasRobotsTxt: true,
-    hasSitemap: true,
-    domainAuthority: Math.floor(Math.random() * 40) + 20,
-    techStack: ['Next.js', 'React', 'Vercel', 'Node.js'],
-    cmsDetected: 'Custom',
-    structuredData: Math.random() > 0.4,
-    openGraph: Math.random() > 0.3,
-    canonicalTags: Math.random() > 0.2,
-    issues: [
-      {
-        type: 'warning',
-        category: 'performance',
-        title: 'Slow loading on mobile',
-        description: 'Mobile pages load slower than recommended.',
-        impact: 'medium',
-      },
-      {
-        type: 'info',
-        category: 'content',
-        title: 'Missing meta descriptions',
-        description: 'Some pages lack meta descriptions for SEO.',
-        impact: 'medium',
-      },
-      {
-        type: 'critical',
-        category: 'technical',
-        title: 'Broken internal links',
-        description: `Found ${Math.floor(Math.random() * 5) + 1} broken internal links.`,
-        impact: 'high',
-      },
-    ],
+    title,
+    metaDescription,
+    h1Tags,
+    h2Tags,
+    hasSchema,
+    hasOG,
+    hasCanonical,
+    wordCount,
+    links: [...new Set(links)], // Deduplicate
   };
 }
 
-// Mock scanned pages generator
-function generateMockScannedPages(domain: string, count = 4): SeoScannedPage[] {
-  const now = new Date().toISOString();
-  const pages: SeoScannedPage[] = [];
+// ── Check if URL returns 200 ────────────────────────────────────────────────
 
-  const pagePaths = ['/', '/about', '/services', '/contact', '/blog', '/pricing'];
-  for (let i = 0; i < Math.min(count, pagePaths.length); i++) {
-    pages.push({
-      url: `https://${domain}${pagePaths[i]}`,
-      title: `${pagePaths[i] === '/' ? 'Home' : pagePaths[i].slice(1)} | ${domain}`,
-      missingMeta: Math.random() > 0.7,
-      missingH1: Math.random() > 0.8,
-      missingAlt: Math.random() > 0.6,
-      wordCount: Math.floor(Math.random() * 2000) + 300,
-      hasSchema: Math.random() > 0.5,
-      scannedAt: now,
+async function checkUrl(url: string): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const response = await fetch(url, {
+      method: 'HEAD',
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; WebScanner/1.0)',
+      },
+    });
+
+    clearTimeout(timeoutId);
+    return response.ok;
+  } catch {
+    // Fall back to GET if HEAD fails
+    try {
+      const html = await fetchWithTimeout(url, 5000);
+      return html !== null;
+    } catch {
+      return false;
+    }
+  }
+}
+
+// ── Scan a single page ──────────────────────────────────────────────────────
+
+async function scanPage(url: string): Promise<ScanPageResult | null> {
+  const startTime = Date.now();
+  const html = await fetchWithTimeout(url);
+
+  if (!html) return null;
+
+  const parsed = parseHtml(html, url);
+  const scannedAt = new Date().toISOString();
+
+  return {
+    url,
+    title: parsed.title || url,
+    missingMeta: !parsed.metaDescription,
+    missingH1: parsed.h1Tags.length === 0,
+    missingAlt: false, // Would need more sophisticated parsing
+    wordCount: parsed.wordCount,
+    hasSchema: parsed.hasSchema,
+    scannedAt,
+  };
+}
+
+// ── Main website scanner ────────────────────────────────────────────────────
+
+async function scanWebsite(websiteUrl: string): Promise<{ scan: SeoWebsiteScan; pages: ScanPageResult[] } | null> {
+  const startTime = Date.now();
+
+  let urlObj: URL;
+  try {
+    urlObj = new URL(websiteUrl);
+  } catch {
+    return null;
+  }
+
+  // Fetch homepage
+  const homepageHtml = await fetchWithTimeout(websiteUrl);
+  if (!homepageHtml) {
+    return null;
+  }
+
+  const loadTimeMs = Date.now() - startTime;
+  const parsed = parseHtml(homepageHtml, websiteUrl);
+  const isHttps = urlObj.protocol === 'https:';
+
+  // Check for robots.txt and sitemap.xml
+  const robotsTxtUrl = `${urlObj.protocol}//${urlObj.hostname}/robots.txt`;
+  const sitemapUrl = `${urlObj.protocol}//${urlObj.hostname}/sitemap.xml`;
+
+  const hasRobotsTxt = await checkUrl(robotsTxtUrl);
+  const hasSitemap = await checkUrl(sitemapUrl);
+
+  // Scan additional internal pages
+  const scannedPages: ScanPageResult[] = [];
+  const pagesToVisit = parsed.links.slice(0, MAX_PAGES_TO_SCAN);
+
+  for (const pageUrl of pagesToVisit) {
+    const pageResult = await scanPage(pageUrl);
+    if (pageResult) {
+      scannedPages.push(pageResult);
+    }
+  }
+
+  // Scan homepage as first page
+  const homepageResult = await scanPage(websiteUrl);
+  if (homepageResult) {
+    scannedPages.unshift(homepageResult);
+  }
+
+  // Build the scan result
+  const scan: SeoWebsiteScan = {
+    url: websiteUrl,
+    scannedAt: new Date().toISOString(),
+    hasSSL: isHttps,
+    loadTimeMs,
+    mobileOptimized: false, // Would need viewport meta tag analysis
+    metaTitle: parsed.title,
+    metaDescription: parsed.metaDescription,
+    h1Tags: parsed.h1Tags,
+    totalPages: scannedPages.length + 1, // Found pages + homepage
+    indexedPages: scannedPages.length, // Simplified: assume all found are indexed
+    brokenLinks: 0, // Would need comprehensive link checking
+    hasRobotsTxt,
+    hasSitemap,
+    domainAuthority: 0, // Cannot determine without external API
+    techStack: [], // Would need header/HTML analysis
+    cmsDetected: 'Unknown',
+    structuredData: parsed.hasSchema,
+    openGraph: parsed.hasOG,
+    canonicalTags: parsed.hasCanonical,
+    issues: buildIssues(parsed, scannedPages),
+  };
+
+  return { scan, pages: scannedPages };
+}
+
+// ── Build issues from scan data ─────────────────────────────────────────────
+
+function buildIssues(parsed: ParsedPage, pages: ScanPageResult[]) {
+  const issues = [];
+
+  // Check for missing title
+  if (!parsed.title) {
+    issues.push({
+      type: 'critical' as const,
+      category: 'technical' as const,
+      title: 'Missing title tag on homepage',
+      description: 'The homepage has no title tag. This affects SEO and browser display.',
+      impact: 'high' as const,
     });
   }
 
-  return pages;
+  // Check for missing meta description
+  if (!parsed.metaDescription) {
+    issues.push({
+      type: 'warning' as const,
+      category: 'technical' as const,
+      title: 'Missing meta description on homepage',
+      description: 'The homepage has no meta description. This may reduce CTR in search results.',
+      impact: 'medium' as const,
+    });
+  }
+
+  // Check for missing H1
+  if (parsed.h1Tags.length === 0) {
+    issues.push({
+      type: 'critical' as const,
+      category: 'content' as const,
+      title: 'Missing H1 tag on homepage',
+      description: 'No H1 tag found on the homepage. H1 tags are important for SEO and accessibility.',
+      impact: 'high' as const,
+    });
+  }
+
+  // Check pages with missing meta descriptions
+  const missingMetaCount = pages.filter(p => p.missingMeta).length;
+  if (missingMetaCount > 0) {
+    issues.push({
+      type: 'warning' as const,
+      category: 'content' as const,
+      title: `${missingMetaCount} pages missing meta descriptions`,
+      description: `Found ${missingMetaCount} scanned pages without meta descriptions.`,
+      impact: 'medium' as const,
+    });
+  }
+
+  // Check pages with missing H1
+  const missingH1Count = pages.filter(p => p.missingH1).length;
+  if (missingH1Count > 0) {
+    issues.push({
+      type: 'warning' as const,
+      category: 'content' as const,
+      title: `${missingH1Count} pages missing H1 tags`,
+      description: `Found ${missingH1Count} scanned pages without H1 tags.`,
+      impact: 'medium' as const,
+    });
+  }
+
+  // Check for missing SSL
+  // (Already checked in main scan function)
+
+  // Check for no structured data
+  if (!parsed.hasSchema) {
+    issues.push({
+      type: 'info' as const,
+      category: 'technical' as const,
+      title: 'No structured data found',
+      description: 'No JSON-LD structured data detected. Consider adding schema markup.',
+      impact: 'low' as const,
+    });
+  }
+
+  // Check for no Open Graph tags
+  if (!parsed.hasOG) {
+    issues.push({
+      type: 'info' as const,
+      category: 'technical' as const,
+      title: 'No Open Graph tags found',
+      description: 'Open Graph tags can improve social media sharing.',
+      impact: 'low' as const,
+    });
+  }
+
+  return issues;
 }
+
+// ── Main API handler ────────────────────────────────────────────────────────
 
 async function _POST(
   req: NextRequest,
@@ -94,18 +361,66 @@ async function _POST(
   if (!plan) return err('Plan not found', 404);
 
   try {
-    const domain = new URL(plan.websiteUrl).hostname;
+    // Perform real website scan
+    const scanResult = await scanWebsite(plan.websiteUrl);
 
-    // Generate mock scan
-    const scanResult = generateMockScan(plan.websiteUrl);
+    if (!scanResult) {
+      // Fetch failed - return minimal result with unavailable status
+      const updated = await updatePlanSafe(planId, {
+        websiteScan: {
+          url: plan.websiteUrl,
+          scannedAt: new Date().toISOString(),
+          hasSSL: false,
+          loadTimeMs: 0,
+          mobileOptimized: false,
+          metaTitle: '',
+          metaDescription: '',
+          h1Tags: [],
+          totalPages: 0,
+          indexedPages: 0,
+          brokenLinks: 0,
+          hasRobotsTxt: false,
+          hasSitemap: false,
+          domainAuthority: 0,
+          techStack: [],
+          cmsDetected: 'Unknown',
+          structuredData: false,
+          openGraph: false,
+          canonicalTags: false,
+          issues: [
+            {
+              type: 'critical',
+              category: 'technical',
+              title: 'Unable to scan website',
+              description: 'The website could not be reached. Please verify the URL is correct and accessible.',
+              impact: 'high',
+            },
+          ],
+        } as SeoWebsiteScan,
+        scannedPages: [],
+        status: 'scanning',
+      });
 
-    // Generate mock scanned pages
-    const scannedPages = generateMockScannedPages(domain, 4);
+      if (!updated) {
+        return err('Failed to save scan results', 500);
+      }
 
-    // Update plan with scan results
+      logActivity(planId, 'scan_website_unavailable', {
+        url: plan.websiteUrl,
+        reason: 'Website unreachable',
+      });
+
+      return ok({
+        scan: updated.websiteScan,
+        scannedPages: updated.scannedPages || [],
+        status: 'unavailable',
+      });
+    }
+
+    // Update plan with real scan results
     const updated = await updatePlanSafe(planId, {
-      websiteScan: scanResult,
-      scannedPages,
+      websiteScan: scanResult.scan,
+      scannedPages: scanResult.pages,
       status: 'scanning',
     });
 
@@ -115,13 +430,16 @@ async function _POST(
 
     logActivity(planId, 'scan_website', {
       url: plan.websiteUrl,
-      totalPages: scanResult.totalPages,
-      scannedPages: scannedPages.length,
+      totalPages: scanResult.scan.totalPages,
+      scannedPages: scanResult.pages.length,
+      loadTimeMs: scanResult.scan.loadTimeMs,
+      hasSSL: scanResult.scan.hasSSL,
     });
 
     return ok({
-      scan: scanResult,
-      scannedPages,
+      scan: scanResult.scan,
+      scannedPages: scanResult.pages,
+      status: 'success',
     });
   } catch (error) {
     console.error('[SEO-API] POST /seo-geo-plans/[planId]/scan-website error:', error);

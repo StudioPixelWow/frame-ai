@@ -48,7 +48,7 @@ export interface SeoReport {
 
 // ── Main Generator ──
 
-export function generateSeoReport(plan: any, language: "he" | "en" = "he"): SeoReport {
+export function generateSeoReport(plan: any, language: "he" | "en" = "en", businessProfile?: any): SeoReport {
   const he = language === "he";
   const scan = plan.websiteScan || null;
   const goals = (plan.goals || []).filter((g: any) => g.selected);
@@ -59,6 +59,7 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he"): SeoR
   const allTasks = weeks.flatMap((w: any) => w.tasks || []);
   const doneTasks = allTasks.filter((t: any) => t.status === "done");
   const domain = (plan.websiteUrl || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const scanMode = plan.scanMode || null;
 
   // AI engine analysis
   const engines = ["ChatGPT", "Gemini", "Perplexity", "Claude", "Copilot"];
@@ -167,39 +168,37 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he"): SeoR
   // Build sections
   const sections: ReportSection[] = [];
 
+  // ── Scan Mode Banner ──
+  const scanModeBanner = scanMode === "simulated" ? {
+    type: "paragraph" as const,
+    text: "⚠️ NOTE: This report is based on simulated scan data. Results should be verified with real scanning tools before making major decisions."
+  } : null;
+
   // ── 1. Executive Summary ──
   sections.push({
     id: "executive_summary", number: 1,
-    title: "תקציר מנהלים",
+    title: "Executive Summary",
     titleEn: "Executive Summary",
     content: [
-      { type: "paragraph", text: he
-        ? `דוח זה מציג ניתוח מקיף של מצב ה-SEO והנראות ב-AI (GEO) עבור ${plan.clientName || "הלקוח"} (${domain}). הניתוח מבוסס על סריקה טכנית מלאה של האתר, בדיקת נוכחות ב-5 מנועי AI מובילים, וניתוח ${visQueries.length} שאילתות רלוונטיות.`
-        : `This report presents a comprehensive SEO and AI visibility (GEO) analysis for ${plan.clientName || "the client"} (${domain}). The analysis is based on a full technical scan, presence checks across 5 leading AI engines, and analysis of ${visQueries.length} relevant queries.`
-      },
+      ...(scanModeBanner ? [scanModeBanner] : []),
+      { type: "paragraph", text: `Comprehensive SEO and AI visibility (GEO) analysis for ${plan.clientName || "the client"} (${domain}). Based on full technical scan, presence checks across 5 leading AI engines, and analysis of ${visQueries.length} relevant queries.${businessProfile?.business_name ? ` Business: ${businessProfile.business_name}${businessProfile.industry ? ` (${businessProfile.industry})` : ""}${businessProfile.location ? ` in ${businessProfile.location}` : ""}.` : ""}`},
       { type: "stat_row", stats: [
-        { label: he ? "ציון כללי" : "Overall Score", value: `${plan.overallScore || 0}%`, color: scoreColor(plan.overallScore || 0), icon: "📊" },
-        { label: he ? "ציון טכני" : "Technical Score", value: `${plan.technicalScore || 0}%`, color: scoreColor(plan.technicalScore || 0), icon: "🔧" },
-        { label: he ? "נראות AI" : "AI Visibility", value: `${plan.visibilityScore || 0}%`, color: scoreColor(plan.visibilityScore || 0), icon: "🤖" },
-        { label: he ? "תוכן" : "Content", value: `${plan.contentScore || 0}%`, color: scoreColor(plan.contentScore || 0), icon: "📝" },
+        { label: "Overall Score", value: `${plan.overallScore || 0}%`, color: scoreColor(plan.overallScore || 0), icon: "📊" },
+        { label: "Technical Score", value: `${plan.technicalScore || 0}%`, color: scoreColor(plan.technicalScore || 0), icon: "🔧" },
+        { label: "AI Visibility", value: `${plan.visibilityScore || 0}%`, color: scoreColor(plan.visibilityScore || 0), icon: "🤖" },
+        { label: "Content", value: `${plan.contentScore || 0}%`, color: scoreColor(plan.contentScore || 0), icon: "📝" },
       ]},
-      { type: "paragraph", text: he
-        ? `נמצאו ${technicalFindings.filter(f => f.severity === "critical").length} ממצאים קריטיים ו-${technicalFindings.filter(f => f.severity === "warning").length} אזהרות שדורשים טיפול. ${mentionedQueries.length} מתוך ${visResults.length} שאילתות AI מזכירות את העסק (${visResults.length > 0 ? Math.round((mentionedQueries.length / visResults.length) * 100) : 0}%).`
-        : `Found ${technicalFindings.filter(f => f.severity === "critical").length} critical findings and ${technicalFindings.filter(f => f.severity === "warning").length} warnings. ${mentionedQueries.length} of ${visResults.length} AI queries mention the business (${visResults.length > 0 ? Math.round((mentionedQueries.length / visResults.length) * 100) : 0}%).`
-      },
+      { type: "paragraph", text: `Found ${technicalFindings.filter(f => f.severity === "critical").length} critical findings and ${technicalFindings.filter(f => f.severity === "warning").length} warnings requiring attention. ${mentionedQueries.length} of ${visResults.length} AI queries mention the business (${visResults.length > 0 ? Math.round((mentionedQueries.length / visResults.length) * 100) : 0}%).`},
     ],
   });
 
   // ── 2. Current SEO/GEO Status ──
   sections.push({
     id: "current_status", number: 2,
-    title: "מצב SEO/GEO נוכחי",
+    title: "Current SEO/GEO Status",
     titleEn: "Current SEO/GEO Status",
     content: [
-      { type: "paragraph", text: he
-        ? `להלן סיכום מצב האתר ${domain} נכון לתאריך הסריקה:`
-        : `Below is the status summary for ${domain} as of the scan date:`
-      },
+      { type: "paragraph", text: `Status summary for ${domain} as of the scan date:`},
       ...(scan ? [
         { type: "stat_row" as const, stats: [
           { label: "SSL", value: scan.hasSSL ? "✓" : "✗", color: scan.hasSSL ? "#10B981" : "#EF4444" },
@@ -226,27 +225,24 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he"): SeoR
   // ── 3. AI Visibility Overview ──
   sections.push({
     id: "ai_visibility", number: 3,
-    title: "סקירת נראות AI",
+    title: "AI Visibility Overview",
     titleEn: "AI Visibility Overview",
     content: [
-      { type: "stat", label: he ? "ציון נראות AI כולל" : "Overall AI Visibility Score", value: `${plan.visibilityScore || 0}%`, color: scoreColor(plan.visibilityScore || 0), icon: "🤖" },
-      { type: "paragraph", text: he
-        ? `נבדקו ${visResults.length} שאילתות ב-5 מנועי AI: ChatGPT, Gemini, Perplexity, Claude ו-Copilot. העסק מוזכר ב-${mentionedQueries.length} שאילתות ולא מוזכר ב-${missedQueries.length}.`
-        : `Tested ${visResults.length} queries across 5 AI engines: ChatGPT, Gemini, Perplexity, Claude, and Copilot. The business is mentioned in ${mentionedQueries.length} queries and missing from ${missedQueries.length}.`
-      },
+      { type: "stat", label: "Overall AI Visibility Score", value: `${plan.visibilityScore || 0}%`, color: scoreColor(plan.visibilityScore || 0), icon: "🤖" },
+      { type: "paragraph", text: `Tested ${visResults.length} queries across 5 AI engines: ChatGPT, Gemini, Perplexity, Claude, and Copilot. Business mentioned in ${mentionedQueries.length} queries and missing from ${missedQueries.length}.`},
       { type: "table",
-        headers: [he ? "מנוע" : "Engine", he ? "אזכורים" : "Mentions", he ? "מתוך" : "Out of", he ? "אחוז" : "Percentage"],
+        headers: ["Engine", "Mentions", "Out of", "Percentage"],
         rows: engineStats.map(e => [e.engine, `${e.mentioned}`, `${e.total}`, `${e.pct}%`]),
       },
       ...(mentionedQueries.length > 0 ? [
-        { type: "heading" as const, text: he ? "שאילתות בהן העסק מופיע:" : "Queries where the business appears:" },
+        { type: "heading" as const, text: "Queries where business appears:" },
         { type: "list" as const, items: mentionedQueries.slice(0, 10).map((vr: any) => {
           const enginesFound = (vr.results || []).filter((r: any) => r.mentioned).map((r: any) => r.engine).join(", ");
-          return `"${vr.query}" — ${he ? "מופיע ב" : "found in"}: ${enginesFound}`;
+          return `"${vr.query}" — found in: ${enginesFound}`;
         })},
       ] : []),
       ...(missedQueries.length > 0 ? [
-        { type: "heading" as const, text: he ? "שאילתות בהן העסק לא מופיע:" : "Queries where the business is missing:" },
+        { type: "heading" as const, text: "Queries where business is missing:" },
         { type: "list" as const, items: missedQueries.slice(0, 10).map((vr: any) => `"${vr.query}"`) },
       ] : []),
     ],
@@ -255,13 +251,10 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he"): SeoR
   // ── 4. SEO Findings ──
   sections.push({
     id: "seo_findings", number: 4,
-    title: "ממצאי אופטימיזציה למנועי חיפוש",
+    title: "Search Engine Optimization Findings",
     titleEn: "Search Engine Optimization Findings",
     content: [
-      { type: "paragraph", text: he
-        ? `להלן ${technicalFindings.length} ממצאים שנמצאו בסריקה הטכנית של ${domain}:`
-        : `Below are ${technicalFindings.length} findings from the technical scan of ${domain}:`
-      },
+      { type: "paragraph", text: `Below are ${technicalFindings.length} findings from the technical scan of ${domain}:`},
       ...technicalFindings.map(f => ({
         type: "finding" as const,
         severity: f.severity,
@@ -270,19 +263,9 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he"): SeoR
         recommendation: f.rec,
       })),
       { type: "divider" },
-      { type: "heading", text: he ? "הזדמנויות FAQ ו-Schema" : "FAQ & Schema Opportunities" },
-      { type: "paragraph", text: he
-        ? "הוספת FAQ Schema לדפים מרכזיים תאפשר הופעה בתוצאות מורחבות של גוגל ותגדיל את ה-CTR. שאילתות ה-AI שנבדקו יכולות לשמש כבסיס לתוכן FAQ."
-        : "Adding FAQ Schema to key pages enables rich results on Google and increases CTR. The AI queries tested can serve as FAQ content basis."
-      },
-      { type: "list", items: he ? [
-        `צור דף FAQ עם ${Math.min(visQueries.length, 10)} שאלות מרכזיות מסריקת ה-AI`,
-        "הוסף FAQ Schema (JSON-LD) לדפי שירות ומוצר",
-        "הוסף LocalBusiness Schema עם שעות פעילות, כתובת ותמונות",
-        "הוסף Breadcrumb Schema לניווט מובנה",
-        scan?.metaTitle ? "" : "כתוב Meta Title ייחודי לכל דף (50-60 תווים)",
-        scan?.metaDescription ? "" : "כתוב Meta Description ייחודי לכל דף (150-160 תווים)",
-      ].filter(Boolean) : [
+      { type: "heading", text: "FAQ & Schema Opportunities" },
+      { type: "paragraph", text: "Adding FAQ Schema to key pages enables rich results on Google and increases CTR. The AI queries tested can serve as FAQ content basis." },
+      { type: "list", items: [
         `Create FAQ page with ${Math.min(visQueries.length, 10)} key questions from AI scan`,
         "Add FAQ Schema (JSON-LD) to service and product pages",
         "Add LocalBusiness Schema with hours, address, and photos",
@@ -290,17 +273,9 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he"): SeoR
         scan?.metaTitle ? "" : "Write unique Meta Title for each page (50-60 chars)",
         scan?.metaDescription ? "" : "Write unique Meta Description for each page (150-160 chars)",
       ].filter(Boolean) },
-      { type: "heading", text: he ? "הזדמנויות Internal Linking" : "Internal Linking Opportunities" },
-      { type: "paragraph", text: he
-        ? `האתר כולל ${scan?.totalPages || "?"} דפים. קישור פנימי חכם בין דפים רלוונטיים מחזק את מבנה האתר ומפזר סמכות.`
-        : `The site has ${scan?.totalPages || "?"} pages. Smart internal linking between relevant pages strengthens site structure and distributes authority.`
-      },
-      { type: "list", items: he ? [
-        "קשר כל דף שירות ל-3-5 דפי תוכן רלוונטיים",
-        "צור דפי Hub (עמודי אם) עם קישורים לתתי-נושאים",
-        "הוסף קישורי Breadcrumb בכל עמוד",
-        "ודא שכל דף נגיש בתוך 3 קליקים מדף הבית",
-      ] : [
+      { type: "heading", text: "Internal Linking Opportunities" },
+      { type: "paragraph", text: `The site has ${scan?.totalPages || "?"} pages. Smart internal linking between relevant pages strengthens site structure and distributes authority.` },
+      { type: "list", items: [
         "Link each service page to 3-5 relevant content pages",
         "Create Hub pages with links to subtopics",
         "Add Breadcrumb links on every page",
@@ -312,25 +287,13 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he"): SeoR
   // ── 5. Competitor Analysis ──
   sections.push({
     id: "competitors", number: 5,
-    title: "ניתוח מתחרים",
+    title: "Competitor Analysis",
     titleEn: "Competitor Analysis",
     content: [
-      { type: "paragraph", text: he
-        ? `על בסיס סריקת הנראות ב-AI, ניתחנו אילו עסקים מופיעים בשאילתות בהן ${plan.clientName || "העסק"} לא מופיע. מתחרים שמופיעים בתשובות AI צוברים יתרון משמעותי בנראות.`
-        : `Based on AI visibility scanning, we analyzed which businesses appear in queries where ${plan.clientName || "the business"} is absent. Competitors appearing in AI responses gain significant visibility advantage.`
-      },
-      { type: "paragraph", text: he
-        ? `מתוך ${visResults.length} שאילתות, העסק חסר ב-${missedQueries.length} שאילתות (${visResults.length > 0 ? Math.round((missedQueries.length / visResults.length) * 100) : 0}%). אלו ההזדמנויות העיקריות לצמיחה.`
-        : `Out of ${visResults.length} queries, the business is missing from ${missedQueries.length} (${visResults.length > 0 ? Math.round((missedQueries.length / visResults.length) * 100) : 0}%). These are the main growth opportunities.`
-      },
-      { type: "heading", text: he ? "אסטרטגיה להתגברות על מתחרים:" : "Strategy to Outperform Competitors:" },
-      { type: "list", items: he ? [
-        "פרסם תוכן מקצועי ומעמיק שעונה על השאילתות בהן אתה חסר",
-        "בנה E-E-A-T: מומחיות, ניסיון, סמכות ואמינות",
-        "צור פרופילים בכל מנועי ה-AI (ChatGPT Plugins, Bing Places)",
-        "הפץ תוכן במגוון פלטפורמות — בלוגים, פודקאסטים, סרטונים",
-        "אסוף ופרסם ביקורות לקוחות — מנועי AI מסתמכים עליהן",
-      ] : [
+      { type: "paragraph", text: `Based on AI visibility scanning, we analyzed which businesses appear in queries where ${plan.clientName || "the business"} is absent. Competitors appearing in AI responses gain significant visibility advantage.` },
+      { type: "paragraph", text: `Out of ${visResults.length} queries, the business is missing from ${missedQueries.length} (${visResults.length > 0 ? Math.round((missedQueries.length / visResults.length) * 100) : 0}%). These are the main growth opportunities.` },
+      { type: "heading", text: "Strategy to Outperform Competitors:" },
+      { type: "list", items: [
         "Publish expert content answering queries where you're missing",
         "Build E-E-A-T: Expertise, Experience, Authority, Trust",
         "Create profiles on all AI engines (ChatGPT Plugins, Bing Places)",
@@ -353,31 +316,22 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he"): SeoR
 
   sections.push({
     id: "content_gaps", number: 6,
-    title: "ניתוח פערי תוכן",
+    title: "Content Gap Analysis",
     titleEn: "Content Gap Analysis",
     content: [
-      { type: "paragraph", text: he
-        ? `זיהינו ${contentGaps.length} פערי תוכן — שאילתות שבהן ${plan.clientName || "העסק"} לא מופיע בתשובות ה-AI. כל פער מייצג הזדמנות ליצירת תוכן ממוקד.`
-        : `Identified ${contentGaps.length} content gaps — queries where ${plan.clientName || "the business"} doesn't appear in AI responses. Each gap represents a targeted content opportunity.`
-      },
+      { type: "paragraph", text: `Identified ${contentGaps.length} content gaps — queries where ${plan.clientName || "the business"} doesn't appear in AI responses. Each gap represents a targeted content opportunity.` },
       ...(contentGaps.length > 0 ? [{
         type: "table" as const,
-        headers: [he ? "שאילתה" : "Query", he ? "קטגוריה" : "Category", he ? "כוונה" : "Intent", he ? "עדיפות" : "Priority"],
+        headers: ["Query", "Category", "Intent", "Priority"],
         rows: contentGaps.slice(0, 15).map(g => [
           g.query,
           g.category,
           g.intent,
-          g.importance === "high" ? (he ? "גבוהה" : "High") : g.importance === "medium" ? (he ? "בינונית" : "Medium") : (he ? "נמוכה" : "Low"),
+          g.importance === "high" ? "High" : g.importance === "medium" ? "Medium" : "Low",
         ]),
       }] : []),
-      { type: "heading", text: he ? "תוכנית תוכן מומלצת:" : "Recommended Content Plan:" },
-      { type: "list", items: he ? [
-        `צור ${Math.min(contentGaps.length, 5)} מאמרים מקצועיים שעונים על השאילתות בעדיפות גבוהה`,
-        "כתוב כל מאמר עם Schema FAQ מובנה",
-        "הוסף נתונים, סטטיסטיקות ומקורות — AI מעדיף תוכן אמין",
-        "עדכן תוכן קיים עם תשובות ישירות לשאילתות החסרות",
-        "פרסם תוכן באופן עקבי — לפחות 2 מאמרים בחודש",
-      ] : [
+      { type: "heading", text: "Recommended Content Plan:" },
+      { type: "list", items: [
         `Create ${Math.min(contentGaps.length, 5)} expert articles answering high-priority queries`,
         "Write each article with built-in FAQ Schema",
         "Add data, statistics, and sources — AI prefers authoritative content",
@@ -405,15 +359,12 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he"): SeoR
 
   sections.push({
     id: "actions", number: 7,
-    title: "פעולות מומלצות",
+    title: "Recommended Actions",
     titleEn: "Recommended Actions",
     content: [
-      { type: "paragraph", text: he
-        ? `להלן ${actions.length} פעולות מומלצות, מסודרות לפי עדיפות. כל המלצה מבוססת על ממצאים בפועל מהסריקה.`
-        : `Below are ${actions.length} recommended actions, ordered by priority. Each recommendation is based on actual scan findings.`
-      },
+      { type: "paragraph", text: `Below are ${actions.length} recommended actions, ordered by priority. Each recommendation is based on actual scan findings.` },
       { type: "table",
-        headers: [he ? "עדיפות" : "Priority", he ? "פעולה" : "Action", he ? "השפעה" : "Impact", he ? "מאמץ" : "Effort"],
+        headers: ["Priority", "Action", "Impact", "Effort"],
         rows: actions.map(a => [a.priority, a.action, a.impact, a.effort]),
       },
     ],
@@ -422,19 +373,19 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he"): SeoR
   // ── 8. 60-Day Plan ──
   sections.push({
     id: "plan_60day", number: 8,
-    title: "תוכנית צמיחה 60 יום",
+    title: "60-Day Growth Plan",
     titleEn: "60-Day Growth Plan",
     content: [
       ...(weeks.length === 0 ? [
-        { type: "paragraph" as const, text: he ? "לא נוצרה תוכנית 60 יום עדיין." : "No 60-day plan generated yet." },
+        { type: "paragraph" as const, text: "No 60-day plan generated yet." },
       ] : [
         { type: "stat_row" as const, stats: [
-          { label: he ? "שבועות" : "Weeks", value: `${weeks.length}`, color: "#00B5FE", icon: "📅" },
-          { label: he ? "משימות" : "Tasks", value: `${allTasks.length}`, color: "#00B5FE", icon: "📋" },
-          { label: he ? "הושלמו" : "Done", value: `${doneTasks.length}`, color: "#10B981", icon: "✓" },
-          { label: he ? "שעות עבודה" : "Work Hours", value: `${Math.round(allTasks.reduce((s: number, t: any) => s + (t.estimatedHours || 0), 0))}`, color: "#F59E0B", icon: "⏱️" },
+          { label: "Weeks", value: `${weeks.length}`, color: "#00B5FE", icon: "📅" },
+          { label: "Tasks", value: `${allTasks.length}`, color: "#00B5FE", icon: "📋" },
+          { label: "Done", value: `${doneTasks.length}`, color: "#10B981", icon: "✓" },
+          { label: "Work Hours", value: `${Math.round(allTasks.reduce((s: number, t: any) => s + (t.estimatedHours || 0), 0))}`, color: "#F59E0B", icon: "⏱️" },
         ]},
-        { type: "progress_bar" as const, label: he ? "התקדמות כוללת" : "Overall Progress", value: doneTasks.length, max: allTasks.length, color: "#10B981" },
+        { type: "progress_bar" as const, label: "Overall Progress", value: doneTasks.length, max: allTasks.length, color: "#10B981" },
         ...weeks.map((w: any) => ({
           type: "table" as const,
           headers: [`${he ? "שבוע" : "Week"} ${w.weekNumber}: ${w.theme}`, he ? "שעות" : "Hours", he ? "סטטוס" : "Status"],
@@ -451,48 +402,31 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he"): SeoR
   // ── 9. Expected Results ──
   sections.push({
     id: "expected_results", number: 9,
-    title: "תוצאות צפויות",
+    title: "Expected Results",
     titleEn: "Expected Results",
     content: [
-      { type: "paragraph", text: he
-        ? `על בסיס המצב הנוכחי (ציון ${plan.overallScore || 0}%) והפעולות המומלצות, להלן התוצאות הצפויות בתום 60 יום:`
-        : `Based on current status (score ${plan.overallScore || 0}%) and recommended actions, here are expected results after 60 days:`
-      },
+      { type: "paragraph", text: `Based on current status (score ${plan.overallScore || 0}%) and recommended actions, here are expected results after 60 days:` },
       { type: "table",
-        headers: [he ? "מדד" : "Metric", he ? "מצב נוכחי" : "Current", he ? "יעד 60 יום" : "60-Day Target", he ? "שיפור צפוי" : "Expected Improvement"],
+        headers: ["Metric", "Current", "60-Day Target", "Expected Improvement"],
         rows: [
-          [he ? "ציון טכני" : "Technical Score", `${plan.technicalScore || 0}%`, `${Math.min(100, (plan.technicalScore || 0) + 25)}%`, `+${Math.min(25, 100 - (plan.technicalScore || 0))}%`],
-          [he ? "נראות AI" : "AI Visibility", `${plan.visibilityScore || 0}%`, `${Math.min(100, (plan.visibilityScore || 0) + 20)}%`, `+${Math.min(20, 100 - (plan.visibilityScore || 0))}%`],
-          [he ? "ציון כללי" : "Overall Score", `${plan.overallScore || 0}%`, `${Math.min(100, (plan.overallScore || 0) + 20)}%`, `+${Math.min(20, 100 - (plan.overallScore || 0))}%`],
-          [he ? "שאילתות AI עם אזכור" : "AI Query Mentions", `${mentionedQueries.length}/${visResults.length}`, `${Math.min(visResults.length, mentionedQueries.length + Math.ceil(missedQueries.length * 0.4))}/${visResults.length}`, `+${Math.ceil(missedQueries.length * 0.4)}`],
+          ["Technical Score", `${plan.technicalScore || 0}%`, `${Math.min(100, (plan.technicalScore || 0) + 25)}%`, `+${Math.min(25, 100 - (plan.technicalScore || 0))}%`],
+          ["AI Visibility", `${plan.visibilityScore || 0}%`, `${Math.min(100, (plan.visibilityScore || 0) + 20)}%`, `+${Math.min(20, 100 - (plan.visibilityScore || 0))}%`],
+          ["Overall Score", `${plan.overallScore || 0}%`, `${Math.min(100, (plan.overallScore || 0) + 20)}%`, `+${Math.min(20, 100 - (plan.overallScore || 0))}%`],
+          ["AI Query Mentions", `${mentionedQueries.length}/${visResults.length}`, `${Math.min(visResults.length, mentionedQueries.length + Math.ceil(missedQueries.length * 0.4))}/${visResults.length}`, `+${Math.ceil(missedQueries.length * 0.4)}`],
         ],
       },
-      { type: "paragraph", text: he
-        ? "* התוצאות מבוססות על ביצוע מלא של כל הפעולות המומלצות. תוצאות בפועל עשויות להשתנות בהתאם לקצב הביצוע והשינויים בשוק."
-        : "* Results are based on full execution of all recommended actions. Actual results may vary depending on execution pace and market changes."
-      },
+      { type: "paragraph", text: "* Results are based on full execution of all recommended actions. Actual results may vary depending on execution pace and market changes." },
     ],
   });
 
   // ── 10. Next Steps ──
   sections.push({
     id: "next_steps", number: 10,
-    title: "צעדים הבאים",
+    title: "Next Steps",
     titleEn: "Next Steps",
     content: [
-      { type: "paragraph", text: he
-        ? "להלן סדר הפעולות המומלץ לשבועיים הקרובים:"
-        : "Recommended action order for the next two weeks:"
-      },
-      { type: "list", items: he ? [
-        ...(technicalFindings.some(f => f.severity === "critical") ? ["טפל בכל הממצאים הקריטיים מיידית (SSL, מהירות, מובייל)"] : []),
-        "הוסף Schema.org Structured Data — LocalBusiness, FAQ, Breadcrumb",
-        "צור/עדכן Sitemap.xml ו-Robots.txt",
-        `כתוב 2-3 מאמרים שעונים על שאילתות ה-AI בעדיפות גבוהה`,
-        "הגש את האתר ב-Google Search Console ו-Bing Webmaster Tools",
-        "עדכן Google Business Profile עם תמונות ושעות פעילות",
-        "הגדר מעקב חודשי — סריקה טכנית + בדיקת נראות AI",
-      ] : [
+      { type: "paragraph", text: "Recommended action order for the next two weeks:" },
+      { type: "list", items: [
         ...(technicalFindings.some(f => f.severity === "critical") ? ["Address all critical findings immediately (SSL, speed, mobile)"] : []),
         "Add Schema.org Structured Data — LocalBusiness, FAQ, Breadcrumb",
         "Create/update Sitemap.xml and Robots.txt",
@@ -502,10 +436,7 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he"): SeoR
         "Set up monthly tracking — technical scan + AI visibility check",
       ], ordered: true },
       { type: "divider" },
-      { type: "paragraph", text: he
-        ? `דוח זה הופק אוטומטית על ידי מערכת PixelManageAI בתאריך ${new Date().toLocaleDateString("he-IL")}. לשאלות נוספות, פנו לצוות שלנו.`
-        : `This report was automatically generated by PixelManageAI on ${new Date().toLocaleDateString("en-US")}. For questions, contact our team.`
-      },
+      { type: "paragraph", text: `This report was automatically generated by PixelManageAI on ${new Date().toLocaleDateString("en-US")}. For questions, contact our team.` },
     ],
   });
 

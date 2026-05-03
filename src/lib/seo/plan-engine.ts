@@ -30,6 +30,16 @@ export interface PlanInput {
   targetLocation: string;
   targetLanguage: string;
   insights: InsightInput[];
+  businessProfile?: {
+    business_name: string;
+    business_type: string;
+    industry: string;
+    location: string;
+    main_products_or_services: string[];
+    target_audience: string;
+    known_competitors: string[];
+    confirmed: boolean;
+  };
 }
 
 export interface WebsiteScanInput {
@@ -151,11 +161,11 @@ export interface PhaseOverview {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PHASES = [
-  { number: 1, name: "תשתית וניצחונות מהירים", nameEn: "Foundation & Quick Wins", days: [1, 7], focus: "תיקון בעיות טכניות קריטיות, הקמת תשתית מדידה, ניצחונות מהירים" },
-  { number: 2, name: "סגירת פערי תוכן", nameEn: "Content Gap Closure", days: [8, 20], focus: "יצירת תוכן חדש לפערים שזוהו, עדכון תוכן קיים, מיפוי מילות מפתח" },
-  { number: 3, name: "GEO, Schema ו-FAQ", nameEn: "GEO Optimization & Schema", days: [21, 35], focus: "אופטימיזציה לנראות במנועי AI, הטמעת Schema, בניית FAQ" },
-  { number: 4, name: "אסטרטגיית מתחרים וסמכות", nameEn: "Competitor Strategy & Authority", days: [36, 50], focus: "בניית קישורים, סמכות, Digital PR, התמודדות עם מתחרים" },
-  { number: 5, name: "אופטימיזציה, דיווח וסריקה חוזרת", nameEn: "Optimization & Reporting", days: [51, 60], focus: "מדידת תוצאות, אופטימיזציה נוספת, סריקה חוזרת, דוח סיכום" },
+  { number: 1, name: "Foundation & Quick Wins", nameEn: "Foundation & Quick Wins", days: [1, 7], focus: "Fix critical technical issues, establish measurement infrastructure, achieve quick wins" },
+  { number: 2, name: "Content Gap Closure", nameEn: "Content Gap Closure", days: [8, 20], focus: "Create new content for identified gaps, update existing content, map target keywords" },
+  { number: 3, name: "AI Visibility & Schema Optimization", nameEn: "AI Visibility & Schema Optimization", days: [21, 35], focus: "Optimize for AI engine visibility, implement structured data, build FAQ content" },
+  { number: 4, name: "Competitor Strategy & Authority", nameEn: "Competitor Strategy & Authority", days: [36, 50], focus: "Build backlinks, establish authority, Digital PR, outcompete rivals" },
+  { number: 5, name: "Optimization & Reporting", nameEn: "Optimization & Reporting", days: [51, 60], focus: "Measure results, final optimizations, rescan, deliver comprehensive report" },
 ];
 
 // ─── Main Generator ───────────────────────────────────────────────────────────
@@ -171,14 +181,15 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
 
   const scan = input.websiteScan;
   const domain = (input.websiteUrl || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
-  const loc = input.targetLocation || "ישראל";
-  const lang = input.targetLanguage || "עברית";
+  const businessProfile = input.businessProfile;
+  const loc = businessProfile?.location || input.targetLocation || "";
+  const lang = input.targetLanguage || "English";
   const goals = (input.goals || []).filter(g => g.selected !== false);
   const gaps = input.contentGaps || [];
   const vis = input.visibilityResults || [];
   const queries = input.visibilityQueries || [];
   const pages = input.scannedPages || [];
-  const competitors = input.competitors || [];
+  const competitors = businessProfile?.known_competitors || input.competitors || [];
   const insights = input.insights || [];
   const keywords = input.targetKeywords || [];
 
@@ -231,27 +242,27 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
   // ═══════════════════════════════════════════════════════════════════
 
   // Day 1: Audit & Setup
-  days.push(mkDay(1, "סקירה מלאה והקמת תשתית מדידה", [
+  days.push(mkDay(1, "Complete Audit & Measurement Infrastructure Setup", [
     mkTask("technical", "high", "critical",
-      `הגדרת Google Search Console עבור ${domain}`,
-      `חבר את ${domain} ל-Google Search Console, אמת בעלות באמצעות DNS, הגש את ה-Sitemap${scan?.hasSitemap ? "" : " (יש ליצור אחד קודם)"}, ובדוק שגיאות כיסוי.`,
+      `Set up Google Search Console for ${domain}`,
+      `Connect ${domain} to Google Search Console, verify ownership via DNS, submit Sitemap${scan?.hasSitemap ? "" : " (create one first)"}, and check coverage errors.`,
       1.5, null,
-      "GSC מחובר ומאומת, Sitemap מוגש, שגיאות ידועות",
-      "ללא GSC אין יכולת לנטר ביצועים, קליקים, חשיפות ושגיאות אינדוקס — זה הבסיס לכל עבודת SEO",
+      "GSC connected and verified, Sitemap submitted, coverage errors documented",
+      "Without GSC you cannot monitor performance, clicks, impressions, or indexing errors — this is the foundation of all SEO work",
     ),
     mkTask("analytics", "high", "critical",
-      "הגדרת Google Analytics 4 עם מעקב אירועים",
-      `ודא חיבור GA4 ל-${domain}. הגדר אירועים: form_submit, phone_click, scroll_depth, cta_click. חבר ל-GSC.`,
+      "Set up Google Analytics 4 with Event Tracking",
+      `Ensure GA4 is connected to ${domain}. Configure events: form_submit, phone_click, scroll_depth, cta_click. Connect to GSC.`,
       2, null,
-      "GA4 עם מעקב אירועי המרה מלא",
-      "ללא מדידה לא ניתן להוכיח ROI — צריך baseline מדויק לפני תחילת האופטימיזציה",
+      "GA4 with complete conversion event tracking",
+      "Without measurement you cannot prove ROI — need accurate baseline before optimization begins",
     ),
     mkTask("technical", "high", "high",
-      `סריקה טכנית מלאה של ${domain}`,
-      `הרץ Screaming Frog / Sitebulb על ${domain}. תעד: שגיאות 404, redirects שבורים, duplicate titles, דפים חסומים ב-robots, דפים ללא מטא. ייצא לגיליון.`,
+      `Complete Technical Scan of ${domain}`,
+      `Run Screaming Frog or Sitebulb on ${domain}. Document: 404 errors, broken redirects, duplicate titles, blocked pages, missing meta tags. Export to spreadsheet.`,
       3, scan?.url || null,
-      `רשימה מלאה של כל הבעיות הטכניות ב-${scan?.totalPages || "?"} דפים`,
-      "הסריקה הטכנית חושפת בעיות שנסתרות מהמשתמש אבל פוגעות בדירוג — חייבים לתקן לפני שמשקיעים בתוכן",
+      `Complete list of all technical issues across ${scan?.totalPages || "?"} pages`,
+      "Technical scan reveals hidden problems that damage rankings — must fix before investing in content",
     ),
   ]));
 
@@ -259,166 +270,168 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
   const day2Tasks: DayTask[] = [];
   if (needsSSL) {
     day2Tasks.push(mkTask("technical", "high", "critical",
-      "התקנת תעודת SSL והפניית HTTP→HTTPS",
-      `התקן תעודת SSL (Let's Encrypt חינמית) עבור ${domain}. הגדר הפניית 301 מ-HTTP ל-HTTPS בכל הדפים. עדכן canonical tags, sitemap, וקישורים פנימיים.`,
+      "Install SSL Certificate and Configure HTTPS Redirect",
+      `Install SSL certificate (Let's Encrypt is free) for ${domain}. Set up 301 redirects from HTTP to HTTPS on all pages. Update canonical tags, sitemap, and internal links.`,
       2, scan?.url || null,
-      `${domain} מאובטח ב-HTTPS עם HSTS מופעל`,
-      "Google מסמן אתרים ללא SSL כ'לא בטוח' ומוריד את הדירוג שלהם — זה התיקון הקריטי ביותר",
+      `${domain} secured with HTTPS and HSTS enabled`,
+      "Google marks non-SSL sites as 'Not Secure' and demotes them in rankings — this is the most critical fix",
     ));
   }
   if (needsSitemap) {
     day2Tasks.push(mkTask("technical", "high", "critical",
-      "יצירת Sitemap.xml והגשתו ל-GSC",
-      `צור sitemap.xml הכולל את כל ${scan?.totalPages || "?"} הדפים של ${domain}. ודא שכולל lastmod, priority, changefreq. הגש ל-GSC ול-Bing Webmaster Tools.`,
+      "Create Sitemap.xml and Submit to GSC",
+      `Create sitemap.xml containing all ${scan?.totalPages || "?"} pages of ${domain}. Ensure it includes lastmod, priority, and changefreq. Submit to GSC and Bing Webmaster Tools.`,
       1, null,
-      "Sitemap.xml חי ומוגש למנועי חיפוש",
-      "ללא Sitemap, מנועי חיפוש עלולים לפספס דפים חשובים — במיוחד באתר עם מבנה עמוק",
+      "Sitemap.xml created and submitted to search engines",
+      "Without a Sitemap, search engines may miss important pages — especially critical for sites with deep structure",
     ));
   }
   if (needsRobots) {
     day2Tasks.push(mkTask("technical", "medium", "high",
-      "יצירת Robots.txt עם הוראות סריקה",
-      `צור robots.txt עבור ${domain}. חסום גישה ל-admin/, search-results/, duplicate pages. הוסף שורת Sitemap: https://${domain}/sitemap.xml`,
+      "Create Robots.txt with Crawl Directives",
+      `Create robots.txt for ${domain}. Block access to admin/, search-results/, and duplicate pages. Add Sitemap line: https://${domain}/sitemap.xml`,
       0.5, null,
-      "Robots.txt מוגדר נכון עם הפניה ל-Sitemap",
-      "Robots.txt שולט אילו דפים מנועי חיפוש סורקים — חיסכון ב-crawl budget ומניעת אינדוקס של דפים לא רלוונטיים",
+      "Robots.txt configured correctly with Sitemap reference",
+      "Robots.txt controls which pages search engines crawl — saves crawl budget and prevents indexing irrelevant pages",
     ));
   }
   if (isSlow) {
     day2Tasks.push(mkTask("technical", "high", "critical",
-      `שיפור מהירות טעינה (${((scan?.loadTimeMs || 0) / 1000).toFixed(1)} שניות → מתחת ל-2 שניות)`,
-      `מהירות הטעינה הנוכחית ${((scan?.loadTimeMs || 0) / 1000).toFixed(1)} שניות. דחס תמונות ל-WebP (TinyPNG/Squoosh), הפעל Lazy Loading, מזער CSS/JS, הפעל Browser Caching, ${scan?.cmsDetected ? `בדוק תוספי ${scan.cmsDetected} מאטים` : "שקול CDN כמו Cloudflare"}.`,
+      `Improve Page Load Speed (${((scan?.loadTimeMs || 0) / 1000).toFixed(1)}s → below 2s)`,
+      `Current load time is ${((scan?.loadTimeMs || 0) / 1000).toFixed(1)} seconds. Compress images to WebP (TinyPNG/Squoosh), enable Lazy Loading, minify CSS/JS, enable Browser Caching, ${scan?.cmsDetected ? `audit ${scan.cmsDetected} plugins for slowdowns` : "consider CDN like Cloudflare"}.`,
       4, scan?.url || null,
-      "זמן טעינה מתחת ל-2 שניות ב-Mobile ו-Desktop",
-      `כל שנייה נוספת מגדילה נטישה ב-32%. ${((scan?.loadTimeMs || 0) / 1000).toFixed(1)} שניות זה הרבה מדי — Google מעדיף אתרים מהירים`,
+      "Load time under 2 seconds on mobile and desktop",
+      `Each extra second increases bounce rate by 32%. ${((scan?.loadTimeMs || 0) / 1000).toFixed(1)} seconds is too slow — Google favors faster sites`,
     ));
   }
   if (day2Tasks.length === 0) {
     day2Tasks.push(mkTask("technical", "medium", "medium",
-      "אופטימיזציית Core Web Vitals",
-      `הרץ PageSpeed Insights על 5 דפים מרכזיים ב-${domain}. שפר LCP, FID, CLS. דחס תמונות, הוסף preload לפונטים, מזער CSS/JS לא בשימוש.`,
+      "Optimize Core Web Vitals",
+      `Run PageSpeed Insights on 5 key pages of ${domain}. Improve LCP, FID, CLS. Compress images, add font preloads, minify unused CSS/JS.`,
       3, scan?.url || null,
-      "כל Core Web Vitals ירוקים",
-      "Core Web Vitals הם גורם דירוג ישיר — ירוק = יתרון על מתחרים",
+      "All Core Web Vitals are green",
+      "Core Web Vitals are direct ranking factors — green scores give competitive advantage",
     ));
   }
-  days.push(mkDay(2, "תיקונים טכניים קריטיים", day2Tasks));
+  days.push(mkDay(2, "Critical Technical Fixes", day2Tasks));
 
   // Day 3: Mobile + broken links
   const day3Tasks: DayTask[] = [];
   if (needsMobile) {
     day3Tasks.push(mkTask("technical", "high", "critical",
-      "אופטימיזציית מובייל מלאה",
-      `האתר לא מותאם למובייל. בדוק ב-Mobile-Friendly Test של Google. תקן: font-size (מינימום 16px), touch targets (48px), viewport meta tag, אלמנטים חורגים ממסך. ${scan?.cmsDetected === "WordPress" ? "שקול תבנית responsive או תוסף AMP." : ""}`,
+      "Complete Mobile Optimization",
+      `Site is not mobile-friendly. Test with Google's Mobile-Friendly Test. Fix: font-size (minimum 16px), touch targets (48px), viewport meta tag, elements extending beyond viewport. ${scan?.cmsDetected === "WordPress" ? "Consider responsive theme or AMP plugin." : ""}`,
       4, scan?.url || null,
-      "האתר עובר את Mobile-Friendly Test של Google",
-      "60%+ מהחיפושים ממובייל, Google משתמש ב-Mobile-First Indexing — אתר לא מותאם = אינדוקס לקוי",
+      "Site passes Google's Mobile-Friendly Test",
+      "Over 60% of searches come from mobile; Google uses Mobile-First Indexing — non-mobile site = poor indexing",
     ));
   }
   if (hasBrokenLinks) {
     day3Tasks.push(mkTask("technical", "high", "high",
-      `תיקון ${scan?.brokenLinks || 0} קישורים שבורים`,
-      `נמצאו ${scan?.brokenLinks || 0} קישורים שבורים. הרץ Screaming Frog → Filter: Client Errors (4xx). לכל קישור: תקן ליעד הנכון, הגדר 301 redirect, או הסר. ודא שה-Sitemap לא כולל דפי 404.`,
+      `Fix ${scan?.brokenLinks || 0} Broken Links`,
+      `Found ${scan?.brokenLinks || 0} broken links. Run Screaming Frog and filter Client Errors (4xx). For each: fix target URL, set 301 redirect, or remove. Ensure Sitemap excludes 404 pages.`,
       2, null,
-      "0 קישורים שבורים באתר",
-      "קישורים שבורים פוגעים בחוויית המשתמש וב-crawl budget — גוגל מפסיק לסרוק אם יש יותר מדי שגיאות",
+      "0 broken links on site",
+      "Broken links harm user experience and crawl budget — Google stops crawling if too many errors exist",
     ));
   }
   if (day3Tasks.length < 2) {
     day3Tasks.push(mkTask("onpage", "medium", "medium",
-      "ביקורת URL Structure ו-Canonical Tags",
-      `סרוק את כל ה-URLs ב-${domain}. ודא: URLs קצרים ותיאוריים (לא ?p=123), canonical tag בכל דף, אין duplicate content, הפניות 301 עבודות. ${needsCanonical ? "חסרים canonical tags — יש להוסיפם לכל דף." : ""}`,
+      "Audit URL Structure and Canonical Tags",
+      `Scan all URLs on ${domain}. Ensure: short, descriptive URLs (not ?p=123), canonical tag on every page, no duplicate content, working 301 redirects. ${needsCanonical ? "Missing canonical tags — add them to every page." : ""}`,
       2, null,
-      "URLs נקיים, canonical tags בכל דף, אין duplicates",
-      "URLs מבולגנים ודפים כפולים מבלבלים את Google ומפזרים את כוח הדירוג",
+      "Clean URLs, canonical tags on every page, no duplicates",
+      "Messy URLs and duplicate pages confuse Google and dilute ranking power",
     ));
   }
-  days.push(mkDay(3, "מובייל, קישורים שבורים ומבנה URLs", day3Tasks));
+  days.push(mkDay(3, "Mobile Optimization, Broken Links & URL Structure", day3Tasks));
 
   // Day 4: On-Page — meta tags
   const metaPages = pagesNeedingMeta.length > 0 ? pagesNeedingMeta : pages.slice(0, 5);
-  days.push(mkDay(4, "אופטימיזציית Meta Tags ו-H1", [
+  const locStr = loc ? ` in ${loc}` : "";
+  days.push(mkDay(4, "Optimize Meta Tags and Heading Structure", [
     mkTask("onpage", "high", "high",
-      `כתיבת Meta Title ייחודי ל-${Math.min(metaPages.length, 10)} דפים`,
-      `כתוב Title tag ייחודי לכל דף (50-60 תווים). כלול מילת מפתח ראשית + ${loc}. פורמט מומלץ: "מילת מפתח | ${input.clientName}". דפים לטיפול: ${metaPages.slice(0, 5).map(p => p.url).join(", ")}`,
+      `Write Unique Meta Titles for ${Math.min(metaPages.length, 10)} Pages`,
+      `Write unique Title tag for each page (50-60 characters). Include primary keyword${locStr}. Recommended format: "Keyword | ${input.clientName}". Pages to update: ${metaPages.slice(0, 5).map(p => p.url).join(", ")}`,
       3, metaPages[0]?.url || null,
-      "Meta Title ייחודי ומותאם בכל דף",
-      "Title tag הוא גורם הדירוג החזק ביותר באופטימיזציה On-Page — ישירות משפיע על CTR מתוצאות החיפוש",
+      "Unique, optimized Meta Title on every page",
+      "Title tag is the strongest on-page ranking factor — directly impacts CTR in search results",
     ),
     mkTask("onpage", "high", "high",
-      `כתיבת Meta Description ל-${Math.min(metaPages.length, 10)} דפים`,
-      `כתוב Description ייחודי (150-160 תווים) עם CTA ומילת מפתח. דוגמה: "${keywords[0] || "שירות"} מקצועי ב${loc} — ${input.clientName}. צרו קשר לייעוץ חינם!"`,
+      `Write Meta Descriptions for ${Math.min(metaPages.length, 10)} Pages`,
+      `Write unique Description (150-160 characters) with CTA and keyword. Example: "${keywords[0] || "Service"} expertise${locStr} — ${input.clientName}. Contact for free consultation!"`,
       2.5, metaPages[0]?.url || null,
-      "Meta Description ממוקד CTR בכל דף",
-      "Description טוב מגדיל CTR גם ללא שינוי בדירוג — יותר קליקים = יותר תנועה מאותו מיקום",
+      "CTR-focused Meta Description on every page",
+      "Good descriptions increase CTR even without ranking changes — more clicks = more traffic from same position",
     ),
     mkTask("onpage", "medium", "medium",
-      `תיקון מבנה כותרות H1-H3 ב-${pagesNeedingH1.length > 0 ? pagesNeedingH1.length : "כל ה"}דפים`,
-      `ודא H1 ייחודי בכל דף עם מילת מפתח. ${pagesNeedingH1.length > 0 ? `${pagesNeedingH1.length} דפים חסרי H1: ${pagesNeedingH1.slice(0, 3).map(p => p.url).join(", ")}` : "בדוק היררכיית כותרות H2-H3 בכל הדפים."}`,
+      `Fix H1-H3 Heading Structure on ${pagesNeedingH1.length > 0 ? pagesNeedingH1.length : "All"}Pages`,
+      `Ensure unique H1 on each page with keyword. ${pagesNeedingH1.length > 0 ? `${pagesNeedingH1.length} pages missing H1: ${pagesNeedingH1.slice(0, 3).map(p => p.url).join(", ")}` : "Check H2-H3 hierarchy on all pages."}`,
       2, pagesNeedingH1[0]?.url || null,
-      "כל דף עם H1 ייחודי ומבנה היררכי תקין",
-      "מבנה כותרות עוזר לגוגל ול-AI להבין את מבנה התוכן ולזהות את הנושא של כל דף",
+      "Every page has unique H1 and proper hierarchy",
+      "Heading structure helps Google and AI understand content organization and page topic",
     ),
   ]));
 
   // Day 5: Images + internal linking
-  days.push(mkDay(5, "אופטימיזציית תמונות וקישורים פנימיים", [
+  days.push(mkDay(5, "Optimize Images and Internal Linking", [
     mkTask("onpage", "medium", "medium",
-      `הוספת Alt Text ל-${pagesNeedingAlt.length > 0 ? pagesNeedingAlt.length + " דפים חסרים" : "כל התמונות"}`,
-      `סרוק את כל התמונות ב-${domain}. הוסף alt text תיאורי עם מילות מפתח. ${pagesNeedingAlt.length > 0 ? `דפים חסרי alt: ${pagesNeedingAlt.slice(0, 3).map(p => p.url).join(", ")}` : "ודא שהאלטים לא כפולים."} דחס לפורמט WebP.`,
+      `Add Alt Text to ${pagesNeedingAlt.length > 0 ? pagesNeedingAlt.length + " Pages Missing Alt" : "All Images"}`,
+      `Scan all images on ${domain}. Add descriptive alt text with keywords. ${pagesNeedingAlt.length > 0 ? `Pages missing alt: ${pagesNeedingAlt.slice(0, 3).map(p => p.url).join(", ")}` : "Ensure alt text is not duplicated."} Compress to WebP format.`,
       3, pagesNeedingAlt[0]?.url || null,
-      "100% תמונות עם alt text, פורמט WebP",
-      "תמונות ללא alt הן הזדמנות אבודה — גוגל משתמש ב-alt להבנת תוכן, וזה משפר גם נגישות",
+      "100% of images have alt text, WebP format",
+      "Images without alt text are missed opportunity — Google uses alt for content understanding, improves accessibility",
     ),
     mkTask("onpage", "high", "high",
-      `בניית מפת קישורים פנימיים ל-${domain}`,
-      `צור מבנה Hub & Spoke: דפים ראשיים (Hub) מקשרים ל-3-5 דפים רלוונטיים (Spokes). ודא שכל דף נגיש בתוך 3 קליקים מדף הבית. הוסף breadcrumbs אם חסרים. דפים חשובים: ${pages.slice(0, 3).map(p => p.title || p.url).join(", ")}`,
+      `Build Internal Link Map for ${domain}`,
+      `Create Hub & Spoke structure: main pages (Hubs) link to 3-5 relevant pages (Spokes). Ensure every page is reachable within 3 clicks from home. Add breadcrumbs if missing. Key pages: ${pages.slice(0, 3).map(p => p.title || p.url).join(", ")}`,
       3, null,
-      "כל דף עם 3+ קישורים פנימיים, מבנה Hub & Spoke פעיל",
-      "קישורים פנימיים מפזרים סמכות (link equity) ועוזרים לגוגל להבין את מבנה האתר — זה שינוי פשוט עם אימפקט גבוה",
+      "Every page has 3+ internal links, Hub & Spoke active",
+      "Internal links distribute authority (link equity) and help Google understand site structure — simple change with high impact",
     ),
   ]));
 
   // Day 6: OG + Canonical + Structured Data prep
-  days.push(mkDay(6, "Open Graph, Canonical ותשתית Schema", [
+  const gbpLocation = businessProfile?.location || loc || "your location";
+  days.push(mkDay(6, "Add Open Graph Tags, Set Canonical, Structure Data Foundation", [
     ...(needsOG ? [mkTask("onpage", "medium", "medium",
-      "הוספת תגי Open Graph לכל דף",
-      `הוסף og:title, og:description, og:image, og:url לכל דף ב-${domain}. ודא שהתמונות בגודל 1200x630 לפחות. בדוק עם Facebook Sharing Debugger.`,
+      "Add Open Graph Tags to Every Page",
+      `Add og:title, og:description, og:image, og:url to all pages on ${domain}. Ensure images are at least 1200x630 pixels. Test with Facebook Sharing Debugger.`,
       2, null,
-      "שיתופים ברשתות חברתיות עם תצוגה מקצועית",
-      "תגי OG משפיעים על איך האתר נראה כשמשתפים אותו — תצוגה מקצועית = יותר קליקים מרשתות חברתיות",
+      "Social shares display professionally across platforms",
+      "OG tags control how your site looks when shared — professional preview = more clicks from social",
     )] : []),
     mkTask("technical", "medium", "medium",
-      "הגדרת Google Business Profile (GBP)",
-      `צור או עדכן GBP עבור ${input.clientName} ב${loc}. מלא 100%: שם, כתובת, טלפון, שעות פעילות, קטגוריות (ראשית + 3 משניות), תיאור עם מילות מפתח, תמונות (לוגו + cover + 5 תמונות נוספות).`,
+      "Set Up Google Business Profile (GBP)",
+      `Create or update GBP for ${input.clientName}${gbpLocation ? ` in ${gbpLocation}` : ""}. Complete 100%: name, address, phone, hours, categories (primary + 3 secondary), keyword-rich description, photos (logo + cover + 5 additional).`,
       2.5, null,
-      "GBP מלא ב-100% עם תמונות וקטגוריות",
-      "GBP הוא הגורם #1 בדירוג מקומי — פרופיל מלא מקבל 7x יותר קליקים מפרופיל חלקי",
+      "GBP 100% complete with photos and categories",
+      "GBP is the #1 local ranking factor — complete profile gets 7x more clicks than incomplete",
     ),
     mkTask("analytics", "medium", "medium",
-      `רישום ב-Bing Webmaster Tools ו-${scan?.cmsDetected === "WordPress" ? "Yoast/RankMath" : "כלי SEO"}`,
-      `הגש את ${domain} ל-Bing Webmaster Tools (Copilot משתמש ב-Bing). ${scan?.cmsDetected === "WordPress" ? "התקן Yoast או RankMath לניהול SEO." : "ודא שכלי ה-SEO מוגדרים נכון."}`,
+      `Submit to Bing Webmaster Tools${scan?.cmsDetected === "WordPress" ? " and Yoast/RankMath" : " and SEO Tools"}`,
+      `Submit ${domain} to Bing Webmaster Tools (Copilot uses Bing). ${scan?.cmsDetected === "WordPress" ? "Install Yoast or RankMath for SEO management." : "Ensure SEO tools are configured correctly."}`,
       1.5, null,
-      "Bing WMT מחובר, כלי SEO מוגדרים",
-      "Bing Webmaster Tools חשוב כי Microsoft Copilot ו-ChatGPT (Bing) משתמשים בנתוני Bing — זה עולם ה-GEO",
+      "Bing WMT connected, SEO tools configured",
+      "Bing Webmaster Tools matters because Microsoft Copilot and Bing-powered ChatGPT use Bing data — this is the AI world",
     ),
   ]));
 
   // Day 7: Week 1 review + baseline
-  days.push(mkDay(7, "סיכום שבוע 1 ו-Baseline מלא", [
+  days.push(mkDay(7, "Week 1 Summary & Establish Baseline Metrics", [
     mkTask("analytics", "high", "high",
-      "תיעוד Baseline — ציונים נוכחיים לפני אופטימיזציה",
-      `תעד ציוני baseline: דירוגים ב-GSC (עמדה ממוצעת, CTR), תנועה אורגנית, Core Web Vitals, DA (${scan?.domainAuthority || "?"}), מספר דפים באינדקס (${scan?.indexedPages || "?"}), נראות AI (${mentionedQueries.length}/${vis.length} שאילתות).`,
+      "Document Baseline — Current Scores Before Optimization",
+      `Document baseline metrics: GSC rankings (average position, CTR), organic traffic, Core Web Vitals, DA (${scan?.domainAuthority || "?"}), indexed pages (${scan?.indexedPages || "?"}), AI visibility (${mentionedQueries.length}/${vis.length} queries).`,
       2, null,
-      "גיליון Baseline מלא עם כל המטריקות",
-      "בלי baseline לא ניתן למדוד שיפור — צריך נקודת ייחוס מדויקת לפני שמתחילים",
+      "Complete baseline spreadsheet with all metrics",
+      "Without baseline you cannot measure improvement — need accurate reference point before starting",
     ),
     mkTask("analytics", "medium", "medium",
-      "סיכום שבוע 1 — מה בוצע ומה ההמשך",
-      `כתוב סיכום: מה תוקן (SSL${needsSSL ? " ✓" : ""}, מהירות, sitemap, meta), מה נותר, KPIs ראשוניים. שתף עם הלקוח.`,
+      "Week 1 Summary — What's Done and Next Steps",
+      `Write summary: what was fixed (SSL${needsSSL ? " ✓" : ""}, speed, sitemap, meta), what remains, initial KPIs. Share with client.`,
       1.5, null,
-      "דוח שבועי שלם לשליחה ללקוח",
-      "סיכום שבועי שומר על שקיפות עם הלקוח ומוודא שהתוכנית מתקדמת בקצב הנכון",
+      "Complete weekly report ready to send to client",
+      "Weekly summary maintains transparency with client and verifies plan is on schedule",
     ),
   ]));
 
@@ -428,20 +441,20 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
 
   // Day 8: Keyword research based on actual gaps
   const topGaps = [...highPriorityGaps, ...mediumPriorityGaps].slice(0, 15);
-  days.push(mkDay(8, "מחקר מילות מפתח מעמיק מבוסס פערים", [
+  days.push(mkDay(8, "In-Depth Keyword Research Based on Content Gaps", [
     mkTask("content", "high", "high",
-      `מיפוי ${topGaps.length > 0 ? topGaps.length : keywords.length} מילות מפתח מרכזיות`,
-      `על בסיס ${gaps.length} פערי תוכן שזוהו ו-${keywords.length} מילות מפתח יעד: חקור נפח חיפוש (Google Keyword Planner / Ahrefs), קושי דירוג, כוונת חיפוש. תעדף לפי: volume × relevance × difficulty. מילות מפתח: ${keywords.slice(0, 5).join(", ")}${keywords.length > 5 ? "..." : ""}`,
+      `Map ${topGaps.length > 0 ? topGaps.length : keywords.length} Core Keywords`,
+      `Based on ${gaps.length} identified content gaps and ${keywords.length} target keywords: research search volume (Google Keyword Planner / Ahrefs), ranking difficulty, search intent. Prioritize by: volume × relevance × difficulty. Keywords: ${keywords.slice(0, 5).join(", ")}${keywords.length > 5 ? "..." : ""}`,
       4, null,
-      "מפת מילות מפתח מתועדפת עם נפח, קושי וכוונה",
-      "מחקר מבוסס פערים אמיתיים (מסריקת AI) ולא ניחושים — כל מילת מפתח מייצגת הזדמנות שזוהתה",
+      "Prioritized keyword map with volume, difficulty, and intent",
+      "Research based on actual gaps (from AI scan) not guesses — each keyword represents an identified opportunity",
     ),
     mkTask("content", "medium", "medium",
-      "ניתוח כוונת חיפוש ומיפוי לדפים קיימים",
-      `חלק כל מילת מפתח: informational (מדריכים), commercial (השוואות), transactional (רכישה). מפה לדפים קיימים או סמן כ'דף חדש נדרש'. ${topGaps.slice(0, 3).map(g => `"${g.query}" → ${g.intent}`).join("; ")}`,
+      "Analyze Search Intent and Map to Existing Pages",
+      `Categorize each keyword: informational (guides), commercial (comparisons), transactional (purchase). Map to existing pages or mark 'new page needed'. ${topGaps.slice(0, 3).map(g => `"${g.query}" → ${g.intent}`).join("; ")}`,
       2.5, null,
-      "כל מילת מפתח ממופה לדף קיים או מתוכנן",
-      "תוכן שלא תואם לכוונת החיפוש לא ידורג — informational ≠ transactional",
+      "Every keyword mapped to existing page or planned new page",
+      "Content that doesn't match search intent won't rank — informational ≠ transactional",
     ),
   ]));
 
@@ -449,78 +462,79 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
   const contentDays = [9, 10, 11];
   contentDays.forEach((d, idx) => {
     const gap = topGaps[idx];
-    const kw = gap?.query || keywords[idx] || `נושא מרכזי #${idx + 1}`;
+    const kw = gap?.query || keywords[idx] || `Topic #${idx + 1}`;
     const pageUrl = pages.find(p => p.wordCount > 300)?.url || null;
 
-    days.push(mkDay(d, `כתיבת מאמר מקצועי: "${kw}"`, [
+    days.push(mkDay(d, `Write Expert Article: "${kw}"`, [
       mkTask("content", "high", "high",
-        `כתיבת מאמר 1500+ מילים: "${kw}"`,
-        `כתוב מאמר מקצועי ומעמיק שעונה על "${kw}". מבנה: כותרת עם מילת מפתח, הקדמה (150 מילים), 4-6 תת-סעיפים עם H2/H3, סיכום עם CTA. כלול נתונים, דוגמאות, ${lang === "עברית" ? "ציטוטי מומחים בעברית" : "expert quotes"}. הוסף FAQ עם 3-5 שאלות בתחתית.`,
+        `Write 1500+ Word Article: "${kw}"`,
+        `Write expert, in-depth article answering "${kw}". Structure: headline with keyword, intro (150 words), 4-6 subsections with H2/H3, conclusion with CTA. Include data, examples, expert quotes. Add FAQ with 3-5 questions at bottom.`,
         5, pageUrl,
-        `מאמר מפורסם, ממוקד "${kw}", מותאם לדירוג וה-AI`,
-        gap ? `שאילתה זו זוהתה כפער — ${input.clientName} לא מופיע ב-${missedQueries.length > 0 ? "תשובות ה-AI" : "תוצאות החיפוש"} עליה` : "מילת מפתח מרכזית שחסרה באתר",
-        `מאמר: "${kw}"\nאורך: 1500+ מילים\nקהל יעד: ${loc}\nמבנה:\n1. הקדמה — מה הבעיה/צורך\n2. ${kw} — הסבר מקיף\n3. יתרונות / שיטות / טיפים\n4. דוגמאות / Case Studies\n5. FAQ (3-5 שאלות)\n6. סיכום + CTA\nמילות מפתח משניות: ${keywords.slice(0, 3).join(", ")}`,
+        `Article published, optimized for "${kw}", ranked and AI-ready`,
+        gap ? `Query identified as gap — ${input.clientName} missing from ${missedQueries.length > 0 ? "AI responses" : "search results"} for this` : "Core keyword missing from site",
+        `Article: "${kw}"\nLength: 1500+ words\nTarget audience: ${loc || "your market"}\nStructure:\n1. Introduction — what's the problem/need\n2. ${kw} — comprehensive explanation\n3. Benefits / Methods / Tips\n4. Examples / Case Studies\n5. FAQ (3-5 questions)\n6. Conclusion + CTA\nSecondary keywords: ${keywords.slice(0, 3).join(", ")}`,
       ),
       mkTask("onpage", "medium", "medium",
-        `אופטימיזציית המאמר — Meta, Schema, Links`,
-        `הוסף למאמר: Title tag עם "${kw}", Meta Description עם CTA, FAQ Schema (JSON-LD), 3+ קישורים פנימיים לדפים רלוונטיים, 1 קישור חיצוני לסמכות.`,
+        `Optimize Article — Meta, Schema, Links`,
+        `Add to article: Title tag with "${kw}", Meta Description with CTA, FAQ Schema (JSON-LD), 3+ internal links to relevant pages, 1 external authority link.`,
         1, null,
-        "מאמר מותאם SEO עם Schema ממוקד",
-        "מאמר בלי אופטימיזציה זה כמו חנות בלי שלט — התוכן הוא רק חצי מהעבודה",
+        "SEO-optimized article with targeted Schema",
+        "Unoptimized article is like a store with no sign — content is only half the work",
       ),
     ]));
   });
 
   // Day 12: Update existing thin content
-  days.push(mkDay(12, "שדרוג תוכן קיים דליל", [
+  days.push(mkDay(12, "Upgrade Thin Existing Content", [
     mkTask("content", "high", "high",
-      `שדרוג ${Math.min(thinPages.length, 5) || 5} דפים עם תוכן דליל`,
-      `${thinPages.length > 0 ? `נמצאו ${thinPages.length} דפים עם פחות מ-300 מילים: ${thinPages.slice(0, 3).map(p => p.url).join(", ")}` : `עדכן 5 דפים מרכזיים ב-${domain}`}. לכל דף: הרחב ל-800+ מילים, הוסף H2/H3, שלב מילות מפתח, הוסף FAQ, עדכן תאריך.`,
+      `Upgrade ${Math.min(thinPages.length, 5) || 5} Pages with Thin Content`,
+      `${thinPages.length > 0 ? `Found ${thinPages.length} pages with less than 300 words: ${thinPages.slice(0, 3).map(p => p.url).join(", ")}` : `Update 5 key pages on ${domain}`}. For each: expand to 800+ words, add H2/H3, integrate keywords, add FAQ, update date.`,
       4, thinPages[0]?.url || null,
-      "כל הדפים הדלילים מורחבים ל-800+ מילים",
-      "דפים עם תוכן דליל נחשבים ל-thin content ויכולים לגרור עונש — הרחבה = שיפור דירוג",
+      "All thin pages expanded to 800+ words",
+      "Thin content pages are vulnerable to penalties — expansion = ranking improvement",
     ),
     mkTask("content", "medium", "medium",
-      "הוספת תוכן ויזואלי — אינפוגרפיקות וטבלאות",
-      `הוסף אינפוגרפיקה, טבלה, או גרף ל-3 מאמרים מרכזיים. תוכן ויזואלי מגדיל זמן שהייה ומשותף יותר. השתמש ב-Canva או כלי דומה.`,
+      "Add Visual Content — Infographics and Tables",
+      `Add infographic, table, or chart to 3 key articles. Visual content increases time on page and shareability. Use Canva or similar tool.`,
       3, null,
-      "3 מאמרים עם תוכן ויזואלי ייחודי",
-      "תוכן ויזואלי מגדיל זמן שהייה ב-80% ומשותף 3x יותר — מנועי AI מעדיפים תוכן עשיר",
+      "3 articles with unique visual content",
+      "Visual content increases time on page by 80% and gets shared 3x more — AI engines prefer rich content",
     ),
   ]));
 
   // Days 13-14: More content for missed queries
   [13, 14].forEach((d, idx) => {
     const gap = topGaps[3 + idx];
-    const kw = gap?.query || keywords[3 + idx] || `נושא ${idx + 4}`;
-    days.push(mkDay(d, `מאמר ממוקד AI: "${kw}"`, [
+    const kw = gap?.query || keywords[3 + idx] || `Topic ${idx + 4}`;
+    days.push(mkDay(d, `AI-Optimized Article: "${kw}"`, [
       mkTask("content", "high", "high",
-        `כתיבת מאמר AI-optimized: "${kw}"`,
-        `כתוב מאמר שעונה ישירות על "${kw}" — הפורמט שמנועי AI מעדיפים: תשובה ישירה בפסקה הראשונה, רשימות ממוספרות, definitions ברורות, נתונים עם מקורות. ${gap ? `זוהה כפער: ${input.clientName} לא מוזכר בתשובות AI לשאילתה זו.` : ""}`,
+        `Write AI-Optimized Article: "${kw}"`,
+        `Write article directly answering "${kw}" in AI-preferred format: direct answer in first paragraph, numbered lists, clear definitions, cited data sources. ${gap ? `Gap identified: ${input.clientName} not mentioned in AI responses for this query.` : ""}`,
         5, null,
-        `מאמר AI-friendly מפורסם, ממוקד "${kw}"`,
-        "מנועי AI מעדיפים תוכן מובנה עם תשובות ישירות — פורמט שונה מ-SEO קלאסי",
-        `מאמר AI-Optimized: "${kw}"\nאורך: 1200+ מילים\nפורמט: תשובה ישירה בפתיחה (50 מילים) → הסבר מורחב → רשימה ממוספרת → FAQ\nחשוב: כלול את שם העסק (${input.clientName}) באופן טבעי 2-3 פעמים`,
+        `AI-friendly article published, optimized for "${kw}"`,
+        "AI engines prefer structured content with direct answers — different format from classic SEO",
+        `AI-Optimized Article: "${kw}"\nLength: 1200+ words\nFormat: Direct answer in opening (50 words) → extended explanation → numbered list → FAQ\nImportant: Include business name (${input.clientName}) naturally 2-3 times`,
       ),
     ]));
   });
 
   // Day 15: Landing pages for location
-  days.push(mkDay(15, `דפי נחיתה מקומיים — ${loc}`, [
+  const locStr = loc ? ` in ${loc}` : "";
+  days.push(mkDay(15, `Location-Based Landing Pages${locStr}`, [
     mkTask("content", "high", "high",
-      `יצירת דף נחיתה מקומי: "${keywords[0] || "שירותים"} ב${loc}"`,
-      `צור דף נחיתה ממוקד ${loc}: H1 עם מילת מפתח + מיקום, תוכן 800+ מילים, מפה מוטמעת, כתובת + טלפון, ביקורות מקומיות, Schema LocalBusiness. URL: /${keywords[0] ? keywords[0].replace(/\s/g, "-") : "services"}-${loc.replace(/\s/g, "-")}`,
+      `Create Location Landing Page: "${keywords[0] || "Services"}${locStr}"`,
+      `Create location-focused landing page${locStr}: H1 with keyword + location, 800+ words of content, embedded map, address + phone, local reviews, LocalBusiness Schema. URL: /${keywords[0] ? keywords[0].replace(/\s/g, "-") : "services"}${loc ? "-" + loc.replace(/\s/g, "-") : ""}`,
       4, null,
-      `דף נחיתה חי ל-${loc} עם Schema מקומי`,
-      `דפי נחיתה מקומיים מדורגים גבוה בחיפושים כמו "${keywords[0] || "שירות"} ב${loc}" — חשוב במיוחד לעסקים מקומיים`,
-      `דף נחיתה: "${keywords[0] || "שירות"} ב${loc}"\nH1: ${keywords[0] || "שירות"} מקצועי ב${loc}\nסעיפים: מי אנחנו, שירותים, למה לבחור בנו, ביקורות, יצירת קשר\nSchema: LocalBusiness + Service`,
+      `Live landing page${locStr} with local Schema`,
+      `Location landing pages rank high for searches like "${keywords[0] || "service"}${locStr}" — especially important for local businesses`,
+      `Landing Page: "${keywords[0] || "Service"}${locStr}"\nH1: Professional ${keywords[0] || "Service"}${locStr}\nSections: About us, Services, Why choose us, Reviews, Contact\nSchema: LocalBusiness + Service`,
     ),
     mkTask("local", "medium", "medium",
-      "עקביות NAP בכל הפלטפורמות",
-      `ודא שהשם (${input.clientName}), כתובת וטלפון זהים ב: GBP, Facebook, LinkedIn, Waze, ספריות עסקיות. עדכן כל חוסר עקביות.`,
+      "Ensure NAP Consistency Across All Platforms",
+      `Verify ${input.clientName}'s name, address, and phone are consistent on: GBP, Facebook, LinkedIn, Waze, business directories. Update any inconsistencies.`,
       2, null,
-      "NAP עקבי ב-100% מהפלטפורמות",
-      "חוסר עקביות ב-NAP מבלבל את Google ומוריד אמון — צריך להיות זהה בכל מקום",
+      "NAP 100% consistent across all platforms",
+      "NAP inconsistencies confuse Google and erode trust — must be identical everywhere",
     ),
   ]));
 
@@ -528,52 +542,52 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
   [16, 17, 18].forEach((d, idx) => {
     const gapIdx = 5 + idx;
     const gap = topGaps[gapIdx];
-    const kw = gap?.query || keywords[gapIdx] || `תוכן #${gapIdx + 1}`;
+    const kw = gap?.query || keywords[gapIdx] || `Content #${gapIdx + 1}`;
 
-    days.push(mkDay(d, `תוכן ממוקד: "${kw}"`, [
+    days.push(mkDay(d, `Targeted Content: "${kw}"`, [
       mkTask("content", "high", "high",
-        `כתיבת מאמר/מדריך: "${kw}"`,
-        `${gap ? `פער תוכן שזוהה: "${gap.query}" (${gap.intent}, ${gap.importance}). ` : ""}כתוב מדריך מקצועי 1200+ מילים. כלול: definitions ברורות, שלבים ממוספרים, טיפים מעשיים, CTA. שלב את שם ${input.clientName} באופן טבעי.`,
+        `Write Article/Guide: "${kw}"`,
+        `${gap ? `Content gap identified: "${gap.query}" (${gap.intent}, ${gap.importance}). ` : ""}Write expert guide 1200+ words. Include: clear definitions, numbered steps, practical tips, CTA. Naturally incorporate ${input.clientName}.`,
         4, null,
-        `מאמר מפורסם ומותאם ל-"${kw}"`,
-        gap ? `AI לא מזכיר את ${input.clientName} בשאילתה "${gap.query}" — תוכן ממוקד ישנה את זה` : "מילת מפתח חשובה שצריך לכסות",
+        `Article published and optimized for "${kw}"`,
+        gap ? `AI doesn't mention ${input.clientName} for "${gap.query}" — targeted content will change that` : "Important keyword that needs coverage",
       ),
     ]));
   });
 
   // Day 19: Content calendar
-  days.push(mkDay(19, "לוח תוכן חודשי ואסטרטגיית פרסום", [
+  days.push(mkDay(19, "Build 3-Month Content Calendar and Distribution Strategy", [
     mkTask("content", "medium", "medium",
-      "בניית לוח תוכן ל-3 חודשים הבאים",
-      `צור לוח: 2 מאמרים בחודש, 1 עדכון תוכן קיים, 4 פוסטים חברתיים. בסס על: ${topGaps.length} פערים, ${keywords.length} מילות מפתח, עונתיות. תעדף לפי ROI.`,
+      "Create Content Calendar for Next 3 Months",
+      `Create calendar: 2 articles/month, 1 content update, 4 social posts. Base on: ${topGaps.length} gaps, ${keywords.length} keywords, seasonality. Prioritize by ROI.`,
       3, null,
-      "לוח תוכן מתוזמן ל-3 חודשים",
-      "עקביות בפרסום תוכן חשובה — Google ו-AI מעדיפים אתרים פעילים",
+      "Content calendar scheduled for 3 months",
+      "Consistency in content publishing matters — Google and AI favor active sites",
     ),
     mkTask("content", "medium", "medium",
-      "הגדרת Content Distribution — ערוצי הפצה",
-      `הגדר ערוצים: Google Business (פוסטים שבועיים), LinkedIn, Facebook, Newsletter. כל מאמר חדש → שיתוף בכל הערוצים תוך 24 שעות.`,
+      "Set Up Content Distribution Channels",
+      `Define channels: Google Business (weekly posts), LinkedIn, Facebook, Newsletter. Every new article → share across all channels within 24 hours.`,
       1.5, null,
-      "תהליך הפצה מוגדר לכל תוכן חדש",
-      "תוכן שלא מופץ לא מקבל קישורים ואותות חברתיים — ההפצה חשובה כמו הכתיבה",
+      "Distribution process defined for all new content",
+      "Undistributed content doesn't get links or social signals — distribution is as important as writing",
     ),
   ]));
 
   // Day 20: Phase 2 review
-  days.push(mkDay(20, "סיכום שלב 2 — מדידת התקדמות תוכן", [
+  days.push(mkDay(20, "Phase 2 Summary — Measure Content Progress", [
     mkTask("analytics", "high", "medium",
-      "מדידת ביצועי תוכן חדש",
-      `בדוק ב-GSC: האם המאמרים החדשים נאינדקסו? מה ה-CTR? מה הדירוג הראשוני? השווה ל-Baseline של יום 7. תעד: ${days.filter(d => d.phase === PHASES[1].name).reduce((s, d) => s + d.tasks.length, 0)} משימות שהושלמו.`,
+      "Measure Performance of New Content",
+      `Check GSC: are new articles indexed? What's the CTR? What's the initial ranking? Compare to Day 7 baseline. Document: ${days.filter(d => d.phase === PHASES[1].name).reduce((s, d) => s + d.tasks.length, 0)} tasks completed.`,
       2, null,
-      "דוח התקדמות שלב 2 מלא",
-      "חשוב למדוד את האפקט של התוכן החדש — אינדוקס מהיר = סימן טוב",
+      "Complete Phase 2 progress report",
+      "Important to measure impact of new content — fast indexing = good sign",
     ),
     mkTask("analytics", "medium", "low",
-      "עדכון לקוח — סיכום חצי דרך",
-      `הכן מצגת קצרה: מה בוצע ב-20 ימים, ${topGaps.length} פערים שנסגרו, מטריקות ראשוניות, תוכנית להמשך.`,
+      "Client Update — Midpoint Summary",
+      `Prepare brief presentation: what was done in 20 days, ${topGaps.length} gaps closed, initial metrics, plan for remainder.`,
       1.5, null,
-      "דוח חצי-דרך מוכן לשליחה",
-      "שקיפות מול הלקוח חיונית — מראה ערך ושומר על אמון",
+      "Midpoint report ready to send",
+      "Transparency with client is critical — shows value and maintains trust",
     ),
   ]));
 
@@ -582,38 +596,38 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
   // ═══════════════════════════════════════════════════════════════════
 
   // Day 21: Schema implementation
-  days.push(mkDay(21, "הטמעת Schema.org — LocalBusiness + FAQ", [
+  days.push(mkDay(21, "Implement Schema.org — LocalBusiness & FAQ", [
     mkTask("ai_optimization", "high", "critical",
-      `הטמעת LocalBusiness Schema ב-${domain}`,
-      `הוסף JSON-LD Schema מסוג LocalBusiness לדף הבית: name (${input.clientName}), address (${loc}), telephone, openingHours, image, url, geo coordinates, sameAs (רשתות חברתיות). בדוק ב-Google Rich Results Test.`,
+      `Implement LocalBusiness Schema on ${domain}`,
+      `Add JSON-LD LocalBusiness Schema to home page: name (${input.clientName}), address (${locStr}), telephone, openingHours, image, url, geo coordinates, sameAs (social profiles). Validate with Google Rich Results Test.`,
       3, scan?.url || null,
-      "LocalBusiness Schema מוטמע ומאומת",
-      "Schema הוא השפה שבה מנועי AI ו-Google מבינים את העסק — בלי Schema, ה-AI לא יודע שהעסק קיים",
+      "LocalBusiness Schema implemented and verified",
+      "Schema is how AI engines and Google understand your business — without it, AI doesn't know you exist",
     ),
     mkTask("ai_optimization", "high", "high",
-      "הטמעת FAQ Schema בדפים מרכזיים",
-      `הוסף FAQPage Schema (JSON-LD) ל-3 דפים מרכזיים. השתמש בשאלות מסריקת ה-AI: ${missedQueries.slice(0, 3).map(q => `"${q.query}"`).join(", ")}. כל שאלה עם תשובה מלאה הכוללת את שם העסק.`,
+      "Implement FAQ Schema on Key Pages",
+      `Add FAQPage Schema (JSON-LD) to 3 key pages. Use questions from AI scan: ${missedQueries.slice(0, 3).map(q => `"${q.query}"`).join(", ")}. Each question with complete answer including business name.`,
       2.5, null,
-      "FAQ Schema ב-3+ דפים, עובר Rich Results Test",
-      "FAQ Schema מופיע כתוצאות עשירות בגוגל ומנועי AI שואבים תשובות ישירות מ-FAQ — זו הדרך המהירה ביותר להיכנס לתשובות AI",
+      "FAQ Schema on 3+ pages, passes Rich Results Test",
+      "FAQ Schema appears as rich results and AI engines pull answers directly — fastest way to get into AI responses",
     ),
   ]));
 
   // Day 22: More Schema types
-  days.push(mkDay(22, "Schema מתקדם — Service, BreadcrumbList, Article", [
+  days.push(mkDay(22, "Advanced Schema — Service, BreadcrumbList, Article", [
     mkTask("ai_optimization", "high", "high",
-      "הטמעת Service Schema ו-BreadcrumbList",
-      `הוסף Service Schema לכל דף שירות (name, description, provider, areaServed: ${loc}). הוסף BreadcrumbList Schema לכל הדפים. ודא ש-Article Schema מוטמע בכל מאמר בבלוג.`,
+      "Implement Service Schema and BreadcrumbList",
+      `Add Service Schema to every service page (name, description, provider, areaServed${locStr}). Add BreadcrumbList Schema to all pages. Ensure Article Schema on every blog post.`,
       3, null,
-      "Service + BreadcrumbList + Article Schema מוטמעים",
-      "Service Schema עוזר ל-AI להבין מה העסק מציע — BreadcrumbList משפר ניווט בתוצאות החיפוש",
+      "Service + BreadcrumbList + Article Schema implemented",
+      "Service Schema helps AI understand what your business offers — BreadcrumbList improves navigation in search results",
     ),
     mkTask("ai_optimization", "medium", "medium",
-      "בדיקת Schema Validation מלאה",
-      `הרץ את Google Rich Results Test על כל דף עם Schema. תקן שגיאות ואזהרות. ודא ש-Google ו-Bing מזהים את כל ה-Schema. בדוק גם ב-schema.org validator.`,
+      "Complete Schema Validation Audit",
+      `Run Google Rich Results Test on every page with Schema. Fix errors and warnings. Ensure Google and Bing recognize all Schema. Check with schema.org validator.`,
       1.5, null,
-      "0 שגיאות Schema, 100% validated",
-      "Schema שבור גרוע יותר מ-Schema חסר — Google מתעלם מ-Schema לא תקין",
+      "0 Schema errors, 100% validated",
+      "Broken Schema is worse than no Schema — Google ignores invalid Schema",
     ),
   ]));
 
@@ -625,159 +639,159 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
   });
   const weakestEngine = engineStats.sort((a, b) => a.pct - b.pct)[0];
 
-  days.push(mkDay(23, `אופטימיזציה ל-${weakestEngine?.engine || "ChatGPT"} — המנוע החלש ביותר`, [
+  days.push(mkDay(23, `Optimize for ${weakestEngine?.engine || "ChatGPT"} — Weakest Engine`, [
     mkTask("ai_optimization", "high", "high",
-      `שיפור נראות ב-${weakestEngine?.engine || "ChatGPT"} (${weakestEngine?.pct || 0}% נוכחי)`,
-      `${weakestEngine?.engine || "ChatGPT"} מזכיר את ${input.clientName} רק ב-${weakestEngine?.mentioned || 0} מתוך ${weakestEngine?.total || 0} שאילתות. אסטרטגיה: 1) הוסף תשובות ישירות לשאילתות חסרות בדפי האתר, 2) צור פרופיל ${weakestEngine?.engine === "Copilot" ? "ב-Bing Places" : weakestEngine?.engine === "Gemini" ? "ב-Google Knowledge Graph" : "באתרי סמכות שהמנוע סורק"}, 3) פרסם תוכן בפלטפורמות שהמנוע סומך עליהן.`,
+      `Improve Visibility on ${weakestEngine?.engine || "ChatGPT"} (${weakestEngine?.pct || 0}% currently)`,
+      `${weakestEngine?.engine || "ChatGPT"} only mentions ${input.clientName} in ${weakestEngine?.mentioned || 0} of ${weakestEngine?.total || 0} queries. Strategy: 1) Add direct answers to missing queries on site pages, 2) Create profile on ${weakestEngine?.engine === "Copilot" ? "Bing Places" : weakestEngine?.engine === "Gemini" ? "Google Knowledge Graph" : "authority sites the engine crawls"}, 3) Publish content on platforms the engine trusts.`,
       3, null,
-      `שיפור נראות ב-${weakestEngine?.engine || "ChatGPT"} ב-20%+`,
-      `${weakestEngine?.engine || "ChatGPT"} הוא המנוע שבו ${input.clientName} הכי חלש — שיפור כאן נותן את ה-ROI הגדול ביותר`,
+      `Improve ${weakestEngine?.engine || "ChatGPT"} visibility by 20%+`,
+      `${weakestEngine?.engine || "ChatGPT"} is where ${input.clientName} is weakest — improvement here gives biggest ROI`,
     ),
     mkTask("ai_optimization", "medium", "medium",
-      "יצירת Topical Authority Map",
-      `זהה 3-5 נושאים מרכזיים שבהם ${input.clientName} צריך להיות הסמכות. לכל נושא: 1 מאמר-אם (pillar) + 3-4 מאמרי-בת (cluster). קשר ביניהם עם internal links. נושאים: ${keywords.slice(0, 3).join(", ")}`,
+      "Build Topical Authority Map",
+      `Identify 3-5 core topics where ${input.clientName} should be the authority. For each: 1 pillar article + 3-4 cluster articles. Link them with internal links. Topics: ${keywords.slice(0, 3).join(", ")}`,
       2, null,
-      "מפת Topical Authority עם Pillar-Cluster מוגדרים",
-      "מנועי AI מעדיפים מקורות עם סמכות נושאית — אתר עם מבנה Pillar-Cluster נתפס כסמכותי יותר",
+      "Topical Authority map with Pillar-Cluster structure",
+      "AI engines prefer sources with topical authority — Pillar-Cluster structure appears more authoritative",
     ),
   ]));
 
-  days.push(mkDay(24, "בניית דף FAQ מרכזי עם Schema", [
+  days.push(mkDay(24, "Build Central FAQ Page with Schema", [
     mkTask("content", "high", "critical",
-      `כתיבת דף FAQ מרכזי עם ${Math.min(vis.length, 20)} שאלות`,
-      `צור דף FAQ ייעודי ב-${domain}/faq. כלול ${Math.min(vis.length, 20)} שאלות מסריקת ה-AI. כל תשובה: 100-200 מילים, ישירה, כוללת שם העסק. שאלות: ${missedQueries.slice(0, 5).map(q => `"${q.query}"`).join(", ")}${missedQueries.length > 5 ? "..." : ""}`,
+      `Write Central FAQ Page with ${Math.min(vis.length, 20)} Questions`,
+      `Create dedicated FAQ page at ${domain}/faq. Include ${Math.min(vis.length, 20)} questions from AI scan. Each answer: 100-200 words, direct, includes business name. Questions: ${missedQueries.slice(0, 5).map(q => `"${q.query}"`).join(", ")}${missedQueries.length > 5 ? "..." : ""}`,
       5, null,
-      `דף FAQ חי עם ${Math.min(vis.length, 20)}+ שאלות ותשובות`,
-      "דף FAQ הוא המקור #1 שממנו מנועי AI שואבים תשובות — כל שאלה שנענית = סיכוי להיכלל בתשובת AI",
-      `דף FAQ: ${domain}/faq\n${missedQueries.slice(0, 10).map((q, i) => `${i + 1}. "${q.query}"\n   תשובה: [תשובה ישירה ב-100-200 מילים הכוללת "${input.clientName}"]`).join("\n")}`,
+      `Live FAQ page with ${Math.min(vis.length, 20)}+ questions and answers`,
+      "FAQ page is the #1 source where AI engines pull answers — each answered question = opportunity to appear in AI response",
+      `FAQ Page: ${domain}/faq\n${missedQueries.slice(0, 10).map((q, i) => `${i + 1}. "${q.query}"\n   Answer: [Direct 100-200 word answer including "${input.clientName}"]`).join("\n")}`,
     ),
   ]));
 
   // Days 25-28: Continued GEO work
-  days.push(mkDay(25, "E-E-A-T — חיזוק מומחיות וסמכות", [
+  days.push(mkDay(25, "Build E-E-A-T — Expertise, Experience, Authority, Trust", [
     mkTask("ai_optimization", "high", "high",
-      "בניית דף About Us מקצועי עם E-E-A-T",
-      `שדרג את דף About: סיפור העסק, ניסיון (שנים, פרויקטים), הסמכות, תמונות צוות, ביקורות, פרסום במדיה. הוסף Person Schema + Organization Schema.`,
+      "Build Professional About Us Page with E-E-A-T",
+      `Upgrade About page: business story, experience (years, projects), credentials, team photos, testimonials, media coverage. Add Person Schema + Organization Schema.`,
       3, null,
-      "דף About מקצועי עם E-E-A-T מלא",
-      "Google ומנועי AI מעריכים E-E-A-T (Expertise, Experience, Authoritativeness, Trustworthiness) — זה מה שגורם להם לסמוך על התוכן שלך",
+      "Professional About page with complete E-E-A-T",
+      "Google and AI engines evaluate E-E-A-T (Expertise, Experience, Authoritativeness, Trustworthiness) — this is what makes them trust your content",
     ),
     mkTask("ai_optimization", "medium", "medium",
-      "הוספת Author Bio ו-Credentials לכל מאמר",
-      `הוסף ביוגרפיה של הכותב לכל מאמר בבלוג. כלול: שם, תפקיד, ניסיון, קישור לפרופיל LinkedIn. הוסף Person Schema.`,
+      "Add Author Bio and Credentials to Every Article",
+      `Add author biography to every blog article. Include: name, title, experience, LinkedIn profile link. Add Person Schema.`,
       2, null,
-      "כל מאמר עם Author Bio ו-Schema",
-      "תוכן עם כותב מזוהה מקבל יותר אמון ממנועי AI — Authorship הוא אות אמינות",
+      "Every article with Author Bio and Schema",
+      "Content with identified author gets more trust from AI engines — authorship is a trust signal",
     ),
   ]));
 
-  days.push(mkDay(26, `חיזוק נראות AI — ממוקד ${mentionedQueries.length > 0 ? "שאילתות חזקות" : "שאילתות חדשות"}`, [
+  days.push(mkDay(26, `Strengthen AI Visibility — Focus on ${mentionedQueries.length > 0 ? "Strong Queries" : "New Queries"}`, [
     mkTask("ai_optimization", "high", "high",
-      `אופטימיזציית תוכן ל-${missedQueries.length} שאילתות AI חסרות`,
-      `לכל שאילתה חסרה: מצא דף רלוונטי באתר, הוסף פסקה שעונה ישירות על השאילתה, כלול שם העסק. שאילתות: ${missedQueries.slice(0, 5).map(q => `"${q.query}"`).join(", ")}`,
+      `Optimize Content for ${missedQueries.length} Missing AI Queries`,
+      `For each missed query: find relevant page on site, add paragraph directly answering the query, include business name. Queries: ${missedQueries.slice(0, 5).map(q => `"${q.query}"`).join(", ")}`,
       4, null,
-      `${Math.min(missedQueries.length, 10)} שאילתות עם תשובה ישירה באתר`,
-      "מנועי AI שואבים תוכן מהאתר — אם התשובה קיימת באתר, הסיכוי שה-AI ישתמש בה גבוה משמעותית",
+      `${Math.min(missedQueries.length, 10)} queries with direct answers on site`,
+      "AI engines pull content from your site — if answer exists on your site, AI is much more likely to use it",
     ),
   ]));
 
-  // Days 27-30: More GEO + structured content
+  // Days 27-30: Advanced AI visibility work
   [27, 28, 29, 30].forEach((d) => {
     const dayTasks: DayTask[] = [];
     if (d === 27) {
       dayTasks.push(mkTask("ai_optimization", "high", "high",
-        "יצירת Glossary / מילון מונחים מקצועי",
-        `צור דף מילון מונחים (${domain}/glossary) עם 20+ הגדרות מקצועיות בתחום. כל הגדרה: 50-100 מילים, ברורה, מדויקה. הוסף DefinedTerm Schema.`,
+        "Build Professional Glossary / Terms Dictionary",
+        `Create glossary page (${domain}/glossary) with 20+ professional definitions. Each definition: 50-100 words, clear, accurate. Add DefinedTerm Schema.`,
         4, null,
-        "דף Glossary חי עם 20+ הגדרות ו-Schema",
-        "Glossary הוא מקור מועדף למנועי AI — הגדרות ברורות מגדילות את הסיכוי להיכלל בתשובות",
+        "Live Glossary page with 20+ definitions and Schema",
+        "Glossary is preferred source for AI engines — clear definitions increase chance of appearing in responses",
       ));
     } else if (d === 28) {
       dayTasks.push(mkTask("content", "high", "high",
-        `כתיבת מדריך מקיף: "כל מה שצריך לדעת על ${keywords[0] || "הנושא"}"`,
-        `Pillar Content: מדריך 3000+ מילים שמכסה את ${keywords[0] || "הנושא"} מכל זווית. כלול: סיכום מנהלים, אינפוגרפיקה, FAQ, קישורים ל-5+ מאמרים באתר. זה יהיה ה-Hub Content.`,
+        `Write Comprehensive Guide: "Everything About ${keywords[0] || "Topic"}"`,
+        `Pillar Content: 3000+ word guide covering ${keywords[0] || "topic"} comprehensively. Include: executive summary, infographic, FAQ, links to 5+ articles on site. This is your Hub Content.`,
         6, null,
-        "מדריך Pillar מפורסם — הדף הסמכותי ביותר באתר",
-        "Pillar Content הוא אסטרטגיית Topical Authority — דף מרכזי שמקשר לכל המאמרים הרלוונטיים",
-        `מדריך Pillar: "${keywords[0] || "הנושא"} — מדריך מקיף ${new Date().getFullYear()}"\nאורך: 3000+ מילים\nסעיפים:\n1. הקדמה וסקירה\n2. ${keywords[1] || "תת-נושא 1"}\n3. ${keywords[2] || "תת-נושא 2"}\n4. ${keywords[3] || "תת-נושא 3"}\n5. טעויות נפוצות\n6. טיפים מתקדמים\n7. FAQ\n8. סיכום\nקישורים פנימיים: ${pages.slice(0, 5).map(p => p.url).join(", ")}`,
+        "Pillar guide published — most authoritative page on site",
+        "Pillar Content is Topical Authority strategy — central page linking to all relevant articles",
+        `Pillar Guide: "${keywords[0] || "Topic"} — Comprehensive Guide ${new Date().getFullYear()}"\nLength: 3000+ words\nSections:\n1. Overview\n2. ${keywords[1] || "Subtopic 1"}\n3. ${keywords[2] || "Subtopic 2"}\n4. ${keywords[3] || "Subtopic 3"}\n5. Common Mistakes\n6. Advanced Tips\n7. FAQ\n8. Conclusion\nInternal links: ${pages.slice(0, 5).map(p => p.url).join(", ")}`,
       ));
     } else if (d === 29) {
       dayTasks.push(mkTask("local", "high", "high",
-        "אסטרטגיית ביקורות Google — תהליך יזום",
-        `הגדר תהליך איסוף ביקורות: 1) צור קישור ישיר לביקורת GBP, 2) שלח אימייל אוטומטי ללקוחות 48 שעות אחרי שירות, 3) הוסף CTA לביקורת באתר ובמייל. יעד: 5+ ביקורות חדשות בחודש.`,
+        "Google Reviews Strategy — Proactive Collection Process",
+        `Set up review collection process: 1) Create direct GBP review link, 2) Send automated email to customers 48 hours after service, 3) Add review CTA on site and in email. Goal: 5+ new reviews per month.`,
         2.5, null,
-        "תהליך ביקורות פעיל, 5+ ביקורות חדשות",
-        "ביקורות Google הן אות חזק לאמינות — גם מנועי AI מתייחסים לביקורות כראיה ל-E-E-A-T",
+        "Active review process, 5+ new reviews",
+        "Google reviews are strong trust signal — AI engines also treat reviews as E-E-A-T evidence",
       ));
       dayTasks.push(mkTask("local", "medium", "medium",
-        `רישום ב-10 ספריות עסקיות מקומיות (${loc})`,
-        `רשום את ${input.clientName} ב: d106, infoglobus, b144, zap, yelp, trustpilot, LinkedIn Company, Facebook Business, Waze Business, ועוד. ודא NAP עקבי.`,
+        `Submit to 10 Local Business Directories${locStr}`,
+        `List ${input.clientName} on: directories, review sites, Yelp, Trustpilot, LinkedIn Company, Facebook Business, Waze Business, and others. Ensure consistent NAP.`,
         2.5, null,
-        "פרופיל פעיל ב-10+ ספריות",
-        "Citations (אזכורים בספריות) הם אות דירוג מקומי — יותר citations = יותר סמכות מקומית",
+        "Active profile on 10+ directories",
+        "Citations (directory listings) are local ranking signal — more citations = more local authority",
       ));
     } else {
       dayTasks.push(mkTask("ai_optimization", "medium", "medium",
-        "סקירה חוזרת של נראות AI — מדידת שינויים",
-        `הרץ שוב את 10 השאילתות המרכזיות ב-5 מנועי AI. השווה ל-baseline: כמה שאילתות חדשות מזכירות את ${input.clientName}? אילו מנועים השתפרו?`,
+        "Re-check AI Visibility — Measure Changes",
+        `Re-run top 10 queries on 5 AI engines. Compare to baseline: how many new queries mention ${input.clientName}? Which engines improved?`,
         2.5, null,
-        "דוח נראות AI עדכני להשוואה",
-        "מדידה חוזרת אחרי 3 שבועות נותנת אינדיקציה ראשונית — Schema + FAQ + תוכן חדש אמורים להתחיל לעבוד",
+        "Updated AI visibility report for comparison",
+        "Re-measurement after 3 weeks gives early indication — Schema + FAQ + new content should start working",
       ));
       dayTasks.push(mkTask("analytics", "medium", "low",
-        "דוח שבועי — סיכום שלב GEO",
-        `כתוב דוח: Schema מוטמע (סוגים, דפים), FAQ פורסם (שאלות), נראות AI (שינויים), ביקורות חדשות. שלח ללקוח.`,
+        "Weekly Report — Phase 3 Summary",
+        `Write report: Schema deployed (types, pages), FAQ published (questions), AI visibility (changes), new reviews. Send to client.`,
         1.5, null,
-        "דוח שלב 3 מוכן",
-        "שקיפות מתמשכת שומרת על אמון הלקוח ומוכיחה ערך",
+        "Phase 3 report complete",
+        "Ongoing transparency maintains client trust and demonstrates value",
       ));
     }
     const ph = phaseFor(d);
-    days.push(mkDay(d, dayTasks[0]?.title.substring(0, 50) || `יום ${d}`, dayTasks));
+    days.push(mkDay(d, dayTasks[0]?.title.substring(0, 50) || `Day ${d}`, dayTasks));
   });
 
-  // Days 31-35: Advanced GEO
-  days.push(mkDay(31, "Video SEO ותוכן מולטימדיה", [
+  // Days 31-35: Video and content optimization
+  days.push(mkDay(31, "Create Video Content and Multimedia", [
     mkTask("content", "medium", "medium",
-      `יצירת 2-3 סרטונים קצרים (60-90 שניות) על ${keywords[0] || "הנושא"}`,
-      `צלם/צור סרטונים: 1) מי אנחנו (30 שניות), 2) ${keywords[0] || "טיפ מקצועי"} (60 שניות), 3) FAQ (#1 שאלה נפוצה). העלה ל-YouTube עם title, description, tags ממוקדי SEO.`,
+      `Create 2-3 Short Videos (60-90 seconds) on ${keywords[0] || "Topic"}`,
+      `Create/shoot videos: 1) Who we are (30 seconds), 2) ${keywords[0] || "Expert tip"} (60 seconds), 3) FAQ (most common question). Upload to YouTube with SEO-focused title, description, tags.`,
       4, null,
-      "3 סרטונים באתר ו-YouTube עם SEO",
-      "YouTube הוא מנוע החיפוש השני בגודלו — וגם ChatGPT ו-Gemini שואבים מידע מ-YouTube",
+      "3 videos on site and YouTube with SEO",
+      "YouTube is the second-largest search engine — ChatGPT and Gemini also pull information from YouTube",
     ),
   ]));
 
   [32, 33].forEach((d, idx) => {
     const gap = topGaps[8 + idx];
-    const kw = gap?.query || keywords[8 + idx] || `תוכן ${idx + 8}`;
-    days.push(mkDay(d, `תוכן GEO ממוקד: "${kw}"`, [
+    const kw = gap?.query || keywords[8 + idx] || `Content ${idx + 8}`;
+    days.push(mkDay(d, `AI-Optimized Content: "${kw}"`, [
       mkTask("content", "high", "high",
-        `מאמר GEO-optimized: "${kw}"`,
-        `כתוב מאמר ממוקד GEO עבור "${kw}": פסקת פתיחה עם תשובה ישירה, רשימות ממוספרות, definition boxes, נתונים עם מקורות. אזכור ${input.clientName} 2-3 פעמים באופן טבעי. הוסף FAQ Schema.`,
+        `Write AI-Optimized Article: "${kw}"`,
+        `Write AI-focused article for "${kw}": opening paragraph with direct answer, numbered lists, definition boxes, data with sources. Mention ${input.clientName} naturally 2-3 times. Add FAQ Schema.`,
         4.5, null,
-        `מאמר GEO חי ומאינדקס`,
-        gap ? `זוהה כפער ב-AI: "${gap.query}" — צריך לכסות אותו` : "מילת מפתח אסטרטגית",
+        `Live AI-optimized article, indexed`,
+        gap ? `Gap identified in AI: "${gap.query}" — must cover this` : "Strategic keyword",
       ),
     ]));
   });
 
-  days.push(mkDay(34, "סקירת Schema ו-Rich Results", [
+  days.push(mkDay(34, "Audit Schema and Rich Results", [
     mkTask("ai_optimization", "medium", "medium",
-      `בדיקת כל ה-Schema ב-${domain} — ולידציה מלאה`,
-      `בדוק כל דף עם Schema ב-Rich Results Test. תעד: כמה דפים עם Schema, כמה עוברים, כמה מופיעים כ-Rich Results ב-GSC. תקן בעיות.`,
+      `Validate All Schema on ${domain} — Complete Audit`,
+      `Test every page with Schema using Rich Results Test. Document: how many pages have Schema, how many pass, how many appear as rich results in GSC. Fix issues.`,
       2.5, null,
-      "100% Schema validated, דוח Rich Results",
-      "Schema שעובד = Rich Results = CTR גבוה יותר = יותר תנועה",
+      "100% Schema validated, Rich Results report",
+      "Working Schema = Rich Results = Higher CTR = More traffic",
     ),
   ]));
 
-  days.push(mkDay(35, "סיכום שלב 3 — GEO מידרג", [
+  days.push(mkDay(35, "Phase 3 Summary — AI Visibility Milestone", [
     mkTask("analytics", "high", "medium",
-      "דוח ביניים: GEO + Schema + נראות AI",
-      `כתוב דוח: Schema מוטמע (${pagesNeedingSchema.length > 0 ? `${pagesNeedingSchema.length} דפים שודרגו` : "כל הדפים"}), FAQ פורסם, נראות AI (before/after), Rich Results status, ביקורות חדשות. צרף צילומי מסך.`,
+      "Interim Report: Schema + FAQ + AI Visibility",
+      `Write report: Schema deployed (${pagesNeedingSchema.length > 0 ? `${pagesNeedingSchema.length} pages upgraded` : "all pages"}), FAQ published, AI visibility (before/after), Rich Results status, new reviews. Include screenshots.`,
       2, null,
-      "דוח GEO מקיף לסיום שלב 3",
-      "נקודת ציון חשובה — 35 ימים = יותר מחצי התוכנית, צריך להראות תוצאות ראשוניות",
+      "Comprehensive Phase 3 report",
+      "Key milestone — 35 days = over halfway through, must show initial results",
     ),
   ]));
 
@@ -785,38 +799,39 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
   // PHASE 4: Days 36-50 — Competitor Strategy & Authority
   // ═══════════════════════════════════════════════════════════════════
 
-  days.push(mkDay(36, "ניתוח מתחרים מעמיק", [
+  const competitorsList = competitors.length > 0 ? competitors.slice(0, 3).join(", ") : "identified competitors";
+  days.push(mkDay(36, "In-Depth Competitor Analysis", [
     mkTask("offpage", "high", "high",
-      `ניתוח Backlink Profile של ${Math.min(competitors.length, 3) || 3} מתחרים`,
-      `השתמש ב-Ahrefs / Moz לניתוח: ${competitors.slice(0, 3).join(", ") || "3 מתחרים מובילים"}. תעד: DA, מספר קישורים, אתרים מקשרים, anchor texts. זהה הזדמנויות: אתרים שמקשרים למתחרים אבל לא ל-${domain}.`,
+      `Analyze Backlink Profile of ${Math.min(competitors.length, 3) || 3} Competitors`,
+      `Use Ahrefs or Moz to analyze: ${competitorsList}. Document: DA, link count, referring domains, anchor texts. Identify opportunities: sites linking to competitors but not to ${domain}.`,
       4, null,
-      "רשימת 20+ אתרים פוטנציאליים לקישורים",
-      "קישורים הם עדיין הגורם #1 בדירוג — צריך לדעת מאיפה המתחרים מקבלים את שלהם",
+      "List of 20+ potential link opportunity sites",
+      "Links are still the #1 ranking factor — must understand where competitors get theirs",
     ),
     mkTask("offpage", "medium", "medium",
-      `זיהוי Content Gaps מול מתחרים`,
-      `השווה תוכן ${domain} מול ${competitors[0] || "המתחרה המוביל"}: מילות מפתח שהמתחרה מדורג בהן ו-${domain} לא. תעדף לפי volume ו-difficulty.`,
+      `Identify Content Gaps vs Competitors`,
+      `Compare ${domain} content vs ${competitors[0] || "leading competitor"}: keywords they rank for but you don't. Prioritize by volume and difficulty.`,
       2.5, null,
-      "רשימת מילות מפתח שהמתחרים מנצלים ואנחנו לא",
-      "הזדמנויות שהמתחרים כבר מנצלים = ביקוש מוכח — קל יותר להצדיק השקעה",
+      "List of keywords competitors use that we don't",
+      "Opportunities competitors already use = proven demand — easier to justify investment",
     ),
   ]));
 
   // Days 37-40: Link building
-  days.push(mkDay(37, "אסטרטגיית בניית קישורים — התחלה", [
+  days.push(mkDay(37, "Link Building Strategy — Launch Phase", [
     mkTask("offpage", "high", "high",
-      "כתיבת Guest Post לאתר סמכותי",
-      `כתוב מאמר אורח 800+ מילים לאתר עם DA 30+. נושא: ${keywords[0] || "הנושא המרכזי"}. כלול קישור ל-${domain} ב-anchor text טבעי. זהה 5 אתרים פוטנציאליים מרשימת ניתוח המתחרים.`,
+      "Write Guest Post for Authority Site",
+      `Write 800+ word guest article for DA 30+ site. Topic: ${keywords[0] || "core topic"}. Include natural link to ${domain}. Identify 5 potential sites from competitor analysis list.`,
       5, null,
-      "Guest Post מפורסם עם קישור ל-domain",
-      "קישור מאתר סמכותי שווה יותר מ-100 קישורים מאתרים חלשים — Guest Post הוא השיטה היעילה ביותר",
+      "Guest post published with domain link",
+      "Link from authority site worth more than 100 from weak sites — Guest Post is most efficient method",
     ),
     mkTask("offpage", "medium", "medium",
-      "Digital PR — יצירת Newsworthy Content",
-      `צור תוכן שאפשר להפיץ: סטטיסטיקה מקורית, סקר, מדריך מקיף, אינפוגרפיקה. פנה ל-3 כתבים/בלוגרים בתחום עם pitch ממוקד.`,
+      "Digital PR — Create Newsworthy Content",
+      `Create shareable content: original statistic, survey, comprehensive guide, infographic. Pitch to 3 journalists/bloggers in industry with focused angle.`,
       3, null,
-      "קמפיין PR עם 3+ pitches שנשלחו",
-      "Digital PR מייצר קישורים איכותיים + אזכורים בתקשורת — שני אותות שמנועי AI מעריכים",
+      "PR campaign with 3+ pitches sent",
+      "Digital PR generates quality links + media mentions — two signals AI engines value",
     ),
   ]));
 
@@ -824,30 +839,30 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
     const dayTasksArr: DayTask[] = [];
     if (d === 38) {
       dayTasksArr.push(mkTask("offpage", "high", "high",
-        "בניית קישורים מספריות ו-Resource Pages",
-        `הגש ל-10 ספריות מקצועיות ו-resource pages שזוהו בניתוח המתחרים. כלול תיאור עסקי ממוקד מילות מפתח, קישור, וקטגוריה מדויקת.`,
+        "Build Links from Directories and Resource Pages",
+        `Submit to 10 professional directories and resource pages identified in competitor analysis. Include keyword-focused business description, link, and accurate category.`,
         3, null,
-        "10+ הגשות לספריות ו-resource pages",
-        "Citations בספריות מקצועיות מחזקות את הנוכחות הדיגיטלית — מנועי AI בודקים את הנוכחות ברחבי הרשת",
+        "10+ submissions to directories and resource pages",
+        "Directory citations strengthen digital presence — AI engines check presence across the web",
       ));
     } else if (d === 39) {
       dayTasksArr.push(mkTask("content", "high", "high",
-        `כתיבת מאמר ${keywords[1] || "נושא #2"} — Competitor Counter`,
-        `כתוב מאמר שעולה על התוכן של ${competitors[0] || "המתחרה"} בנושא "${keywords[1] || "נושא #2"}": יותר מעמיק, יותר מעודכן, יותר מובנה, עם נתונים חדשים.`,
+        `Write ${keywords[1] || "Topic #2"} — Competitor Counter`,
+        `Write article outperforming ${competitors[0] || "leading competitor"} on "${keywords[1] || "Topic #2"}": deeper, more current, better structured, with new data.`,
         5, null,
-        "מאמר שעולה על המתחרה — Skyscraper Technique",
-        "Skyscraper Technique: צור תוכן טוב יותר מהמתחרה ופנה לאתרים שמקשרים אליו — שיטה מוכחת לבניית קישורים",
+        "Article better than competitor — Skyscraper Technique",
+        "Skyscraper Technique: create better content than competitor, reach out to sites linking to theirs — proven link-building method",
       ));
     } else {
       dayTasksArr.push(mkTask("offpage", "medium", "medium",
-        "מעקב Guest Post + Outreach נוסף",
-        `בדוק סטטוס Guest Posts שנשלחו. שלח 5 pitches נוספים. חפש הזדמנויות ל-HARO (Help a Reporter Out) / Qwoted / SourceBottle.`,
+        "Follow Up Guest Posts + Additional Outreach",
+        `Check status of sent guest posts. Send 5 more pitches. Look for HARO (Help a Reporter Out) / Qwoted / SourceBottle opportunities.`,
         3, null,
-        "5+ pitches נוספים, מעקב אחרי pending",
-        "בניית קישורים היא מרתון, לא ספרינט — צריך outreach מתמשך",
+        "5+ additional pitches, follow-up on pending",
+        "Link building is a marathon not a sprint — need consistent outreach",
       ));
     }
-    days.push(mkDay(d, dayTasksArr[0]?.title.substring(0, 50) || `יום ${d}`, dayTasksArr));
+    days.push(mkDay(d, dayTasksArr[0]?.title.substring(0, 50) || `Day ${d}`, dayTasksArr));
   });
 
   // Days 41-45: Advanced authority
@@ -855,46 +870,46 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
     const dayTasksArr: DayTask[] = [];
     if (d === 41) {
       dayTasksArr.push(mkTask("ai_optimization", "high", "high",
-        `חיזוק נוכחות בפלטפורמות AI`,
-        `צור/עדכן פרופילים: Bing Places (לCopilot), Google Knowledge Panel (לGemini), Wikipedia (אם רלוונטי), Crunchbase, LinkedIn Company. ודא עקביות מידע.`,
+        `Strengthen Presence on AI Platforms`,
+        `Create/update profiles: Bing Places (for Copilot), Google Knowledge Panel (for Gemini), Wikipedia (if relevant), Crunchbase, LinkedIn Company. Ensure consistent information.`,
         3, null,
-        "פרופילים פעילים ב-3+ פלטפורמות AI",
-        "מנועי AI שואבים מידע מפלטפורמות ספציפיות — נוכחות בהן = סיכוי גבוה יותר להיכלל בתשובות",
+        "Active profiles on 3+ AI platforms",
+        "AI engines pull information from specific platforms — presence there = much higher chance of appearing in responses",
       ));
     } else if (d === 42) {
       dayTasksArr.push(mkTask("content", "high", "high",
-        `כתיבת Case Study / סיפור הצלחה`,
-        `כתוב case study מפורט: הבעיה, הפתרון, התוצאות (עם מספרים). כלול ציטוט לקוח, תמונות לפני/אחרי. הוסף Schema מסוג Article. זה תוכן E-E-A-T חזק.`,
+        `Write Case Study / Success Story`,
+        `Write detailed case study: the problem, solution, results (with numbers). Include client quote, before/after photos. Add Article Schema. Strong E-E-A-T content.`,
         4, null,
-        "Case Study מפורסם עם Schema",
-        "Case Studies הם ההוכחה הטובה ביותר ל-Experience ו-Expertise — שני מרכיבים קריטיים ב-E-E-A-T",
+        "Case study published with Schema",
+        "Case studies are best proof of Experience and Expertise — two critical E-E-A-T components",
       ));
     } else if (d === 43) {
       dayTasksArr.push(mkTask("offpage", "medium", "medium",
-        "Guest Post #2 + פודקאסט / ראיון",
-        `כתוב Guest Post שני לאתר נוסף. בנוסף, פנה לפודקאסט בתחום כדי להתראיין — פודקאסטים מגדילים סמכות ומייצרים backlinks.`,
+        "Guest Post #2 + Podcast/Interview",
+        `Write second guest post for another site. Also pitch podcasts in industry for interviews — podcasts build authority and generate backlinks.`,
         4.5, null,
-        "Guest Post #2 + pitch לפודקאסט",
-        "גיוון מקורות הקישורים חשוב — Google מעריך קישורים ממגוון סוגי אתרים",
+        "Guest Post #2 + podcast pitch",
+        "Diverse link sources matter — Google values links from variety of site types",
       ));
     } else if (d === 44) {
       dayTasksArr.push(mkTask("local", "medium", "medium",
-        "איסוף ביקורות + תגובה לביקורות קיימות",
-        `שלח בקשות ביקורת ל-10 לקוחות. הגב לכל הביקורות הקיימות (חיוביות ושליליות) ב-GBP. כלול מילות מפתח בתגובות באופן טבעי.`,
+        "Collect Reviews + Respond to Existing Reviews",
+        `Send review requests to 10 customers. Respond to all existing reviews (positive and negative) on GBP. Include keywords naturally in responses.`,
         2, null,
-        "10 בקשות נשלחו, כל הביקורות נענו",
-        "תגובה לביקורות משפרת אמינות — Google ומנועי AI רואים שהעסק מגיב ומעורב",
+        "10 requests sent, all reviews answered",
+        "Responding to reviews improves trustworthiness — Google and AI see you're responsive and engaged",
       ));
     } else {
       dayTasksArr.push(mkTask("content", "high", "high",
-        `עדכון ושדרוג 3 מאמרים ישנים`,
-        `עדכן את 3 המאמרים הוותיקים ביותר ב-${domain}: הוסף מידע חדש, עדכן תאריכים, שפר את הפורמט, הוסף FAQ, שלב מילות מפתח שנמצאו בשלב 2.`,
+        `Update and Upgrade 3 Old Articles`,
+        `Update 3 oldest articles on ${domain}: add new information, update dates, improve format, add FAQ, integrate keywords from phase 2.`,
         3.5, null,
-        "3 מאמרים ישנים משודרגים ומעודכנים",
-        "עדכון תוכן ישן נותן boost מיידי — Google מעדיף תוכן fresh ו-updated",
+        "3 old articles upgraded and updated",
+        "Updating old content gives immediate boost — Google prefers fresh and updated content",
       ));
     }
-    days.push(mkDay(d, dayTasksArr[0]?.title.substring(0, 50) || `יום ${d}`, dayTasksArr));
+    days.push(mkDay(d, dayTasksArr[0]?.title.substring(0, 50) || `Day ${d}`, dayTasksArr));
   });
 
   // Days 46-50: Social signals + authority consolidation
@@ -902,170 +917,170 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
     const dayTasksArr: DayTask[] = [];
     if (d === 46) {
       dayTasksArr.push(mkTask("offpage", "medium", "medium",
-        "Social Signals — שיתוף מאסיבי של תוכן",
-        `שתף את כל המאמרים החדשים: LinkedIn (5 פוסטים), Facebook, Twitter/X, Quora (תשובות עם קישור), Reddit (אם רלוונטי). כל פלטפורמה עם format מותאם.`,
+        "Social Signals — Massive Content Sharing",
+        `Share all new articles: LinkedIn (5 posts), Facebook, Twitter/X, Quora (answers with link), Reddit (if relevant). Each platform with tailored format.`,
         3, null,
-        "כל התוכן משותף ב-4+ פלטפורמות",
-        "Social signals הם אות עקיף לדירוג — ומנועי AI סורקים גם רשתות חברתיות",
+        "All content shared on 4+ platforms",
+        "Social signals are indirect ranking signals — AI engines also scan social media",
       ));
     } else if (d === 47) {
       dayTasksArr.push(mkTask("offpage", "high", "high",
-        "Broken Link Building — מציאת הזדמנויות",
-        `חפש קישורים שבורים באתרי מתחרים ואתרי סמכות. פנה לבעלי האתרים והצע את התוכן שלך כתחליף. כלי: Ahrefs Broken Link Checker.`,
+        "Broken Link Building — Find Opportunities",
+        `Search for broken links on competitor and authority sites. Contact owners and offer your content as replacement. Tool: Ahrefs Broken Link Checker.`,
         3, null,
-        "5+ הזדמנויות broken link building מזוהות",
-        "Broken Link Building הוא win-win — אתה עוזר לבעל האתר לתקן קישור שבור ומקבל backlink",
+        "5+ broken link building opportunities identified",
+        "Broken Link Building is win-win — you help site owner fix link and get backlink",
       ));
     } else if (d === 48) {
       dayTasksArr.push(mkTask("content", "medium", "medium",
-        `כתיבת מאמר השוואתי / "vs" article`,
-        `כתוב מאמר השוואה: "${keywords[0] || "שירות A"} vs ${keywords[1] || "שירות B"}" — פורמט פופולרי שמנועי AI מעדיפים. כלול: טבלת השוואה, יתרונות/חסרונות, המלצה.`,
+        `Write Comparison / "vs" Article`,
+        `Write comparison article: "${keywords[0] || "Service A"} vs ${keywords[1] || "Service B"}" — format AI engines prefer. Include: comparison table, pros/cons, recommendation.`,
         4, null,
-        "מאמר השוואתי מפורסם עם טבלה",
-        "מאמרי השוואה מושכים תנועה transactional ומנועי AI אוהבים להשתמש בהם לתשובות",
+        "Comparison article published with table",
+        "Comparison articles attract transactional traffic and AI engines love using them for answers",
       ));
     } else if (d === 49) {
       dayTasksArr.push(mkTask("analytics", "medium", "medium",
-        "מדידת Backlink Profile — מה נבנה?",
-        `בדוק ב-GSC > Links: כמה backlinks חדשים? מאילו אתרים? מה ה-DA? השווה ל-baseline. תעד את כל הקישורים שנבנו בשלב 4.`,
+        "Measure Backlink Profile — What Was Built?",
+        `Check GSC > Links: how many new backlinks? From which sites? What's the DA? Compare to baseline. Document all links built in phase 4.`,
         2, null,
-        "דוח backlinks עדכני עם השוואה ל-baseline",
-        "מדידת backlinks מראה את ה-ROI של מאמצי Link Building — צריך לפחות 5+ קישורים חדשים",
+        "Updated backlink report with baseline comparison",
+        "Backlink measurement shows ROI of link-building effort — need at least 5+ new links",
       ));
     } else {
       dayTasksArr.push(mkTask("analytics", "high", "medium",
-        "סיכום שלב 4 — מתחרים וסמכות",
-        `דוח שלב 4: קישורים חדשים (מספר, DA ממוצע), Guest Posts, ביקורות חדשות, Social presence, שינויים בדירוג. השווה ל-baseline יום 7.`,
+        "Phase 4 Summary — Competitors and Authority",
+        `Report: new links (count, average DA), guest posts, new reviews, social presence, ranking changes. Compare to day 7 baseline.`,
         2, null,
-        "דוח שלב 4 מקיף",
-        "סיכום השלב מראה את ההשקעה בסמכות — הפירות יבואו ב-30-60 הימים הבאים",
+        "Comprehensive Phase 4 report",
+        "Phase summary demonstrates authority investment — fruit will come in next 30-60 days",
       ));
     }
-    days.push(mkDay(d, dayTasksArr[0]?.title.substring(0, 50) || `יום ${d}`, dayTasksArr));
+    days.push(mkDay(d, dayTasksArr[0]?.title.substring(0, 50) || `Day ${d}`, dayTasksArr));
   });
 
   // ═══════════════════════════════════════════════════════════════════
   // PHASE 5: Days 51-60 — Optimization, Reporting & Second Scan
   // ═══════════════════════════════════════════════════════════════════
 
-  days.push(mkDay(51, "אופטימיזציה מתקדמת — Core Web Vitals", [
+  days.push(mkDay(51, "Advanced Optimization — Core Web Vitals", [
     mkTask("technical", "high", "high",
-      "סריקת Core Web Vitals שנייה ותיקון",
-      `הרץ PageSpeed Insights על 10 דפים מרכזיים. השווה ל-baseline יום 1. תקן: LCP (ודא < 2.5s), FID (< 100ms), CLS (< 0.1). ${isModerate || isSlow ? `מהירות הייתה ${((scan?.loadTimeMs || 0) / 1000).toFixed(1)}s — בדוק מה השתפר.` : ""}`,
+      "Second Core Web Vitals Scan and Fix",
+      `Run PageSpeed Insights on 10 key pages. Compare to day 1 baseline. Fix: LCP (ensure < 2.5s), FID (< 100ms), CLS (< 0.1). ${isModerate || isSlow ? `Speed was ${((scan?.loadTimeMs || 0) / 1000).toFixed(1)}s — check what improved.` : ""}`,
       3, scan?.url || null,
-      "כל Core Web Vitals ירוקים",
-      "Core Web Vitals קריטיים לדירוג — שיפור אחרי 50 ימים של עבודה אמור להיות משמעותי",
+      "All Core Web Vitals green",
+      "Core Web Vitals are critical ranking factor — improvement after 50 days should be significant",
     ),
   ]));
 
-  days.push(mkDay(52, "סריקה טכנית שנייה — Before vs After", [
+  days.push(mkDay(52, "Second Technical Scan — Before vs After", [
     mkTask("technical", "high", "high",
-      `סריקה טכנית מלאה שנייה של ${domain}`,
-      `הרץ Screaming Frog / Sitebulb. השווה ל-סריקה מיום 1: כמה שגיאות 404 תוקנו? כמה דפים חדשים נאינדקסו? מה מצב ה-meta tags? כמה דפים עם Schema?`,
+      `Complete Second Technical Scan of ${domain}`,
+      `Run Screaming Frog or Sitebulb. Compare to day 1 scan: how many 404 errors fixed? How many new pages indexed? Meta tag status? How many pages have Schema?`,
       3, null,
-      "דוח סריקה שנייה עם השוואה ל-baseline",
-      "סריקה שנייה מוכיחה מה תוקן ומה נשאר — זו הבסיס לדוח הסופי",
+      "Second scan report with baseline comparison",
+      "Second scan proves what was fixed and what remains — foundation for final report",
     ),
   ]));
 
-  days.push(mkDay(53, "סריקת AI Visibility שנייה", [
+  days.push(mkDay(53, "Second AI Visibility Scan", [
     mkTask("ai_optimization", "high", "critical",
-      `בדיקת נראות AI שנייה — ${vis.length} שאילתות ב-5 מנועים`,
-      `הרץ את כל ${vis.length} השאילתות שוב ב-5 מנועי AI. תעד: כמה שאילתות חדשות מזכירות את ${input.clientName}? אילו מנועים השתפרו? מה ה-sentiment? baseline: ${mentionedQueries.length}/${vis.length} (${vis.length > 0 ? Math.round((mentionedQueries.length / vis.length) * 100) : 0}%).`,
+      `Re-check AI Visibility — ${vis.length} Queries on 5 Engines`,
+      `Re-run all ${vis.length} queries on 5 AI engines. Document: how many new queries mention ${input.clientName}? Which engines improved? What's the sentiment? Baseline: ${mentionedQueries.length}/${vis.length} (${vis.length > 0 ? Math.round((mentionedQueries.length / vis.length) * 100) : 0}%).`,
       4, null,
-      `דוח נראות AI שני — before/after מלא`,
-      "הסריקה השנייה היא רגע האמת — כל העבודה ב-50 ימים אמורה להתבטא בשיפור נראות AI",
+      `Second AI visibility report — complete before/after`,
+      "Second scan is the moment of truth — all 50 days of work should show as AI visibility improvement",
     ),
   ]));
 
-  days.push(mkDay(54, "ניתוח GSC — דירוגים, CTR, חשיפות", [
+  days.push(mkDay(54, "Analyze GSC — Rankings, CTR, Impressions", [
     mkTask("analytics", "high", "high",
-      "ניתוח Google Search Console מעמיק",
-      `GSC > Performance > Compare (אחרונים 28 ימים vs 28 ימים לפני כן): שינויי חשיפות, קליקים, CTR, עמדה ממוצעת. פילטר לפי: דפים חדשים, מילות מפתח חדשות, שיפורי דירוג.`,
+      "In-Depth Google Search Console Analysis",
+      `GSC > Performance > Compare (last 28 days vs 28 days prior): impression changes, clicks, CTR, average position. Filter by: new pages, new keywords, ranking improvements.`,
       3, null,
-      "דוח GSC מפורט עם before/after",
-      "GSC הוא מקור האמת #1 לביצועי SEO — השינויים שם מעידים על ההצלחה",
+      "Detailed GSC report with before/after",
+      "GSC is #1 truth source for SEO performance — changes there indicate success",
     ),
   ]));
 
-  days.push(mkDay(55, "אופטימיזציית דפים עם פוטנציאל גבוה", [
+  days.push(mkDay(55, "Optimize High-Potential Pages", [
     mkTask("onpage", "high", "high",
-      "אופטימיזציית Striking Distance — דפים בעמדות 5-20",
-      `ב-GSC > Performance: מצא דפים בעמדות 5-20 עם חשיפות גבוהות. לכל דף: שפר Title tag, הרחב תוכן, הוסף internal links, שפר URL. אלו הם ה-Quick Wins הגדולים.`,
+      "Optimize Striking Distance — Pages Ranking 5-20",
+      `In GSC > Performance: find pages ranking 5-20 with high impressions. For each: improve Title tag, expand content, add internal links, improve URL. These are the big quick wins.`,
       4, null,
-      "5+ דפים Striking Distance מאופטמזים",
-      "דפים בעמדות 5-20 הם הכי קרובים לעמוד 1 — שיפור קטן יכול להכניס אותם לתוצאות הראשונות",
+      "5+ Striking Distance pages optimized",
+      "Pages ranking 5-20 are closest to page 1 — small improvement can push them into top results",
     ),
   ]));
 
   days.push(mkDay(56, "A/B Testing — Title Tags", [
     mkTask("onpage", "medium", "medium",
-      "A/B Test — שינוי Title Tags לשיפור CTR",
-      `בחר 5 דפים עם חשיפות גבוהות ו-CTR נמוך (< 3%). שנה Title tags עם CTR hooks: מספרים, שנה, מילות פעולה. תעד ועקוב שבועיים.`,
+      "A/B Test — Change Title Tags for CTR Improvement",
+      `Select 5 pages with high impressions and low CTR (< 3%). Change Title tags with CTR hooks: numbers, current year, action words. Document and monitor for 2 weeks.`,
       2, null,
-      "5 Title Tags חדשים ב-A/B Test",
-      "שיפור CTR מ-2% ל-4% = הכפלת התנועה בלי שינוי בדירוג — A/B Testing הוא ROI גבוה",
+      "5 new Title Tags in A/B test",
+      "CTR improvement from 2% to 4% = double traffic without ranking change — high ROI A/B testing",
     ),
     mkTask("content", "medium", "medium",
-      "עדכון תוכן עונתי ואקטואלי",
-      `עדכן 3 מאמרים עם מידע אקטואלי: סטטיסטיקות ${new Date().getFullYear()}, מגמות חדשות, מוצרים/שירותים חדשים. ודא שה-title כולל את השנה.`,
+      "Update Seasonal and Timely Content",
+      `Update 3 articles with current information: statistics for ${new Date().getFullYear()}, new trends, new products/services. Ensure title includes current year.`,
       2.5, null,
-      "3 מאמרים עדכניים עם תאריך נוכחי",
-      "Google אוהב freshness — תוכן עם שנה נוכחית מקבל CTR גבוה יותר",
+      "3 current articles with today's date",
+      "Google loves freshness — content with current year gets higher CTR",
     ),
   ]));
 
-  days.push(mkDay(57, "הכנת דוח סופי — איסוף נתונים", [
+  days.push(mkDay(57, "Prepare Final Report — Collect Data", [
     mkTask("analytics", "high", "high",
-      "איסוף כל הנתונים לדוח 60 יום",
-      `אסוף: דירוגים (GSC), תנועה (GA4), backlinks (Ahrefs/GSC), נראות AI (סריקה 2), Core Web Vitals, ביקורות Google, דפים חדשים, Schema status. ארגן בגיליון מסודר.`,
+      "Collect All Data for 60-Day Report",
+      `Collect: rankings (GSC), traffic (GA4), backlinks (Ahrefs/GSC), AI visibility (scan 2), Core Web Vitals, Google reviews, new pages, Schema status. Organize in clean spreadsheet.`,
       3, null,
-      "גיליון נתונים מלא לדוח סופי",
-      "הנתונים הם הבסיס לדוח — צריך מספרים מדויקים ל-before/after",
+      "Complete data spreadsheet for final report",
+      "Data is the foundation of the report — need accurate before/after numbers",
     ),
   ]));
 
-  days.push(mkDay(58, "כתיבת דוח סופי מקיף", [
+  days.push(mkDay(58, "Write Comprehensive Final Report", [
     mkTask("analytics", "high", "critical",
-      `כתיבת דוח SEO/GEO סופי עבור ${input.clientName}`,
-      `כתוב דוח מקיף: תקציר מנהלים, מצב לפני ואחרי, ממצאים טכניים, נראות AI (before/after), תוכן שנוצר, קישורים שנבנו, המלצות להמשך, ROI צפוי.`,
+      `Write Final SEO/GEO Report for ${input.clientName}`,
+      `Write comprehensive report: executive summary, before/after status, technical findings, AI visibility (before/after), content created, links built, next steps, expected ROI.`,
       5, null,
-      "דוח 60 יום מקיף ומקצועי",
-      "הדוח הוא הפלט העיקרי של 60 ימים — חייב להיות מקצועי ולהראות ערך",
+      "Complete 60-day professional report",
+      "The report is the main output of 60 days — must be professional and show value",
     ),
   ]));
 
-  days.push(mkDay(59, "מצגת לקוח + תוכנית המשך", [
+  days.push(mkDay(59, "Client Presentation + Next Steps Plan", [
     mkTask("analytics", "medium", "medium",
-      "הכנת מצגת סיכום ללקוח",
-      `הכן מצגת 10-15 שקפים: highlights מרכזיים, before/after ויזואלי, 3 הישגים גדולים, 3 הזדמנויות להמשך. כלול גרפים וצילומי מסך.`,
+      "Prepare Client Summary Presentation",
+      `Create 10-15 slide deck: key highlights, before/after visuals, 3 major wins, 3 next opportunities. Include charts and screenshots.`,
       3, null,
-      "מצגת מוכנה לשליחה/הצגה ללקוח",
-      "מצגת ויזואלית מקצועית משכנעת את הלקוח להמשיך — דוח טקסט לא מספיק",
+      "Presentation ready for delivery to client",
+      "Professional visual presentation convinces client to continue — text report alone is not enough",
     ),
     mkTask("analytics", "high", "high",
-      "בניית תוכנית 90 יום — השלב הבא",
-      `על בסיס התוצאות של 60 יום, בנה תוכנית 90 יום: מה לחזור ולעשות, מה חדש, יעדים מעודכנים. תעדף: ${highPriorityGaps.length > 5 ? "פערי תוכן שנותרו" : "בניית קישורים מתמשכת"}, נראות AI, authority.`,
+      "Build 90-Day Plan — Next Phase",
+      `Based on 60-day results, build 90-day plan: what to repeat, what's new, updated goals. Prioritize: ${highPriorityGaps.length > 5 ? "remaining content gaps" : "continuous link building"}, AI visibility, authority.`,
       2.5, null,
-      "תוכנית 90 יום עם יעדים מעודכנים",
-      "SEO הוא מרתון — אחרי 60 יום אפשר לראות לאן ממשיכים עם יעדים חדשים מבוססי נתונים",
+      "90-day plan with updated goals",
+      "SEO is a marathon — after 60 days you can plan next phase with data-driven goals",
     ),
   ]));
 
-  days.push(mkDay(60, "סיום, סריקה סופית ו-Handoff", [
+  days.push(mkDay(60, "Complete, Final Scan & Handoff", [
     mkTask("analytics", "high", "critical",
-      "סריקה סופית + סגירת תוכנית 60 יום",
-      `הרץ סריקה אחרונה: טכנית + AI visibility. השווה ל-Day 1. תעד: ${scan ? `SSL ${scan.hasSSL ? "✓" : needsSSL ? "✗→✓" : "✓"}, מהירות ${(scan.loadTimeMs / 1000).toFixed(1)}s→?s, DA ${scan.domainAuthority}→?` : "before/after מלא"}. סגור את כל הפריטים הפתוחים.`,
+      "Final Scan + Close 60-Day Plan",
+      `Run final scan: technical + AI visibility. Compare to Day 1. Document: ${scan ? `SSL ${scan.hasSSL ? "✓" : needsSSL ? "✗→✓" : "✓"}, speed ${(scan.loadTimeMs / 1000).toFixed(1)}s→?s, DA ${scan.domainAuthority}→?` : "complete before/after"}. Close all open items.`,
       3, null,
-      "דוח סופי מלא — תוכנית 60 יום הושלמה",
-      "הסריקה הסופית סוגרת את המעגל — מראה בדיוק מה השתנה ב-60 ימים של עבודה",
+      "Complete final report — 60-day plan completed",
+      "Final scan closes the loop — shows exactly what changed in 60 days of work",
     ),
     mkTask("analytics", "medium", "medium",
-      "העברת כל הנכסים ללקוח",
-      `ארגן ומסור: גישה ל-GSC, GA4, כלי SEO; רשימת מילות מפתח; מפת תוכן; רשימת backlinks; לוח תוכן 3 חודשים; תיעוד Schema; מדריך תחזוקה שבועי.`,
+      "Hand Over All Assets to Client",
+      `Organize and deliver: GSC, GA4, SEO tools access; keyword list; content map; backlink list; 3-month content calendar; Schema documentation; weekly maintenance guide.`,
       2, null,
-      "כל הנכסים מועברים ומתועדים",
-      "Handoff מקצועי מבטיח שהלקוח יכול להמשיך את העבודה או להעביר לצוות הבא",
+      "All assets transferred and documented",
+      "Professional handoff ensures client can continue work or transfer to next team",
     ),
   ]));
 
@@ -1074,15 +1089,15 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
   for (let d = 1; d <= 60; d++) {
     if (!coveredDays.has(d)) {
       const ph = phaseFor(d);
-      days.push(mkDay(d, `המשך עבודה — ${ph.name}`, [
+      days.push(mkDay(d, `Continue Work — ${ph.name}`, [
         mkTask(
           d <= 7 ? "technical" : d <= 20 ? "content" : d <= 35 ? "ai_optimization" : d <= 50 ? "offpage" : "analytics",
           "medium", "medium",
-          `משימת המשך: ${ph.name}`,
-          `המשך עבודה על המשימות הפתוחות מהימים הקודמים. עדף פריטים שלא הושלמו ומשימות עם impact גבוה.`,
+          `Continuation Task: ${ph.name}`,
+          `Continue work on open tasks from previous days. Prioritize incomplete items and high-impact tasks.`,
           3, null,
-          "התקדמות במשימות שלב " + ph.number,
-          "ימים ללא משימה חדשה הם הזדמנות לסיים עבודה שנפתחה — עדיף לסיים מאשר להתחיל חדש",
+          `Progress on phase ${ph.number} tasks`,
+          "Days without new tasks are opportunity to finish opened work — better to complete than start new",
         ),
       ]));
     }

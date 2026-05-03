@@ -12,9 +12,13 @@ interface SeoPlan {
   websiteUrl: string;
   status: 'draft' | 'scanning' | 'goals_set' | 'visibility_done' | 'insights_ready' | 'plan_generated' | 'tasks_created' | 'active' | 'completed';
   overallScore: number;
+  visibilityScore: number;
+  technicalScore: number;
+  contentScore: number;
   completedTasks: number;
   totalTasks: number;
   createdAt: string;
+  updatedAt: string;
 }
 
 // ==================== COLORS & STYLES ====================
@@ -31,6 +35,8 @@ const COLORS = {
   orange: '#FF9933',
   green: '#22C55E',
   emerald: '#10B981',
+  yellow: '#FFC107',
+  red: '#FF6B6B',
 };
 
 const statusBadgeColors: Record<string, { bg: string; text: string }> = {
@@ -46,15 +52,15 @@ const statusBadgeColors: Record<string, { bg: string; text: string }> = {
 };
 
 const statusLabels: Record<string, string> = {
-  draft: 'טיוטה',
-  scanning: 'סורק',
-  goals_set: 'יעדים מוגדרים',
-  visibility_done: 'נראות נסרקה',
-  insights_ready: 'תובנות מוכנות',
-  plan_generated: 'תוכנית נוצרה',
-  tasks_created: 'משימות נוצרו',
-  active: 'פעיל',
-  completed: 'הושלם',
+  draft: 'Draft',
+  scanning: 'Scanning',
+  goals_set: 'Goals Set',
+  visibility_done: 'Visibility Done',
+  insights_ready: 'Insights Ready',
+  plan_generated: 'Plan Generated',
+  tasks_created: 'Tasks Created',
+  active: 'Active',
+  completed: 'Completed',
 };
 
 // ==================== HELPERS ====================
@@ -65,7 +71,7 @@ function getStatusBadgeColor(status: string): { bg: string; text: string } {
 function formatDate(dateStr: string): string {
   try {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('he-IL', { year: 'numeric', month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   } catch {
     return dateStr;
   }
@@ -75,7 +81,18 @@ function scoreColor(score: number): string {
   if (score >= 80) return COLORS.green;
   if (score >= 60) return COLORS.blue;
   if (score >= 40) return COLORS.orange;
-  return '#FF6B6B';
+  return COLORS.red;
+}
+
+function getDaysAgo(dateStr: string): number {
+  try {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    return Math.floor(diff / (1000 * 60 * 60 * 24));
+  } catch {
+    return -1;
+  }
 }
 
 // ==================== MAIN COMPONENT ====================
@@ -83,6 +100,8 @@ export default function SeoGeoDashboard() {
   const [plans, setPlans] = useState<SeoPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filteredPlans, setFilteredPlans] = useState<SeoPlan[]>([]);
 
   // Fetch SEO plans on mount
   useEffect(() => {
@@ -105,20 +124,38 @@ export default function SeoGeoDashboard() {
     fetchPlans();
   }, []);
 
+  // Filter plans based on search term
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredPlans(plans);
+      return;
+    }
+
+    const term = searchTerm.toLowerCase();
+    const filtered = plans.filter(
+      (plan) =>
+        plan.clientName.toLowerCase().includes(term) ||
+        plan.websiteUrl.toLowerCase().includes(term)
+    );
+    setFilteredPlans(filtered);
+  }, [searchTerm, plans]);
+
   // Calculate KPIs
   const kpis = useMemo(() => {
     const total = plans.length;
-    const active = plans.filter((p) => p.status === 'active').length;
-    const avgScore = plans.length > 0 ? Math.round(plans.reduce((sum, p) => sum + p.overallScore, 0) / plans.length) : 0;
-    const completedTasks = plans.reduce((sum, p) => sum + p.completedTasks, 0);
-    const totalTasks = plans.reduce((sum, p) => sum + p.totalTasks, 0);
-    const completionRatio = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    const active = plans.filter((p) => p.status === 'active' || p.status === 'plan_generated').length;
+    const avgGeoScore = plans.length > 0 ? Math.round(plans.reduce((sum, p) => sum + p.visibilityScore, 0) / plans.length) : 0;
+    const needsReview = plans.filter((p) => {
+      // Extract confidence from somewhere or use a default logic
+      return p.status === 'draft' || p.overallScore < 70;
+    }).length;
+    const lastSevenDays = plans.filter((p) => getDaysAgo(p.updatedAt) <= 7).length;
 
-    return { total, active, avgScore, completionRatio };
+    return { total, active, avgGeoScore, needsReview, lastSevenDays };
   }, [plans]);
 
   return (
-    <div style={{ direction: 'rtl', padding: '32px', maxWidth: '1400px', margin: '0 auto', fontFamily: 'system-ui, -apple-system, sans-serif', backgroundColor: COLORS.background, minHeight: '100vh' }}>
+    <div style={{ padding: '32px', maxWidth: '1400px', margin: '0 auto', fontFamily: 'system-ui, -apple-system, sans-serif', backgroundColor: COLORS.background, minHeight: '100vh' }}>
       <style>{`
         @keyframes fade-in {
           from { opacity: 0; transform: translateY(10px); }
@@ -144,27 +181,15 @@ export default function SeoGeoDashboard() {
           transform: translateY(-4px);
           box-shadow: 0 8px 24px rgba(0,0,0,0.1);
         }
-        .score-circle {
-          display: flex;
+        .score-badge {
+          display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 80px;
-          height: 80px;
-          border-radius: 50%;
+          width: 60px;
+          height: 60px;
+          border-radius: 12px;
           font-weight: 700;
-          font-size: 24px;
-        }
-        .progress-bar {
-          height: 8px;
-          background: ${COLORS.border};
-          border-radius: 4px;
-          overflow: hidden;
-          margin-top: 12px;
-        }
-        .progress-fill {
-          height: 100%;
-          border-radius: 4px;
-          transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+          font-size: 16px;
         }
         .status-badge {
           display: inline-block;
@@ -172,6 +197,17 @@ export default function SeoGeoDashboard() {
           border-radius: 12px;
           font-size: 12px;
           font-weight: 600;
+        }
+        .badge {
+          display: inline-block;
+          padding: 4px 10px;
+          border-radius: 8px;
+          font-size: 11px;
+          font-weight: 600;
+        }
+        .badge-yellow {
+          background: ${COLORS.yellow}20;
+          color: #B8960B;
         }
         .action-button {
           padding: 8px 16px;
@@ -199,6 +235,19 @@ export default function SeoGeoDashboard() {
         .action-button-secondary:hover {
           background: ${COLORS.primary}08;
         }
+        .search-input {
+          width: 100%;
+          padding: 12px 16px;
+          border-radius: 12px;
+          border: 1px solid ${COLORS.border};
+          font-size: 14px;
+          font-family: inherit;
+        }
+        .search-input:focus {
+          outline: none;
+          border-color: ${COLORS.primary};
+          box-shadow: 0 0 0 3px ${COLORS.primary}10;
+        }
         .empty-state {
           text-align: center;
           padding: 60px 32px;
@@ -208,16 +257,46 @@ export default function SeoGeoDashboard() {
           font-size: 64px;
           margin-bottom: 16px;
         }
+        .plans-table {
+          width: 100%;
+          border-collapse: collapse;
+          background: ${COLORS.card};
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        }
+        .plans-table thead {
+          background: ${COLORS.background};
+          border-bottom: 1px solid ${COLORS.border};
+        }
+        .plans-table th {
+          padding: 16px;
+          text-align: left;
+          font-weight: 600;
+          font-size: 13px;
+          color: ${COLORS.textMuted};
+        }
+        .plans-table td {
+          padding: 16px;
+          border-bottom: 1px solid ${COLORS.border};
+          font-size: 14px;
+        }
+        .plans-table tbody tr:last-child td {
+          border-bottom: none;
+        }
+        .plans-table tbody tr:hover {
+          background: ${COLORS.background};
+        }
       `}</style>
 
       {/* ══════════ HEADER ══════════ */}
       <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
         <div>
           <h1 style={{ fontSize: '28px', fontWeight: '700', color: COLORS.text, margin: '0 0 8px 0' }}>
-            מרכז SEO/GEO
+            SEO/GEO Growth Center
           </h1>
           <p style={{ fontSize: '14px', color: COLORS.textMuted, margin: 0 }}>
-            סקירה כללית של כל תוכניות SEO וGEO שלך על פני כל הלקוחות
+            Overview of all SEO and GEO plans across your clients
           </p>
         </div>
         <Link href="/seo-geo" style={{
@@ -231,15 +310,15 @@ export default function SeoGeoDashboard() {
           transition: 'all 0.2s ease',
           whiteSpace: 'nowrap',
         }}>
-          תוכנית חדשה +
+          New SEO/GEO Plan +
         </Link>
       </div>
 
       {/* ══════════ KPI CARDS ROW ══════════ */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '32px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '32px' }}>
         <div className="kpi-card" style={{ animationDelay: '0s' }}>
           <div style={{ fontSize: '13px', color: COLORS.textMuted, fontWeight: '600', marginBottom: '12px' }}>
-            סה"כ תוכניות
+            Total Plans
           </div>
           <div style={{ fontSize: '40px', fontWeight: '700', color: COLORS.primary }}>
             {kpis.total}
@@ -248,7 +327,7 @@ export default function SeoGeoDashboard() {
 
         <div className="kpi-card" style={{ animationDelay: '0.08s' }}>
           <div style={{ fontSize: '13px', color: COLORS.textMuted, fontWeight: '600', marginBottom: '12px' }}>
-            תוכניות פעילות
+            Active Plans
           </div>
           <div style={{ fontSize: '40px', fontWeight: '700', color: COLORS.green }}>
             {kpis.active}
@@ -257,41 +336,59 @@ export default function SeoGeoDashboard() {
 
         <div className="kpi-card" style={{ animationDelay: '0.16s' }}>
           <div style={{ fontSize: '13px', color: COLORS.textMuted, fontWeight: '600', marginBottom: '12px' }}>
-            ניקוד ממוצע
+            Average GEO Score
           </div>
           <div style={{ fontSize: '40px', fontWeight: '700', color: COLORS.blue }}>
-            {kpis.avgScore}
+            {kpis.avgGeoScore}
           </div>
         </div>
 
         <div className="kpi-card" style={{ animationDelay: '0.24s' }}>
           <div style={{ fontSize: '13px', color: COLORS.textMuted, fontWeight: '600', marginBottom: '12px' }}>
-            יחס משימות הושלמו
+            Plans Needing Review
           </div>
-          <div style={{ fontSize: '40px', fontWeight: '700', color: COLORS.accent }}>
-            {kpis.completionRatio}%
+          <div style={{ fontSize: '40px', fontWeight: '700', color: COLORS.orange }}>
+            {kpis.needsReview}
+          </div>
+        </div>
+
+        <div className="kpi-card" style={{ animationDelay: '0.32s' }}>
+          <div style={{ fontSize: '13px', color: COLORS.textMuted, fontWeight: '600', marginBottom: '12px' }}>
+            API Connection Status
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="badge badge-yellow">Simulated</span>
+          </div>
+        </div>
+
+        <div className="kpi-card" style={{ animationDelay: '0.40s' }}>
+          <div style={{ fontSize: '13px', color: COLORS.textMuted, fontWeight: '600', marginBottom: '12px' }}>
+            Latest Scans (7 days)
+          </div>
+          <div style={{ fontSize: '40px', fontWeight: '700', color: COLORS.emerald }}>
+            {kpis.lastSevenDays}
           </div>
         </div>
       </div>
 
-      {/* ══════════ PLANS LIST/GRID ══════════ */}
+      {/* ══════════ SEARCH & PLANS LIST ══════════ */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px 32px', color: COLORS.textMuted }}>
-          טוען תוכניות...
+          Loading plans...
         </div>
       ) : error ? (
-        <div style={{ textAlign: 'center', padding: '60px 32px', color: '#FF6B6B' }}>
-          שגיאה בטעינה: {error}
+        <div style={{ textAlign: 'center', padding: '60px 32px', color: COLORS.red }}>
+          Error loading: {error}
         </div>
       ) : plans.length === 0 ? (
         <div className="plan-card" style={{ textAlign: 'center' }}>
           <div className="empty-state">
             <div className="empty-state-icon">📋</div>
             <h3 style={{ fontSize: '20px', fontWeight: '600', color: COLORS.text, marginBottom: '8px' }}>
-              אין תוכניות עדיין
+              No SEO/GEO plans yet
             </h3>
             <p style={{ marginBottom: '24px' }}>
-              צור את התוכנית הראשונה שלך כדי להתחיל
+              Create your first plan to get started
             </p>
             <Link href="/seo-geo" style={{
               display: 'inline-block',
@@ -303,83 +400,98 @@ export default function SeoGeoDashboard() {
               fontWeight: '600',
               fontSize: '14px',
             }}>
-              צור תוכנית חדשה
+              Create New Plan
             </Link>
           </div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '20px' }}>
-          {plans.map((plan, idx) => {
-            const badge = getStatusBadgeColor(plan.status);
-            const taskProgress = plan.totalTasks > 0 ? Math.round((plan.completedTasks / plan.totalTasks) * 100) : 0;
-            const scoreCol = scoreColor(plan.overallScore);
+        <>
+          {/* Search bar */}
+          <div style={{ marginBottom: '24px' }}>
+            <input
+              type="text"
+              placeholder="Search by client name, domain, or industry..."
+              className="search-input"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
 
-            return (
-              <div key={plan.id} className="plan-card" style={{ animationDelay: `${idx * 0.08}s` }}>
-                {/* Header: Client name + Status */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                  <div style={{ flex: 1 }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: '700', color: COLORS.text, margin: '0 0 4px 0' }}>
-                      {plan.clientName}
-                    </h3>
-                    <p style={{ fontSize: '13px', color: COLORS.textMuted, margin: 0, wordBreak: 'break-all' }}>
-                      {plan.websiteUrl}
-                    </p>
-                  </div>
-                  <div className="status-badge" style={{ background: badge.bg, color: badge.text }}>
-                    {statusLabels[plan.status] || plan.status}
-                  </div>
-                </div>
+          {/* Plans table */}
+          <div style={{ overflow: 'auto' }}>
+            <table className="plans-table">
+              <thead>
+                <tr>
+                  <th>Client Name</th>
+                  <th>Domain</th>
+                  <th>Status</th>
+                  <th>GEO Score</th>
+                  <th>SEO Score</th>
+                  <th>Last Scan</th>
+                  <th>Scan Mode</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPlans.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: COLORS.textMuted }}>
+                      No plans match your search
+                    </td>
+                  </tr>
+                ) : (
+                  filteredPlans.map((plan) => {
+                    const badge = getStatusBadgeColor(plan.status);
+                    const daysAgo = getDaysAgo(plan.updatedAt);
+                    const lastScanText = daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo} days ago`;
 
-                {/* Score Circle */}
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
-                  <div className="score-circle" style={{ background: `${scoreCol}15`, color: scoreCol }}>
-                    {plan.overallScore}
-                  </div>
-                </div>
-
-                {/* Progress Bar */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '13px', color: COLORS.textMuted, fontWeight: '500' }}>
-                      התקדמות משימות
-                    </span>
-                    <span style={{ fontSize: '13px', fontWeight: '600', color: COLORS.text }}>
-                      {plan.completedTasks}/{plan.totalTasks}
-                    </span>
-                  </div>
-                  <div className="progress-bar">
-                    <div className="progress-fill" style={{
-                      width: `${taskProgress}%`,
-                      background: taskProgress >= 75 ? COLORS.green : taskProgress >= 50 ? COLORS.blue : COLORS.orange,
-                    }} />
-                  </div>
-                  <div style={{ fontSize: '12px', color: COLORS.textMuted, marginTop: '4px', textAlign: 'center' }}>
-                    {taskProgress}%
-                  </div>
-                </div>
-
-                {/* Created Date */}
-                <div style={{ fontSize: '12px', color: COLORS.textMuted, marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${COLORS.border}` }}>
-                  נוצר ב: {formatDate(plan.createdAt)}
-                </div>
-
-                {/* Action Buttons */}
-                <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
-                  <Link href={`/seo-geo/dashboard/${plan.id}`} className="action-button action-button-primary" style={{ flex: 1, textAlign: 'center' }}>
-                    צפה
-                  </Link>
-                  <button className="action-button action-button-secondary" style={{ flex: 1 }} onClick={() => {
-                    // Placeholder for continue wizard
-                    window.location.href = `/seo-geo/dashboard/${plan.id}`;
-                  }}>
-                    המשך
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                    return (
+                      <tr key={plan.id}>
+                        <td style={{ fontWeight: '600', color: COLORS.text }}>{plan.clientName}</td>
+                        <td style={{ fontSize: '13px', color: COLORS.textMuted, wordBreak: 'break-all' }}>
+                          {plan.websiteUrl}
+                        </td>
+                        <td>
+                          <div className="status-badge" style={{ background: badge.bg, color: badge.text }}>
+                            {statusLabels[plan.status] || plan.status}
+                          </div>
+                        </td>
+                        <td>
+                          <div className="score-badge" style={{ background: `${scoreColor(plan.visibilityScore)}15`, color: scoreColor(plan.visibilityScore) }}>
+                            {plan.visibilityScore}
+                          </div>
+                        </td>
+                        <td>
+                          <div className="score-badge" style={{ background: `${scoreColor(plan.technicalScore)}15`, color: scoreColor(plan.technicalScore) }}>
+                            {plan.technicalScore}
+                          </div>
+                        </td>
+                        <td style={{ fontSize: '13px', color: COLORS.textMuted }}>
+                          {lastScanText}
+                        </td>
+                        <td>
+                          <span className="badge badge-yellow">Simulated</span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <Link href={`/seo-geo/dashboard/${plan.id}`} className="action-button action-button-primary">
+                              Open
+                            </Link>
+                            <button className="action-button action-button-secondary" onClick={() => {
+                              window.location.href = `/seo-geo/dashboard/${plan.id}`;
+                            }}>
+                              Generate Report
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );

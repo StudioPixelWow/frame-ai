@@ -192,22 +192,23 @@ interface WizardData {
 // ══════════════════════════════════════════════════════════════
 
 const STEPS = [
-  { key: 1, label: "בחירת לקוח", icon: "👤", desc: "בחר לקוח קיים או צור חדש" },
-  { key: 2, label: "בחירת אתר", icon: "🌐", desc: "בחר או הוסף אתר ללקוח" },
-  { key: 3, label: "הגדרת יעדים", icon: "🎯", desc: "הגדר יעדי SEO/GEO" },
-  { key: 4, label: "סריקת אתר", icon: "🔍", desc: "סריקה טכנית מלאה" },
-  { key: 5, label: "נראות AI", icon: "🤖", desc: "סריקת נוכחות במנועי AI" },
-  { key: 6, label: "תובנות", icon: "💡", desc: "ניתוח ותובנות" },
-  { key: 7, label: "תוכנית 60 יום", icon: "📋", desc: "תוכנית פעולה מפורטת" },
+  { key: 1, label: "Select Client", icon: "👤", desc: "Choose existing client or create new" },
+  { key: 2, label: "Select Website", icon: "🌐", desc: "Choose or add website for client" },
+  { key: 3, label: "Set Goals", icon: "🎯", desc: "Define SEO/GEO goals" },
+  { key: 4, label: "Website Scan", icon: "🔍", desc: "Complete technical scan" },
+  { key: 5, label: "Confirm Business Profile", icon: "🏢", desc: "Verify business information" },
+  { key: 6, label: "AI Visibility", icon: "🤖", desc: "Scan presence in AI engines" },
+  { key: 7, label: "Insights", icon: "💡", desc: "Analysis and insights" },
+  { key: 8, label: "60-Day Plan", icon: "📋", desc: "Detailed action plan" },
 ];
 
 const GOAL_TYPES: Array<{ value: string; label: string; icon: string; desc: string; metric: string }> = [
-  { value: "traffic", label: "תנועה אורגנית", icon: "📈", desc: "הגדלת תנועה מחיפוש אורגני", metric: "ביקורים/חודש" },
-  { value: "leads", label: "לידים", icon: "🎯", desc: "הגדלת לידים מהאתר", metric: "לידים/חודש" },
-  { value: "rankings", label: "דירוגים", icon: "🏆", desc: "שיפור מיקום בתוצאות חיפוש", metric: "מילים בעמוד 1" },
-  { value: "local_visibility", label: "SEO מקומי", icon: "📍", desc: "חיזוק נוכחות מקומית", metric: "ביקורים מקומיים/חודש" },
-  { value: "ai_visibility", label: "נראות AI", icon: "🤖", desc: "הופעה במנועי AI", metric: "% אזכורים" },
-  { value: "brand_authority", label: "סמכות מותג", icon: "👑", desc: "בניית סמכות וE-E-A-T", metric: "Domain Authority" },
+  { value: "traffic", label: "Organic Traffic", icon: "📈", desc: "Increase organic search traffic", metric: "Visits/month" },
+  { value: "leads", label: "Leads", icon: "🎯", desc: "Increase leads from website", metric: "Leads/month" },
+  { value: "rankings", label: "Rankings", icon: "🏆", desc: "Improve search result positions", metric: "Words on page 1" },
+  { value: "local_visibility", label: "Local SEO", icon: "📍", desc: "Strengthen local presence", metric: "Local visits/month" },
+  { value: "ai_visibility", label: "AI Visibility", icon: "🤖", desc: "Appearance in AI engines", metric: "% mentions" },
+  { value: "brand_authority", label: "Brand Authority", icon: "👑", desc: "Build authority and E-E-A-T", metric: "Domain Authority" },
 ];
 
 const AI_ENGINES = ["ChatGPT", "Gemini", "Perplexity", "Claude", "Copilot"];
@@ -274,7 +275,7 @@ const INITIAL_DATA: WizardData = {
 
 export default function SeoGeoPage() {
   return (
-    <Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", direction: "rtl", fontFamily: "'Segoe UI', system-ui, sans-serif", color: "#5A5A7A" }}>טוען...</div>}>
+    <Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", direction: "rtl", fontFamily: "'Segoe UI', system-ui, sans-serif", color: "#5A5A7A" }}>Loading...</div>}>
       <SeoGeoWizard />
     </Suspense>
   );
@@ -302,6 +303,22 @@ function SeoGeoWizard() {
   // Scan state
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
+
+  // Website facts and business profile
+  const [websiteFacts, setWebsiteFacts] = useState<any>(null);
+  const [businessProfile, setBusinessProfile] = useState({
+    business_name: '',
+    business_type: '',
+    industry: '',
+    location: '',
+    main_products_or_services: [] as string[],
+    target_audience: '',
+    known_competitors: [] as string[],
+    notes: '',
+    confirmed: false,
+    confirmed_at: null as string | null,
+  });
+  const [profileConfirmed, setProfileConfirmed] = useState(false);
 
   // Visibility state
   const [scanningVisibility, setScanningVisibility] = useState(false);
@@ -357,7 +374,7 @@ function SeoGeoWizard() {
       }
     } catch (e) {
       console.error("Failed to fetch clients:", e);
-      setErrorMsg("שגיאה: לא ניתן לטעון את רשימת הלקוחות");
+      setErrorMsg("Error: Could not load client list");
     }
     setLoadingClients(false);
   };
@@ -372,7 +389,7 @@ function SeoGeoWizard() {
       }
     } catch (e) {
       console.error("Failed to fetch websites:", e);
-      setErrorMsg("שגיאה: לא ניתן לטעון את רשימת האתרים");
+      setErrorMsg("Error: Could not load website list");
     }
     setLoadingWebsites(false);
   };
@@ -402,11 +419,11 @@ function SeoGeoWizard() {
         await fetchClients();
         goToStep(2);
       } else {
-        setErrorMsg("שגיאה: לא ניתן ליצור לקוח חדש");
+        setErrorMsg("Error: Could not create new client");
       }
     } catch (e) {
       console.error("Failed to create client:", e);
-      setErrorMsg("שגיאה: בעיה בחיבור לשרת");
+      setErrorMsg("Error: Server connection issue");
     }
     setCreatingClient(false);
   };
@@ -431,17 +448,44 @@ function SeoGeoWizard() {
       if (res.ok) {
         const scan = await res.json();
         setScanProgress(100);
+
+        // Extract websiteFacts if present
+        if (scan.websiteFacts) {
+          setWebsiteFacts(scan.websiteFacts);
+          // Pre-fill businessProfile from websiteFacts
+          const profile = { ...businessProfile };
+          if (scan.websiteFacts.business_name && scan.websiteFacts.business_name.confidence >= 50) {
+            profile.business_name = scan.websiteFacts.business_name.value;
+          }
+          if (scan.websiteFacts.business_type) {
+            profile.business_type = scan.websiteFacts.business_type.value;
+          }
+          if (scan.websiteFacts.industry) {
+            profile.industry = scan.websiteFacts.industry.value;
+          }
+          if (scan.websiteFacts.detected_location && scan.websiteFacts.detected_location.confidence >= 50) {
+            profile.location = scan.websiteFacts.detected_location.value;
+          }
+          if (scan.websiteFacts.main_products_or_services) {
+            profile.main_products_or_services = scan.websiteFacts.main_products_or_services;
+          }
+          if (scan.websiteFacts.target_audience) {
+            profile.target_audience = scan.websiteFacts.target_audience.value;
+          }
+          setBusinessProfile(profile);
+        }
+
         setTimeout(() => {
           setData(prev => ({ ...prev, scanResult: scan }));
           setScanning(false);
         }, 500);
       } else {
-        setErrorMsg("שגיאה: הסריקה נכשלה");
+        setErrorMsg("Error: Scan failed");
         setScanning(false);
       }
     } catch (e) {
       console.error("Scan failed:", e);
-      setErrorMsg("שגיאה: בעיה בסריקת האתר");
+      setErrorMsg("Error: Problem scanning the website");
       setScanning(false);
     }
     clearInterval(interval);
@@ -504,12 +548,12 @@ function SeoGeoWizard() {
           setScanningVisibility(false);
         }, 500);
       } else {
-        setErrorMsg("שגיאה: סריקת ה-AI נכשלה");
+        setErrorMsg("Error: AI visibility scan failed");
         setScanningVisibility(false);
       }
     } catch (e) {
       console.error("Visibility scan failed:", e);
-      setErrorMsg("שגיאה: בעיה בסריקת ה-AI");
+      setErrorMsg("Error: Problem with AI visibility scan");
       setScanningVisibility(false);
     }
     clearInterval(interval);
@@ -520,20 +564,17 @@ function SeoGeoWizard() {
     let idx = 0;
 
     if (scan) {
-      if (!scan.hasSSL) insights.push({ id: `ins_${idx++}`, category: "threat", title: "אין תעודת SSL", description: "האתר לא מאובטח ב-HTTPS. גוגל מעניש אתרים ללא SSL.", impact: "high", action: "התקן תעודת SSL מיידית" });
-      if (scan.loadTimeMs > 3000) insights.push({ id: `ins_${idx++}`, category: "weakness", title: "זמן טעינה איטי", description: `זמן טעינה ${(scan.loadTimeMs/1000).toFixed(1)} שניות. מומלץ מתחת ל-3 שניות.`, impact: "medium", action: "בצע אופטימיזציית מהירות" });
-      if (!scan.hasSitemap) insights.push({ id: `ins_${idx++}`, category: "weakness", title: "חסר Sitemap", description: "לא נמצא קובץ sitemap.xml. זה פוגע באינדוקס.", impact: "medium", action: "צור והגש sitemap.xml" });
-      if (scan.brokenLinks > 0) insights.push({ id: `ins_${idx++}`, category: "threat", title: `${scan.brokenLinks} קישורים שבורים`, description: "קישורים שבורים פוגעים בחוויית המשתמש ובדירוג.", impact: "medium", action: "תקן או הסר קישורים שבורים" });
-      if (scan.domainAuthority > 30) insights.push({ id: `ins_${idx++}`, category: "strength", title: "סמכות דומיין טובה", description: `DA ${scan.domainAuthority} — בסיס טוב לצמיחה.`, impact: "high", action: "המשך לבנות קישורים איכותיים" });
-      if (scan.structuredData) insights.push({ id: `ins_${idx++}`, category: "strength", title: "Structured Data קיים", description: "האתר כולל נתונים מובנים — יתרון בתוצאות חיפוש.", impact: "medium", action: "הרחב Schema לדפים נוספים" });
+      if (!scan.hasSSL) insights.push({ id: `ins_${idx++}`, category: "threat", title: "Missing SSL Certificate", description: "Website is not secured with HTTPS. Google penalizes sites without SSL.", impact: "high", action: "Install SSL certificate immediately" });
+      if (scan.loadTimeMs > 3000) insights.push({ id: `ins_${idx++}`, category: "weakness", title: "Slow Page Load Time", description: `Load time is ${(scan.loadTimeMs/1000).toFixed(1)} seconds. Recommended is under 3 seconds.`, impact: "medium", action: "Perform speed optimization" });
+      if (!scan.hasSitemap) insights.push({ id: `ins_${idx++}`, category: "weakness", title: "Missing Sitemap", description: "No sitemap.xml file found. This affects indexing.", impact: "medium", action: "Create and submit sitemap.xml" });
+      if (scan.brokenLinks > 0) insights.push({ id: `ins_${idx++}`, category: "threat", title: `${scan.brokenLinks} Broken Links`, description: "Broken links harm user experience and rankings.", impact: "medium", action: "Fix or remove broken links" });
+      if (scan.domainAuthority > 30) insights.push({ id: `ins_${idx++}`, category: "strength", title: "Good Domain Authority", description: `DA ${scan.domainAuthority} — strong foundation for growth.`, impact: "high", action: "Continue building quality links" });
+      if (scan.structuredData) insights.push({ id: `ins_${idx++}`, category: "strength", title: "Structured Data Present", description: "Website includes structured data — advantageous for search results.", impact: "medium", action: "Expand Schema to more pages" });
     }
 
-    if (visScore >= 60) insights.push({ id: `ins_${idx++}`, category: "strength", title: "נראות AI טובה", description: `ציון ${visScore}% — העסק מוזכר ברוב מנועי ה-AI.`, impact: "high", action: "שמור על נוכחות עקבית" });
-    else if (visScore >= 30) insights.push({ id: `ins_${idx++}`, category: "opportunity", title: "פוטנציאל שיפור בנראות AI", description: `ציון ${visScore}% — יש מקום לשיפור משמעותי.`, impact: "high", action: "בנה תוכן E-E-A-T ו-Schema" });
-    else insights.push({ id: `ins_${idx++}`, category: "threat", title: "נראות AI נמוכה", description: `ציון ${visScore}% — העסק כמעט לא מוזכר ב-AI.`, impact: "high", action: "אסטרטגיית GEO מיידית נדרשת" });
-
-    insights.push({ id: `ins_${idx++}`, category: "opportunity", title: "תוכן מקצועי", description: "יצירת מאמרים מקצועיים תחזק סמכות ונראות.", impact: "high", action: "פרסם 2 מאמרים מקצועיים בחודש" });
-    insights.push({ id: `ins_${idx++}`, category: "opportunity", title: "SEO מקומי", description: "אופטימיזציה מקומית תביא לקוחות מהאזור.", impact: "medium", action: "עדכן Google Business Profile" });
+    if (visScore >= 60) insights.push({ id: `ins_${idx++}`, category: "strength", title: "Good AI Visibility", description: `Score ${visScore}% — mentioned in most AI engines.`, impact: "high", action: "Maintain consistent presence" });
+    else if (visScore >= 30) insights.push({ id: `ins_${idx++}`, category: "opportunity", title: "AI Visibility Improvement Potential", description: `Score ${visScore}% — significant room for improvement.`, impact: "high", action: "Build E-E-A-T content and Schema" });
+    else insights.push({ id: `ins_${idx++}`, category: "threat", title: "Low AI Visibility", description: `Score ${visScore}% — barely mentioned in AI engines.`, impact: "high", action: "GEO strategy needed immediately" });
 
     return insights;
   };
@@ -556,7 +597,7 @@ function SeoGeoWizard() {
           contentGaps: [],
           goals: data.goals.filter(g => g.selected),
           targetKeywords: [],
-          targetLocation: "ישראל",
+          targetLocation: "",
           targetLanguage: "he",
           insights: data.insights,
         }),
@@ -572,11 +613,11 @@ function SeoGeoWizard() {
           totalHours: Math.round(plan.totalHours || 0),
         }));
       } else {
-        setErrorMsg("שגיאה: יצירת התוכנית נכשלה");
+        setErrorMsg("Error: Plan generation failed");
       }
     } catch (e) {
       console.error("Plan generation failed:", e);
-      setErrorMsg("שגיאה: בעיה ביצירת התוכנית");
+      setErrorMsg("Error: Problem creating the plan");
     }
     setGeneratingPlan(false);
   };
@@ -624,11 +665,11 @@ function SeoGeoWizard() {
         setData(prev => ({ ...prev, savedPlanId: saved.id }));
         router.push(`/seo-geo/${saved.id}`);
       } else {
-        setErrorMsg("שגיאה: שמירת התוכנית נכשלה");
+        setErrorMsg("Error: Failed to save the plan");
       }
     } catch (e) {
       console.error("Save failed:", e);
-      setErrorMsg("שגיאה: בעיה בשמירת התוכנית");
+      setErrorMsg("Error: Problem saving the plan");
     }
     setSaving(false);
   };
@@ -649,18 +690,19 @@ function SeoGeoWizard() {
       case 2: return !!data.websiteUrl;
       case 3: return data.goals.some(g => g.selected);
       case 4: return !!data.scanResult;
-      case 5: return data.visibilityResults.length > 0;
-      case 6: return data.insights.length > 0;
-      case 7: return data.days.length > 0;
+      case 5: return profileConfirmed === true;
+      case 6: return data.visibilityResults.length > 0;
+      case 7: return data.insights.length > 0;
+      case 8: return data.days.length > 0;
       default: return false;
     }
   };
 
   const handleNext = () => {
-    if (step >= 7 || !canContinue()) return;
+    if (step >= 8 || !canContinue()) return;
     const nextStep = step + 1;
-    // Auto-generate visibility queries when entering step 5
-    if (nextStep === 5 && data.visibilityQueries.length === 0) {
+    // Auto-generate visibility queries when entering step 6
+    if (nextStep === 6 && data.visibilityQueries.length === 0) {
       const queries = generateDefaultQueries();
       setData(prev => ({ ...prev, visibilityQueries: queries }));
     }
@@ -679,17 +721,52 @@ function SeoGeoWizard() {
   };
 
   const generateDefaultQueries = (): VisibilityQuery[] => {
-    const business = data.clientName || data.clientCompany || "העסק";
-    const field = data.clientBusinessField || "השירות";
-    return [
-      { id: "q1", query: `מה ה${field} הכי טוב בישראל?`, category: "comparison", intent: "commercial", importance: "high" },
-      { id: "q2", query: `${business} ביקורות`, category: "brand", intent: "navigational", importance: "high" },
-      { id: "q3", query: `איך לבחור ${field}?`, category: "general", intent: "informational", importance: "medium" },
-      { id: "q4", query: `${field} מומלץ בתל אביב`, category: "local", intent: "commercial", importance: "high" },
-      { id: "q5", query: `השוואת ${field}ים בישראל`, category: "comparison", intent: "commercial", importance: "medium" },
-      { id: "q6", query: `מחיר ${field}`, category: "product", intent: "transactional", importance: "medium" },
-      { id: "q7", query: `${field} למתחילים — מדריך`, category: "general", intent: "informational", importance: "low" },
-      { id: "q8", query: `למה לבחור ב${business}?`, category: "brand", intent: "navigational", importance: "high" },
+    // Use confirmed business profile data
+    const business = businessProfile.business_name || data.clientName || data.clientCompany || "the business";
+    const businessType = businessProfile.business_type || "";
+    const location = businessProfile.location || "";
+    const services = businessProfile.main_products_or_services && businessProfile.main_products_or_services.length > 0
+      ? businessProfile.main_products_or_services[0]
+      : "";
+
+    const queries: VisibilityQuery[] = [];
+
+    // Brand queries
+    if (business && business !== "the business") {
+      queries.push({ id: "q1", query: `${business} reviews`, category: "brand", intent: "navigational", importance: "high" });
+      queries.push({ id: "q2", query: `Why choose ${business}?`, category: "brand", intent: "navigational", importance: "high" });
+    }
+
+    // Service/type queries
+    if (businessType && businessType !== "") {
+      queries.push({ id: "q3", query: `Best ${businessType} companies`, category: "comparison", intent: "commercial", importance: "high" });
+      queries.push({ id: "q4", query: `How to choose a ${businessType}?`, category: "general", intent: "informational", importance: "medium" });
+    }
+
+    // Service + location queries
+    if (services && location) {
+      queries.push({ id: "q5", query: `${services} near me`, category: "local", intent: "commercial", importance: "high" });
+      queries.push({ id: "q6", query: `${services} in ${location}`, category: "local", intent: "commercial", importance: "high" });
+    }
+
+    // Comparison and pricing queries
+    if (services) {
+      queries.push({ id: "q7", query: `${services} pricing`, category: "product", intent: "transactional", importance: "medium" });
+      queries.push({ id: "q8", query: `${services} guide for beginners`, category: "general", intent: "informational", importance: "low" });
+    }
+
+    // Return at least 5 queries, fill with generic ones if needed
+    while (queries.length < 5 && queries.length < 8) {
+      const index = queries.length + 1;
+      queries.push({ id: `q${index}`, query: `Best practices for ${businessType || 'online business'}`, category: "general", intent: "informational", importance: "medium" });
+    }
+
+    return queries.length > 0 ? queries : [
+      { id: "q1", query: `${business} information`, category: "brand", intent: "navigational", importance: "high" },
+      { id: "q2", query: `${business} services`, category: "brand", intent: "navigational", importance: "high" },
+      { id: "q3", query: `How to find ${business}`, category: "general", intent: "informational", importance: "medium" },
+      { id: "q4", query: `${business} reviews`, category: "brand", intent: "navigational", importance: "high" },
+      { id: "q5", query: `${business} near me`, category: "local", intent: "commercial", importance: "medium" },
     ];
   };
 
@@ -746,7 +823,7 @@ function SeoGeoWizard() {
               }}>🔍</div>
               <div>
                 <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>SEO/GEO Plan</div>
-                <div style={{ fontSize: 12, color: C.textMuted }}>בונה תוכנית צמיחה</div>
+                <div style={{ fontSize: 12, color: C.textMuted }}>Growth plan builder</div>
               </div>
             </div>
             {data.clientName && (
@@ -830,7 +907,7 @@ function SeoGeoWizard() {
                 transition: "all 0.2s",
               }}
             >
-              → חזרה למרכז SEO/GEO
+              ← Back to SEO/GEO Center
             </button>
           </div>
         </aside>
@@ -863,17 +940,17 @@ function SeoGeoWizard() {
             {/* ═══ STEP 1: CLIENT SELECTION ═══ */}
             {step === 1 && (
               <div>
-                <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0 }}>בחירת לקוח</h1>
+                <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0 }}>Select Client</h1>
                 <p style={{ fontSize: 15, color: C.textSecondary, marginTop: 8, marginBottom: 32 }}>
-                  בחר לקוח קיים מהמערכת או צור לקוח חדש
+                  Choose an existing client from the system or create a new one
                 </p>
 
                 {/* Mode cards */}
                 {!data.clientMode && (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 32 }}>
                     {[
-                      { mode: "existing" as const, icon: "👥", title: "לקוח קיים", desc: "בחר מתוך הלקוחות במערכת" },
-                      { mode: "new" as const, icon: "➕", title: "לקוח חדש", desc: "צור לקוח חדש ובנה תוכנית" },
+                      { mode: "existing" as const, icon: "👥", title: "Existing Client", desc: "Choose from clients in the system" },
+                      { mode: "new" as const, icon: "➕", title: "New Client", desc: "Create new client and build plan" },
                     ].map(m => (
                       <button key={m.mode} onClick={() => updateData({ clientMode: m.mode })} style={{
                         padding: 32, background: C.card, border: `2px solid ${C.border}`,
@@ -895,7 +972,7 @@ function SeoGeoWizard() {
                     <input
                       value={clientSearch}
                       onChange={e => setClientSearch(e.target.value)}
-                      placeholder="חפש לקוח לפי שם..."
+                      placeholder="Search client by name..."
                       style={{
                         width: "100%", padding: "14px 18px",
                         border: `1px solid ${C.border}`, borderRadius: 14,
@@ -907,7 +984,7 @@ function SeoGeoWizard() {
                     {loadingClients ? (
                       <div style={{ textAlign: "center", padding: 40, color: C.textMuted }}>
                         <div style={{ fontSize: 32, marginBottom: 12, animation: "spin 1s linear infinite" }}>⟳</div>
-                        טוען לקוחות...
+                        Loading clients...
                       </div>
                     ) : (
                       <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 400, overflowY: "auto" }}>
@@ -946,22 +1023,22 @@ function SeoGeoWizard() {
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{c.name}</div>
                                 <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                                  {c.company && `${c.company} · `}{c.websiteUrl || "אין אתר"}
+                                  {c.company && `${c.company} · `}{c.websiteUrl || "No website"}
                                 </div>
                               </div>
-                              <span style={{ fontSize: 12, color: C.primary }}>בחר →</span>
+                              <span style={{ fontSize: 12, color: C.primary }}>Select →</span>
                             </button>
                           ))}
                         {clients.length === 0 && !loadingClients && (
                           <div style={{ textAlign: "center", padding: 40, color: C.textMuted }}>
                             <div style={{ fontSize: 48, marginBottom: 12 }}>📭</div>
-                            <div>לא נמצאו לקוחות</div>
+                            <div>No clients found</div>
                             <button onClick={() => updateData({ clientMode: "new" })} style={{
                               marginTop: 12, padding: "8px 20px",
                               background: C.primary, color: "#fff",
                               border: "none", borderRadius: 8,
                               cursor: "pointer", fontSize: 13,
-                            }}>צור לקוח חדש</button>
+                            }}>Create New Client</button>
                           </div>
                         )}
                       </div>
@@ -969,7 +1046,7 @@ function SeoGeoWizard() {
                     <button onClick={() => updateData({ clientMode: null })} style={{
                       marginTop: 16, fontSize: 13, color: C.textMuted,
                       background: "none", border: "none", cursor: "pointer",
-                    }}>→ חזרה לבחירה</button>
+                    }}>← Back to choice</button>
                   </div>
                 )}
 
@@ -980,15 +1057,15 @@ function SeoGeoWizard() {
                     border: `1px solid ${C.border}`,
                     padding: 32, boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
                   }}>
-                    <h3 style={{ fontSize: 18, fontWeight: 700, color: C.text, margin: "0 0 24px 0" }}>פרטי לקוח חדש</h3>
+                    <h3 style={{ fontSize: 18, fontWeight: 700, color: C.text, margin: "0 0 24px 0" }}>New Client Details</h3>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                       {[
-                        { key: "clientName", label: "שם לקוח *", placeholder: "שם מלא", full: false },
-                        { key: "clientCompany", label: "חברה", placeholder: "שם החברה", full: false },
-                        { key: "clientEmail", label: "אימייל", placeholder: "email@example.com", full: false },
-                        { key: "clientPhone", label: "טלפון", placeholder: "050-0000000", full: false },
-                        { key: "clientBusinessField", label: "תחום עסקי", placeholder: "שיווק דיגיטלי, עיצוב...", full: false },
-                        { key: "websiteUrl", label: "כתובת אתר *", placeholder: "https://example.co.il", full: false },
+                        { key: "clientName", label: "Client Name *", placeholder: "Full name", full: false },
+                        { key: "clientCompany", label: "Company", placeholder: "Company name", full: false },
+                        { key: "clientEmail", label: "Email", placeholder: "email@example.com", full: false },
+                        { key: "clientPhone", label: "Phone", placeholder: "555-0000000", full: false },
+                        { key: "clientBusinessField", label: "Business Field", placeholder: "Digital Marketing, Design...", full: false },
+                        { key: "websiteUrl", label: "Website URL *", placeholder: "https://example.com", full: false },
                       ].map(f => (
                         <div key={f.key} style={f.full ? { gridColumn: "1 / -1" } : {}}>
                           <label style={{ fontSize: 13, fontWeight: 600, color: C.textSecondary, display: "block", marginBottom: 6 }}>{f.label}</label>
@@ -1017,13 +1094,13 @@ function SeoGeoWizard() {
                           opacity: creatingClient ? 0.7 : 1,
                         }}
                       >
-                        {creatingClient ? "יוצר..." : "צור לקוח והמשך"}
+                        {creatingClient ? "Creating..." : "Create Client and Continue"}
                       </button>
                       <button onClick={() => updateData({ clientMode: null })} style={{
                         padding: "12px 20px", background: "transparent",
                         border: `1px solid ${C.border}`, borderRadius: 10,
                         fontSize: 13, color: C.textSecondary, cursor: "pointer",
-                      }}>ביטול</button>
+                      }}>Cancel</button>
                     </div>
                   </div>
                 )}
@@ -1039,12 +1116,12 @@ function SeoGeoWizard() {
                     <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
                     <div style={{ fontSize: 20, fontWeight: 700, color: C.text }}>{data.clientName}</div>
                     <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 4 }}>
-                      {data.clientCompany && `${data.clientCompany} · `}{data.websiteUrl || "אין אתר מוגדר"}
+                      {data.clientCompany && `${data.clientCompany} · `}{data.websiteUrl || "No website set"}
                     </div>
                     <button onClick={() => updateData({ clientId: "", clientName: "", clientMode: "existing" })} style={{
                       marginTop: 16, fontSize: 12, color: C.textMuted,
                       background: "none", border: "none", cursor: "pointer",
-                    }}>שנה לקוח</button>
+                    }}>Change Client</button>
                   </div>
                 )}
               </div>
@@ -1053,9 +1130,9 @@ function SeoGeoWizard() {
             {/* ═══ STEP 2: WEBSITE SELECTION ═══ */}
             {step === 2 && (
               <div>
-                <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0 }}>בחירת אתר</h1>
+                <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0 }}>Select Website</h1>
                 <p style={{ fontSize: 15, color: C.textSecondary, marginTop: 8, marginBottom: 32 }}>
-                  בחר אתר קיים או הוסף כתובת אתר חדשה
+                  Choose an existing website or add a new website URL
                 </p>
 
                 {/* If client has a website URL, show it as option */}
@@ -1075,13 +1152,13 @@ function SeoGeoWizard() {
                     }}>🌐</div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{data.websiteUrl}</div>
-                      <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>אתר ראשי של הלקוח</div>
+                      <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>Client primary website</div>
                     </div>
                     <div style={{
                       padding: "6px 16px", background: `${C.success}15`,
                       color: C.success, borderRadius: 8,
                       fontSize: 13, fontWeight: 600,
-                    }}>נבחר ✓</div>
+                    }}>Selected ✓</div>
                   </div>
                 )}
 
@@ -1093,7 +1170,7 @@ function SeoGeoWizard() {
                     padding: 32, boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
                   }}>
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: "0 0 16px 0" }}>
-                      {addingWebsite ? "הוסף אתר נוסף" : "הזן כתובת אתר"}
+                      {addingWebsite ? "Add another website" : "Enter website URL"}
                     </h3>
                     <div style={{ display: "flex", gap: 12 }}>
                       <input
@@ -1129,7 +1206,7 @@ function SeoGeoWizard() {
                           opacity: (addingWebsite ? !newWebsiteUrl : !data.websiteUrl) ? 0.5 : 1,
                           whiteSpace: "nowrap",
                         }}
-                      >אשר</button>
+                      >Confirm</button>
                     </div>
                   </div>
                 )}
@@ -1138,7 +1215,7 @@ function SeoGeoWizard() {
                   <button onClick={() => setAddingWebsite(true)} style={{
                     marginTop: 16, fontSize: 13, color: C.primary,
                     background: "none", border: "none", cursor: "pointer",
-                  }}>+ הוסף אתר אחר</button>
+                  }}>+ Add Another Website</button>
                 )}
               </div>
             )}
@@ -1146,9 +1223,9 @@ function SeoGeoWizard() {
             {/* ═══ STEP 3: GOALS ═══ */}
             {step === 3 && (
               <div>
-                <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0 }}>הגדרת יעדים</h1>
+                <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0 }}>Set Goals</h1>
                 <p style={{ fontSize: 15, color: C.textSecondary, marginTop: 8, marginBottom: 32 }}>
-                  בחר את היעדים לתוכנית ה-SEO/GEO — ניתן לבחור כמה שרוצים
+                  Choose goals for your SEO/GEO plan — you can select multiple goals
                 </p>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16, marginBottom: 32 }}>
@@ -1194,7 +1271,7 @@ function SeoGeoWizard() {
                     border: `1px solid ${C.border}`,
                     padding: 28, boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
                   }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: "0 0 20px 0" }}>יעדים מספריים</h3>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: "0 0 20px 0" }}>Target Metrics</h3>
                     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                       {data.goals.filter(g => g.selected).map((g, i) => (
                         <div key={g.id} style={{
@@ -1211,7 +1288,7 @@ function SeoGeoWizard() {
                             </div>
                           </div>
                           <div>
-                            <label style={{ fontSize: 10, color: C.textMuted, display: "block", marginBottom: 4 }}>ערך נוכחי</label>
+                            <label style={{ fontSize: 10, color: C.textMuted, display: "block", marginBottom: 4 }}>Current Value</label>
                             <input
                               type="number"
                               value={g.currentValue || ""}
@@ -1229,7 +1306,7 @@ function SeoGeoWizard() {
                             />
                           </div>
                           <div>
-                            <label style={{ fontSize: 10, color: C.textMuted, display: "block", marginBottom: 4 }}>יעד</label>
+                            <label style={{ fontSize: 10, color: C.textMuted, display: "block", marginBottom: 4 }}>Target</label>
                             <input
                               type="number"
                               value={g.targetValue || ""}
@@ -1247,7 +1324,7 @@ function SeoGeoWizard() {
                             />
                           </div>
                           <div>
-                            <label style={{ fontSize: 10, color: C.textMuted, display: "block", marginBottom: 4 }}>עדיפות</label>
+                            <label style={{ fontSize: 10, color: C.textMuted, display: "block", marginBottom: 4 }}>Priority</label>
                             <select
                               value={g.priority}
                               onChange={e => {
@@ -1263,9 +1340,9 @@ function SeoGeoWizard() {
                                 cursor: "pointer",
                               }}
                             >
-                              <option value="high">גבוהה</option>
-                              <option value="medium">בינונית</option>
-                              <option value="low">נמוכה</option>
+                              <option value="high">High</option>
+                              <option value="medium">Medium</option>
+                              <option value="low">Low</option>
                             </select>
                           </div>
                         </div>
@@ -1279,9 +1356,9 @@ function SeoGeoWizard() {
             {/* ═══ STEP 4: WEBSITE SCAN ═══ */}
             {step === 4 && (
               <div>
-                <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0 }}>סריקת אתר</h1>
+                <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0 }}>Website Scan</h1>
                 <p style={{ fontSize: 15, color: C.textSecondary, marginTop: 8, marginBottom: 32 }}>
-                  סריקה טכנית מלאה של {data.websiteUrl || "האתר"}
+                  Complete technical scan of {data.websiteUrl || "the website"}
                 </p>
 
                 {/* Scan button / progress */}
@@ -1291,9 +1368,9 @@ function SeoGeoWizard() {
                     padding: 48, textAlign: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
                   }}>
                     <div style={{ fontSize: 64, marginBottom: 20 }}>🔍</div>
-                    <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: "0 0 12px 0" }}>מוכן לסריקה</h2>
+                    <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: "0 0 12px 0" }}>Ready to Scan</h2>
                     <p style={{ fontSize: 14, color: C.textSecondary, marginBottom: 28, maxWidth: 400, margin: "0 auto 28px" }}>
-                      הסריקה תבדוק SSL, מהירות טעינה, אופטימיזציה למובייל, מטא תגיות, קישורים, ועוד
+                      The scan will check SSL, load speed, mobile optimization, meta tags, links, and more
                     </p>
                     <button
                       onClick={runScan}
@@ -1304,7 +1381,7 @@ function SeoGeoWizard() {
                         boxShadow: `0 4px 16px ${C.primary}40`,
                       }}
                     >
-                      התחל סריקה
+                      Start Scan
                     </button>
                   </div>
                 )}
@@ -1316,7 +1393,7 @@ function SeoGeoWizard() {
                     padding: 48, textAlign: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
                   }}>
                     <div style={{ fontSize: 48, marginBottom: 20, animation: "pulse 1.5s ease-in-out infinite" }}>🔍</div>
-                    <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: "0 0 20px 0" }}>סורק את {data.websiteUrl}...</h2>
+                    <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: "0 0 20px 0" }}>Scanning {data.websiteUrl}...</h2>
                     <div style={{
                       width: "100%", maxWidth: 400, margin: "0 auto", height: 8,
                       background: C.borderLight, borderRadius: 4, overflow: "hidden",
@@ -1328,9 +1405,9 @@ function SeoGeoWizard() {
                       }} />
                     </div>
                     <p style={{ fontSize: 13, color: C.textMuted, marginTop: 12 }}>
-                      {scanProgress < 30 ? "בודק חיבור ו-SSL..." :
-                       scanProgress < 60 ? "בודק מהירות ומטא תגיות..." :
-                       scanProgress < 90 ? "סורק דפים ובודק קישורים..." : "מסיים..."}
+                      {scanProgress < 30 ? "Checking connection and SSL..." :
+                       scanProgress < 60 ? "Checking speed and meta tags..." :
+                       scanProgress < 90 ? "Scanning pages and checking links..." : "Finishing..."}
                     </p>
                   </div>
                 )}
@@ -1344,7 +1421,7 @@ function SeoGeoWizard() {
                     }}>
                       {[
                         {
-                          label: "ציון כללי",
+                          label: "Overall Score",
                           value: Math.round((
                             (data.scanResult.hasSSL ? 25 : 0) +
                             (data.scanResult.loadTimeMs < 3000 ? 25 : 10) +
@@ -1361,7 +1438,7 @@ function SeoGeoWizard() {
                           color: data.scanResult.domainAuthority > 30 ? C.success : C.warning,
                         },
                         {
-                          label: "בעיות שנמצאו",
+                          label: "Issues Found",
                           value: data.scanResult.issues.length,
                           suffix: "",
                           color: data.scanResult.issues.length > 5 ? C.danger : C.warning,
@@ -1382,18 +1459,18 @@ function SeoGeoWizard() {
                       display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginBottom: 24,
                     }}>
                       {[
-                        { icon: data.scanResult.hasSSL ? "🔒" : "🔓", label: "SSL", value: data.scanResult.hasSSL ? "מאובטח" : "לא מאובטח", ok: data.scanResult.hasSSL },
-                        { icon: "⚡", label: "מהירות טעינה", value: `${(data.scanResult.loadTimeMs/1000).toFixed(1)}s`, ok: data.scanResult.loadTimeMs < 3000 },
-                        { icon: "📱", label: "מובייל", value: data.scanResult.mobileOptimized ? "מותאם" : "לא מותאם", ok: data.scanResult.mobileOptimized },
-                        { icon: "🏷️", label: "Meta Title", value: data.scanResult.metaTitle ? "קיים" : "חסר", ok: !!data.scanResult.metaTitle },
-                        { icon: "📝", label: "Meta Description", value: data.scanResult.metaDescription ? "קיים" : "חסר", ok: !!data.scanResult.metaDescription },
-                        { icon: "📄", label: "דפים", value: `${data.scanResult.totalPages} סה"כ`, ok: true },
-                        { icon: "🗺️", label: "Sitemap", value: data.scanResult.hasSitemap ? "נמצא" : "חסר", ok: data.scanResult.hasSitemap },
-                        { icon: "🤖", label: "Robots.txt", value: data.scanResult.hasRobotsTxt ? "נמצא" : "חסר", ok: data.scanResult.hasRobotsTxt },
-                        { icon: "🔗", label: "קישורים שבורים", value: `${data.scanResult.brokenLinks}`, ok: data.scanResult.brokenLinks === 0 },
-                        { icon: "📊", label: "Structured Data", value: data.scanResult.structuredData ? "קיים" : "חסר", ok: data.scanResult.structuredData },
-                        { icon: "🌐", label: "Open Graph", value: data.scanResult.openGraph ? "קיים" : "חסר", ok: data.scanResult.openGraph },
-                        { icon: "🔖", label: "Canonical Tags", value: data.scanResult.canonicalTags ? "קיים" : "חסר", ok: data.scanResult.canonicalTags },
+                        { icon: data.scanResult.hasSSL ? "🔒" : "🔓", label: "SSL", value: data.scanResult.hasSSL ? "Secure" : "Not Secure", ok: data.scanResult.hasSSL },
+                        { icon: "⚡", label: "Load Speed", value: `${(data.scanResult.loadTimeMs/1000).toFixed(1)}s`, ok: data.scanResult.loadTimeMs < 3000 },
+                        { icon: "📱", label: "Mobile", value: data.scanResult.mobileOptimized ? "Optimized" : "Not Optimized", ok: data.scanResult.mobileOptimized },
+                        { icon: "🏷️", label: "Meta Title", value: data.scanResult.metaTitle ? "Present" : "Missing", ok: !!data.scanResult.metaTitle },
+                        { icon: "📝", label: "Meta Description", value: data.scanResult.metaDescription ? "Present" : "Missing", ok: !!data.scanResult.metaDescription },
+                        { icon: "📄", label: "Pages", value: `${data.scanResult.totalPages} total`, ok: true },
+                        { icon: "🗺️", label: "Sitemap", value: data.scanResult.hasSitemap ? "Found" : "Missing", ok: data.scanResult.hasSitemap },
+                        { icon: "🤖", label: "Robots.txt", value: data.scanResult.hasRobotsTxt ? "Found" : "Missing", ok: data.scanResult.hasRobotsTxt },
+                        { icon: "🔗", label: "Broken Links", value: `${data.scanResult.brokenLinks}`, ok: data.scanResult.brokenLinks === 0 },
+                        { icon: "📊", label: "Structured Data", value: data.scanResult.structuredData ? "Present" : "Missing", ok: data.scanResult.structuredData },
+                        { icon: "🌐", label: "Open Graph", value: data.scanResult.openGraph ? "Present" : "Missing", ok: data.scanResult.openGraph },
+                        { icon: "🔖", label: "Canonical Tags", value: data.scanResult.canonicalTags ? "Present" : "Missing", ok: data.scanResult.canonicalTags },
                       ].map((item, i) => (
                         <div key={i} style={{
                           background: C.card, borderRadius: 12,
@@ -1420,7 +1497,7 @@ function SeoGeoWizard() {
                         padding: 24, boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
                       }}>
                         <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: "0 0 16px 0" }}>
-                          בעיות שנמצאו ({data.scanResult.issues.length})
+                          Issues Found ({data.scanResult.issues.length})
                         </h3>
                         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                           {data.scanResult.issues.map((issue, i) => (
@@ -1450,7 +1527,7 @@ function SeoGeoWizard() {
                                 background: issue.type === "critical" ? `${C.danger}15` :
                                            issue.type === "warning" ? `${C.warning}15` : `${C.info}15`,
                               }}>
-                                {issue.type === "critical" ? "קריטי" : issue.type === "warning" ? "אזהרה" : "מידע"}
+                                {issue.type === "critical" ? "Critical" : issue.type === "warning" ? "Warning" : "Info"}
                               </div>
                             </div>
                           ))}
@@ -1468,7 +1545,7 @@ function SeoGeoWizard() {
                           fontSize: 13, color: C.textSecondary, cursor: "pointer",
                         }}
                       >
-                        סרוק מחדש
+                        Rescan
                       </button>
                     </div>
                   </div>
@@ -1476,12 +1553,238 @@ function SeoGeoWizard() {
               </div>
             )}
 
-            {/* ═══ STEP 5: AI VISIBILITY SCAN ═══ */}
+            {/* ═══ STEP 5: CONFIRM BUSINESS PROFILE ═══ */}
             {step === 5 && (
               <div>
-                <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0 }}>נראות במנועי AI</h1>
+                <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0 }}>Confirm Business Profile</h1>
                 <p style={{ fontSize: 15, color: C.textSecondary, marginTop: 8, marginBottom: 32 }}>
-                  בדיקת הנוכחות של {data.clientName || "העסק"} ב-ChatGPT, Gemini, Perplexity, Claude ו-Copilot
+                  Verify and complete the business information detected from your website
+                </p>
+
+                {/* Low confidence warning */}
+                {websiteFacts && websiteFacts.overall_confidence < 70 && (
+                  <div style={{
+                    background: `${C.warning}15`, border: `1px solid ${C.warning}30`, borderRadius: 14,
+                    padding: 16, marginBottom: 24, display: "flex", gap: 12, alignItems: "flex-start",
+                  }}>
+                    <div style={{ fontSize: 20, flexShrink: 0 }}>⚠️</div>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>Low Confidence Scan Results</div>
+                      <div style={{ fontSize: 13, color: C.textSecondary }}>
+                        Please verify and complete the fields below before continuing.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Business Profile Form */}
+                <div style={{
+                  background: C.card, borderRadius: 20, border: `1px solid ${C.border}`,
+                  padding: 32, boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+                }}>
+                  {/* Confidence Score Display */}
+                  {websiteFacts && (
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 16, marginBottom: 32,
+                      padding: 16, background: C.bg, borderRadius: 12,
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 8 }}>Overall Scan Confidence</div>
+                        <div style={{ fontSize: 28, fontWeight: 800, color: C.primary }}>{websiteFacts.overall_confidence || 0}%</div>
+                      </div>
+                      <div style={{
+                        width: 120, height: 120, borderRadius: "50%",
+                        background: `conic-gradient(${C.primary} 0deg ${(websiteFacts.overall_confidence || 0) * 3.6}deg, ${C.border} ${(websiteFacts.overall_confidence || 0) * 3.6}deg)`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        <div style={{
+                          width: 110, height: 110, borderRadius: "50%",
+                          background: C.card, display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 12, fontWeight: 700, color: C.textMuted,
+                        }}>
+                          {websiteFacts.overall_confidence || 0}%
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Form Fields */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+                    {/* Business Name */}
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: C.text, display: "block", marginBottom: 8 }}>
+                        Business Name *
+                      </label>
+                      <input
+                        value={businessProfile.business_name}
+                        onChange={e => setBusinessProfile({ ...businessProfile, business_name: e.target.value })}
+                        placeholder="Your business name"
+                        style={{
+                          width: "100%", padding: "12px 16px",
+                          border: `1px solid ${C.border}`, borderRadius: 10,
+                          fontSize: 14, outline: "none", background: C.card,
+                        }}
+                      />
+                    </div>
+
+                    {/* Business Type */}
+                    <div>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: C.text, display: "block", marginBottom: 8 }}>
+                        Business Type
+                      </label>
+                      <input
+                        value={businessProfile.business_type}
+                        onChange={e => setBusinessProfile({ ...businessProfile, business_type: e.target.value })}
+                        placeholder="e.g., Consulting, Retail"
+                        style={{
+                          width: "100%", padding: "12px 16px",
+                          border: `1px solid ${C.border}`, borderRadius: 10,
+                          fontSize: 14, outline: "none", background: C.card,
+                        }}
+                      />
+                    </div>
+
+                    {/* Industry */}
+                    <div>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: C.text, display: "block", marginBottom: 8 }}>
+                        Industry
+                      </label>
+                      <input
+                        value={businessProfile.industry}
+                        onChange={e => setBusinessProfile({ ...businessProfile, industry: e.target.value })}
+                        placeholder="e.g., Technology, Finance"
+                        style={{
+                          width: "100%", padding: "12px 16px",
+                          border: `1px solid ${C.border}`, borderRadius: 10,
+                          fontSize: 14, outline: "none", background: C.card,
+                        }}
+                      />
+                    </div>
+
+                    {/* Location */}
+                    <div>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: C.text, display: "block", marginBottom: 8 }}>
+                        Location
+                      </label>
+                      <input
+                        value={businessProfile.location}
+                        onChange={e => setBusinessProfile({ ...businessProfile, location: e.target.value })}
+                        placeholder="City, Country"
+                        style={{
+                          width: "100%", padding: "12px 16px",
+                          border: `1px solid ${C.border}`, borderRadius: 10,
+                          fontSize: 14, outline: "none", background: C.card,
+                        }}
+                      />
+                    </div>
+
+                    {/* Target Audience */}
+                    <div>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: C.text, display: "block", marginBottom: 8 }}>
+                        Target Audience
+                      </label>
+                      <input
+                        value={businessProfile.target_audience}
+                        onChange={e => setBusinessProfile({ ...businessProfile, target_audience: e.target.value })}
+                        placeholder="e.g., Small businesses, Enterprises"
+                        style={{
+                          width: "100%", padding: "12px 16px",
+                          border: `1px solid ${C.border}`, borderRadius: 10,
+                          fontSize: 14, outline: "none", background: C.card,
+                        }}
+                      />
+                    </div>
+
+                    {/* Main Products/Services */}
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: C.text, display: "block", marginBottom: 8 }}>
+                        Main Products/Services (one per line)
+                      </label>
+                      <textarea
+                        value={businessProfile.main_products_or_services.join("\n")}
+                        onChange={e => setBusinessProfile({
+                          ...businessProfile,
+                          main_products_or_services: e.target.value.split("\n").filter(s => s.trim())
+                        })}
+                        placeholder="Enter products or services, one per line"
+                        style={{
+                          width: "100%", padding: "12px 16px", minHeight: 100,
+                          border: `1px solid ${C.border}`, borderRadius: 10,
+                          fontSize: 14, outline: "none", background: C.card,
+                          fontFamily: "inherit", resize: "vertical",
+                        }}
+                      />
+                    </div>
+
+                    {/* Known Competitors */}
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: C.text, display: "block", marginBottom: 8 }}>
+                        Known Competitors (one per line)
+                      </label>
+                      <textarea
+                        value={businessProfile.known_competitors.join("\n")}
+                        onChange={e => setBusinessProfile({
+                          ...businessProfile,
+                          known_competitors: e.target.value.split("\n").filter(s => s.trim())
+                        })}
+                        placeholder="Enter competitor names or domains, one per line"
+                        style={{
+                          width: "100%", padding: "12px 16px", minHeight: 100,
+                          border: `1px solid ${C.border}`, borderRadius: 10,
+                          fontSize: 14, outline: "none", background: C.card,
+                          fontFamily: "inherit", resize: "vertical",
+                        }}
+                      />
+                    </div>
+
+                    {/* Notes */}
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: C.text, display: "block", marginBottom: 8 }}>
+                        Additional Notes
+                      </label>
+                      <textarea
+                        value={businessProfile.notes}
+                        onChange={e => setBusinessProfile({ ...businessProfile, notes: e.target.value })}
+                        placeholder="Any additional information about your business..."
+                        style={{
+                          width: "100%", padding: "12px 16px", minHeight: 80,
+                          border: `1px solid ${C.border}`, borderRadius: 10,
+                          fontSize: 14, outline: "none", background: C.card,
+                          fontFamily: "inherit", resize: "vertical",
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Confirm Button */}
+                  <div style={{ marginTop: 32, display: "flex", gap: 16 }}>
+                    <button
+                      onClick={() => {
+                        setBusinessProfile({ ...businessProfile, confirmed: true, confirmed_at: new Date().toISOString() });
+                        setProfileConfirmed(true);
+                      }}
+                      style={{
+                        flex: 1, padding: "14px 24px",
+                        background: businessProfile.business_name ? C.primary : C.border,
+                        color: "#fff", border: "none", borderRadius: 10,
+                        fontSize: 16, fontWeight: 700,
+                        cursor: businessProfile.business_name ? "pointer" : "default",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      Confirm Profile
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ═══ STEP 6: AI VISIBILITY SCAN ═══ */}
+            {step === 6 && (
+              <div>
+                <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0 }}>AI Visibility Scan</h1>
+                <p style={{ fontSize: 15, color: C.textSecondary, marginTop: 8, marginBottom: 32 }}>
+                  Check {businessProfile.business_name || data.clientName || "the business"}'s presence in ChatGPT, Gemini, Perplexity, Claude and Copilot
                 </p>
 
                 {/* Auto-generate queries if empty */}
@@ -1499,7 +1802,7 @@ function SeoGeoWizard() {
                   }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
                       <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: 0 }}>
-                        שאילתות לבדיקה ({data.visibilityQueries.length})
+                        Queries to Check ({data.visibilityQueries.length})
                       </h3>
                       <button
                         onClick={() => setEditingQueries(!editingQueries)}
@@ -1509,7 +1812,7 @@ function SeoGeoWizard() {
                           fontSize: 12, color: C.textSecondary, cursor: "pointer",
                         }}
                       >
-                        {editingQueries ? "סיום עריכה" : "ערוך שאילתות"}
+                        {editingQueries ? "Done editing" : "Edit queries"}
                       </button>
                     </div>
 
@@ -1577,7 +1880,7 @@ function SeoGeoWizard() {
                           boxShadow: `0 4px 16px ${C.primary}40`,
                         }}
                       >
-                        התחל סריקת AI
+                        Start AI Scan
                       </button>
                     </div>
                   </div>
@@ -1590,7 +1893,7 @@ function SeoGeoWizard() {
                     padding: 48, textAlign: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
                   }}>
                     <div style={{ fontSize: 48, marginBottom: 20 }}>🤖</div>
-                    <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: "0 0 20px 0" }}>סורק מנועי AI...</h2>
+                    <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: "0 0 20px 0" }}>Scanning AI engines...</h2>
                     <div style={{
                       display: "flex", justifyContent: "center", gap: 16, marginBottom: 24,
                     }}>
@@ -1616,7 +1919,7 @@ function SeoGeoWizard() {
                       }} />
                     </div>
                     <p style={{ fontSize: 13, color: C.textMuted, marginTop: 12 }}>
-                      שולח {data.visibilityQueries.length} שאילתות ל-{AI_ENGINES.length} מנועי AI...
+                      Sending {data.visibilityQueries.length} queries to {AI_ENGINES.length} AI engines...
                     </p>
                   </div>
                 )}
@@ -1624,6 +1927,20 @@ function SeoGeoWizard() {
                 {/* Results */}
                 {data.visibilityResults.length > 0 && !scanningVisibility && (
                   <div>
+                    {/* Simulated Data Banner */}
+                    <div style={{
+                      background: `${C.info}15`, border: `1px solid ${C.info}30`, borderRadius: 14,
+                      padding: 16, marginBottom: 24, display: "flex", gap: 12, alignItems: "flex-start",
+                    }}>
+                      <div style={{ fontSize: 20, flexShrink: 0 }}>ℹ️</div>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>Simulated AI Visibility Results</div>
+                        <div style={{ fontSize: 13, color: C.textSecondary }}>
+                          AI visibility results are currently simulated. Connect real APIs to generate verified AI visibility data.
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Visibility score hero */}
                     <div style={{
                       background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
@@ -1631,11 +1948,11 @@ function SeoGeoWizard() {
                       color: "#fff",
                     }}>
                       <div style={{ fontSize: 56, fontWeight: 800 }}>{data.visibilityScore}%</div>
-                      <div style={{ fontSize: 16, fontWeight: 600, marginTop: 4 }}>ציון נראות AI</div>
+                      <div style={{ fontSize: 16, fontWeight: 600, marginTop: 4 }}>AI Visibility Score</div>
                       <div style={{ fontSize: 13, opacity: 0.8, marginTop: 6 }}>
-                        {data.visibilityScore >= 60 ? "נראות מצוינת — המשיכו כך!" :
-                         data.visibilityScore >= 30 ? "נראות בינונית — יש פוטנציאל שיפור משמעותי" :
-                         "נראות נמוכה — נדרשת אסטרטגיית GEO מיידית"}
+                        {data.visibilityScore >= 60 ? "Excellent visibility — Keep it up!" :
+                         data.visibilityScore >= 30 ? "Moderate visibility — Significant improvement potential" :
+                         "Low visibility — GEO strategy needed immediately"}
                       </div>
                     </div>
 
@@ -1644,11 +1961,11 @@ function SeoGeoWizard() {
                       background: C.card, borderRadius: 20, border: `1px solid ${C.border}`,
                       padding: 24, overflow: "auto", boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
                     }}>
-                      <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: "0 0 16px 0" }}>מטריצת תוצאות</h3>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: "0 0 16px 0" }}>Results Matrix</h3>
                       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                         <thead>
                           <tr>
-                            <th style={{ padding: "10px 12px", textAlign: "right", borderBottom: `2px solid ${C.border}`, color: C.textMuted, fontWeight: 600 }}>שאילתה</th>
+                            <th style={{ padding: "10px 12px", textAlign: "left", borderBottom: `2px solid ${C.border}`, color: C.textMuted, fontWeight: 600 }}>Query</th>
                             {AI_ENGINES.map(eng => (
                               <th key={eng} style={{ padding: "10px 8px", textAlign: "center", borderBottom: `2px solid ${C.border}`, color: C.textMuted, fontWeight: 600, minWidth: 80 }}>{eng}</th>
                             ))}
@@ -1693,7 +2010,7 @@ function SeoGeoWizard() {
                           fontSize: 13, color: C.textSecondary, cursor: "pointer",
                         }}
                       >
-                        סרוק מחדש
+                        Rescan
                       </button>
                     </div>
                   </div>
@@ -1701,12 +2018,12 @@ function SeoGeoWizard() {
               </div>
             )}
 
-            {/* ═══ STEP 6: INSIGHTS ═══ */}
-            {step === 6 && (
+            {/* ═══ STEP 7: INSIGHTS ═══ */}
+            {step === 7 && (
               <div>
-                <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0 }}>תובנות וניתוח</h1>
+                <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0 }}>Insights and Analysis</h1>
                 <p style={{ fontSize: 15, color: C.textSecondary, marginTop: 8, marginBottom: 32 }}>
-                  ניתוח SWOT מבוסס על הסריקה ובדיקת נראות ה-AI
+                  SWOT analysis based on scan results and AI visibility check
                 </p>
 
                 {data.insights.length === 0 ? (
@@ -1716,7 +2033,7 @@ function SeoGeoWizard() {
                   }}>
                     <div style={{ fontSize: 48, marginBottom: 16 }}>💡</div>
                     <p style={{ fontSize: 15, color: C.textSecondary }}>
-                      לא נמצאו תובנות. חזור לשלבים הקודמים כדי להשלים את הסריקות.
+                      No insights found. Go back to previous steps to complete the scans.
                     </p>
                   </div>
                 ) : (
@@ -1726,10 +2043,10 @@ function SeoGeoWizard() {
                       const items = data.insights.filter(ins => ins.category === cat);
                       if (items.length === 0) return null;
                       const config = {
-                        strength: { icon: "💪", title: "חוזקות", color: C.success, bg: `${C.success}08`, border: `${C.success}20` },
-                        opportunity: { icon: "🚀", title: "הזדמנויות", color: C.primary, bg: `${C.primary}08`, border: `${C.primary}20` },
-                        weakness: { icon: "⚠️", title: "חולשות", color: C.warning, bg: `${C.warning}08`, border: `${C.warning}20` },
-                        threat: { icon: "🛡️", title: "איומים", color: C.danger, bg: `${C.danger}08`, border: `${C.danger}20` },
+                        strength: { icon: "💪", title: "Strengths", color: C.success, bg: `${C.success}08`, border: `${C.success}20` },
+                        opportunity: { icon: "🚀", title: "Opportunities", color: C.primary, bg: `${C.primary}08`, border: `${C.primary}20` },
+                        weakness: { icon: "⚠️", title: "Weaknesses", color: C.warning, bg: `${C.warning}08`, border: `${C.warning}20` },
+                        threat: { icon: "🛡️", title: "Threats", color: C.danger, bg: `${C.danger}08`, border: `${C.danger}20` },
                       }[cat];
                       return (
                         <div key={cat} style={{
@@ -1763,7 +2080,7 @@ function SeoGeoWizard() {
                                     background: ins.impact === "high" ? `${C.danger}15` : ins.impact === "medium" ? `${C.warning}15` : `${C.info}15`,
                                     color: ins.impact === "high" ? C.danger : ins.impact === "medium" ? C.warning : C.info,
                                   }}>
-                                    {ins.impact === "high" ? "השפעה גבוהה" : ins.impact === "medium" ? "השפעה בינונית" : "השפעה נמוכה"}
+                                    {ins.impact === "high" ? "High Impact" : ins.impact === "medium" ? "Medium Impact" : "Low Impact"}
                                   </div>
                                 </div>
                                 <div style={{
@@ -1786,12 +2103,12 @@ function SeoGeoWizard() {
               </div>
             )}
 
-            {/* ═══ STEP 7: 60-DAY PLAN ═══ */}
-            {step === 7 && (
+            {/* ═══ STEP 8: 60-DAY PLAN ═══ */}
+            {step === 8 && (
               <div>
-                <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0 }}>תוכנית 60 יום</h1>
+                <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0 }}>60-Day Plan</h1>
                 <p style={{ fontSize: 15, color: C.textSecondary, marginTop: 8, marginBottom: 32 }}>
-                  תוכנית פעולה מפורטת לצמיחה ב-SEO ו-GEO
+                  Detailed action plan for SEO and GEO growth
                 </p>
 
                 {/* Generate button if no plan yet */}
@@ -1801,9 +2118,9 @@ function SeoGeoWizard() {
                     padding: 48, textAlign: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
                   }}>
                     <div style={{ fontSize: 64, marginBottom: 20 }}>📋</div>
-                    <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: "0 0 12px 0" }}>יצירת תוכנית פעולה</h2>
+                    <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: "0 0 12px 0" }}>Generate Action Plan</h2>
                     <p style={{ fontSize: 14, color: C.textSecondary, marginBottom: 28, maxWidth: 480, margin: "0 auto 28px" }}>
-                      על בסיס הסריקה, נראות ה-AI והתובנות — ניצור תוכנית 60 יום מפורטת עם משימות יומיות
+                      Based on the scan, AI visibility, and insights — we'll create a detailed 60-day plan with daily tasks
                     </p>
                     <button
                       onClick={generatePlan}
@@ -1814,7 +2131,7 @@ function SeoGeoWizard() {
                         boxShadow: `0 4px 16px ${C.primary}40`,
                       }}
                     >
-                      צור תוכנית
+                      Generate Plan
                     </button>
                   </div>
                 )}
@@ -1826,9 +2143,9 @@ function SeoGeoWizard() {
                     padding: 48, textAlign: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
                   }}>
                     <div style={{ fontSize: 48, marginBottom: 20 }}>⚙️</div>
-                    <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0 }}>מייצר תוכנית...</h2>
+                    <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0 }}>Generating plan...</h2>
                     <p style={{ fontSize: 13, color: C.textMuted, marginTop: 12 }}>
-                      ממפה משימות, קובע לוח זמנים ומתעדף פעולות...
+                      Mapping tasks, setting timeline, and prioritizing actions...
                     </p>
                   </div>
                 )}
@@ -1845,28 +2162,28 @@ function SeoGeoWizard() {
                         borderRadius: 16, padding: 20, color: "#fff", textAlign: "center",
                       }}>
                         <div style={{ fontSize: 28, fontWeight: 800 }}>60</div>
-                        <div style={{ fontSize: 12, marginTop: 4, opacity: 0.9 }}>ימים</div>
+                        <div style={{ fontSize: 12, marginTop: 4, opacity: 0.9 }}>Days</div>
                       </div>
                       <div style={{
                         background: C.card, borderRadius: 16, border: `1px solid ${C.border}`,
                         padding: 20, textAlign: "center",
                       }}>
                         <div style={{ fontSize: 28, fontWeight: 800, color: C.primary }}>{data.phases.length}</div>
-                        <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>שלבים</div>
+                        <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>Phases</div>
                       </div>
                       <div style={{
                         background: C.card, borderRadius: 16, border: `1px solid ${C.border}`,
                         padding: 20, textAlign: "center",
                       }}>
                         <div style={{ fontSize: 28, fontWeight: 800, color: C.primary }}>{data.totalTasks}</div>
-                        <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>משימות</div>
+                        <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>Tasks</div>
                       </div>
                       <div style={{
                         background: C.card, borderRadius: 16, border: `1px solid ${C.border}`,
                         padding: 20, textAlign: "center",
                       }}>
                         <div style={{ fontSize: 28, fontWeight: 800, color: C.primaryDark }}>{data.totalHours}</div>
-                        <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>שעות עבודה</div>
+                        <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>Work Hours</div>
                       </div>
                     </div>
 
@@ -1913,7 +2230,7 @@ function SeoGeoWizard() {
                                   {phase.name}
                                 </div>
                                 <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>
-                                  ימים {phase.dayRange} · {phase.taskCount} משימות · {phase.hours} שעות
+                                  Days {phase.dayRange} · {phase.taskCount} tasks · {phase.hours} hours
                                 </div>
                                 <div style={{ fontSize: 11, color: C.textSecondary, marginTop: 2 }}>
                                   {phase.focus}
@@ -1966,10 +2283,10 @@ function SeoGeoWizard() {
                                           </div>
                                           <div style={{ flex: 1 }}>
                                             <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
-                                              יום {day.day}: {day.focusTitle}
+                                              Day {day.day}: {day.focusTitle}
                                             </div>
                                             <div style={{ fontSize: 11, color: C.textMuted, marginTop: 1 }}>
-                                              {day.tasks.length} משימות · {day.tasks.reduce((s, t) => s + t.effortHours, 0)} שעות
+                                              {day.tasks.length} tasks · {day.tasks.reduce((s, t) => s + t.effortHours, 0)} hours
                                             </div>
                                           </div>
                                           <div style={{
@@ -1987,9 +2304,9 @@ function SeoGeoWizard() {
                                                 const impactColor = task.impactLevel === "critical" ? C.danger :
                                                   task.impactLevel === "high" ? "#F97316" :
                                                   task.impactLevel === "medium" ? C.warning : C.info;
-                                                const impactLabel = task.impactLevel === "critical" ? "קריטי" :
-                                                  task.impactLevel === "high" ? "גבוה" :
-                                                  task.impactLevel === "medium" ? "בינוני" : "נמוך";
+                                                const impactLabel = task.impactLevel === "critical" ? "Critical" :
+                                                  task.impactLevel === "high" ? "High" :
+                                                  task.impactLevel === "medium" ? "Medium" : "Low";
 
                                                 return (
                                                   <div key={task.id} style={{
@@ -2009,12 +2326,12 @@ function SeoGeoWizard() {
                                                         </div>
                                                         {task.expectedOutcome && (
                                                           <div style={{ fontSize: 11, color: C.success, marginTop: 6 }}>
-                                                            תוצאה צפויה: {task.expectedOutcome}
+                                                            Expected Outcome: {task.expectedOutcome}
                                                           </div>
                                                         )}
                                                         {task.relatedPageUrl && (
                                                           <div style={{ fontSize: 11, color: C.primary, marginTop: 4 }}>
-                                                            דף קשור: {task.relatedPageUrl}
+                                                            Related Page: {task.relatedPageUrl}
                                                           </div>
                                                         )}
                                                         <div style={{
@@ -2062,7 +2379,7 @@ function SeoGeoWizard() {
                           fontSize: 13, color: C.textSecondary, cursor: "pointer",
                         }}
                       >
-                        צור תוכנית מחדש
+                        Generate Plan Again
                       </button>
                     </div>
                   </div>
@@ -2093,14 +2410,14 @@ function SeoGeoWizard() {
                 opacity: step === 1 && data.entryMode !== "from_client" ? 0.3 : 1,
               }}
             >
-              הקודם
+              ← Back
             </button>
 
             <div style={{ fontSize: 13, color: C.textMuted }}>
-              שלב {step} מתוך {STEPS.length}
+              Step {step} of {STEPS.length}
             </div>
 
-            {step < 7 ? (
+            {step < 8 ? (
               <button
                 onClick={handleNext}
                 disabled={!canContinue()}
@@ -2115,7 +2432,7 @@ function SeoGeoWizard() {
                   transition: "all 0.2s",
                 }}
               >
-                המשך ←
+                Next →
               </button>
             ) : (
               <button
@@ -2131,7 +2448,7 @@ function SeoGeoWizard() {
                   opacity: saving ? 0.7 : 1,
                 }}
               >
-                {data.savedPlanId ? "✓ נשמר" : saving ? "שומר..." : "שמור תוכנית"}
+                {data.savedPlanId ? "✓ Saved" : saving ? "Saving..." : "Save Plan"}
               </button>
             )}
           </div>

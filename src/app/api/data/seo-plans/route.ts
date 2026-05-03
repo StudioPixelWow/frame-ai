@@ -13,10 +13,20 @@ export async function GET(req: NextRequest) {
     // Optional: filter by clientId query param
     const clientId = req.nextUrl.searchParams.get('clientId');
     const filtered = clientId ? data.filter((p: any) => p.clientId === clientId) : data;
-    return NextResponse.json(filtered);
+
+    return NextResponse.json({
+      success: true,
+      plans: filtered,
+      count: filtered.length,
+    });
   } catch (error) {
     console.warn('[API] GET /api/data/seo-plans failed, returning empty:', error instanceof Error ? error.message : error);
-    return NextResponse.json([]);
+    return NextResponse.json({
+      success: false,
+      error: 'Failed to fetch SEO plans',
+      plans: [],
+      count: 0,
+    });
   }
 }
 
