@@ -1699,3 +1699,220 @@ export interface PlaybookEntry {
   evidenceCount: number;
   sourceIds: string[];
 }
+
+// ─── SEO/GEO Growth Plan Engine ───────────────────────────────────────────
+
+export type SeoPlanStatus = 'draft' | 'scanning' | 'goals_set' | 'visibility_done' | 'insights_ready' | 'plan_generated' | 'tasks_created' | 'active' | 'completed';
+
+export interface SeoWebsiteScan {
+  url: string;
+  scannedAt: string;
+  hasSSL: boolean;
+  loadTimeMs: number;
+  mobileOptimized: boolean;
+  metaTitle: string;
+  metaDescription: string;
+  h1Tags: string[];
+  totalPages: number;
+  indexedPages: number;
+  brokenLinks: number;
+  hasRobotsTxt: boolean;
+  hasSitemap: boolean;
+  domainAuthority: number;
+  techStack: string[];
+  cmsDetected: string;
+  structuredData: boolean;
+  openGraph: boolean;
+  canonicalTags: boolean;
+  issues: SeoIssue[];
+}
+
+export interface SeoIssue {
+  type: 'critical' | 'warning' | 'info';
+  category: 'technical' | 'content' | 'performance' | 'mobile' | 'security';
+  title: string;
+  description: string;
+  impact: 'high' | 'medium' | 'low';
+}
+
+export interface SeoGoal {
+  id: string;
+  type: 'traffic' | 'leads' | 'rankings' | 'local_visibility' | 'ai_visibility' | 'brand_authority' | 'ecommerce' | 'custom';
+  label: string;
+  targetMetric: string;
+  currentValue: number;
+  targetValue: number;
+  priority: 'high' | 'medium' | 'low';
+}
+
+export interface AiVisibilityQuery {
+  id: string;
+  query: string;
+  category: string;
+  intent: 'informational' | 'commercial' | 'navigational' | 'transactional';
+  importance: 'high' | 'medium' | 'low';
+}
+
+export interface AiVisibilityResult {
+  queryId: string;
+  query: string;
+  engine: 'chatgpt' | 'gemini' | 'perplexity' | 'claude' | 'copilot';
+  mentioned: boolean;
+  position: number | null;
+  context: string;
+  sentiment: 'positive' | 'neutral' | 'negative' | 'not_mentioned';
+  competitorsMentioned: string[];
+  scannedAt: string;
+}
+
+export interface SeoInsight {
+  id: string;
+  category: 'opportunity' | 'threat' | 'strength' | 'weakness';
+  title: string;
+  description: string;
+  impact: 'high' | 'medium' | 'low';
+  source: 'website_scan' | 'ai_visibility' | 'competitor_analysis' | 'content_gap';
+  actionable: boolean;
+  suggestedAction: string;
+}
+
+export interface SeoPlanWeek {
+  weekNumber: number;
+  startDate: string;
+  endDate: string;
+  theme: string;
+  focus: string;
+  tasks: SeoPlanTask[];
+}
+
+export interface SeoPlanTask {
+  id: string;
+  weekNumber: number;
+  dayOfWeek: number;
+  title: string;
+  description: string;
+  category: 'technical' | 'content' | 'onpage' | 'offpage' | 'local' | 'ai_optimization' | 'analytics';
+  priority: 'high' | 'medium' | 'low';
+  estimatedHours: number;
+  status: 'pending' | 'in_progress' | 'completed' | 'skipped';
+  assignedTo: string | null;
+  completedAt: string | null;
+  deliverable: string;
+  kpiTarget: string;
+}
+
+export interface SeoPlan {
+  id: string;
+  clientId: string;
+  clientName: string;
+  websiteUrl: string;
+  status: SeoPlanStatus;
+  // Step data
+  websiteScan: SeoWebsiteScan | null;
+  goals: SeoGoal[];
+  visibilityQueries: AiVisibilityQuery[];
+  visibilityResults: AiVisibilityResult[];
+  insights: SeoInsight[];
+  weeks: SeoPlanWeek[];
+  // Scores
+  overallScore: number;
+  technicalScore: number;
+  contentScore: number;
+  visibilityScore: number;
+  // Metadata
+  createdAt: string;
+  updatedAt: string;
+  generatedAt: string | null;
+  completedTasks: number;
+  totalTasks: number;
+  // New 60-day plan fields
+  days?: any[];
+  phases?: any[];
+  scannedPages?: SeoScannedPage[];
+  contentGaps?: SeoContentGap[];
+  competitors?: SeoCompetitor[];
+  reports?: SeoReportMeta[];
+  activityLog?: SeoActivityEntry[];
+}
+
+// ─── SEO/GEO Extended Types ─────────────────────────────────────────────────
+
+export interface SeoWebsite {
+  id: string;
+  clientId: string;
+  url: string;
+  domain: string;
+  label: string;
+  isPrimary: boolean;
+  status: 'active' | 'inactive';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SeoScannedPage {
+  url: string;
+  title: string;
+  missingMeta: boolean;
+  missingH1: boolean;
+  missingAlt: boolean;
+  wordCount: number;
+  hasSchema: boolean;
+  scannedAt: string;
+}
+
+export interface SeoContentGap {
+  id: string;
+  query: string;
+  category: string;
+  intent: string;
+  importance: 'high' | 'medium' | 'low';
+  suggestedAction: string;
+  relatedUrl: string | null;
+}
+
+export interface SeoCompetitor {
+  id: string;
+  domain: string;
+  name: string;
+  overlapScore: number;
+  strengths: string[];
+  weaknesses: string[];
+  topKeywords: string[];
+  discoveredAt: string;
+}
+
+export interface SeoReportMeta {
+  id: string;
+  name: string;
+  generatedAt: string;
+  language: string;
+  type: string;
+  meta?: Record<string, unknown>;
+}
+
+export interface SeoActivityEntry {
+  ts: string;
+  action: string;
+  actor: string;
+  details?: string;
+}
+
+export interface SeoGrowthTask {
+  id: string;
+  planId: string;
+  day: number;
+  title: string;
+  type: string;
+  description: string;
+  impactLevel: 'critical' | 'high' | 'medium' | 'low';
+  effortHours: number;
+  status: 'pending' | 'in_progress' | 'completed' | 'skipped';
+  assignedTo: string | null;
+  completedAt: string | null;
+  relatedPageUrl: string | null;
+  expectedOutcome: string;
+  reason: string;
+  contentBrief: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

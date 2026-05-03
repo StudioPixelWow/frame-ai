@@ -57,6 +57,9 @@ import type {
   GrowthActionResult,
   KnowledgeItem,
   IndustryPlaybook,
+  SeoPlan,
+  SeoWebsite,
+  SeoGrowthTask,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -123,3 +126,8 @@ export const growthActionResults = new SupabaseCrud<GrowthActionResult>('growth_
 // Agency Knowledge Layer
 export const knowledgeItems = new SupabaseCrud<KnowledgeItem>('agency_knowledge_items', 'kni');
 export const industryPlaybooks = new SupabaseCrud<IndustryPlaybook>('industry_playbooks', 'ipb');
+
+// SEO/GEO Growth Plans
+export const seoPlans = new SupabaseCrud<SeoPlan>('app_seo_plans', 'seo');
+export const seoWebsites = new SupabaseCrud<SeoWebsite>('app_seo_websites', 'swb');
+export const seoGrowthTasks = new SupabaseCrud<SeoGrowthTask>('app_seo_growth_tasks', 'sgt');

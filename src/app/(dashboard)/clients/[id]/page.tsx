@@ -24,6 +24,7 @@ import TabVideos from "./tab-videos";
 import { TabAutomations } from "@/components/client/tab-automations";
 import TabCampaigns from "./tab-campaigns";
 import TabGrowth from "./tab-growth";
+import TabSeoGeo from "./tab-seo-geo";
 
 // ── BI Health Badge (inline component) ──
 
@@ -96,7 +97,7 @@ const GANTT_STATUS_COLORS: Record<string, { label: string; color: string }> = {
   none: { label: "לא יוצר", color: "#9ca3af" },
 };
 
-type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "campaigns" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos" | "automations" | "integrations";
+type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "campaigns" | "seo" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos" | "automations" | "integrations" | "growth";
 
 const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "overview", label: "סקירה" },
@@ -109,6 +110,7 @@ const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "social", label: "סושיאל" },
   { id: "campaigns", label: "קמפיינים" },
   { id: "ads", label: "פרסום" },
+  { id: "seo", label: "SEO/GEO Plans" },
   { id: "files", label: "קבצים" },
   { id: "accounting", label: "הנהח״ש" },
   { id: "portal", label: "פורטל" },
@@ -1389,6 +1391,9 @@ function ClientDetailContent() {
             </div>
           );
         })()}
+        {activeTab === "seo" && (
+          <TabSeoGeo client={client} />
+        )}
       </div>
 
       {/* Edit Client Modal */}

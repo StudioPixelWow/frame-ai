@@ -77,6 +77,12 @@ const ReportsIcon = () => (
   </svg>
 );
 
+const SeoGeoIcon = () => (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503-6.97l.75-.75a2.25 2.25 0 10-3.182-3.182l-.75.75m0 0l-.75-.75a2.25 2.25 0 10-3.182 3.182l.75.75m0 0l-.75.75m.75-.75l.75.75" />
+  </svg>
+);
+
 const sections = [
   { href: "/dashboard",       icon: <DashboardIcon />,      label: "Dashboard" },
   { href: "/command-center",  icon: <CommandCenterIcon />,   label: "Command Center" },
@@ -87,6 +93,7 @@ const sections = [
   { href: "/clients",         icon: <ClientsIcon />,         label: "Clients" },
   { href: "/content",         icon: <ContentIcon />,         label: "Content" },
   { href: "/bi-dashboard",    icon: <BIIcon />,              label: "BI Dashboard" },
+  { href: "/seo-geo/dashboard", icon: <SeoGeoIcon />,        label: "SEO/GEO" },
   { href: "/reports",         icon: <ReportsIcon />,         label: "Reports" },
   { href: "/editor",          icon: <VideoEditorIcon />,     label: "Video Editor" },
   { href: "/settings",        icon: <SettingsIcon />,        label: "Settings" },
