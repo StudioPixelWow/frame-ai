@@ -32,8 +32,8 @@ export async function GET(req: NextRequest) {
     console.log(`[podcast-strategies] GET → ${all.length} strategies found`);
     return NextResponse.json(all);
   } catch (error) {
-    console.error('[podcast-strategies] GET error:', error);
-    return NextResponse.json({ error: 'Failed to fetch podcast strategies' }, { status: 500 });
+    console.warn('[podcast-strategies] GET failed (table may not exist):', error instanceof Error ? error.message : error);
+    return NextResponse.json([]);
   }
 }
 

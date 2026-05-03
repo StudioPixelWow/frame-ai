@@ -8,7 +8,9 @@ export async function GET() {
   try {
     return NextResponse.json(await podcastSessions.getAllAsync());
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
+    // Table may not exist yet — return empty array so frontend doesn't crash
+    console.warn('[Podcast] GET failed (table may not exist):', error instanceof Error ? error.message : error);
+    return NextResponse.json([]);
   }
 }
 
