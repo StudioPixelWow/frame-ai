@@ -92,8 +92,10 @@ export function AIProgressModal({
     }
   }, [displayProgress, open, isSuccess, onComplete]);
 
-  // Resolve current stage
-  const currentStage = [...stages].reverse().find((s) => displayProgress >= s.threshold) ?? stages[0];
+  // Resolve current stage (guard against empty stages array)
+  const currentStage = (stages.length > 0
+    ? [...stages].reverse().find((s) => displayProgress >= s.threshold) ?? stages[0]
+    : { label: 'מעבד...', threshold: 0 }) as ProgressStage;
   const dashOffset = CIRCUMFERENCE - (CIRCUMFERENCE * Math.min(displayProgress, 100)) / 100;
 
   if (!visible) return null;
