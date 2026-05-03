@@ -130,9 +130,20 @@ function ScanPageInner() {
   const [elapsed, setElapsed] = useState(0);
   const [showEvidence, setShowEvidence] = useState<any>(null);
 
+  // Platform API availability (fetched from server)
+  const [platformApiStatus, setPlatformApiStatus] = useState<Record<string, boolean>>({});
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef(0);
+
+  // Fetch platform API status from server on mount
+  useEffect(() => {
+    fetch('/api/pixel-seo-geo/platform-status')
+      .then(r => r.json())
+      .then(data => setPlatformApiStatus(data))
+      .catch(() => {});
+  }, []);
 
   // Cleanup
   useEffect(() => {
@@ -204,12 +215,12 @@ function ScanPageInner() {
           unavailableResults: stageIdx >= 7 ? 5 : 0,
         },
         platformStatuses: [
-          { id: 'google_seo', name: 'Google SEO', icon: '🔍', status: stageIdx >= 8 ? 'completed' : stageIdx >= 7 ? 'running' : 'waiting', queriesScanned: 0, mentionsFound: 0, scanMode: 'simulated' as const },
-          { id: 'google_ai_overview', name: 'Google AI Overview', icon: '✨', status: 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: 'unavailable' as const },
-          { id: 'gemini', name: 'Gemini', icon: '💎', status: 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: 'unavailable' as const },
-          { id: 'chatgpt', name: 'ChatGPT', icon: '🤖', status: 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: 'unavailable' as const },
-          { id: 'claude', name: 'Claude', icon: '🧠', status: 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: 'unavailable' as const },
-          { id: 'perplexity', name: 'Perplexity', icon: '🔮', status: 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: 'unavailable' as const },
+          { id: 'google_seo', name: 'Google SEO', icon: '🔍', status: platformApiStatus.google_seo ? (stageIdx >= 8 ? 'completed' : stageIdx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.google_seo ? 'real' as const : 'unavailable' as const },
+          { id: 'google_ai_overview', name: 'Google AI Overview', icon: '✨', status: platformApiStatus.google_ai_overview ? (stageIdx >= 8 ? 'completed' : stageIdx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.google_ai_overview ? 'real' as const : 'unavailable' as const },
+          { id: 'gemini', name: 'Gemini', icon: '💎', status: platformApiStatus.gemini ? (stageIdx >= 8 ? 'completed' : stageIdx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.gemini ? 'real' as const : 'unavailable' as const },
+          { id: 'chatgpt', name: 'ChatGPT', icon: '🤖', status: platformApiStatus.chatgpt ? (stageIdx >= 8 ? 'completed' : stageIdx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.chatgpt ? 'real' as const : 'unavailable' as const },
+          { id: 'claude', name: 'Claude', icon: '🧠', status: platformApiStatus.claude ? (stageIdx >= 8 ? 'completed' : stageIdx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.claude ? 'real' as const : 'unavailable' as const },
+          { id: 'perplexity', name: 'Perplexity', icon: '🔮', status: platformApiStatus.perplexity ? (stageIdx >= 8 ? 'completed' : stageIdx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.perplexity ? 'real' as const : 'unavailable' as const },
         ],
       }));
 
@@ -222,7 +233,7 @@ function ScanPageInner() {
     };
 
     advanceStage();
-  }, [scanType]);
+  }, [scanType, platformApiStatus]);
 
   // Start scan — uses sync endpoint, simulates progress on client
   const startScan = useCallback(async () => {
@@ -429,6 +440,48 @@ function ScanPageInner() {
               </button>
             ))}
           </div>
+
+          {/* Platform API Status */}
+          {Object.keys(platformApiStatus).length > 0 && (
+            <div style={{
+              background: C.card, borderRadius: 16, border: `1px solid ${C.border}`,
+              padding: 20, marginBottom: 24,
+            }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: '0 0 14px 0' }}>
+                פלטפורמות AI
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                {[
+                  { id: 'google_seo', name: 'Google SEO', icon: '🔍' },
+                  { id: 'google_ai_overview', name: 'Google AI Overview', icon: '✨' },
+                  { id: 'gemini', name: 'Gemini', icon: '💎' },
+                  { id: 'chatgpt', name: 'ChatGPT', icon: '🤖' },
+                  { id: 'claude', name: 'Claude', icon: '🧠' },
+                  { id: 'perplexity', name: 'Perplexity', icon: '🔮' },
+                ].map(p => {
+                  const connected = platformApiStatus[p.id];
+                  return (
+                    <div key={p.id} style={{
+                      background: C.bg, borderRadius: 12, padding: '12px 14px', textAlign: 'center',
+                      border: `1px solid ${connected ? C.success + '30' : C.warning + '30'}`,
+                    }}>
+                      <div style={{ fontSize: 24, marginBottom: 6 }}>{p.icon}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{p.name}</div>
+                      <div style={{
+                        fontSize: 11, fontWeight: 600, marginTop: 4,
+                        color: connected ? C.success : C.warning,
+                      }}>
+                        {connected ? 'מחובר ✓' : 'API לא מחובר'}
+                      </div>
+                      {!connected && (
+                        <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>דרוש מפתח API</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Start button */}
           <div style={{ textAlign: 'center' }}>
@@ -735,10 +788,10 @@ function ScanPageInner() {
                 display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
               }}>
                 {[
-                  { label: 'המשך ליצירת שאלות AI', icon: '🤖', action: () => router.push(`/seo-geo${planId ? `?planId=${planId}` : ''}`) },
-                  { label: 'יצירת תוכנית 60 יום', icon: '📋', action: () => router.push(`/seo-geo${planId ? `?planId=${planId}` : ''}`) },
-                  { label: 'הפקת דוח PIXEL SEO/GEO', icon: '📊', action: () => {} },
-                  { label: 'צפייה בתוצאות נראות', icon: '👁', action: () => {} },
+                  { label: 'המשך ליצירת שאלות AI', icon: '🤖', action: () => router.push(`/seo-geo/wizard${planId ? `?planId=${planId}&step=questions` : '?step=questions'}${scanUrl ? `&url=${encodeURIComponent(scanUrl)}` : ''}`) },
+                  { label: 'יצירת תוכנית 60 יום', icon: '📋', action: () => router.push(`/seo-geo/wizard${planId ? `?planId=${planId}&step=plan` : '?step=plan'}${scanUrl ? `&url=${encodeURIComponent(scanUrl)}` : ''}`) },
+                  { label: 'הפקת דוח PIXEL SEO/GEO', icon: '📊', action: () => router.push(`/seo-geo/wizard${planId ? `?planId=${planId}&step=report` : '?step=report'}${scanUrl ? `&url=${encodeURIComponent(scanUrl)}` : ''}`) },
+                  { label: 'צפייה בתוצאות נראות', icon: '👁', action: () => router.push(`/seo-geo${planId ? `/${planId}/results` : ''}`) },
                 ].map((cta, i) => (
                   <button key={i} onClick={cta.action} style={{
                     padding: '14px 16px', background: C.card, border: `1px solid ${C.border}`,
