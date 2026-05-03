@@ -447,84 +447,107 @@ function SeoGeoWizard() {
     setErrorMsg("");
     scanStartTimeRef.current = Date.now();
 
+    // Simulated progress animation while sync request runs
+    const stageDefs = [
+      'התחלת סריקה', 'שליפת עמוד הבית', 'גילוי עמודים פנימיים',
+      'חילוץ כותרות ותוכן', 'זיהוי תחום העסק', 'בניית מילות מפתח',
+      'יצירת שאלות AI', 'בדיקת נראות במנועים', 'אימות ראיות', 'סיום סריקה',
+    ];
+    let simIdx = 0;
+    const simStages = stageDefs.map((label, i) => ({
+      stage: `stage_${i}`, index: i + 1, label, labelHe: label,
+      status: 'pending' as const,
+    }));
+
+    const advanceSim = () => {
+      if (simIdx > 0 && simIdx <= simStages.length) {
+        simStages[simIdx - 1] = { ...simStages[simIdx - 1], status: 'completed' as const };
+      }
+      if (simIdx < simStages.length) {
+        simStages[simIdx] = { ...simStages[simIdx], status: 'running' as const };
+        setScanLogs(prev => [...prev, {
+          timestamp: new Date().toISOString(), stage: `stage_${simIdx}`,
+          action: `שלב ${simIdx + 1}: ${stageDefs[simIdx]}`, result: 'info',
+        }]);
+      }
+      setScanStages([...simStages]);
+      setScanProgress(Math.round(((simIdx + 0.5) / simStages.length) * 90));
+      setScanDuration(Date.now() - scanStartTimeRef.current);
+      simIdx++;
+    };
+
+    advanceSim();
+    const simInterval = setInterval(() => {
+      if (simIdx < simStages.length) advanceSim();
+    }, 1500 + Math.random() * 2000);
+    scanPollRef.current = simInterval;
+
+    // Duration timer
+    const durationInterval = setInterval(() => {
+      setScanDuration(Date.now() - scanStartTimeRef.current);
+    }, 200);
+
     try {
-      // Start async pipeline — get job ID immediately
-      const startRes = await fetch("/api/seo/scan/start", {
+      // Single sync request — runs full pipeline server-side
+      const res = await fetch("/api/seo/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: data.websiteUrl }),
       });
 
-      if (!startRes.ok) {
-        setErrorMsg("שגיאה: לא ניתן להתחיל סריקה");
+      clearInterval(simInterval);
+      clearInterval(durationInterval);
+      scanPollRef.current = null;
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'שגיאה' }));
+        setErrorMsg(err.error || "שגיאה: הסריקה נכשלה");
         setScanning(false);
         return;
       }
 
-      const { jobId } = await startRes.json();
-      setScanJobId(jobId);
+      const scan = await res.json();
+      const pipeline = scan._pipeline || {};
 
-      // Poll for progress
-      const pollInterval = setInterval(async () => {
-        try {
-          const statusRes = await fetch(`/api/seo/scan/status?jobId=${jobId}`);
-          if (!statusRes.ok) return;
-          const job = await statusRes.json();
+      setScanProgress(100);
+      setScanValidation(pipeline.validation || null);
+      setScanJobId(pipeline.jobId || null);
+      setScanDuration(pipeline.totalDurationMs || (Date.now() - scanStartTimeRef.current));
 
-          setScanProgress(job.progress || 0);
-          setScanStages(job.stages || []);
-          setScanLogs(job.logs || []);
-          setScanDuration(Date.now() - scanStartTimeRef.current);
+      if (pipeline.stages) setScanStages(pipeline.stages);
+      if (pipeline.logs) setScanLogs(pipeline.logs);
 
-          if (job.status === 'completed' && job.result) {
-            clearInterval(pollInterval);
-            scanPollRef.current = null;
-            setScanProgress(100);
-            setScanValidation(job.validation);
-            setScanDuration(job.totalDurationMs || (Date.now() - scanStartTimeRef.current));
-
-            const scan = job.result;
-
-            // Extract websiteFacts if present
-            if (scan.websiteFacts) {
-              const facts = scan.websiteFacts;
-              setWebsiteFacts(facts);
-              const profile = { ...businessProfile };
-              if (facts.business_name && facts.business_name.confidence >= 50) {
-                profile.business_name = facts.business_name.value;
-              }
-              if (facts.business_type && facts.business_type.confidence >= 50) {
-                profile.business_type = facts.business_type.value;
-              }
-              if (facts.detected_industry && facts.detected_industry.confidence >= 50) {
-                profile.industry = facts.detected_industry.value;
-              }
-              if (facts.detected_location && facts.detected_location.confidence >= 50) {
-                profile.location = facts.detected_location.value;
-              }
-              if (facts.main_products_or_services && facts.main_products_or_services.confidence >= 50) {
-                profile.main_products_or_services = facts.main_products_or_services.value || [];
-              }
-              setBusinessProfile(profile);
-            }
-
-            setTimeout(() => {
-              setData(prev => ({ ...prev, scanResult: scan }));
-              setScanning(false);
-            }, 500);
-          } else if (job.status === 'failed') {
-            clearInterval(pollInterval);
-            scanPollRef.current = null;
-            setErrorMsg(job.error || "שגיאה: הסריקה נכשלה");
-            setScanning(false);
-          }
-        } catch {
-          // Silently retry on network blips
+      // Extract websiteFacts if present
+      if (scan.websiteFacts) {
+        const facts = scan.websiteFacts;
+        setWebsiteFacts(facts);
+        const profile = { ...businessProfile };
+        if (facts.business_name && facts.business_name.confidence >= 50) {
+          profile.business_name = facts.business_name.value;
         }
-      }, 800);
+        if (facts.business_type && facts.business_type.confidence >= 50) {
+          profile.business_type = facts.business_type.value;
+        }
+        if (facts.detected_industry && facts.detected_industry.confidence >= 50) {
+          profile.industry = facts.detected_industry.value;
+        }
+        if (facts.detected_location && facts.detected_location.confidence >= 50) {
+          profile.location = facts.detected_location.value;
+        }
+        if (facts.main_products_or_services && facts.main_products_or_services.confidence >= 50) {
+          profile.main_products_or_services = facts.main_products_or_services.value || [];
+        }
+        setBusinessProfile(profile);
+      }
 
-      scanPollRef.current = pollInterval;
+      setTimeout(() => {
+        setData(prev => ({ ...prev, scanResult: scan }));
+        setScanning(false);
+      }, 500);
     } catch (e) {
+      clearInterval(simInterval);
+      clearInterval(durationInterval);
+      scanPollRef.current = null;
       console.error("Scan failed:", e);
       setErrorMsg("שגיאה: בעיה בסריקת האתר");
       setScanning(false);

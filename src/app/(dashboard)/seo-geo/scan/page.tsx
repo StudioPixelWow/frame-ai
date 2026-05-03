@@ -142,49 +142,163 @@ function ScanPageInner() {
     };
   }, []);
 
-  // Start scan
+  // Simulated stage progression while waiting for sync response
+  const STAGE_DEFS: Array<{ stage: string; labelHe: string; durationRange: [number, number] }> = [
+    { stage: 'init', labelHe: 'התחלת סריקה', durationRange: [300, 600] },
+    { stage: 'fetch_homepage', labelHe: 'שליפת עמוד הבית', durationRange: [1000, 2500] },
+    { stage: 'discover_pages', labelHe: 'גילוי עמודים פנימיים', durationRange: [800, 1500] },
+    { stage: 'extract_content', labelHe: 'חילוץ כותרות ותוכן', durationRange: [2000, 5000] },
+    { stage: 'detect_business', labelHe: 'זיהוי תחום העסק', durationRange: [500, 1200] },
+    { stage: 'build_keywords', labelHe: 'בניית מילות מפתח', durationRange: [400, 1000] },
+    { stage: 'generate_queries', labelHe: 'יצירת שאלות AI', durationRange: [600, 1500] },
+    { stage: 'check_visibility', labelHe: 'בדיקת נראות במנועים', durationRange: [2000, 4000] },
+    { stage: 'validate_evidence', labelHe: 'אימות ראיות', durationRange: [500, 1200] },
+    { stage: 'finalize', labelHe: 'סיום סריקה', durationRange: [300, 800] },
+  ];
+
+  const simulateProgress = useCallback(() => {
+    const stages: StageProgress[] = STAGE_DEFS.map((d, i) => ({
+      stage: d.stage, index: i + 1, label: d.stage, labelHe: d.labelHe,
+      status: 'pending' as StageStatus,
+    }));
+    const logs: LogEntry[] = [];
+
+    let stageIdx = 0;
+    const advanceStage = () => {
+      if (stageIdx >= stages.length) return;
+
+      // Complete previous stage
+      if (stageIdx > 0) {
+        stages[stageIdx - 1].status = 'completed';
+        stages[stageIdx - 1].completedAt = new Date().toISOString();
+      }
+
+      // Start current stage
+      stages[stageIdx].status = 'running';
+      stages[stageIdx].startedAt = new Date().toISOString();
+      logs.push({
+        timestamp: new Date().toISOString(),
+        stage: stages[stageIdx].stage,
+        action: `שלב ${stageIdx + 1}: ${stages[stageIdx].labelHe}`,
+        result: 'info',
+      });
+
+      const progress = Math.round(((stageIdx + 0.5) / stages.length) * 90);
+
+      setJob(prev => ({
+        ...(prev || {
+          id: 'sim', url: '', scanType, status: 'init' as any, progress: 0,
+          stages: [], logs: [], metrics: { pagesScanned: 0, evidenceCount: 0, confidenceScore: 0, scanDurationMs: 0, platformsChecked: 0, unavailableResults: 0 },
+          platformStatuses: [], startedAt: new Date().toISOString(),
+        }),
+        status: stages[stageIdx].stage as any,
+        progress,
+        stages: [...stages],
+        logs: [...logs],
+        metrics: {
+          pagesScanned: Math.min(stageIdx * 2, scanType === 'deep' ? 30 : 8),
+          evidenceCount: Math.min(stageIdx, 10),
+          confidenceScore: Math.min(stageIdx * 10, 80),
+          scanDurationMs: Date.now() - startTimeRef.current,
+          platformsChecked: stageIdx >= 7 ? 1 : 0,
+          unavailableResults: stageIdx >= 7 ? 5 : 0,
+        },
+        platformStatuses: [
+          { id: 'google_seo', name: 'Google SEO', icon: '🔍', status: stageIdx >= 8 ? 'completed' : stageIdx >= 7 ? 'running' : 'waiting', queriesScanned: 0, mentionsFound: 0, scanMode: 'simulated' as const },
+          { id: 'google_ai_overview', name: 'Google AI Overview', icon: '✨', status: 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: 'unavailable' as const },
+          { id: 'gemini', name: 'Gemini', icon: '💎', status: 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: 'unavailable' as const },
+          { id: 'chatgpt', name: 'ChatGPT', icon: '🤖', status: 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: 'unavailable' as const },
+          { id: 'claude', name: 'Claude', icon: '🧠', status: 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: 'unavailable' as const },
+          { id: 'perplexity', name: 'Perplexity', icon: '🔮', status: 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: 'unavailable' as const },
+        ],
+      }));
+
+      stageIdx++;
+      if (stageIdx < stages.length) {
+        const [min, max] = STAGE_DEFS[stageIdx - 1].durationRange;
+        const delay = min + Math.random() * (max - min);
+        pollRef.current = setTimeout(advanceStage, delay) as any;
+      }
+    };
+
+    advanceStage();
+  }, [scanType]);
+
+  // Start scan — uses sync endpoint, simulates progress on client
   const startScan = useCallback(async () => {
     if (!scanUrl) return;
     setPhase('scanning');
     startTimeRef.current = Date.now();
     setElapsed(0);
 
-    // Timer
+    // Elapsed timer
     timerRef.current = setInterval(() => {
       setElapsed(Date.now() - startTimeRef.current);
     }, 200);
 
+    // Start simulated stage progression
+    simulateProgress();
+
     try {
-      const res = await fetch("/api/seo/scan/start", {
+      // Single sync request — pipeline runs server-side, returns full result
+      const res = await fetch("/api/seo/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: scanUrl, scanType }),
       });
-      if (!res.ok) { setPhase('select'); return; }
-      const { jobId } = await res.json();
 
-      // Poll
-      pollRef.current = setInterval(async () => {
-        try {
-          const r = await fetch(`/api/seo/scan/status?jobId=${jobId}`);
-          if (!r.ok) return;
-          const data: ScanJob = await r.json();
-          setJob(data);
+      // Stop simulation
+      if (pollRef.current) clearTimeout(pollRef.current as any);
+      if (timerRef.current) clearInterval(timerRef.current);
+      pollRef.current = null;
+      timerRef.current = null;
 
-          if (data.status === 'completed' || data.status === 'failed') {
-            if (pollRef.current) clearInterval(pollRef.current);
-            if (timerRef.current) clearInterval(timerRef.current);
-            pollRef.current = null;
-            timerRef.current = null;
-            setElapsed(data.totalDurationMs || (Date.now() - startTimeRef.current));
-            setPhase('done');
-          }
-        } catch { /* retry */ }
-      }, 700);
+      const totalElapsed = Date.now() - startTimeRef.current;
+      setElapsed(totalElapsed);
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'שגיאה' }));
+        setJob(prev => prev ? {
+          ...prev, status: 'failed' as any, progress: 100, error: err.error || 'שגיאה בסריקה',
+          stages: prev.stages.map(s => s.status === 'running' ? { ...s, status: 'failed' as StageStatus } : s.status === 'pending' ? { ...s, status: 'skipped' as StageStatus } : s),
+        } : null);
+        setPhase('done');
+        return;
+      }
+
+      const data = await res.json();
+      const pipeline = data._pipeline || {};
+
+      // Build final job from real response
+      setJob({
+        id: pipeline.jobId || 'scan',
+        url: scanUrl,
+        scanType,
+        status: 'completed',
+        progress: 100,
+        stages: (pipeline.stages || []).length > 0 ? pipeline.stages : STAGE_DEFS.map((d, i) => ({
+          stage: d.stage, index: i + 1, label: d.stage, labelHe: d.labelHe, status: 'completed' as StageStatus,
+        })),
+        logs: (pipeline.logs || []).length > 0 ? pipeline.logs : [],
+        metrics: data.metrics || {
+          pagesScanned: data.totalPages || data.scannedPages?.length || 0,
+          evidenceCount: 0, confidenceScore: data.websiteFacts?.confidence_score || 0,
+          scanDurationMs: totalElapsed, platformsChecked: 1, unavailableResults: 5,
+        },
+        platformStatuses: data.platformStatuses || [],
+        startedAt: new Date(startTimeRef.current).toISOString(),
+        completedAt: new Date().toISOString(),
+        totalDurationMs: pipeline.totalDurationMs || totalElapsed,
+        validation: pipeline.validation || null,
+        result: data,
+      });
+      setPhase('done');
     } catch {
+      if (pollRef.current) clearTimeout(pollRef.current as any);
+      if (timerRef.current) clearInterval(timerRef.current);
       setPhase('select');
     }
-  }, [scanUrl, scanType]);
+  }, [scanUrl, scanType, simulateProgress]);
 
   const rescan = useCallback(() => {
     setJob(null);
