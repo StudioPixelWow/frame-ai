@@ -83,7 +83,7 @@ function generateMockScannedPages(domain: string, count = 4): SeoScannedPage[] {
   return pages;
 }
 
-async function POST(
+async function _POST(
   req: NextRequest,
   context: { params: Promise<{ planId: string }> }
 ): Promise<NextResponse> {
@@ -129,4 +129,4 @@ async function POST(
   }
 }
 
-export const POST = withErrorBoundary(POST);
+export const POST = withErrorBoundary(_POST);

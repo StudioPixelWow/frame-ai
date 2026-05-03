@@ -13,7 +13,7 @@ import {
 } from '@/lib/seo/api-helpers';
 import { getRequestClientId } from '@/lib/auth/api-guard';
 
-async function POST(req: NextRequest): Promise<NextResponse> {
+async function _POST(req: NextRequest): Promise<NextResponse> {
   const { body, error: parseErr } = await parseBody<Record<string, unknown>>(req);
   if (parseErr) return parseErr;
 
@@ -65,4 +65,4 @@ async function POST(req: NextRequest): Promise<NextResponse> {
   }
 }
 
-export const POST = withErrorBoundary(POST);
+export const POST = withErrorBoundary(_POST);

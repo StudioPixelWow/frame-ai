@@ -35,7 +35,7 @@ const ALLOWED_UPDATE_FIELDS = [
   'activityLog',
 ];
 
-async function GET(
+async function _GET(
   req: NextRequest,
   context: { params: Promise<{ planId: string }> }
 ): Promise<NextResponse> {
@@ -48,7 +48,7 @@ async function GET(
   return ok(plan);
 }
 
-async function PATCH(
+async function _PATCH(
   req: NextRequest,
   context: { params: Promise<{ planId: string }> }
 ): Promise<NextResponse> {
@@ -86,5 +86,5 @@ async function PATCH(
   }
 }
 
-export const GET = withErrorBoundary(GET);
-export const PATCH = withErrorBoundary(PATCH);
+export const GET = withErrorBoundary(_GET);
+export const PATCH = withErrorBoundary(_PATCH);

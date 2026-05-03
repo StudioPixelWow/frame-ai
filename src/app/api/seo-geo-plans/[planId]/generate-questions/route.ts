@@ -120,7 +120,7 @@ function generateVisibilityQuestions(
   return questions;
 }
 
-async function POST(
+async function _POST(
   req: NextRequest,
   context: { params: Promise<{ planId: string }> }
 ): Promise<NextResponse> {
@@ -164,4 +164,4 @@ async function POST(
   }
 }
 
-export const POST = withErrorBoundary(POST);
+export const POST = withErrorBoundary(_POST);

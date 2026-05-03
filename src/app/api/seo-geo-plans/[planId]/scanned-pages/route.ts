@@ -6,7 +6,7 @@ import {
   withErrorBoundary,
 } from '@/lib/seo/api-helpers';
 
-async function GET(
+async function _GET(
   req: NextRequest,
   context: { params: Promise<{ planId: string }> }
 ): Promise<NextResponse> {
@@ -24,4 +24,4 @@ async function GET(
   });
 }
 
-export const GET = withErrorBoundary(GET);
+export const GET = withErrorBoundary(_GET);
