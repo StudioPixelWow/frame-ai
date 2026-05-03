@@ -106,6 +106,8 @@ const InsightsTab: React.FC = () => {
   const { data: rawClients } = useClients();
   const { data: rawCampaigns } = useCampaigns();
   const { data: rawPayments } = usePayments();
+  const { data: rawApprovals } = useApprovals();
+  const { data: rawSocialPosts } = useSocialPosts();
 
   // Safe fallbacks — never let undefined reach .filter/.map/.reduce
   const alerts = rawAlerts ?? [];
@@ -114,6 +116,8 @@ const InsightsTab: React.FC = () => {
   const clients = rawClients ?? [];
   const campaigns = rawCampaigns ?? [];
   const payments = rawPayments ?? [];
+  const approvals = rawApprovals ?? [];
+  const socialPosts = rawSocialPosts ?? [];
 
   const allAlerts = useMemo(() => {
     const mapped = alerts.map((alert) => ({
@@ -131,11 +135,12 @@ const InsightsTab: React.FC = () => {
     return generateInsights({
       tasks: tasks || [],
       clients: clients || [],
-      campaigns: campaigns || [],
+      approvals: approvals || [],
       payments: payments || [],
-      insights: insights || [],
+      campaigns: campaigns || [],
+      socialPosts: socialPosts || [],
     });
-  }, [tasks, clients, campaigns, payments, insights]);
+  }, [tasks, clients, approvals, payments, campaigns, socialPosts]);
 
   return (
     <div
