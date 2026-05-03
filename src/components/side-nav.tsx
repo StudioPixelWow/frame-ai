@@ -187,6 +187,14 @@ const Icons = {
       <path d="M2 12h20" />
     </svg>
   ),
+  SeoGeo: (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="11" cy="11" r="8" />
+      <path d="M21 21l-4.35-4.35" />
+      <path d="M11 8v6" />
+      <path d="M8 11h6" />
+    </svg>
+  ),
 };
 
 const mainNavItems: NavItem[] = [
@@ -201,6 +209,7 @@ const mainNavItems: NavItem[] = [
   { href: "/business-projects", label: "פרויקטים", id: "nav-otp", icon: Icons.BusinessProjects, allowedRoles: ['admin', 'employee'] },
   { href: "/business-projects/dashboard", label: "דשבורד פרויקטים", id: "nav-biz-dash", icon: Icons.BarChart, allowedRoles: ['admin'] },
   { href: "/editor", label: "PixelFrameAI", id: "nav-editor", icon: Icons.Video, allowedRoles: ['admin', 'employee'] },
+  { href: "/seo-geo", label: "PIXEL SEO/GEO", id: "nav-seo-geo", icon: Icons.SeoGeo, allowedRoles: ['admin'] },
   { href: "/accounting", label: "חשבונות", id: "nav-payments", icon: Icons.CreditCard, allowedRoles: ['admin'] },
   { href: "/accounting/timeline", label: "גבייה חכמה", id: "nav-timeline", icon: Icons.BarChart, allowedRoles: ['admin'] },
   { href: "/accounting/podcast", label: "פודקאסט", id: "nav-podcast", icon: Icons.Mic, allowedRoles: ['admin', 'employee'] },
