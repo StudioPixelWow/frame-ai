@@ -20,6 +20,7 @@
  */
 
 import { extractWebsiteFacts, type WebsiteFacts } from './website-facts';
+import { isPlatformAvailable, queryPlatform, type PlatformId as ApiPlatformId } from './platform-apis';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -370,7 +371,7 @@ function initPlatformStatuses(): PlatformStatus[] {
     status: 'waiting' as const,
     queriesScanned: 0,
     mentionsFound: 0,
-    scanMode: p.requiresApi ? 'unavailable' as const : 'simulated' as const,
+    scanMode: isPlatformAvailable(p.id as ApiPlatformId) ? 'real' as const : 'unavailable' as const,
   }));
 }
 
@@ -811,7 +812,10 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
         continue;
       }
 
-      if (platform.requiresApi) {
+      const apiPlatformId = platform.id as ApiPlatformId;
+      const available = isPlatformAvailable(apiPlatformId);
+
+      if (!available) {
         ps.status = 'api_missing';
         ps.scanMode = 'unavailable';
         unavailableCount++;
@@ -827,24 +831,37 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
         continue;
       }
 
-      // Simulated scan for google_seo (no real API but we can simulate structure)
+      // Real API scan
       ps.status = 'running';
-      log(job, 'check_visibility', `${platform.name} — סורק ${platformQueries.length} שאילתות...`, 'info');
+      ps.scanMode = 'real';
+      log(job, 'check_visibility', `${platform.name} — סורק ${platformQueries.length} שאילתות (API אמיתי)...`, 'info');
 
+      let mentions = 0;
       for (const q of platformQueries) {
-        await new Promise(r => setTimeout(r, 150 + Math.random() * 250));
-        aiResults.push({
-          query: q.query, platform: platform.id, found: false, confidence: 0,
-          checkedAt: new Date().toISOString(), scanMode: 'simulated',
-        });
+        try {
+          const result = await queryPlatform(apiPlatformId, q.query, bName || urlObj.hostname, normalizedUrl);
+          aiResults.push({
+            query: q.query, platform: platform.id, found: result.found,
+            position: result.position, snippet: result.snippet,
+            confidence: result.confidence,
+            checkedAt: new Date().toISOString(), scanMode: result.scanMode,
+          });
+          if (result.found) mentions++;
+        } catch (err) {
+          log(job, 'check_visibility', `${platform.name} — שגיאה בשאילתה "${q.query}"`, 'error',
+            err instanceof Error ? err.message : 'Unknown error');
+          aiResults.push({
+            query: q.query, platform: platform.id, found: false, confidence: 0,
+            checkedAt: new Date().toISOString(), scanMode: 'real',
+          });
+        }
       }
 
       ps.status = 'completed';
-      ps.scanMode = 'simulated';
       ps.queriesScanned = platformQueries.length;
-      ps.mentionsFound = 0;
+      ps.mentionsFound = mentions;
       platformsChecked++;
-      log(job, 'check_visibility', `${platform.name} — ${platformQueries.length} שאילתות נבדקו`, 'success', 'סימולציה');
+      log(job, 'check_visibility', `${platform.name} — ${platformQueries.length} שאילתות נבדקו, ${mentions} אזכורים`, 'success', 'API אמיתי');
     }
 
     job.metrics.platformsChecked = platformsChecked;
