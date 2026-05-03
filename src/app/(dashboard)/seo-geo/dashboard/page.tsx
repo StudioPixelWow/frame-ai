@@ -52,16 +52,25 @@ const statusBadgeColors: Record<string, { bg: string; text: string }> = {
 };
 
 const statusLabels: Record<string, string> = {
-  draft: 'Draft',
-  scanning: 'Scanning',
-  goals_set: 'Goals Set',
-  visibility_done: 'Visibility Done',
-  insights_ready: 'Insights Ready',
-  plan_generated: 'Plan Generated',
-  tasks_created: 'Tasks Created',
-  active: 'Active',
-  completed: 'Completed',
+  draft: 'טיוטה',
+  scanning: 'בסריקה',
+  goals_set: 'יעדים הוגדרו',
+  visibility_done: 'נראות הושלמה',
+  insights_ready: 'תובנות מוכנות',
+  plan_generated: 'תוכנית מוכנה',
+  tasks_created: 'משימות נוצרו',
+  active: 'פעיל',
+  completed: 'הושלם',
 };
+
+const PLATFORMS = [
+  { id: 'google_seo', name: 'Google SEO', icon: '🔍', desc: 'חיפוש אורגני' },
+  { id: 'google_ai_overview', name: 'Google AI Overview', icon: '✨', desc: 'סקירת AI של גוגל' },
+  { id: 'gemini', name: 'Gemini', icon: '💎', desc: 'מנוע AI של Google' },
+  { id: 'chatgpt', name: 'ChatGPT', icon: '🤖', desc: 'מנוע AI של OpenAI' },
+  { id: 'claude', name: 'Claude', icon: '🧠', desc: 'מנוע AI של Anthropic' },
+  { id: 'perplexity', name: 'Perplexity', icon: '🔮', desc: 'מנוע חיפוש AI' },
+];
 
 // ==================== HELPERS ====================
 function getStatusBadgeColor(status: string): { bg: string; text: string } {
@@ -71,7 +80,7 @@ function getStatusBadgeColor(status: string): { bg: string; text: string } {
 function formatDate(dateStr: string): string {
   try {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('he-IL', { year: 'numeric', month: 'short', day: 'numeric' });
   } catch {
     return dateStr;
   }
@@ -155,7 +164,7 @@ export default function SeoGeoDashboard() {
   }, [plans]);
 
   return (
-    <div style={{ padding: '32px', maxWidth: '1400px', margin: '0 auto', fontFamily: 'system-ui, -apple-system, sans-serif', backgroundColor: COLORS.background, minHeight: '100vh' }}>
+    <div style={{ direction: 'rtl', padding: '32px', maxWidth: '1400px', margin: '0 auto', fontFamily: 'system-ui, -apple-system, sans-serif', backgroundColor: COLORS.background, minHeight: '100vh' }}>
       <style>{`
         @keyframes fade-in {
           from { opacity: 0; transform: translateY(10px); }
@@ -271,7 +280,7 @@ export default function SeoGeoDashboard() {
         }
         .plans-table th {
           padding: 16px;
-          text-align: left;
+          text-align: right;
           font-weight: 600;
           font-size: 13px;
           color: ${COLORS.textMuted};
@@ -293,10 +302,10 @@ export default function SeoGeoDashboard() {
       <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
         <div>
           <h1 style={{ fontSize: '28px', fontWeight: '700', color: COLORS.text, margin: '0 0 8px 0' }}>
-            SEO/GEO Growth Center
+            מרכז PIXEL SEO/GEO
           </h1>
           <p style={{ fontSize: '14px', color: COLORS.textMuted, margin: 0 }}>
-            Overview of all SEO and GEO plans across your clients
+            סקירת כל תוכניות PIXEL SEO/GEO ללקוחות
           </p>
         </div>
         <Link href="/seo-geo" style={{
@@ -310,7 +319,7 @@ export default function SeoGeoDashboard() {
           transition: 'all 0.2s ease',
           whiteSpace: 'nowrap',
         }}>
-          New SEO/GEO Plan +
+          תוכנית PIXEL SEO/GEO חדשה +
         </Link>
       </div>
 
@@ -318,7 +327,7 @@ export default function SeoGeoDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '32px' }}>
         <div className="kpi-card" style={{ animationDelay: '0s' }}>
           <div style={{ fontSize: '13px', color: COLORS.textMuted, fontWeight: '600', marginBottom: '12px' }}>
-            Total Plans
+            סה״כ תוכניות
           </div>
           <div style={{ fontSize: '40px', fontWeight: '700', color: COLORS.primary }}>
             {kpis.total}
@@ -327,7 +336,7 @@ export default function SeoGeoDashboard() {
 
         <div className="kpi-card" style={{ animationDelay: '0.08s' }}>
           <div style={{ fontSize: '13px', color: COLORS.textMuted, fontWeight: '600', marginBottom: '12px' }}>
-            Active Plans
+            תוכניות פעילות
           </div>
           <div style={{ fontSize: '40px', fontWeight: '700', color: COLORS.green }}>
             {kpis.active}
@@ -336,7 +345,7 @@ export default function SeoGeoDashboard() {
 
         <div className="kpi-card" style={{ animationDelay: '0.16s' }}>
           <div style={{ fontSize: '13px', color: COLORS.textMuted, fontWeight: '600', marginBottom: '12px' }}>
-            Average GEO Score
+            ציון GEO ממוצע
           </div>
           <div style={{ fontSize: '40px', fontWeight: '700', color: COLORS.blue }}>
             {kpis.avgGeoScore}
@@ -345,7 +354,7 @@ export default function SeoGeoDashboard() {
 
         <div className="kpi-card" style={{ animationDelay: '0.24s' }}>
           <div style={{ fontSize: '13px', color: COLORS.textMuted, fontWeight: '600', marginBottom: '12px' }}>
-            Plans Needing Review
+            תוכניות לבדיקה
           </div>
           <div style={{ fontSize: '40px', fontWeight: '700', color: COLORS.orange }}>
             {kpis.needsReview}
@@ -354,16 +363,16 @@ export default function SeoGeoDashboard() {
 
         <div className="kpi-card" style={{ animationDelay: '0.32s' }}>
           <div style={{ fontSize: '13px', color: COLORS.textMuted, fontWeight: '600', marginBottom: '12px' }}>
-            API Connection Status
+            סטטוס חיבור API
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span className="badge badge-yellow">Simulated</span>
+            <span className="badge badge-yellow">סימולציה</span>
           </div>
         </div>
 
         <div className="kpi-card" style={{ animationDelay: '0.40s' }}>
           <div style={{ fontSize: '13px', color: COLORS.textMuted, fontWeight: '600', marginBottom: '12px' }}>
-            Latest Scans (7 days)
+            סריקות אחרונות (7 ימים)
           </div>
           <div style={{ fontSize: '40px', fontWeight: '700', color: COLORS.emerald }}>
             {kpis.lastSevenDays}
@@ -371,24 +380,38 @@ export default function SeoGeoDashboard() {
         </div>
       </div>
 
+      {/* ══════════ PLATFORM CARDS ROW ══════════ */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '32px' }}>
+        {PLATFORMS.map((p) => (
+          <div key={p.id} className="kpi-card" style={{ textAlign: 'center', cursor: 'default' }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>{p.icon}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>{p.name}</div>
+            <div style={{ fontSize: 12, color: COLORS.textMuted }}>{p.desc}</div>
+            <div style={{ marginTop: 10 }}>
+              <span className="badge badge-yellow">סימולציה</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* ══════════ SEARCH & PLANS LIST ══════════ */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px 32px', color: COLORS.textMuted }}>
-          Loading plans...
+          טוען תוכניות...
         </div>
       ) : error ? (
         <div style={{ textAlign: 'center', padding: '60px 32px', color: COLORS.red }}>
-          Error loading: {error}
+          שגיאה בטעינה: {error}
         </div>
       ) : plans.length === 0 ? (
         <div className="plan-card" style={{ textAlign: 'center' }}>
           <div className="empty-state">
             <div className="empty-state-icon">📋</div>
             <h3 style={{ fontSize: '20px', fontWeight: '600', color: COLORS.text, marginBottom: '8px' }}>
-              No SEO/GEO plans yet
+              אין תוכניות PIXEL SEO/GEO עדיין
             </h3>
             <p style={{ marginBottom: '24px' }}>
-              Create your first plan to get started
+              צור תוכנית ראשונה כדי להתחיל
             </p>
             <Link href="/seo-geo" style={{
               display: 'inline-block',
@@ -400,7 +423,7 @@ export default function SeoGeoDashboard() {
               fontWeight: '600',
               fontSize: '14px',
             }}>
-              Create New Plan
+              צור תוכנית חדשה
             </Link>
           </div>
         </div>
@@ -410,7 +433,7 @@ export default function SeoGeoDashboard() {
           <div style={{ marginBottom: '24px' }}>
             <input
               type="text"
-              placeholder="Search by client name, domain, or industry..."
+              placeholder="חפש לפי שם לקוח, דומיין או תחום..."
               className="search-input"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -422,28 +445,28 @@ export default function SeoGeoDashboard() {
             <table className="plans-table">
               <thead>
                 <tr>
-                  <th>Client Name</th>
-                  <th>Domain</th>
-                  <th>Status</th>
-                  <th>GEO Score</th>
-                  <th>SEO Score</th>
-                  <th>Last Scan</th>
-                  <th>Scan Mode</th>
-                  <th>Actions</th>
+                  <th>שם לקוח</th>
+                  <th>דומיין</th>
+                  <th>סטטוס</th>
+                  <th>ציון GEO</th>
+                  <th>ציון טכני</th>
+                  <th>סריקה אחרונה</th>
+                  <th>מצב סריקה</th>
+                  <th>פעולות</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredPlans.length === 0 ? (
                   <tr>
                     <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: COLORS.textMuted }}>
-                      No plans match your search
+                      אין תוכניות התואמות את החיפוש
                     </td>
                   </tr>
                 ) : (
                   filteredPlans.map((plan) => {
                     const badge = getStatusBadgeColor(plan.status);
                     const daysAgo = getDaysAgo(plan.updatedAt);
-                    const lastScanText = daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo} days ago`;
+                    const lastScanText = daysAgo === 0 ? 'היום' : daysAgo === 1 ? 'אתמול' : `לפני ${daysAgo} ימים`;
 
                     return (
                       <tr key={plan.id}>
@@ -470,17 +493,17 @@ export default function SeoGeoDashboard() {
                           {lastScanText}
                         </td>
                         <td>
-                          <span className="badge badge-yellow">Simulated</span>
+                          <span className="badge badge-yellow">סימולציה</span>
                         </td>
                         <td>
                           <div style={{ display: 'flex', gap: '8px' }}>
-                            <Link href={`/seo-geo/dashboard/${plan.id}`} className="action-button action-button-primary">
-                              Open
+                            <Link href={`/seo-geo/${plan.id}`} className="action-button action-button-primary">
+                              פתח
                             </Link>
                             <button className="action-button action-button-secondary" onClick={() => {
-                              window.location.href = `/seo-geo/dashboard/${plan.id}`;
+                              window.location.href = `/seo-geo/${plan.id}/report?lang=he`;
                             }}>
-                              Generate Report
+                              הפק דוח
                             </button>
                           </div>
                         </td>

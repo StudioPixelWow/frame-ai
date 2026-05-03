@@ -110,7 +110,7 @@ const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "social", label: "סושיאל" },
   { id: "campaigns", label: "קמפיינים" },
   { id: "ads", label: "פרסום" },
-  { id: "seo", label: "SEO/GEO Plans" },
+  { id: "seo", label: "PIXEL SEO/GEO" },
   { id: "files", label: "קבצים" },
   { id: "accounting", label: "הנהח״ש" },
   { id: "portal", label: "פורטל" },

@@ -1897,6 +1897,85 @@ export interface SeoActivityEntry {
   details?: string;
 }
 
+// ─── Results & Visibility Layer ─────────────────────────────────────────────
+
+export type ScanMode = 'real' | 'simulated' | 'unavailable';
+
+export type VisibilityPlatformId = 'google_seo' | 'google_ai_overview' | 'gemini' | 'chatgpt' | 'claude' | 'perplexity';
+
+export interface PlatformSummary {
+  platformId: VisibilityPlatformId;
+  platformName: string;
+  icon: string;
+  queriesScanned: number;
+  mentions: number;
+  visibilityPct: number;
+  scanMode: ScanMode;
+  lastScannedAt: string | null;
+}
+
+export interface PlatformResultBase {
+  id: string;
+  planId: string;
+  platformId: VisibilityPlatformId;
+  query: string;
+  queryCategory: string;
+  queryIntent: string;
+  mentioned: boolean;
+  scanMode: ScanMode;
+  confidence: number;        // 0-100
+  evidence: ResultEvidence;
+  scannedAt: string;
+  competitorsMentioned: string[];
+  opportunityScore: number;  // 0-100, higher = bigger opportunity
+  cluster?: string;          // keyword cluster grouping
+}
+
+export interface ResultEvidence {
+  sourceUrl: string | null;
+  extractedSnippet: string | null;
+  rawApiResponse: string | null;
+  scanMode: ScanMode;
+  confidence: number;
+}
+
+/** Google SEO (Organic) specific fields */
+export interface GoogleSeoResult extends PlatformResultBase {
+  platformId: 'google_seo';
+  organicPosition: number | null;
+  pageUrl: string | null;
+  pageTitle: string | null;
+  metaDescription: string | null;
+}
+
+/** Google AI Overview specific fields */
+export interface GoogleAiOverviewResult extends PlatformResultBase {
+  platformId: 'google_ai_overview';
+  aiOverviewExists: boolean;
+  mentionPosition: number | null;
+  aiSnippet: string | null;
+  sourceUrls: string[];
+}
+
+/** AI Platform result (Gemini, ChatGPT, Claude, Perplexity) */
+export interface AiPlatformResult extends PlatformResultBase {
+  answer: string | null;           // full or truncated answer
+  mentionContext: string | null;   // text snippet around mention
+  sources: string[];
+}
+
+export type PlatformResult = GoogleSeoResult | GoogleAiOverviewResult | AiPlatformResult;
+
+export interface VisibilityScanHistory {
+  id: string;
+  planId: string;
+  scannedAt: string;
+  platformSummaries: PlatformSummary[];
+  totalQueries: number;
+  totalMentions: number;
+  overallVisibilityPct: number;
+}
+
 export interface SeoGrowthTask {
   id: string;
   planId: string;

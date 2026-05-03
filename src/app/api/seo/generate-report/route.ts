@@ -24,9 +24,7 @@ export async function POST(req: NextRequest) {
     const existingReports = (plan as any).reports || [];
     const reportMeta = {
       id: report.id,
-      name: language === "he"
-        ? `דוח SEO/GEO — ${plan.clientName || "ללא שם"}`
-        : `SEO/GEO Report — ${plan.clientName || "Unnamed"}`,
+      name: `דוח PIXEL SEO/GEO — ${plan.clientName || "ללא שם"}`,
       generatedAt: report.generatedAt,
       language,
       type: "full",

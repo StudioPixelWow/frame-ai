@@ -149,7 +149,7 @@ export default function TabSeoGeo({ client }: { client: any }) {
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 18,
             }}>🔍</span>
-            תוכניות SEO/GEO
+            תוכניות PIXEL SEO/GEO
           </h2>
           <p style={{ fontSize: 13, color: C.textMuted, margin: '6px 0 0 0' }}>
             {hasPlans
@@ -171,7 +171,7 @@ export default function TabSeoGeo({ client }: { client: any }) {
           }}
         >
           <span style={{ fontSize: 16 }}>+</span>
-          בנה תוכנית SEO/GEO
+          בנה תוכנית PIXEL SEO/GEO
         </button>
       </div>
 
@@ -241,7 +241,7 @@ export default function TabSeoGeo({ client }: { client: any }) {
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                         <h3 style={{ fontSize: 17, fontWeight: 700, color: C.text, margin: 0 }}>
-                          {plan.clientName || 'תוכנית SEO/GEO'}
+                          {plan.clientName || 'תוכנית PIXEL SEO/GEO'}
                         </h3>
                         <span style={{
                           fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 8,
@@ -360,7 +360,7 @@ export default function TabSeoGeo({ client }: { client: any }) {
           }}>🔍</div>
 
           <h3 style={{ fontSize: 20, fontWeight: 800, color: C.text, margin: '0 0 10px 0' }}>
-            אין תוכניות SEO/GEO עדיין
+            אין תוכניות PIXEL SEO/GEO עדיין
           </h3>
           <p style={{
             fontSize: 14, color: C.textSecondary, margin: '0 auto 32px',
@@ -404,7 +404,7 @@ export default function TabSeoGeo({ client }: { client: any }) {
             }}
           >
             <span style={{ fontSize: 18 }}>+</span>
-            בנה תוכנית SEO/GEO
+            בנה תוכנית PIXEL SEO/GEO
           </button>
 
           {!client?.websiteUrl && (

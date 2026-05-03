@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
         priority: g.priority || "medium",
       })),
       targetKeywords: body.targetKeywords || [],
-      targetLocation: body.targetLocation || "ישראל",
+      targetLocation: body.targetLocation || "",
       targetLanguage: body.targetLanguage || "he",
       insights: (body.insights || []).map((ins: any) => ({
         id: ins.id || "",

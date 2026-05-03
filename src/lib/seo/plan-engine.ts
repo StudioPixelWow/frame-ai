@@ -1041,7 +1041,7 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
 
   days.push(mkDay(58, "Write Comprehensive Final Report", [
     mkTask("analytics", "high", "critical",
-      `Write Final SEO/GEO Report for ${input.clientName}`,
+      `Write Final PIXEL SEO/GEO Report for ${input.clientName}`,
       `Write comprehensive report: executive summary, before/after status, technical findings, AI visibility (before/after), content created, links built, next steps, expected ROI.`,
       5, null,
       "Complete 60-day professional report",

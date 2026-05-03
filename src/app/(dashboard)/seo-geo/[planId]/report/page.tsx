@@ -203,7 +203,7 @@ export default function ReportViewer() {
             >
               → {he ? "חזרה לתוכנית" : "Back to Plan"}
             </button>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexDirection: "row-reverse" }}>
               {/* Language toggle */}
               <div style={{ display: "flex", background: C.bg, borderRadius: 10, border: `1px solid ${C.border}`, overflow: "hidden" }}>
                 <button
@@ -252,7 +252,7 @@ export default function ReportViewer() {
                   PixelManageAI
                 </div>
                 <h1 style={{ fontSize: 32, fontWeight: 800, margin: "0 0 8px", lineHeight: 1.3 }}>
-                  {he ? "דוח SEO/GEO מקיף" : "Comprehensive SEO/GEO Report"}
+                  {he ? "דוח PIXEL SEO/GEO מקיף" : "Comprehensive PIXEL SEO/GEO Report"}
                 </h1>
                 <div style={{ fontSize: 18, fontWeight: 500, opacity: 0.9, marginBottom: 24 }}>
                   {report.clientName} — {domain}

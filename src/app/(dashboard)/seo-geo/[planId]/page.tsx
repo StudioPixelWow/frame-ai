@@ -89,13 +89,14 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   completed: { label: "הושלם", color: C.primary },
 };
 
-type TabId = "overview" | "plan" | "tasks" | "ai" | "competitors" | "gaps" | "reports";
+type TabId = "overview" | "plan" | "tasks" | "ai" | "results" | "competitors" | "gaps" | "reports";
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "overview", label: "סקירה", icon: "📊" },
   { id: "plan", label: "תוכנית 60 יום", icon: "📅" },
   { id: "tasks", label: "משימות", icon: "✅" },
   { id: "ai", label: "תוצאות AI", icon: "🤖" },
+  { id: "results", label: "תוצאות ��נראות", icon: "🔎" },
   { id: "competitors", label: "מתחרים", icon: "🏆" },
   { id: "gaps", label: "פערי תוכן", icon: "📝" },
   { id: "reports", label: "דוחות", icon: "📄" },
@@ -216,7 +217,7 @@ export default function SeoPlanDetail() {
         // Update local reports list
         setReports(prev => [...prev, {
           id: report.id,
-          name: `דוח SEO/GEO — ${plan.clientName || "ללא שם"}`,
+          name: `דוח PIXEL SEO/GEO — ${plan.clientName || "ללא שם"}`,
           generatedAt: report.generatedAt,
           type: "full",
         }]);
@@ -254,7 +255,7 @@ export default function SeoPlanDetail() {
         <button onClick={() => router.push("/seo-geo/dashboard")} style={{
           marginTop: 24, padding: "12px 32px", background: C.primary, color: "#fff",
           border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: "pointer",
-        }}>חזרה למרכז SEO/GEO</button>
+        }}>חזרה למרכז PIXEL SEO/GEO</button>
       </div>
     );
   }
@@ -300,7 +301,7 @@ export default function SeoPlanDetail() {
                 }}>🔍</div>
                 <div>
                   <h1 style={{ fontSize: 22, fontWeight: 800, color: C.text, margin: 0 }}>
-                    {plan.clientName || "תוכנית SEO/GEO"}
+                    {plan.clientName || "תוכנית PIXEL SEO/GEO"}
                   </h1>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
                     <span style={{ fontSize: 13, color: C.textSecondary }}>🌐 {domain}</span>
@@ -378,9 +379,9 @@ export default function SeoPlanDetail() {
             { label: "GEO Score", value: `${plan.visibilityScore || 0}%`, color: C.purple, icon: "🤖", sub: "נראות במנועי AI" },
             { label: "SEO Score", value: `${plan.technicalScore || 0}%`, color: C.info, icon: "🔧", sub: "ציון טכני" },
             { label: "AI Visibility", value: `${plan.overallScore || 0}%`, color: C.primary, icon: "📊", sub: "ציון כללי" },
-            { label: "התקדמות", value: `${progress}%`, color: progress >= 60 ? C.success : C.warning, icon: "📈", sub: `${plan.completedTasks}/${plan.totalTasks}` },
-            { label: "משימות שהושלמו", value: `${plan.completedTasks || 0}`, color: C.success, icon: "���", sub: `מתוך ${plan.totalTasks || 0}` },
-            { label: "ימים שנותרו", value: `${daysRemaining}`, color: daysRemaining < 15 ? C.danger : C.primary, icon: "⏰", sub: `מתוך 60 יום` },
+            { label: "Progress", value: `${progress}%`, color: progress >= 60 ? C.success : C.warning, icon: "📈", sub: "התקדמות" },
+            { label: "Completed Tasks", value: `${plan.completedTasks || 0}`, color: C.success, icon: "���", sub: `מתוך ${plan.totalTasks || 0}` },
+            { label: "Days Remaining", value: `${daysRemaining}`, color: daysRemaining < 15 ? C.danger : C.primary, icon: "⏰", sub: `מתוך 60 יום` },
           ].map((kpi, i) => (
             <div key={i} style={{
               background: C.card, borderRadius: 18, border: `1px solid ${C.border}`,
@@ -603,7 +604,7 @@ export default function SeoPlanDetail() {
                             שלב {phase.number}: {phase.name}
                           </div>
                           <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                            {phase.focus} · {phaseDone}/{phaseTotal} משימות · ימים {phase.days[0]}-{phase.days[1]}
+                            {phase.focus} · {phaseDone}/{phaseTotal} tasks · Days {phase.days[0]}-{phase.days[1]}
                           </div>
                         </div>
                         {/* Mini progress */}
@@ -1062,14 +1063,35 @@ export default function SeoPlanDetail() {
           </div>
         )}
 
+        {/* ── RESULTS & VISIBILITY ── */}
+        {activeTab === "results" && (
+          <div style={{ textAlign: "center", padding: "40px 20px" }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🔎</div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>תוצאות ונראות</h3>
+            <p style={{ color: C.textSecondary, marginBottom: 20, maxWidth: 500, margin: "0 auto 20px" }}>
+              צפה בתוצאות מפורטות לפי פלטפורמה — Google SEO, AI Overview, ChatGPT, Gemini, Claude, Perplexity
+            </p>
+            <button
+              onClick={() => router.push(`/seo-geo/${planId}/results`)}
+              style={{
+                padding: "12px 32px", borderRadius: 10, border: "none", cursor: "pointer",
+                background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+                color: "#fff", fontWeight: 600, fontSize: 15,
+              }}
+            >
+              פתח דשבורד תוצאות ונראות →
+            </button>
+          </div>
+        )}
+
         {/* ── COMPETITORS ── */}
         {activeTab === "competitors" && (
-          <EmptyTab icon="🏆" text="ניתוח מתחרים יהיה זמין בקרוב. הנתונים ייאספו מסריקות הנראות ומחקר מילות מפתח." />
+          <EmptyTab icon="🏆" text="ניתוח מתחרים בקרוב. נתונים יאספו מסריקות נראות וחקר מילות מפתח." />
         )}
 
         {/* ── CONTENT GAPS ── */}
         {activeTab === "gaps" && (
-          <EmptyTab icon="📝" text="ניתוח פערי תוכן יהיה זמין בקרוב. המערכת תזהה הזדמנויות תוכן על בסיס מחקר מילות מפתח וניתוח מתחרים." />
+          <EmptyTab icon="📝" text="ניתוח פערי תוכן בקרוב. המערכת תזהה הזדמנויות תוכן בהתאם לחקר מילות מפתח וניתוח מתחרים." />
         )}
 
         {/* ── REPORTS ── */}
@@ -1145,7 +1167,7 @@ export default function SeoPlanDetail() {
                       עדיין לא הופק דוח
                     </div>
                     <div>
-                      הפק דוח חדש כדי לשתף עם הלקוח את ממצאי הסריקה, תוצאות ה-AI ותוכנית הפעולה
+                      הפק דוח חדש כדי לשתף עם הלקוח ממצאי סריקה, תוצאות AI ותוכנית פעולה
                     </div>
                     <button
                       onClick={handleGenerateReport}
@@ -1160,7 +1182,7 @@ export default function SeoPlanDetail() {
                     </button>
                   </>
                 ) : (
-                  <>לחץ על &quot;הפק דוח חדש&quot; כדי לייצר דוח מעודכן</>
+                  <>לחץ על &quot;הפק דוח חדש&quot; כדי ליצור דוח מעודכן</>
                 )}
               </div>
             </div>
