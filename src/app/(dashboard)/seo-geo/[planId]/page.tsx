@@ -11,10 +11,22 @@ import { useParams, useRouter } from "next/navigation";
 interface ScanResult {
   url: string; scannedAt: string; hasSSL: boolean; loadTimeMs: number;
   mobileOptimized: boolean; metaTitle: string; metaDescription: string;
-  h1Tags: string[]; totalPages: number; indexedPages: number; brokenLinks: number;
+  h1Tags: string[]; h2Tags?: string[]; totalPages: number; indexedPages: number; brokenLinks: number;
   hasRobotsTxt: boolean; hasSitemap: boolean; domainAuthority: number;
   structuredData: boolean; openGraph: boolean; canonicalTags: boolean;
   issues: { type: string; category: string; title: string; description: string; impact: string }[];
+  // Fields from scan pipeline
+  scanType?: string;
+  scan_mode?: string;
+  scannedPages?: any[];
+  aiQueries?: any[];
+  platformStatuses?: Record<string, any>;
+  websiteFacts?: Record<string, any>;
+  metrics?: Record<string, any>;
+  scanDuration?: number;
+  schemaTypes?: string[];
+  techStack?: string[];
+  cmsDetected?: string | null;
 }
 
 interface Goal {
@@ -111,10 +123,28 @@ const KANBAN_COLS: { id: PlanTask["status"]; label: string; color: string; icon:
 
 function fmtDate(d: string | null | undefined): string {
   if (!d) return "—";
-  const date = new Date(d);
-  if (isNaN(date.getTime())) return "—";
-  const m = ["ינו","פבר","מרץ","אפר","מאי","יונ","יול","אוג","ספט","אוק","נוב","דצמ"];
-  return `${date.getDate()} ${m[date.getMonth()]} ${date.getFullYear()}`;
+  try {
+    const date = new Date(typeof d === 'object' ? String(d) : d);
+    if (isNaN(date.getTime())) return "—";
+    const m = ["ינו","פבר","מרץ","אפר","מאי","יונ","יול","אוג","ספט","אוק","נוב","דצמ"];
+    return `${date.getDate()} ${m[date.getMonth()]} ${date.getFullYear()}`;
+  } catch { return "—"; }
+}
+
+/**
+ * Safely convert any value to a React-renderable string.
+ * Objects/arrays are converted to a summary string instead of crashing React.
+ */
+function s(val: unknown): string {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+  if (val instanceof Date) return val.toISOString();
+  if (typeof val === 'object') {
+    console.warn('[SEO-PLAN-DETAIL] Object rendered as child — auto-stringified:', val);
+    return JSON.stringify(val);
+  }
+  return String(val);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -141,13 +171,36 @@ export default function SeoPlanDetail() {
         const res = await fetch(`/api/data/seo-plans/${planId}`);
         if (res.ok) {
           const data = await res.json();
+
+          // ── DIAGNOSTIC: Log any top-level field that is an unexpected object ──
+          const primitiveFields = ['id','clientId','clientName','websiteUrl','status',
+            'overallScore','technicalScore','contentScore','visibilityScore',
+            'totalTasks','completedTasks','createdAt','updatedAt','generatedAt'];
+          for (const f of primitiveFields) {
+            const v = data[f];
+            if (v !== null && v !== undefined && typeof v === 'object') {
+              console.error(`[SEO-PLAN-DETAIL] ⚠️ FIELD "${f}" is an object instead of primitive:`, v);
+              // Auto-fix: flatten to safe value
+              if (f.includes('Score') || f.includes('Tasks')) data[f] = 0;
+              else if (f.includes('At') || f.includes('at')) data[f] = typeof v === 'object' ? JSON.stringify(v) : '';
+              else data[f] = typeof v === 'object' ? JSON.stringify(v) : '';
+            }
+          }
+
           // Normalize task statuses
           if (data.weeks) {
-            data.weeks = data.weeks.map((w: PlanWeek) => ({
+            data.weeks = (Array.isArray(data.weeks) ? data.weeks : []).map((w: PlanWeek) => ({
               ...w,
-              tasks: w.tasks.map((t: PlanTask) => ({ ...t, status: t.status || "todo" })),
+              tasks: (Array.isArray(w?.tasks) ? w.tasks : []).map((t: PlanTask) => ({ ...t, status: t.status || "todo" })),
             }));
           }
+
+          // Ensure array fields are actually arrays
+          if (data.goals && !Array.isArray(data.goals)) { console.error('[SEO-PLAN-DETAIL] goals is not array:', data.goals); data.goals = []; }
+          if (data.insights && !Array.isArray(data.insights)) { console.error('[SEO-PLAN-DETAIL] insights is not array:', data.insights); data.insights = []; }
+          if (data.visibilityResults && !Array.isArray(data.visibilityResults)) { console.error('[SEO-PLAN-DETAIL] visibilityResults is not array:', data.visibilityResults); data.visibilityResults = []; }
+          if (data.visibilityQueries && !Array.isArray(data.visibilityQueries)) { console.error('[SEO-PLAN-DETAIL] visibilityQueries is not array:', data.visibilityQueries); data.visibilityQueries = []; }
+
           setPlan(data);
         }
       } catch (e) {
@@ -375,14 +428,14 @@ export default function SeoPlanDetail() {
                 }}>🔍</div>
                 <div>
                   <h1 style={{ fontSize: 22, fontWeight: 800, color: C.text, margin: 0 }}>
-                    {plan.clientName || "תוכנית PIXEL SEO/GEO"}
+                    {s(plan.clientName) || "תוכנית PIXEL SEO/GEO"}
                   </h1>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
-                    <span style={{ fontSize: 13, color: C.textSecondary }}>🌐 {domain}</span>
+                    <span style={{ fontSize: 13, color: C.textSecondary }}>🌐 {s(domain)}</span>
                     <span style={{
                       fontSize: 11, fontWeight: 600, padding: "3px 12px", borderRadius: 8,
                       background: `${status.color}15`, color: status.color,
-                    }}>{status.label}</span>
+                    }}>{s(status.label)}</span>
                     <span style={{ fontSize: 11, color: C.textMuted }}>נוצר {fmtDate(plan.createdAt)}</span>
                   </div>
                 </div>
@@ -533,11 +586,11 @@ export default function SeoPlanDetail() {
                       display: "flex", alignItems: "center", gap: 12,
                       padding: "10px 14px", borderRadius: 12, background: C.bg,
                     }}>
-                      <span style={{ fontSize: 22 }}>{g.icon}</span>
+                      <span style={{ fontSize: 22 }}>{s(g.icon)}</span>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{g.label}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{s(g.label)}</div>
                         <div style={{ fontSize: 11, color: C.textMuted }}>
-                          {g.currentValue} → {g.targetValue} {g.targetMetric}
+                          {s(g.currentValue)} → {s(g.targetValue)} {s(g.targetMetric)}
                         </div>
                       </div>
                       <span style={{
@@ -604,10 +657,10 @@ export default function SeoPlanDetail() {
                         padding: "10px 12px", borderRadius: 10, background: `${cc.color}06`,
                         border: `1px solid ${cc.color}18`,
                       }}>
-                        <span style={{ fontSize: 16, flexShrink: 0 }}>{cc.icon}</span>
+                        <span style={{ fontSize: 16, flexShrink: 0 }}>{s(cc.icon)}</span>
                         <div>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{ins.title}</div>
-                          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{ins.action}</div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{s(ins.title)}</div>
+                          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{s(ins.action)}</div>
                         </div>
                       </div>
                     );
@@ -627,7 +680,7 @@ export default function SeoPlanDetail() {
                   background: `linear-gradient(135deg, ${C.primary}, ${C.purple})`,
                   WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
                 }}>
-                  {plan.visibilityScore || 0}%
+                  {s(plan.visibilityScore || 0)}%
                 </div>
                 <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>ציון נראות כולל</div>
               </div>
@@ -690,10 +743,10 @@ export default function SeoPlanDetail() {
                         }}>{phase.number}</div>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>
-                            שלב {phase.number}: {phase.name}
+                            שלב {s(phase.number)}: {s(phase.name)}
                           </div>
                           <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                            {phase.focus} · {phaseDone}/{phaseTotal} tasks · Days {phase.days[0]}-{phase.days[1]}
+                            {s(phase.focus)} · {phaseDone}/{phaseTotal} tasks · Days {s(phase.days?.[0])}-{s(phase.days?.[1])}
                           </div>
                         </div>
                         {/* Mini progress */}
@@ -732,7 +785,7 @@ export default function SeoPlanDetail() {
                                     fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 8,
                                     display: "flex", justifyContent: "space-between", alignItems: "center",
                                   }}>
-                                    <span>יום {day.day}: {day.theme}</span>
+                                    <span>יום {s(day.day)}: {s(day.theme)}</span>
                                     <span style={{ fontSize: 11, color: C.textMuted }}>{dayDone}/{dayTotal} משימות ({dayPct}%)</span>
                                   </div>
                                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -763,7 +816,7 @@ export default function SeoPlanDetail() {
                                             fontSize: 12, fontWeight: 600, color: C.text,
                                             textDecoration: task.status === "done" ? "line-through" : "none",
                                             opacity: task.status === "done" ? 0.6 : 1,
-                                          }}>{task.title}</div>
+                                          }}>{s(task.title)}</div>
                                         </div>
 
                                         {/* Impact badge */}
@@ -820,10 +873,10 @@ export default function SeoPlanDetail() {
                         }}>{week.weekNumber}</div>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>
-                            שבוע {week.weekNumber}: {week.theme}
+                            שבוע {s(week.weekNumber)}: {s(week.theme)}
                           </div>
                           <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                            {week.focus} · {weekDone}/{weekTotal} משימות · {fmtDate(week.startDate)} – {fmtDate(week.endDate)}
+                            {s(week.focus)} · {weekDone}/{weekTotal} משימות · {fmtDate(week.startDate)} – {fmtDate(week.endDate)}
                           </div>
                         </div>
                         {/* Mini progress */}
@@ -881,22 +934,22 @@ export default function SeoPlanDetail() {
                                     fontSize: 13, fontWeight: 600, color: C.text,
                                     textDecoration: task.status === "done" ? "line-through" : "none",
                                     opacity: task.status === "done" ? 0.6 : 1,
-                                  }}>{task.title}</div>
+                                  }}>{s(task.title)}</div>
                                   <div style={{ display: "flex", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
                                     <span style={{ ...tagStyle, background: `${C.primary}10`, color: C.primary }}>
-                                      🏷️ {task.category}
+                                      🏷️ {s(task.category)}
                                     </span>
                                     <span style={{ ...tagStyle, background: `${C.warning}10`, color: C.warning }}>
-                                      ⏱️ {task.estimatedHours}h
+                                      ⏱️ {s(task.estimatedHours)}h
                                     </span>
                                     {task.deliverable && (
                                       <span style={{ ...tagStyle, background: `${C.success}10`, color: C.success }}>
-                                        📦 {task.deliverable}
+                                        📦 {s(task.deliverable)}
                                       </span>
                                     )}
                                     {task.kpiTarget && (
                                       <span style={{ ...tagStyle, background: `${C.purple}10`, color: C.purple }}>
-                                        📊 {task.kpiTarget}
+                                        📊 {s(task.kpiTarget)}
                                       </span>
                                     )}
                                   </div>
@@ -984,15 +1037,15 @@ export default function SeoPlanDetail() {
                             <div style={{
                               fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 8,
                               lineHeight: 1.5,
-                            }}>{task.title}</div>
+                            }}>{s(task.title)}</div>
 
                             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                              <span style={{ ...tagStyle, background: `${C.primary}10`, color: C.primary }}>{task.category}</span>
-                              <span style={{ ...tagStyle, background: `${C.warning}10`, color: C.warning }}>{task.estimatedHours}h</span>
+                              <span style={{ ...tagStyle, background: `${C.primary}10`, color: C.primary }}>{s(task.category)}</span>
+                              <span style={{ ...tagStyle, background: `${C.warning}10`, color: C.warning }}>{s(task.estimatedHours)}h</span>
                             </div>
 
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <span style={{ fontSize: 10, color: C.textMuted }}>שבוע {(task as any).weekNumber}</span>
+                              <span style={{ fontSize: 10, color: C.textMuted }}>שבוע {s((task as any).weekNumber)}</span>
                               <select
                                 value={task.status || "todo"}
                                 onChange={e => updateTaskStatus(task.id, e.target.value as PlanTask["status"])}
@@ -1037,7 +1090,7 @@ export default function SeoPlanDetail() {
                   display: "flex", alignItems: "center", gap: 32,
                 }}>
                   <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 52, fontWeight: 800 }}>{plan.visibilityScore || 0}%</div>
+                    <div style={{ fontSize: 52, fontWeight: 800 }}>{s(plan.visibilityScore || 0)}%</div>
                     <div style={{ fontSize: 14, opacity: 0.9 }}>ציון נראות AI</div>
                   </div>
                   <div style={{ flex: 1, display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -1077,14 +1130,14 @@ export default function SeoPlanDetail() {
                         const q = plan.visibilityQueries.find(q => q.id === vr.queryId);
                         return (
                           <tr key={vr.queryId} style={{ borderBottom: `1px solid ${C.borderLight}` }}>
-                            <td style={tdStyle}>{vr.query}</td>
+                            <td style={tdStyle}>{s(vr.query)}</td>
                             <td style={tdStyle}>
                               <span style={{ ...tagStyle, background: `${C.primary}10`, color: C.primary }}>
-                                {q?.category || "—"}
+                                {s(q?.category || "—")}
                               </span>
                             </td>
                             <td style={tdStyle}>
-                              <span style={{ fontSize: 11, color: C.textMuted }}>{q?.intent || "—"}</span>
+                              <span style={{ fontSize: 11, color: C.textMuted }}>{s(q?.intent || "—")}</span>
                             </td>
                             {AI_ENGINES.map(eng => {
                               const res = (Array.isArray(vr.results) ? vr.results : []).find(r => r.engine === eng);
@@ -1140,7 +1193,7 @@ export default function SeoPlanDetail() {
                       <div style={{
                         padding: "14px 16px", borderRadius: 12, background: C.bg,
                         marginBottom: 20, fontSize: 14, fontWeight: 600, color: C.text,
-                      }}>{drawerQuery.query}</div>
+                      }}>{s(drawerQuery.query)}</div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                         {(Array.isArray(drawerQuery.results) ? drawerQuery.results : []).map(r => (
                           <div key={r.engine} style={{
@@ -1156,9 +1209,9 @@ export default function SeoPlanDetail() {
                               fontSize: 16, color: r.mentioned ? C.success : C.danger,
                             }}>{r.mentioned ? "✓" : "✗"}</div>
                             <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{r.engine}</div>
+                              <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{s(r.engine)}</div>
                               <div style={{ fontSize: 11, color: C.textMuted }}>
-                                {r.mentioned ? `מוזכר · עמדה ${r.position ?? "—"} · ${r.sentiment}` : "לא מוזכר"}
+                                {r.mentioned ? `מוזכר · עמדה ${s(r.position ?? "—")} · ${s(r.sentiment)}` : "לא מוזכר"}
                               </div>
                             </div>
                           </div>
@@ -1237,7 +1290,7 @@ export default function SeoPlanDetail() {
                     fontSize: 22,
                   }}>📄</div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{report.name}</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{s(report.name)}</div>
                     <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
                       {fmtDate(report.generatedAt)}
                     </div>

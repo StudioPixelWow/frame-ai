@@ -194,6 +194,7 @@ interface ErrorBoundaryState {
 const RECOVERABLE_ERROR_PATTERNS = [
   "reading 'stage'",     // webpack tapable hook hydration artifact
   "reading 'default'",   // occasional SSR mismatch
+  "not valid as a React child",  // object rendered as child — auto-recover
 ];
 
 function isRecoverableError(error: Error | null): boolean {
