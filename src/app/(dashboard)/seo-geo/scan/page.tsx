@@ -156,6 +156,7 @@ function ScanPageInner() {
   const [scanType, setScanType] = useState<ScanType>('quick');
   const [phase, setPhaseRaw] = useState<'select' | 'scanning' | 'done'>('select');
   const [job, setJobRaw] = useState<ScanJob | null>(null);
+  const [savedPlanId, setSavedPlanId] = useState<string>(planId);
 
   // ── GUARD: Never allow phase to regress from 'scanning' back to 'select' ──
   // Only an explicit user action (rescan button) should reset to 'select'.
@@ -376,6 +377,74 @@ function ScanPageInner() {
       });
       setPhase('done');
       console.log(`[PIXEL-SEO-SCAN-UI] COMPLETED totalElapsed=${totalElapsed}ms`);
+
+      // ── PERSIST: Save scan results to seo-plans DB ──────────────
+      try {
+        const clientId = searchParams.get("clientId") || '';
+        const planPayload = {
+          clientId,
+          clientName: clientName || data.websiteFacts?.business_name?.value || '',
+          websiteUrl: scanUrl,
+          status: 'scanned',
+          websiteScan: {
+            url: data.url || scanUrl,
+            scannedAt: data.scannedAt || new Date().toISOString(),
+            hasSSL: data.hasSSL ?? false,
+            loadTimeMs: data.loadTimeMs ?? 0,
+            mobileOptimized: data.mobileOptimized ?? false,
+            metaTitle: data.metaTitle || '',
+            metaDescription: data.metaDescription || '',
+            h1Tags: data.h1Tags || [],
+            totalPages: data.totalPages || 0,
+            indexedPages: data.indexedPages || 0,
+            brokenLinks: data.brokenLinks || 0,
+            hasRobotsTxt: data.hasRobotsTxt ?? false,
+            hasSitemap: data.hasSitemap ?? false,
+            domainAuthority: data.domainAuthority || 0,
+            structuredData: data.structuredData ?? false,
+            openGraph: data.openGraph ?? false,
+            canonicalTags: data.canonicalTags ?? false,
+            issues: data.issues || [],
+            websiteFacts: data.websiteFacts || null,
+            scannedPages: data.scannedPages || [],
+            aiQueries: data.aiQueries || [],
+            platformStatuses: data.platformStatuses || [],
+            metrics: data.metrics || {},
+            scanDuration: data.scanDuration || {},
+            scanType,
+          },
+        };
+
+        if (savedPlanId) {
+          // Update existing plan with new scan
+          await fetch(`/api/data/seo-plans/${savedPlanId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(planPayload),
+          });
+          console.log(`[PIXEL-SEO-SCAN-UI] PERSISTED updated planId=${savedPlanId}`);
+        } else {
+          // Create new plan
+          const saveRes = await fetch('/api/data/seo-plans', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(planPayload),
+          });
+          if (saveRes.ok) {
+            const saved = await saveRes.json();
+            const newId = saved.id || saved.planId;
+            if (newId) {
+              setSavedPlanId(newId);
+              console.log(`[PIXEL-SEO-SCAN-UI] PERSISTED new planId=${newId}`);
+            }
+          } else {
+            console.warn(`[PIXEL-SEO-SCAN-UI] PERSIST_FAILED status=${saveRes.status}`);
+          }
+        }
+      } catch (persistErr) {
+        console.warn('[PIXEL-SEO-SCAN-UI] PERSIST_ERROR', persistErr);
+        // Non-blocking — scan still shows results even if save fails
+      }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error(`[SEO-GEO 77 DEBUG] EXCEPTION in startScan: ${errMsg}`, err);
@@ -885,15 +954,30 @@ function ScanPageInner() {
             )}
 
             {/* ���─ CTAs (valid scan only) ─────────────────────── */}
+            {phase === 'done' && job.validation?.passed && savedPlanId && (
+              <div style={{
+                padding: '10px 16px', borderRadius: 10,
+                background: C.successLight, color: C.success,
+                fontSize: 12.5, fontWeight: 600, textAlign: 'center',
+              }}>
+                תוצאות הסריקה נשמרו בהצלחה
+              </div>
+            )}
+
             {phase === 'done' && job.validation?.passed && (
               <div style={{
                 display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
               }}>
                 {[
-                  { label: 'המשך ליצירת שאלות AI', icon: '🤖', action: () => router.push(`/seo-geo/wizard${planId ? `?planId=${planId}&step=questions` : '?step=questions'}${scanUrl ? `&url=${encodeURIComponent(scanUrl)}` : ''}`) },
-                  { label: 'יצירת תוכנית 60 יום', icon: '📋', action: () => router.push(`/seo-geo/wizard${planId ? `?planId=${planId}&step=plan` : '?step=plan'}${scanUrl ? `&url=${encodeURIComponent(scanUrl)}` : ''}`) },
-                  { label: 'הפקת דוח PIXEL SEO/GEO', icon: '📊', action: () => router.push(`/seo-geo/wizard${planId ? `?planId=${planId}&step=report` : '?step=report'}${scanUrl ? `&url=${encodeURIComponent(scanUrl)}` : ''}`) },
-                  { label: 'צפייה בתוצאות נראות', icon: '👁', action: () => router.push(`/seo-geo${planId ? `/${planId}/results` : ''}`) },
+                  ...(savedPlanId ? [
+                    { label: 'צפייה בתוכנית', icon: '📋', action: () => router.push(`/seo-geo/${savedPlanId}`) },
+                    { label: 'צפייה בתוצאות נראות', icon: '👁', action: () => router.push(`/seo-geo/${savedPlanId}/results`) },
+                    { label: 'הפקת דוח PIXEL SEO/GEO', icon: '📊', action: () => router.push(`/seo-geo/${savedPlanId}/report`) },
+                    { label: 'חזרה לדשבורד SEO/GEO', icon: '🏠', action: () => router.push('/seo-geo/dashboard') },
+                  ] : [
+                    { label: 'חזרה לדשבורד SEO/GEO', icon: '🏠', action: () => router.push('/seo-geo/dashboard') },
+                    { label: 'סרוק אתר נוסף', icon: '🔄', action: rescan },
+                  ]),
                 ].map((cta, i) => (
                   <button key={i} onClick={cta.action} style={{
                     padding: '14px 16px', background: C.card, border: `1px solid ${C.border}`,
