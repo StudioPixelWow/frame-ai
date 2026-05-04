@@ -72,7 +72,7 @@ export default function ReportViewer() {
   const [lang, setLang] = useState<"he" | "en">((searchParams.get("lang") as "he" | "en") || "he");
   const he = lang === "he";
 
-  // Fetch existing report on load, don't auto-generate
+  // Fetch existing report on load, auto-generate if none exists
   useEffect(() => {
     if (!planId) return;
     (async () => {
@@ -80,18 +80,41 @@ export default function ReportViewer() {
         const res = await fetch(`/api/data/seo-plans/${planId}`);
         if (res.ok) {
           const plan = await res.json();
-          // Check if a report already exists
+          // Check if a report already exists (check both lastReport and reports array)
           if (plan.lastReport) {
             setReport(plan.lastReport);
-          } else {
-            // No existing report, show empty state
-            setError(null);
+            setLoading(false);
+            return;
+          }
+          // Check reports array — find the latest full report
+          if (plan.reports && plan.reports.length > 0) {
+            // Reports array has metadata only; we need to regenerate for full content
           }
         }
       } catch (e) {
         console.error("Failed to load plan:", e);
       }
+      // No existing report found — auto-generate
+      setGenerating(true);
       setLoading(false);
+      try {
+        const genRes = await fetch("/api/seo/generate-report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ planId, language: lang }),
+        });
+        if (!genRes.ok) {
+          const errData = await genRes.json().catch(() => ({}));
+          throw new Error(errData.error || "Failed to generate report");
+        }
+        const data = await genRes.json();
+        setReport(data);
+      } catch (e: any) {
+        console.error("Report generation failed:", e);
+        setError(e.message || "Failed to generate report");
+      } finally {
+        setGenerating(false);
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planId]);

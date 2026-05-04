@@ -9,15 +9,15 @@ import { VisibilityPlatformId } from '@/lib/schema';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { planId: string } }
+  context: { params: Promise<{ planId: string }> }
 ) {
   try {
-    const { planId } = params;
+    const { planId } = await context.params;
     const { searchParams } = new URL(req.url);
     const platformParam = searchParams.get('platform') as VisibilityPlatformId | null;
 
     // Load the plan from seoPlans collection
-    const plan = await seoPlans.findOne({ id: planId });
+    const plan = await seoPlans.getByIdAsync(planId);
 
     if (!plan) {
       return NextResponse.json(
