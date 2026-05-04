@@ -253,31 +253,39 @@ function ScanPageInner() {
         console.log(`[SEO-GEO 77 DEBUG] entering stage ${stageIdx} (${stages[stageIdx].stage}) progress=${progress}%`);
       }
 
+      // CRITICAL: Capture stageIdx in a const so the React state updater always reads
+      // the correct value — `stageIdx` is a mutable `let` and may be incremented
+      // before React 19's concurrent renderer calls the updater function.
+      const idx = stageIdx;
+      const stageName = stages[idx].stage;
+      const stagesCopy = [...stages];
+      const logsCopy = [...logs];
+
       setJob(prev => ({
         ...(prev || {
           id: 'sim', url: '', scanType, status: 'init' as any, progress: 0,
           stages: [], logs: [], metrics: { pagesScanned: 0, evidenceCount: 0, confidenceScore: 0, scanDurationMs: 0, platformsChecked: 0, unavailableResults: 0 },
           platformStatuses: [], startedAt: new Date().toISOString(),
         }),
-        status: stages[stageIdx].stage as any,
+        status: stageName as any,
         progress,
-        stages: [...stages],
-        logs: [...logs],
+        stages: stagesCopy,
+        logs: logsCopy,
         metrics: {
-          pagesScanned: Math.min(stageIdx * 2, scanType === 'deep' ? 30 : 8),
-          evidenceCount: Math.min(stageIdx, 10),
-          confidenceScore: Math.min(stageIdx * 10, 80),
+          pagesScanned: Math.min(idx * 2, scanType === 'deep' ? 30 : 8),
+          evidenceCount: Math.min(idx, 10),
+          confidenceScore: Math.min(idx * 10, 80),
           scanDurationMs: Date.now() - startTimeRef.current,
-          platformsChecked: stageIdx >= 7 ? 1 : 0,
-          unavailableResults: stageIdx >= 7 ? 5 : 0,
+          platformsChecked: idx >= 7 ? 1 : 0,
+          unavailableResults: idx >= 7 ? 5 : 0,
         },
         platformStatuses: [
-          { id: 'google_seo', name: 'Google SEO', icon: '🔍', status: platformApiStatus.google_seo ? (stageIdx >= 8 ? 'completed' : stageIdx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.google_seo ? 'real' as const : 'unavailable' as const },
-          { id: 'google_ai_overview', name: 'Google AI Overview', icon: '✨', status: platformApiStatus.google_ai_overview ? (stageIdx >= 8 ? 'completed' : stageIdx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.google_ai_overview ? 'real' as const : 'unavailable' as const },
-          { id: 'gemini', name: 'Gemini', icon: '💎', status: platformApiStatus.gemini ? (stageIdx >= 8 ? 'completed' : stageIdx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.gemini ? 'real' as const : 'unavailable' as const },
-          { id: 'chatgpt', name: 'ChatGPT', icon: '🤖', status: platformApiStatus.chatgpt ? (stageIdx >= 8 ? 'completed' : stageIdx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.chatgpt ? 'real' as const : 'unavailable' as const },
-          { id: 'claude', name: 'Claude', icon: '🧠', status: platformApiStatus.claude ? (stageIdx >= 8 ? 'completed' : stageIdx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.claude ? 'real' as const : 'unavailable' as const },
-          { id: 'perplexity', name: 'Perplexity', icon: '🔮', status: platformApiStatus.perplexity ? (stageIdx >= 8 ? 'completed' : stageIdx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.perplexity ? 'real' as const : 'unavailable' as const },
+          { id: 'google_seo', name: 'Google SEO', icon: '🔍', status: platformApiStatus.google_seo ? (idx >= 8 ? 'completed' : idx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.google_seo ? 'real' as const : 'unavailable' as const },
+          { id: 'google_ai_overview', name: 'Google AI Overview', icon: '✨', status: platformApiStatus.google_ai_overview ? (idx >= 8 ? 'completed' : idx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.google_ai_overview ? 'real' as const : 'unavailable' as const },
+          { id: 'gemini', name: 'Gemini', icon: '💎', status: platformApiStatus.gemini ? (idx >= 8 ? 'completed' : idx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.gemini ? 'real' as const : 'unavailable' as const },
+          { id: 'chatgpt', name: 'ChatGPT', icon: '🤖', status: platformApiStatus.chatgpt ? (idx >= 8 ? 'completed' : idx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.chatgpt ? 'real' as const : 'unavailable' as const },
+          { id: 'claude', name: 'Claude', icon: '🧠', status: platformApiStatus.claude ? (idx >= 8 ? 'completed' : idx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.claude ? 'real' as const : 'unavailable' as const },
+          { id: 'perplexity', name: 'Perplexity', icon: '🔮', status: platformApiStatus.perplexity ? (idx >= 8 ? 'completed' : idx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.perplexity ? 'real' as const : 'unavailable' as const },
         ],
       }));
 
