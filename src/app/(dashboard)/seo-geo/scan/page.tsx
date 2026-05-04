@@ -969,15 +969,8 @@ function ScanPageInner() {
                 display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
               }}>
                 {[
-                  ...(savedPlanId ? [
-                    { label: 'צפייה בתוכנית', icon: '📋', action: () => router.push(`/seo-geo/${savedPlanId}`) },
-                    { label: 'צפייה בתוצאות נראות', icon: '👁', action: () => router.push(`/seo-geo/${savedPlanId}/results`) },
-                    { label: 'הפקת דוח PIXEL SEO/GEO', icon: '📊', action: () => router.push(`/seo-geo/${savedPlanId}/report`) },
-                    { label: 'חזרה לדשבורד SEO/GEO', icon: '🏠', action: () => router.push('/seo-geo/dashboard') },
-                  ] : [
-                    { label: 'חזרה לדשבורד SEO/GEO', icon: '🏠', action: () => router.push('/seo-geo/dashboard') },
-                    { label: 'סרוק אתר נוסף', icon: '🔄', action: rescan },
-                  ]),
+                  { label: 'חזרה לדשבורד SEO/GEO', icon: '🏠', action: () => router.push('/seo-geo/dashboard') },
+                  { label: 'סרוק אתר נוסף', icon: '🔄', action: rescan },
                 ].map((cta, i) => (
                   <button key={i} onClick={cta.action} style={{
                     padding: '14px 16px', background: C.card, border: `1px solid ${C.border}`,
