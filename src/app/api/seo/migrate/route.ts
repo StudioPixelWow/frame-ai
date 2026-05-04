@@ -16,6 +16,41 @@ export const maxDuration = 60;
 
 // Each entry is a named DDL block. We run them sequentially so FK references resolve.
 const DDL_BLOCKS: Array<{ name: string; sql: string }> = [
+  // ── SupabaseCrud JSONB tables (used by /api/data/seo-plans etc.) ───
+  {
+    name: 'app_seo_plans',
+    sql: `
+      CREATE TABLE IF NOT EXISTS public.app_seo_plans (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        data JSONB NOT NULL DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `,
+  },
+  {
+    name: 'app_seo_websites',
+    sql: `
+      CREATE TABLE IF NOT EXISTS public.app_seo_websites (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        data JSONB NOT NULL DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `,
+  },
+  {
+    name: 'app_seo_growth_tasks',
+    sql: `
+      CREATE TABLE IF NOT EXISTS public.app_seo_growth_tasks (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        data JSONB NOT NULL DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `,
+  },
+  // ── Relational tables ─────────────────────────────────────────────
   {
     name: 'seo_client_websites',
     sql: `

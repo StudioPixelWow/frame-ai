@@ -954,7 +954,7 @@ function ScanPageInner() {
             )}
 
             {/* ���─ CTAs (valid scan only) ─────────────────────── */}
-            {phase === 'done' && job.validation?.passed && savedPlanId && (
+            {phase === 'done' && job.validation?.passed && savedPlanId && !savedPlanId.startsWith('temp-') && (
               <div style={{
                 padding: '10px 16px', borderRadius: 10,
                 background: C.successLight, color: C.success,
@@ -963,12 +963,27 @@ function ScanPageInner() {
                 תוצאות הסריקה נשמרו בהצלחה
               </div>
             )}
+            {phase === 'done' && job.validation?.passed && (!savedPlanId || savedPlanId.startsWith('temp-')) && (
+              <div style={{
+                padding: '10px 16px', borderRadius: 10,
+                background: C.warningLight, color: C.warning,
+                fontSize: 12.5, fontWeight: 600, textAlign: 'center',
+              }}>
+                שמירת התוצאות נכשלה — יש להריץ את המיגרציה ואז לסרוק מחדש
+              </div>
+            )}
 
             {phase === 'done' && job.validation?.passed && (
               <div style={{
                 display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
               }}>
                 {[
+                  // Show plan-specific buttons only if we have a real saved ID
+                  ...(savedPlanId && !savedPlanId.startsWith('temp-') ? [
+                    { label: 'צפה בתוצאות הסריקה', icon: '📊', action: () => router.push(`/seo-geo/${savedPlanId}/results`) },
+                    { label: 'צור תוכנית 60 ימים', icon: '📋', action: () => router.push(`/seo-geo/${savedPlanId}`) },
+                    { label: 'הפק דוח מקצועי', icon: '📄', action: () => router.push(`/seo-geo/${savedPlanId}/report`) },
+                  ] : []),
                   { label: 'חזרה לדשבורד SEO/GEO', icon: '🏠', action: () => router.push('/seo-geo/dashboard') },
                   { label: 'סרוק אתר נוסף', icon: '🔄', action: rescan },
                 ].map((cta, i) => (
