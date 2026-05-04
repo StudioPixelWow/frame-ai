@@ -130,6 +130,7 @@ export default function SeoPlanDetail() {
   const [expandedWeeks, setExpandedWeeks] = useState<Set<number>>(new Set([1]));
   const [drawerQuery, setDrawerQuery] = useState<VisibilityResult | null>(null);
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [generatingPlan, setGeneratingPlan] = useState(false);
   const [reports, setReports] = useState<Array<{ id: string; name: string; generatedAt: string; type: string }>>([]);
 
   // Fetch plan
@@ -230,6 +231,39 @@ export default function SeoPlanDetail() {
     setGeneratingReport(false);
   }, [plan, router]);
 
+  // Generate 60-day plan
+  const handleGenerate60DayPlan = useCallback(async () => {
+    if (!plan) return;
+    setGeneratingPlan(true);
+    try {
+      const res = await fetch(`/api/seo-geo-plans/${plan.id}/generate-60-day-plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Refresh plan data
+        const refreshRes = await fetch(`/api/data/seo-plans/${plan.id}`);
+        if (refreshRes.ok) {
+          const refreshed = await refreshRes.json();
+          if (refreshed.weeks) {
+            refreshed.weeks = refreshed.weeks.map((w: any) => ({
+              ...w,
+              tasks: w.tasks.map((t: any) => ({ ...t, status: t.status || "todo" })),
+            }));
+          }
+          setPlan(refreshed);
+          setActiveTab("plan");
+        }
+      } else {
+        console.error("Failed to generate 60-day plan:", await res.text());
+      }
+    } catch (e) {
+      console.error("Failed to generate 60-day plan:", e);
+    }
+    setGeneratingPlan(false);
+  }, [plan]);
+
   // ── Loading ──
   if (loading) {
     return (
@@ -267,6 +301,39 @@ export default function SeoPlanDetail() {
   const now = new Date();
   const daysSinceCreated = Math.max(0, Math.floor((now.getTime() - createdDate.getTime()) / 86400000));
   const daysRemaining = Math.max(0, 60 - daysSinceCreated);
+
+  // ── Compute scores from websiteScan data (plan fields are often 0) ──
+  const computedScores = useMemo(() => {
+    const scan = plan?.websiteScan;
+    if (!scan) return { technical: plan?.technicalScore || 0, visibility: plan?.visibilityScore || 0, overall: plan?.overallScore || 0 };
+
+    // Technical score: based on scan findings
+    let tech = 50; // base
+    if (scan.hasSSL) tech += 10;
+    if (scan.mobileOptimized) tech += 10;
+    if (scan.hasRobotsTxt) tech += 5;
+    if (scan.hasSitemap) tech += 5;
+    if (scan.structuredData) tech += 5;
+    if (scan.metaTitle) tech += 5;
+    if (scan.metaDescription) tech += 5;
+    if (scan.loadTimeMs && scan.loadTimeMs < 3000) tech += 5;
+    const issueCount = scan.issues?.length || 0;
+    tech = Math.max(0, Math.min(100, tech - issueCount * 3));
+
+    // Visibility score: based on AI queries
+    const aiQueries = scan.aiQueries || [];
+    const found = aiQueries.filter((q: any) => q.found).length;
+    const vis = aiQueries.length > 0 ? Math.round((found / aiQueries.length) * 100) : (plan?.visibilityScore || 0);
+
+    // Overall = weighted average
+    const overall = Math.round(tech * 0.4 + vis * 0.6);
+
+    return {
+      technical: plan?.technicalScore || tech,
+      visibility: plan?.visibilityScore || vis,
+      overall: plan?.overallScore || overall,
+    };
+  }, [plan]);
 
   // ══════════════════════════════════════════════════════════════
   // RENDER
@@ -330,6 +397,21 @@ export default function SeoPlanDetail() {
               >
                 <span style={{ fontSize: 13 }}>📄</span> {generatingReport ? "מייצר..." : "הפק דוח PDF"}
               </button>
+              {!plan.phases?.length && (
+                <button
+                  onClick={handleGenerate60DayPlan}
+                  disabled={generatingPlan}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6, padding: "9px 18px",
+                    background: C.primary, color: "#fff",
+                    border: "none", borderRadius: 10,
+                    fontSize: 12, fontWeight: 600, cursor: generatingPlan ? "wait" : "pointer",
+                    opacity: generatingPlan ? 0.6 : 1, transition: "all 0.2s",
+                  }}
+                >
+                  <span style={{ fontSize: 13 }}>📅</span> {generatingPlan ? "מייצר תוכנית..." : "צור תוכנית 60 יום"}
+                </button>
+              )}
               <button
                 onClick={() => router.push(`/seo-geo/${plan.id}/report?lang=he`)}
                 style={{
@@ -376,9 +458,9 @@ export default function SeoPlanDetail() {
           display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 14, marginBottom: 24,
         }}>
           {[
-            { label: "GEO Score", value: `${plan.visibilityScore || 0}%`, color: C.purple, icon: "🤖", sub: "נראות במנועי AI" },
-            { label: "SEO Score", value: `${plan.technicalScore || 0}%`, color: C.info, icon: "🔧", sub: "ציון טכני" },
-            { label: "AI Visibility", value: `${plan.overallScore || 0}%`, color: C.primary, icon: "📊", sub: "ציון כללי" },
+            { label: "GEO Score", value: `${computedScores.visibility}%`, color: C.purple, icon: "🤖", sub: "נראות במנועי AI" },
+            { label: "SEO Score", value: `${computedScores.technical}%`, color: C.info, icon: "🔧", sub: "ציון טכני" },
+            { label: "AI Visibility", value: `${computedScores.overall}%`, color: C.primary, icon: "📊", sub: "ציון כללי" },
             { label: "Progress", value: `${progress}%`, color: progress >= 60 ? C.success : C.warning, icon: "📈", sub: "התקדמות" },
             { label: "Completed Tasks", value: `${plan.completedTasks || 0}`, color: C.success, icon: "���", sub: `מתוך ${plan.totalTasks || 0}` },
             { label: "Days Remaining", value: `${daysRemaining}`, color: daysRemaining < 15 ? C.danger : C.primary, icon: "⏰", sub: `מתוך 60 יום` },
@@ -831,7 +913,27 @@ export default function SeoPlanDetail() {
                 })}
               </div>
             ) : (
-              <EmptyTab icon="📅" text="אין תוכנית 60 יום עדיין. חזור לאשף ליצירת תוכנית." />
+              <div style={{ textAlign: "center", padding: "60px 20px" }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>📅</div>
+                <p style={{ fontSize: 16, color: C.textMuted, marginBottom: 24 }}>אין תוכנית 60 יום עדיין</p>
+                <button
+                  onClick={handleGenerate60DayPlan}
+                  disabled={generatingPlan}
+                  style={{
+                    padding: "14px 36px",
+                    background: `linear-gradient(135deg, ${C.primary}, ${C.purple})`,
+                    color: "#fff", border: "none", borderRadius: 14,
+                    fontSize: 15, fontWeight: 700, cursor: generatingPlan ? "wait" : "pointer",
+                    opacity: generatingPlan ? 0.6 : 1, transition: "all 0.3s",
+                    boxShadow: `0 4px 16px ${C.primary}30`,
+                  }}
+                >
+                  {generatingPlan ? "מייצר תוכנית..." : "צור תוכנית 60 יום"}
+                </button>
+                <p style={{ fontSize: 12, color: C.textMuted, marginTop: 12 }}>
+                  התוכנית תיווצר על בסיס נתוני הסריקה, היעדים והתובנות
+                </p>
+              </div>
             )}
           </div>
         )}

@@ -308,6 +308,11 @@ export function buildPlatformResults(
         0
       );
 
+      // Try to extract competitors from snippet (names/brands mentioned)
+      const competitors: string[] = q.competitorsMentioned || [];
+      // Try to extract sources if available
+      const sources: string[] = q.sources || [];
+
       const result: AiPlatformResult = {
         id: `${planId}-${platformId}-${idx}`,
         planId,
@@ -320,11 +325,11 @@ export function buildPlatformResults(
         confidence,
         evidence,
         scannedAt: q.checkedAt || new Date().toISOString(),
-        competitorsMentioned: [],
+        competitorsMentioned: competitors,
         opportunityScore,
         answer: q.snippet || null,
         mentionContext: q.snippet || null,
-        sources: [],
+        sources,
       };
 
       return result;

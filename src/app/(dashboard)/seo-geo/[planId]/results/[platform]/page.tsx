@@ -713,10 +713,12 @@ export default function PlatformDetailPage() {
                             <td style={tableCellStyle}>
                               {result.competitorsMentioned && result.competitorsMentioned.length > 0
                                 ? result.competitorsMentioned.join(', ')
-                                : '—'}
+                                : <span style={{ color: '#9CA3AF', fontSize: '0.75rem' }}>לא זמין</span>}
                             </td>
                             <td style={tableCellStyle}>
-                              {result.sources && result.sources.length > 0 ? result.sources.length : '—'}
+                              {result.sources && result.sources.length > 0
+                                ? result.sources.length
+                                : <span style={{ color: '#9CA3AF', fontSize: '0.75rem' }}>לא זמין</span>}
                             </td>
                             <td style={tableCellStyle}>{Math.round(result.confidence)}%</td>
                           </>

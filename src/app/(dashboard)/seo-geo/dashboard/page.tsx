@@ -42,6 +42,7 @@ const COLORS = {
 const statusBadgeColors: Record<string, { bg: string; text: string }> = {
   draft: { bg: '#F3F3F3', text: '#666666' },
   scanning: { bg: '#E3F2FD', text: '#0066FF' },
+  scanned: { bg: '#E0F2F1', text: '#10B981' },
   goals_set: { bg: '#E3F2FD', text: '#0066FF' },
   visibility_done: { bg: '#E3F2FD', text: '#0066FF' },
   insights_ready: { bg: '#E3F2FD', text: '#0066FF' },
@@ -54,6 +55,7 @@ const statusBadgeColors: Record<string, { bg: string; text: string }> = {
 const statusLabels: Record<string, string> = {
   draft: 'טיוטה',
   scanning: 'בסריקה',
+  scanned: 'נסרק',
   goals_set: 'יעדים הוגדרו',
   visibility_done: 'נראות הושלמה',
   insights_ready: 'תובנות מוכנות',
@@ -111,6 +113,7 @@ export default function SeoGeoDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredPlans, setFilteredPlans] = useState<SeoPlan[]>([]);
+  const [platformStatus, setPlatformStatus] = useState<Record<string, 'real' | 'unavailable'>>({});
 
   // Fetch SEO plans on mount
   useEffect(() => {
@@ -131,6 +134,11 @@ export default function SeoGeoDashboard() {
     };
 
     fetchPlans();
+
+    // Fetch platform availability
+    fetch('/api/seo/platform-status').then(r => r.ok ? r.json() : {}).then(data => {
+      if (data.platforms) setPlatformStatus(data.platforms);
+    }).catch(() => {});
   }, []);
 
   // Filter plans based on search term
@@ -366,7 +374,13 @@ export default function SeoGeoDashboard() {
             סטטוס חיבור API
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span className="badge badge-yellow">סימולציה</span>
+            {(() => {
+              const connected = Object.values(platformStatus).filter(s => s === 'real').length;
+              const total = PLATFORMS.length;
+              if (connected === total) return <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: `${COLORS.green}20`, color: COLORS.green }}>הכל מחובר</span>;
+              if (connected > 0) return <span className="badge badge-yellow">{connected}/{total} מחוברים</span>;
+              return <span className="badge badge-yellow">לא מחובר</span>;
+            })()}
           </div>
         </div>
 
@@ -382,16 +396,22 @@ export default function SeoGeoDashboard() {
 
       {/* ══════════ PLATFORM CARDS ROW ══════════ */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '32px' }}>
-        {PLATFORMS.map((p) => (
-          <div key={p.id} className="kpi-card" style={{ textAlign: 'center', cursor: 'default' }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>{p.icon}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>{p.name}</div>
-            <div style={{ fontSize: 12, color: COLORS.textMuted }}>{p.desc}</div>
-            <div style={{ marginTop: 10 }}>
-              <span className="badge badge-yellow">סימולציה</span>
+        {PLATFORMS.map((p) => {
+          const status = platformStatus[p.id];
+          const isConnected = status === 'real';
+          return (
+            <div key={p.id} className="kpi-card" style={{ textAlign: 'center', cursor: 'default' }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>{p.icon}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>{p.name}</div>
+              <div style={{ fontSize: 12, color: COLORS.textMuted }}>{p.desc}</div>
+              <div style={{ marginTop: 10 }}>
+                {isConnected
+                  ? <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: `${COLORS.green}20`, color: COLORS.green }}>מחובר</span>
+                  : <span className="badge badge-yellow">לא מחובר</span>}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* ══════════ SEARCH & PLANS LIST ══════════ */}
@@ -493,7 +513,14 @@ export default function SeoGeoDashboard() {
                           {lastScanText}
                         </td>
                         <td>
-                          <span className="badge badge-yellow">סימולציה</span>
+                          {(() => {
+                            const ws = (plan as any).websiteScan;
+                            const scanMode = ws?.scanType || ws?.scan_mode || (ws?.aiQueries?.some((q: any) => q.scanMode === 'real') ? 'real' : 'simulated');
+                            return scanMode === 'real'
+                              ? <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: `${COLORS.green}20`, color: COLORS.green }}>אמיתי</span>
+                              : ws ? <span className="badge badge-yellow">סימולציה</span>
+                              : <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: '#F3F3F3', color: '#999' }}>לא נסרק</span>;
+                          })()}
                         </td>
                         <td>
                           <div style={{ display: 'flex', gap: '8px' }}>

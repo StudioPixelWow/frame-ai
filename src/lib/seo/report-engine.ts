@@ -208,12 +208,47 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he", busin
       { type: "paragraph", text: he
         ? `ניתוח מקיף של SEO ונראות AI (GEO) עבור ${plan.clientName || "הלקוח"} (${domain}). מבוסס על סריקה טכנית מלאה, בדיקת נוכחות ב-5 מנועי AI מובילים, וניתוח ${visQueries.length} שאילתות רלוונטיות.${businessProfile?.business_name ? ` עסק: ${businessProfile.business_name}${businessProfile.industry ? ` (${businessProfile.industry})` : ""}${businessProfile.location ? ` ב${businessProfile.location}` : ""}.` : ""}`
         : `Comprehensive SEO and AI visibility (GEO) analysis for ${plan.clientName || "the client"} (${domain}). Based on full technical scan, presence checks across 5 leading AI engines, and analysis of ${visQueries.length} relevant queries.${businessProfile?.business_name ? ` Business: ${businessProfile.business_name}${businessProfile.industry ? ` (${businessProfile.industry})` : ""}${businessProfile.location ? ` in ${businessProfile.location}` : ""}.` : ""}`},
-      { type: "stat_row", stats: [
-        { label: he ? "ציון כללי" : "Overall Score", value: `${plan.overallScore || 0}%`, color: scoreColor(plan.overallScore || 0), icon: "📊" },
-        { label: he ? "ציון טכני" : "Technical Score", value: `${plan.technicalScore || 0}%`, color: scoreColor(plan.technicalScore || 0), icon: "🔧" },
-        { label: he ? "נראות AI" : "AI Visibility", value: `${plan.visibilityScore || 0}%`, color: scoreColor(plan.visibilityScore || 0), icon: "🤖" },
-        { label: he ? "תוכן" : "Content", value: `${plan.contentScore || 0}%`, color: scoreColor(plan.contentScore || 0), icon: "📝" },
-      ]},
+      { type: "stat_row", stats: (() => {
+        // Compute scores from websiteScan if plan fields are 0
+        const scan = plan.websiteScan;
+        let techScore = plan.technicalScore || 0;
+        let visScore = plan.visibilityScore || 0;
+        let contScore = plan.contentScore || 0;
+
+        if (techScore === 0 && scan) {
+          techScore = 50;
+          if (scan.hasSSL) techScore += 10;
+          if (scan.mobileOptimized) techScore += 10;
+          if (scan.hasRobotsTxt) techScore += 5;
+          if (scan.hasSitemap) techScore += 5;
+          if (scan.structuredData) techScore += 5;
+          if (scan.metaTitle) techScore += 5;
+          if (scan.metaDescription) techScore += 5;
+          if (scan.loadTimeMs && scan.loadTimeMs < 3000) techScore += 5;
+          const issueCount = scan.issues?.length || 0;
+          techScore = Math.max(0, Math.min(100, techScore - issueCount * 3));
+        }
+        if (visScore === 0 && scan) {
+          const aiQ = scan.aiQueries || [];
+          const found = aiQ.filter((q: any) => q.found).length;
+          visScore = aiQ.length > 0 ? Math.round((found / aiQ.length) * 100) : 0;
+        }
+        if (contScore === 0 && scan) {
+          contScore = 50;
+          if (scan.metaTitle) contScore += 15;
+          if (scan.metaDescription) contScore += 15;
+          if (scan.h1Tags?.length) contScore += 10;
+          if (scan.structuredData) contScore += 10;
+        }
+        const overallScore = plan.overallScore || Math.round(techScore * 0.3 + visScore * 0.4 + contScore * 0.3);
+
+        return [
+          { label: he ? "ציון כללי" : "Overall Score", value: `${overallScore}%`, color: scoreColor(overallScore), icon: "📊" },
+          { label: he ? "ציון טכני" : "Technical Score", value: `${techScore}%`, color: scoreColor(techScore), icon: "🔧" },
+          { label: he ? "נראות AI" : "AI Visibility", value: `${visScore}%`, color: scoreColor(visScore), icon: "🤖" },
+          { label: he ? "תוכן" : "Content", value: `${contScore}%`, color: scoreColor(contScore), icon: "📝" },
+        ];
+      })()},
       { type: "paragraph", text: he
         ? `נמצאו ${technicalFindings.filter(f => f.severity === "critical").length} ממצאים קריטיים ו-${technicalFindings.filter(f => f.severity === "warning").length} אזהרות הדורשים טיפול. ${mentionedQueries.length} מתוך ${visResults.length} שאילתות AI מזכירות את העסק (${visResults.length > 0 ? Math.round((mentionedQueries.length / visResults.length) * 100) : 0}%).`
         : `Found ${technicalFindings.filter(f => f.severity === "critical").length} critical findings and ${technicalFindings.filter(f => f.severity === "warning").length} warnings requiring attention. ${mentionedQueries.length} of ${visResults.length} AI queries mention the business (${visResults.length > 0 ? Math.round((mentionedQueries.length / visResults.length) * 100) : 0}%).`},
