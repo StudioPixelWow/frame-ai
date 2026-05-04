@@ -81,6 +81,35 @@ interface ScanJob {
   error?: string;
 }
 
+// ── Runtime validation — canonical ScanJob shape ───────────────────────────────
+
+const EMPTY_METRICS: Metrics = {
+  pagesScanned: 0, evidenceCount: 0, confidenceScore: 0,
+  scanDurationMs: 0, platformsChecked: 0, unavailableResults: 0,
+};
+
+/** Ensures a ScanJob always has safe defaults for all arrays/objects. */
+function safeScanJob(raw: Partial<ScanJob> | null): ScanJob | null {
+  if (!raw) return null;
+  return {
+    id: raw.id || 'unknown',
+    url: raw.url || '',
+    scanType: raw.scanType || 'quick',
+    status: raw.status || 'init',
+    progress: raw.progress ?? 0,
+    stages: Array.isArray(raw.stages) ? raw.stages : [],
+    logs: Array.isArray(raw.logs) ? raw.logs : [],
+    metrics: raw.metrics ? { ...EMPTY_METRICS, ...raw.metrics } : { ...EMPTY_METRICS },
+    platformStatuses: Array.isArray(raw.platformStatuses) ? raw.platformStatuses : [],
+    startedAt: raw.startedAt || new Date().toISOString(),
+    completedAt: raw.completedAt,
+    totalDurationMs: raw.totalDurationMs,
+    validation: raw.validation,
+    result: raw.result,
+    error: raw.error,
+  };
+}
+
 // ── Colors ─────────────────────────────────────────────────────────────────────
 
 const C = {
@@ -126,7 +155,15 @@ function ScanPageInner() {
   const [scanUrl, setScanUrl] = useState(urlParam);
   const [scanType, setScanType] = useState<ScanType>('quick');
   const [phase, setPhase] = useState<'select' | 'scanning' | 'done'>('select');
-  const [job, setJob] = useState<ScanJob | null>(null);
+  const [job, setJobRaw] = useState<ScanJob | null>(null);
+  // Wrap setJob to always validate the shape
+  const setJob = useCallback((val: ScanJob | null | ((prev: ScanJob | null) => ScanJob | null)) => {
+    if (typeof val === 'function') {
+      setJobRaw(prev => safeScanJob(val(prev)));
+    } else {
+      setJobRaw(safeScanJob(val));
+    }
+  }, []);
   const [elapsed, setElapsed] = useState(0);
   const [showEvidence, setShowEvidence] = useState<any>(null);
 
@@ -238,6 +275,7 @@ function ScanPageInner() {
   // Start scan — uses sync endpoint, simulates progress on client
   const startScan = useCallback(async () => {
     if (!scanUrl) return;
+    console.log(`[PIXEL-SEO-SCAN-UI] INIT url=${scanUrl} type=${scanType}`);
     setPhase('scanning');
     startTimeRef.current = Date.now();
     setElapsed(0);
@@ -252,6 +290,7 @@ function ScanPageInner() {
 
     try {
       // Single sync request — pipeline runs server-side, returns full result
+      console.log(`[PIXEL-SEO-SCAN-UI] FETCH_START POST /api/seo/scan`);
       const res = await fetch("/api/seo/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -266,9 +305,11 @@ function ScanPageInner() {
 
       const totalElapsed = Date.now() - startTimeRef.current;
       setElapsed(totalElapsed);
+      console.log(`[PIXEL-SEO-SCAN-UI] FETCH_DONE status=${res.status} elapsed=${totalElapsed}ms`);
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'שגיאה' }));
+        console.error(`[PIXEL-SEO-SCAN-UI] FETCH_FAILED status=${res.status} error=${err.error}`);
         setJob(prev => prev ? {
           ...prev, status: 'failed' as any, progress: 100, error: err.error || 'שגיאה בסריקה',
           stages: (prev.stages || []).map(s => s.status === 'running' ? { ...s, status: 'failed' as StageStatus } : s.status === 'pending' ? { ...s, status: 'skipped' as StageStatus } : s),
@@ -279,6 +320,7 @@ function ScanPageInner() {
 
       const data = await res.json();
       const pipeline = data._pipeline || {};
+      console.log(`[PIXEL-SEO-SCAN-UI] RESPONSE_PARSED jobId=${pipeline.jobId} stagesCount=${pipeline.stages?.length ?? 0} logsCount=${pipeline.logs?.length ?? 0} hasResult=${!!data.websiteFacts}`);
 
       // Build final job from real response
       setJob({
@@ -304,7 +346,9 @@ function ScanPageInner() {
         result: data,
       });
       setPhase('done');
-    } catch {
+      console.log(`[PIXEL-SEO-SCAN-UI] COMPLETED totalElapsed=${totalElapsed}ms`);
+    } catch (err) {
+      console.error(`[PIXEL-SEO-SCAN-UI] EXCEPTION:`, err);
       if (pollRef.current) clearTimeout(pollRef.current as any);
       if (timerRef.current) clearInterval(timerRef.current);
       setPhase('select');

@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Enable source maps in production so minified errors can be traced to source files.
+  // This adds ~10% to build size but makes production debugging possible.
+  productionBrowserSourceMaps: true,
   typescript: {
     ignoreBuildErrors: true,
   },

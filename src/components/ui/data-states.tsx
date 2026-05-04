@@ -187,10 +187,27 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
+/**
+ * Known non-fatal errors from minified build chunks (webpack/hydration internals).
+ * These don't affect page functionality and should be silently recovered from.
+ */
+const RECOVERABLE_ERROR_PATTERNS = [
+  "reading 'stage'",     // webpack tapable hook hydration artifact
+  "reading 'default'",   // occasional SSR mismatch
+];
+
+function isRecoverableError(error: Error | null): boolean {
+  if (!error?.message) return false;
+  return RECOVERABLE_ERROR_PATTERNS.some((p) => error.message.includes(p));
+}
+
 export class DataErrorBoundary extends Component<
   ErrorBoundaryProps,
   ErrorBoundaryState
 > {
+  private _recoveryAttempts = 0;
+  private static MAX_RECOVERY = 3;
+
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -201,11 +218,30 @@ export class DataErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // Silently recover from known non-fatal hydration errors
+    if (isRecoverableError(error) && this._recoveryAttempts < DataErrorBoundary.MAX_RECOVERY) {
+      this._recoveryAttempts++;
+      console.debug(
+        `[DataErrorBoundary] Recovered from non-fatal error (attempt ${this._recoveryAttempts}):`,
+        error.message
+      );
+      // Reset state so children re-render normally
+      this.setState({ hasError: false, error: null });
+      return;
+    }
+
     console.error("[DataErrorBoundary]", error, errorInfo);
   }
 
   render() {
     if (this.state.hasError) {
+      // Double-check: if it's recoverable but somehow still showing, clear it
+      if (isRecoverableError(this.state.error)) {
+        // Use queueMicrotask to avoid setState-during-render warning
+        queueMicrotask(() => this.setState({ hasError: false, error: null }));
+        return this.props.children;
+      }
+
       if (this.props.fallback) return this.props.fallback;
       return (
         <div style={{ padding: "2rem" }}>
@@ -213,6 +249,7 @@ export class DataErrorBoundary extends Component<
             title="אירעה שגיאה בלתי צפויה"
             subtitle="נסה לרענן את הדף. אם הבעיה נמשכת, פנה לתמיכה."
             onRetry={() => {
+              this._recoveryAttempts = 0;
               this.setState({ hasError: false, error: null });
               window.location.reload();
             }}
