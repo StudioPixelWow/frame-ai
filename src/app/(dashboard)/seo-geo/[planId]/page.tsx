@@ -536,10 +536,10 @@ export default function SeoPlanDetail() {
                 position: "absolute", top: 0, left: 0, right: 0, height: 3,
                 background: kpi.color, borderRadius: "18px 18px 0 0",
               }} />
-              <div style={{ fontSize: 22, marginBottom: 8 }}>{kpi.icon}</div>
-              <div style={{ fontSize: 28, fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginTop: 4 }}>{kpi.label}</div>
-              <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{kpi.sub}</div>
+              <div style={{ fontSize: 22, marginBottom: 8 }}>{s(kpi.icon)}</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: kpi.color }}>{s(kpi.value)}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginTop: 4 }}>{s(kpi.label)}</div>
+              <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{s(kpi.sub)}</div>
             </div>
           ))}
         </div>
@@ -564,7 +564,7 @@ export default function SeoPlanDetail() {
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
               }}
             >
-              <span style={{ fontSize: 14 }}>{tab.icon}</span> {tab.label}
+              <span style={{ fontSize: 14 }}>{s(tab.icon)}</span> {s(tab.label)}
             </button>
           ))}
         </div>
@@ -628,8 +628,8 @@ export default function SeoPlanDetail() {
                       padding: "10px 12px", borderRadius: 10, background: C.bg,
                       display: "flex", justifyContent: "space-between", alignItems: "center",
                     }}>
-                      <span style={{ fontSize: 11, color: C.textMuted }}>{item.l}</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: item.ok ? C.success : C.danger }}>{item.v}</span>
+                      <span style={{ fontSize: 11, color: C.textMuted }}>{s(item.l)}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: item.ok ? C.success : C.danger }}>{s(item.v)}</span>
                     </div>
                   ))}
                 </div>
@@ -696,8 +696,8 @@ export default function SeoPlanDetail() {
                       padding: "8px 14px", borderRadius: 10, background: C.bg,
                       border: `1px solid ${C.borderLight}`, textAlign: "center", minWidth: 80,
                     }}>
-                      <div style={{ fontSize: 16, fontWeight: 800, color: pct > 50 ? C.success : C.danger }}>{pct}%</div>
-                      <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{eng}</div>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: pct > 50 ? C.success : C.danger }}>{s(pct)}%</div>
+                      <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{s(eng)}</div>
                     </div>
                   );
                 })}
@@ -740,7 +740,7 @@ export default function SeoPlanDetail() {
                           background: `linear-gradient(135deg, ${C.primary}15, ${C.primary}05)`,
                           display: "flex", alignItems: "center", justifyContent: "center",
                           fontSize: 20, fontWeight: 800, color: C.primary,
-                        }}>{phase.number}</div>
+                        }}>{s(phase.number)}</div>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>
                             שלב {s(phase.number)}: {s(phase.name)}
@@ -870,7 +870,7 @@ export default function SeoPlanDetail() {
                           background: `linear-gradient(135deg, ${C.primary}15, ${C.primary}05)`,
                           display: "flex", alignItems: "center", justifyContent: "center",
                           fontSize: 20, fontWeight: 800, color: C.primary,
-                        }}>{week.weekNumber}</div>
+                        }}>{s(week.weekNumber)}</div>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>
                             שבוע {s(week.weekNumber)}: {s(week.theme)}
@@ -1018,13 +1018,13 @@ export default function SeoPlanDetail() {
                         marginBottom: 14, padding: "0 4px",
                       }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 16, color: col.color }}>{col.icon}</span>
-                          <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{col.label}</span>
+                          <span style={{ fontSize: 16, color: col.color }}>{s(col.icon)}</span>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{s(col.label)}</span>
                         </div>
                         <span style={{
                           fontSize: 11, fontWeight: 600, padding: "2px 10px", borderRadius: 8,
                           background: `${col.color}15`, color: col.color,
-                        }}>{colTasks.length}</span>
+                        }}>{s(colTasks.length)}</span>
                       </div>
 
                       {/* Task cards */}
@@ -1105,8 +1105,8 @@ export default function SeoPlanDetail() {
                           padding: "12px 18px", textAlign: "center", minWidth: 90,
                           backdropFilter: "blur(8px)",
                         }}>
-                          <div style={{ fontSize: 20, fontWeight: 800 }}>{mentioned}/{total}</div>
-                          <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>{eng}</div>
+                          <div style={{ fontSize: 20, fontWeight: 800 }}>{s(mentioned)}/{s(total)}</div>
+                          <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>{s(eng)}</div>
                         </div>
                       );
                     })}
@@ -1401,8 +1401,8 @@ function EmptyTab({ icon, text }: { icon: string; text: string }) {
         width: 72, height: 72, borderRadius: 18, margin: "0 auto 20px",
         background: "#E6F7FF", display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: 36,
-      }}>{icon}</div>
-      <p style={{ fontSize: 14, color: "#9A9AB0", maxWidth: 420, margin: "0 auto", lineHeight: 1.7 }}>{text}</p>
+      }}>{typeof icon === 'string' ? icon : String(icon)}</div>
+      <p style={{ fontSize: 14, color: "#9A9AB0", maxWidth: 420, margin: "0 auto", lineHeight: 1.7 }}>{typeof text === 'string' ? text : String(text)}</p>
     </div>
   );
 }
