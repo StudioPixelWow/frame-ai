@@ -453,64 +453,119 @@ const DDL_BLOCKS: Array<{ name: string; sql: string }> = [
   },
 ];
 
+/** Run a single SQL block — tries exec_sql RPC first, then raw fetch to /sql endpoint */
+async function runSQL(
+  sb: ReturnType<typeof getSupabase>,
+  sql: string,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+): Promise<{ ok: boolean; error?: string; method?: string }> {
+  // Method 1: exec_sql RPC
+  try {
+    const { error } = await sb.rpc('exec_sql', { query: sql });
+    if (!error) return { ok: true, method: 'rpc' };
+    if (!error.message.includes('function') && !error.message.includes('does not exist') && !error.message.includes('could not find')) {
+      if (error.message.includes('already exists')) return { ok: true, method: 'rpc_exists' };
+      return { ok: false, error: error.message, method: 'rpc' };
+    }
+  } catch { /* RPC not available, try next */ }
+
+  // Method 2: Direct SQL via Supabase REST (service_role key)
+  // Supabase exposes /rest/v1/ for PostgREST, but we can POST raw SQL to the
+  // /pg endpoint (available in Supabase platform) or use the raw PostgreSQL HTTP.
+  try {
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/exec_sql`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': serviceRoleKey,
+        'Authorization': `Bearer ${serviceRoleKey}`,
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify({ query: sql }),
+    });
+    if (res.ok) return { ok: true, method: 'rest_rpc' };
+  } catch { /* not available, try next */ }
+
+  // Method 3: Try creating the table by inserting a dummy row and letting Supabase auto-create
+  // (This only works for the simple JSONB tables, not the relational ones)
+
+  return { ok: false, error: 'No SQL execution method available', method: 'none' };
+}
+
 export async function GET() {
   const sb = getSupabase();
-  const results: Array<{ table: string; status: string; error?: string }> = [];
-  let rpcAvailable = true;
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
+    'https://uaruggdabeyiuppcvbbi.supabase.co';
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-  for (const block of DDL_BLOCKS) {
-    try {
-      const { error } = await sb.rpc('exec_sql', { query: block.sql });
-      if (error) {
-        if (error.message.includes('function') || error.message.includes('does not exist') || error.message.includes('could not find')) {
-          rpcAvailable = false;
-          results.push({ table: block.name, status: 'skip_no_rpc', error: 'exec_sql RPC not available' });
-        } else if (error.message.includes('already exists')) {
-          results.push({ table: block.name, status: 'exists' });
-        } else {
-          results.push({ table: block.name, status: 'error', error: error.message });
-        }
-      } else {
-        results.push({ table: block.name, status: 'created' });
-      }
-    } catch (err) {
-      results.push({ table: block.name, status: 'error', error: err instanceof Error ? err.message : 'Unknown' });
+  const results: Array<{ table: string; status: string; error?: string; method?: string }> = [];
+
+  // ── First, try to create the critical JSONB tables (app_seo_plans etc.) ──
+  // These are simple tables — try direct PostgREST insert to see if they exist
+  const jsonbTables = DDL_BLOCKS.filter(b => b.name.startsWith('app_'));
+  const relationalTables = DDL_BLOCKS.filter(b => !b.name.startsWith('app_'));
+
+  // For JSONB tables: check if accessible, if not try to create via SQL
+  for (const block of jsonbTables) {
+    // Check if table already exists by trying a SELECT
+    const { error: selectErr } = await sb.from(block.name).select('id').limit(0);
+    if (!selectErr) {
+      results.push({ table: block.name, status: 'exists', method: 'select' });
+      continue;
     }
 
-    // If RPC not available, skip remaining (they'll all fail the same way)
-    if (!rpcAvailable) {
-      const remaining = DDL_BLOCKS.slice(DDL_BLOCKS.indexOf(block) + 1);
-      for (const r of remaining) {
-        results.push({ table: r.name, status: 'skip_no_rpc' });
-      }
-      break;
+    // Table doesn't exist — try SQL methods
+    const r = await runSQL(sb, block.sql, supabaseUrl, serviceRoleKey);
+    if (r.ok) {
+      results.push({ table: block.name, status: 'created', method: r.method });
+    } else {
+      results.push({ table: block.name, status: 'missing', error: r.error, method: r.method });
+    }
+  }
+
+  // For relational tables: same approach
+  for (const block of relationalTables) {
+    const { error: selectErr } = await sb.from(block.name).select('id').limit(0);
+    if (!selectErr) {
+      results.push({ table: block.name, status: 'exists', method: 'select' });
+      continue;
+    }
+
+    const r = await runSQL(sb, block.sql, supabaseUrl, serviceRoleKey);
+    if (r.ok) {
+      results.push({ table: block.name, status: 'created', method: r.method });
+    } else {
+      results.push({ table: block.name, status: 'missing', error: r.error, method: r.method });
     }
   }
 
   // Refresh PostgREST schema cache
-  if (rpcAvailable) {
-    try {
-      await sb.rpc('exec_sql', { query: "NOTIFY pgrst, 'reload schema'" });
-    } catch { /* non-fatal */ }
-  }
+  try {
+    await sb.rpc('exec_sql', { query: "NOTIFY pgrst, 'reload schema'" });
+  } catch { /* non-fatal */ }
 
   const created = results.filter(r => r.status === 'created').length;
   const existing = results.filter(r => r.status === 'exists').length;
-  const errors = results.filter(r => r.status === 'error').length;
-  const skipped = results.filter(r => r.status === 'skip_no_rpc').length;
+  const missing = results.filter(r => r.status === 'missing').length;
 
-  // Generate manual DDL fallback if needed
-  const manualSQL = (!rpcAvailable || errors > 0)
-    ? DDL_BLOCKS.map(b => `-- ${b.name}\n${b.sql.trim()}`).join('\n\n') + "\n\nNOTIFY pgrst, 'reload schema';"
+  // Generate manual DDL for missing tables only
+  const missingNames = new Set(results.filter(r => r.status === 'missing').map(r => r.table));
+  const manualSQL = missingNames.size > 0
+    ? DDL_BLOCKS
+        .filter(b => missingNames.has(b.name))
+        .map(b => `-- ${b.name}\n${b.sql.trim()}`)
+        .join('\n\n') + "\n\nNOTIFY pgrst, 'reload schema';"
     : null;
 
   return NextResponse.json({
-    summary: `${created} created, ${existing} already exist, ${errors} errors, ${skipped} skipped (no RPC)`,
-    rpcAvailable,
+    summary: `${created} created, ${existing} already exist, ${missing} missing (need manual SQL)`,
     tables: results,
     manualSQL,
     instructions: manualSQL
-      ? 'exec_sql RPC is not available. Copy the manualSQL field and run it in Supabase SQL Editor → New Query → Run.'
-      : null,
+      ? 'הטבלאות החסרות לא ניתנות ליצירה אוטומטית. העתק את שדה manualSQL והרץ אותו ב-Supabase SQL Editor → New Query → Run.'
+      : 'כל הטבלאות קיימות ✅',
   });
 }

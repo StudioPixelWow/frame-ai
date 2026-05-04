@@ -463,6 +463,14 @@ function ScanPageInner() {
           console.log(`[PIXEL-SEO-SCAN-UI] PERSISTED planId=${resultId}`);
         } else {
           console.warn('[PIXEL-SEO-SCAN-UI] PERSIST_FAILED after migration retry');
+          console.warn('[PIXEL-SEO-SCAN-UI] ⚠️ To fix: go to Supabase SQL Editor and run:\n' +
+            'CREATE TABLE IF NOT EXISTS public.app_seo_plans (\n' +
+            '  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n' +
+            '  data JSONB NOT NULL DEFAULT \'{}\',\n' +
+            '  created_at TIMESTAMPTZ DEFAULT NOW(),\n' +
+            '  updated_at TIMESTAMPTZ DEFAULT NOW()\n' +
+            ');\n' +
+            'NOTIFY pgrst, \'reload schema\';');
         }
       } catch (persistErr) {
         console.warn('[PIXEL-SEO-SCAN-UI] PERSIST_ERROR', persistErr);
@@ -996,31 +1004,33 @@ function ScanPageInner() {
               </div>
             )}
 
-            {phase === 'done' && job.validation?.passed && (
-              <div style={{
-                display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
-              }}>
-                {[
-                  // Show plan-specific buttons only if we have a real saved ID
-                  ...(savedPlanId && !savedPlanId.startsWith('temp-') ? [
-                    { label: 'צפה בתוצאות הסריקה', icon: '📊', action: () => router.push(`/seo-geo/${savedPlanId}/results`) },
-                    { label: 'צור תוכנית 60 ימים', icon: '📋', action: () => router.push(`/seo-geo/${savedPlanId}`) },
-                    { label: 'הפק דוח מקצועי', icon: '📄', action: () => router.push(`/seo-geo/${savedPlanId}/report`) },
-                  ] : []),
-                  { label: 'חזרה לדשבורד SEO/GEO', icon: '🏠', action: () => router.push('/seo-geo/dashboard') },
-                  { label: 'סרוק אתר נוסף', icon: '🔄', action: rescan },
-                ].map((cta, i) => (
-                  <button key={i} onClick={cta.action} style={{
-                    padding: '14px 16px', background: C.card, border: `1px solid ${C.border}`,
-                    borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center',
-                    gap: 10, textAlign: 'right', transition: 'all 0.2s',
-                  }}>
-                    <span style={{ fontSize: 22 }}>{cta.icon}</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{cta.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            {phase === 'done' && job.validation?.passed && (() => {
+              // Determine planId for navigation — use savedPlanId if real, else fallback to 'latest'
+              const navId = (savedPlanId && !savedPlanId.startsWith('temp-')) ? savedPlanId : null;
+              return (
+                <div style={{
+                  display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
+                }}>
+                  {[
+                    { label: 'צפה בתוצאות הסריקה', icon: '📊', action: () => navId ? router.push(`/seo-geo/${navId}/results`) : alert('התוצאות לא נשמרו — יש ליצור טבלה ב-Supabase. ראה קונסול.'), disabled: !navId },
+                    { label: 'צור תוכנית 60 ימים', icon: '📋', action: () => navId ? router.push(`/seo-geo/${navId}`) : alert('התוצאות לא נשמרו — יש ליצור טבלה ב-Supabase. ראה קונסול.'), disabled: !navId },
+                    { label: 'הפק דוח מקצועי', icon: '📄', action: () => navId ? router.push(`/seo-geo/${navId}/report`) : alert('התוצאות לא נשמרו — יש ליצור טבלה ב-Supabase. ראה קונסול.'), disabled: !navId },
+                    { label: 'חזרה לדשבורד SEO/GEO', icon: '🏠', action: () => router.push('/seo-geo/dashboard') },
+                    { label: 'סרוק אתר נוסף', icon: '🔄', action: rescan },
+                  ].map((cta, i) => (
+                    <button key={i} onClick={cta.action} style={{
+                      padding: '14px 16px', background: C.card, border: `1px solid ${C.border}`,
+                      borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center',
+                      gap: 10, textAlign: 'right', transition: 'all 0.2s',
+                      opacity: (cta as any).disabled ? 0.5 : 1,
+                    }}>
+                      <span style={{ fontSize: 22 }}>{cta.icon}</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{cta.label}</span>
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
 
           {/* ─── Right: Live Log ──────────────────────────────── */}
