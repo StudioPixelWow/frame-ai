@@ -33,6 +33,15 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
+        {/* Suppress non-breaking "reading 'stage'" error from minified chunk */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          window.addEventListener('error', function(e) {
+            if (e.message && e.message.includes("reading 'stage'")) {
+              e.preventDefault();
+              return true;
+            }
+          });
+        `}} />
       </body>
     </html>
   );

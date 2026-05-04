@@ -271,7 +271,7 @@ function ScanPageInner() {
         const err = await res.json().catch(() => ({ error: 'שגיאה' }));
         setJob(prev => prev ? {
           ...prev, status: 'failed' as any, progress: 100, error: err.error || 'שגיאה בסריקה',
-          stages: prev.stages.map(s => s.status === 'running' ? { ...s, status: 'failed' as StageStatus } : s.status === 'pending' ? { ...s, status: 'skipped' as StageStatus } : s),
+          stages: (prev.stages || []).map(s => s.status === 'running' ? { ...s, status: 'failed' as StageStatus } : s.status === 'pending' ? { ...s, status: 'skipped' as StageStatus } : s),
         } : null);
         setPhase('done');
         return;
@@ -614,7 +614,7 @@ function ScanPageInner() {
                 <div style={{
                   marginTop: 8, fontSize: 13, fontWeight: 600, color: C.primary,
                 }}>
-                  {job.stages.find(s => s.status === 'running')?.labelHe || ''}
+                  {(job.stages || []).find(s => s.status === 'running')?.labelHe || ''}
                 </div>
               )}
             </div>
