@@ -154,8 +154,23 @@ function ScanPageInner() {
   // State
   const [scanUrl, setScanUrl] = useState(urlParam);
   const [scanType, setScanType] = useState<ScanType>('quick');
-  const [phase, setPhase] = useState<'select' | 'scanning' | 'done'>('select');
+  const [phase, setPhaseRaw] = useState<'select' | 'scanning' | 'done'>('select');
   const [job, setJobRaw] = useState<ScanJob | null>(null);
+
+  // ── GUARD: Never allow phase to regress from 'scanning' back to 'select' ──
+  // Only an explicit user action (rescan button) should reset to 'select'.
+  const scanActiveRef = useRef(false);
+  const setPhase = useCallback((next: 'select' | 'scanning' | 'done') => {
+    if (next === 'select' && scanActiveRef.current) {
+      console.warn('[SEO-GEO 77 DEBUG] BLOCKED setPhase("select") during active scan — refusing to reset');
+      return; // Block the reset
+    }
+    if (next === 'scanning') scanActiveRef.current = true;
+    if (next === 'select') scanActiveRef.current = false;
+    console.log(`[SEO-GEO 77 DEBUG] setPhase: ${next}`);
+    setPhaseRaw(next);
+  }, []);
+
   // Wrap setJob to always validate the shape
   const setJob = useCallback((val: ScanJob | null | ((prev: ScanJob | null) => ScanJob | null)) => {
     if (typeof val === 'function') {
@@ -233,6 +248,11 @@ function ScanPageInner() {
 
       const progress = Math.round(((stageIdx + 0.5) / stages.length) * 90);
 
+      // Debug logging at critical 77% point (stage 8 = validate_evidence)
+      if (stageIdx >= 7) {
+        console.log(`[SEO-GEO 77 DEBUG] entering stage ${stageIdx} (${stages[stageIdx].stage}) progress=${progress}%`);
+      }
+
       setJob(prev => ({
         ...(prev || {
           id: 'sim', url: '', scanType, status: 'init' as any, progress: 0,
@@ -305,7 +325,8 @@ function ScanPageInner() {
 
       const totalElapsed = Date.now() - startTimeRef.current;
       setElapsed(totalElapsed);
-      console.log(`[PIXEL-SEO-SCAN-UI] FETCH_DONE status=${res.status} elapsed=${totalElapsed}ms`);
+      console.log(`[SEO-GEO 77 DEBUG] API response received: status=${res.status} elapsed=${totalElapsed}ms`);
+      console.log(`[SEO-GEO 77 DEBUG] scan state before update: phase=scanning, jobProgress=${job?.progress}, currentStage=${job?.stages?.find(s => s.status === 'running')?.stage}`);
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'שגיאה' }));
@@ -348,17 +369,46 @@ function ScanPageInner() {
       setPhase('done');
       console.log(`[PIXEL-SEO-SCAN-UI] COMPLETED totalElapsed=${totalElapsed}ms`);
     } catch (err) {
-      console.error(`[PIXEL-SEO-SCAN-UI] EXCEPTION:`, err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[SEO-GEO 77 DEBUG] EXCEPTION in startScan: ${errMsg}`, err);
+      console.error(`[SEO-GEO 77 DEBUG] scan state at crash: phase=scanning, url=${scanUrl}, scanType=${scanType}, jobId=${job?.id}, progress=${job?.progress}`);
+
       if (pollRef.current) clearTimeout(pollRef.current as any);
       if (timerRef.current) clearInterval(timerRef.current);
-      setPhase('select');
+      pollRef.current = null;
+      timerRef.current = null;
+
+      // ── CRITICAL FIX: NEVER reset to 'select' on error ──
+      // Show error state in 'done' phase so user sees what failed and can retry.
+      const totalElapsed = Date.now() - startTimeRef.current;
+      setElapsed(totalElapsed);
+      setJob(prev => prev ? {
+        ...prev,
+        status: 'failed' as any,
+        progress: prev.progress || 0,
+        error: `שגיאת רשת: ${errMsg}`,
+        stages: (prev.stages || []).map(s =>
+          s.status === 'running' ? { ...s, status: 'failed' as StageStatus } :
+          s.status === 'pending' ? { ...s, status: 'skipped' as StageStatus } : s
+        ),
+      } : {
+        id: 'error', url: scanUrl, scanType, status: 'failed', progress: 0,
+        stages: [], logs: [], metrics: { ...EMPTY_METRICS, scanDurationMs: totalElapsed },
+        platformStatuses: [], startedAt: new Date(startTimeRef.current).toISOString(),
+        error: `שגיאת רשת: ${errMsg}`,
+      });
+      setPhaseRaw('done'); // bypass guard — intentional move to done
+      scanActiveRef.current = false;
     }
-  }, [scanUrl, scanType, simulateProgress]);
+  }, [scanUrl, scanType, simulateProgress, job]);
 
   const rescan = useCallback(() => {
+    console.log('[SEO-GEO 77 DEBUG] User-initiated rescan — clearing state');
+    // Explicitly deactivate scan guard before resetting
+    scanActiveRef.current = false;
     setJob(null);
     setPhase('select');
-  }, []);
+  }, [setJob, setPhase]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
