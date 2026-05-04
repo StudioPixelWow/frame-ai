@@ -35,9 +35,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const now = new Date().toISOString();
     const plan = {
-      ...body,
-      id: generateId(),
-      status: body.status || 'draft',
+      // Defaults first — body values override them
       websiteScan: null,
       goals: [],
       visibilityQueries: [],
@@ -50,9 +48,13 @@ export async function POST(req: NextRequest) {
       visibilityScore: 0,
       completedTasks: 0,
       totalTasks: 0,
+      generatedAt: null,
+      // Body overrides defaults
+      ...body,
+      // These always take precedence
+      status: body.status || 'draft',
       createdAt: now,
       updatedAt: now,
-      generatedAt: null,
     };
     const created = await seoPlans.createAsync(plan);
     return NextResponse.json(created, { status: 201 });

@@ -26,8 +26,6 @@ export async function GET(
       );
     }
 
-    const p = plan as any;
-
     // Build platform summaries
     const summaries = buildPlatformSummaries(plan);
 
@@ -46,23 +44,10 @@ export async function GET(
       results = buildPlatformResults(plan, platformParam);
     }
 
-    // DEBUG: Include data shape info to troubleshoot zero results
-    const _debug = {
-      planKeys: Object.keys(p),
-      hasWebsiteScan: !!p.websiteScan,
-      websiteScanKeys: p.websiteScan ? Object.keys(p.websiteScan) : [],
-      aiQueriesCount: p.websiteScan?.aiQueries?.length ?? p.aiQueries?.length ?? 0,
-      platformStatusesCount: p.websiteScan?.platformStatuses?.length ?? p.platformStatuses?.length ?? 0,
-      visibilityResultsCount: p.visibilityResults?.length ?? 0,
-      sampleAiQuery: (p.websiteScan?.aiQueries || p.aiQueries || [])[0] || null,
-      samplePlatformStatus: (p.websiteScan?.platformStatuses || p.platformStatuses || [])[0] || null,
-    };
-
     const response = {
       summaries,
       metrics,
       ...(results !== undefined && { results }),
-      _debug,
     };
 
     return NextResponse.json(response);
