@@ -120,95 +120,150 @@ function generateResultId(
 }
 
 /**
+ * Extracts aiQueries from plan data — checks both websiteScan.aiQueries and plan.aiQueries
+ */
+function extractAiQueries(plan: any): any[] {
+  return plan?.websiteScan?.aiQueries || plan?.aiQueries || [];
+}
+
+/**
+ * Extracts platformStatuses from plan data — checks both websiteScan and plan level
+ */
+function extractPlatformStatuses(plan: any): any[] {
+  return plan?.websiteScan?.platformStatuses || plan?.platformStatuses || [];
+}
+
+/**
+ * Maps scan-pipeline platform IDs to visibility platform IDs
+ * The scan pipeline uses the same IDs as PLATFORM_CONFIG (google_seo, chatgpt, etc.)
+ */
+function scanPlatformToVisibilityId(platform: string): VisibilityPlatformId | null {
+  const mapping: Record<string, VisibilityPlatformId> = {
+    google_seo: 'google_seo',
+    google_ai_overview: 'google_ai_overview',
+    chatgpt: 'chatgpt',
+    gemini: 'gemini',
+    claude: 'claude',
+    perplexity: 'perplexity',
+  };
+  return mapping[platform] || engineToPlatformId(platform);
+}
+
+/**
  * Builds platform summaries from plan data
- * Computes metrics for each platform (queries scanned, mentions, visibility %)
+ * Reads from scan pipeline's aiQueries + platformStatuses format,
+ * with fallback to legacy visibilityResults format.
  */
 export function buildPlatformSummaries(plan: any): PlatformSummary[] {
   const summaries: PlatformSummary[] = [];
-  const visibilityResults = plan.visibilityResults || [];
-  const visibilityQueries = plan.visibilityQueries || [];
+  const aiQueries = extractAiQueries(plan);
+  const platformStatuses = extractPlatformStatuses(plan);
+  const legacyVisibilityResults = plan.visibilityResults || [];
 
-  // Google SEO - no existing data source
-  summaries.push({
-    platformId: 'google_seo',
-    platformName: PLATFORM_CONFIG.google_seo.name,
-    icon: PLATFORM_CONFIG.google_seo.icon,
-    queriesScanned: 0,
-    mentions: 0,
-    visibilityPct: 0,
-    scanMode: 'unavailable',
-    lastScannedAt: null,
-  });
-
-  // Google AI Overview - no existing data source
-  summaries.push({
-    platformId: 'google_ai_overview',
-    platformName: PLATFORM_CONFIG.google_ai_overview.name,
-    icon: PLATFORM_CONFIG.google_ai_overview.icon,
-    queriesScanned: 0,
-    mentions: 0,
-    visibilityPct: 0,
-    scanMode: 'unavailable',
-    lastScannedAt: null,
-  });
-
-  // AI Platforms - built from visibilityResults
-  const aiPlatforms = new Map<VisibilityPlatformId, any[]>();
-
-  // Group results by platform
-  for (const result of visibilityResults) {
-    const platformId = engineToPlatformId(result.engine);
-    if (!platformId) continue;
-
-    if (!aiPlatforms.has(platformId)) {
-      aiPlatforms.set(platformId, []);
-    }
-    aiPlatforms.get(platformId)!.push(result);
+  // If we have platformStatuses from the scan pipeline, use them directly
+  // They already have queriesScanned, mentionsFound, scanMode per platform
+  const statusMap = new Map<string, any>();
+  for (const ps of platformStatuses) {
+    statusMap.set(ps.id, ps);
   }
 
-  // Build summaries for AI platforms
-  const aiPlatformIds: VisibilityPlatformId[] = [
+  // Also group aiQueries by platform for detailed data
+  const queryByPlatform = new Map<string, any[]>();
+  for (const q of aiQueries) {
+    const pid = q.platform;
+    if (!pid) continue;
+    if (!queryByPlatform.has(pid)) queryByPlatform.set(pid, []);
+    queryByPlatform.get(pid)!.push(q);
+  }
+
+  // Also handle legacy format — group visibilityResults by engine
+  const legacyByPlatform = new Map<VisibilityPlatformId, any[]>();
+  for (const result of legacyVisibilityResults) {
+    const pid = engineToPlatformId(result.engine);
+    if (!pid) continue;
+    if (!legacyByPlatform.has(pid)) legacyByPlatform.set(pid, []);
+    legacyByPlatform.get(pid)!.push(result);
+  }
+
+  // Build summaries for all platforms
+  const allPlatformIds: VisibilityPlatformId[] = [
+    'google_seo',
+    'google_ai_overview',
     'gemini',
     'chatgpt',
     'claude',
     'perplexity',
   ];
-  for (const platformId of aiPlatformIds) {
-    const platformResults = aiPlatforms.get(platformId) || [];
 
-    if (platformResults.length === 0) {
-      // No data for this platform
+  for (const platformId of allPlatformIds) {
+    const status = statusMap.get(platformId);
+    const queries = queryByPlatform.get(platformId) || [];
+    const legacyResults = legacyByPlatform.get(platformId) || [];
+
+    // Priority 1: Use platformStatuses from scan pipeline (most reliable)
+    if (status && (status.queriesScanned > 0 || status.mentionsFound > 0)) {
+      const qs = status.queriesScanned || queries.length;
+      const mentions = status.mentionsFound || queries.filter((q: any) => q.found).length;
+      const pct = qs > 0 ? (mentions / qs) * 100 : 0;
       summaries.push({
         platformId,
         platformName: PLATFORM_CONFIG[platformId].name,
         icon: PLATFORM_CONFIG[platformId].icon,
-        queriesScanned: 0,
-        mentions: 0,
-        visibilityPct: 0,
-        scanMode: 'unavailable',
-        lastScannedAt: null,
-      });
-    } else {
-      const mentions = platformResults.filter((r) => r.mentioned).length;
-      const queriesScanned = platformResults.length;
-      const visibilityPct =
-        queriesScanned > 0 ? (mentions / queriesScanned) * 100 : 0;
-      const scanMode = plan.scanMode || 'simulated';
-      const lastScannedAt = platformResults
-        .map((r) => new Date(r.scannedAt).getTime())
-        .reduce((max, t) => Math.max(max, t), 0);
-
-      summaries.push({
-        platformId,
-        platformName: PLATFORM_CONFIG[platformId].name,
-        icon: PLATFORM_CONFIG[platformId].icon,
-        queriesScanned,
+        queriesScanned: qs,
         mentions,
-        visibilityPct: Math.round(visibilityPct * 10) / 10,
-        scanMode: scanMode as ScanMode,
-        lastScannedAt: lastScannedAt > 0 ? new Date(lastScannedAt).toISOString() : null,
+        visibilityPct: Math.round(pct * 10) / 10,
+        scanMode: (status.scanMode || 'simulated') as ScanMode,
+        lastScannedAt: plan.completedAt || plan.updatedAt || null,
       });
+      continue;
     }
+
+    // Priority 2: Use aiQueries grouped by platform
+    if (queries.length > 0) {
+      const mentions = queries.filter((q: any) => q.found).length;
+      const pct = queries.length > 0 ? (mentions / queries.length) * 100 : 0;
+      summaries.push({
+        platformId,
+        platformName: PLATFORM_CONFIG[platformId].name,
+        icon: PLATFORM_CONFIG[platformId].icon,
+        queriesScanned: queries.length,
+        mentions,
+        visibilityPct: Math.round(pct * 10) / 10,
+        scanMode: (queries[0]?.scanMode || 'simulated') as ScanMode,
+        lastScannedAt: queries[0]?.checkedAt || null,
+      });
+      continue;
+    }
+
+    // Priority 3: Use legacy visibilityResults
+    if (legacyResults.length > 0) {
+      const mentions = legacyResults.filter((r: any) => r.mentioned).length;
+      const pct = legacyResults.length > 0 ? (mentions / legacyResults.length) * 100 : 0;
+      summaries.push({
+        platformId,
+        platformName: PLATFORM_CONFIG[platformId].name,
+        icon: PLATFORM_CONFIG[platformId].icon,
+        queriesScanned: legacyResults.length,
+        mentions,
+        visibilityPct: Math.round(pct * 10) / 10,
+        scanMode: (plan.scanMode || 'simulated') as ScanMode,
+        lastScannedAt: legacyResults[0]?.scannedAt || null,
+      });
+      continue;
+    }
+
+    // No data — check if platform was scanned but had 0 results vs never scanned
+    const wasScanned = status && status.status === 'completed';
+    summaries.push({
+      platformId,
+      platformName: PLATFORM_CONFIG[platformId].name,
+      icon: PLATFORM_CONFIG[platformId].icon,
+      queriesScanned: 0,
+      mentions: 0,
+      visibilityPct: 0,
+      scanMode: wasScanned ? ((status.scanMode || 'simulated') as ScanMode) : 'unavailable',
+      lastScannedAt: null,
+    });
   }
 
   return summaries;
@@ -216,28 +271,75 @@ export function buildPlatformSummaries(plan: any): PlatformSummary[] {
 
 /**
  * Builds platform-specific results from plan data
- * Returns empty array for platforms with no data source
+ * Reads from scan pipeline's aiQueries format with fallback to legacy visibilityResults.
  */
 export function buildPlatformResults(
   plan: any,
   platformId: VisibilityPlatformId
 ): PlatformResult[] {
-  // Google SEO and AI Overview have no data source
-  if (platformId === 'google_seo' || platformId === 'google_ai_overview') {
-    return [];
+  const aiQueries = extractAiQueries(plan);
+  const legacyVisibilityResults = plan.visibilityResults || [];
+  const legacyVisibilityQueries = plan.visibilityQueries || [];
+  const planId = plan.id || '';
+
+  // ── Try scan-pipeline aiQueries format first ──
+  const pipelineResults = aiQueries.filter(
+    (q: any) => scanPlatformToVisibilityId(q.platform) === platformId
+  );
+
+  if (pipelineResults.length > 0) {
+    return pipelineResults.map((q: any, idx: number) => {
+      const sm = (q.scanMode || 'simulated') as ScanMode;
+      const confidence = q.confidence ?? (sm === 'real' ? 100 : sm === 'simulated' ? 50 : 0);
+      const mentioned = !!q.found;
+
+      const evidence: ResultEvidence = {
+        sourceUrl: null,
+        extractedSnippet: q.snippet || null,
+        rawApiResponse: null,
+        scanMode: sm,
+        confidence,
+      };
+
+      const opportunityScore = computeOpportunityScore(
+        mentioned,
+        'medium',
+        'informational',
+        0
+      );
+
+      const result: AiPlatformResult = {
+        id: `${planId}-${platformId}-${idx}`,
+        planId,
+        platformId,
+        query: q.query || '',
+        queryCategory: 'general',
+        queryIntent: 'informational',
+        mentioned,
+        scanMode: sm,
+        confidence,
+        evidence,
+        scannedAt: q.checkedAt || new Date().toISOString(),
+        competitorsMentioned: [],
+        opportunityScore,
+        answer: q.snippet || null,
+        mentionContext: q.snippet || null,
+        sources: [],
+      };
+
+      return result;
+    });
   }
 
-  const visibilityResults = plan.visibilityResults || [];
-  const visibilityQueries = plan.visibilityQueries || [];
-  const scanMode = plan.scanMode || 'simulated';
-  const planId = plan.id || '';
+  // ── Fallback to legacy visibilityResults format ──
+  const scanMode = (plan.scanMode || 'simulated') as ScanMode;
 
   // Create lookup for query metadata
   const queryMetadata = new Map<
     string,
     { category: string; intent: string; importance: string }
   >();
-  for (const q of visibilityQueries) {
+  for (const q of legacyVisibilityQueries) {
     queryMetadata.set(q.query, {
       category: q.category || 'general',
       intent: q.intent || 'informational',
@@ -245,10 +347,9 @@ export function buildPlatformResults(
     });
   }
 
-  // Filter results for this platform
   const platformResults: PlatformResult[] = [];
 
-  for (const result of visibilityResults) {
+  for (const result of legacyVisibilityResults) {
     const resultPlatformId = engineToPlatformId(result.engine);
     if (resultPlatformId !== platformId) continue;
 
@@ -258,26 +359,23 @@ export function buildPlatformResults(
       importance: 'medium',
     };
 
-    // Determine confidence level based on scan mode
     let confidence: number;
     if (scanMode === 'unavailable') {
       confidence = 0;
     } else if (scanMode === 'real') {
       confidence = 100;
     } else {
-      confidence = 50; // simulated
+      confidence = 50;
     }
 
-    // Build evidence
     const evidence: ResultEvidence = {
       sourceUrl: null,
       extractedSnippet: result.context || null,
       rawApiResponse: null,
-      scanMode: scanMode as ScanMode,
+      scanMode,
       confidence,
     };
 
-    // Compute opportunity score
     const opportunityScore = computeOpportunityScore(
       result.mentioned,
       metadata.importance,
@@ -285,19 +383,17 @@ export function buildPlatformResults(
       result.competitorsMentioned?.length || 0
     );
 
-    // Create result ID
-    const id = generateResultId(planId, platformId, result.queryId);
+    const id = generateResultId(planId, platformId, result.queryId || String(platformResults.length));
 
-    // Build AI platform result
     const aiResult: AiPlatformResult = {
       id,
       planId,
-      platformId: platformId as VisibilityPlatformId,
+      platformId,
       query: result.query,
       queryCategory: metadata.category,
       queryIntent: metadata.intent,
       mentioned: result.mentioned,
-      scanMode: scanMode as ScanMode,
+      scanMode,
       confidence,
       evidence,
       scannedAt: result.scannedAt,

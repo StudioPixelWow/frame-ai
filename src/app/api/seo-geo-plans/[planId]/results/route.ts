@@ -34,7 +34,13 @@ export async function GET(
 
     // If platform parameter is provided, fetch results for that platform
     let results: any[] | undefined;
-    if (platformParam) {
+    if (platformParam === 'all') {
+      // Return combined results from all platforms
+      const allPlatforms: VisibilityPlatformId[] = [
+        'google_seo', 'google_ai_overview', 'gemini', 'chatgpt', 'claude', 'perplexity',
+      ];
+      results = allPlatforms.flatMap(pid => buildPlatformResults(plan, pid));
+    } else if (platformParam) {
       results = buildPlatformResults(plan, platformParam);
     }
 

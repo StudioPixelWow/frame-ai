@@ -52,7 +52,10 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he", busin
   const he = language === "he";
   const scan = plan.websiteScan || null;
   const goals = (plan.goals || []).filter((g: any) => g.selected);
-  const visResults = plan.visibilityResults || [];
+  // Support both legacy visibilityResults and scan-pipeline aiQueries format
+  const rawAiQueries = scan?.aiQueries || plan?.aiQueries || [];
+  const rawPlatformStatuses = scan?.platformStatuses || plan?.platformStatuses || [];
+  const legacyVisResults = plan.visibilityResults || [];
   const visQueries = plan.visibilityQueries || [];
   const insights = plan.insights || [];
   const weeks = plan.weeks || [];
@@ -61,9 +64,28 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he", busin
   const domain = (plan.websiteUrl || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
   const scanMode = plan.scanMode || null;
 
+  // Normalize aiQueries to legacy format for engine analysis
+  // aiQueries: { query, platform, found, confidence, snippet, checkedAt, scanMode }
+  // legacy: { query, results: [{ engine, mentioned }] }
+  const visResults = rawAiQueries.length > 0
+    ? _normalizeAiQueries(rawAiQueries)
+    : legacyVisResults;
+
   // AI engine analysis
+  const engineMapping: Record<string, string> = {
+    chatgpt: "ChatGPT", gemini: "Gemini", perplexity: "Perplexity",
+    claude: "Claude", copilot: "Copilot",
+  };
   const engines = ["ChatGPT", "Gemini", "Perplexity", "Claude", "Copilot"];
   const engineStats = engines.map(eng => {
+    // For aiQueries format: filter by platform name
+    if (rawAiQueries.length > 0) {
+      const platformId = Object.entries(engineMapping).find(([_, v]) => v === eng)?.[0] || '';
+      const platformQueries = rawAiQueries.filter((q: any) => q.platform === platformId);
+      const mentioned = platformQueries.filter((q: any) => q.found).length;
+      return { engine: eng, mentioned, total: platformQueries.length, pct: platformQueries.length > 0 ? Math.round((mentioned / platformQueries.length) * 100) : 0 };
+    }
+    // Legacy format
     const total = visResults.length;
     const mentioned = visResults.filter((vr: any) =>
       (vr.results || []).some((r: any) => r.engine === eng && r.mentioned)
@@ -72,12 +94,12 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he", busin
   });
 
   // Queries analysis
-  const mentionedQueries = visResults.filter((vr: any) =>
-    (vr.results || []).some((r: any) => r.mentioned)
-  );
-  const missedQueries = visResults.filter((vr: any) =>
-    !(vr.results || []).some((r: any) => r.mentioned)
-  );
+  const mentionedQueries = rawAiQueries.length > 0
+    ? rawAiQueries.filter((q: any) => q.found)
+    : visResults.filter((vr: any) => (vr.results || []).some((r: any) => r.mentioned));
+  const missedQueries = rawAiQueries.length > 0
+    ? rawAiQueries.filter((q: any) => !q.found)
+    : visResults.filter((vr: any) => !(vr.results || []).some((r: any) => r.mentioned));
 
   // Technical findings
   const technicalFindings: Array<{ severity: "critical" | "warning" | "info" | "success"; title: string; detail: string; rec: string }> = [];
@@ -494,6 +516,24 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he", busin
       totalRecommendations: actions.length,
     },
   };
+}
+
+/**
+ * Normalizes scan-pipeline aiQueries format to legacy visibilityResults format.
+ * aiQueries: { query, platform, found, confidence, snippet, checkedAt, scanMode }
+ * legacy: { query, engine, mentioned, context, scannedAt, results: [{ engine, mentioned }] }
+ */
+function _normalizeAiQueries(aiQueries: any[]): any[] {
+  return aiQueries.map((q: any) => ({
+    query: q.query || '',
+    queryId: q.query || '',
+    engine: q.platform || '',
+    mentioned: !!q.found,
+    context: q.snippet || null,
+    scannedAt: q.checkedAt || new Date().toISOString(),
+    competitorsMentioned: [],
+    results: [{ engine: q.platform, mentioned: !!q.found }],
+  }));
 }
 
 function scoreColor(score: number): string {
