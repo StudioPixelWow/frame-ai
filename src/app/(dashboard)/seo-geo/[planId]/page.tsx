@@ -177,7 +177,7 @@ export default function SeoPlanDetail() {
   // Update task status
   const updateTaskStatus = useCallback(async (taskId: string, newStatus: PlanTask["status"]) => {
     if (!plan) return;
-    const updatedWeeks = plan.weeks.map(w => ({
+    const updatedWeeks = (plan.weeks || []).map(w => ({
       ...w,
       tasks: w.tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t),
     }));
@@ -296,11 +296,18 @@ export default function SeoPlanDetail() {
 
   const status = STATUS_MAP[plan.status] || STATUS_MAP.draft;
   const domain = plan.websiteUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "") || "—";
-  const progress = plan.totalTasks > 0 ? Math.round((plan.completedTasks / plan.totalTasks) * 100) : 0;
-  const createdDate = new Date(plan.createdAt);
+  const progress = (plan.totalTasks || 0) > 0 ? Math.round(((plan.completedTasks || 0) / (plan.totalTasks || 1)) * 100) : 0;
+  const createdDate = plan.createdAt ? new Date(plan.createdAt) : new Date();
   const now = new Date();
   const daysSinceCreated = Math.max(0, Math.floor((now.getTime() - createdDate.getTime()) / 86400000));
   const daysRemaining = Math.max(0, 60 - daysSinceCreated);
+
+  // Safe accessors for websiteScan (data from DB may have unexpected types)
+  const scan = plan.websiteScan || null;
+  const safeLoadTime = typeof scan?.loadTimeMs === 'number' ? scan.loadTimeMs : 0;
+  const safeDa = typeof scan?.domainAuthority === 'number' ? scan.domainAuthority : 0;
+  const safeTotalPages = typeof scan?.totalPages === 'number' ? scan.totalPages : 0;
+  const safeBrokenLinks = typeof scan?.brokenLinks === 'number' ? scan.brokenLinks : 0;
 
   // ── Compute scores from websiteScan data (plan fields are often 0) ──
   const computedScores = useMemo(() => {
@@ -549,20 +556,20 @@ export default function SeoPlanDetail() {
             {/* Scan Summary */}
             <div style={{ ...cardStyle }}>
               <h3 style={{ ...sectionTitle }}>🔍 סריקה טכנית</h3>
-              {!plan.websiteScan ? (
+              {!scan ? (
                 <p style={{ fontSize: 13, color: C.textMuted }}>לא בוצעה סריקה</p>
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
                   {[
-                    { l: "SSL", v: plan.websiteScan.hasSSL ? "✓" : "���", ok: plan.websiteScan.hasSSL },
-                    { l: "מהירות", v: `${(plan.websiteScan.loadTimeMs / 1000).toFixed(1)}s`, ok: plan.websiteScan.loadTimeMs < 3000 },
-                    { l: "מובייל", v: plan.websiteScan.mobileOptimized ? "✓" : "✗", ok: plan.websiteScan.mobileOptimized },
-                    { l: "Sitemap", v: plan.websiteScan.hasSitemap ? "✓" : "✗", ok: plan.websiteScan.hasSitemap },
-                    { l: "Robots", v: plan.websiteScan.hasRobotsTxt ? "✓" : "✗", ok: plan.websiteScan.hasRobotsTxt },
-                    { l: "DA", v: `${plan.websiteScan.domainAuthority}`, ok: plan.websiteScan.domainAuthority > 20 },
-                    { l: "דפים", v: `${plan.websiteScan.totalPages}`, ok: true },
-                    { l: "שבורים", v: `${plan.websiteScan.brokenLinks}`, ok: plan.websiteScan.brokenLinks === 0 },
-                    { l: "Schema", v: plan.websiteScan.structuredData ? "✓" : "✗", ok: plan.websiteScan.structuredData },
+                    { l: "SSL", v: scan?.hasSSL ? "✓" : "���", ok: scan?.hasSSL },
+                    { l: "מהירות", v: `${(safeLoadTime / 1000).toFixed(1)}s`, ok: safeLoadTime < 3000 },
+                    { l: "מובייל", v: scan?.mobileOptimized ? "✓" : "✗", ok: scan?.mobileOptimized },
+                    { l: "Sitemap", v: scan?.hasSitemap ? "✓" : "✗", ok: scan?.hasSitemap },
+                    { l: "Robots", v: scan?.hasRobotsTxt ? "✓" : "✗", ok: scan?.hasRobotsTxt },
+                    { l: "DA", v: `${safeDa}`, ok: safeDa > 20 },
+                    { l: "דפים", v: `${safeTotalPages}`, ok: true },
+                    { l: "שבורים", v: `${safeBrokenLinks}`, ok: safeBrokenLinks === 0 },
+                    { l: "Schema", v: scan?.structuredData ? "✓" : "✗", ok: scan?.structuredData },
                   ].map((item, i) => (
                     <div key={i} style={{
                       padding: "10px 12px", borderRadius: 10, background: C.bg,
@@ -628,7 +635,7 @@ export default function SeoPlanDetail() {
                 {AI_ENGINES.map(eng => {
                   const total = (plan.visibilityResults || []).length;
                   const mentioned = (plan.visibilityResults || []).filter(vr =>
-                    vr.results.some(r => r.engine === eng && r.mentioned)
+                    (Array.isArray(vr.results) ? vr.results : []).some(r => r.engine === eng && r.mentioned)
                   ).length;
                   const pct = total > 0 ? Math.round((mentioned / total) * 100) : 0;
                   return (
@@ -1037,7 +1044,7 @@ export default function SeoPlanDetail() {
                     {AI_ENGINES.map(eng => {
                       const total = plan.visibilityResults.length;
                       const mentioned = plan.visibilityResults.filter(vr =>
-                        vr.results.some(r => r.engine === eng && r.mentioned)
+                        (Array.isArray(vr.results) ? vr.results : []).some(r => r.engine === eng && r.mentioned)
                       ).length;
                       return (
                         <div key={eng} style={{
@@ -1080,7 +1087,7 @@ export default function SeoPlanDetail() {
                               <span style={{ fontSize: 11, color: C.textMuted }}>{q?.intent || "—"}</span>
                             </td>
                             {AI_ENGINES.map(eng => {
-                              const res = vr.results.find(r => r.engine === eng);
+                              const res = (Array.isArray(vr.results) ? vr.results : []).find(r => r.engine === eng);
                               return (
                                 <td key={eng} style={{ ...tdStyle, textAlign: "center" }}>
                                   <div style={{
@@ -1135,7 +1142,7 @@ export default function SeoPlanDetail() {
                         marginBottom: 20, fontSize: 14, fontWeight: 600, color: C.text,
                       }}>{drawerQuery.query}</div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                        {drawerQuery.results.map(r => (
+                        {(Array.isArray(drawerQuery.results) ? drawerQuery.results : []).map(r => (
                           <div key={r.engine} style={{
                             display: "flex", alignItems: "center", gap: 14,
                             padding: "14px 16px", borderRadius: 12,
