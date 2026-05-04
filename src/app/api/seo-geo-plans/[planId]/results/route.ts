@@ -26,21 +26,7 @@ export async function GET(
       );
     }
 
-    // DEBUG: Log the plan structure to understand data shape
     const p = plan as any;
-    console.log('[RESULTS-DEBUG] Plan keys:', Object.keys(p));
-    console.log('[RESULTS-DEBUG] plan.websiteScan?', !!p.websiteScan);
-    console.log('[RESULTS-DEBUG] plan.websiteScan keys:', p.websiteScan ? Object.keys(p.websiteScan) : 'N/A');
-    console.log('[RESULTS-DEBUG] plan.websiteScan.aiQueries length:', p.websiteScan?.aiQueries?.length ?? 'N/A');
-    console.log('[RESULTS-DEBUG] plan.websiteScan.platformStatuses length:', p.websiteScan?.platformStatuses?.length ?? 'N/A');
-    console.log('[RESULTS-DEBUG] plan.aiQueries length:', p.aiQueries?.length ?? 'N/A');
-    console.log('[RESULTS-DEBUG] plan.visibilityResults length:', p.visibilityResults?.length ?? 'N/A');
-    if (p.websiteScan?.aiQueries?.length > 0) {
-      console.log('[RESULTS-DEBUG] First aiQuery sample:', JSON.stringify(p.websiteScan.aiQueries[0]));
-    }
-    if (p.websiteScan?.platformStatuses?.length > 0) {
-      console.log('[RESULTS-DEBUG] First platformStatus sample:', JSON.stringify(p.websiteScan.platformStatuses[0]));
-    }
 
     // Build platform summaries
     const summaries = buildPlatformSummaries(plan);
@@ -61,7 +47,6 @@ export async function GET(
     }
 
     // DEBUG: Include data shape info to troubleshoot zero results
-    const p = plan as any;
     const _debug = {
       planKeys: Object.keys(p),
       hasWebsiteScan: !!p.websiteScan,
