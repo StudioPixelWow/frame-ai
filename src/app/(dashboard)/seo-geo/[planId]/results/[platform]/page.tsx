@@ -215,6 +215,13 @@ export default function PlatformDetailPage() {
     toggleActionDropdown(resultId);
   };
 
+  // Extract the summary for THIS specific platform from the summaries array
+  const platformSummary = data?.summaries
+    ? (Array.isArray(data.summaries)
+        ? data.summaries.find((s: any) => s.platformId === platform)
+        : data.summaries)
+    : null;
+
   const getScanModeBadgeColor = (scanMode: ScanMode) => {
     switch (scanMode) {
       case 'real':
@@ -305,7 +312,7 @@ export default function PlatformDetailPage() {
                 שאילתות שנסרקו
               </p>
               <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 'bold', color: C.primary }}>
-                {data.summaries.totalQueries}
+                {platformSummary?.queriesScanned ?? 0}
               </p>
             </div>
             <div
@@ -320,7 +327,7 @@ export default function PlatformDetailPage() {
                 אזכורים
               </p>
               <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 'bold', color: C.success }}>
-                {data.summaries.totalMentions}
+                {platformSummary?.mentions ?? 0}
               </p>
             </div>
             <div
@@ -335,7 +342,7 @@ export default function PlatformDetailPage() {
                 נראות %
               </p>
               <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 'bold', color: C.warning }}>
-                {data.summaries.visibilityPercentage}%
+                {platformSummary?.visibilityPct ?? 0}%
               </p>
             </div>
             <div
@@ -361,7 +368,7 @@ export default function PlatformDetailPage() {
                   borderRadius: '0.25rem',
                 }}
               >
-                {getScanModeLabel(data.summaries.scanMode)}
+                {getScanModeLabel(platformSummary?.scanMode || 'unavailable')}
               </p>
             </div>
           </div>
@@ -371,7 +378,7 @@ export default function PlatformDetailPage() {
       {/* Scan Mode Banner */}
       {!loading && data && (
         <>
-          {data.summaries.scanMode === 'simulated' && (
+          {platformSummary?.scanMode === 'simulated' && (
             <div
               style={{
                 backgroundColor: C.warning,
@@ -388,7 +395,7 @@ export default function PlatformDetailPage() {
               ⚠️ סימולציה — לא נתונים אמיתיים
             </div>
           )}
-          {data.summaries.scanMode === 'unavailable' && (
+          {platformSummary?.scanMode === 'unavailable' && (
             <div
               style={{
                 backgroundColor: C.textMuted,
@@ -711,7 +718,7 @@ export default function PlatformDetailPage() {
                             <td style={tableCellStyle}>
                               {result.sources && result.sources.length > 0 ? result.sources.length : '—'}
                             </td>
-                            <td style={tableCellStyle}>{Math.round(result.confidence * 100)}%</td>
+                            <td style={tableCellStyle}>{Math.round(result.confidence)}%</td>
                           </>
                         )}
                         <td
@@ -871,7 +878,7 @@ export default function PlatformDetailPage() {
                                   ביטחון
                                 </p>
                                 <p style={{ margin: 0, color: C.text, fontSize: '0.875rem' }}>
-                                  {Math.round(result.evidence.confidence * 100)}%
+                                  {Math.round(result.evidence.confidence)}%
                                 </p>
                               </div>
                               <div>
