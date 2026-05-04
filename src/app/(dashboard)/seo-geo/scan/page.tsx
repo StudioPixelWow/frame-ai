@@ -415,31 +415,54 @@ function ScanPageInner() {
           },
         };
 
-        if (savedPlanId) {
-          // Update existing plan with new scan
-          await fetch(`/api/data/seo-plans/${savedPlanId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(planPayload),
-          });
-          console.log(`[PIXEL-SEO-SCAN-UI] PERSISTED updated planId=${savedPlanId}`);
-        } else {
-          // Create new plan
-          const saveRes = await fetch('/api/data/seo-plans', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(planPayload),
-          });
-          if (saveRes.ok) {
-            const saved = await saveRes.json();
-            const newId = saved.id || saved.planId;
-            if (newId) {
-              setSavedPlanId(newId);
-              console.log(`[PIXEL-SEO-SCAN-UI] PERSISTED new planId=${newId}`);
-            }
+        // Helper: attempt to save plan
+        const attemptSave = async (): Promise<string | null> => {
+          if (savedPlanId) {
+            await fetch(`/api/data/seo-plans/${savedPlanId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(planPayload),
+            });
+            return savedPlanId;
           } else {
-            console.warn(`[PIXEL-SEO-SCAN-UI] PERSIST_FAILED status=${saveRes.status}`);
+            const saveRes = await fetch('/api/data/seo-plans', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(planPayload),
+            });
+            if (saveRes.ok) {
+              const saved = await saveRes.json();
+              const newId = saved.id || saved.planId;
+              // Check if it's a real ID (not temp-xxx which means table is missing)
+              if (newId && !String(newId).startsWith('temp-')) return newId;
+            }
+            return null;
           }
+        };
+
+        // First attempt
+        let resultId = await attemptSave();
+
+        // If save failed or returned temp ID, auto-migrate and retry
+        if (!resultId) {
+          console.log('[PIXEL-SEO-SCAN-UI] Save failed — running auto-migration...');
+          try {
+            const migRes = await fetch('/api/seo/migrate');
+            const migData = await migRes.json();
+            console.log('[PIXEL-SEO-SCAN-UI] Migration result:', migData.summary);
+          } catch (migErr) {
+            console.warn('[PIXEL-SEO-SCAN-UI] Migration failed:', migErr);
+          }
+          // Wait a moment for table to be ready, then retry
+          await new Promise(r => setTimeout(r, 1500));
+          resultId = await attemptSave();
+        }
+
+        if (resultId) {
+          setSavedPlanId(resultId);
+          console.log(`[PIXEL-SEO-SCAN-UI] PERSISTED planId=${resultId}`);
+        } else {
+          console.warn('[PIXEL-SEO-SCAN-UI] PERSIST_FAILED after migration retry');
         }
       } catch (persistErr) {
         console.warn('[PIXEL-SEO-SCAN-UI] PERSIST_ERROR', persistErr);
