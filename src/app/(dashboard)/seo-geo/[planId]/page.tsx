@@ -149,44 +149,47 @@ function s(val: unknown): string {
 }
 
 /**
- * Deep-sanitize plan data: recursively convert any nested object in a "leaf"
- * position (where a primitive is expected) to a safe string.
- * This prevents React error #310 regardless of what shape the DB returns.
+ * Deep-sanitize plan data: recursively walk the entire object tree.
+ * Any plain object at a leaf position (not containing sub-objects/arrays)
+ * gets flattened to a string. This prevents React error #310.
  */
 function deepSanitize(obj: any, depth = 0): any {
-  if (depth > 10) return obj; // prevent infinite recursion
+  if (depth > 12) return typeof obj === 'object' ? JSON.stringify(obj) : obj;
   if (obj === null || obj === undefined) return obj;
   if (typeof obj !== 'object') return obj;
   if (obj instanceof Date) return obj.toISOString();
   if (Array.isArray(obj)) return obj.map(item => deepSanitize(item, depth + 1));
 
+  // EvidenceField pattern: { value, confidence, source } → flatten to value
+  if ('value' in obj && ('confidence' in obj || 'source' in obj)) {
+    return obj.value ?? '';
+  }
+
+  // Check if this object has any sub-objects or arrays (i.e., it's a "container")
+  const keys = Object.keys(obj);
+  const hasComplexChildren = keys.some(k => {
+    const v = obj[k];
+    return v !== null && v !== undefined && typeof v === 'object';
+  });
+
+  // If no complex children, it's a leaf object — flatten it
+  if (!hasComplexChildren && keys.length > 0 && keys.length <= 5) {
+    // Small leaf object with only primitive values — likely a data structure leaked as child
+    // Check if it looks like it should be a string/number
+    if (!('id' in obj) && !('type' in obj)) {
+      console.warn(`[SANITIZE] Flattening leaf object:`, obj);
+      // Try to extract a meaningful value
+      if ('label' in obj) return obj.label;
+      if ('name' in obj) return obj.name;
+      if ('text' in obj) return obj.text;
+      return JSON.stringify(obj);
+    }
+  }
+
+  // Recurse into all children
   const result: any = {};
-  for (const key of Object.keys(obj)) {
-    const v = obj[key];
-    if (v === null || v === undefined) { result[key] = v; continue; }
-    if (typeof v !== 'object') { result[key] = v; continue; }
-    if (v instanceof Date) { result[key] = v.toISOString(); continue; }
-    if (Array.isArray(v)) { result[key] = v.map((item: any) => deepSanitize(item, depth + 1)); continue; }
-
-    // EvidenceField pattern: { value, confidence, source } → flatten to value
-    if ('value' in v && ('confidence' in v || 'source' in v)) {
-      result[key] = v.value ?? '';
-      continue;
-    }
-
-    // Known nested objects that SHOULD stay as objects (scan data, etc.)
-    const keepAsObject = [
-      'websiteScan','websiteFacts','platformStatuses','metrics',
-      'issues','goals','insights','weeks','days','phases',
-      'visibilityResults','visibilityQueries','tasks','results',
-    ];
-    if (keepAsObject.includes(key)) {
-      result[key] = deepSanitize(v, depth + 1);
-    } else {
-      // Unknown object in a leaf position — flatten to string
-      console.warn(`[SANITIZE] Flattening unexpected object at key="${key}":`, v);
-      result[key] = JSON.stringify(v);
-    }
+  for (const key of keys) {
+    result[key] = deepSanitize(obj[key], depth + 1);
   }
   return result;
 }
