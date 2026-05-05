@@ -27,7 +27,7 @@ function hasEnv(key: string): boolean {
   return !!(process.env[key] && process.env[key]!.trim().length > 5);
 }
 
-async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 10000): Promise<Response> {
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 8000): Promise<Response> {
   const controller = new AbortController();
   const tid = setTimeout(() => controller.abort(), timeoutMs);
   try {

@@ -66,6 +66,10 @@ const INDUSTRY_KEYWORDS: Record<string, string[]> = {
   'beauty': ['salon', 'spa', 'beauty', 'hair', 'nails', 'skincare', 'makeup', 'esthetic'],
   'hospitality': ['hotel', 'resort', 'lodging', 'accommodation', 'inn', 'motel', 'bed and breakfast'],
   'nonprofit': ['nonprofit', 'charity', 'foundation', 'donation', 'volunteer', 'mission'],
+  'news_media': ['news', 'breaking', 'headlines', 'reporter', 'journalism', 'editorial', 'press', 'media', 'article', 'opinion', 'columnist'],
+  'sports': ['sport', 'football', 'soccer', 'basketball', 'tennis', 'league', 'match', 'score', 'team', 'player', 'championship', 'כדורגל', 'ספורט', 'כדורסל', 'מכבי', 'הפועל'],
+  'entertainment': ['entertainment', 'movie', 'film', 'music', 'concert', 'show', 'celebrity', 'tv', 'streaming'],
+  'finance': ['bank', 'insurance', 'investment', 'loan', 'mortgage', 'financial', 'credit', 'trading', 'stock'],
 };
 
 // ── Helper: Extract text from various sources ──────────────────────────────────
@@ -90,7 +94,7 @@ function extractPhoneNumber(text: string): string | undefined {
 function detectLocationFromText(text: string): string | undefined {
   // Look for common city/country patterns
   // This is basic; in production, use a proper geocoding service
-  const commonLocations = ['new york', 'los angeles', 'chicago', 'london', 'paris', 'tokyo', 'sydney', 'toronto', 'mexico', 'canada', 'usa', 'uk', 'france', 'germany', 'australia', 'california', 'florida', 'texas', 'new york city', 'san francisco'];
+  const commonLocations = ['new york', 'los angeles', 'chicago', 'london', 'paris', 'tokyo', 'sydney', 'toronto', 'mexico', 'canada', 'usa', 'uk', 'france', 'germany', 'australia', 'california', 'florida', 'texas', 'new york city', 'san francisco', 'israel', 'tel aviv', 'jerusalem', 'haifa', 'ישראל', 'תל אביב', 'ירושלים', 'חיפה', 'רמת גן', 'פתח תקווה', 'באר שבע', 'נתניה', 'הרצליה', 'רעננה', 'כפר סבא', 'אשדוד', 'חולון', 'בת ים'];
   const lowerText = normalizeText(text);
   for (const loc of commonLocations) {
     if (lowerText.includes(loc)) {
@@ -225,7 +229,7 @@ export function extractWebsiteFacts(
     detected_contact_details: contactField,
     confidence_score: confidenceScore,
     evidence_urls: evidenceUrls,
-    scan_mode: 'simulated', // No real scanner yet
+    scan_mode: 'real',
   };
 }
 

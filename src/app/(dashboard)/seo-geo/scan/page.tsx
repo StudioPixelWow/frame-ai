@@ -274,12 +274,12 @@ function ScanPageInner() {
         stages: stagesCopy,
         logs: logsCopy,
         metrics: {
-          pagesScanned: Math.min(idx * 2, scanType === 'deep' ? 30 : 8),
-          evidenceCount: Math.min(idx, 10),
-          confidenceScore: Math.min(idx * 10, 80),
+          pagesScanned: 0,
+          evidenceCount: 0,
+          confidenceScore: 0,
           scanDurationMs: Date.now() - startTimeRef.current,
-          platformsChecked: idx >= 7 ? 1 : 0,
-          unavailableResults: idx >= 7 ? 5 : 0,
+          platformsChecked: 0,
+          unavailableResults: 0,
         },
         platformStatuses: [
           { id: 'google_seo', name: 'Google SEO', icon: '🔍', status: platformApiStatus.google_seo ? (idx >= 8 ? 'completed' : idx >= 7 ? 'running' : 'waiting') : 'api_missing', queriesScanned: 0, mentionsFound: 0, scanMode: platformApiStatus.google_seo ? 'real' as const : 'unavailable' as const },
@@ -367,7 +367,7 @@ function ScanPageInner() {
         metrics: data.metrics || {
           pagesScanned: data.totalPages || data.scannedPages?.length || 0,
           evidenceCount: 0, confidenceScore: data.websiteFacts?.confidence_score || 0,
-          scanDurationMs: totalElapsed, platformsChecked: 1, unavailableResults: 5,
+          scanDurationMs: totalElapsed, platformsChecked: 0, unavailableResults: 0,
         },
         platformStatuses: data.platformStatuses || [],
         startedAt: new Date(startTimeRef.current).toISOString(),
@@ -824,14 +824,18 @@ function ScanPageInner() {
 
             {/* Metrics Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-              {[
-                { label: 'עמודים שנסרקו', value: job.metrics.pagesScanned, icon: '📄' },
-                { label: 'ראיות שנמצאו', value: job.metrics.evidenceCount, icon: '🔗' },
-                { label: 'ציון אמינות', value: `${job.metrics.confidenceScore}%`, icon: '🎯' },
-                { label: 'זמן סריקה', value: `${(elapsed / 1000).toFixed(0)}s`, icon: '⏱' },
-                { label: 'מנועים שנבדקו', value: job.metrics.platformsChecked, icon: '🔍' },
-                { label: 'תוצאות לא זמינות', value: job.metrics.unavailableResults, icon: '⚠' },
-              ].map((m, i) => (
+              {(() => {
+                const scanning = phase === 'scanning';
+                const dot = scanning ? '...' : '';
+                return [
+                  { label: 'עמודים שנסרקו', value: scanning ? `סורק${dot}` : job.metrics.pagesScanned, icon: '📄' },
+                  { label: 'ראיות שנמצאו', value: scanning ? `סורק${dot}` : job.metrics.evidenceCount, icon: '🔗' },
+                  { label: 'ציון אמינות', value: scanning ? `סורק${dot}` : `${job.metrics.confidenceScore}%`, icon: '🎯' },
+                  { label: 'זמן סריקה', value: `${(elapsed / 1000).toFixed(0)}s`, icon: '⏱' },
+                  { label: 'מנועים שנבדקו', value: scanning ? `סורק${dot}` : job.metrics.platformsChecked, icon: '🔍' },
+                  { label: 'תוצאות לא זמינות', value: scanning ? `סורק${dot}` : job.metrics.unavailableResults, icon: '⚠' },
+                ];
+              })().map((m, i) => (
                 <div key={i} style={{
                   background: C.card, borderRadius: 14, border: `1px solid ${C.border}`,
                   padding: '12px 14px', textAlign: 'center',

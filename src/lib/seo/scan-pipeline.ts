@@ -24,7 +24,9 @@ import { isPlatformAvailable, queryPlatform, type PlatformId as ApiPlatformId } 
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const FETCH_TIMEOUT_MS = 10_000;
+const FETCH_TIMEOUT_MS = 6_000;  // 6s per page (was 10s — reduced for Vercel 60s limit)
+const INTERNAL_PAGE_TIMEOUT_MS = 4_000; // 4s for internal pages (server already connected)
+const PAGE_FETCH_BUDGET_MS = 25_000; // Max 25s total for page fetching stage
 const MIN_SCAN_DURATION_MS = 5_000;
 const MIN_PAGES_SCANNED = 3;
 const MIN_EVIDENCE_COUNT = 5;
@@ -36,7 +38,7 @@ export type ScanType = 'quick' | 'deep';
 
 export function getScanConfig(type: ScanType) {
   return type === 'deep'
-    ? { maxPages: 50, label: 'סריקה עמוקה', labelEn: 'Deep Scan' }
+    ? { maxPages: 20, label: 'סריקה עמוקה', labelEn: 'Deep Scan' }
     : { maxPages: 8, label: 'סריקה מהירה', labelEn: 'Quick Scan' };
 }
 
@@ -317,11 +319,12 @@ export function parseHtml(html: string, pageUrl: string): ParsedPage {
 
 // ── Fetch Helpers ──────────────────────────────────────────────────────────────
 
-async function fetchPage(url: string): Promise<{ html: string | null; durationMs: number; status?: number }> {
+async function fetchPage(url: string, isInternal = false): Promise<{ html: string | null; durationMs: number; status?: number }> {
+  const timeout = isInternal ? INTERNAL_PAGE_TIMEOUT_MS : FETCH_TIMEOUT_MS;
   const start = Date.now();
   try {
     const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const tid = setTimeout(() => controller.abort(), timeout);
     const res = await fetch(url, {
       signal: controller.signal,
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PixelSEOScanner/1.0)' },
@@ -677,28 +680,44 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
     const stg4 = job.stages.find(s => s.stage === 'extract_content');
     if (stg4) { stg4.itemsTotal = pagesToVisit.length + 1; stg4.itemsProcessed = 1; }
 
-    for (let i = 0; i < pagesToVisit.length; i++) {
-      const pageUrl = pagesToVisit[i];
-      const { html: pageHtml, durationMs: pageLoad } = await fetchPage(pageUrl);
-      if (pageHtml) {
-        const parsed = parseHtml(pageHtml, pageUrl);
-        allParsed.push(parsed);
-        scannedPages.push({
-          url: pageUrl,
-          title: parsed.title || pageUrl,
-          missingMeta: !parsed.metaDescription,
-          missingH1: parsed.h1Tags.length === 0,
-          wordCount: parsed.wordCount,
-          hasSchema: parsed.hasSchema,
-          scannedAt: new Date().toISOString(),
-          loadTimeMs: pageLoad,
-        });
-        log(job, 'extract_content', `חולצו H1/H2 מ-${pageUrl.split('/').pop() || 'page'}`, 'success',
-          `${parsed.wordCount} מילים | ${pageLoad}ms`);
-      } else {
-        log(job, 'extract_content', `דף ${i + 2} נכשל`, 'error', pageUrl);
+    // Parallel page fetching with concurrency limit + time budget to avoid Vercel timeout
+    const CONCURRENCY = 5;
+    const fetchStart = Date.now();
+    let budgetExhausted = false;
+    for (let batch = 0; batch < pagesToVisit.length && !budgetExhausted; batch += CONCURRENCY) {
+      if (Date.now() - fetchStart > PAGE_FETCH_BUDGET_MS) {
+        log(job, 'extract_content', `תקציב זמן שליפה נגמר (${(PAGE_FETCH_BUDGET_MS / 1000).toFixed(0)}s), ממשיך עם ${scannedPages.length} דפים`, 'warning');
+        budgetExhausted = true;
+        break;
       }
-      if (stg4) stg4.itemsProcessed = i + 2;
+      const batchUrls = pagesToVisit.slice(batch, batch + CONCURRENCY);
+      const batchResults = await Promise.all(
+        batchUrls.map(async (pageUrl) => {
+          const { html: pageHtml, durationMs: pageLoad } = await fetchPage(pageUrl, true);
+          return { pageUrl, pageHtml, pageLoad };
+        })
+      );
+      for (const { pageUrl, pageHtml, pageLoad } of batchResults) {
+        if (pageHtml) {
+          const parsed = parseHtml(pageHtml, pageUrl);
+          allParsed.push(parsed);
+          scannedPages.push({
+            url: pageUrl,
+            title: parsed.title || pageUrl,
+            missingMeta: !parsed.metaDescription,
+            missingH1: parsed.h1Tags.length === 0,
+            wordCount: parsed.wordCount,
+            hasSchema: parsed.hasSchema,
+            scannedAt: new Date().toISOString(),
+            loadTimeMs: pageLoad,
+          });
+          log(job, 'extract_content', `חולצו H1/H2 מ-${pageUrl.split('/').pop() || 'page'}`, 'success',
+            `${parsed.wordCount} מילים | ${pageLoad}ms`);
+        } else {
+          log(job, 'extract_content', `דף נכשל`, 'error', pageUrl);
+        }
+      }
+      if (stg4) stg4.itemsProcessed = 1 + scannedPages.length;
       job.metrics.pagesScanned = scannedPages.length;
     }
 
