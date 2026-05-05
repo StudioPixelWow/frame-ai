@@ -513,16 +513,55 @@ export default function SeoPlanDetail() {
     );
   }
 
-  const status = STATUS_MAP[plan.status] || STATUS_MAP.draft;
-  const domain = plan.websiteUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "") || "—";
-  const progress = n(plan.totalTasks) > 0 ? Math.round((n(plan.completedTasks) / (n(plan.totalTasks) || 1)) * 100) : 0;
-  const createdDate = plan.createdAt ? new Date(plan.createdAt) : new Date();
+  // ── PRE-RENDER SAFETY: Deep-walk the ENTIRE plan and force every leaf to primitive ──
+  // This runs on every render and catches ANY object that survived all prior sanitization.
+  const safePlan = useMemo(() => {
+    if (!plan) return plan;
+    function forcePrimitive(obj: any, path: string, depth: number): any {
+      if (depth > 30 || obj === null || obj === undefined) return obj;
+      if (typeof obj !== 'object') return obj;
+      if (obj instanceof Date) return obj.toISOString();
+      if (Array.isArray(obj)) return obj.map((item, i) => forcePrimitive(item, `${path}[${i}]`, depth + 1));
+      const out: any = {};
+      for (const [k, v] of Object.entries(obj)) {
+        if (v === null || v === undefined || typeof v !== 'object') { out[k] = v; continue; }
+        if (v instanceof Date) { out[k] = (v as Date).toISOString(); continue; }
+        if (Array.isArray(v)) { out[k] = v.map((item, i) => forcePrimitive(item, `${path}.${k}[${i}]`, depth + 1)); continue; }
+        // Plain object — check if it's a container or a leaf
+        const isContainer = ['websiteScan','goals','insights','visibilityResults','visibilityQueries',
+          'weeks','phases','days','tasks','results','issues','aiQueries',
+          'scannedPages','platformStatuses','websiteFacts','metrics'].includes(k);
+        if (isContainer) {
+          out[k] = forcePrimitive(v, `${path}.${k}`, depth + 1);
+        } else if ('value' in (v as any)) {
+          // Evidence-pattern — extract value
+          console.warn(`[RENDER-SAFETY] Object at ${path}.${k} flattened:`, JSON.stringify(v).slice(0, 80));
+          const extracted = (v as any).value;
+          out[k] = (extracted !== null && extracted !== undefined && typeof extracted === 'object') ? String(extracted) : extracted;
+        } else {
+          // Unknown object — stringify it so React can render it
+          console.warn(`[RENDER-SAFETY] Unknown object at ${path}.${k} stringified:`, JSON.stringify(v).slice(0, 80));
+          out[k] = JSON.stringify(v);
+        }
+      }
+      return out;
+    }
+    return forcePrimitive(plan, 'plan', 0) as SeoPlan;
+  }, [plan]);
+
+  // Use safePlan for ALL rendering below
+  const p = safePlan!;
+
+  const status = STATUS_MAP[p.status] || STATUS_MAP.draft;
+  const domain = p.websiteUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "") || "—";
+  const progress = n(p.totalTasks) > 0 ? Math.round((n(p.completedTasks) / (n(p.totalTasks) || 1)) * 100) : 0;
+  const createdDate = p.createdAt ? new Date(typeof p.createdAt === 'string' ? p.createdAt : String(p.createdAt)) : new Date();
   const now = new Date();
   const daysSinceCreated = Math.max(0, Math.floor((now.getTime() - createdDate.getTime()) / 86400000));
   const daysRemaining = Math.max(0, 60 - daysSinceCreated);
 
   // Safe accessors for websiteScan (data from DB may have unexpected types)
-  const scan = plan.websiteScan || null;
+  const scan = p.websiteScan || null;
   const safeLoadTime = typeof scan?.loadTimeMs === 'number' ? scan.loadTimeMs : 0;
   const safeDa = typeof scan?.domainAuthority === 'number' ? scan.domainAuthority : 0;
   const safeTotalPages = typeof scan?.totalPages === 'number' ? scan.totalPages : 0;
@@ -530,8 +569,8 @@ export default function SeoPlanDetail() {
 
   // ── Compute scores from websiteScan data (plan fields are often 0) ──
   const computedScores = useMemo(() => {
-    const scan = plan?.websiteScan;
-    if (!scan) return { technical: n(plan?.technicalScore), visibility: n(plan?.visibilityScore), overall: n(plan?.overallScore) };
+    const scan = p?.websiteScan;
+    if (!scan) return { technical: n(p?.technicalScore), visibility: n(p?.visibilityScore), overall: n(p?.overallScore) };
 
     // Technical score: based on scan findings
     let tech = 50; // base
@@ -594,7 +633,7 @@ export default function SeoPlanDetail() {
                 }}>🔍</div>
                 <div>
                   <h1 style={{ fontSize: 22, fontWeight: 800, color: C.text, margin: 0 }}>
-                    {s(plan.clientName) || "תוכנית PIXEL SEO/GEO"}
+                    {s(p.clientName) || "תוכנית PIXEL SEO/GEO"}
                   </h1>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
                     <span style={{ fontSize: 13, color: C.textSecondary }}>🌐 {s(domain)}</span>
@@ -602,7 +641,7 @@ export default function SeoPlanDetail() {
                       fontSize: 11, fontWeight: 600, padding: "3px 12px", borderRadius: 8,
                       background: `${status.color}15`, color: status.color,
                     }}>{s(status.label)}</span>
-                    <span style={{ fontSize: 11, color: C.textMuted }}>נוצר {fmtDate(plan.createdAt)}</span>
+                    <span style={{ fontSize: 11, color: C.textMuted }}>נוצר {fmtDate(p.createdAt)}</span>
                   </div>
                 </div>
               </div>
@@ -623,7 +662,7 @@ export default function SeoPlanDetail() {
               >
                 <span style={{ fontSize: 13 }}>📄</span> {generatingReport ? "מייצר..." : "הפק דוח PDF"}
               </button>
-              {(!Array.isArray(plan.phases) || plan.phases.length === 0) && (
+              {(!Array.isArray(p.phases) || p.phases.length === 0) && (
                 <button
                   onClick={handleGenerate60DayPlan}
                   disabled={generatingPlan}
@@ -639,7 +678,7 @@ export default function SeoPlanDetail() {
                 </button>
               )}
               <button
-                onClick={() => router.push(`/seo-geo/${plan.id}/report?lang=he`)}
+                onClick={() => router.push(`/seo-geo/${p.id}/report?lang=he`)}
                 style={{
                   display: "flex", alignItems: "center", gap: 6, padding: "9px 18px",
                   background: "transparent", color: C.textSecondary,
@@ -688,7 +727,7 @@ export default function SeoPlanDetail() {
             { label: "SEO Score", value: `${computedScores.technical}%`, color: C.info, icon: "🔧", sub: "ציון טכני" },
             { label: "AI Visibility", value: `${computedScores.overall}%`, color: C.primary, icon: "📊", sub: "ציון כללי" },
             { label: "Progress", value: `${progress}%`, color: progress >= 60 ? C.success : C.warning, icon: "📈", sub: "התקדמות" },
-            { label: "Completed Tasks", value: `${n(plan.completedTasks)}`, color: C.success, icon: "✅", sub: `מתוך ${n(plan.totalTasks)}` },
+            { label: "Completed Tasks", value: `${n(p.completedTasks)}`, color: C.success, icon: "✅", sub: `מתוך ${n(p.totalTasks)}` },
             { label: "Days Remaining", value: `${daysRemaining}`, color: daysRemaining < 15 ? C.danger : C.primary, icon: "⏰", sub: `מתוך 60 יום` },
           ].map((kpi, i) => (
             <div key={i} style={{
@@ -743,11 +782,11 @@ export default function SeoPlanDetail() {
             {/* Goals */}
             <div style={{ ...cardStyle }}>
               <h3 style={{ ...sectionTitle }}>🎯 יעדים</h3>
-              {(!Array.isArray(plan.goals) || plan.goals.length === 0) ? (
+              {(!Array.isArray(p.goals) || p.goals.length === 0) ? (
                 <p style={{ fontSize: 13, color: C.textMuted }}>לא הוגדרו יעדים</p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {plan.goals.filter(g => g && g.selected).map(g => (
+                  {p.goals.filter(g => g && g.selected).map(g => (
                     <div key={g.id} style={{
                       display: "flex", alignItems: "center", gap: 12,
                       padding: "10px 14px", borderRadius: 12, background: C.bg,
@@ -805,11 +844,11 @@ export default function SeoPlanDetail() {
             {/* Insights SWOT */}
             <div style={{ ...cardStyle }}>
               <h3 style={{ ...sectionTitle }}>💡 תובנות</h3>
-              {(!Array.isArray(plan.insights) || plan.insights.length === 0) ? (
+              {(!Array.isArray(p.insights) || p.insights.length === 0) ? (
                 <p style={{ fontSize: 13, color: C.textMuted }}>אין תובנות</p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {plan.insights.slice(0, 6).map(ins => {
+                  {p.insights.slice(0, 6).map(ins => {
                     const catConfig: Record<string, { icon: string; color: string }> = {
                       strength: { icon: "💪", color: C.success },
                       opportunity: { icon: "🚀", color: C.primary },
@@ -846,13 +885,13 @@ export default function SeoPlanDetail() {
                   background: `linear-gradient(135deg, ${C.primary}, ${C.purple})`,
                   WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
                 }}>
-                  {n(plan.visibilityScore)}%
+                  {n(p.visibilityScore)}%
                 </div>
                 <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>ציון נראות כולל</div>
               </div>
               <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
                 {AI_ENGINES.map(eng => {
-                  const vrArr = Array.isArray(plan.visibilityResults) ? plan.visibilityResults : [];
+                  const vrArr = Array.isArray(p.visibilityResults) ? p.visibilityResults : [];
                   const total = vrArr.length;
                   const mentioned = vrArr.filter(vr =>
                     (Array.isArray(vr.results) ? vr.results : []).some(r => r.engine === eng && r.mentioned)
@@ -877,10 +916,10 @@ export default function SeoPlanDetail() {
         {activeTab === "plan" && (
           <div>
             {/* Phase + Day structure (new) */}
-            {Array.isArray(plan.phases) && plan.phases.length > 0 ? (
+            {Array.isArray(p.phases) && p.phases.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                {plan.phases.map(phase => {
-                  const phaseDays = (Array.isArray(plan.days) ? plan.days : []).filter(d => d.phase === phase.number);
+                {p.phases.map(phase => {
+                  const phaseDays = (Array.isArray(p.days) ? p.days : []).filter(d => d.phase === phase.number);
                   const phaseDone = phaseDays.flatMap(d => d.tasks).filter(t => t.status === "done").length;
                   const phaseTotal = phaseDays.flatMap(d => d.tasks).length;
                   const phasePct = phaseTotal > 0 ? Math.round((phaseDone / phaseTotal) * 100) : 0;
@@ -1007,9 +1046,9 @@ export default function SeoPlanDetail() {
                   );
                 })}
               </div>
-            ) : (Array.isArray(plan.weeks) && plan.weeks.length > 0) ? (
+            ) : (Array.isArray(p.weeks) && p.weeks.length > 0) ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                {plan.weeks.map(week => {
+                {p.weeks.map(week => {
                   const isExpanded = expandedWeeks.has(week.weekNumber);
                   const weekDone = week.tasks.filter(t => t.status === "done").length;
                   const weekTotal = week.tasks.length;
@@ -1246,7 +1285,7 @@ export default function SeoPlanDetail() {
         {/* ── AI RESULTS ── */}
         {activeTab === "ai" && (
           <div>
-            {(!Array.isArray(plan.visibilityResults) || plan.visibilityResults.length === 0) ? (
+            {(!Array.isArray(p.visibilityResults) || p.visibilityResults.length === 0) ? (
               <EmptyTab icon="🤖" text="אין תוצאות AI. חזור לאשף והרץ סריקת נראות." />
             ) : (
               <>
@@ -1257,13 +1296,13 @@ export default function SeoPlanDetail() {
                   display: "flex", alignItems: "center", gap: 32,
                 }}>
                   <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 52, fontWeight: 800 }}>{n(plan.visibilityScore)}%</div>
+                    <div style={{ fontSize: 52, fontWeight: 800 }}>{n(p.visibilityScore)}%</div>
                     <div style={{ fontSize: 14, opacity: 0.9 }}>ציון נראות AI</div>
                   </div>
                   <div style={{ flex: 1, display: "flex", gap: 12, flexWrap: "wrap" }}>
                     {AI_ENGINES.map(eng => {
-                      const total = plan.visibilityResults.length;
-                      const mentioned = plan.visibilityResults.filter(vr =>
+                      const total = p.visibilityResults.length;
+                      const mentioned = p.visibilityResults.filter(vr =>
                         (Array.isArray(vr.results) ? vr.results : []).some(r => r.engine === eng && r.mentioned)
                       ).length;
                       return (
@@ -1293,8 +1332,8 @@ export default function SeoPlanDetail() {
                       </tr>
                     </thead>
                     <tbody>
-                      {plan.visibilityResults.map((vr, i) => {
-                        const q = (Array.isArray(plan.visibilityQueries) ? plan.visibilityQueries : []).find(q => q.id === vr.queryId);
+                      {p.visibilityResults.map((vr, i) => {
+                        const q = (Array.isArray(p.visibilityQueries) ? p.visibilityQueries : []).find(q => q.id === vr.queryId);
                         return (
                           <tr key={vr.queryId} style={{ borderBottom: `1px solid ${C.borderLight}` }}>
                             <td style={tdStyle}>{s(vr.query)}</td>
@@ -1464,12 +1503,12 @@ export default function SeoPlanDetail() {
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <button
-                      onClick={() => router.push(`/seo-geo/${plan.id}/report?lang=he`)}
+                      onClick={() => router.push(`/seo-geo/${p.id}/report?lang=he`)}
                       style={{ ...smallBtnStyle }}
                     >👁️ צפה</button>
                     <button
                       onClick={() => {
-                        router.push(`/seo-geo/${plan.id}/report?lang=he`);
+                        router.push(`/seo-geo/${p.id}/report?lang=he`);
                         // The report viewer page has a print button for PDF export
                       }}
                       style={{ ...smallBtnStyle }}

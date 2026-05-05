@@ -1,12 +1,66 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { seoPlans } from '@/lib/db';
 
+/**
+ * SERVER-SIDE sanitization — ensures no {value, confidence, source} objects
+ * ever reach the client. This is the DEFINITIVE fix for React Error #310.
+ */
+const CONTAINER_KEYS = new Set([
+  'websiteScan','goals','insights','visibilityResults','visibilityQueries',
+  'weeks','phases','days','tasks','results','issues','aiQueries',
+  'scannedPages','platformStatuses','websiteFacts','metrics',
+  'h1Tags','h2Tags','schemaTypes','techStack',
+]);
+
+function serverSanitize(obj: any, depth = 0): any {
+  if (depth > 40) return typeof obj === 'object' ? JSON.stringify(obj) : obj;
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj !== 'object') return obj;
+  if (obj instanceof Date) return obj.toISOString();
+  if (Array.isArray(obj)) return obj.map(item => serverSanitize(item, depth + 1));
+
+  const result: any = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val === null || val === undefined || typeof val !== 'object') {
+      result[key] = val;
+    } else if (val instanceof Date) {
+      result[key] = (val as Date).toISOString();
+    } else if (Array.isArray(val)) {
+      result[key] = val.map(item => serverSanitize(item, depth + 1));
+    } else {
+      // It's a plain object
+      if (CONTAINER_KEYS.has(key)) {
+        // Recurse into container objects
+        result[key] = serverSanitize(val, depth + 1);
+      } else if ('value' in (val as any)) {
+        // Evidence-pattern object {value, confidence?, source?} — flatten to value
+        const v = (val as any).value;
+        result[key] = (v !== null && v !== undefined && typeof v === 'object') ? JSON.stringify(v) : v;
+      } else {
+        // Unknown object at a non-container key — check if it has renderable sub-objects
+        const hasNestedObjects = Object.values(val as any).some(
+          (v: any) => v !== null && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date)
+        );
+        if (hasNestedObjects) {
+          result[key] = serverSanitize(val, depth + 1);
+        } else {
+          // Flat object with only primitive values — stringify it
+          result[key] = JSON.stringify(val);
+        }
+      }
+    }
+  }
+  return result;
+}
+
 export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
     const item = await seoPlans.getByIdAsync(id);
     if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json(item);
+    // SERVER-SIDE sanitization — strip all evidence-pattern objects before sending to client
+    const sanitized = serverSanitize(JSON.parse(JSON.stringify(item)));
+    return NextResponse.json(sanitized);
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
   }
