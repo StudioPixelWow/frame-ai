@@ -469,7 +469,9 @@ export default function SeoPlanDetail() {
               tasks: w.tasks.map((t: any) => ({ ...t, status: t.status || "todo" })),
             }));
           }
-          setPlan(deepSanitize(refreshed));
+          const s1 = JSON.parse(JSON.stringify(refreshed));
+          const s2 = deepSanitize(s1);
+          setPlan(nuclearFlatten(s2));
           setActiveTab("plan");
         }
       } else {
@@ -1292,7 +1294,7 @@ export default function SeoPlanDetail() {
                     </thead>
                     <tbody>
                       {plan.visibilityResults.map((vr, i) => {
-                        const q = plan.visibilityQueries.find(q => q.id === vr.queryId);
+                        const q = (Array.isArray(plan.visibilityQueries) ? plan.visibilityQueries : []).find(q => q.id === vr.queryId);
                         return (
                           <tr key={vr.queryId} style={{ borderBottom: `1px solid ${C.borderLight}` }}>
                             <td style={tdStyle}>{s(vr.query)}</td>
