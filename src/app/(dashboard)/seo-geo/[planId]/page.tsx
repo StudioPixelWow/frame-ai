@@ -150,11 +150,11 @@ function s(val: unknown): string {
 
 /**
  * Deep-sanitize plan data: recursively walk the entire object tree.
- * Any plain object at a leaf position (not containing sub-objects/arrays)
- * gets flattened to a string. This prevents React error #310.
+ * Forces every value that will be rendered as a React child to be a primitive.
+ * This prevents React error #310.
  */
 function deepSanitize(obj: any, depth = 0): any {
-  if (depth > 12) return typeof obj === 'object' ? JSON.stringify(obj) : obj;
+  if (depth > 20) return typeof obj === 'object' ? JSON.stringify(obj) : obj;
   if (obj === null || obj === undefined) return obj;
   if (typeof obj !== 'object') return obj;
   if (obj instanceof Date) return obj.toISOString();
@@ -162,35 +162,51 @@ function deepSanitize(obj: any, depth = 0): any {
 
   // EvidenceField pattern: { value, confidence, source } → flatten to value
   if ('value' in obj && ('confidence' in obj || 'source' in obj)) {
-    return obj.value ?? '';
+    const v = obj.value;
+    return (v !== null && v !== undefined && typeof v === 'object') ? JSON.stringify(v) : (v ?? '');
   }
 
-  // Check if this object has any sub-objects or arrays (i.e., it's a "container")
   const keys = Object.keys(obj);
-  const hasComplexChildren = keys.some(k => {
-    const v = obj[k];
-    return v !== null && v !== undefined && typeof v === 'object';
-  });
 
-  // If no complex children, it's a leaf object — flatten it
-  if (!hasComplexChildren && keys.length > 0 && keys.length <= 5) {
-    // Small leaf object with only primitive values — likely a data structure leaked as child
-    // Check if it looks like it should be a string/number
-    if (!('id' in obj) && !('type' in obj)) {
-      console.warn(`[SANITIZE] Flattening leaf object:`, obj);
-      // Try to extract a meaningful value
-      if ('label' in obj) return obj.label;
-      if ('name' in obj) return obj.name;
-      if ('text' in obj) return obj.text;
-      return JSON.stringify(obj);
-    }
-  }
+  // Known "record" types that should be recursed into (have identifiable structure)
+  const isKnownContainer = keys.length > 5 || keys.includes('children') ||
+    (keys.includes('id') && keys.length > 3) ||
+    (keys.includes('tasks') || keys.includes('weeks') || keys.includes('days') ||
+     keys.includes('goals') || keys.includes('insights') || keys.includes('results') ||
+     keys.includes('visibilityResults') || keys.includes('visibilityQueries') ||
+     keys.includes('websiteScan') || keys.includes('phases'));
 
   // Recurse into all children
   const result: any = {};
   for (const key of keys) {
-    result[key] = deepSanitize(obj[key], depth + 1);
+    const val = obj[key];
+    if (val === null || val === undefined) {
+      result[key] = val;
+    } else if (typeof val !== 'object') {
+      result[key] = val;
+    } else if (val instanceof Date) {
+      result[key] = val.toISOString();
+    } else if (Array.isArray(val)) {
+      result[key] = val.map(item => deepSanitize(item, depth + 1));
+    } else {
+      // It's a plain object — recurse
+      result[key] = deepSanitize(val, depth + 1);
+    }
   }
+
+  // If this object looks like a stray leaf (not a known container and has few keys),
+  // check all its values are primitives. If so, it might accidentally be rendered as a child.
+  if (!isKnownContainer && keys.length <= 5 && keys.length > 0) {
+    const allPrimitive = keys.every(k => {
+      const v = result[k];
+      return v === null || v === undefined || typeof v !== 'object';
+    });
+    if (allPrimitive) {
+      // Log for debugging
+      console.warn(`[SANITIZE] Potential leaf object at depth ${depth}:`, keys);
+    }
+  }
+
   return result;
 }
 
@@ -219,18 +235,41 @@ export default function SeoPlanDetail() {
         if (res.ok) {
           const data = await res.json();
 
-          // ── DIAGNOSTIC: Log any top-level field that is an unexpected object ──
+          // ── FORCE all top-level fields to be actual primitives ──
           const primitiveFields = ['id','clientId','clientName','websiteUrl','status',
             'overallScore','technicalScore','contentScore','visibilityScore',
             'totalTasks','completedTasks','createdAt','updatedAt','generatedAt'];
           for (const f of primitiveFields) {
             const v = data[f];
             if (v !== null && v !== undefined && typeof v === 'object') {
-              console.error(`[SEO-PLAN-DETAIL] ⚠️ FIELD "${f}" is an object instead of primitive:`, v);
-              // Auto-fix: flatten to safe value
-              if (f.includes('Score') || f.includes('Tasks')) data[f] = 0;
-              else if (f.includes('At') || f.includes('at')) data[f] = typeof v === 'object' ? JSON.stringify(v) : '';
-              else data[f] = typeof v === 'object' ? JSON.stringify(v) : '';
+              console.error(`[SEO-PLAN-DETAIL] ⚠️ FIELD "${f}" is an object instead of primitive:`, JSON.stringify(v));
+              // Extract value from EvidenceField pattern
+              if ('value' in v) { data[f] = v.value ?? ''; continue; }
+              if (f.includes('Score') || f.includes('Tasks')) { data[f] = Number(v) || 0; continue; }
+              data[f] = JSON.stringify(v);
+            }
+          }
+
+          // Force scan sub-fields to primitives too
+          if (data.websiteScan && typeof data.websiteScan === 'object') {
+            const scan = data.websiteScan;
+            const scanPrimitives = ['url','scannedAt','metaTitle','metaDescription','scanType','scan_mode','cmsDetected'];
+            const scanBooleans = ['hasSSL','mobileOptimized','hasRobotsTxt','hasSitemap','structuredData','openGraph','canonicalTags'];
+            const scanNumbers = ['loadTimeMs','totalPages','indexedPages','brokenLinks','domainAuthority','scanDuration'];
+            for (const f of scanPrimitives) {
+              if (scan[f] !== null && scan[f] !== undefined && typeof scan[f] === 'object') {
+                scan[f] = 'value' in scan[f] ? String(scan[f].value ?? '') : JSON.stringify(scan[f]);
+              }
+            }
+            for (const f of scanBooleans) {
+              if (scan[f] !== null && scan[f] !== undefined && typeof scan[f] === 'object') {
+                scan[f] = 'value' in scan[f] ? Boolean(scan[f].value) : false;
+              }
+            }
+            for (const f of scanNumbers) {
+              if (scan[f] !== null && scan[f] !== undefined && typeof scan[f] === 'object') {
+                scan[f] = 'value' in scan[f] ? Number(scan[f].value) || 0 : 0;
+              }
             }
           }
 

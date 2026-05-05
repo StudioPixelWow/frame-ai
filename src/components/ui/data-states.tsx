@@ -194,6 +194,8 @@ interface ErrorBoundaryState {
 const RECOVERABLE_ERROR_PATTERNS = [
   "reading 'stage'",     // webpack tapable hook hydration artifact
   "reading 'default'",   // occasional SSR mismatch
+  "error #310",          // Objects as React children — retry after sanitize
+  "Minified React error #310",
 ];
 
 function isRecoverableError(error: Error | null): boolean {
