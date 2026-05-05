@@ -141,11 +141,23 @@ function s(val: unknown): string {
   if (typeof val === 'number' || typeof val === 'boolean') return String(val);
   if (val instanceof Date) return val.toISOString();
   if (typeof val === 'object') {
-    // EvidenceField pattern: { value, confidence, source }
     if ('value' in (val as any)) return String((val as any).value ?? '');
+    if ('label' in (val as any)) return String((val as any).label ?? '');
+    if ('name' in (val as any)) return String((val as any).name ?? '');
     return JSON.stringify(val);
   }
   return String(val);
+}
+
+/** Force any value to a number. Objects get 0. */
+function n(val: unknown): number {
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') return Number(val) || 0;
+  if (val !== null && val !== undefined && typeof val === 'object') {
+    if ('value' in (val as any)) return Number((val as any).value) || 0;
+    return 0;
+  }
+  return Number(val) || 0;
 }
 
 /**
@@ -447,7 +459,7 @@ export default function SeoPlanDetail() {
 
   const status = STATUS_MAP[plan.status] || STATUS_MAP.draft;
   const domain = plan.websiteUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "") || "—";
-  const progress = (plan.totalTasks || 0) > 0 ? Math.round(((plan.completedTasks || 0) / (plan.totalTasks || 1)) * 100) : 0;
+  const progress = n(plan.totalTasks) > 0 ? Math.round((n(plan.completedTasks) / (n(plan.totalTasks) || 1)) * 100) : 0;
   const createdDate = plan.createdAt ? new Date(plan.createdAt) : new Date();
   const now = new Date();
   const daysSinceCreated = Math.max(0, Math.floor((now.getTime() - createdDate.getTime()) / 86400000));
@@ -463,33 +475,33 @@ export default function SeoPlanDetail() {
   // ── Compute scores from websiteScan data (plan fields are often 0) ──
   const computedScores = useMemo(() => {
     const scan = plan?.websiteScan;
-    if (!scan) return { technical: plan?.technicalScore || 0, visibility: plan?.visibilityScore || 0, overall: plan?.overallScore || 0 };
+    if (!scan) return { technical: n(plan?.technicalScore), visibility: n(plan?.visibilityScore), overall: n(plan?.overallScore) };
 
     // Technical score: based on scan findings
     let tech = 50; // base
-    if (scan.hasSSL) tech += 10;
-    if (scan.mobileOptimized) tech += 10;
-    if (scan.hasRobotsTxt) tech += 5;
-    if (scan.hasSitemap) tech += 5;
-    if (scan.structuredData) tech += 5;
-    if (scan.metaTitle) tech += 5;
-    if (scan.metaDescription) tech += 5;
-    if (scan.loadTimeMs && scan.loadTimeMs < 3000) tech += 5;
-    const issueCount = scan.issues?.length || 0;
+    if (scan.hasSSL === true) tech += 10;
+    if (scan.mobileOptimized === true) tech += 10;
+    if (scan.hasRobotsTxt === true) tech += 5;
+    if (scan.hasSitemap === true) tech += 5;
+    if (scan.structuredData === true) tech += 5;
+    if (typeof scan.metaTitle === 'string' && scan.metaTitle) tech += 5;
+    if (typeof scan.metaDescription === 'string' && scan.metaDescription) tech += 5;
+    if (typeof scan.loadTimeMs === 'number' && scan.loadTimeMs < 3000) tech += 5;
+    const issueCount = Array.isArray(scan.issues) ? scan.issues.length : 0;
     tech = Math.max(0, Math.min(100, tech - issueCount * 3));
 
     // Visibility score: based on AI queries
-    const aiQueries = scan.aiQueries || [];
-    const found = aiQueries.filter((q: any) => q.found).length;
-    const vis = aiQueries.length > 0 ? Math.round((found / aiQueries.length) * 100) : (plan?.visibilityScore || 0);
+    const aiQueries = Array.isArray(scan.aiQueries) ? scan.aiQueries : [];
+    const found = aiQueries.filter((q: any) => q.found === true).length;
+    const vis = aiQueries.length > 0 ? Math.round((found / aiQueries.length) * 100) : n(plan?.visibilityScore);
 
     // Overall = weighted average
     const overall = Math.round(tech * 0.4 + vis * 0.6);
 
     return {
-      technical: plan?.technicalScore || tech,
-      visibility: plan?.visibilityScore || vis,
-      overall: plan?.overallScore || overall,
+      technical: n(plan?.technicalScore) || tech,
+      visibility: n(plan?.visibilityScore) || vis,
+      overall: n(plan?.overallScore) || overall,
     };
   }, [plan]);
 
@@ -620,7 +632,7 @@ export default function SeoPlanDetail() {
             { label: "SEO Score", value: `${computedScores.technical}%`, color: C.info, icon: "🔧", sub: "ציון טכני" },
             { label: "AI Visibility", value: `${computedScores.overall}%`, color: C.primary, icon: "📊", sub: "ציון כללי" },
             { label: "Progress", value: `${progress}%`, color: progress >= 60 ? C.success : C.warning, icon: "📈", sub: "התקדמות" },
-            { label: "Completed Tasks", value: `${plan.completedTasks || 0}`, color: C.success, icon: "���", sub: `מתוך ${plan.totalTasks || 0}` },
+            { label: "Completed Tasks", value: `${n(plan.completedTasks)}`, color: C.success, icon: "✅", sub: `מתוך ${n(plan.totalTasks)}` },
             { label: "Days Remaining", value: `${daysRemaining}`, color: daysRemaining < 15 ? C.danger : C.primary, icon: "⏰", sub: `מתוך 60 יום` },
           ].map((kpi, i) => (
             <div key={i} style={{
