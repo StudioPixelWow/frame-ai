@@ -108,7 +108,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "plan", label: "תוכנית 60 יום", icon: "📅" },
   { id: "tasks", label: "משימות", icon: "✅" },
   { id: "ai", label: "תוצאות AI", icon: "🤖" },
-  { id: "results", label: "תוצאות ��נראות", icon: "🔎" },
+  { id: "results", label: "תוצאות נראות", icon: "🔎" },
   { id: "competitors", label: "מתחרים", icon: "🏆" },
   { id: "gaps", label: "פערי תוכן", icon: "📝" },
   { id: "reports", label: "דוחות", icon: "📄" },
@@ -568,12 +568,12 @@ export default function SeoPlanDetail() {
           display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 14, marginBottom: 24,
         }}>
           {[
-            { label: "GEO Score", value: `${computedScores.visibility}%`, color: C.purple, icon: "🤖", sub: "נראות במנועי AI" },
-            { label: "SEO Score", value: `${computedScores.technical}%`, color: C.info, icon: "🔧", sub: "ציון טכני" },
-            { label: "AI Visibility", value: `${computedScores.overall}%`, color: C.primary, icon: "📊", sub: "ציון כללי" },
-            { label: "Progress", value: `${progress}%`, color: progress >= 60 ? C.success : C.warning, icon: "📈", sub: "התקדמות" },
-            { label: "Completed Tasks", value: `${n(p.completedTasks)}`, color: C.success, icon: "✅", sub: `מתוך ${n(p.totalTasks)}` },
-            { label: "Days Remaining", value: `${daysRemaining}`, color: daysRemaining < 15 ? C.danger : C.primary, icon: "⏰", sub: `מתוך 60 יום` },
+            { label: "ציון GEO", value: `${computedScores.visibility}%`, color: C.purple, icon: "🤖", sub: "נראות במנועי AI" },
+            { label: "ציון SEO", value: `${computedScores.technical}%`, color: C.info, icon: "🔧", sub: "ציון טכני" },
+            { label: "נראות AI", value: `${computedScores.overall}%`, color: C.primary, icon: "📊", sub: "ציון כללי" },
+            { label: "התקדמות", value: `${progress}%`, color: progress >= 60 ? C.success : C.warning, icon: "📈", sub: "התקדמות" },
+            { label: "משימות שהושלמו", value: `${n(p.completedTasks)}`, color: C.success, icon: "✅", sub: `מתוך ${n(p.totalTasks)}` },
+            { label: "ימים נותרו", value: `${daysRemaining}`, color: daysRemaining < 15 ? C.danger : C.primary, icon: "⏰", sub: `מתוך 60 יום` },
           ].map((kpi, i) => (
             <div key={i} style={{
               background: C.card, borderRadius: 18, border: `1px solid ${C.border}`,
@@ -797,7 +797,7 @@ export default function SeoPlanDetail() {
                             שלב {s(phase.number)}: {s(phase.name)}
                           </div>
                           <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                            {s(phase.focus)} · {phaseDone}/{phaseTotal} tasks · Days {s(phase.days?.[0])}-{s(phase.days?.[1])}
+                            {s(phase.focus)} · {phaseDone}/{phaseTotal} משימות · ימים {s(phase.days?.[0])}-{s(phase.days?.[1])}
                           </div>
                         </div>
                         {/* Mini progress */}
