@@ -161,116 +161,40 @@ function n(val: unknown): number {
 }
 
 /**
- * NUCLEAR deep-sanitize: walk the ENTIRE plan object and force every single value
- * to a primitive. Objects with a "value" key are ALWAYS flattened to that value
- * regardless of how many other keys they have. This prevents React error #310.
+ * Recursive sanitization: walk the entire object tree and flatten evidence patterns.
+ * No whitelist. Recurses into every key on every object.
+ * Evidence patterns {value, confidence?, source?} are flattened to their primitive value.
+ * After recursion into plain objects, the object itself is returned (needed for data structure).
+ * Arrays are always recursed.
+ * Primitives and Dates are returned as-is (or as strings for Dates).
  */
-function deepSanitize(obj: any): any {
-  return _sanitize(obj, 0);
-}
+function nuke(val: any, depth: number): any {
+  if (depth > 50) return typeof val === 'string' ? val : JSON.stringify(val ?? '');
+  if (val === null || val === undefined) return val;
+  if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') return val;
+  if (val instanceof Date) return val.toISOString();
 
-/** Known container keys whose OBJECT structure should be preserved (they hold record-like data) */
-const CONTAINER_KEYS = new Set([
-  'websiteScan','goals','insights','visibilityResults','visibilityQueries',
-  'weeks','phases','days','tasks','results','issues','aiQueries',
-]);
+  // Arrays: always recurse into each element
+  if (Array.isArray(val)) return val.map((item) => nuke(item, depth + 1));
 
-function _sanitize(obj: any, depth: number): any {
-  if (depth > 30) return typeof obj === 'object' ? JSON.stringify(obj) : obj;
-  if (obj === null || obj === undefined) return obj;
-  if (typeof obj !== 'object') return obj;
-  if (obj instanceof Date) return obj.toISOString();
-
-  // Arrays: recurse into each item
-  if (Array.isArray(obj)) return obj.map(item => _sanitize(item, depth + 1));
-
-  // ANY object with a 'value' key → flatten to the primitive value (no exceptions)
-  if ('value' in obj) {
-    const v = obj.value;
-    if (v === null || v === undefined) return '';
-    if (typeof v === 'object') return JSON.stringify(v);
-    return v;
-  }
-
-  // Object without 'value' key → recurse into fields
-  const result: any = {};
-  for (const key of Object.keys(obj)) {
-    const val = obj[key];
-    if (val === null || val === undefined) {
-      result[key] = val;
-    } else if (typeof val !== 'object') {
-      result[key] = val;
-    } else if (val instanceof Date) {
-      result[key] = val.toISOString();
-    } else if (Array.isArray(val)) {
-      result[key] = val.map(item => _sanitize(item, depth + 1));
-    } else if ('value' in val) {
-      // ANY nested object with 'value' → flatten immediately
-      const v = val.value;
-      result[key] = (v !== null && v !== undefined && typeof v === 'object') ? JSON.stringify(v) : (v ?? '');
-    } else if (CONTAINER_KEYS.has(key)) {
-      // Known container — recurse to sanitize its children
-      result[key] = _sanitize(val, depth + 1);
-    } else {
-      // Unknown object without 'value' key — recurse but check result
-      const sanitized = _sanitize(val, depth + 1);
-      // If after recursion it's still a non-array object, stringify it (safety net)
-      if (sanitized !== null && typeof sanitized === 'object' && !Array.isArray(sanitized)) {
-        // Keep it as an object only if it has meaningful keys
-        const sKeys = Object.keys(sanitized);
-        if (sKeys.length === 0) {
-          result[key] = '';
-        } else {
-          result[key] = sanitized;
-        }
-      } else {
-        result[key] = sanitized;
-      }
+  // Plain object: check for evidence pattern first
+  if (typeof val === 'object') {
+    // Evidence pattern shortcut: {value, confidence?, source?}
+    if ('value' in val && ('confidence' in val || 'source' in val)) {
+      const extracted = val.value;
+      return (extracted !== null && extracted !== undefined && typeof extracted === 'object')
+        ? JSON.stringify(extracted) : extracted;
     }
-  }
-  return result;
-}
 
-/**
- * ABSOLUTE LAST safety pass: walk the entire plan tree and ensure NO plain object
- * ends up as a value that could be rendered as a React child.
- * Arrays of records are left as-is (they contain container objects for goals, tasks, etc.)
- * but any LEAF value that is a plain object is forcibly stringified.
- */
-function nuclearFlatten(obj: any, path = ''): any {
-  if (obj === null || obj === undefined) return obj;
-  if (typeof obj !== 'object') return obj;
-  if (obj instanceof Date) return obj.toISOString();
-  if (Array.isArray(obj)) return obj.map((item, i) => nuclearFlatten(item, `${path}[${i}]`));
-
-  const result: any = {};
-  for (const [key, val] of Object.entries(obj)) {
-    if (val === null || val === undefined || typeof val !== 'object') {
-      result[key] = val;
-    } else if (val instanceof Date) {
-      result[key] = (val as Date).toISOString();
-    } else if (Array.isArray(val)) {
-      result[key] = val.map((item, i) => nuclearFlatten(item, `${path}.${key}[${i}]`));
-    } else {
-      // Plain object — should it be kept as a container or flattened?
-      if (CONTAINER_KEYS.has(key)) {
-        result[key] = nuclearFlatten(val, `${path}.${key}`);
-      } else {
-        // Check if this object has any sub-objects (making it a record)
-        const hasSubObjects = Object.values(val).some(
-          v => v !== null && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date)
-        );
-        if (hasSubObjects) {
-          // Record-like — recurse
-          result[key] = nuclearFlatten(val, `${path}.${key}`);
-        } else {
-          // Leaf object with only primitive values — keep as record
-          result[key] = val;
-        }
-      }
+    // NOT an evidence pattern: recurse into every key, then return the recursed object
+    const out: any = {};
+    for (const [k, v] of Object.entries(val)) {
+      out[k] = nuke(v, depth + 1);
     }
+    return out;
   }
-  return result;
+
+  return String(val);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -298,45 +222,7 @@ export default function SeoPlanDetail() {
         if (res.ok) {
           const data = await res.json();
 
-          // ── FORCE all top-level fields to be actual primitives ──
-          const primitiveFields = ['id','clientId','clientName','websiteUrl','status',
-            'overallScore','technicalScore','contentScore','visibilityScore',
-            'totalTasks','completedTasks','createdAt','updatedAt','generatedAt'];
-          for (const f of primitiveFields) {
-            const v = data[f];
-            if (v !== null && v !== undefined && typeof v === 'object') {
-              console.error(`[SEO-PLAN-DETAIL] ⚠️ FIELD "${f}" is an object instead of primitive:`, JSON.stringify(v));
-              // Extract value from EvidenceField pattern
-              if ('value' in v) { data[f] = v.value ?? ''; continue; }
-              if (f.includes('Score') || f.includes('Tasks')) { data[f] = Number(v) || 0; continue; }
-              data[f] = JSON.stringify(v);
-            }
-          }
-
-          // Force scan sub-fields to primitives too
-          if (data.websiteScan && typeof data.websiteScan === 'object') {
-            const scan = data.websiteScan;
-            const scanPrimitives = ['url','scannedAt','metaTitle','metaDescription','scanType','scan_mode','cmsDetected'];
-            const scanBooleans = ['hasSSL','mobileOptimized','hasRobotsTxt','hasSitemap','structuredData','openGraph','canonicalTags'];
-            const scanNumbers = ['loadTimeMs','totalPages','indexedPages','brokenLinks','domainAuthority','scanDuration'];
-            for (const f of scanPrimitives) {
-              if (scan[f] !== null && scan[f] !== undefined && typeof scan[f] === 'object') {
-                scan[f] = 'value' in scan[f] ? String(scan[f].value ?? '') : JSON.stringify(scan[f]);
-              }
-            }
-            for (const f of scanBooleans) {
-              if (scan[f] !== null && scan[f] !== undefined && typeof scan[f] === 'object') {
-                scan[f] = 'value' in scan[f] ? Boolean(scan[f].value) : false;
-              }
-            }
-            for (const f of scanNumbers) {
-              if (scan[f] !== null && scan[f] !== undefined && typeof scan[f] === 'object') {
-                scan[f] = 'value' in scan[f] ? Number(scan[f].value) || 0 : 0;
-              }
-            }
-          }
-
-          // Normalize task statuses
+          // Normalize task statuses in weeks/phases
           if (data.weeks) {
             data.weeks = (Array.isArray(data.weeks) ? data.weeks : []).map((w: PlanWeek) => ({
               ...w,
@@ -344,28 +230,9 @@ export default function SeoPlanDetail() {
             }));
           }
 
-          // Ensure array fields are actually arrays
-          if (data.goals && !Array.isArray(data.goals)) { console.error('[SEO-PLAN-DETAIL] goals is not array:', data.goals); data.goals = []; }
-          if (data.insights && !Array.isArray(data.insights)) { console.error('[SEO-PLAN-DETAIL] insights is not array:', data.insights); data.insights = []; }
-          if (data.visibilityResults && !Array.isArray(data.visibilityResults)) { console.error('[SEO-PLAN-DETAIL] visibilityResults is not array:', data.visibilityResults); data.visibilityResults = []; }
-          if (data.visibilityQueries && !Array.isArray(data.visibilityQueries)) { console.error('[SEO-PLAN-DETAIL] visibilityQueries is not array:', data.visibilityQueries); data.visibilityQueries = []; }
-
-          // Nuclear sanitization: JSON round-trip + deepSanitize + nuclearFlatten
-          const step1 = JSON.parse(JSON.stringify(data));
-          const step2 = deepSanitize(step1);
-          const final = nuclearFlatten(step2);
-
-          // Absolute last guard: verify no top-level value is a non-array object
-          for (const [k, v] of Object.entries(final)) {
-            if (v !== null && v !== undefined && typeof v === 'object' && !Array.isArray(v)) {
-              if (!CONTAINER_KEYS.has(k)) {
-                console.error(`[SEO-PLAN-DETAIL] ⚠️ STILL OBJECT at key "${k}" after nuclear sanitize:`, JSON.stringify(v).slice(0, 100));
-                (final as any)[k] = 'value' in (v as any) ? String((v as any).value ?? '') : '';
-              }
-            }
-          }
-          console.log('[SEO-PLAN-DETAIL] Sanitized plan keys:', Object.keys(final));
-          setPlan(final);
+          // Sanitize: single pass through entire object tree
+          const sanitized = nuke(data, 0);
+          setPlan(sanitized as SeoPlan);
         }
       } catch (e) {
         console.error("Failed to load plan:", e);
@@ -476,9 +343,8 @@ export default function SeoPlanDetail() {
               tasks: w.tasks.map((t: any) => ({ ...t, status: t.status || "todo" })),
             }));
           }
-          const s1 = JSON.parse(JSON.stringify(refreshed));
-          const s2 = deepSanitize(s1);
-          setPlan(nuclearFlatten(s2));
+          const sanitized = nuke(refreshed, 0);
+          setPlan(sanitized as SeoPlan);
           setActiveTab("plan");
         }
       } else {
@@ -520,32 +386,9 @@ export default function SeoPlanDetail() {
     );
   }
 
-  // ── PRE-RENDER SAFETY: Deep-walk the ENTIRE plan, recurse into ALL objects (no whitelist) ──
-  // Every leaf MUST be a primitive. No whitelist. No exceptions. Recurse everything.
+  // ── PRE-RENDER SAFETY: ensure plan is fully sanitized (no objects as children) ──
   const safePlan = useMemo(() => {
     if (!plan) return plan;
-    function nuke(val: any, depth: number): any {
-      if (depth > 50) return typeof val === 'string' ? val : JSON.stringify(val ?? '');
-      if (val === null || val === undefined) return val;
-      if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') return val;
-      if (val instanceof Date) return val.toISOString();
-      if (Array.isArray(val)) return val.map((item, i) => nuke(item, depth + 1));
-      // It's a plain object — ALWAYS recurse, no whitelist
-      if (typeof val === 'object') {
-        // Evidence-pattern shortcut: {value, confidence?, source?}
-        if ('value' in val && ('confidence' in val || 'source' in val)) {
-          const extracted = val.value;
-          return (extracted !== null && extracted !== undefined && typeof extracted === 'object')
-            ? JSON.stringify(extracted) : extracted;
-        }
-        const out: any = {};
-        for (const [k, v] of Object.entries(val)) {
-          out[k] = nuke(v, depth + 1);
-        }
-        return out;
-      }
-      return String(val);
-    }
     return nuke(plan, 0) as SeoPlan;
   }, [plan]);
 
