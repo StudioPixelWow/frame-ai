@@ -89,6 +89,17 @@ const C = {
 
 const AI_ENGINES = ["ChatGPT", "Gemini", "Perplexity", "Claude", "Copilot"];
 
+const PLATFORM_DISPLAY: Record<string, { name: string; icon: string }> = {
+  google_seo: { name: "Google SEO", icon: "🔍" },
+  google_ai_overview: { name: "AI Overview", icon: "✨" },
+  gemini: { name: "Gemini", icon: "💎" },
+  chatgpt: { name: "ChatGPT", icon: "🤖" },
+  claude: { name: "Claude", icon: "🧠" },
+  perplexity: { name: "Perplexity", icon: "🔮" },
+};
+
+const AI_PLATFORM_IDS = ["chatgpt", "gemini", "perplexity", "claude", "google_ai_overview"] as const;
+
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
   draft: { label: "טיוטה", color: "#6B7280" },
   scanning: { label: "בסריקה", color: C.info },
@@ -507,7 +518,7 @@ export default function SeoPlanDetail() {
               >
                 <span style={{ fontSize: 13 }}>📄</span> {generatingReport ? "מייצר..." : "הפק דוח PDF"}
               </button>
-              {(!Array.isArray(p.phases) || p.phases.length === 0) && (
+              {(!Array.isArray(p.days) || p.days.length === 0) && (
                 <button
                   onClick={handleGenerate60DayPlan}
                   disabled={generatingPlan}
@@ -760,8 +771,37 @@ export default function SeoPlanDetail() {
         {/* ── 60-DAY PLAN ── */}
         {activeTab === "plan" && (
           <div>
+            {/* Show generate button if no days exist */}
+            {(!Array.isArray(p.days) || p.days.length === 0) && (
+              <div style={{
+                background: C.card, borderRadius: 20, border: `1px solid ${C.border}`,
+                padding: "32px 24px", marginBottom: 20, textAlign: "center",
+                boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+              }}>
+                <div style={{ fontSize: 42, marginBottom: 12 }}>📅</div>
+                <h3 style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>
+                  תוכנית 60 יום עדיין לא נוצרה
+                </h3>
+                <p style={{ fontSize: 13, color: C.textMuted, marginBottom: 20, maxWidth: 500, margin: "0 auto 20px" }}>
+                  לחץ כדי ליצור תוכנית פעולה מפורטת עם משימות יומיות מותאמות לאתר שלך, מחולקת ל-5 שלבים
+                </p>
+                <button
+                  onClick={handleGenerate60DayPlan}
+                  disabled={generatingPlan}
+                  style={{
+                    padding: "14px 36px", borderRadius: 12, border: "none", cursor: generatingPlan ? "wait" : "pointer",
+                    background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+                    color: "#fff", fontWeight: 700, fontSize: 15,
+                    opacity: generatingPlan ? 0.7 : 1, transition: "all 0.2s",
+                  }}
+                >
+                  {generatingPlan ? "⏳ מייצר תוכנית..." : "📅 צור תוכנית 60 יום"}
+                </button>
+              </div>
+            )}
+
             {/* Phase + Day structure (new) */}
-            {Array.isArray(p.phases) && p.phases.length > 0 ? (
+            {Array.isArray(p.phases) && p.phases.length > 0 && Array.isArray(p.days) && p.days.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {p.phases.map(phase => {
                   const phaseDays = (Array.isArray(p.days) ? p.days : []).filter(d => d.phase === phase.number);
@@ -1128,91 +1168,103 @@ export default function SeoPlanDetail() {
         )}
 
         {/* ── AI RESULTS ── */}
-        {activeTab === "ai" && (
+        {activeTab === "ai" && (() => {
+          // Read AI queries from scan pipeline format (websiteScan.aiQueries) or flat visibilityResults
+          const aiQueries: Array<{platform: string; query: string; found: boolean; confidence: number; snippet?: string; scanMode?: string}> =
+            (scan?.aiQueries as any[] || []).length > 0
+              ? (scan?.aiQueries as any[])
+              : (Array.isArray(p.visibilityResults) ? p.visibilityResults : []).map((vr: any) => ({
+                  platform: vr.engine || '',
+                  query: vr.query || '',
+                  found: !!vr.mentioned,
+                  confidence: vr.found ? 80 : 0,
+                  snippet: vr.context || '',
+                  scanMode: 'real',
+                }));
+
+          // Group by unique queries
+          const uniqueQueries = Array.from(new Set(aiQueries.map(q => q.query)));
+          // Group by platform
+          const platforms = Array.from(new Set(aiQueries.map(q => q.platform)));
+          const totalScanned = aiQueries.filter(q => q.scanMode === 'real').length;
+          const totalFound = aiQueries.filter(q => q.scanMode === 'real' && q.found).length;
+          const score = totalScanned > 0 ? Math.round((totalFound / totalScanned) * 100) : n(p.visibilityScore);
+
+          return (
           <div>
-            {(!Array.isArray(p.visibilityResults) || p.visibilityResults.length === 0) ? (
+            {aiQueries.length === 0 ? (
               <EmptyTab icon="🤖" text="אין תוצאות AI. חזור לאשף והרץ סריקת נראות." />
             ) : (
               <>
                 {/* Score hero */}
                 <div style={{
                   background: `linear-gradient(135deg, ${C.neon}, ${C.neonEnd})`,
-                  borderRadius: 20, padding: 28, marginBottom: 20, color: "#fff",
+                  borderRadius: 20, padding: 28, marginBottom: 20, color: "#1A1A2E",
                   display: "flex", alignItems: "center", gap: 32,
                 }}>
                   <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 52, fontWeight: 800 }}>{n(p.visibilityScore)}%</div>
-                    <div style={{ fontSize: 14, opacity: 0.9 }}>ציון נראות AI</div>
+                    <div style={{ fontSize: 52, fontWeight: 800 }}>{score}%</div>
+                    <div style={{ fontSize: 14, opacity: 0.8 }}>ציון נראות AI</div>
                   </div>
                   <div style={{ flex: 1, display: "flex", gap: 12, flexWrap: "wrap" }}>
-                    {AI_ENGINES.map(eng => {
-                      const total = p.visibilityResults.length;
-                      const mentioned = p.visibilityResults.filter(vr =>
-                        (Array.isArray(vr.results) ? vr.results : []).some(r => r.engine === eng && r.mentioned)
-                      ).length;
+                    {platforms.map(pid => {
+                      const pd = PLATFORM_DISPLAY[pid] || { name: pid, icon: "🔍" };
+                      const platQueries = aiQueries.filter(q => q.platform === pid);
+                      const platFound = platQueries.filter(q => q.found).length;
                       return (
-                        <div key={eng} style={{
-                          background: "rgba(255,255,255,0.15)", borderRadius: 12,
-                          padding: "12px 18px", textAlign: "center", minWidth: 90,
-                          backdropFilter: "blur(8px)",
+                        <div key={pid} style={{
+                          background: "rgba(255,255,255,0.5)", borderRadius: 12,
+                          padding: "12px 18px", textAlign: "center", minWidth: 100,
                         }}>
-                          <div style={{ fontSize: 20, fontWeight: 800 }}>{s(mentioned)}/{s(total)}</div>
-                          <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>{s(eng)}</div>
+                          <div style={{ fontSize: 20, marginBottom: 4 }}>{pd.icon}</div>
+                          <div style={{ fontSize: 18, fontWeight: 800 }}>{platFound}/{platQueries.length}</div>
+                          <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{pd.name}</div>
                         </div>
                       );
                     })}
                   </div>
                 </div>
 
-                {/* Results table */}
+                {/* Cross-platform matrix table */}
                 <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: C.bg }}>
                         <th style={thStyle}>שאילתה</th>
-                        <th style={thStyle}>קטגוריה</th>
-                        <th style={thStyle}>כוונה</th>
-                        {AI_ENGINES.map(e => <th key={e} style={{ ...thStyle, textAlign: "center", minWidth: 70 }}>{e}</th>)}
-                        <th style={{ ...thStyle, textAlign: "center" }}>פעולות</th>
+                        {platforms.map(pid => {
+                          const pd = PLATFORM_DISPLAY[pid] || { name: pid, icon: "🔍" };
+                          return <th key={pid} style={{ ...thStyle, textAlign: "center", minWidth: 80 }}>{pd.icon} {pd.name}</th>;
+                        })}
                       </tr>
                     </thead>
                     <tbody>
-                      {p.visibilityResults.map((vr, i) => {
-                        const q = (Array.isArray(p.visibilityQueries) ? p.visibilityQueries : []).find(q => q.id === vr.queryId);
+                      {uniqueQueries.map((query, i) => {
+                        const decoded = (query || '').replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#39;/g, "'");
                         return (
-                          <tr key={vr.queryId} style={{ borderBottom: `1px solid ${C.borderLight}` }}>
-                            <td style={tdStyle}>{s(vr.query)}</td>
-                            <td style={tdStyle}>
-                              <span style={{ ...tagStyle, background: `${C.primary}10`, color: C.primary }}>
-                                {s(q?.category || "—")}
-                              </span>
-                            </td>
-                            <td style={tdStyle}>
-                              <span style={{ fontSize: 11, color: C.textMuted }}>{s(q?.intent || "—")}</span>
-                            </td>
-                            {AI_ENGINES.map(eng => {
-                              const res = (Array.isArray(vr.results) ? vr.results : []).find(r => r.engine === eng);
+                          <tr key={i} style={{ borderBottom: `1px solid ${C.borderLight}` }}>
+                            <td style={{ ...tdStyle, maxWidth: 300, fontSize: 12 }}>{decoded}</td>
+                            {platforms.map(pid => {
+                              const result = aiQueries.find(q => q.platform === pid && q.query === query);
+                              if (!result) return <td key={pid} style={{ ...tdStyle, textAlign: "center" }}>
+                                <span style={{ color: C.textMuted, fontSize: 11 }}>—</span>
+                              </td>;
                               return (
-                                <td key={eng} style={{ ...tdStyle, textAlign: "center" }}>
+                                <td key={pid} style={{ ...tdStyle, textAlign: "center" }}>
                                   <div style={{
                                     width: 28, height: 28, borderRadius: 8, margin: "0 auto",
                                     display: "flex", alignItems: "center", justifyContent: "center",
                                     fontSize: 14,
-                                    background: res?.mentioned ? `${C.success}15` : `${C.danger}10`,
-                                    color: res?.mentioned ? C.success : C.danger,
+                                    background: result.found ? `${C.success}15` : `${C.danger}10`,
+                                    color: result.found ? C.success : C.danger,
                                   }}>
-                                    {res?.mentioned ? "✓" : "✗"}
+                                    {result.found ? "✓" : "✗"}
                                   </div>
+                                  {result.confidence > 0 && (
+                                    <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>{result.confidence}%</div>
+                                  )}
                                 </td>
                               );
                             })}
-                            <td style={{ ...tdStyle, textAlign: "center" }}>
-                              <button onClick={() => setDrawerQuery(vr)} style={{
-                                padding: "5px 12px", background: "transparent",
-                                border: `1px solid ${C.border}`, borderRadius: 8,
-                                fontSize: 11, color: C.primary, cursor: "pointer", fontWeight: 600,
-                              }}>פרטים</button>
-                            </td>
                           </tr>
                         );
                       })}
@@ -1220,61 +1272,38 @@ export default function SeoPlanDetail() {
                   </table>
                 </div>
 
-                {/* Drawer */}
-                {drawerQuery && (
-                  <div style={{
-                    position: "fixed", inset: 0, zIndex: 1000,
-                    display: "flex", justifyContent: "flex-start",
-                  }}>
-                    <div onClick={() => setDrawerQuery(null)} style={{
-                      flex: 1, background: "rgba(0,0,0,0.3)", backdropFilter: "blur(4px)",
-                    }} />
-                    <div style={{
-                      width: 440, background: C.card, padding: 32,
-                      borderRight: `1px solid ${C.border}`, overflowY: "auto",
-                      boxShadow: "-8px 0 32px rgba(0,0,0,0.1)",
-                    }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-                        <h3 style={{ fontSize: 18, fontWeight: 700, color: C.text, margin: 0 }}>פרטי שאילתה</h3>
-                        <button onClick={() => setDrawerQuery(null)} style={{
-                          width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.border}`,
-                          background: "transparent", cursor: "pointer", fontSize: 16, color: C.textMuted,
-                        }}>×</button>
-                      </div>
-                      <div style={{
-                        padding: "14px 16px", borderRadius: 12, background: C.bg,
-                        marginBottom: 20, fontSize: 14, fontWeight: 600, color: C.text,
-                      }}>{s(drawerQuery.query)}</div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                        {(Array.isArray(drawerQuery.results) ? drawerQuery.results : []).map(r => (
-                          <div key={r.engine} style={{
-                            display: "flex", alignItems: "center", gap: 14,
-                            padding: "14px 16px", borderRadius: 12,
-                            background: r.mentioned ? `${C.success}06` : `${C.danger}06`,
-                            border: `1px solid ${r.mentioned ? `${C.success}20` : `${C.danger}20`}`,
+                {/* Snippets section */}
+                {aiQueries.filter(q => q.found && q.snippet).length > 0 && (
+                  <div style={{ ...cardStyle, marginTop: 20 }}>
+                    <h3 style={{ ...sectionTitle }}>💬 קטעי תשובה שבהם הוזכר העסק</h3>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {aiQueries.filter(q => q.found && q.snippet).slice(0, 8).map((q, i) => {
+                        const pd = PLATFORM_DISPLAY[q.platform] || { name: q.platform, icon: "🔍" };
+                        return (
+                          <div key={i} style={{
+                            padding: "14px 16px", borderRadius: 14, background: `${C.success}06`,
+                            border: `1px solid ${C.success}20`,
                           }}>
-                            <div style={{
-                              width: 36, height: 36, borderRadius: 10,
-                              background: r.mentioned ? `${C.success}15` : `${C.danger}10`,
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              fontSize: 16, color: r.mentioned ? C.success : C.danger,
-                            }}>{r.mentioned ? "✓" : "✗"}</div>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{s(r.engine)}</div>
-                              <div style={{ fontSize: 11, color: C.textMuted }}>
-                                {r.mentioned ? `מוזכר · עמדה ${s(r.position ?? "—")} · ${s(r.sentiment)}` : "לא מוזכר"}
-                              </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                              <span style={{ fontSize: 16 }}>{pd.icon}</span>
+                              <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{pd.name}</span>
+                              <span style={{ fontSize: 10, color: C.textMuted }}>·</span>
+                              <span style={{ fontSize: 11, color: C.textMuted }}>{(q.query || '').replace(/&quot;/g, '"').slice(0, 60)}</span>
+                            </div>
+                            <div style={{ fontSize: 12, color: C.textSecondary, lineHeight: 1.6, direction: "ltr", textAlign: "left" }}>
+                              {(q.snippet || '').slice(0, 250)}{(q.snippet || '').length > 250 ? "..." : ""}
                             </div>
                           </div>
-                        ))}
-                      </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
               </>
             )}
           </div>
-        )}
+          );
+        })()}
 
         {/* ── RESULTS & VISIBILITY ── */}
         {activeTab === "results" && (
@@ -1298,14 +1327,294 @@ export default function SeoPlanDetail() {
         )}
 
         {/* ── COMPETITORS ── */}
-        {activeTab === "competitors" && (
-          <EmptyTab icon="🏆" text="ניתוח מתחרים בקרוב. נתונים יאספו מסריקות נראות וחקר מילות מפתח." />
-        )}
+        {activeTab === "competitors" && (() => {
+          // Extract competitor data from scan pipeline aiQueries + plan.competitors
+          const aiQueriesRaw: any[] = scan?.aiQueries as any[] || [];
+          const planCompetitors: any[] = Array.isArray((p as any).competitors) ? (p as any).competitors : [];
+          const businessProfile = (p as any).businessProfile || (scan as any)?.websiteFacts?.businessProfile;
+          const knownCompetitors: string[] = businessProfile?.known_competitors || planCompetitors.map((c: any) => c.domain || c.name || '') || [];
+
+          // Extract mentioned competitors from AI snippets
+          const mentionedInAI = new Map<string, {platforms: Set<string>; queries: string[]}>();
+          for (const q of aiQueriesRaw) {
+            if (q.found && q.snippet) {
+              for (const comp of knownCompetitors) {
+                if (comp && q.snippet.toLowerCase().includes(comp.toLowerCase())) {
+                  if (!mentionedInAI.has(comp)) mentionedInAI.set(comp, {platforms: new Set(), queries: []});
+                  const entry = mentionedInAI.get(comp)!;
+                  entry.platforms.add(q.platform);
+                  if (!entry.queries.includes(q.query)) entry.queries.push(q.query);
+                }
+              }
+            }
+          }
+
+          // Also check competitorsMentioned field from visibilityResults
+          const visResults: any[] = Array.isArray(p.visibilityResults) ? p.visibilityResults : [];
+          for (const vr of visResults) {
+            const comps = vr.competitorsMentioned || [];
+            for (const comp of comps) {
+              if (!mentionedInAI.has(comp)) mentionedInAI.set(comp, {platforms: new Set(), queries: []});
+              const entry = mentionedInAI.get(comp)!;
+              entry.platforms.add(vr.engine || vr.platform || '');
+              if (vr.query && !entry.queries.includes(vr.query)) entry.queries.push(vr.query);
+            }
+          }
+
+          const hasCompData = knownCompetitors.length > 0 || mentionedInAI.size > 0 || planCompetitors.length > 0;
+
+          return (
+          <div>
+            {!hasCompData ? (
+              <EmptyTab icon="🏆" text="אין נתוני מתחרים עדיין. הרץ סריקת נראות כדי לזהות מתחרים שמוזכרים בתשובות AI." />
+            ) : (
+              <>
+                {/* Summary */}
+                <div style={{
+                  display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 20,
+                }}>
+                  <div style={{ ...cardStyle, textAlign: "center" }}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: C.primary }}>{knownCompetitors.length}</div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>מתחרים מוכרים</div>
+                  </div>
+                  <div style={{ ...cardStyle, textAlign: "center" }}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: C.warning }}>{mentionedInAI.size}</div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>מתחרים שמוזכרים ב-AI</div>
+                  </div>
+                  <div style={{ ...cardStyle, textAlign: "center" }}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: C.danger }}>
+                      {aiQueriesRaw.filter(q => !q.found).length}
+                    </div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>שאילתות שלא מוזכרים בהן</div>
+                  </div>
+                </div>
+
+                {/* Known competitors list */}
+                <div style={{ ...cardStyle, marginBottom: 20 }}>
+                  <h3 style={{ ...sectionTitle }}>🏆 מתחרים מוכרים</h3>
+                  {knownCompetitors.length === 0 ? (
+                    <p style={{ fontSize: 13, color: C.textMuted }}>לא הוגדרו מתחרים בפרופיל העסקי</p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {knownCompetitors.map((comp, i) => {
+                        const aiData = mentionedInAI.get(comp);
+                        return (
+                          <div key={i} style={{
+                            display: "flex", alignItems: "center", gap: 14,
+                            padding: "14px 16px", borderRadius: 14, background: C.bg,
+                            border: `1px solid ${C.borderLight}`,
+                          }}>
+                            <div style={{
+                              width: 40, height: 40, borderRadius: 10,
+                              background: aiData ? `${C.warning}15` : `${C.info}10`,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 18, fontWeight: 700, color: aiData ? C.warning : C.info,
+                            }}>{i + 1}</div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{comp}</div>
+                              {aiData ? (
+                                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                                  מוזכר ב-{aiData.platforms.size} פלטפורמות · {aiData.queries.length} שאילתות
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>לא זוהה בסריקת AI</div>
+                              )}
+                            </div>
+                            {aiData && (
+                              <div style={{ display: "flex", gap: 4 }}>
+                                {Array.from(aiData.platforms).map(pid => {
+                                  const pd = PLATFORM_DISPLAY[pid];
+                                  return pd ? <span key={pid} title={pd.name} style={{ fontSize: 16 }}>{pd.icon}</span> : null;
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Plan competitors if available */}
+                {planCompetitors.length > 0 && (
+                  <div style={{ ...cardStyle }}>
+                    <h3 style={{ ...sectionTitle }}>📊 ניתוח מתחרים מפורט</h3>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {planCompetitors.map((comp: any, i: number) => (
+                        <div key={i} style={{
+                          padding: "14px 16px", borderRadius: 14, background: C.bg,
+                          border: `1px solid ${C.borderLight}`,
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                              {comp.name || comp.domain || `מתחרה ${i + 1}`}
+                            </div>
+                            {comp.overlapScore !== undefined && (
+                              <span style={{
+                                ...tagStyle,
+                                background: comp.overlapScore > 50 ? `${C.danger}15` : `${C.warning}15`,
+                                color: comp.overlapScore > 50 ? C.danger : C.warning,
+                              }}>חפיפה: {comp.overlapScore}%</span>
+                            )}
+                          </div>
+                          {comp.domain && (
+                            <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>🌐 {comp.domain}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          );
+        })()}
 
         {/* ── CONTENT GAPS ── */}
-        {activeTab === "gaps" && (
-          <EmptyTab icon="📝" text="ניתוח פערי תוכן בקרוב. המערכת תזהה הזדמנויות תוכן בהתאם לחקר מילות מפתח וניתוח מתחרים." />
-        )}
+        {activeTab === "gaps" && (() => {
+          // Build content gaps from AI queries where business was NOT found
+          const aiQueriesRaw: any[] = scan?.aiQueries as any[] || [];
+          const planGaps: any[] = Array.isArray((p as any).contentGaps) ? (p as any).contentGaps : [];
+
+          // Find queries where business is missing per platform
+          const missedByQuery = new Map<string, {platforms: string[]; totalPlatforms: number}>();
+          const uniqueQueries = Array.from(new Set(aiQueriesRaw.map(q => q.query)));
+
+          for (const query of uniqueQueries) {
+            const queryResults = aiQueriesRaw.filter(q => q.query === query);
+            const missed = queryResults.filter(q => !q.found).map(q => q.platform);
+            const total = queryResults.length;
+            if (missed.length > 0) {
+              missedByQuery.set(query, { platforms: missed, totalPlatforms: total });
+            }
+          }
+
+          // Sort by most missed (worst gaps first)
+          const sortedGaps = Array.from(missedByQuery.entries()).sort((a, b) => {
+            const aRatio = a[1].platforms.length / a[1].totalPlatforms;
+            const bRatio = b[1].platforms.length / b[1].totalPlatforms;
+            return bRatio - aRatio;
+          });
+
+          const hasGapData = sortedGaps.length > 0 || planGaps.length > 0;
+
+          // Stats
+          const totalGaps = sortedGaps.length;
+          const criticalGaps = sortedGaps.filter(([, v]) => v.platforms.length === v.totalPlatforms).length;
+          const partialGaps = totalGaps - criticalGaps;
+
+          return (
+          <div>
+            {!hasGapData ? (
+              <EmptyTab icon="📝" text="אין נתוני פערי תוכן. הרץ סריקת נראות AI כדי לזהות שאילתות שבהן העסק לא מופיע." />
+            ) : (
+              <>
+                {/* Summary cards */}
+                <div style={{
+                  display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 20,
+                }}>
+                  <div style={{ ...cardStyle, textAlign: "center" }}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: C.danger }}>{criticalGaps}</div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>חסר בכל הפלטפורמות</div>
+                  </div>
+                  <div style={{ ...cardStyle, textAlign: "center" }}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: C.warning }}>{partialGaps}</div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>חסר בחלק מהפלטפורמות</div>
+                  </div>
+                  <div style={{ ...cardStyle, textAlign: "center" }}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: C.success }}>
+                      {uniqueQueries.length - totalGaps}
+                    </div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>מופיע בכל הפלטפורמות</div>
+                  </div>
+                </div>
+
+                {/* Gaps list */}
+                <div style={{ ...cardStyle }}>
+                  <h3 style={{ ...sectionTitle }}>📝 שאילתות שבהן העסק לא מופיע</h3>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {sortedGaps.map(([query, data], i) => {
+                      const decoded = query.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#39;/g, "'");
+                      const isCritical = data.platforms.length === data.totalPlatforms;
+                      return (
+                        <div key={i} style={{
+                          padding: "14px 16px", borderRadius: 14,
+                          background: isCritical ? `${C.danger}04` : C.bg,
+                          border: `1px solid ${isCritical ? `${C.danger}20` : C.borderLight}`,
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 6 }}>
+                                {decoded}
+                              </div>
+                              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                                {data.platforms.map(pid => {
+                                  const pd = PLATFORM_DISPLAY[pid] || { name: pid, icon: "🔍" };
+                                  return (
+                                    <span key={pid} style={{
+                                      ...tagStyle,
+                                      background: `${C.danger}10`,
+                                      color: C.danger,
+                                    }}>
+                                      {pd.icon} לא מופיע ב-{pd.name}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            <span style={{
+                              ...tagStyle, flexShrink: 0,
+                              background: isCritical ? `${C.danger}15` : `${C.warning}15`,
+                              color: isCritical ? C.danger : C.warning,
+                            }}>
+                              {isCritical ? "קריטי" : "חלקי"}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Plan-level content gaps if available */}
+                {planGaps.length > 0 && (
+                  <div style={{ ...cardStyle, marginTop: 20 }}>
+                    <h3 style={{ ...sectionTitle }}>🔍 הזדמנויות תוכן מזוהות</h3>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {planGaps.map((gap: any, i: number) => (
+                        <div key={i} style={{
+                          display: "flex", alignItems: "center", gap: 12,
+                          padding: "12px 16px", borderRadius: 12, background: C.bg,
+                          border: `1px solid ${C.borderLight}`,
+                        }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{gap.query || gap.title}</div>
+                            {gap.category && (
+                              <span style={{ ...tagStyle, marginTop: 4, background: `${C.primary}10`, color: C.primary }}>
+                                {gap.category}
+                              </span>
+                            )}
+                          </div>
+                          {gap.importance && (
+                            <span style={{
+                              ...tagStyle,
+                              background: gap.importance === 'high' ? `${C.danger}15` : gap.importance === 'medium' ? `${C.warning}15` : `${C.info}15`,
+                              color: gap.importance === 'high' ? C.danger : gap.importance === 'medium' ? C.warning : C.info,
+                            }}>
+                              {gap.importance === 'high' ? 'גבוהה' : gap.importance === 'medium' ? 'בינונית' : 'נמוכה'}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          );
+        })()}
 
         {/* ── REPORTS ── */}
         {activeTab === "reports" && (
