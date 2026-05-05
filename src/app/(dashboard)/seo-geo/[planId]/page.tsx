@@ -413,10 +413,17 @@ export default function SeoPlanDetail() {
     }
   }, [plan]);
 
-  // Load reports from plan data
+  // Load reports from plan data (sanitize to prevent #310)
   useEffect(() => {
     if (plan && (plan as any).reports) {
-      setReports((plan as any).reports);
+      const raw = (plan as any).reports;
+      const safe = (Array.isArray(raw) ? raw : []).map((r: any) => ({
+        id: String(r?.id ?? ''),
+        name: String(r?.name ?? r?.value?.name ?? ''),
+        generatedAt: String(r?.generatedAt ?? r?.value?.generatedAt ?? ''),
+        type: String(r?.type ?? r?.value?.type ?? ''),
+      }));
+      setReports(safe);
     }
   }, [plan]);
 
@@ -513,40 +520,33 @@ export default function SeoPlanDetail() {
     );
   }
 
-  // ── PRE-RENDER SAFETY: Deep-walk the ENTIRE plan and force every leaf to primitive ──
-  // This runs on every render and catches ANY object that survived all prior sanitization.
+  // ── PRE-RENDER SAFETY: Deep-walk the ENTIRE plan, recurse into ALL objects (no whitelist) ──
+  // Every leaf MUST be a primitive. No whitelist. No exceptions. Recurse everything.
   const safePlan = useMemo(() => {
     if (!plan) return plan;
-    function forcePrimitive(obj: any, path: string, depth: number): any {
-      if (depth > 30 || obj === null || obj === undefined) return obj;
-      if (typeof obj !== 'object') return obj;
-      if (obj instanceof Date) return obj.toISOString();
-      if (Array.isArray(obj)) return obj.map((item, i) => forcePrimitive(item, `${path}[${i}]`, depth + 1));
-      const out: any = {};
-      for (const [k, v] of Object.entries(obj)) {
-        if (v === null || v === undefined || typeof v !== 'object') { out[k] = v; continue; }
-        if (v instanceof Date) { out[k] = (v as Date).toISOString(); continue; }
-        if (Array.isArray(v)) { out[k] = v.map((item, i) => forcePrimitive(item, `${path}.${k}[${i}]`, depth + 1)); continue; }
-        // Plain object — check if it's a container or a leaf
-        const isContainer = ['websiteScan','goals','insights','visibilityResults','visibilityQueries',
-          'weeks','phases','days','tasks','results','issues','aiQueries',
-          'scannedPages','platformStatuses','websiteFacts','metrics'].includes(k);
-        if (isContainer) {
-          out[k] = forcePrimitive(v, `${path}.${k}`, depth + 1);
-        } else if ('value' in (v as any)) {
-          // Evidence-pattern — extract value
-          console.warn(`[RENDER-SAFETY] Object at ${path}.${k} flattened:`, JSON.stringify(v).slice(0, 80));
-          const extracted = (v as any).value;
-          out[k] = (extracted !== null && extracted !== undefined && typeof extracted === 'object') ? String(extracted) : extracted;
-        } else {
-          // Unknown object — stringify it so React can render it
-          console.warn(`[RENDER-SAFETY] Unknown object at ${path}.${k} stringified:`, JSON.stringify(v).slice(0, 80));
-          out[k] = JSON.stringify(v);
+    function nuke(val: any, depth: number): any {
+      if (depth > 50) return typeof val === 'string' ? val : JSON.stringify(val ?? '');
+      if (val === null || val === undefined) return val;
+      if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') return val;
+      if (val instanceof Date) return val.toISOString();
+      if (Array.isArray(val)) return val.map((item, i) => nuke(item, depth + 1));
+      // It's a plain object — ALWAYS recurse, no whitelist
+      if (typeof val === 'object') {
+        // Evidence-pattern shortcut: {value, confidence?, source?}
+        if ('value' in val && ('confidence' in val || 'source' in val)) {
+          const extracted = val.value;
+          return (extracted !== null && extracted !== undefined && typeof extracted === 'object')
+            ? JSON.stringify(extracted) : extracted;
         }
+        const out: any = {};
+        for (const [k, v] of Object.entries(val)) {
+          out[k] = nuke(v, depth + 1);
+        }
+        return out;
       }
-      return out;
+      return String(val);
     }
-    return forcePrimitive(plan, 'plan', 0) as SeoPlan;
+    return nuke(plan, 0) as SeoPlan;
   }, [plan]);
 
   // Use safePlan for ALL rendering below
@@ -588,17 +588,17 @@ export default function SeoPlanDetail() {
     // Visibility score: based on AI queries
     const aiQueries = Array.isArray(scan.aiQueries) ? scan.aiQueries : [];
     const found = aiQueries.filter((q: any) => q.found === true).length;
-    const vis = aiQueries.length > 0 ? Math.round((found / aiQueries.length) * 100) : n(plan?.visibilityScore);
+    const vis = aiQueries.length > 0 ? Math.round((found / aiQueries.length) * 100) : n(p?.visibilityScore);
 
     // Overall = weighted average
     const overall = Math.round(tech * 0.4 + vis * 0.6);
 
     return {
-      technical: n(plan?.technicalScore) || tech,
-      visibility: n(plan?.visibilityScore) || vis,
-      overall: n(plan?.overallScore) || overall,
+      technical: n(p?.technicalScore) || tech,
+      visibility: n(p?.visibilityScore) || vis,
+      overall: n(p?.overallScore) || overall,
     };
-  }, [plan]);
+  }, [p]);
 
   // ══════════════════════════════════════════════════════════════
   // RENDER
