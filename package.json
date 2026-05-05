@@ -22,6 +22,7 @@
     "@remotion/player": "^4.0.447",
     "@remotion/renderer": "^4.0.447",
     "@supabase/supabase-js": "^2.49.4",
+    "cheerio": "^1.2.0",
     "next": "^16.2.3",
     "openai": "^6.34.0",
     "react": "^19.0.0",
