@@ -2,26 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-// Inline icon components — no external dependency
-const IconSpan = ({ children, size = 48 }: { children: string; size?: number }) => (
-  <span style={{ fontSize: size * 0.6, lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: size, height: size }}>{children}</span>
-);
-const GoogleIcon = ({ width = 48, height = 48 }: { width?: number; height?: number }) => <IconSpan size={width}>🔍</IconSpan>;
-const ChatGPTIcon = ({ width = 48, height = 48 }: { width?: number; height?: number }) => <IconSpan size={width}>🤖</IconSpan>;
-const ClaudeIcon = ({ width = 48, height = 48 }: { width?: number; height?: number }) => <IconSpan size={width}>🧠</IconSpan>;
-const BingIcon = ({ width = 48, height = 48 }: { width?: number; height?: number }) => <IconSpan size={width}>✨</IconSpan>;
-const PerplexityIcon = ({ width = 48, height = 48 }: { width?: number; height?: number }) => <IconSpan size={width}>🔮</IconSpan>;
-const WikipediaIcon = ({ width = 48, height = 48 }: { width?: number; height?: number }) => <IconSpan size={width}>📚</IconSpan>;
-const ChevronLeftIcon = ({ width = 16, height = 16, style }: { width?: number; height?: number; style?: React.CSSProperties }) => (
-  <span style={{ fontSize: width, lineHeight: 1, ...style }}>‹</span>
-);
 
 const C = {
   primary: '#00B5FE',
   primaryDark: '#0095D0',
   primaryLight: '#E6F7FF',
   accent: '#E8F401',
-  accentDark: '#C8D400',
   bg: '#F7F9FC',
   card: '#FFFFFF',
   text: '#1A1A2E',
@@ -33,10 +19,12 @@ const C = {
   warning: '#F59E0B',
   danger: '#EF4444',
   info: '#3B82F6',
-  neon: '#e9fe00', neonEnd: '#d3e200',
+  neon: '#e9fe00',
+  neonEnd: '#d3e200',
 };
 
 type ScanMode = 'real' | 'simulated' | 'unavailable';
+type TabId = 'overview' | 'seo_keywords' | 'ai_visibility' | 'all_results';
 
 interface PlatformSummary {
   platformId: string;
@@ -70,8 +58,6 @@ interface PlatformResult {
   organicPosition?: number | null;
   pageUrl?: string | null;
   pageTitle?: string | null;
-  metaDescription?: string | null;
-  aiOverviewExists?: boolean;
   answer?: string | null;
   mentionContext?: string | null;
   sources?: string[];
@@ -81,7 +67,7 @@ interface Metrics {
   totalQueries: number;
   totalMentions: number;
   overallVisibilityPct: number;
-  perPlatform: Record<string, { queries: number; mentions: number; visibility: number }>;
+  perPlatform: any[];
 }
 
 interface ApiResponse {
@@ -90,57 +76,59 @@ interface ApiResponse {
   results?: PlatformResult[];
 }
 
-interface Plan {
-  id: string;
-  name: string;
+// ── Platform display config ──────────────────────────────────────────────────
+
+const PLATFORM_DISPLAY: Record<string, { name: string; nameHe: string; icon: string; desc: string }> = {
+  google_seo: { name: 'Google SEO', nameHe: 'Google חיפוש', icon: '🔍', desc: 'דירוג ונראות בתוצאות חיפוש אורגנית של Google' },
+  google_ai_overview: { name: 'Google AI Overview', nameHe: 'AI Overview של Google', icon: '✨', desc: 'סיכומי AI בתוצאות חיפוש של Google' },
+  gemini: { name: 'Gemini', nameHe: 'Gemini', icon: '💎', desc: 'אזכורים בתשובות של Google Gemini' },
+  chatgpt: { name: 'ChatGPT', nameHe: 'ChatGPT', icon: '🤖', desc: 'אזכורים בתשובות של ChatGPT' },
+  claude: { name: 'Claude', nameHe: 'Claude', icon: '🧠', desc: 'אזכורים בתשובות של Claude' },
+  perplexity: { name: 'Perplexity', nameHe: 'Perplexity', icon: '🔮', desc: 'אזכורים בתשובות של Perplexity' },
+};
+
+function getPlatformName(id: string): string {
+  return PLATFORM_DISPLAY[id]?.nameHe || PLATFORM_DISPLAY[id]?.name || id;
+}
+function getPlatformIcon(id: string): string {
+  return PLATFORM_DISPLAY[id]?.icon || '📊';
+}
+function getPlatformDesc(id: string): string {
+  return PLATFORM_DISPLAY[id]?.desc || 'נתוני פלטפורמה';
 }
 
-const platformIcons: Record<string, React.ReactNode> = {
-  google: <GoogleIcon width={48} height={48} />,
-  chatgpt: <ChatGPTIcon width={48} height={48} />,
-  claude: <ClaudeIcon width={48} height={48} />,
-  bing: <BingIcon width={48} height={48} />,
-  perplexity: <PerplexityIcon width={48} height={48} />,
-  wikipedia: <WikipediaIcon width={48} height={48} />,
-};
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec)));
+}
 
-const platformDisplayNames: Record<string, string> = {
-  google: 'Google SEO',
-  chatgpt: 'ChatGPT',
-  claude: 'Claude',
-  bing: 'Bing',
-  perplexity: 'Perplexity',
-  wikipedia: 'Wikipedia',
-};
-
-const platformDescriptions: Record<string, string> = {
-  google: 'נראות בתוצאות חיפוש אורגנית של Google',
-  chatgpt: 'אזכורים בתשובות של ChatGPT',
-  claude: 'אזכורים בתשובות של Claude',
-  bing: 'נראות בתוצאות חיפוש של Bing',
-  perplexity: 'אזכורים בתשובות של Perplexity',
-  wikipedia: 'אזכורים וקישורים בויקיפדיה',
-};
+function scanModeLabel(mode: ScanMode): string {
+  return { real: 'אמיתי', simulated: 'סימולציה', unavailable: 'לא זמין' }[mode];
+}
+function scanModeColor(mode: ScanMode): string {
+  return { real: C.success, simulated: C.warning, unavailable: C.textMuted }[mode];
+}
 
 export default function ResultsPage() {
   const params = useParams();
   const router = useRouter();
   const planId = params.planId as string;
 
-  const [plan, setPlan] = useState<Plan | null>(null);
+  const [plan, setPlan] = useState<any>(null);
   const [summaries, setSummaries] = useState<PlatformSummary[]>([]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [results, setResults] = useState<PlatformResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeFilter, setActiveFilter] = useState<
-    'all' | 'opportunities' | 'high_rank' | 'ai_mentions'
-  >('all');
-  const [sortBy, setSortBy] = useState<
-    'platform' | 'query' | 'mentioned' | 'opportunity' | 'scan_mode'
-  >('platform');
-  const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
-  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+  const [activeTab, setActiveTab] = useState<TabId>('overview');
+  const [expandedQuery, setExpandedQuery] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -148,118 +136,49 @@ export default function ResultsPage() {
         setLoading(true);
         setError(null);
 
-        // Fetch plan
         const planResponse = await fetch(`/api/seo-geo-plans/${planId}`);
-        if (!planResponse.ok) throw new Error('Failed to load plan');
+        if (!planResponse.ok) throw new Error('שגיאה בטעינת התוכנית');
         const planData = await planResponse.json();
         setPlan(planData);
 
-        // Fetch results
-        const resultsResponse = await fetch(
-          `/api/seo-geo-plans/${planId}/results?platform=all`
-        );
-        if (!resultsResponse.ok) throw new Error('Failed to load results');
+        const resultsResponse = await fetch(`/api/seo-geo-plans/${planId}/results?platform=all`);
+        if (!resultsResponse.ok) throw new Error('שגיאה בטעינת התוצאות');
         const data: ApiResponse = await resultsResponse.json();
 
         setSummaries(data.summaries || []);
         setMetrics(data.metrics || null);
         setResults(data.results || []);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
-        console.error('Error fetching results:', err);
+        setError(err instanceof Error ? err.message : 'שגיאה לא צפויה');
       } finally {
         setLoading(false);
       }
     };
-
     if (planId) fetchData();
   }, [planId]);
 
-  const filteredResults = results.filter((result) => {
-    if (activeFilter === 'opportunities') {
-      return !result.mentioned;
-    }
-    if (activeFilter === 'high_rank') {
-      return result.opportunityScore >= 75;
-    }
-    if (activeFilter === 'ai_mentions') {
-      return result.mentioned && result.platformId !== 'google';
-    }
-    return true;
-  });
+  // ── Derived data ──────────────────────────────────────────────────────────
 
-  const sortedResults = [...filteredResults].sort((a, b) => {
-    switch (sortBy) {
-      case 'query':
-        return a.query.localeCompare(b.query);
-      case 'mentioned':
-        return (b.mentioned ? 1 : 0) - (a.mentioned ? 1 : 0);
-      case 'opportunity':
-        return b.opportunityScore - a.opportunityScore;
-      case 'scan_mode':
-        return a.scanMode.localeCompare(b.scanMode);
-      case 'platform':
-      default:
-        return a.platformId.localeCompare(b.platformId);
-    }
-  });
+  const seoResults = results.filter(r => r.platformId === 'google_seo' || r.platformId === 'google_ai_overview');
+  const aiResults = results.filter(r => !['google_seo', 'google_ai_overview'].includes(r.platformId));
+  const seoSummaries = summaries.filter(s => s.platformId === 'google_seo' || s.platformId === 'google_ai_overview');
+  const aiSummaries = summaries.filter(s => !['google_seo', 'google_ai_overview'].includes(s.platformId));
 
-  const getScanModeLabel = (mode: ScanMode): string => {
-    const labels: Record<ScanMode, string> = {
-      real: 'אמיתי',
-      simulated: 'סימולציה',
-      unavailable: 'לא זמין',
-    };
-    return labels[mode];
-  };
+  // Group results by query for the keyword view
+  const keywordMap = new Map<string, PlatformResult[]>();
+  for (const r of results) {
+    const key = decodeHtmlEntities(r.query);
+    if (!keywordMap.has(key)) keywordMap.set(key, []);
+    keywordMap.get(key)!.push(r);
+  }
 
-  const getScanModeColor = (mode: ScanMode): string => {
-    const colors: Record<ScanMode, string> = {
-      real: C.success,
-      simulated: C.warning,
-      unavailable: C.textMuted,
-    };
-    return colors[mode];
-  };
-
-  const handlePlatformCardClick = (platformId: string) => {
-    router.push(`/seo-geo/${planId}/results/${platformId}`);
-  };
-
-  const handleRowHover = (rowId: string, e: React.MouseEvent) => {
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setHoveredRowId(rowId);
-    setTooltipPos({ x: rect.right + 10, y: rect.top });
-  };
+  // ── Loading / Error ───────────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100vh',
-          backgroundColor: C.bg,
-        }}
-      >
-        <div
-          style={{
-            textAlign: 'center',
-            color: C.textSecondary,
-          }}
-        >
-          <div
-            style={{
-              width: '40px',
-              height: '40px',
-              border: `3px solid ${C.borderLight}`,
-              borderTop: `3px solid ${C.primary}`,
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite',
-              margin: '0 auto 16px',
-            }}
-          />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: C.bg, direction: 'rtl' }}>
+        <div style={{ textAlign: 'center', color: C.textSecondary }}>
+          <div style={{ width: 40, height: 40, border: `3px solid ${C.borderLight}`, borderTop: `3px solid ${C.primary}`, borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
           <p>טוען תוצאות...</p>
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
@@ -269,38 +188,11 @@ export default function ResultsPage() {
 
   if (error) {
     return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100vh',
-          backgroundColor: C.bg,
-        }}
-      >
-        <div
-          style={{
-            textAlign: 'center',
-            color: C.danger,
-            maxWidth: '400px',
-          }}
-        >
-          <p style={{ marginBottom: '16px', fontSize: '16px' }}>שגיאה בטעינת הנתונים</p>
-          <p style={{ color: C.textSecondary, fontSize: '14px', marginBottom: '24px' }}>
-            {error}
-          </p>
-          <button
-            onClick={() => router.back()}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: C.primary,
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '14px',
-            }}
-          >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: C.bg, direction: 'rtl' }}>
+        <div style={{ textAlign: 'center', maxWidth: 400 }}>
+          <p style={{ color: C.danger, fontSize: 16, marginBottom: 16 }}>שגיאה בטעינת הנתונים</p>
+          <p style={{ color: C.textSecondary, fontSize: 14, marginBottom: 24 }}>{error}</p>
+          <button onClick={() => router.back()} style={{ padding: '8px 16px', backgroundColor: C.primary, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>
             חזור
           </button>
         </div>
@@ -310,725 +202,397 @@ export default function ResultsPage() {
 
   const isEmpty = !summaries.length && !results.length;
 
+  const TABS: { id: TabId; label: string; count?: number }[] = [
+    { id: 'overview', label: 'סקירה כללית' },
+    { id: 'seo_keywords', label: 'ביטויי SEO ודירוג', count: seoResults.length },
+    { id: 'ai_visibility', label: 'נראות AI', count: aiResults.length },
+    { id: 'all_results', label: 'כל התוצאות', count: results.length },
+  ];
+
   return (
-    <div
-      style={{
-        backgroundColor: C.bg,
-        minHeight: '100vh',
-        direction: 'rtl',
-        paddingBottom: '60px',
-      }}
-    >
+    <div style={{ backgroundColor: C.bg, minHeight: '100vh', direction: 'rtl', paddingBottom: 60 }}>
       {/* Header */}
-      <div
-        style={{
-          backgroundColor: C.card,
-          borderBottom: `1px solid ${C.border}`,
-          padding: '24px',
-          marginBottom: '32px',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            marginBottom: '16px',
-          }}
-        >
+      <div style={{ backgroundColor: C.card, borderBottom: `1px solid ${C.border}`, padding: '24px 24px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
           <button
             onClick={() => router.push(`/seo-geo/${planId}`)}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: '0',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              color: C.primary,
-              fontSize: '14px',
-            }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4, color: C.primary, fontSize: 14 }}
           >
-            <ChevronLeftIcon width={16} height={16} style={{ transform: 'scaleX(-1)' }} />
-            חזרה לתוכנית
+            ‹ חזרה לתוכנית
           </button>
         </div>
-        <div>
-          <h1
-            style={{
-              fontSize: '28px',
-              fontWeight: '700',
-              color: C.text,
-              margin: '0 0 8px 0',
-            }}
-          >
-            תוצאות ונראות
-          </h1>
-          {plan && (
-            <p
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: C.text, margin: '0 0 8px' }}>תוצאות ונראות</h1>
+        {plan && <p style={{ fontSize: 14, color: C.textSecondary, margin: '0 0 20px' }}>{plan.name || plan.businessName || ''}</p>}
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 0, borderBottom: 'none' }}>
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
               style={{
-                fontSize: '14px',
-                color: C.textSecondary,
-                margin: '0',
+                padding: '10px 20px',
+                fontSize: 13,
+                fontWeight: activeTab === tab.id ? 600 : 400,
+                color: activeTab === tab.id ? C.primary : C.textSecondary,
+                background: 'none',
+                border: 'none',
+                borderBottom: activeTab === tab.id ? `2px solid ${C.primary}` : '2px solid transparent',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
               }}
             >
-              {plan.name}
-            </p>
-          )}
+              {tab.label}
+              {tab.count !== undefined && <span style={{ marginRight: 6, fontSize: 11, color: C.textMuted }}>({tab.count})</span>}
+            </button>
+          ))}
         </div>
       </div>
 
       {isEmpty ? (
-        /* Empty State */
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minHeight: '400px',
-            textAlign: 'center',
-          }}
-        >
-          <div style={{ maxWidth: '300px' }}>
-            <p
-              style={{
-                fontSize: '16px',
-                color: C.textSecondary,
-                marginBottom: '16px',
-              }}
-            >
-              אין נתוני סריקה עדיין. הרץ סריקת נראות מהאשף כדי לקבל תוצאות.
-            </p>
-            <button
-              onClick={() => router.push(`/seo-geo/${planId}`)}
-              style={{
-                padding: '10px 24px',
-                backgroundColor: C.primary,
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '14px',
-              }}
-            >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400, textAlign: 'center' }}>
+          <div style={{ maxWidth: 300 }}>
+            <p style={{ fontSize: 40, marginBottom: 16 }}>📊</p>
+            <p style={{ fontSize: 16, color: C.textSecondary, marginBottom: 16 }}>אין נתוני סריקה עדיין</p>
+            <p style={{ fontSize: 13, color: C.textMuted, marginBottom: 24 }}>הרץ סריקת נראות מהתוכנית כדי לקבל תוצאות</p>
+            <button onClick={() => router.push(`/seo-geo/${planId}`)} style={{ padding: '10px 24px', backgroundColor: C.primary, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>
               חזור לתוכנית
             </button>
           </div>
         </div>
       ) : (
-        <>
-          {/* Global Metrics Row */}
-          {metrics && (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-                gap: '16px',
-                padding: '0 24px',
-                marginBottom: '32px',
-              }}
-            >
-              <MetricCard
-                label="סה״כ שאילתות שנסרקו"
-                value={metrics.totalQueries.toString()}
-                icon="📊"
-              />
-              <MetricCard
-                label="סה״כ אזכורים"
-                value={metrics.totalMentions.toString()}
-                icon="💬"
-              />
-              <MetricCard
-                label="נראות AI כוללת"
-                value={`${metrics.overallVisibilityPct}%`}
-                icon="👁️"
-              />
-              <MetricCard
-                label="פלטפורמות פעילות"
-                value={summaries.length.toString()}
-                icon="🌐"
-              />
-            </div>
+        <div style={{ padding: '24px' }}>
+          {/* ═══ OVERVIEW TAB ═══ */}
+          {activeTab === 'overview' && (
+            <>
+              {/* Global Metrics */}
+              {metrics && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
+                  <MetricCard icon="📊" label="סה״כ שאילתות" value={String(metrics.totalQueries)} />
+                  <MetricCard icon="💬" label="סה״כ אזכורים" value={String(metrics.totalMentions)} accent={metrics.totalMentions > 0} />
+                  <MetricCard icon="👁️" label="נראות AI כוללת" value={`${metrics.overallVisibilityPct}%`} accent={metrics.overallVisibilityPct > 0} />
+                  <MetricCard icon="🌐" label="פלטפורמות פעילות" value={String(summaries.filter(s => s.scanMode !== 'unavailable').length)} />
+                </div>
+              )}
+
+              {/* Platform Cards */}
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 16 }}>פלטפורמות</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16, marginBottom: 32 }}>
+                {summaries.map(s => (
+                  <PlatformCard key={s.platformId} summary={s} onClick={() => router.push(`/seo-geo/${planId}/results/${s.platformId}`)} />
+                ))}
+              </div>
+
+              {/* Quick summary table */}
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 16 }}>סיכום מהיר לפי ביטוי</h2>
+              <div style={{ backgroundColor: C.card, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: C.bg, borderBottom: `1px solid ${C.border}` }}>
+                      <th style={thStyle}>ביטוי</th>
+                      <th style={thStyle}>Google דירוג</th>
+                      <th style={thStyle}>ChatGPT</th>
+                      <th style={thStyle}>Gemini</th>
+                      <th style={thStyle}>Claude</th>
+                      <th style={thStyle}>Perplexity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from(keywordMap.entries()).map(([query, queryResults]) => {
+                      const google = queryResults.find(r => r.platformId === 'google_seo');
+                      const chatgpt = queryResults.find(r => r.platformId === 'chatgpt');
+                      const gemini = queryResults.find(r => r.platformId === 'gemini');
+                      const claude = queryResults.find(r => r.platformId === 'claude');
+                      const perplexity = queryResults.find(r => r.platformId === 'perplexity');
+
+                      return (
+                        <tr key={query} style={{ borderBottom: `1px solid ${C.borderLight}` }}>
+                          <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 250 }}>{query}</td>
+                          <td style={tdStyle}>{google ? <PositionBadge result={google} /> : <ModeTag mode="unavailable" />}</td>
+                          <td style={tdStyle}>{chatgpt ? <MentionBadge result={chatgpt} /> : <ModeTag mode="unavailable" />}</td>
+                          <td style={tdStyle}>{gemini ? <MentionBadge result={gemini} /> : <ModeTag mode="unavailable" />}</td>
+                          <td style={tdStyle}>{claude ? <MentionBadge result={claude} /> : <ModeTag mode="unavailable" />}</td>
+                          <td style={tdStyle}>{perplexity ? <MentionBadge result={perplexity} /> : <ModeTag mode="unavailable" />}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {keywordMap.size === 0 && (
+                  <div style={{ padding: 32, textAlign: 'center', color: C.textMuted }}>אין תוצאות</div>
+                )}
+              </div>
+            </>
           )}
 
-          {/* Platform Cards Row */}
-          <div
-            style={{
-              padding: '0 24px',
-              marginBottom: '32px',
-              overflowX: 'auto',
-              overflowY: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                gap: '16px',
-                paddingBottom: '8px',
-              }}
-            >
-              {summaries.map((summary) => (
-                <PlatformCard
-                  key={summary.platformId}
-                  summary={summary}
-                  onClick={() => handlePlatformCardClick(summary.platformId)}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Quick Filters */}
-          <div
-            style={{
-              padding: '0 24px',
-              marginBottom: '32px',
-              display: 'flex',
-              gap: '8px',
-              flexWrap: 'wrap',
-            }}
-          >
-            {(
-              [
-                { id: 'all', label: 'הכל' },
-                { id: 'opportunities', label: 'הזדמנויות בלבד' },
-                { id: 'high_rank', label: 'דירוג גבוה' },
-                { id: 'ai_mentions', label: 'אזכורי AI' },
-              ] as Array<{
-                id: 'all' | 'opportunities' | 'high_rank' | 'ai_mentions';
-                label: string;
-              }>
-            ).map((filter) => (
-              <button
-                key={filter.id}
-                onClick={() => setActiveFilter(filter.id)}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: activeFilter === filter.id ? C.primary : C.card,
-                  color: activeFilter === filter.id ? '#FFFFFF' : C.text,
-                  border: `1px solid ${activeFilter === filter.id ? C.primary : C.border}`,
-                  borderRadius: '20px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: activeFilter === filter.id ? '600' : '400',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Results Table */}
-          <div
-            style={{
-              padding: '0 24px',
-              marginBottom: '32px',
-            }}
-          >
-            <div
-              style={{
-                backgroundColor: C.card,
-                borderRadius: '8px',
-                border: `1px solid ${C.border}`,
-                overflow: 'hidden',
-              }}
-            >
-              <table
-                style={{
-                  width: '100%',
-                  borderCollapse: 'collapse',
-                  direction: 'rtl',
-                }}
-              >
-                <thead>
-                  <tr
-                    style={{
-                      backgroundColor: C.bg,
-                      borderBottom: `1px solid ${C.border}`,
-                    }}
-                  >
-                    {[
-                      { id: 'platform', label: 'פלטפורמה' },
-                      { id: 'query', label: 'שאילתה' },
-                      { id: 'mentioned', label: 'מוזכר?' },
-                      { id: 'opportunity', label: 'ציון הזדמנות' },
-                      { id: 'scan_mode', label: 'מצב סריקה' },
-                    ].map((col) => (
-                      <th
-                        key={col.id}
-                        onClick={() =>
-                          setSortBy(
-                            col.id as
-                              | 'platform'
-                              | 'query'
-                              | 'mentioned'
-                              | 'opportunity'
-                              | 'scan_mode'
-                          )
-                        }
-                        style={{
-                          padding: '12px 16px',
-                          textAlign: 'right',
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                          fontWeight: '600',
-                          color: C.textSecondary,
-                          userSelect: 'none',
-                          borderRight:
-                            col.id !== 'platform' ? `1px solid ${C.borderLight}` : 'none',
-                          backgroundColor: sortBy === col.id ? C.primaryLight : 'transparent',
-                        }}
-                      >
-                        {col.label} {sortBy === col.id && '↓'}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedResults.map((result) => {
-                    const platformName =
-                      platformDisplayNames[result.platformId] || result.platformId;
-                    const isMentioned = result.mentioned;
-                    const rowId = result.id;
-
-                    return (
-                      <tr
-                        key={rowId}
-                        onMouseEnter={(e) => handleRowHover(rowId, e)}
-                        onMouseLeave={() => {
-                          setHoveredRowId(null);
-                          setTooltipPos(null);
-                        }}
-                        style={{
-                          borderBottom: `1px solid ${C.borderLight}`,
-                          backgroundColor: !isMentioned ? '#FFEBEE' : C.card,
-                          transition: 'background-color 0.2s ease',
-                        }}
-                      >
-                        <td
-                          style={{
-                            padding: '12px 16px',
-                            fontSize: '13px',
-                            color: C.text,
-                            fontWeight: '500',
-                            borderRight: `1px solid ${C.borderLight}`,
-                          }}
-                        >
-                          {platformName}
-                        </td>
-                        <td
-                          style={{
-                            padding: '12px 16px',
-                            fontSize: '13px',
-                            color: C.text,
-                            borderRight: `1px solid ${C.borderLight}`,
-                            maxWidth: '200px',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {result.query}
-                        </td>
-                        <td
-                          style={{
-                            padding: '12px 16px',
-                            fontSize: '13px',
-                            color: isMentioned ? C.success : C.danger,
-                            fontWeight: '500',
-                            borderRight: `1px solid ${C.borderLight}`,
-                          }}
-                        >
-                          {isMentioned ? '✓ כן' : '✗ לא'}
-                        </td>
-                        <td
-                          style={{
-                            padding: '12px 16px',
-                            fontSize: '13px',
-                            color: C.text,
-                            borderRight: `1px solid ${C.borderLight}`,
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: '100%',
-                                maxWidth: '60px',
-                                height: '4px',
-                                backgroundColor: C.borderLight,
-                                borderRadius: '2px',
-                                overflow: 'hidden',
-                              }}
-                            >
-                              <div
-                                style={{
-                                  height: '100%',
-                                  width: `${Math.min(result.opportunityScore, 100)}%`,
-                                  backgroundColor: C.primary,
-                                }}
-                              />
-                            </div>
-                            <span style={{ fontSize: '12px', minWidth: '30px' }}>
-                              {result.opportunityScore}
-                            </span>
-                          </div>
-                        </td>
-                        <td
-                          style={{
-                            padding: '12px 16px',
-                            fontSize: '12px',
-                            borderRight: `1px solid ${C.borderLight}`,
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              backgroundColor:
-                                getScanModeColor(result.scanMode) + '20',
-                              padding: '4px 8px',
-                              borderRadius: '12px',
-                              color: getScanModeColor(result.scanMode),
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: '6px',
-                                height: '6px',
-                                borderRadius: '50%',
-                                backgroundColor: getScanModeColor(result.scanMode),
-                              }}
-                            />
-                            {getScanModeLabel(result.scanMode)}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {sortedResults.length === 0 && (
-              <div
-                style={{
-                  padding: '32px',
-                  textAlign: 'center',
-                  color: C.textMuted,
-                }}
-              >
-                לא נמצאו תוצאות עבור הסינון שנבחר
+          {/* ═══ SEO KEYWORDS TAB ═══ */}
+          {activeTab === 'seo_keywords' && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
+                <MetricCard icon="🔍" label="ביטויים שנבדקו" value={String(seoResults.length)} />
+                <MetricCard icon="📍" label="ביטויים שנמצאו" value={String(seoResults.filter(r => r.mentioned).length)} accent />
+                <MetricCard icon="🏆" label="Top 3" value={String(seoResults.filter(r => r.mentioned && r.evidence?.confidence && r.evidence.confidence >= 70).length)} accent />
+                <MetricCard icon="📈" label="הזדמנויות" value={String(seoResults.filter(r => !r.mentioned).length)} />
               </div>
-            )}
-          </div>
 
-          {/* Export Buttons */}
-          <div
-            style={{
-              padding: '0 24px',
-              marginBottom: '32px',
-              display: 'flex',
-              gap: '12px',
-              justifyContent: 'flex-start',
-            }}
-          >
-            <button
-              style={{
-                padding: '10px 20px',
-                backgroundColor: C.primary,
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: '500',
-              }}
-              title="TODO: Implement export by platform"
-            >
-              ייצוא לפי פלטפורמה
-            </button>
-            <button
-              style={{
-                padding: '10px 20px',
-                backgroundColor: C.primary,
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: '500',
-              }}
-              title="TODO: Implement full report export"
-            >
-              ייצוא דוח מלא
-            </button>
-          </div>
-        </>
-      )}
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 16 }}>דירוג ביטויי חיפוש</h2>
+              <div style={{ backgroundColor: C.card, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: C.bg, borderBottom: `1px solid ${C.border}` }}>
+                      <th style={thStyle}>ביטוי</th>
+                      <th style={thStyle}>פלטפורמה</th>
+                      <th style={thStyle}>נמצא?</th>
+                      <th style={thStyle}>דירוג</th>
+                      <th style={thStyle}>ביטחון</th>
+                      <th style={thStyle}>תגובה / קטע</th>
+                      <th style={thStyle}>מצב</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {seoResults.map(result => (
+                      <tr key={result.id} style={{ borderBottom: `1px solid ${C.borderLight}`, backgroundColor: result.mentioned ? '#F0FFF4' : C.card }}>
+                        <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 220 }}>{decodeHtmlEntities(result.query)}</td>
+                        <td style={tdStyle}>
+                          <span>{getPlatformIcon(result.platformId)} {getPlatformName(result.platformId)}</span>
+                        </td>
+                        <td style={tdStyle}>
+                          {result.mentioned
+                            ? <span style={{ color: C.success, fontWeight: 600 }}>✓ כן</span>
+                            : <span style={{ color: C.danger }}>✗ לא</span>
+                          }
+                        </td>
+                        <td style={tdStyle}>
+                          <PositionBadge result={result} />
+                        </td>
+                        <td style={tdStyle}>
+                          <ConfidenceBar value={result.confidence} />
+                        </td>
+                        <td style={{ ...tdStyle, maxWidth: 250, fontSize: 12, color: C.textSecondary }}>
+                          {result.answer || result.evidence?.extractedSnippet
+                            ? <SnippetCell text={decodeHtmlEntities(result.answer || result.evidence?.extractedSnippet || '')} id={result.id} expanded={expandedQuery} setExpanded={setExpandedQuery} />
+                            : <span style={{ color: C.textMuted }}>—</span>
+                          }
+                        </td>
+                        <td style={tdStyle}><ModeTag mode={result.scanMode} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {seoResults.length === 0 && (
+                  <div style={{ padding: 40, textAlign: 'center' }}>
+                    <p style={{ fontSize: 14, color: C.textMuted, marginBottom: 8 }}>אין תוצאות SEO עדיין</p>
+                    <p style={{ fontSize: 12, color: C.textMuted }}>הרץ סריקה עם מפתח Google API כדי לקבל דירוגים</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
-      {/* Tooltip */}
-      {hoveredRowId && tooltipPos && (
-        <div
-          style={{
-            position: 'fixed',
-            top: `${tooltipPos.y}px`,
-            left: `${tooltipPos.x}px`,
-            backgroundColor: C.text,
-            color: '#FFFFFF',
-            padding: '12px',
-            borderRadius: '6px',
-            fontSize: '12px',
-            maxWidth: '300px',
-            zIndex: 1000,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            pointerEvents: 'none',
-          }}
-        >
-          {results.find((r) => r.id === hoveredRowId)?.evidence?.extractedSnippet ||
-            'אין פרטים זמינים'}
+          {/* ═══ AI VISIBILITY TAB ═══ */}
+          {activeTab === 'ai_visibility' && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
+                <MetricCard icon="🤖" label="שאילתות AI" value={String(aiResults.length)} />
+                <MetricCard icon="💬" label="אזכורים" value={String(aiResults.filter(r => r.mentioned).length)} accent />
+                <MetricCard icon="📊" label="נראות %" value={`${aiResults.length > 0 ? Math.round((aiResults.filter(r => r.mentioned).length / aiResults.length) * 100) : 0}%`} />
+                <MetricCard icon="🔌" label="פלטפורמות AI" value={String(aiSummaries.filter(s => s.scanMode !== 'unavailable').length)} />
+              </div>
+
+              {/* AI platform cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16, marginBottom: 32 }}>
+                {aiSummaries.map(s => (
+                  <PlatformCard key={s.platformId} summary={s} onClick={() => router.push(`/seo-geo/${planId}/results/${s.platformId}`)} />
+                ))}
+              </div>
+
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 16 }}>תוצאות נראות AI</h2>
+              <div style={{ backgroundColor: C.card, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: C.bg, borderBottom: `1px solid ${C.border}` }}>
+                      <th style={thStyle}>ביטוי</th>
+                      <th style={thStyle}>פלטפורמה</th>
+                      <th style={thStyle}>מוזכר?</th>
+                      <th style={thStyle}>ביטחון</th>
+                      <th style={thStyle}>תשובת AI</th>
+                      <th style={thStyle}>מצב</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aiResults.map(result => (
+                      <tr key={result.id} style={{ borderBottom: `1px solid ${C.borderLight}`, backgroundColor: result.mentioned ? '#F0FFF4' : C.card }}>
+                        <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 220 }}>{decodeHtmlEntities(result.query)}</td>
+                        <td style={tdStyle}>
+                          <span>{getPlatformIcon(result.platformId)} {getPlatformName(result.platformId)}</span>
+                        </td>
+                        <td style={tdStyle}>
+                          {result.mentioned
+                            ? <span style={{ color: C.success, fontWeight: 600 }}>✓ מוזכר</span>
+                            : <span style={{ color: C.danger }}>✗ לא מוזכר</span>
+                          }
+                        </td>
+                        <td style={tdStyle}>
+                          <ConfidenceBar value={result.confidence} />
+                        </td>
+                        <td style={{ ...tdStyle, maxWidth: 280, fontSize: 12, color: C.textSecondary }}>
+                          {result.answer || result.evidence?.extractedSnippet
+                            ? <SnippetCell text={decodeHtmlEntities(result.answer || result.evidence?.extractedSnippet || '')} id={result.id} expanded={expandedQuery} setExpanded={setExpandedQuery} />
+                            : <span style={{ color: C.textMuted }}>—</span>
+                          }
+                        </td>
+                        <td style={tdStyle}><ModeTag mode={result.scanMode} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {aiResults.length === 0 && (
+                  <div style={{ padding: 40, textAlign: 'center' }}>
+                    <p style={{ fontSize: 14, color: C.textMuted, marginBottom: 8 }}>אין תוצאות AI עדיין</p>
+                    <p style={{ fontSize: 12, color: C.textMuted }}>הרץ סריקת AI עם מפתחות API מוגדרים</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ═══ ALL RESULTS TAB ═══ */}
+          {activeTab === 'all_results' && (
+            <>
+              <div style={{ backgroundColor: C.card, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: C.bg, borderBottom: `1px solid ${C.border}` }}>
+                      <th style={thStyle}>פלטפורמה</th>
+                      <th style={thStyle}>ביטוי</th>
+                      <th style={thStyle}>נמצא?</th>
+                      <th style={thStyle}>ציון הזדמנות</th>
+                      <th style={thStyle}>ביטחון</th>
+                      <th style={thStyle}>תגובה</th>
+                      <th style={thStyle}>מצב סריקה</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {results.map(result => (
+                      <tr key={result.id} style={{ borderBottom: `1px solid ${C.borderLight}`, backgroundColor: result.mentioned ? '#F0FFF4' : C.card }}>
+                        <td style={tdStyle}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span>{getPlatformIcon(result.platformId)}</span>
+                            <span style={{ fontWeight: 500 }}>{getPlatformName(result.platformId)}</span>
+                          </span>
+                        </td>
+                        <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 200 }}>{decodeHtmlEntities(result.query)}</td>
+                        <td style={tdStyle}>
+                          {result.mentioned
+                            ? <span style={{ color: C.success, fontWeight: 600 }}>✓ כן</span>
+                            : <span style={{ color: C.danger }}>✗ לא</span>
+                          }
+                        </td>
+                        <td style={tdStyle}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ width: 60, height: 4, background: C.borderLight, borderRadius: 2, overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${Math.min(result.opportunityScore, 100)}%`, background: result.opportunityScore >= 70 ? C.warning : C.primary }} />
+                            </div>
+                            <span style={{ fontSize: 12 }}>{result.opportunityScore}</span>
+                          </div>
+                        </td>
+                        <td style={tdStyle}>
+                          <ConfidenceBar value={result.confidence} />
+                        </td>
+                        <td style={{ ...tdStyle, maxWidth: 250, fontSize: 12, color: C.textSecondary }}>
+                          {result.answer || result.evidence?.extractedSnippet
+                            ? <SnippetCell text={decodeHtmlEntities(result.answer || result.evidence?.extractedSnippet || '')} id={result.id} expanded={expandedQuery} setExpanded={setExpandedQuery} />
+                            : <span style={{ color: C.textMuted }}>—</span>
+                          }
+                        </td>
+                        <td style={tdStyle}><ModeTag mode={result.scanMode} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {results.length === 0 && (
+                  <div style={{ padding: 32, textAlign: 'center', color: C.textMuted }}>לא נמצאו תוצאות</div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-interface MetricCardProps {
-  label: string;
-  value: string;
-  icon: string;
-}
+// ── Shared table styles ─────────────────────────────────────────────────────
 
-function MetricCard({ label, value, icon }: MetricCardProps) {
+const thStyle: React.CSSProperties = {
+  padding: '12px 14px',
+  textAlign: 'right',
+  fontSize: 12,
+  fontWeight: 600,
+  color: C.textSecondary,
+  whiteSpace: 'nowrap',
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: '10px 14px',
+  fontSize: 13,
+  color: C.text,
+  verticalAlign: 'middle',
+};
+
+// ── Components ──────────────────────────────────────────────────────────────
+
+function MetricCard({ icon, label, value, accent }: { icon: string; label: string; value: string; accent?: boolean }) {
   return (
-    <div
-      style={{
-        backgroundColor: C.card,
-        borderRadius: '8px',
-        border: `1px solid ${C.border}`,
-        padding: '20px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <span
-          style={{
-            fontSize: '12px',
-            color: C.textSecondary,
-            fontWeight: '500',
-          }}
-        >
-          {label}
-        </span>
-        <span
-          style={{
-            fontSize: '20px',
-          }}
-        >
-          {icon}
-        </span>
+    <div style={{ backgroundColor: C.card, borderRadius: 12, border: `1px solid ${C.border}`, padding: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span style={{ fontSize: 12, color: C.textSecondary, fontWeight: 500 }}>{label}</span>
+        <span style={{ fontSize: 20 }}>{icon}</span>
       </div>
-      <p
-        style={{
-          fontSize: '24px',
-          fontWeight: '700',
-          color: C.text,
-          margin: '0',
-        }}
-      >
-        {value}
-      </p>
+      <p style={{ fontSize: 28, fontWeight: 700, color: accent ? C.primary : C.text, margin: 0 }}>{value}</p>
     </div>
   );
 }
 
-interface PlatformCardProps {
-  summary: PlatformSummary;
-  onClick: () => void;
-}
-
-function PlatformCard({ summary, onClick }: PlatformCardProps) {
-  const platformName = platformDisplayNames[summary.platformId] || summary.platformId;
-  const platformDesc =
-    platformDescriptions[summary.platformId] || 'Platform data';
-
+function PlatformCard({ summary, onClick }: { summary: PlatformSummary; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
       style={{
         backgroundColor: C.card,
-        borderRadius: '8px',
+        borderRadius: 12,
         border: `1px solid ${C.border}`,
-        padding: '20px',
+        padding: 20,
         cursor: 'pointer',
-        minWidth: '260px',
         textAlign: 'right',
-        transition: 'all 0.2s ease',
+        transition: 'all 0.2s',
         display: 'flex',
         flexDirection: 'column',
-        gap: '16px',
-      }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.borderColor = C.primary;
-        (e.currentTarget as HTMLElement).style.boxShadow =
-          `0 4px 12px rgba(0,181,254,0.1)`;
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.borderColor = C.border;
-        (e.currentTarget as HTMLElement).style.boxShadow = 'none';
+        gap: 12,
       }}
     >
-      {/* Icon */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-        }}
-      >
-        {platformIcons[summary.platformId] || <div style={{ width: '48px', height: '48px' }} />}
-      </div>
-
-      {/* Name & Description */}
-      <div>
-        <h3
-          style={{
-            fontSize: '14px',
-            fontWeight: '600',
-            color: C.text,
-            margin: '0 0 4px 0',
-          }}
-        >
-          {platformName}
-        </h3>
-        <p
-          style={{
-            fontSize: '12px',
-            color: C.textSecondary,
-            margin: '0',
-          }}
-        >
-          {platformDesc}
-        </p>
-      </div>
-
-      {/* Stats */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: '8px',
-        }}
-      >
-        <div
-          style={{
-            padding: '8px',
-            backgroundColor: C.bg,
-            borderRadius: '4px',
-          }}
-        >
-          <p
-            style={{
-              fontSize: '11px',
-              color: C.textMuted,
-              margin: '0 0 4px 0',
-            }}
-          >
-            שאילתות
-          </p>
-          <p
-            style={{
-              fontSize: '16px',
-              fontWeight: '700',
-              color: C.text,
-              margin: '0',
-            }}
-          >
-            {summary.queriesScanned}
-          </p>
-        </div>
-        <div
-          style={{
-            padding: '8px',
-            backgroundColor: C.bg,
-            borderRadius: '4px',
-          }}
-        >
-          <p
-            style={{
-              fontSize: '11px',
-              color: C.textMuted,
-              margin: '0 0 4px 0',
-            }}
-          >
-            אזכורים
-          </p>
-          <p
-            style={{
-              fontSize: '16px',
-              fontWeight: '700',
-              color: C.text,
-              margin: '0',
-            }}
-          >
-            {summary.mentions}
-          </p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 28 }}>{getPlatformIcon(summary.platformId)}</span>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{getPlatformName(summary.platformId)}</div>
+          <div style={{ fontSize: 11, color: C.textMuted }}>{getPlatformDesc(summary.platformId)}</div>
         </div>
       </div>
 
-      {/* Visibility & Mode */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: '12px',
-        }}
-      >
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px',
-            backgroundColor:
-              getScanModeColor(summary.scanMode) + '20',
-            padding: '4px 8px',
-            borderRadius: '12px',
-            color: getScanModeColor(summary.scanMode),
-            fontSize: '11px',
-          }}
-        >
-          <div
-            style={{
-              width: '6px',
-              height: '6px',
-              borderRadius: '50%',
-              backgroundColor: getScanModeColor(summary.scanMode),
-            }}
-          />
-          {getScanModeLabel(summary.scanMode)}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div style={{ padding: 8, background: C.bg, borderRadius: 6 }}>
+          <div style={{ fontSize: 10, color: C.textMuted }}>שאילתות</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{summary.queriesScanned}</div>
         </div>
-        <div
-          style={{
-            fontSize: '14px',
-            fontWeight: '700',
-            color: C.primary,
-          }}
-        >
+        <div style={{ padding: 8, background: C.bg, borderRadius: 6 }}>
+          <div style={{ fontSize: 10, color: C.textMuted }}>אזכורים</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: summary.mentions > 0 ? C.success : C.text }}>{summary.mentions}</div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <ModeTag mode={summary.scanMode} />
+        <div style={{ fontSize: 16, fontWeight: 700, color: summary.visibilityPct > 0 ? C.success : C.textMuted }}>
           {summary.visibilityPct}%
         </div>
       </div>
@@ -1036,20 +600,67 @@ function PlatformCard({ summary, onClick }: PlatformCardProps) {
   );
 }
 
-function getScanModeColor(mode: ScanMode): string {
-  const colors: Record<ScanMode, string> = {
-    real: C.success,
-    simulated: C.warning,
-    unavailable: C.textMuted,
-  };
-  return colors[mode];
+function ModeTag({ mode }: { mode: ScanMode }) {
+  const color = scanModeColor(mode);
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, backgroundColor: color + '18', padding: '3px 8px', borderRadius: 10, color, fontSize: 11, fontWeight: 500 }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />
+      {scanModeLabel(mode)}
+    </span>
+  );
 }
 
-function getScanModeLabel(mode: ScanMode): string {
-  const labels: Record<ScanMode, string> = {
-    real: 'אמיתי',
-    simulated: 'סימולציה',
-    unavailable: 'לא זמין',
-  };
-  return labels[mode];
+function MentionBadge({ result }: { result: PlatformResult }) {
+  if (result.scanMode === 'unavailable') return <ModeTag mode="unavailable" />;
+  return result.mentioned
+    ? <span style={{ color: C.success, fontWeight: 600, fontSize: 13 }}>✓ מוזכר</span>
+    : <span style={{ color: C.textMuted, fontSize: 13 }}>✗ לא</span>;
+}
+
+function PositionBadge({ result }: { result: PlatformResult }) {
+  if (result.scanMode === 'unavailable') return <ModeTag mode="unavailable" />;
+  if (!result.mentioned) return <span style={{ color: C.textMuted, fontSize: 13 }}>לא נמצא</span>;
+
+  const position = result.evidence?.confidence ? Math.ceil((100 - result.evidence.confidence) / 10) + 1 : null;
+  // If the confidence is high and it was found, show approximate position
+  if (result.confidence >= 70) {
+    return <span style={{ color: C.success, fontWeight: 700, fontSize: 14 }}>#{position || '?'} 🏆</span>;
+  }
+  if (result.confidence >= 40) {
+    return <span style={{ color: C.warning, fontWeight: 600, fontSize: 13 }}>#{position || '?'}</span>;
+  }
+  return <span style={{ color: C.success, fontSize: 13 }}>נמצא</span>;
+}
+
+function ConfidenceBar({ value }: { value: number }) {
+  const color = value >= 70 ? C.success : value >= 40 ? C.warning : C.textMuted;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ width: 40, height: 4, background: C.borderLight, borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${Math.min(value, 100)}%`, background: color, borderRadius: 2 }} />
+      </div>
+      <span style={{ fontSize: 11, color, fontWeight: 500 }}>{value}%</span>
+    </div>
+  );
+}
+
+function SnippetCell({ text, id, expanded, setExpanded }: { text: string; id: string; expanded: string | null; setExpanded: (id: string | null) => void }) {
+  const isExpanded = expanded === id;
+  const shortText = text.length > 80 ? text.slice(0, 80) + '...' : text;
+
+  return (
+    <div>
+      <div style={{ lineHeight: 1.5, direction: 'ltr', textAlign: 'left' }}>
+        {isExpanded ? text : shortText}
+      </div>
+      {text.length > 80 && (
+        <button
+          onClick={() => setExpanded(isExpanded ? null : id)}
+          style={{ background: 'none', border: 'none', color: C.primary, fontSize: 11, cursor: 'pointer', padding: 0, marginTop: 4 }}
+        >
+          {isExpanded ? 'הצג פחות' : 'הצג עוד'}
+        </button>
+      )}
+    </div>
+  );
 }

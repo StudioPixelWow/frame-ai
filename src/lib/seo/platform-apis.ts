@@ -40,6 +40,51 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 1
   }
 }
 
+/**
+ * Smart matching — checks if a business is mentioned in an AI response.
+ * Handles Hebrew names, domain names, partial matches, and HTML entities.
+ */
+function isBusinessMentioned(answer: string, businessName: string, targetDomain?: string): { found: boolean; confidence: number } {
+  const answerLower = answer.toLowerCase().replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+  const cleanName = businessName.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/"/g, '"');
+  const nameLower = cleanName.toLowerCase();
+
+  // Exact name match
+  if (answerLower.includes(nameLower)) {
+    return { found: true, confidence: 90 };
+  }
+
+  // Try without quotes (Hebrew abbreviation marks like נדל"ן → נדלן)
+  const nameNoQuotes = nameLower.replace(/["""''׳״]/g, '');
+  const answerNoQuotes = answerLower.replace(/["""''׳״]/g, '');
+  if (nameNoQuotes.length > 3 && answerNoQuotes.includes(nameNoQuotes)) {
+    return { found: true, confidence: 85 };
+  }
+
+  // Domain match
+  if (targetDomain) {
+    const domain = targetDomain.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
+    const domainName = domain.replace(/^www\./, '').split('.')[0]; // e.g., "alram" from "www.alram.co.il"
+    if (domainName.length > 3 && answerLower.includes(domainName)) {
+      return { found: true, confidence: 70 };
+    }
+    if (answerLower.includes(domain)) {
+      return { found: true, confidence: 80 };
+    }
+  }
+
+  // Partial match — try each word of the business name (skip short words)
+  const nameWords = nameLower.split(/[\s\-_]+/).filter(w => w.length > 2);
+  if (nameWords.length >= 2) {
+    const matchedWords = nameWords.filter(w => answerLower.includes(w));
+    if (matchedWords.length >= Math.ceil(nameWords.length * 0.6)) {
+      return { found: true, confidence: 60 };
+    }
+  }
+
+  return { found: false, confidence: 10 };
+}
+
 // ── Google Custom Search (SEO + AI Overview) ──────────────────────────────────
 
 export function isGoogleAvailable(): boolean {
@@ -92,7 +137,7 @@ export function isChatGPTAvailable(): boolean {
   return hasEnv('OPENAI_API_KEY');
 }
 
-export async function queryChatGPT(query: string, businessName: string): Promise<PlatformQueryResult> {
+export async function queryChatGPT(query: string, businessName: string, targetDomain?: string): Promise<PlatformQueryResult> {
   if (!isChatGPTAvailable()) return { found: false, confidence: 0, scanMode: 'unavailable' };
 
   try {
@@ -106,10 +151,10 @@ export async function queryChatGPT(query: string, businessName: string): Promise
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You are a helpful assistant. Answer concisely.' },
+          { role: 'system', content: 'You are a helpful assistant. Answer concisely. When recommending businesses or services, mention specific names.' },
           { role: 'user', content: query },
         ],
-        max_tokens: 300,
+        max_tokens: 400,
         temperature: 0.3,
       }),
     }, 15000);
@@ -118,13 +163,12 @@ export async function queryChatGPT(query: string, businessName: string): Promise
 
     const data = await res.json();
     const answer = data.choices?.[0]?.message?.content || '';
-    const nameLower = businessName.toLowerCase();
-    const found = answer.toLowerCase().includes(nameLower);
+    const match = isBusinessMentioned(answer, businessName, targetDomain);
 
     return {
-      found,
-      snippet: answer.slice(0, 200),
-      confidence: found ? 80 : 10,
+      found: match.found,
+      snippet: answer.slice(0, 300),
+      confidence: match.confidence,
       scanMode: 'real',
     };
   } catch {
@@ -138,7 +182,7 @@ export function isClaudeAvailable(): boolean {
   return hasEnv('ANTHROPIC_API_KEY');
 }
 
-export async function queryClaude(query: string, businessName: string): Promise<PlatformQueryResult> {
+export async function queryClaude(query: string, businessName: string, targetDomain?: string): Promise<PlatformQueryResult> {
   if (!isClaudeAvailable()) return { found: false, confidence: 0, scanMode: 'unavailable' };
 
   try {
@@ -152,7 +196,7 @@ export async function queryClaude(query: string, businessName: string): Promise<
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 300,
+        max_tokens: 400,
         messages: [{ role: 'user', content: query }],
       }),
     }, 15000);
@@ -161,13 +205,12 @@ export async function queryClaude(query: string, businessName: string): Promise<
 
     const data = await res.json();
     const answer = data.content?.[0]?.text || '';
-    const nameLower = businessName.toLowerCase();
-    const found = answer.toLowerCase().includes(nameLower);
+    const match = isBusinessMentioned(answer, businessName, targetDomain);
 
     return {
-      found,
-      snippet: answer.slice(0, 200),
-      confidence: found ? 80 : 10,
+      found: match.found,
+      snippet: answer.slice(0, 300),
+      confidence: match.confidence,
       scanMode: 'real',
     };
   } catch {
@@ -181,7 +224,7 @@ export function isPerplexityAvailable(): boolean {
   return hasEnv('PERPLEXITY_API_KEY');
 }
 
-export async function queryPerplexity(query: string, businessName: string): Promise<PlatformQueryResult> {
+export async function queryPerplexity(query: string, businessName: string, targetDomain?: string): Promise<PlatformQueryResult> {
   if (!isPerplexityAvailable()) return { found: false, confidence: 0, scanMode: 'unavailable' };
 
   try {
@@ -195,7 +238,7 @@ export async function queryPerplexity(query: string, businessName: string): Prom
       body: JSON.stringify({
         model: 'sonar',
         messages: [{ role: 'user', content: query }],
-        max_tokens: 300,
+        max_tokens: 400,
       }),
     }, 15000);
 
@@ -203,13 +246,12 @@ export async function queryPerplexity(query: string, businessName: string): Prom
 
     const data = await res.json();
     const answer = data.choices?.[0]?.message?.content || '';
-    const nameLower = businessName.toLowerCase();
-    const found = answer.toLowerCase().includes(nameLower);
+    const match = isBusinessMentioned(answer, businessName, targetDomain);
 
     return {
-      found,
-      snippet: answer.slice(0, 200),
-      confidence: found ? 85 : 10,
+      found: match.found,
+      snippet: answer.slice(0, 300),
+      confidence: match.confidence,
       scanMode: 'real',
     };
   } catch {
@@ -223,7 +265,7 @@ export function isGeminiAvailable(): boolean {
   return hasEnv('GEMINI_API_KEY');
 }
 
-export async function queryGemini(query: string, businessName: string): Promise<PlatformQueryResult> {
+export async function queryGemini(query: string, businessName: string, targetDomain?: string): Promise<PlatformQueryResult> {
   if (!isGeminiAvailable()) return { found: false, confidence: 0, scanMode: 'unavailable' };
 
   try {
@@ -235,7 +277,7 @@ export async function queryGemini(query: string, businessName: string): Promise<
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: query }] }],
-        generationConfig: { maxOutputTokens: 300, temperature: 0.3 },
+        generationConfig: { maxOutputTokens: 400, temperature: 0.3 },
       }),
     }, 15000);
 
@@ -243,13 +285,12 @@ export async function queryGemini(query: string, businessName: string): Promise<
 
     const data = await res.json();
     const answer = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const nameLower = businessName.toLowerCase();
-    const found = answer.toLowerCase().includes(nameLower);
+    const match = isBusinessMentioned(answer, businessName, targetDomain);
 
     return {
-      found,
-      snippet: answer.slice(0, 200),
-      confidence: found ? 80 : 10,
+      found: match.found,
+      snippet: answer.slice(0, 300),
+      confidence: match.confidence,
       scanMode: 'real',
     };
   } catch {
@@ -282,10 +323,10 @@ export async function queryPlatform(
   switch (platformId) {
     case 'google_seo': return queryGoogle(query, targetDomain);
     case 'google_ai_overview': return queryGoogle(query, targetDomain); // same API, different intent
-    case 'gemini': return queryGemini(query, businessName);
-    case 'chatgpt': return queryChatGPT(query, businessName);
-    case 'claude': return queryClaude(query, businessName);
-    case 'perplexity': return queryPerplexity(query, businessName);
+    case 'gemini': return queryGemini(query, businessName, targetDomain);
+    case 'chatgpt': return queryChatGPT(query, businessName, targetDomain);
+    case 'claude': return queryClaude(query, businessName, targetDomain);
+    case 'perplexity': return queryPerplexity(query, businessName, targetDomain);
     default: return { found: false, confidence: 0, scanMode: 'unavailable' };
   }
 }
