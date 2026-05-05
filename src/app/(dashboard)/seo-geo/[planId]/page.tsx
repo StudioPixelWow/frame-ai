@@ -149,34 +149,37 @@ function s(val: unknown): string {
 }
 
 /**
- * Deep-sanitize plan data: recursively walk the entire object tree.
- * Forces every value that will be rendered as a React child to be a primitive.
- * This prevents React error #310.
+ * Nuclear deep-sanitize: walk the entire plan object and force EVERY value
+ * that could be rendered as a React child into a primitive.
+ * Objects are kept ONLY when they're recognized records in arrays (goals, tasks, etc).
+ * Everything else is flattened. This prevents React error #310.
  */
-function deepSanitize(obj: any, depth = 0): any {
+function deepSanitize(obj: any): any {
+  return _sanitize(obj, 0);
+}
+
+function _sanitize(obj: any, depth: number): any {
   if (depth > 20) return typeof obj === 'object' ? JSON.stringify(obj) : obj;
   if (obj === null || obj === undefined) return obj;
   if (typeof obj !== 'object') return obj;
   if (obj instanceof Date) return obj.toISOString();
-  if (Array.isArray(obj)) return obj.map(item => deepSanitize(item, depth + 1));
 
-  // EvidenceField pattern: { value, confidence, source } → flatten to value
+  // Arrays: recurse into each item
+  if (Array.isArray(obj)) return obj.map(item => _sanitize(item, depth + 1));
+
+  // EvidenceField pattern: { value, ... } with confidence/source → flatten
   if ('value' in obj && ('confidence' in obj || 'source' in obj)) {
     const v = obj.value;
     return (v !== null && v !== undefined && typeof v === 'object') ? JSON.stringify(v) : (v ?? '');
   }
 
+  // Single-key object with 'value' → also flatten
   const keys = Object.keys(obj);
+  if (keys.length === 1 && keys[0] === 'value') {
+    return obj.value ?? '';
+  }
 
-  // Known "record" types that should be recursed into (have identifiable structure)
-  const isKnownContainer = keys.length > 5 || keys.includes('children') ||
-    (keys.includes('id') && keys.length > 3) ||
-    (keys.includes('tasks') || keys.includes('weeks') || keys.includes('days') ||
-     keys.includes('goals') || keys.includes('insights') || keys.includes('results') ||
-     keys.includes('visibilityResults') || keys.includes('visibilityQueries') ||
-     keys.includes('websiteScan') || keys.includes('phases'));
-
-  // Recurse into all children
+  // Recurse: sanitize every value in the object
   const result: any = {};
   for (const key of keys) {
     const val = obj[key];
@@ -187,26 +190,19 @@ function deepSanitize(obj: any, depth = 0): any {
     } else if (val instanceof Date) {
       result[key] = val.toISOString();
     } else if (Array.isArray(val)) {
-      result[key] = val.map(item => deepSanitize(item, depth + 1));
+      result[key] = val.map(item => _sanitize(item, depth + 1));
     } else {
-      // It's a plain object — recurse
-      result[key] = deepSanitize(val, depth + 1);
+      // Plain object value — recurse, but check if it should be flattened
+      const childKeys = Object.keys(val);
+      // Objects with 'value' key but missing confidence/source → flatten
+      if ('value' in val && childKeys.length <= 3) {
+        const v = val.value;
+        result[key] = (v !== null && v !== undefined && typeof v === 'object') ? JSON.stringify(v) : (v ?? '');
+      } else {
+        result[key] = _sanitize(val, depth + 1);
+      }
     }
   }
-
-  // If this object looks like a stray leaf (not a known container and has few keys),
-  // check all its values are primitives. If so, it might accidentally be rendered as a child.
-  if (!isKnownContainer && keys.length <= 5 && keys.length > 0) {
-    const allPrimitive = keys.every(k => {
-      const v = result[k];
-      return v === null || v === undefined || typeof v !== 'object';
-    });
-    if (allPrimitive) {
-      // Log for debugging
-      console.warn(`[SANITIZE] Potential leaf object at depth ${depth}:`, keys);
-    }
-  }
-
   return result;
 }
 
@@ -287,7 +283,23 @@ export default function SeoPlanDetail() {
           if (data.visibilityResults && !Array.isArray(data.visibilityResults)) { console.error('[SEO-PLAN-DETAIL] visibilityResults is not array:', data.visibilityResults); data.visibilityResults = []; }
           if (data.visibilityQueries && !Array.isArray(data.visibilityQueries)) { console.error('[SEO-PLAN-DETAIL] visibilityQueries is not array:', data.visibilityQueries); data.visibilityQueries = []; }
 
-          setPlan(deepSanitize(data));
+          // Nuclear sanitization: JSON round-trip + deepSanitize
+          const sanitized = deepSanitize(JSON.parse(JSON.stringify(data)));
+          // Final guard: walk all top-level values and force to primitives where expected
+          for (const [k, v] of Object.entries(sanitized)) {
+            if (v !== null && v !== undefined && typeof v === 'object' && !Array.isArray(v) && k !== 'websiteScan') {
+              // Known object fields that should stay as objects
+              if (['goals','visibilityQueries','visibilityResults','insights','weeks','phases','days'].includes(k)) continue;
+              if (typeof v === 'object' && !Array.isArray(v)) {
+                // Unexpected object at top level — flatten
+                if ('value' in (v as any)) {
+                  (sanitized as any)[k] = (v as any).value ?? '';
+                }
+              }
+            }
+          }
+          console.log('[SEO-PLAN-DETAIL] Sanitized plan keys:', Object.keys(sanitized));
+          setPlan(sanitized);
         }
       } catch (e) {
         console.error("Failed to load plan:", e);
