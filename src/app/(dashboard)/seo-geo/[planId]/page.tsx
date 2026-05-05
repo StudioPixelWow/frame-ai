@@ -141,10 +141,54 @@ function s(val: unknown): string {
   if (typeof val === 'number' || typeof val === 'boolean') return String(val);
   if (val instanceof Date) return val.toISOString();
   if (typeof val === 'object') {
-    console.warn('[SEO-PLAN-DETAIL] Object rendered as child — auto-stringified:', val);
+    // EvidenceField pattern: { value, confidence, source }
+    if ('value' in (val as any)) return String((val as any).value ?? '');
     return JSON.stringify(val);
   }
   return String(val);
+}
+
+/**
+ * Deep-sanitize plan data: recursively convert any nested object in a "leaf"
+ * position (where a primitive is expected) to a safe string.
+ * This prevents React error #310 regardless of what shape the DB returns.
+ */
+function deepSanitize(obj: any, depth = 0): any {
+  if (depth > 10) return obj; // prevent infinite recursion
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj !== 'object') return obj;
+  if (obj instanceof Date) return obj.toISOString();
+  if (Array.isArray(obj)) return obj.map(item => deepSanitize(item, depth + 1));
+
+  const result: any = {};
+  for (const key of Object.keys(obj)) {
+    const v = obj[key];
+    if (v === null || v === undefined) { result[key] = v; continue; }
+    if (typeof v !== 'object') { result[key] = v; continue; }
+    if (v instanceof Date) { result[key] = v.toISOString(); continue; }
+    if (Array.isArray(v)) { result[key] = v.map((item: any) => deepSanitize(item, depth + 1)); continue; }
+
+    // EvidenceField pattern: { value, confidence, source } → flatten to value
+    if ('value' in v && ('confidence' in v || 'source' in v)) {
+      result[key] = v.value ?? '';
+      continue;
+    }
+
+    // Known nested objects that SHOULD stay as objects (scan data, etc.)
+    const keepAsObject = [
+      'websiteScan','websiteFacts','platformStatuses','metrics',
+      'issues','goals','insights','weeks','days','phases',
+      'visibilityResults','visibilityQueries','tasks','results',
+    ];
+    if (keepAsObject.includes(key)) {
+      result[key] = deepSanitize(v, depth + 1);
+    } else {
+      // Unknown object in a leaf position — flatten to string
+      console.warn(`[SANITIZE] Flattening unexpected object at key="${key}":`, v);
+      result[key] = JSON.stringify(v);
+    }
+  }
+  return result;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -201,7 +245,7 @@ export default function SeoPlanDetail() {
           if (data.visibilityResults && !Array.isArray(data.visibilityResults)) { console.error('[SEO-PLAN-DETAIL] visibilityResults is not array:', data.visibilityResults); data.visibilityResults = []; }
           if (data.visibilityQueries && !Array.isArray(data.visibilityQueries)) { console.error('[SEO-PLAN-DETAIL] visibilityQueries is not array:', data.visibilityQueries); data.visibilityQueries = []; }
 
-          setPlan(data);
+          setPlan(deepSanitize(data));
         }
       } catch (e) {
         console.error("Failed to load plan:", e);
