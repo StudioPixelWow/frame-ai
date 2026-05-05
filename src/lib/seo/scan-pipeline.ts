@@ -802,14 +802,15 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
     let platformsChecked = 0;
     let unavailableCount = 0;
 
-    for (const platform of PLATFORMS) {
+    // Run ALL platform queries in parallel to avoid Vercel timeout
+    const platformTasks = PLATFORMS.map(async (platform) => {
       const ps = job.platformStatuses.find(p => p.id === platform.id)!;
       const platformQueries = queries.filter(q => q.platform === platform.id);
 
       if (platformQueries.length === 0) {
         ps.status = 'skipped';
         log(job, 'check_visibility', `${platform.name} — ללא שאילתות`, 'skipped');
-        continue;
+        return { checked: false, unavailable: false };
       }
 
       const apiPlatformId = platform.id as ApiPlatformId;
@@ -818,7 +819,6 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       if (!available) {
         ps.status = 'api_missing';
         ps.scanMode = 'unavailable';
-        unavailableCount++;
         log(job, 'check_visibility', `${platform.name} — API לא מחובר`, 'skipped', 'דרוש מפתח API');
 
         for (const q of platformQueries) {
@@ -828,16 +828,16 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
           });
         }
         ps.queriesScanned = platformQueries.length;
-        continue;
+        return { checked: false, unavailable: true };
       }
 
-      // Real API scan
+      // Real API scan — run all queries for this platform in parallel
       ps.status = 'running';
       ps.scanMode = 'real';
       log(job, 'check_visibility', `${platform.name} — סורק ${platformQueries.length} שאילתות (API אמיתי)...`, 'info');
 
       let mentions = 0;
-      for (const q of platformQueries) {
+      const queryTasks = platformQueries.map(async (q) => {
         try {
           const result = await queryPlatform(apiPlatformId, q.query, bName || urlObj.hostname, normalizedUrl);
           aiResults.push({
@@ -855,14 +855,20 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
             checkedAt: new Date().toISOString(), scanMode: 'real',
           });
         }
-      }
+      });
+
+      await Promise.all(queryTasks);
 
       ps.status = 'completed';
       ps.queriesScanned = platformQueries.length;
       ps.mentionsFound = mentions;
-      platformsChecked++;
       log(job, 'check_visibility', `${platform.name} — ${platformQueries.length} שאילתות נבדקו, ${mentions} אזכורים`, 'success', 'API אמיתי');
-    }
+      return { checked: true, unavailable: false };
+    });
+
+    const platformResults = await Promise.all(platformTasks);
+    platformsChecked = platformResults.filter(r => r.checked).length;
+    unavailableCount = platformResults.filter(r => r.unavailable).length;
 
     job.metrics.platformsChecked = platformsChecked;
     job.metrics.unavailableResults = unavailableCount;
