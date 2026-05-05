@@ -356,64 +356,18 @@ export default function SeoPlanDetail() {
     setGeneratingPlan(false);
   }, [plan]);
 
-  // ── Loading ──
-  if (loading) {
-    return (
-      <div style={{ direction: "rtl", padding: 40, background: C.bg, minHeight: "100vh" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-          {[200, 100, 400].map((h, i) => (
-            <div key={i} style={{
-              height: h, borderRadius: 20, background: C.borderLight, marginBottom: 20,
-              animation: "pulse 1.5s ease-in-out infinite",
-            }} />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (!plan) {
-    return (
-      <div style={{ direction: "rtl", padding: 60, background: C.bg, minHeight: "100vh", textAlign: "center" }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: C.text }}>תוכנית לא נמצאה</h2>
-        <p style={{ fontSize: 14, color: C.textMuted, marginTop: 8 }}>ID: {planId}</p>
-        <button onClick={() => router.push("/seo-geo/dashboard")} style={{
-          marginTop: 24, padding: "12px 32px", background: C.primary, color: "#fff",
-          border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: "pointer",
-        }}>חזרה למרכז PIXEL SEO/GEO</button>
-      </div>
-    );
-  }
-
   // ── PRE-RENDER SAFETY: ensure plan is fully sanitized (no objects as children) ──
+  // CRITICAL: These useMemo hooks MUST be before any conditional returns (Rules of Hooks)
   const safePlan = useMemo(() => {
-    if (!plan) return plan;
+    if (!plan) return null;
     return nuke(plan, 0) as SeoPlan;
   }, [plan]);
 
-  // Use safePlan for ALL rendering below
-  const p = safePlan!;
-
-  const status = STATUS_MAP[p.status] || STATUS_MAP.draft;
-  const domain = p.websiteUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "") || "—";
-  const progress = n(p.totalTasks) > 0 ? Math.round((n(p.completedTasks) / (n(p.totalTasks) || 1)) * 100) : 0;
-  const createdDate = p.createdAt ? new Date(typeof p.createdAt === 'string' ? p.createdAt : String(p.createdAt)) : new Date();
-  const now = new Date();
-  const daysSinceCreated = Math.max(0, Math.floor((now.getTime() - createdDate.getTime()) / 86400000));
-  const daysRemaining = Math.max(0, 60 - daysSinceCreated);
-
-  // Safe accessors for websiteScan (data from DB may have unexpected types)
-  const scan = p.websiteScan || null;
-  const safeLoadTime = typeof scan?.loadTimeMs === 'number' ? scan.loadTimeMs : 0;
-  const safeDa = typeof scan?.domainAuthority === 'number' ? scan.domainAuthority : 0;
-  const safeTotalPages = typeof scan?.totalPages === 'number' ? scan.totalPages : 0;
-  const safeBrokenLinks = typeof scan?.brokenLinks === 'number' ? scan.brokenLinks : 0;
-
   // ── Compute scores from websiteScan data (plan fields are often 0) ──
   const computedScores = useMemo(() => {
-    const scan = p?.websiteScan;
-    if (!scan) return { technical: n(p?.technicalScore), visibility: n(p?.visibilityScore), overall: n(p?.overallScore) };
+    if (!safePlan) return { technical: 0, visibility: 0, overall: 0 };
+    const scan = safePlan.websiteScan;
+    if (!scan) return { technical: n(safePlan.technicalScore), visibility: n(safePlan.visibilityScore), overall: n(safePlan.overallScore) };
 
     // Technical score: based on scan findings
     let tech = 50; // base
@@ -431,17 +385,65 @@ export default function SeoPlanDetail() {
     // Visibility score: based on AI queries
     const aiQueries = Array.isArray(scan.aiQueries) ? scan.aiQueries : [];
     const found = aiQueries.filter((q: any) => q.found === true).length;
-    const vis = aiQueries.length > 0 ? Math.round((found / aiQueries.length) * 100) : n(p?.visibilityScore);
+    const vis = aiQueries.length > 0 ? Math.round((found / aiQueries.length) * 100) : n(safePlan.visibilityScore);
 
     // Overall = weighted average
     const overall = Math.round(tech * 0.4 + vis * 0.6);
 
     return {
-      technical: n(p?.technicalScore) || tech,
-      visibility: n(p?.visibilityScore) || vis,
-      overall: n(p?.overallScore) || overall,
+      technical: n(safePlan.technicalScore) || tech,
+      visibility: n(safePlan.visibilityScore) || vis,
+      overall: n(safePlan.overallScore) || overall,
     };
-  }, [p]);
+  }, [safePlan]);
+
+  // ── Loading ──
+  if (loading) {
+    return (
+      <div style={{ direction: "rtl", padding: 40, background: C.bg, minHeight: "100vh" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          {[200, 100, 400].map((h, i) => (
+            <div key={i} style={{
+              height: h, borderRadius: 20, background: C.borderLight, marginBottom: 20,
+              animation: "pulse 1.5s ease-in-out infinite",
+            }} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!plan || !safePlan) {
+    return (
+      <div style={{ direction: "rtl", padding: 60, background: C.bg, minHeight: "100vh", textAlign: "center" }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: C.text }}>תוכנית לא נמצאה</h2>
+        <p style={{ fontSize: 14, color: C.textMuted, marginTop: 8 }}>ID: {planId}</p>
+        <button onClick={() => router.push("/seo-geo/dashboard")} style={{
+          marginTop: 24, padding: "12px 32px", background: C.primary, color: "#fff",
+          border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: "pointer",
+        }}>חזרה למרכז PIXEL SEO/GEO</button>
+      </div>
+    );
+  }
+
+  // Use safePlan for ALL rendering below
+  const p = safePlan;
+
+  const status = STATUS_MAP[p.status] || STATUS_MAP.draft;
+  const domain = p.websiteUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "") || "—";
+  const progress = n(p.totalTasks) > 0 ? Math.round((n(p.completedTasks) / (n(p.totalTasks) || 1)) * 100) : 0;
+  const createdDate = p.createdAt ? new Date(typeof p.createdAt === 'string' ? p.createdAt : String(p.createdAt)) : new Date();
+  const now = new Date();
+  const daysSinceCreated = Math.max(0, Math.floor((now.getTime() - createdDate.getTime()) / 86400000));
+  const daysRemaining = Math.max(0, 60 - daysSinceCreated);
+
+  // Safe accessors for websiteScan (data from DB may have unexpected types)
+  const scan = p.websiteScan || null;
+  const safeLoadTime = typeof scan?.loadTimeMs === 'number' ? scan.loadTimeMs : 0;
+  const safeDa = typeof scan?.domainAuthority === 'number' ? scan.domainAuthority : 0;
+  const safeTotalPages = typeof scan?.totalPages === 'number' ? scan.totalPages : 0;
+  const safeBrokenLinks = typeof scan?.brokenLinks === 'number' ? scan.brokenLinks : 0;
 
   // ══════════════════════════════════════════════════════════════
   // RENDER
