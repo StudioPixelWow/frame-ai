@@ -161,17 +161,22 @@ function n(val: unknown): number {
 }
 
 /**
- * Nuclear deep-sanitize: walk the entire plan object and force EVERY value
- * that could be rendered as a React child into a primitive.
- * Objects are kept ONLY when they're recognized records in arrays (goals, tasks, etc).
- * Everything else is flattened. This prevents React error #310.
+ * NUCLEAR deep-sanitize: walk the ENTIRE plan object and force every single value
+ * to a primitive. Objects with a "value" key are ALWAYS flattened to that value
+ * regardless of how many other keys they have. This prevents React error #310.
  */
 function deepSanitize(obj: any): any {
   return _sanitize(obj, 0);
 }
 
+/** Known container keys whose OBJECT structure should be preserved (they hold record-like data) */
+const CONTAINER_KEYS = new Set([
+  'websiteScan','goals','insights','visibilityResults','visibilityQueries',
+  'weeks','phases','days','tasks','results','issues','aiQueries',
+]);
+
 function _sanitize(obj: any, depth: number): any {
-  if (depth > 20) return typeof obj === 'object' ? JSON.stringify(obj) : obj;
+  if (depth > 30) return typeof obj === 'object' ? JSON.stringify(obj) : obj;
   if (obj === null || obj === undefined) return obj;
   if (typeof obj !== 'object') return obj;
   if (obj instanceof Date) return obj.toISOString();
@@ -179,21 +184,17 @@ function _sanitize(obj: any, depth: number): any {
   // Arrays: recurse into each item
   if (Array.isArray(obj)) return obj.map(item => _sanitize(item, depth + 1));
 
-  // EvidenceField pattern: { value, ... } with confidence/source → flatten
-  if ('value' in obj && ('confidence' in obj || 'source' in obj)) {
+  // ANY object with a 'value' key → flatten to the primitive value (no exceptions)
+  if ('value' in obj) {
     const v = obj.value;
-    return (v !== null && v !== undefined && typeof v === 'object') ? JSON.stringify(v) : (v ?? '');
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'object') return JSON.stringify(v);
+    return v;
   }
 
-  // Single-key object with 'value' → also flatten
-  const keys = Object.keys(obj);
-  if (keys.length === 1 && keys[0] === 'value') {
-    return obj.value ?? '';
-  }
-
-  // Recurse: sanitize every value in the object
+  // Object without 'value' key → recurse into fields
   const result: any = {};
-  for (const key of keys) {
+  for (const key of Object.keys(obj)) {
     const val = obj[key];
     if (val === null || val === undefined) {
       result[key] = val;
@@ -203,15 +204,69 @@ function _sanitize(obj: any, depth: number): any {
       result[key] = val.toISOString();
     } else if (Array.isArray(val)) {
       result[key] = val.map(item => _sanitize(item, depth + 1));
+    } else if ('value' in val) {
+      // ANY nested object with 'value' → flatten immediately
+      const v = val.value;
+      result[key] = (v !== null && v !== undefined && typeof v === 'object') ? JSON.stringify(v) : (v ?? '');
+    } else if (CONTAINER_KEYS.has(key)) {
+      // Known container — recurse to sanitize its children
+      result[key] = _sanitize(val, depth + 1);
     } else {
-      // Plain object value — recurse, but check if it should be flattened
-      const childKeys = Object.keys(val);
-      // Objects with 'value' key but missing confidence/source → flatten
-      if ('value' in val && childKeys.length <= 3) {
-        const v = val.value;
-        result[key] = (v !== null && v !== undefined && typeof v === 'object') ? JSON.stringify(v) : (v ?? '');
+      // Unknown object without 'value' key — recurse but check result
+      const sanitized = _sanitize(val, depth + 1);
+      // If after recursion it's still a non-array object, stringify it (safety net)
+      if (sanitized !== null && typeof sanitized === 'object' && !Array.isArray(sanitized)) {
+        // Keep it as an object only if it has meaningful keys
+        const sKeys = Object.keys(sanitized);
+        if (sKeys.length === 0) {
+          result[key] = '';
+        } else {
+          result[key] = sanitized;
+        }
       } else {
-        result[key] = _sanitize(val, depth + 1);
+        result[key] = sanitized;
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * ABSOLUTE LAST safety pass: walk the entire plan tree and ensure NO plain object
+ * ends up as a value that could be rendered as a React child.
+ * Arrays of records are left as-is (they contain container objects for goals, tasks, etc.)
+ * but any LEAF value that is a plain object is forcibly stringified.
+ */
+function nuclearFlatten(obj: any, path = ''): any {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj !== 'object') return obj;
+  if (obj instanceof Date) return obj.toISOString();
+  if (Array.isArray(obj)) return obj.map((item, i) => nuclearFlatten(item, `${path}[${i}]`));
+
+  const result: any = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val === null || val === undefined || typeof val !== 'object') {
+      result[key] = val;
+    } else if (val instanceof Date) {
+      result[key] = (val as Date).toISOString();
+    } else if (Array.isArray(val)) {
+      result[key] = val.map((item, i) => nuclearFlatten(item, `${path}.${key}[${i}]`));
+    } else {
+      // Plain object — should it be kept as a container or flattened?
+      if (CONTAINER_KEYS.has(key)) {
+        result[key] = nuclearFlatten(val, `${path}.${key}`);
+      } else {
+        // Check if this object has any sub-objects (making it a record)
+        const hasSubObjects = Object.values(val).some(
+          v => v !== null && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date)
+        );
+        if (hasSubObjects) {
+          // Record-like — recurse
+          result[key] = nuclearFlatten(val, `${path}.${key}`);
+        } else {
+          // Leaf object with only primitive values — keep as record
+          result[key] = val;
+        }
       }
     }
   }
@@ -295,23 +350,22 @@ export default function SeoPlanDetail() {
           if (data.visibilityResults && !Array.isArray(data.visibilityResults)) { console.error('[SEO-PLAN-DETAIL] visibilityResults is not array:', data.visibilityResults); data.visibilityResults = []; }
           if (data.visibilityQueries && !Array.isArray(data.visibilityQueries)) { console.error('[SEO-PLAN-DETAIL] visibilityQueries is not array:', data.visibilityQueries); data.visibilityQueries = []; }
 
-          // Nuclear sanitization: JSON round-trip + deepSanitize
-          const sanitized = deepSanitize(JSON.parse(JSON.stringify(data)));
-          // Final guard: walk all top-level values and force to primitives where expected
-          for (const [k, v] of Object.entries(sanitized)) {
-            if (v !== null && v !== undefined && typeof v === 'object' && !Array.isArray(v) && k !== 'websiteScan') {
-              // Known object fields that should stay as objects
-              if (['goals','visibilityQueries','visibilityResults','insights','weeks','phases','days'].includes(k)) continue;
-              if (typeof v === 'object' && !Array.isArray(v)) {
-                // Unexpected object at top level — flatten
-                if ('value' in (v as any)) {
-                  (sanitized as any)[k] = (v as any).value ?? '';
-                }
+          // Nuclear sanitization: JSON round-trip + deepSanitize + nuclearFlatten
+          const step1 = JSON.parse(JSON.stringify(data));
+          const step2 = deepSanitize(step1);
+          const final = nuclearFlatten(step2);
+
+          // Absolute last guard: verify no top-level value is a non-array object
+          for (const [k, v] of Object.entries(final)) {
+            if (v !== null && v !== undefined && typeof v === 'object' && !Array.isArray(v)) {
+              if (!CONTAINER_KEYS.has(k)) {
+                console.error(`[SEO-PLAN-DETAIL] ⚠️ STILL OBJECT at key "${k}" after nuclear sanitize:`, JSON.stringify(v).slice(0, 100));
+                (final as any)[k] = 'value' in (v as any) ? String((v as any).value ?? '') : '';
               }
             }
           }
-          console.log('[SEO-PLAN-DETAIL] Sanitized plan keys:', Object.keys(sanitized));
-          setPlan(sanitized);
+          console.log('[SEO-PLAN-DETAIL] Sanitized plan keys:', Object.keys(final));
+          setPlan(final);
         }
       } catch (e) {
         console.error("Failed to load plan:", e);
@@ -340,7 +394,7 @@ export default function SeoPlanDetail() {
   // Update task status
   const updateTaskStatus = useCallback(async (taskId: string, newStatus: PlanTask["status"]) => {
     if (!plan) return;
-    const updatedWeeks = (plan.weeks || []).map(w => ({
+    const updatedWeeks = (Array.isArray(plan.weeks) ? plan.weeks : []).map(w => ({
       ...w,
       tasks: w.tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t),
     }));
@@ -567,7 +621,7 @@ export default function SeoPlanDetail() {
               >
                 <span style={{ fontSize: 13 }}>📄</span> {generatingReport ? "מייצר..." : "הפק דוח PDF"}
               </button>
-              {!plan.phases?.length && (
+              {(!Array.isArray(plan.phases) || plan.phases.length === 0) && (
                 <button
                   onClick={handleGenerate60DayPlan}
                   disabled={generatingPlan}
@@ -687,11 +741,11 @@ export default function SeoPlanDetail() {
             {/* Goals */}
             <div style={{ ...cardStyle }}>
               <h3 style={{ ...sectionTitle }}>🎯 יעדים</h3>
-              {(plan.goals || []).length === 0 ? (
+              {(!Array.isArray(plan.goals) || plan.goals.length === 0) ? (
                 <p style={{ fontSize: 13, color: C.textMuted }}>לא הוגדרו יעדים</p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {plan.goals.filter(g => g.selected).map(g => (
+                  {plan.goals.filter(g => g && g.selected).map(g => (
                     <div key={g.id} style={{
                       display: "flex", alignItems: "center", gap: 12,
                       padding: "10px 14px", borderRadius: 12, background: C.bg,
@@ -724,15 +778,15 @@ export default function SeoPlanDetail() {
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
                   {[
-                    { l: "SSL", v: scan?.hasSSL ? "✓" : "���", ok: scan?.hasSSL },
+                    { l: "SSL", v: scan?.hasSSL === true ? "✓" : "✗", ok: scan?.hasSSL === true },
                     { l: "מהירות", v: `${(safeLoadTime / 1000).toFixed(1)}s`, ok: safeLoadTime < 3000 },
-                    { l: "מובייל", v: scan?.mobileOptimized ? "✓" : "✗", ok: scan?.mobileOptimized },
-                    { l: "Sitemap", v: scan?.hasSitemap ? "✓" : "✗", ok: scan?.hasSitemap },
-                    { l: "Robots", v: scan?.hasRobotsTxt ? "✓" : "✗", ok: scan?.hasRobotsTxt },
+                    { l: "מובייל", v: scan?.mobileOptimized === true ? "✓" : "✗", ok: scan?.mobileOptimized === true },
+                    { l: "Sitemap", v: scan?.hasSitemap === true ? "✓" : "✗", ok: scan?.hasSitemap === true },
+                    { l: "Robots", v: scan?.hasRobotsTxt === true ? "✓" : "✗", ok: scan?.hasRobotsTxt === true },
                     { l: "DA", v: `${safeDa}`, ok: safeDa > 20 },
                     { l: "דפים", v: `${safeTotalPages}`, ok: true },
                     { l: "שבורים", v: `${safeBrokenLinks}`, ok: safeBrokenLinks === 0 },
-                    { l: "Schema", v: scan?.structuredData ? "✓" : "✗", ok: scan?.structuredData },
+                    { l: "Schema", v: scan?.structuredData === true ? "✓" : "✗", ok: scan?.structuredData === true },
                   ].map((item, i) => (
                     <div key={i} style={{
                       padding: "10px 12px", borderRadius: 10, background: C.bg,
@@ -749,7 +803,7 @@ export default function SeoPlanDetail() {
             {/* Insights SWOT */}
             <div style={{ ...cardStyle }}>
               <h3 style={{ ...sectionTitle }}>💡 תובנות</h3>
-              {(plan.insights || []).length === 0 ? (
+              {(!Array.isArray(plan.insights) || plan.insights.length === 0) ? (
                 <p style={{ fontSize: 13, color: C.textMuted }}>אין תובנות</p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -790,14 +844,15 @@ export default function SeoPlanDetail() {
                   background: `linear-gradient(135deg, ${C.primary}, ${C.purple})`,
                   WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
                 }}>
-                  {s(plan.visibilityScore || 0)}%
+                  {n(plan.visibilityScore)}%
                 </div>
                 <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>ציון נראות כולל</div>
               </div>
               <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
                 {AI_ENGINES.map(eng => {
-                  const total = (plan.visibilityResults || []).length;
-                  const mentioned = (plan.visibilityResults || []).filter(vr =>
+                  const vrArr = Array.isArray(plan.visibilityResults) ? plan.visibilityResults : [];
+                  const total = vrArr.length;
+                  const mentioned = vrArr.filter(vr =>
                     (Array.isArray(vr.results) ? vr.results : []).some(r => r.engine === eng && r.mentioned)
                   ).length;
                   const pct = total > 0 ? Math.round((mentioned / total) * 100) : 0;
@@ -820,10 +875,10 @@ export default function SeoPlanDetail() {
         {activeTab === "plan" && (
           <div>
             {/* Phase + Day structure (new) */}
-            {plan.phases && plan.phases.length > 0 ? (
+            {Array.isArray(plan.phases) && plan.phases.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {plan.phases.map(phase => {
-                  const phaseDays = (plan.days || []).filter(d => d.phase === phase.number);
+                  const phaseDays = (Array.isArray(plan.days) ? plan.days : []).filter(d => d.phase === phase.number);
                   const phaseDone = phaseDays.flatMap(d => d.tasks).filter(t => t.status === "done").length;
                   const phaseTotal = phaseDays.flatMap(d => d.tasks).length;
                   const phasePct = phaseTotal > 0 ? Math.round((phaseDone / phaseTotal) * 100) : 0;
@@ -950,7 +1005,7 @@ export default function SeoPlanDetail() {
                   );
                 })}
               </div>
-            ) : (plan.weeks || []).length > 0 ? (
+            ) : (Array.isArray(plan.weeks) && plan.weeks.length > 0) ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {plan.weeks.map(week => {
                   const isExpanded = expandedWeeks.has(week.weekNumber);
@@ -1189,7 +1244,7 @@ export default function SeoPlanDetail() {
         {/* ── AI RESULTS ── */}
         {activeTab === "ai" && (
           <div>
-            {(plan.visibilityResults || []).length === 0 ? (
+            {(!Array.isArray(plan.visibilityResults) || plan.visibilityResults.length === 0) ? (
               <EmptyTab icon="🤖" text="אין תוצאות AI. חזור לאשף והרץ סריקת נראות." />
             ) : (
               <>
@@ -1200,7 +1255,7 @@ export default function SeoPlanDetail() {
                   display: "flex", alignItems: "center", gap: 32,
                 }}>
                   <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 52, fontWeight: 800 }}>{s(plan.visibilityScore || 0)}%</div>
+                    <div style={{ fontSize: 52, fontWeight: 800 }}>{n(plan.visibilityScore)}%</div>
                     <div style={{ fontSize: 14, opacity: 0.9 }}>ציון נראות AI</div>
                   </div>
                   <div style={{ flex: 1, display: "flex", gap: 12, flexWrap: "wrap" }}>
