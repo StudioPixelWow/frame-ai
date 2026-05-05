@@ -258,7 +258,7 @@ export default function SeoPlanDetail() {
 
     // If plan has days structure
     if (plan.days) {
-      return plan.days.flatMap(d => d.tasks.map(t => ({ ...t, dayNumber: d.day, phaseNumber: d.phase, dayTheme: d.theme })));
+      return plan.days.flatMap(d => d.tasks.map(t => ({ ...t, dayNumber: d.day, phaseNumber: d.phaseNumber, dayTheme: d.focusTitle })));
     }
 
     // Fallback to weeks structure
@@ -352,6 +352,13 @@ export default function SeoPlanDetail() {
             refreshed.weeks = refreshed.weeks.map((w: any) => ({
               ...w,
               tasks: w.tasks.map((t: any) => ({ ...t, status: t.status || "todo" })),
+            }));
+          }
+          // Add status defaults to days/tasks from 60-day plan
+          if (refreshed.days) {
+            refreshed.days = refreshed.days.map((d: any) => ({
+              ...d,
+              tasks: (d.tasks || []).map((t: any) => ({ ...t, status: t.status || "todo" })),
             }));
           }
           const sanitized = nuke(refreshed, 0);
@@ -804,7 +811,7 @@ export default function SeoPlanDetail() {
             {Array.isArray(p.phases) && p.phases.length > 0 && Array.isArray(p.days) && p.days.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {p.phases.map(phase => {
-                  const phaseDays = (Array.isArray(p.days) ? p.days : []).filter(d => d.phase === phase.number);
+                  const phaseDays = (Array.isArray(p.days) ? p.days : []).filter(d => d.phaseNumber === phase.number);
                   const phaseDone = phaseDays.flatMap(d => d.tasks).filter(t => t.status === "done").length;
                   const phaseTotal = phaseDays.flatMap(d => d.tasks).length;
                   const phasePct = phaseTotal > 0 ? Math.round((phaseDone / phaseTotal) * 100) : 0;
@@ -876,7 +883,7 @@ export default function SeoPlanDetail() {
                                     fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 8,
                                     display: "flex", justifyContent: "space-between", alignItems: "center",
                                   }}>
-                                    <span>יום {s(day.day)}: {s(day.theme)}</span>
+                                    <span>יום {s(day.day)}: {s(day.focusTitle)}</span>
                                     <span style={{ fontSize: 11, color: C.textMuted }}>{dayDone}/{dayTotal} משימות ({dayPct}%)</span>
                                   </div>
                                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -913,10 +920,10 @@ export default function SeoPlanDetail() {
                                         {/* Impact badge */}
                                         <span style={{
                                           fontSize: 9, fontWeight: 600, padding: "2px 8px", borderRadius: 4, flexShrink: 0,
-                                          background: task.priority === "high" ? `${C.danger}15` : task.priority === "medium" ? `${C.warning}15` : `${C.info}15`,
-                                          color: task.priority === "high" ? C.danger : task.priority === "medium" ? C.warning : C.info,
+                                          background: task.impactLevel === "high" || task.impactLevel === "critical" ? `${C.danger}15` : task.impactLevel === "medium" ? `${C.warning}15` : `${C.info}15`,
+                                          color: task.impactLevel === "high" || task.impactLevel === "critical" ? C.danger : task.impactLevel === "medium" ? C.warning : C.info,
                                         }}>
-                                          {task.priority === "high" ? "גבוהה" : task.priority === "medium" ? "בינו" : "נמוכה"}
+                                          {task.impactLevel === "critical" ? "קריטית" : task.impactLevel === "high" ? "גבוהה" : task.impactLevel === "medium" ? "בינו" : "נמוכה"}
                                         </span>
                                       </div>
                                     ))}
@@ -1331,8 +1338,10 @@ export default function SeoPlanDetail() {
           // Extract competitor data from scan pipeline aiQueries + plan.competitors
           const aiQueriesRaw: any[] = scan?.aiQueries as any[] || [];
           const planCompetitors: any[] = Array.isArray((p as any).competitors) ? (p as any).competitors : [];
+          const scanCompetitors: any[] = Array.isArray((scan as any)?.competitors) ? (scan as any).competitors : [];
+          const allCompetitors = [...planCompetitors, ...scanCompetitors];
           const businessProfile = (p as any).businessProfile || (scan as any)?.websiteFacts?.businessProfile;
-          const knownCompetitors: string[] = businessProfile?.known_competitors || planCompetitors.map((c: any) => c.domain || c.name || '') || [];
+          const knownCompetitors: string[] = businessProfile?.known_competitors || allCompetitors.map((c: any) => c.domain || c.name || '').filter(Boolean) || [];
 
           // Extract mentioned competitors from AI snippets
           const mentionedInAI = new Map<string, {platforms: Set<string>; queries: string[]}>();

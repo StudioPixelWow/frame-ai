@@ -91,6 +91,18 @@ export function isGoogleAvailable(): boolean {
   return hasEnv('GOOGLE_SEARCH_API_KEY') && hasEnv('GOOGLE_SEARCH_CX');
 }
 
+/**
+ * Extract domain from a URL link
+ */
+function extractDomainFromUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.hostname || url;
+  } catch {
+    return url;
+  }
+}
+
 export async function queryGoogle(query: string, targetDomain: string): Promise<PlatformQueryResult> {
   if (!isGoogleAvailable()) return { found: false, confidence: 0, scanMode: 'unavailable' };
 
@@ -118,13 +130,27 @@ export async function queryGoogle(query: string, targetDomain: string): Promise<
       }
     }
 
+    // Collect competitor domains from search results
+    const competitors = items
+      .filter((item: any) => !item.link.toLowerCase().includes(domain))
+      .slice(0, 5)
+      .map((item: any) => ({
+        domain: extractDomainFromUrl(item.link),
+        title: item.title || '',
+        snippet: item.snippet || '',
+      }));
+
     return {
       found: position > 0,
       position: position > 0 ? position : undefined,
       snippet: snippet || undefined,
       confidence: position > 0 ? Math.max(100 - (position - 1) * 10, 30) : 0,
       scanMode: 'real',
-      raw: { totalResults: data.searchInformation?.totalResults, itemCount: items.length },
+      raw: {
+        totalResults: data.searchInformation?.totalResults,
+        itemCount: items.length,
+        competitors: competitors,
+      },
     };
   } catch {
     return { found: false, confidence: 0, scanMode: 'real' };

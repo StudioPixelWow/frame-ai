@@ -3,6 +3,50 @@ import { ok, err, loadPlan, notFound, updatePlanSafe, logActivity, withErrorBoun
 import { generate60DayPlan } from '@/lib/seo/plan-engine';
 import type { PlanInput } from '@/lib/seo/plan-engine';
 
+/**
+ * Extract keywords from plan data (websiteScan H1/H2 tags, business profile, or visibility queries)
+ */
+function extractKeywords(plan: any): string[] {
+  const keywords = new Set<string>();
+
+  // Extract from H1 and H2 tags
+  if (plan.websiteScan?.h1Tags && Array.isArray(plan.websiteScan.h1Tags)) {
+    plan.websiteScan.h1Tags.forEach((tag: string) => {
+      if (tag && typeof tag === 'string') {
+        keywords.add(tag.trim());
+      }
+    });
+  }
+
+  if (plan.websiteScan?.h2Tags && Array.isArray(plan.websiteScan.h2Tags)) {
+    plan.websiteScan.h2Tags.forEach((tag: string) => {
+      if (tag && typeof tag === 'string') {
+        keywords.add(tag.trim());
+      }
+    });
+  }
+
+  // Extract from business profile main products/services
+  if (plan.websiteScan?.websiteFacts?.main_products_or_services && Array.isArray(plan.websiteScan.websiteFacts.main_products_or_services)) {
+    plan.websiteScan.websiteFacts.main_products_or_services.forEach((service: string) => {
+      if (service && typeof service === 'string') {
+        keywords.add(service.trim());
+      }
+    });
+  }
+
+  // Fallback: extract from visibility queries (up to 10 unique queries)
+  if (plan.visibilityQueries && Array.isArray(plan.visibilityQueries) && keywords.size === 0) {
+    plan.visibilityQueries.slice(0, 10).forEach((q: any) => {
+      if (q.query && typeof q.query === 'string') {
+        keywords.add(q.query.trim());
+      }
+    });
+  }
+
+  return Array.from(keywords).slice(0, 20);
+}
+
 export const POST = withErrorBoundary(async (req: NextRequest, context: { params: Promise<{ planId: string }> }) => {
   const { planId } = await context.params;
   const { plan, error } = await loadPlan(planId, req);
@@ -78,7 +122,7 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
       targetValue: g.targetValue,
       priority: g.priority,
     })),
-    targetKeywords: [],
+    targetKeywords: extractKeywords(plan),
     targetLocation: 'Israel',
     targetLanguage: 'Hebrew',
     insights: (plan.insights || []).map((insight) => ({

@@ -187,6 +187,12 @@ export interface AIQueryResult {
   scanMode: 'real' | 'simulated' | 'unavailable';
 }
 
+export interface Competitor {
+  domain: string;
+  title: string;
+  snippet: string;
+}
+
 export interface ScanResult {
   url: string;
   scanType: ScanType;
@@ -215,6 +221,7 @@ export interface ScanResult {
   websiteFacts: WebsiteFacts | null;
   scan_mode: 'real' | 'simulated' | 'unavailable';
   aiQueries: AIQueryResult[];
+  competitors: Competitor[];
   platformStatuses: PlatformStatus[];
   metrics: ScanMetrics;
   scanDuration: {
@@ -781,35 +788,144 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
     startStage(job, 'generate_queries');
 
     const queries: Array<{ query: string; platform: PlatformId; intent: string }> = [];
+    const uniqueQueries = new Set<string>();
+
     const bName = websiteFacts.business_name.value;
     const industry = websiteFacts.detected_industry.value;
     const location = websiteFacts.detected_location?.value || '';
+    const h1Tags = homepageParsed.h1Tags || [];
+    const h2Tags = homepageParsed.h2Tags || [];
 
-    if (bName) {
-      for (const p of PLATFORMS) {
-        queries.push({ query: bName, platform: p.id, intent: 'brand' });
+    // Helper to add queries with deduplication
+    const addQuery = (text: string, platform: PlatformId, intent: string) => {
+      const normalized = text.toLowerCase().trim();
+      if (normalized && !uniqueQueries.has(normalized)) {
+        uniqueQueries.add(normalized);
+        queries.push({ query: text, platform, intent });
       }
-      log(job, 'generate_queries', `שאילתות מותג: "${bName}"`, 'success', `${PLATFORMS.length} פלטפורמות`);
+    };
+
+    // 1. Brand name queries (only for google_seo)
+    if (bName) {
+      addQuery(bName, 'google_seo', 'brand');
+      log(job, 'generate_queries', `שאילתת מותג: "${bName}"`, 'success');
     }
 
+    // 2. Industry + location queries (all platforms)
     if (industry && location) {
-      const q = `best ${industry} in ${location}`;
-      for (const p of PLATFORMS) queries.push({ query: q, platform: p.id, intent: 'local' });
-      log(job, 'generate_queries', `שאילתות מקומיות`, 'success', `"${q}"`);
+      const baseQueries = [
+        `best ${industry} in ${location}`,
+        `top ${industry} ${location}`,
+        `${industry} services ${location}`,
+        `how to find ${industry} in ${location}`,
+      ];
+      for (const q of baseQueries) {
+        for (const p of PLATFORMS) {
+          addQuery(q, p.id, 'local');
+        }
+      }
+      log(job, 'generate_queries', `${baseQueries.length} שאילתות מקומיות ליצור ע"י ${PLATFORMS.length} פלטפורמות`, 'success');
     } else if (industry) {
-      const q = `best ${industry} services`;
-      for (const p of PLATFORMS) queries.push({ query: q, platform: p.id, intent: 'generic' });
-      log(job, 'generate_queries', `שאילתות כלליות`, 'success', `"${q}"`);
+      const baseQueries = [
+        `best ${industry} services`,
+        `top ${industry} companies`,
+        `how to choose ${industry}`,
+        `${industry} solutions`,
+      ];
+      for (const q of baseQueries) {
+        for (const p of PLATFORMS) {
+          addQuery(q, p.id, 'generic');
+        }
+      }
+      log(job, 'generate_queries', `${baseQueries.length} שאילתות כלליות`, 'success');
     }
 
-    for (const prod of products.slice(0, 3)) {
-      const q = location ? `${prod} ${location}` : prod;
-      queries.push({ query: q, platform: 'google_seo', intent: 'product' });
-      queries.push({ query: q, platform: 'chatgpt', intent: 'product' });
-      log(job, 'generate_queries', `שאילתת מוצר`, 'success', `"${q}"`);
+    // 3. Product/service queries with location (google_seo + chatgpt)
+    const aiPlatforms: PlatformId[] = ['chatgpt', 'gemini', 'claude', 'perplexity'];
+    const seoAiPlatforms: PlatformId[] = ['google_seo', 'chatgpt'];
+
+    for (const prod of products.slice(0, 5)) {
+      // "Product in Location" for search engines and ChatGPT
+      if (location) {
+        const q = `${prod} ${location}`;
+        for (const p of seoAiPlatforms) {
+          addQuery(q, p, 'product');
+        }
+      } else {
+        addQuery(prod, 'google_seo', 'product');
+        addQuery(prod, 'chatgpt', 'product');
+      }
+
+      // AI-only: "best {product}" comparison
+      for (const p of aiPlatforms) {
+        addQuery(`best ${prod}`, p, 'product');
+      }
+    }
+    log(job, 'generate_queries', `${Math.min(5, products.length)} שאילתות מוצרים ליצור`, 'success');
+
+    // 4. "How to" / informational queries from products (AI platforms only)
+    for (const prod of products.slice(0, 4)) {
+      const howtoQueries = [
+        `how to choose ${prod}`,
+        `${prod} vs alternatives`,
+        `best practices for ${prod}`,
+      ];
+      for (const q of howtoQueries) {
+        for (const p of aiPlatforms) {
+          addQuery(q, p, 'informational');
+        }
+      }
+    }
+    log(job, 'generate_queries', `שאילתות מדעות (how-to) מ-4 מוצרים`, 'success');
+
+    // 5. Comparison queries (AI platforms only)
+    if (products.length >= 2) {
+      const comparisonQueries = [
+        `${products[0]} vs ${products[1] || products[0]}`,
+        `${products[0]} alternatives`,
+        `compare ${products[0]} solutions`,
+      ];
+      for (const q of comparisonQueries) {
+        for (const p of aiPlatforms) {
+          addQuery(q, p, 'comparison');
+        }
+      }
+      log(job, 'generate_queries', `שאילתות השוואה`, 'success');
     }
 
-    log(job, 'generate_queries', `נבנו ${queries.length} שאילתות`, 'success');
+    // 6. H1/H2 derived queries (google_seo)
+    const headingQueries = [...h1Tags, ...h2Tags].filter(tag => tag && tag.length > 5 && tag.length < 120);
+    for (const heading of headingQueries.slice(0, 5)) {
+      // Use heading as-is if concise, otherwise extract key terms
+      if (heading.length > 80) {
+        // Extract first noun phrase or significant terms
+        const words = heading.split(/\s+/).slice(0, 5).join(' ');
+        addQuery(words, 'google_seo', 'heading');
+      } else {
+        addQuery(heading, 'google_seo', 'heading');
+      }
+    }
+    if (headingQueries.length > 0) {
+      log(job, 'generate_queries', `${headingQueries.length} שאילתות מכותרות H1/H2 ליצור`, 'success');
+    }
+
+    // 7. Hebrew-aware: detect if content is in Hebrew and generate Hebrew queries if applicable
+    const isHebrew = /[֐-׿]/.test([bName, industry, ...products, ...h1Tags, ...h2Tags].join(''));
+    if (isHebrew && industry) {
+      const hebrewQueries = [
+        `${industry} בישראל`,
+        `${bName || industry} - שירותים`,
+        `${industry} טוב ביותר`,
+      ];
+      for (const q of hebrewQueries.filter(q => q && !uniqueQueries.has(q.toLowerCase()))) {
+        for (const p of ['google_seo', 'chatgpt'] as PlatformId[]) {
+          addQuery(q, p, 'hebrew');
+        }
+      }
+      log(job, 'generate_queries', `שאילתות בעברית הוספו`, 'success');
+    }
+
+    log(job, 'generate_queries', `נבנו ${queries.length} שאילתות בסך הכל (${uniqueQueries.size} ייחודיות)`, 'success');
     completeStage(job, 'generate_queries', queries.length);
     stageDurations.generate_queries = Date.now() - s7;
 
@@ -818,6 +934,7 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
     startStage(job, 'check_visibility');
 
     const aiResults: AIQueryResult[] = [];
+    const competitorSet = new Map<string, Competitor>(); // Dedup competitors by domain
     let platformsChecked = 0;
     let unavailableCount = 0;
 
@@ -829,7 +946,7 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       if (platformQueries.length === 0) {
         ps.status = 'skipped';
         log(job, 'check_visibility', `${platform.name} — ללא שאילתות`, 'skipped');
-        return { checked: false, unavailable: false };
+        return { checked: false, unavailable: false, competitors: [] };
       }
 
       const apiPlatformId = platform.id as ApiPlatformId;
@@ -847,7 +964,7 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
           });
         }
         ps.queriesScanned = platformQueries.length;
-        return { checked: false, unavailable: true };
+        return { checked: false, unavailable: true, competitors: [] };
       }
 
       // Real API scan — run all queries for this platform in parallel
@@ -856,6 +973,7 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       log(job, 'check_visibility', `${platform.name} — סורק ${platformQueries.length} שאילתות (API אמיתי)...`, 'info');
 
       let mentions = 0;
+      const platformCompetitors: Competitor[] = [];
       const queryTasks = platformQueries.map(async (q) => {
         try {
           const result = await queryPlatform(apiPlatformId, q.query, bName || urlObj.hostname, normalizedUrl);
@@ -866,6 +984,11 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
             checkedAt: new Date().toISOString(), scanMode: result.scanMode,
           });
           if (result.found) mentions++;
+
+          // Collect competitors from Google results (google_seo platform only)
+          if (platform.id === 'google_seo' && result.raw?.competitors) {
+            platformCompetitors.push(...(result.raw.competitors as Competitor[]));
+          }
         } catch (err) {
           log(job, 'check_visibility', `${platform.name} — שגיאה בשאילתה "${q.query}"`, 'error',
             err instanceof Error ? err.message : 'Unknown error');
@@ -882,16 +1005,31 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       ps.queriesScanned = platformQueries.length;
       ps.mentionsFound = mentions;
       log(job, 'check_visibility', `${platform.name} — ${platformQueries.length} שאילתות נבדקו, ${mentions} אזכורים`, 'success', 'API אמיתי');
-      return { checked: true, unavailable: false };
+      return { checked: true, unavailable: false, competitors: platformCompetitors };
     });
 
     const platformResults = await Promise.all(platformTasks);
     platformsChecked = platformResults.filter(r => r.checked).length;
     unavailableCount = platformResults.filter(r => r.unavailable).length;
 
+    // Collect unique competitors across all platforms
+    for (const result of platformResults) {
+      if (result.competitors) {
+        for (const comp of result.competitors) {
+          if (!competitorSet.has(comp.domain)) {
+            competitorSet.set(comp.domain, comp);
+          }
+        }
+      }
+    }
+    const competitorsList = Array.from(competitorSet.values()).slice(0, 10); // Top 10 competitors
+
     job.metrics.platformsChecked = platformsChecked;
     job.metrics.unavailableResults = unavailableCount;
     log(job, 'check_visibility', `${platformsChecked} פלטפורמות נבדקו, ${unavailableCount} לא זמינות`, 'info');
+    if (competitorsList.length > 0) {
+      log(job, 'check_visibility', `${competitorsList.length} תחרויות זוהו מתוצאות Google`, 'success');
+    }
     completeStage(job, 'check_visibility', platformsChecked);
     stageDurations.check_visibility = Date.now() - s8;
 
@@ -969,6 +1107,7 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       websiteFacts,
       scan_mode: 'real',
       aiQueries: aiResults,
+      competitors: competitorsList,
       platformStatuses: job.platformStatuses,
       metrics: job.metrics,
       scanDuration: {
