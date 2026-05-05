@@ -84,7 +84,7 @@ const C = {
   text: "#1A1A2E", textSecondary: "#5A5A7A", textMuted: "#9A9AB0",
   border: "#E8EAF0", borderLight: "#F0F2F5",
   success: "#10B981", warning: "#F59E0B", danger: "#EF4444", info: "#3B82F6",
-  neon: "#e9fe00", neonDark: "#c8d800",
+  neon: "#e9fe00", neonEnd: "#d3e200",
 };
 
 const AI_ENGINES = ["ChatGPT", "Gemini", "Perplexity", "Claude", "Copilot"];
@@ -94,7 +94,7 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   scanning: { label: "בסריקה", color: C.info },
   goals_set: { label: "יעדים הוגדרו", color: C.warning },
   visibility_done: { label: "נראות הושלמה", color: C.primary },
-  insights_ready: { label: "תובנות מוכנות", color: C.neonDark },
+  insights_ready: { label: "תובנות מוכנות", color: C.neonEnd },
   plan_generated: { label: "תוכנית מוכנה", color: C.success },
   tasks_created: { label: "משימות נוצרו", color: C.success },
   active: { label: "פעיל", color: C.success },
@@ -568,7 +568,7 @@ export default function SeoPlanDetail() {
           display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 14, marginBottom: 24,
         }}>
           {[
-            { label: "ציון GEO", value: `${computedScores.visibility}%`, color: C.neonDark, icon: "🤖", sub: "נראות במנועי AI" },
+            { label: "ציון GEO", value: `${computedScores.visibility}%`, color: C.neonEnd, icon: "🤖", sub: "נראות במנועי AI" },
             { label: "ציון SEO", value: `${computedScores.technical}%`, color: C.info, icon: "🔧", sub: "ציון טכני" },
             { label: "נראות AI", value: `${computedScores.overall}%`, color: C.primary, icon: "📊", sub: "ציון כללי" },
             { label: "התקדמות", value: `${progress}%`, color: progress >= 60 ? C.success : C.warning, icon: "📈", sub: "התקדמות" },
@@ -727,7 +727,7 @@ export default function SeoPlanDetail() {
               }}>
                 <div style={{
                   fontSize: 48, fontWeight: 800, color: C.primary,
-                  background: `linear-gradient(135deg, ${C.primary}, ${C.neon})`,
+                  background: `linear-gradient(135deg, ${C.neon}, ${C.neonEnd})`,
                   WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
                 }}>
                   {n(p.visibilityScore)}%
@@ -999,7 +999,7 @@ export default function SeoPlanDetail() {
                                       </span>
                                     )}
                                     {task.kpiTarget && (
-                                      <span style={{ ...tagStyle, background: `${C.neon}20`, color: C.neonDark }}>
+                                      <span style={{ ...tagStyle, background: `${C.neon}20`, color: C.neonEnd }}>
                                         📊 {s(task.kpiTarget)}
                                       </span>
                                     )}
@@ -1032,7 +1032,7 @@ export default function SeoPlanDetail() {
                   disabled={generatingPlan}
                   style={{
                     padding: "14px 36px",
-                    background: `linear-gradient(135deg, ${C.primary}, ${C.neon})`,
+                    background: `linear-gradient(135deg, ${C.neon}, ${C.neonEnd})`,
                     color: "#fff", border: "none", borderRadius: 14,
                     fontSize: 15, fontWeight: 700, cursor: generatingPlan ? "wait" : "pointer",
                     opacity: generatingPlan ? 0.6 : 1, transition: "all 0.3s",
@@ -1136,7 +1136,7 @@ export default function SeoPlanDetail() {
               <>
                 {/* Score hero */}
                 <div style={{
-                  background: `linear-gradient(135deg, ${C.primary}, ${C.neon})`,
+                  background: `linear-gradient(135deg, ${C.neon}, ${C.neonEnd})`,
                   borderRadius: 20, padding: 28, marginBottom: 20, color: "#fff",
                   display: "flex", alignItems: "center", gap: 32,
                 }}>

@@ -121,6 +121,7 @@ const C = {
   primary: '#2563eb',
   primaryLight: '#dbeafe',
   accent: '#e9fe00',
+  accentEnd: '#d3e200',
   success: '#22c55e',
   successLight: '#dcfce7',
   warning: '#f59e0b',
@@ -692,10 +693,10 @@ function ScanPageInner() {
               disabled={!scanUrl}
               style={{
                 padding: '16px 64px', fontSize: 17, fontWeight: 700,
-                background: scanUrl ? `linear-gradient(135deg, ${C.primary}, ${C.accent})` : C.borderLight,
-                color: scanUrl ? '#fff' : C.textMuted,
+                background: scanUrl ? `linear-gradient(135deg, ${C.accent}, ${C.accentEnd})` : C.borderLight,
+                color: scanUrl ? '#1A1A2E' : C.textMuted,
                 border: 'none', borderRadius: 14, cursor: scanUrl ? 'pointer' : 'default',
-                boxShadow: scanUrl ? `0 6px 24px ${C.primary}30` : 'none',
+                boxShadow: scanUrl ? `0 6px 24px ${C.accent}30` : 'none',
                 transition: 'all 0.2s',
               }}
             >
@@ -793,8 +794,8 @@ function ScanPageInner() {
                 />
                 <defs>
                   <linearGradient id={`grad-${job.id}`} x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor={C.primary} />
-                    <stop offset="100%" stopColor={C.accent} />
+                    <stop offset="0%" stopColor={C.accent} />
+                    <stop offset="100%" stopColor={C.accentEnd} />
                   </linearGradient>
                 </defs>
                 {/* Center text */}
@@ -1174,7 +1175,7 @@ function ScanPageInner() {
 
 function btnStyle(color: string): React.CSSProperties {
   // Use dark text for bright/neon backgrounds
-  const isBright = color === '#e9fe00' || color === '#E8F401' || color === '#c8d800';
+  const isBright = color === '#e9fe00' || color === '#d3e200' || color === '#E8F401' || color === '#c8d800';
   return {
     padding: '8px 20px', fontSize: 13, fontWeight: 600,
     background: color, color: isBright ? '#1A1A2E' : '#fff', border: 'none',

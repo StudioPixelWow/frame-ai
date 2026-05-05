@@ -1478,7 +1478,7 @@ function SeoGeoWizard() {
                         }}
                         style={{
                           padding: "14px 48px",
-                          background: `linear-gradient(135deg, ${C.primary}, #e9fe00)`,
+                          background: "linear-gradient(135deg, #e9fe00, #d3e200)",
                           color: "#1A1A2E",
                           border: "none", borderRadius: 12, fontSize: 16, fontWeight: 700,
                           cursor: "pointer", transition: "all 0.2s",
