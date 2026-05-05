@@ -43,6 +43,9 @@ interface PlanTask {
   id: string; title: string; category: string; priority: string;
   estimatedHours: number; deliverable: string; kpiTarget: string;
   status?: "todo" | "in_progress" | "waiting" | "done";
+  description?: string; reason?: string; expectedOutcome?: string;
+  contentBrief?: string; effortHours?: number; relatedPageUrl?: string;
+  impactLevel?: string;
 }
 
 interface PlanWeek {
@@ -55,7 +58,7 @@ interface PlanPhase {
 }
 
 interface PlanDay {
-  day: number; date: string; phase: number; theme: string; tasks: PlanTask[];
+  day: number; date: string; phase: number; phaseNumber?: number; theme: string; focusTitle?: string; tasks: PlanTask[];
 }
 
 interface SeoPlan {
@@ -112,7 +115,7 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   completed: { label: "הושלם", color: C.primary },
 };
 
-type TabId = "overview" | "plan" | "tasks" | "ai" | "results" | "competitors" | "gaps" | "reports";
+type TabId = "overview" | "plan" | "tasks" | "ai" | "results" | "competitors" | "gaps" | "keywords" | "reports";
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "overview", label: "סקירה", icon: "📊" },
@@ -122,6 +125,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "results", label: "תוצאות נראות", icon: "🔎" },
   { id: "competitors", label: "מתחרים", icon: "🏆" },
   { id: "gaps", label: "פערי תוכן", icon: "📝" },
+  { id: "keywords", label: "ביטויי SEO", icon: "🔑" },
   { id: "reports", label: "דוחות", icon: "📄" },
 ];
 
@@ -219,10 +223,12 @@ export default function SeoPlanDetail() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [expandedWeeks, setExpandedWeeks] = useState<Set<number>>(new Set([1]));
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [drawerQuery, setDrawerQuery] = useState<VisibilityResult | null>(null);
   const [generatingReport, setGeneratingReport] = useState(false);
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [reports, setReports] = useState<Array<{ id: string; name: string; generatedAt: string; type: string }>>([]);
+  const [expandedKeyword, setExpandedKeyword] = useState<string | null>(null);
 
   // Fetch plan
   useEffect(() => {
@@ -413,6 +419,195 @@ export default function SeoPlanDetail() {
       visibility: n(safePlan.visibilityScore) || vis,
       overall: n(safePlan.overallScore) || overall,
     };
+  }, [safePlan]);
+
+  // ── Auto-generate goals from scan data ──
+  const autoGoals = useMemo(() => {
+    if (!safePlan) return [];
+    if (Array.isArray(safePlan.goals) && safePlan.goals.length > 0) return safePlan.goals;
+    const scan = safePlan.websiteScan;
+    if (!scan) return [];
+    const goals: any[] = [];
+    if (scan.loadTimeMs > 3000) goals.push({ id: 'g1', type: 'technical', label: `שיפור מהירות טעינה מ-${(scan.loadTimeMs/1000).toFixed(1)}s ל-2s`, targetMetric: 'loadTimeMs', currentValue: scan.loadTimeMs, targetValue: 2000, priority: 'high', icon: '⚡', selected: true });
+    if (!scan.mobileOptimized) goals.push({ id: 'g2', type: 'technical', label: 'אופטימיזציה לניידים — עבור Mobile-Friendly Test', targetMetric: 'mobileOptimized', currentValue: 0, targetValue: 1, priority: 'high', icon: '📱', selected: true });
+    const aiQueries = scan.aiQueries || [];
+    const found = aiQueries.filter((q: any) => q.found).length;
+    const total = aiQueries.length || 1;
+    goals.push({ id: 'g3', type: 'visibility', label: `שיפור נראות AI מ-${Math.round(found/total*100)}% ל-60%+`, targetMetric: 'ai_visibility', currentValue: Math.round(found/total*100), targetValue: 60, priority: 'high', icon: '🤖', selected: true });
+    goals.push({ id: 'g4', type: 'seo', label: 'הגעה לעמוד 1 בגוגל ב-5 ביטויים ליבה', targetMetric: 'top10_keywords', currentValue: 0, targetValue: 5, priority: 'high', icon: '🎯', selected: true });
+    const pages = safePlan.websiteScan?.scannedPages || [];
+    const thinPages = pages.filter((pg: any) => pg.wordCount < 300).length;
+    if (thinPages > 0) goals.push({ id: 'g5', type: 'content', label: `שדרוג ${thinPages} עמודים עם תוכן תשוש (מתחת ל-300 מילים)`, targetMetric: 'thin_pages', currentValue: thinPages, targetValue: 0, priority: 'medium', icon: '📝', selected: true });
+    if (!scan.structuredData) goals.push({ id: 'g6', type: 'technical', label: 'יישום Schema.org — LocalBusiness + FAQ + Service', targetMetric: 'schema', currentValue: 0, targetValue: 1, priority: 'high', icon: '📋', selected: true });
+    if (!scan.hasSSL) goals.push({ id: 'g7', type: 'technical', label: 'התקנת SSL — HTTPS מלא', targetMetric: 'ssl', currentValue: 0, targetValue: 1, priority: 'critical', icon: '🔒', selected: true });
+    if (scan.domainAuthority < 25) goals.push({ id: 'g8', type: 'authority', label: `העלאת Domain Authority מ-${scan.domainAuthority} ל-25+`, targetMetric: 'da', currentValue: scan.domainAuthority, targetValue: 25, priority: 'medium', icon: '📈', selected: true });
+    return goals;
+  }, [safePlan]);
+
+  // ── Auto-generate insights from scan data ──
+  const autoInsights = useMemo(() => {
+    if (!safePlan) return [];
+    if (Array.isArray(safePlan.insights) && safePlan.insights.length > 0) return safePlan.insights;
+    const scan = safePlan.websiteScan;
+    if (!scan) return [];
+    const insights: any[] = [];
+    if (!scan.structuredData) insights.push({ id: 'i1', category: 'opportunity', title: 'Schema.org חסר — הזדמנות לתוצאות עשירות', description: 'הוספת LocalBusiness, FAQ, Service Schema תגביר הזדמנויות להופיע ב-Rich Results וב-AI', impact: 'high', action: 'יישום Schema JSON-LD בכל עמוד' });
+    const aiQueries = scan.aiQueries || [];
+    const missed = aiQueries.filter((q: any) => !q.found);
+    if (missed.length > 0) insights.push({ id: 'i2', category: 'threat', title: `${missed.length} שאילתות AI בהן העסק לא מוזכר`, description: `מנועי AI לא מזכירים את העסק ב-${missed.length} שאילתות רלוונטיות — מתחרים מקבלים את התנועה`, impact: 'high', action: 'יצירת תוכן ממוקד לכל שאילתה חסרה' });
+    if (scan.hasSSL) insights.push({ id: 'i3', category: 'strength', title: 'HTTPS מאובטח — בסיס טכני טוב', description: 'האתר מאובטח עם SSL — Google מעריך זאת כגורם דירוג', impact: 'low', action: 'לשמור על תוקף תעודת SSL' });
+    if (scan.hasSitemap) insights.push({ id: 'i4', category: 'strength', title: 'Sitemap קיים — Google יכול לזחול בקלות', description: 'Sitemap.xml קיים ומאפשר לגוגל למצוא את כל העמודים', impact: 'low', action: 'לעדכן Sitemap אחרי כל שינוי' });
+    if (scan.loadTimeMs > 3000) insights.push({ id: 'i5', category: 'weakness', title: `אתר איטי — ${(scan.loadTimeMs/1000).toFixed(1)} שניות טעינה`, description: 'זמן טעינה מעל 3 שניות גורם לנטישה גבוהה ופוגע בדירוג', impact: 'high', action: 'דחיסת תמונות, Lazy Loading, minify CSS/JS' });
+    if (!scan.mobileOptimized) insights.push({ id: 'i6', category: 'weakness', title: 'אתר לא מותאם לניידים', description: '60%+ מהחיפושים מגיעים מנייד — אתר לא responsive = דירוג נמוך', impact: 'critical', action: 'עיצוב responsive או AMP' });
+    if (scan.brokenLinks > 0) insights.push({ id: 'i7', category: 'weakness', title: `${scan.brokenLinks} קישורים שבורים`, description: 'קישורים שבורים פוגעים בחוויית משתמש וב-crawl budget', impact: 'medium', action: 'סריקה ותיקון כל קישור שבור' });
+    const found = aiQueries.filter((q: any) => q.found);
+    if (found.length > 0) insights.push({ id: 'i8', category: 'strength', title: `מוזכר ב-${found.length} שאילתות AI`, description: `העסק כבר מופיע ב-${found.length} תוצאות AI — בסיס טוב לחיזוק`, impact: 'medium', action: 'חיזוק נוכחות בשאילתות קיימות + הרחבה לחדשות' });
+    return insights;
+  }, [safePlan]);
+
+  // ── Auto-generate SEO keywords from scan data ──
+  const autoKeywords = useMemo(() => {
+    if (!safePlan) return [];
+
+    const scan = safePlan.websiteScan;
+    if (!scan) return [];
+
+    const businessName = s(safePlan.clientName) || "העסק";
+    const productsStr = s(scan.websiteFacts?.main_products_or_services || "");
+    const products = productsStr
+      ? productsStr.split(",").map((p: string) => p.trim()).filter((p: string) => p.length > 0).slice(0, 3)
+      : [];
+    const h1Tags = Array.isArray(scan.h1Tags) ? scan.h1Tags.filter((t: any) => typeof t === 'string' && t.length > 0).slice(0, 3) : [];
+    const h2Tags = Array.isArray(scan.h2Tags) ? scan.h2Tags.filter((t: any) => typeof t === 'string' && t.length > 0).slice(0, 3) : [];
+
+    // Extract location if available
+    const websiteUrl = s(safePlan.websiteUrl || "");
+    const locationMatch = websiteUrl.match(/\.([a-z]{2})($|\/)/i);
+    const location = locationMatch ? (locationMatch[1] === "il" ? "ישראל" : locationMatch[1]) : "ישראל";
+
+    // Keywords for each category
+    const keywordsList: any[] = [];
+
+    // 1. PURCHASE_INTENT (כוונת רכישה) - products + purchase terms
+    const purchaseTerms = ["מחיר", "עלות", "הזמנת", "קנייה", "השכרת", "ביצוע"];
+    if (products.length > 0) {
+      products.slice(0, 2).forEach((prod: string) => {
+        purchaseTerms.slice(0, 2).forEach((term: string) => {
+          keywordsList.push({
+            keyword: `${term} ${prod}`,
+            category: "purchase_intent",
+            categoryLabel: "כוונת רכישה",
+          });
+        });
+      });
+    }
+
+    // 2. LOCATION (מיקום) - products + location
+    if (products.length > 0) {
+      products.slice(0, 2).forEach((prod: string) => {
+        keywordsList.push({
+          keyword: `${prod} ${location}`,
+          category: "location",
+          categoryLabel: "מיקום",
+        });
+      });
+    }
+
+    // 3. PRODUCT (מוצר/שירות) - direct products + h1/h2 tags
+    products.slice(0, 4).forEach((prod: string) => {
+      keywordsList.push({
+        keyword: prod,
+        category: "product",
+        categoryLabel: "מוצר/שירות",
+      });
+    });
+    h1Tags.slice(0, 2).forEach((tag: string) => {
+      if (tag && tag.length < 60) {
+        keywordsList.push({
+          keyword: tag,
+          category: "product",
+          categoryLabel: "מוצר/שירות",
+        });
+      }
+    });
+    h2Tags.slice(0, 1).forEach((tag: string) => {
+      if (tag && tag.length < 60) {
+        keywordsList.push({
+          keyword: tag,
+          category: "product",
+          categoryLabel: "מוצר/שירות",
+        });
+      }
+    });
+
+    // 4. TRUST (אמון ומותג) - business + trust terms
+    const trustTerms = ["חוות דעת", "המלצות", "ביקורות", "ציונים", "הוכחות"];
+    trustTerms.slice(0, 3).forEach((term: string) => {
+      keywordsList.push({
+        keyword: `${term} ${businessName}`,
+        category: "trust",
+        categoryLabel: "אמון ומותג",
+      });
+    });
+
+    // Limit to 20 keywords total
+    const limitedKeywords = keywordsList.slice(0, 20);
+
+    // Map visibility results to find Google positions
+    const visibilityResults: Record<string, number | null> = {};
+    const aiFoundMap: Record<string, boolean> = {};
+
+    if (Array.isArray(safePlan.visibilityResults)) {
+      safePlan.visibilityResults.forEach((vr: any) => {
+        const query = s(vr.query || "").toLowerCase();
+        if (Array.isArray(vr.results)) {
+          const googleResult = vr.results.find((r: any) => s(r.engine || "").toLowerCase() === "google_seo" || s(r.engine || "").toLowerCase() === "google");
+          if (googleResult) {
+            visibilityResults[query] = n(googleResult.position) || null;
+          }
+        }
+      });
+    }
+
+    if (Array.isArray(scan.aiQueries)) {
+      scan.aiQueries.forEach((aq: any) => {
+        const query = s(aq.query || "").toLowerCase();
+        if (aq.found === true) {
+          aiFoundMap[query] = true;
+        }
+      });
+    }
+
+    // Add position and AI status to each keyword
+    const enrichedKeywords = limitedKeywords.map((kw: any, idx: number) => {
+      const keywordLower = kw.keyword.toLowerCase();
+      const position = visibilityResults[keywordLower] || null;
+      const aiMentioned = aiFoundMap[keywordLower] || false;
+
+      // Generate action plan based on status
+      let actionPlan = "";
+      if (!aiMentioned) {
+        actionPlan = `יצירת תוכן ממוקד לביטוי "${kw.keyword}" ברוח טבעית לשפע AI — שמור מרכוזות וסיכום בפסקה הראשונה`;
+      } else if (!position || position > 10) {
+        actionPlan = `שיפור תכולת קיימת עבור "${kw.keyword}" — הוסף קישורים פנימיים, שדרגו Meta Title ו-Description, בנה קישורים חיצוניים`;
+      } else if (position > 5) {
+        actionPlan = `לחצוץ "${kw.keyword}" מעמדה ${position} לעמוד 1 — חזקו עמוד יעד עם תוכן נוסף, קישורים ובדוקות בחוץ`;
+      } else {
+        actionPlan = `השמר על דירוג "${kw.keyword}" בעמוד 1 — שדרג תוכן באופן קבוע, עקבו אחר שינויים בתוצאות`;
+      }
+
+      return {
+        id: `kw-${idx}`,
+        keyword: kw.keyword,
+        category: kw.category,
+        categoryLabel: kw.categoryLabel,
+        googlePosition: position,
+        aiMentioned: aiMentioned,
+        actionPlan: actionPlan,
+      };
+    });
+
+    return enrichedKeywords;
   }, [safePlan]);
 
   // ── Loading ──
@@ -645,31 +840,42 @@ export default function SeoPlanDetail() {
             {/* Goals */}
             <div style={{ ...cardStyle }}>
               <h3 style={{ ...sectionTitle }}>🎯 יעדים</h3>
-              {(!Array.isArray(p.goals) || p.goals.length === 0) ? (
+              {(!Array.isArray(autoGoals) || autoGoals.length === 0) ? (
                 <p style={{ fontSize: 13, color: C.textMuted }}>לא הוגדרו יעדים</p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {p.goals.filter(g => g && g.selected).map(g => (
-                    <div key={g.id} style={{
-                      display: "flex", alignItems: "center", gap: 12,
-                      padding: "10px 14px", borderRadius: 12, background: C.bg,
-                    }}>
-                      <span style={{ fontSize: 22 }}>{s(g.icon)}</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{s(g.label)}</div>
-                        <div style={{ fontSize: 11, color: C.textMuted }}>
-                          {s(g.currentValue)} → {s(g.targetValue)} {s(g.targetMetric)}
-                        </div>
-                      </div>
-                      <span style={{
-                        fontSize: 10, fontWeight: 600, padding: "3px 10px", borderRadius: 6,
-                        background: g.priority === "high" ? `${C.danger}15` : g.priority === "medium" ? `${C.warning}15` : `${C.info}15`,
-                        color: g.priority === "high" ? C.danger : g.priority === "medium" ? C.warning : C.info,
+                  {autoGoals.filter(g => g && g.selected).map(g => {
+                    const progress = g.targetValue > 0 ? Math.min(100, Math.round((g.currentValue / g.targetValue) * 100)) : 0;
+                    return (
+                      <div key={g.id} style={{
+                        display: "flex", alignItems: "flex-start", gap: 12,
+                        padding: "12px 14px", borderRadius: 12, background: C.bg,
                       }}>
-                        {g.priority === "high" ? "גבוהה" : g.priority === "medium" ? "בינונית" : "נמוכה"}
-                      </span>
-                    </div>
-                  ))}
+                        <span style={{ fontSize: 22, flexShrink: 0 }}>{s(g.icon)}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{s(g.label)}</div>
+                          <div style={{
+                            height: 4, background: C.borderLight, borderRadius: 2, marginTop: 6, overflow: "hidden",
+                          }}>
+                            <div style={{
+                              height: "100%", width: `${progress}%`, borderRadius: 2,
+                              background: progress === 100 ? C.success : C.primary, transition: "width 0.4s",
+                            }} />
+                          </div>
+                          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>
+                            {s(g.currentValue)} → {s(g.targetValue)} {s(g.targetMetric)}
+                          </div>
+                        </div>
+                        <span style={{
+                          fontSize: 10, fontWeight: 600, padding: "3px 10px", borderRadius: 6, flexShrink: 0,
+                          background: g.priority === "high" ? `${C.danger}15` : g.priority === "medium" ? `${C.warning}15` : `${C.info}15`,
+                          color: g.priority === "high" ? C.danger : g.priority === "medium" ? C.warning : C.info,
+                        }}>
+                          {g.priority === "high" ? "גבוהה" : g.priority === "medium" ? "בינונית" : "נמוכה"}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -707,11 +913,11 @@ export default function SeoPlanDetail() {
             {/* Insights SWOT */}
             <div style={{ ...cardStyle }}>
               <h3 style={{ ...sectionTitle }}>💡 תובנות</h3>
-              {(!Array.isArray(p.insights) || p.insights.length === 0) ? (
+              {(!Array.isArray(autoInsights) || autoInsights.length === 0) ? (
                 <p style={{ fontSize: 13, color: C.textMuted }}>אין תובנות</p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {p.insights.slice(0, 6).map(ins => {
+                  {autoInsights.slice(0, 6).map(ins => {
                     const catConfig: Record<string, { icon: string; color: string }> = {
                       strength: { icon: "💪", color: C.success },
                       opportunity: { icon: "🚀", color: C.primary },
@@ -887,46 +1093,143 @@ export default function SeoPlanDetail() {
                                     <span style={{ fontSize: 11, color: C.textMuted }}>{dayDone}/{dayTotal} משימות ({dayPct}%)</span>
                                   </div>
                                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                                    {day.tasks.map(task => (
-                                      <div key={task.id} style={{
-                                        display: "flex", alignItems: "center", gap: 10,
-                                        padding: "10px 12px", borderRadius: 10, background: C.card,
-                                        border: `1px solid ${C.borderLight}`,
-                                      }}>
-                                        {/* Status toggle */}
-                                        <select
-                                          value={task.status || "todo"}
-                                          onChange={e => updateTaskStatus(task.id, e.target.value as PlanTask["status"])}
-                                          style={{
-                                            padding: "4px 6px", borderRadius: 6, border: `1px solid ${C.border}`,
-                                            fontSize: 10, background: C.card, cursor: "pointer", flexShrink: 0,
-                                            color: task.status === "done" ? C.success : task.status === "in_progress" ? C.primary : C.textSecondary,
-                                          }}
-                                        >
-                                          {KANBAN_COLS.map(col => (
-                                            <option key={col.id} value={col.id}>{col.label}</option>
-                                          ))}
-                                        </select>
+                                    {day.tasks.map(task => {
+                                      const isExpanded = expandedTaskId === task.id;
+                                      const taskDesc = (task as any).description || '';
+                                      const taskReason = (task as any).reason || '';
+                                      const taskOutcome = (task as any).expectedOutcome || '';
+                                      const taskBrief = (task as any).contentBrief || '';
+                                      const taskHours = (task as any).effortHours || (task as any).estimatedHours || 0;
+                                      const taskUrl = (task as any).relatedPageUrl || '';
 
-                                        {/* Content */}
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                          <div style={{
-                                            fontSize: 12, fontWeight: 600, color: C.text,
-                                            textDecoration: task.status === "done" ? "line-through" : "none",
-                                            opacity: task.status === "done" ? 0.6 : 1,
-                                          }}>{s(task.title)}</div>
-                                        </div>
-
-                                        {/* Impact badge */}
-                                        <span style={{
-                                          fontSize: 9, fontWeight: 600, padding: "2px 8px", borderRadius: 4, flexShrink: 0,
-                                          background: task.impactLevel === "high" || task.impactLevel === "critical" ? `${C.danger}15` : task.impactLevel === "medium" ? `${C.warning}15` : `${C.info}15`,
-                                          color: task.impactLevel === "high" || task.impactLevel === "critical" ? C.danger : task.impactLevel === "medium" ? C.warning : C.info,
+                                      return (
+                                        <div key={task.id} style={{
+                                          borderRadius: 10, background: C.card,
+                                          border: `1px solid ${isExpanded ? C.primary : C.borderLight}`,
+                                          overflow: "hidden",
                                         }}>
-                                          {task.impactLevel === "critical" ? "קריטית" : task.impactLevel === "high" ? "גבוהה" : task.impactLevel === "medium" ? "בינו" : "נמוכה"}
-                                        </span>
-                                      </div>
-                                    ))}
+                                          {/* Task header - clickable */}
+                                          <button onClick={() => setExpandedTaskId(isExpanded ? null : task.id)} style={{
+                                            width: "100%", padding: "10px 12px",
+                                            display: "flex", alignItems: "center", gap: 10,
+                                            background: "transparent", border: "none", cursor: "pointer", textAlign: "right",
+                                          }}>
+                                            {/* Status toggle */}
+                                            <select
+                                              value={task.status || "todo"}
+                                              onChange={e => {
+                                                e.stopPropagation();
+                                                updateTaskStatus(task.id, e.target.value as PlanTask["status"]);
+                                              }}
+                                              style={{
+                                                padding: "4px 6px", borderRadius: 6, border: `1px solid ${C.border}`,
+                                                fontSize: 10, background: C.card, cursor: "pointer", flexShrink: 0,
+                                                color: task.status === "done" ? C.success : task.status === "in_progress" ? C.primary : C.textSecondary,
+                                              }}
+                                            >
+                                              {KANBAN_COLS.map(col => (
+                                                <option key={col.id} value={col.id}>{col.label}</option>
+                                              ))}
+                                            </select>
+
+                                            {/* Content */}
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                              <div style={{
+                                                fontSize: 12, fontWeight: 600, color: C.text,
+                                                textDecoration: task.status === "done" ? "line-through" : "none",
+                                                opacity: task.status === "done" ? 0.6 : 1,
+                                              }}>{s(task.title)}</div>
+                                            </div>
+
+                                            {/* Impact badge */}
+                                            <span style={{
+                                              fontSize: 9, fontWeight: 600, padding: "2px 8px", borderRadius: 4, flexShrink: 0,
+                                              background: task.impactLevel === "high" || task.impactLevel === "critical" ? `${C.danger}15` : task.impactLevel === "medium" ? `${C.warning}15` : `${C.info}15`,
+                                              color: task.impactLevel === "high" || task.impactLevel === "critical" ? C.danger : task.impactLevel === "medium" ? C.warning : C.info,
+                                            }}>
+                                              {task.impactLevel === "critical" ? "קריטית" : task.impactLevel === "high" ? "גבוהה" : task.impactLevel === "medium" ? "בינו" : "נמוכה"}
+                                            </span>
+
+                                            {/* Expand arrow */}
+                                            <span style={{
+                                              fontSize: 14, color: C.textMuted,
+                                              transition: "transform 0.2s",
+                                              transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                                            }}>▾</span>
+                                          </button>
+
+                                          {/* Task details panel */}
+                                          {isExpanded && (
+                                            <div style={{
+                                              padding: "14px 12px", borderTop: `1px solid ${C.borderLight}`,
+                                              background: C.bg, fontSize: 13,
+                                            }}>
+                                              {taskDesc && (
+                                                <div style={{ marginBottom: 12 }}>
+                                                  <div style={{ fontSize: 11, fontWeight: 600, color: C.textSecondary, marginBottom: 6 }}>📝 תיאור המשימה</div>
+                                                  <div style={{ fontSize: 12, color: C.text, lineHeight: 1.6 }}>{s(taskDesc)}</div>
+                                                </div>
+                                              )}
+
+                                              {taskReason && (
+                                                <div style={{ marginBottom: 12 }}>
+                                                  <div style={{ fontSize: 11, fontWeight: 600, color: C.textSecondary, marginBottom: 6 }}>💡 למה זה חשוב?</div>
+                                                  <div style={{ fontSize: 12, color: C.text, lineHeight: 1.6 }}>{s(taskReason)}</div>
+                                                </div>
+                                              )}
+
+                                              {taskOutcome && (
+                                                <div style={{ marginBottom: 12 }}>
+                                                  <div style={{ fontSize: 11, fontWeight: 600, color: C.textSecondary, marginBottom: 6 }}>✅ תוצאה צפויה</div>
+                                                  <div style={{ fontSize: 12, color: C.text, lineHeight: 1.6 }}>{s(taskOutcome)}</div>
+                                                </div>
+                                              )}
+
+                                              {taskHours > 0 && (
+                                                <div style={{ marginBottom: 12 }}>
+                                                  <div style={{ fontSize: 11, fontWeight: 600, color: C.textSecondary, marginBottom: 6 }}>⏱️ שעות עבודה משוערות</div>
+                                                  <div style={{ fontSize: 12, color: C.text }}>{s(taskHours)} שעות</div>
+                                                </div>
+                                              )}
+
+                                              {taskBrief && (
+                                                <div style={{ marginBottom: 0 }}>
+                                                  <div style={{ fontSize: 11, fontWeight: 600, color: C.textSecondary, marginBottom: 6 }}>📋 תקציר תוכן מוכן</div>
+                                                  <div style={{
+                                                    background: C.card, border: `1px solid ${C.border}`,
+                                                    borderRadius: 8, padding: "10px 12px", fontFamily: "monospace",
+                                                    fontSize: 11, color: C.text, maxHeight: 120, overflow: "auto",
+                                                    lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word",
+                                                  }}>
+                                                    {s(taskBrief)}
+                                                  </div>
+                                                  <button onClick={() => {
+                                                    navigator.clipboard.writeText(String(taskBrief)).catch(() => {});
+                                                  }} style={{
+                                                    ...smallBtnStyle,
+                                                    width: "100%", marginTop: 8,
+                                                    background: `${C.primary}10`, color: C.primary, border: `1px solid ${C.primary}30`,
+                                                  }}>
+                                                    📋 העתק תקציר
+                                                  </button>
+                                                </div>
+                                              )}
+
+                                              {taskUrl && (
+                                                <div style={{ marginTop: 12 }}>
+                                                  <div style={{ fontSize: 11, fontWeight: 600, color: C.textSecondary, marginBottom: 6 }}>🔗 עמוד קשור</div>
+                                                  <a href={s(taskUrl)} target="_blank" rel="noopener noreferrer" style={{
+                                                    fontSize: 12, color: C.primary, textDecoration: "underline", cursor: "pointer",
+                                                  }}>
+                                                    {s(taskUrl)}
+                                                  </a>
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               );
@@ -1622,6 +1925,194 @@ export default function SeoPlanDetail() {
               </>
             )}
           </div>
+          );
+        })()}
+
+        {/* ── SEO KEYWORDS ── */}
+        {activeTab === "keywords" && (() => {
+          // Group keywords by category
+          const groupedByCategory = new Map<string, any[]>();
+          autoKeywords.forEach(kw => {
+            if (!groupedByCategory.has(kw.category)) {
+              groupedByCategory.set(kw.category, []);
+            }
+            groupedByCategory.get(kw.category)!.push(kw);
+          });
+
+          // Category display config
+          const categoryConfig: Record<string, { label: string; color: string; icon: string }> = {
+            purchase_intent: { label: "כוונת רכישה", color: C.danger, icon: "💳" },
+            location: { label: "מיקום", color: C.primary, icon: "📍" },
+            product: { label: "מוצר/שירות", color: C.info, icon: "📦" },
+            trust: { label: "אמון ומותג", color: C.success, icon: "⭐" },
+          };
+
+          // Calculate stats
+          const totalKeywords = autoKeywords.length;
+          const foundInGoogle = autoKeywords.filter(kw => kw.googlePosition !== null && kw.googlePosition <= 10).length;
+          const foundInAI = autoKeywords.filter(kw => kw.aiMentioned).length;
+          const avgPosition = autoKeywords
+            .filter(kw => kw.googlePosition !== null)
+            .reduce((sum, kw) => sum + (kw.googlePosition || 0), 0) / Math.max(1, autoKeywords.filter(kw => kw.googlePosition !== null).length);
+
+          return (
+            <div>
+              {totalKeywords === 0 ? (
+                <EmptyTab icon="🔑" text="אין ביטויי SEO זמינים. בדוק שהסריקה טכנית הושלמה." />
+              ) : (
+                <>
+                  {/* Summary stats */}
+                  <div style={{
+                    display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20,
+                  }}>
+                    {[
+                      { label: "ביטויים כלל", value: totalKeywords, color: C.text, icon: "🔑" },
+                      { label: "בעמוד 1 בגוגל", value: foundInGoogle, color: C.success, icon: "🏆" },
+                      { label: "נמצאים ב-AI", value: foundInAI, color: C.primary, icon: "🤖" },
+                      { label: "דירוג ממוצע", value: avgPosition > 0 ? Math.round(avgPosition) : "—", color: foundInGoogle > 0 ? C.success : C.warning, icon: "📊" },
+                    ].map((stat, i) => (
+                      <div key={i} style={{
+                        background: C.card,
+                        borderRadius: 14,
+                        border: `1px solid ${C.border}`,
+                        padding: "14px 16px",
+                        textAlign: "center",
+                      }}>
+                        <div style={{ fontSize: 18, marginBottom: 6 }}>{stat.icon}</div>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: stat.color, marginBottom: 4 }}>
+                          {s(stat.value)}
+                        </div>
+                        <div style={{ fontSize: 11, color: C.textMuted }}>{stat.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Category sections */}
+                  {Array.from(groupedByCategory.entries()).map(([catKey, keywords]) => {
+                    const config = categoryConfig[catKey as string] || { label: catKey, color: C.text, icon: "📌" };
+                    return (
+                      <div key={catKey} style={{
+                        marginBottom: 24,
+                        ...cardStyle,
+                      }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                          <span style={{ fontSize: 18 }}>{config.icon}</span>
+                          <h3 style={{ ...sectionTitle, margin: 0 }}>{config.label}</h3>
+                          <span style={{
+                            ...tagStyle,
+                            background: `${config.color}15`,
+                            color: config.color,
+                            marginLeft: "auto",
+                          }}>
+                            {keywords.length} ביטויים
+                          </span>
+                        </div>
+
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          {keywords.map(kw => {
+                            const isExpanded = expandedKeyword === kw.id;
+                            const statusColor = !kw.googlePosition
+                              ? C.warning
+                              : kw.googlePosition <= 5
+                                ? C.success
+                                : kw.googlePosition <= 10
+                                  ? C.info
+                                  : C.warning;
+
+                            return (
+                              <div
+                                key={kw.id}
+                                style={{
+                                  padding: "14px 16px",
+                                  borderRadius: 12,
+                                  background: C.bg,
+                                  border: `1px solid ${C.borderLight}`,
+                                  cursor: "pointer",
+                                  transition: "all 0.2s",
+                                }}
+                                onClick={() => setExpandedKeyword(isExpanded ? null : kw.id)}
+                              >
+                                <div style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  gap: 12,
+                                }}>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{
+                                      fontSize: 13,
+                                      fontWeight: 600,
+                                      color: C.text,
+                                      wordBreak: "break-word",
+                                    }}>
+                                      {s(kw.keyword)}
+                                    </div>
+                                  </div>
+
+                                  <div style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                    flexShrink: 0,
+                                  }}>
+                                    {/* Google position badge */}
+                                    <span style={{
+                                      ...tagStyle,
+                                      background: `${statusColor}15`,
+                                      color: statusColor,
+                                      minWidth: 70,
+                                      textAlign: "center",
+                                    }}>
+                                      {kw.googlePosition !== null ? `#${kw.googlePosition}` : "לא נמצא"}
+                                    </span>
+
+                                    {/* AI status badge */}
+                                    <span style={{
+                                      ...tagStyle,
+                                      background: kw.aiMentioned ? `${C.success}15` : `${C.danger}15`,
+                                      color: kw.aiMentioned ? C.success : C.danger,
+                                    }}>
+                                      {kw.aiMentioned ? "✓ AI" : "✗ AI"}
+                                    </span>
+
+                                    {/* Expand toggle */}
+                                    <span style={{
+                                      fontSize: 12,
+                                      color: C.textMuted,
+                                    }}>
+                                      {isExpanded ? "▼" : "▶"}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Expandable action plan */}
+                                {isExpanded && (
+                                  <div style={{
+                                    marginTop: 12,
+                                    paddingTop: 12,
+                                    borderTop: `1px solid ${C.border}`,
+                                  }}>
+                                    <div style={{
+                                      fontSize: 12,
+                                      color: C.textSecondary,
+                                      lineHeight: "1.5",
+                                    }}>
+                                      <span style={{ fontWeight: 600, color: C.text }}>תוכנית פעולה:</span>
+                                      <br />
+                                      {s(kw.actionPlan)}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </div>
           );
         })()}
 
