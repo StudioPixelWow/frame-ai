@@ -120,7 +120,7 @@ const C = {
   borderLight: '#f0f1f5',
   primary: '#2563eb',
   primaryLight: '#dbeafe',
-  accent: '#7c3aed',
+  accent: '#e9fe00',
   success: '#22c55e',
   successLight: '#dcfce7',
   warning: '#f59e0b',
@@ -1173,9 +1173,11 @@ function ScanPageInner() {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function btnStyle(color: string): React.CSSProperties {
+  // Use dark text for bright/neon backgrounds
+  const isBright = color === '#e9fe00' || color === '#E8F401' || color === '#c8d800';
   return {
     padding: '8px 20px', fontSize: 13, fontWeight: 600,
-    background: color, color: '#fff', border: 'none',
+    background: color, color: isBright ? '#1A1A2E' : '#fff', border: 'none',
     borderRadius: 10, cursor: 'pointer',
   };
 }

@@ -1478,11 +1478,11 @@ function SeoGeoWizard() {
                         }}
                         style={{
                           padding: "14px 48px",
-                          background: `linear-gradient(135deg, ${C.primary}, #7c3aed)`,
-                          color: "#fff",
+                          background: `linear-gradient(135deg, ${C.primary}, #e9fe00)`,
+                          color: "#1A1A2E",
                           border: "none", borderRadius: 12, fontSize: 16, fontWeight: 700,
                           cursor: "pointer", transition: "all 0.2s",
-                          boxShadow: "0 4px 16px rgba(124,58,237,0.3)",
+                          boxShadow: "0 4px 16px rgba(233,254,0,0.3)",
                         }}
                       >
                         סריקה מתקדמת (Quick / Deep)
@@ -2420,7 +2420,7 @@ function SeoGeoWizard() {
                       {data.phases.map((phase) => {
                         const isPhaseExpanded = expandedPhases.has(phase.number);
                         const phaseDays = data.days.filter(d => d.phaseNumber === phase.number);
-                        const phaseColors = ["#3B82F6", "#10B981", "#8B5CF6", "#F59E0B", "#EF4444"];
+                        const phaseColors = ["#3B82F6", "#10B981", "#e9fe00", "#F59E0B", "#EF4444"];
                         const phaseColor = phaseColors[(phase.number - 1) % phaseColors.length];
 
                         return (

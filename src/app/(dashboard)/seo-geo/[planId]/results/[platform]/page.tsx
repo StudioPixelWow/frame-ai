@@ -21,7 +21,7 @@ const C = {
   warning: '#F59E0B',
   danger: '#EF4444',
   info: '#3B82F6',
-  purple: '#8B5CF6',
+  neon: '#e9fe00', neonDark: '#c8d800',
 };
 
 type ScanMode = 'real' | 'simulated' | 'unavailable';
