@@ -1,276 +1,202 @@
-'use client';
+"use client";
 
-import { useEffect } from 'react';
+import { useState } from 'react';
 
-// ==================== TYPES ====================
-export interface EvidenceItem {
-  source_url: string;
-  extracted_text_snippet: string;
+interface Evidence {
+  source: string;
+  url?: string;
+  snippet: string;
   confidence: number;
-  data_type: 'real' | 'simulated' | 'manual' | 'unavailable';
+  dataPoint?: string;
 }
 
-export interface EvidenceDrawerProps {
-  open: boolean;
-  onClose: () => void;
-  title: string;
-  evidence: EvidenceItem[];
+interface EvidenceDrawerProps {
+  evidence: Evidence | Evidence[];
+  label?: string;
+  compact?: boolean;
 }
 
-// ==================== COLORS ====================
-const COLORS = {
+const C = {
   primary: '#00B5FE',
-  accent: '#E8F401',
-  background: '#F7F9FC',
+  success: '#10B981',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  text: '#1A1A2E',
+  textMuted: '#9A9AB0',
+  bg: '#F7F9FC',
   card: '#FFFFFF',
-  text: '#1A1A1A',
-  textMuted: '#666666',
-  border: '#E8E8E8',
-  green: '#22C55E',
-  orange: '#FF9933',
-  red: '#FF6B6B',
-  yellow: '#FFC107',
+  border: '#E8EAF0',
 };
 
-// ==================== CONFIDENCE COLOR HELPER ====================
-function getConfidenceColor(confidence: number): { bg: string; text: string; label: string } {
-  if (confidence >= 70) {
-    return { bg: '#E8F5E9', text: '#22C55E', label: `${confidence}% Confident` };
-  }
-  if (confidence >= 40) {
-    return { bg: '#FFF3E0', text: '#FF9933', label: `${confidence}% Confident` };
-  }
-  return { bg: '#FFEBEE', text: '#FF6B6B', label: `${confidence}% Confident` };
+function getConfidenceColor(confidence: number): string {
+  if (confidence >= 80) return C.success;
+  if (confidence >= 50) return C.warning;
+  return C.danger;
 }
 
-// ==================== DATA TYPE BADGE HELPER ====================
-function getDataTypeStyle(dataType: string): { bg: string; text: string; label: string } {
-  switch (dataType) {
-    case 'real':
-      return { bg: '#E8F5E9', text: '#22C55E', label: 'Real Data' };
-    case 'simulated':
-      return { bg: '#FFF3E0', text: '#FF9933', label: 'Simulated' };
-    case 'manual':
-      return { bg: '#E3F2FD', text: '#0066FF', label: 'Manual Entry' };
-    case 'unavailable':
-      return { bg: '#F5F5F5', text: '#999999', label: 'Unavailable' };
-    default:
-      return { bg: '#F5F5F5', text: '#999999', label: dataType };
-  }
+function getConfidenceLabel(confidence: number): string {
+  if (confidence >= 80) return 'גבוהה';
+  if (confidence >= 50) return 'בינונית';
+  return 'נמוכה';
 }
 
-// ==================== MAIN COMPONENT ====================
-export function EvidenceDrawer({ open, onClose, title, evidence }: EvidenceDrawerProps) {
-  // Handle escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && open) {
-        onClose();
-      }
-    };
+export function EvidenceDrawer({ evidence, label = 'צפה בראיות', compact = false }: EvidenceDrawerProps) {
+  const [open, setOpen] = useState(false);
+  const items = Array.isArray(evidence) ? evidence : [evidence];
 
-    if (open) {
-      document.addEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = 'hidden';
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = 'auto';
-    };
-  }, [open, onClose]);
-
-  if (!open) return null;
+  if (items.length === 0) return null;
 
   return (
     <>
-      {/* Backdrop */}
-      <div
+      <button
+        onClick={() => setOpen(true)}
         style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.4)',
-          zIndex: 999,
-        }}
-        onClick={onClose}
-      />
-
-      {/* Drawer */}
-      <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          height: '100vh',
-          width: '480px',
-          maxWidth: '90vw',
-          backgroundColor: COLORS.card,
-          boxShadow: '-4px 0 16px rgba(0, 0, 0, 0.15)',
-          zIndex: 1000,
-          display: 'flex',
-          flexDirection: 'column',
-          animation: 'slideIn 0.3s ease-out',
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          padding: compact ? '2px 8px' : '4px 12px',
+          fontSize: compact ? 10 : 11,
+          fontWeight: 600,
+          color: C.primary,
+          background: `${C.primary}08`,
+          border: `1px solid ${C.primary}25`,
+          borderRadius: 6,
+          cursor: 'pointer',
+          transition: 'all 0.15s',
         }}
       >
-        <style>{`
-          @keyframes slideIn {
-            from {
-              transform: translateX(100%);
-              opacity: 0;
-            }
-            to {
-              transform: translateX(0);
-              opacity: 1;
-            }
-          }
-          .evidence-quote {
-            background: ${COLORS.background};
-            border-left: 4px solid ${COLORS.primary};
-            padding: 16px;
-            border-radius: 8px;
-            font-style: italic;
-            font-size: 14px;
-            color: ${COLORS.text};
-            line-height: 1.6;
-            margin: 12px 0;
-          }
-          .evidence-item {
-            padding: 20px;
-            border-bottom: 1px solid ${COLORS.border};
-          }
-          .evidence-item:last-of-type {
-            border-bottom: none;
-          }
-          .evidence-link {
-            color: ${COLORS.primary};
-            text-decoration: none;
-            word-break: break-all;
-            font-size: 13px;
-            margin: 12px 0;
-            display: inline-block;
-          }
-          .evidence-link:hover {
-            text-decoration: underline;
-          }
-          .badge {
-            display: inline-block;
-            padding: 6px 12px;
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: 600;
-            margin: 4px 4px 4px 0;
-          }
-        `}</style>
+        <span style={{ fontSize: compact ? 10 : 12 }}>🔍</span>
+        {label}
+      </button>
 
-        {/* Header */}
-        <div
-          style={{
-            padding: '20px',
-            borderBottom: `1px solid ${COLORS.border}`,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexShrink: 0,
-          }}
-        >
-          <h2 style={{ fontSize: '18px', fontWeight: '700', color: COLORS.text, margin: 0 }}>
-            {title}
-          </h2>
-          <button
-            onClick={onClose}
+      {open && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          display: 'flex', justifyContent: 'flex-start',
+          direction: 'rtl',
+        }}>
+          {/* Backdrop */}
+          <div
+            onClick={() => setOpen(false)}
             style={{
-              background: 'none',
-              border: 'none',
-              fontSize: '24px',
-              cursor: 'pointer',
-              color: COLORS.textMuted,
-              padding: '4px 8px',
-              lineHeight: 1,
+              flex: 1, background: 'rgba(0,0,0,0.3)',
+              backdropFilter: 'blur(4px)',
             }}
-          >
-            ×
-          </button>
-        </div>
-
-        {/* Content */}
-        <div
-          style={{
-            flex: 1,
+          />
+          {/* Drawer */}
+          <div style={{
+            width: 420, maxWidth: '90vw',
+            background: C.card,
+            borderLeft: `1px solid ${C.border}`,
+            boxShadow: '-8px 0 32px rgba(0,0,0,0.1)',
             overflowY: 'auto',
-            paddingBottom: '20px',
-          }}
-        >
-          {evidence.length === 0 ? (
-            <div
-              style={{
-                padding: '40px 20px',
-                textAlign: 'center',
-                color: COLORS.textMuted,
-              }}
-            >
-              <p style={{ margin: 0 }}>No evidence available</p>
+            padding: 28,
+            display: 'flex', flexDirection: 'column', gap: 20,
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, color: C.text, margin: 0 }}>
+                ראיות ומקורות
+              </h3>
+              <button
+                onClick={() => setOpen(false)}
+                style={{
+                  width: 32, height: 32, borderRadius: 8,
+                  border: `1px solid ${C.border}`,
+                  background: 'transparent', cursor: 'pointer',
+                  fontSize: 16, color: C.textMuted,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >×</button>
             </div>
-          ) : (
-            evidence.map((item, idx) => {
-              const confidenceStyle = getConfidenceColor(item.confidence);
-              const dataTypeStyle = getDataTypeStyle(item.data_type);
 
-              return (
-                <div key={idx} className="evidence-item">
-                  {/* Source URL */}
-                  <a
-                    href={item.source_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="evidence-link"
-                    title={item.source_url}
-                  >
-                    🔗 {item.source_url}
-                  </a>
-
-                  {/* Extracted Text Snippet */}
-                  <div className="evidence-quote">
-                    "{item.extracted_text_snippet}"
-                  </div>
-
-                  {/* Badges */}
-                  <div style={{ marginTop: '12px' }}>
-                    <div
-                      className="badge"
-                      style={{ background: confidenceStyle.bg, color: confidenceStyle.text }}
-                    >
-                      {confidenceStyle.label}
-                    </div>
-                    <div
-                      className="badge"
-                      style={{ background: dataTypeStyle.bg, color: dataTypeStyle.text }}
-                    >
-                      {dataTypeStyle.label}
-                    </div>
-                  </div>
+            {/* Evidence items */}
+            {items.map((item, i) => (
+              <div key={i} style={{
+                padding: 16, borderRadius: 12,
+                background: C.bg,
+                border: `1px solid ${C.border}`,
+              }}>
+                {/* Source + Confidence */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <span style={{
+                    fontSize: 11, fontWeight: 600,
+                    padding: '2px 8px', borderRadius: 4,
+                    background: `${C.primary}10`, color: C.primary,
+                  }}>
+                    {item.source}
+                  </span>
+                  <span style={{
+                    fontSize: 10, fontWeight: 600,
+                    padding: '2px 8px', borderRadius: 4,
+                    background: `${getConfidenceColor(item.confidence)}15`,
+                    color: getConfidenceColor(item.confidence),
+                  }}>
+                    אמינות: {getConfidenceLabel(item.confidence)} ({item.confidence}%)
+                  </span>
                 </div>
-              );
-            })
-          )}
-        </div>
 
-        {/* Footer */}
-        <div
-          style={{
-            padding: '16px 20px',
-            borderTop: `1px solid ${COLORS.border}`,
-            backgroundColor: COLORS.background,
-            fontSize: '12px',
-            color: COLORS.textMuted,
-            flexShrink: 0,
-          }}
-        >
-          Evidence is extracted from website scans and verified data sources.
+                {/* URL */}
+                {item.url && (
+                  <div style={{ marginBottom: 8 }}>
+                    <span style={{ fontSize: 10, color: C.textMuted }}>מקור: </span>
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontSize: 11, color: C.primary, textDecoration: 'none' }}
+                    >
+                      {item.url.length > 60 ? item.url.slice(0, 60) + '...' : item.url}
+                    </a>
+                  </div>
+                )}
+
+                {/* Data point */}
+                {item.dataPoint && (
+                  <div style={{
+                    fontSize: 12, color: C.text, fontWeight: 600,
+                    padding: '8px 12px', borderRadius: 8,
+                    background: C.card, marginBottom: 8,
+                    border: `1px solid ${C.border}`,
+                  }}>
+                    📊 {item.dataPoint}
+                  </div>
+                )}
+
+                {/* Snippet */}
+                <div style={{
+                  fontSize: 12, color: C.text, lineHeight: 1.7,
+                  padding: '10px 12px', borderRadius: 8,
+                  background: C.card,
+                  borderRight: `3px solid ${C.primary}`,
+                }}>
+                  &ldquo;{item.snippet}&rdquo;
+                </div>
+              </div>
+            ))}
+
+            {/* Footer note */}
+            <p style={{ fontSize: 10, color: C.textMuted, textAlign: 'center', margin: 0 }}>
+              כל תובנה מבוססת על נתונים אמיתיים בלבד — ללא השערות
+            </p>
+          </div>
         </div>
-      </div>
+      )}
     </>
+  );
+}
+
+/**
+ * Inline evidence badge — shows confidence + hover preview
+ */
+export function EvidenceBadge({ confidence, source }: { confidence: number; source: string }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 3,
+      fontSize: 9, fontWeight: 600,
+      padding: '1px 6px', borderRadius: 4,
+      background: `${getConfidenceColor(confidence)}10`,
+      color: getConfidenceColor(confidence),
+    }}>
+      {confidence}% • {source}
+    </span>
   );
 }

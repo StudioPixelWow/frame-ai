@@ -352,7 +352,7 @@ export default function SeoPlanDetail() {
               tasks: w.tasks.map((t: any) => ({ ...t, status: t.status || "todo" })),
             }));
           }
-          setPlan(refreshed);
+          setPlan(deepSanitize(refreshed));
           setActiveTab("plan");
         }
       } else {

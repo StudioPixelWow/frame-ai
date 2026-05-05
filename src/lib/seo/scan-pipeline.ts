@@ -311,7 +311,7 @@ export function parseHtml(html: string, pageUrl: string): ParsedPage {
 
   return {
     title, metaDescription, h1Tags, h2Tags, hasSchema, hasOG, hasCanonical,
-    hasMobileViewport, wordCount, internalLinks: [...new Set(internalLinks)], schemaTypes,
+    hasMobileViewport, wordCount, internalLinks: Array.from(new Set(internalLinks)), schemaTypes,
   };
 }
 
