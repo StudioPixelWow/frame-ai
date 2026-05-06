@@ -81,16 +81,22 @@ async function _POST(
       return err('לא ניתן לזהות סוג משימה', 400);
     }
 
-    // Build automation context from plan data
-    const websiteFacts = (plan as any).websiteFacts || {};
+    // Build automation context from plan data (matching daily-runner pattern)
+    const facts = (plan as any).websiteScan?.websiteFacts || {};
+    const profile = (plan as any).businessProfile || {};
     const automationContext: AutomationContext = {
       connection: wpConnection,
-      businessName: websiteFacts.businessName || plan.clientName || 'Business',
-      businessType: websiteFacts.businessType || '',
-      industry: websiteFacts.industry || '',
-      products: websiteFacts.products || [],
-      location: websiteFacts.location || '',
-      targetKeywords: websiteFacts.targetKeywords || [],
+      businessName: plan.clientName || facts.business_name?.value || facts.business_name || '',
+      businessType: facts.business_type?.value || facts.business_type || profile.business_type || '',
+      industry: facts.detected_industry?.value || facts.industry || profile.industry || '',
+      products: (() => {
+        const p = facts.main_products_or_services?.value || facts.main_products_or_services || profile.main_products_or_services;
+        return Array.isArray(p) ? p : [];
+      })(),
+      location: facts.detected_location?.value || facts.location || profile.location || 'Israel',
+      targetKeywords: Array.isArray((plan as any).aiKeywords)
+        ? (plan as any).aiKeywords.map((k: any) => k.keyword || k).filter(Boolean)
+        : [],
     };
 
     // Execute the automation task

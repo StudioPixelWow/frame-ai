@@ -1534,6 +1534,9 @@ export default function SeoPlanDetail() {
                 : 0;
               const todayTasks = p.days?.find((d: any) => d.day === currentDay)?.tasks || [];
               const pendingToday = todayTasks.filter((t: any) => t.status !== 'done').length;
+              const AUTO_KW_CHECK = ['meta title','meta description','robots.txt','רובוטס','canonical','קנוני','כותרים','h1-h3','heading','schema','סכמה','json-ld','image alt','alt text','תמונות','images','internal link','קישורים פנימיים','linking','content optimization','optimize content','תוכן','content','optimization'];
+              const autoCountToday = todayTasks.filter((t: any) => t.status !== 'done' && AUTO_KW_CHECK.some(kw => (t.title||'').toLowerCase().includes(kw))).length;
+              const manualCountToday = pendingToday - autoCountToday;
 
               return (
                 <div style={{
@@ -1575,14 +1578,14 @@ export default function SeoPlanDetail() {
                             המערכת רצה אוטומטית כל יום על המשימות שלך.
                             {lastRunDate && <> ריצה אחרונה: <b>{lastRunDate}</b>.</>}
                             {` `}הורצו {automLog.length} ריצות עד כה.
-                            {pendingToday > 0 && <> | <b>{pendingToday} משימות ממתינות</b> להיום (יום {currentDay})</>}
+                            {pendingToday > 0 && <> | <b>{autoCountToday} משימות אוטומטיות</b>{manualCountToday > 0 && <>, {manualCountToday} ידניות</>} להיום (יום {currentDay})</>}
                           </>
                         ) : (
                           <>
                             לחץ להפעלת האוטומציה — המערכת תריץ את המשימות של היום ב-WordPress שלך,
                             ותמשיך לרוץ כל יום ב-08:00 אוטומטית.
                             {currentDay > 0 && currentDay <= 60 && pendingToday > 0 && (
-                              <> היום יום {currentDay}, יש {pendingToday} משימות ממתינות.</>
+                              <> היום יום {currentDay}, יש {autoCountToday} משימות אוטומטיות{manualCountToday > 0 ? ` ו-${manualCountToday} ידניות` : ''}.</>
                             )}
                           </>
                         )}
@@ -1594,17 +1597,45 @@ export default function SeoPlanDetail() {
                           setRunningAutomation(true);
                           setAutomationStatus("מריץ משימות היום...");
                           try {
-                            // Run today's tasks via the daily runner (without auth for manual trigger)
                             const todayDayData = p.days?.find((d: any) => d.day === currentDay);
                             if (!todayDayData?.tasks?.length) {
                               setAutomationStatus("אין משימות להיום");
                               setTimeout(() => { setRunningAutomation(false); setAutomationStatus(null); }, 3000);
                               return;
                             }
+
+                            // Client-side check: which tasks are automatable (mirrors mapPlanTaskToAutoType)
+                            const AUTO_KEYWORDS = [
+                              'meta title', 'meta description',
+                              'robots.txt', 'רובוטס',
+                              'canonical', 'קנוני',
+                              'כותרים', 'h1-h3', 'heading', 'headings',
+                              'schema', 'סכמה', 'json-ld',
+                              'image alt', 'alt text', 'תמונות', 'images',
+                              'internal link', 'קישורים פנימיים', 'linking',
+                              'content optimization', 'optimize content', 'תוכן', 'content', 'optimization',
+                            ];
+                            const isAutomatable = (title: string) => {
+                              const t = title.toLowerCase().trim();
+                              return AUTO_KEYWORDS.some(kw => t.includes(kw));
+                            };
+
+                            const pendingTasks = todayDayData.tasks.filter((t: any) => t.status !== 'done');
+                            const autoTasks = pendingTasks.filter((t: any) => isAutomatable(t.title || ''));
+                            const manualTasks = pendingTasks.filter((t: any) => !isAutomatable(t.title || ''));
+
+                            if (autoTasks.length === 0) {
+                              const manualMsg = manualTasks.length > 0
+                                ? `${manualTasks.length} משימות ידניות (דילוג) — אין משימות אוטומטיות להיום`
+                                : "אין משימות ממתינות להיום";
+                              setAutomationStatus(manualMsg);
+                              setTimeout(() => { setRunningAutomation(false); setAutomationStatus(null); }, 4000);
+                              return;
+                            }
+
                             let successCount = 0;
                             let failCount = 0;
-                            for (const task of todayDayData.tasks) {
-                              if (task.status === 'done') continue;
+                            for (const task of autoTasks) {
                               setAutomationStatus(`מבצע: ${task.title?.slice(0, 40)}...`);
                               try {
                                 const res = await fetch(`/api/seo-geo-plans/${plan!.id}/execute-task`, {
@@ -1619,7 +1650,8 @@ export default function SeoPlanDetail() {
                                 } else { failCount++; }
                               } catch { failCount++; }
                             }
-                            setAutomationStatus(`הושלם! ${successCount} הצליחו${failCount > 0 ? `, ${failCount} נכשלו` : ""}`);
+                            const manualNote = manualTasks.length > 0 ? ` | ${manualTasks.length} ידניות` : "";
+                            setAutomationStatus(`הושלם! ${successCount} הצליחו${failCount > 0 ? `, ${failCount} נכשלו` : ""}${manualNote}`);
                             // Refresh plan
                             const res = await fetch(`/api/data/seo-plans/${planId}`);
                             if (res.ok) { const data = await res.json(); setPlan(data); }

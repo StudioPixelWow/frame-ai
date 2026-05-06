@@ -10,6 +10,7 @@ const CONTAINER_KEYS = new Set([
   'weeks','phases','days','tasks','results','issues','aiQueries',
   'scannedPages','platformStatuses','websiteFacts','metrics',
   'h1Tags','h2Tags','schemaTypes','techStack',
+  'wpConnection','businessProfile','automationLog','automationResults',
 ]);
 
 function serverSanitize(obj: any, depth = 0): any {
