@@ -44,13 +44,56 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 8
  * Smart matching — checks if a business is mentioned in an AI response.
  * Handles Hebrew names, domain names, partial matches, and HTML entities.
  */
-function isBusinessMentioned(answer: string, businessName: string, targetDomain?: string): { found: boolean; confidence: number } {
+/**
+ * ANTI-FAKE: Checks if the query itself contains the business name.
+ * If the query contains the name, the AI will naturally echo it back — that's NOT real visibility.
+ * Real visibility = AI independently recommends the business for a GENERIC query.
+ */
+function queryContainsBusinessName(query: string, businessName: string, targetDomain?: string): boolean {
+  const qLower = query.toLowerCase().replace(/["""''׳״]/g, '');
+  const nameLower = businessName.toLowerCase().replace(/["""''׳״]/g, '');
+
+  // Direct name match in query
+  if (nameLower.length > 3 && qLower.includes(nameLower)) return true;
+
+  // Domain name match in query
+  if (targetDomain) {
+    const domainName = targetDomain.replace(/^https?:\/\//, '').replace(/^www\./, '').split('.')[0].toLowerCase();
+    if (domainName.length > 3 && qLower.includes(domainName)) return true;
+  }
+
+  // Major words of business name appear in query (skip common Hebrew words)
+  const commonWords = new Set(['של', 'את', 'על', 'עם', 'או', 'גם', 'לא', 'כל', 'זה', 'הוא', 'היא', 'אני', 'and', 'the', 'for', 'in', 'to', 'of', 'is', 'a', 'an']);
+  const nameWords = nameLower.split(/[\s\-_]+/).filter(w => w.length > 2 && !commonWords.has(w));
+  if (nameWords.length >= 2) {
+    const matchedWords = nameWords.filter(w => qLower.includes(w));
+    if (matchedWords.length >= Math.ceil(nameWords.length * 0.5)) return true;
+  }
+
+  return false;
+}
+
+function isBusinessMentioned(answer: string, businessName: string, targetDomain?: string, queryText?: string): { found: boolean; confidence: number } {
   const answerLower = answer.toLowerCase().replace(/&quot;/g, '"').replace(/&amp;/g, '&');
   const cleanName = businessName.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/"/g, '"');
   const nameLower = cleanName.toLowerCase();
 
+  // ANTI-FAKE: If the query itself contains the business name, the AI is just echoing.
+  // We need the AI to show it KNOWS the business (URL, phone, address, recommendation context).
+  const queryHasName = queryText ? queryContainsBusinessName(queryText, businessName, targetDomain) : false;
+
   // Exact name match
   if (answerLower.includes(nameLower)) {
+    if (queryHasName) {
+      // Query contained the name — AI is just echoing. Check for REAL knowledge signals.
+      const hasUrl = targetDomain && answerLower.includes(targetDomain.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase());
+      const hasContact = /\d{2,3}[-\s]?\d{7}/.test(answer) || /phone|טלפון|כתובת|address/.test(answerLower);
+      const hasRecommendation = /recommend|ממליץ|מומלץ|מובי[לל]|מוביל|quality|איכות|professional|מקצועי/.test(answerLower);
+      if (hasUrl || hasContact) return { found: true, confidence: 70 };
+      if (hasRecommendation) return { found: true, confidence: 50 };
+      // Just echoing the name — NOT real visibility
+      return { found: false, confidence: 15 };
+    }
     return { found: true, confidence: 90 };
   }
 
@@ -58,18 +101,21 @@ function isBusinessMentioned(answer: string, businessName: string, targetDomain?
   const nameNoQuotes = nameLower.replace(/["""''׳״]/g, '');
   const answerNoQuotes = answerLower.replace(/["""''׳״]/g, '');
   if (nameNoQuotes.length > 3 && answerNoQuotes.includes(nameNoQuotes)) {
+    if (queryHasName) return { found: false, confidence: 15 }; // echo
     return { found: true, confidence: 85 };
   }
 
-  // Domain match
+  // Domain match — only counts if query didn't contain the domain
   if (targetDomain) {
     const domain = targetDomain.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
     const domainName = domain.replace(/^www\./, '').split('.')[0]; // e.g., "alram" from "www.alram.co.il"
     if (domainName.length > 3 && answerLower.includes(domainName)) {
+      if (queryHasName) return { found: false, confidence: 15 };
       return { found: true, confidence: 70 };
     }
     if (answerLower.includes(domain)) {
-      return { found: true, confidence: 80 };
+      // Full domain in answer is strong signal even if query had name
+      return { found: true, confidence: queryHasName ? 60 : 80 };
     }
   }
 
@@ -78,11 +124,13 @@ function isBusinessMentioned(answer: string, businessName: string, targetDomain?
   if (nameWords.length >= 2) {
     const matchedWords = nameWords.filter(w => answerLower.includes(w));
     if (matchedWords.length >= Math.ceil(nameWords.length * 0.6)) {
+      // Partial word match with brand in query = almost certainly echoing
+      if (queryHasName) return { found: false, confidence: 10 };
       return { found: true, confidence: 60 };
     }
   }
 
-  return { found: false, confidence: 10 };
+  return { found: false, confidence: 0 };
 }
 
 // ── Google Custom Search (SEO + AI Overview) ──────────────────────────────────
@@ -163,7 +211,7 @@ export function isChatGPTAvailable(): boolean {
   return hasEnv('OPENAI_API_KEY');
 }
 
-export async function queryChatGPT(query: string, businessName: string, targetDomain?: string): Promise<PlatformQueryResult> {
+export async function queryChatGPT(query: string, businessName: string, targetDomain?: string, _queryText?: string): Promise<PlatformQueryResult> {
   if (!isChatGPTAvailable()) return { found: false, confidence: 0, scanMode: 'unavailable' };
 
   try {
@@ -189,7 +237,7 @@ export async function queryChatGPT(query: string, businessName: string, targetDo
 
     const data = await res.json();
     const answer = data.choices?.[0]?.message?.content || '';
-    const match = isBusinessMentioned(answer, businessName, targetDomain);
+    const match = isBusinessMentioned(answer, businessName, targetDomain, query);
 
     return {
       found: match.found,
@@ -231,7 +279,7 @@ export async function queryClaude(query: string, businessName: string, targetDom
 
     const data = await res.json();
     const answer = data.content?.[0]?.text || '';
-    const match = isBusinessMentioned(answer, businessName, targetDomain);
+    const match = isBusinessMentioned(answer, businessName, targetDomain, query);
 
     return {
       found: match.found,
@@ -272,7 +320,7 @@ export async function queryPerplexity(query: string, businessName: string, targe
 
     const data = await res.json();
     const answer = data.choices?.[0]?.message?.content || '';
-    const match = isBusinessMentioned(answer, businessName, targetDomain);
+    const match = isBusinessMentioned(answer, businessName, targetDomain, query);
 
     return {
       found: match.found,
@@ -311,7 +359,7 @@ export async function queryGemini(query: string, businessName: string, targetDom
 
     const data = await res.json();
     const answer = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const match = isBusinessMentioned(answer, businessName, targetDomain);
+    const match = isBusinessMentioned(answer, businessName, targetDomain, query);
 
     return {
       found: match.found,

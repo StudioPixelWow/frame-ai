@@ -71,26 +71,30 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he", busin
     ? _normalizeAiQueries(rawAiQueries)
     : legacyVisResults;
 
-  // AI engine analysis
-  const engineMapping: Record<string, string> = {
-    chatgpt: "ChatGPT", gemini: "Gemini", perplexity: "Perplexity",
-    claude: "Claude", copilot: "Copilot",
+  // AI engine analysis — map platform IDs to display names
+  // Must match PLATFORMS in scan-pipeline.ts: google_seo, google_ai_overview, gemini, chatgpt, claude, perplexity
+  const engineDisplayMap: Record<string, { name: string; ids: string[] }> = {
+    google: { name: "Google SEO", ids: ["google_seo", "google_ai_overview"] },
+    chatgpt: { name: "ChatGPT", ids: ["chatgpt"] },
+    gemini: { name: "Gemini", ids: ["gemini"] },
+    claude: { name: "Claude", ids: ["claude"] },
+    perplexity: { name: "Perplexity", ids: ["perplexity"] },
   };
-  const engines = ["ChatGPT", "Gemini", "Perplexity", "Claude", "Copilot"];
-  const engineStats = engines.map(eng => {
-    // For aiQueries format: filter by platform name
+  const engineKeys = Object.keys(engineDisplayMap);
+  const engineStats = engineKeys.map(key => {
+    const { name, ids } = engineDisplayMap[key];
     if (rawAiQueries.length > 0) {
-      const platformId = Object.entries(engineMapping).find(([_, v]) => v === eng)?.[0] || '';
-      const platformQueries = rawAiQueries.filter((q: any) => q.platform === platformId);
+      // Only count queries that were actually scanned (scanMode === 'real')
+      const platformQueries = rawAiQueries.filter((q: any) => ids.includes(q.platform) && q.scanMode === 'real');
       const mentioned = platformQueries.filter((q: any) => q.found).length;
-      return { engine: eng, mentioned, total: platformQueries.length, pct: platformQueries.length > 0 ? Math.round((mentioned / platformQueries.length) * 100) : 0 };
+      return { engine: name, mentioned, total: platformQueries.length, pct: platformQueries.length > 0 ? Math.round((mentioned / platformQueries.length) * 100) : 0 };
     }
     // Legacy format
     const total = visResults.length;
     const mentioned = visResults.filter((vr: any) =>
-      (vr.results || []).some((r: any) => r.engine === eng && r.mentioned)
+      (vr.results || []).some((r: any) => r.engine === name && r.mentioned)
     ).length;
-    return { engine: eng, mentioned, total, pct: total > 0 ? Math.round((mentioned / total) * 100) : 0 };
+    return { engine: name, mentioned, total, pct: total > 0 ? Math.round((mentioned / total) * 100) : 0 };
   });
 
   // Queries analysis
@@ -212,8 +216,9 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he", busin
     }
 
     // AI Visibility: real ratio of found vs total queries
+    // ANTI-FAKE: Only count queries with scanMode === 'real' (skip unavailable/simulated)
     if (visibility === 0 && scan) {
-      const aiQ = scan.aiQueries || [];
+      const aiQ = (scan.aiQueries || []).filter((q: any) => q.scanMode === 'real');
       const found = aiQ.filter((q: any) => q.found).length;
       visibility = aiQ.length > 0 ? Math.round((found / aiQ.length) * 100) : 0;
     }
@@ -318,7 +323,7 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he", busin
     title: he ? "סקירת נראות AI" : "AI Visibility Overview",
     titleEn: "AI Visibility Overview",
     content: [
-      { type: "stat", label: he ? "ציון נראות AI כולל" : "Overall AI Visibility Score", value: `${plan.visibilityScore || 0}%`, color: scoreColor(plan.visibilityScore || 0), icon: "🤖" },
+      { type: "stat", label: he ? "ציון נראות AI כולל" : "Overall AI Visibility Score", value: `${computedScores.visibility}%`, color: scoreColor(computedScores.visibility), icon: "🤖" },
       { type: "paragraph", text: he ? `נבדקו ${visResults.length} שאילתות ב-5 מנועי AI: ChatGPT, Gemini, Perplexity, Claude ו-Copilot. העסק מוזכר ב-${mentionedQueries.length} שאילתות וחסר מ-${missedQueries.length}.` : `Tested ${visResults.length} queries across 5 AI engines: ChatGPT, Gemini, Perplexity, Claude, and Copilot. Business mentioned in ${mentionedQueries.length} queries and missing from ${missedQueries.length}.`},
       { type: "table",
         headers: he ? ["מנוע", "אזכורים", "מתוך", "אחוז"] : ["Engine", "Mentions", "Out of", "Percentage"],

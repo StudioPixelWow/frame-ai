@@ -493,21 +493,23 @@ export default function SeoPlanDetail() {
     const scan = safePlan.websiteScan;
     if (!scan) return { technical: n(safePlan.technicalScore), visibility: n(safePlan.visibilityScore), overall: n(safePlan.overallScore) };
 
-    // Technical score: based on scan findings
-    let tech = 50; // base
-    if (scan.hasSSL === true) tech += 10;
-    if (scan.mobileOptimized === true) tech += 10;
-    if (scan.hasRobotsTxt === true) tech += 5;
-    if (scan.hasSitemap === true) tech += 5;
-    if (scan.structuredData === true) tech += 5;
-    if (typeof scan.metaTitle === 'string' && scan.metaTitle) tech += 5;
-    if (typeof scan.metaDescription === 'string' && scan.metaDescription) tech += 5;
-    if (typeof scan.loadTimeMs === 'number' && scan.loadTimeMs < 3000) tech += 5;
+    // Technical score: start at 0, earn points for each real signal (same as report-engine)
+    let tech = 0;
+    if (scan.hasSSL === true) tech += 15;
+    if (scan.mobileOptimized === true) tech += 15;
+    if (scan.hasRobotsTxt === true) tech += 10;
+    if (scan.hasSitemap === true) tech += 10;
+    if (scan.structuredData === true) tech += 10;
+    if (typeof scan.metaTitle === 'string' && scan.metaTitle) tech += 10;
+    if (typeof scan.metaDescription === 'string' && scan.metaDescription) tech += 10;
+    if (typeof scan.loadTimeMs === 'number' && scan.loadTimeMs < 3000) tech += 10;
+    if (scan.openGraph === true) tech += 5;
+    if (scan.canonicalTags === true) tech += 5;
     const issueCount = Array.isArray(scan.issues) ? scan.issues.length : 0;
-    tech = Math.max(0, Math.min(100, tech - issueCount * 3));
+    tech = Math.max(0, Math.min(100, tech - issueCount * 5));
 
-    // Visibility score: based on AI queries
-    const aiQueries = Array.isArray(scan.aiQueries) ? scan.aiQueries : [];
+    // Visibility score: based on AI queries — ONLY count real API results (skip unavailable/simulated)
+    const aiQueries = Array.isArray(scan.aiQueries) ? scan.aiQueries.filter((q: any) => q.scanMode === 'real') : [];
     const found = aiQueries.filter((q: any) => q.found === true).length;
     const vis = aiQueries.length > 0 ? Math.round((found / aiQueries.length) * 100) : n(safePlan.visibilityScore);
 
@@ -1224,25 +1226,32 @@ export default function SeoPlanDetail() {
                   background: `linear-gradient(135deg, ${C.neon}, ${C.neonEnd})`,
                   WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
                 }}>
-                  {n(p.visibilityScore)}%
+                  {computedScores.visibility}%
                 </div>
                 <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>ציון נראות כולל</div>
               </div>
               <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
                 {AI_ENGINES.map(eng => {
-                  const vrArr = Array.isArray(p.visibilityResults) ? p.visibilityResults : [];
-                  const total = vrArr.length;
-                  const mentioned = vrArr.filter(vr =>
-                    (Array.isArray(vr.results) ? vr.results : []).some(r => r.engine === eng && r.mentioned)
-                  ).length;
+                  // Use real scan pipeline data (aiQueries) instead of legacy visibilityResults
+                  const aiQ = Array.isArray(scan?.aiQueries) ? (scan.aiQueries as any[]) : [];
+                  // Map engine display names to platform IDs used in scan pipeline
+                  const engToPlat: Record<string, string[]> = {
+                    'ChatGPT': ['chatgpt'], 'Gemini': ['gemini'], 'Perplexity': ['perplexity'],
+                    'Claude': ['claude'], 'Copilot': ['copilot'],
+                    'Google': ['google_seo', 'google_ai_overview'],
+                  };
+                  const platIds = engToPlat[eng] || [];
+                  const platQueries = aiQ.filter(q => platIds.includes(q.platform) && q.scanMode === 'real');
+                  const mentioned = platQueries.filter(q => q.found).length;
+                  const total = platQueries.length;
                   const pct = total > 0 ? Math.round((mentioned / total) * 100) : 0;
                   return (
                     <div key={eng} style={{
                       padding: "8px 14px", borderRadius: 10, background: C.bg,
                       border: `1px solid ${C.borderLight}`, textAlign: "center", minWidth: 80,
                     }}>
-                      <div style={{ fontSize: 16, fontWeight: 800, color: pct > 50 ? C.success : C.danger }}>{s(pct)}%</div>
-                      <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{s(eng)}</div>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: total === 0 ? C.textMuted : pct > 50 ? C.success : C.danger }}>{total === 0 ? "—" : `${s(pct)}%`}</div>
+                      <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{s(eng)}{total === 0 ? " (לא נסרק)" : ""}</div>
                     </div>
                   );
                 })}
