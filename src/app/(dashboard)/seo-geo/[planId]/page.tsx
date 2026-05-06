@@ -591,6 +591,19 @@ export default function SeoPlanDetail() {
     const businessType = extractBusinessType();
     const products = extractProducts();
 
+    // Guard: if business type is garbage (English-only, too generic, or just "Website"), skip deterministic
+    const isGarbageType = (t: string) => {
+      if (!t) return true;
+      if (t.length < 3) return true;
+      // If it's entirely English/ASCII with no Hebrew, it's probably garbage like "Website"
+      if (/^[a-zA-Z0-9\s\-_.]+$/.test(t)) return true;
+      return false;
+    };
+    if (isGarbageType(businessType) && products.length === 0) {
+      // No meaningful data — return empty so user sees the AI Enrich button
+      return [];
+    }
+
     // Extract location if available
     const websiteUrl = s(safePlan.websiteUrl || "");
     const locationMatch = websiteUrl.match(/\.([a-z]{2})($|\/)/i);
