@@ -192,11 +192,12 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   completed: { label: "הושלם", color: C.primary },
 };
 
-type TabId = "overview" | "plan" | "tasks" | "articles" | "ai" | "results" | "competitors" | "gaps" | "keywords" | "reports";
+type TabId = "overview" | "plan" | "calendar" | "tasks" | "articles" | "ai" | "results" | "competitors" | "gaps" | "keywords" | "reports";
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "overview", label: "סקירה", icon: "📊" },
   { id: "plan", label: "תוכנית 60 יום", icon: "📅" },
+  { id: "calendar", label: "לוח שנה", icon: "🗓️" },
   { id: "tasks", label: "משימות", icon: "✅" },
   { id: "articles", label: "מאמרים", icon: "📝" },
   { id: "ai", label: "תוצאות AI", icon: "🤖" },
@@ -2111,6 +2112,245 @@ export default function SeoPlanDetail() {
             )}
           </div>
         )}
+
+        {/* ── CALENDAR VIEW ── */}
+        {activeTab === "calendar" && (() => {
+          const days = plan?.days || [];
+          const generatedAt = plan?.generatedAt ? new Date(plan.generatedAt) : null;
+          const automationLog = (plan as any)?.automationLog || [];
+
+          if (days.length === 0) {
+            return <EmptyTab icon="🗓️" text="אין תוכנית עדיין. צור תוכנית 60 יום כדי לראות לוח שנה." />;
+          }
+
+          // חשב תאריכים לכל יום
+          const dayDates = days.map((d: any) => {
+            if (!generatedAt) return { ...d, date: null };
+            const date = new Date(generatedAt);
+            date.setDate(date.getDate() + (d.day - 1));
+            return { ...d, dateObj: date };
+          });
+
+          // חלק לחודשים
+          const months: Record<string, any[]> = {};
+          for (const d of dayDates) {
+            if (!d.dateObj) continue;
+            const key = `${d.dateObj.getFullYear()}-${String(d.dateObj.getMonth() + 1).padStart(2, "0")}`;
+            if (!months[key]) months[key] = [];
+            months[key].push(d);
+          }
+
+          const HEB_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+          const HEB_DAYS = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+
+          const getStatusColor = (tasks: any[]) => {
+            if (!tasks || tasks.length === 0) return "#e2e8f0"; // אפור - אין משימות
+            const allDone = tasks.every((t: any) => t.status === "done");
+            const someInProgress = tasks.some((t: any) => t.status === "in_progress");
+            const someDone = tasks.some((t: any) => t.status === "done");
+            if (allDone) return "#22c55e"; // ירוק — בוצע
+            if (someInProgress) return "#f59e0b"; // כתום — בתהליך
+            if (someDone) return "#60a5fa"; // כחול — חלקי
+            // בדוק אם היום כבר עבר
+            const dayData = dayDates.find((dd: any) => dd.tasks === tasks);
+            if (dayData?.dateObj && dayData.dateObj < new Date()) return "#ef4444"; // אדום — לא בוצע
+            return "#94a3b8"; // אפור — עתידי
+          };
+
+          const getStatusLabel = (tasks: any[]) => {
+            if (!tasks || tasks.length === 0) return "אין משימות";
+            const done = tasks.filter((t: any) => t.status === "done").length;
+            if (done === tasks.length) return "הושלם";
+            if (done > 0) return `${done}/${tasks.length} בוצעו`;
+            return "ממתין";
+          };
+
+          // התקדמות כללית
+          const totalTasks = days.reduce((s: number, d: any) => s + (d.tasks?.length || 0), 0);
+          const doneTasks = days.reduce((s: number, d: any) => s + (d.tasks?.filter((t: any) => t.status === "done").length || 0), 0);
+          const progressPercent = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
+          // יום נוכחי
+          const currentDayNum = generatedAt
+            ? Math.floor((new Date().getTime() - generatedAt.getTime()) / (1000 * 60 * 60 * 24)) + 1
+            : 0;
+
+          return (
+            <div>
+              {/* Progress Summary */}
+              <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+                <div style={{ flex: 1, background: C.bg, borderRadius: 16, border: `1px solid ${C.border}`, padding: 20 }}>
+                  <div style={{ fontSize: 13, color: C.textMuted }}>התקדמות כללית</div>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: C.primary, marginTop: 4 }}>{progressPercent}%</div>
+                  <div style={{ background: "#e2e8f0", borderRadius: 99, height: 8, marginTop: 8, overflow: "hidden" }}>
+                    <div style={{ background: `linear-gradient(90deg, ${C.primary}, #7c3aed)`, height: "100%", width: `${progressPercent}%`, borderRadius: 99, transition: "width 0.5s" }} />
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>{doneTasks} מתוך {totalTasks} משימות</div>
+                </div>
+                <div style={{ flex: 1, background: C.bg, borderRadius: 16, border: `1px solid ${C.border}`, padding: 20 }}>
+                  <div style={{ fontSize: 13, color: C.textMuted }}>יום נוכחי</div>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: currentDayNum > 60 ? C.success : C.primary, marginTop: 4 }}>
+                    {currentDayNum > 60 ? "הושלם!" : `יום ${currentDayNum}`}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8 }}>{60 - Math.min(currentDayNum, 60)} ימים נותרו</div>
+                </div>
+                <div style={{ flex: 1, background: C.bg, borderRadius: 16, border: `1px solid ${C.border}`, padding: 20 }}>
+                  <div style={{ fontSize: 13, color: C.textMuted }}>ריצות אוטומטיות</div>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: "#7c3aed", marginTop: 4 }}>{automationLog.length}</div>
+                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8 }}>
+                    {automationLog.length > 0
+                      ? `אחרון: ${new Date(automationLog[automationLog.length - 1].date).toLocaleDateString("he-IL")}`
+                      : "טרם הורצה"
+                    }
+                  </div>
+                </div>
+              </div>
+
+              {/* Legend */}
+              <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
+                {[
+                  { color: "#22c55e", label: "הושלם" },
+                  { color: "#60a5fa", label: "חלקי" },
+                  { color: "#f59e0b", label: "בתהליך" },
+                  { color: "#ef4444", label: "לא בוצע" },
+                  { color: "#94a3b8", label: "עתידי" },
+                ].map(item => (
+                  <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ width: 12, height: 12, borderRadius: 3, background: item.color }} />
+                    <span style={{ fontSize: 12, color: C.textSecondary }}>{item.label}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Calendar Months */}
+              {Object.entries(months).map(([monthKey, monthDays]) => {
+                const [year, month] = monthKey.split("-").map(Number);
+                const monthName = HEB_MONTHS[month - 1];
+                const firstDayOfMonth = new Date(year, month - 1, 1);
+                const startDow = firstDayOfMonth.getDay(); // 0=Sun
+                const daysInMonth = new Date(year, month, 0).getDate();
+
+                // בנה grid עם ימים ריקים בהתחלה
+                const calendarCells: (any | null)[] = [];
+                for (let i = 0; i < startDow; i++) calendarCells.push(null);
+                for (let d = 1; d <= daysInMonth; d++) {
+                  const matchDay = monthDays.find((md: any) => md.dateObj?.getDate() === d);
+                  calendarCells.push(matchDay || { dayOfMonth: d, empty: true });
+                }
+
+                return (
+                  <div key={monthKey} style={{ marginBottom: 32 }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 12 }}>
+                      {monthName} {year}
+                    </div>
+
+                    {/* Day Headers */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
+                      {HEB_DAYS.map(d => (
+                        <div key={d} style={{ textAlign: "center", fontSize: 11, fontWeight: 600, color: C.textMuted, padding: "4px 0" }}>{d}</div>
+                      ))}
+                    </div>
+
+                    {/* Calendar Grid */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+                      {calendarCells.map((cell, idx) => {
+                        if (!cell) return <div key={`empty-${idx}`} />;
+                        if (cell.empty) {
+                          return (
+                            <div key={`month-${cell.dayOfMonth}`} style={{
+                              aspectRatio: "1", borderRadius: 10, background: "#f8fafc",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 12, color: "#cbd5e1",
+                            }}>
+                              {cell.dayOfMonth}
+                            </div>
+                          );
+                        }
+
+                        const tasks = cell.tasks || [];
+                        const statusColor = getStatusColor(tasks);
+                        const isToday = cell.day === currentDayNum;
+                        const statusLabel = getStatusLabel(tasks);
+
+                        return (
+                          <div
+                            key={`day-${cell.day}`}
+                            title={`יום ${cell.day}: ${tasks.map((t: any) => t.title).join(", ")} — ${statusLabel}`}
+                            style={{
+                              aspectRatio: "1", borderRadius: 10, background: statusColor + "18",
+                              border: isToday ? `2px solid ${C.primary}` : `1px solid ${statusColor}40`,
+                              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                              cursor: "pointer", position: "relative", overflow: "hidden",
+                              boxShadow: isToday ? `0 0 0 3px ${C.primary}30` : "none",
+                              transition: "transform 0.15s, box-shadow 0.15s",
+                            }}
+                            onClick={() => {
+                              setSelectedTask(tasks[0] || null);
+                              setActiveTab("plan");
+                            }}
+                          >
+                            {/* Day Number */}
+                            <div style={{ fontSize: 15, fontWeight: 700, color: statusColor === "#22c55e" ? "#166534" : statusColor === "#ef4444" ? "#991b1b" : C.text }}>
+                              {cell.day}
+                            </div>
+                            {/* Task Count */}
+                            <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>
+                              {tasks.length > 0 ? `${tasks.length} משימות` : ""}
+                            </div>
+                            {/* Status Dot */}
+                            <div style={{
+                              position: "absolute", top: 4, left: 4, width: 6, height: 6,
+                              borderRadius: "50%", background: statusColor,
+                            }} />
+                            {/* Today Indicator */}
+                            {isToday && (
+                              <div style={{
+                                position: "absolute", bottom: 2, fontSize: 8, fontWeight: 700,
+                                color: C.primary, letterSpacing: 0.5,
+                              }}>
+                                היום
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Automation Log */}
+              {automationLog.length > 0 && (
+                <div style={{ marginTop: 32 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 12 }}>היסטוריית ריצות אוטומטיות</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {automationLog.slice(-10).reverse().map((log: any, idx: number) => (
+                      <div key={idx} style={{
+                        background: C.bg, borderRadius: 12, border: `1px solid ${C.border}`, padding: "12px 16px",
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                      }}>
+                        <div>
+                          <span style={{ fontWeight: 600, fontSize: 14, color: C.text }}>יום {log.dayNumber}</span>
+                          <span style={{ fontSize: 12, color: C.textMuted, marginRight: 12 }}>
+                            {new Date(log.date).toLocaleDateString("he-IL")} {new Date(log.date).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <span style={{ fontSize: 12, color: "#16a34a", fontWeight: 600 }}>
+                            {log.successfulTasks || 0} הצליחו
+                          </span>
+                          <span style={{ fontSize: 12, color: C.textMuted }}>
+                            מתוך {log.totalTasks || 0}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── TASKS (KANBAN) ── */}
         {activeTab === "tasks" && (
