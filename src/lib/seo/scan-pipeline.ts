@@ -878,15 +878,24 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
     // SAFETY: reject garbage queries before they enter the system
     const isGarbageQuery = (text: string): boolean => {
       if (!text || text.length < 3) return true;
-      if (text.length > 100) return true;
-      // URLs, CSS files, JS files
-      if (/^https?:\/\//.test(text) || /\.(css|js|html|php|jpg|png|svg|woff|ttf)/.test(text)) return true;
-      // Page titles with separators (e.g., "סטודיו פיקסל - פרסום ומיתוג עסקי")
+      if (text.length > 80) return true;
+      // URLs, paths, embeds, CSS/JS
+      if (/https?:\/\/|\/embed|\/wp-|\/feed|\.(css|js|html|php|jpg|png|svg|woff|ttf|xml)/i.test(text)) return true;
+      // Page titles with separators
       if (/\s[-–—|]\s/.test(text) && text.split(/\s[-–—|]\s/).length > 2) return true;
-      // CMS noise
-      if (/תגובות לפוסט|comment|cookie|wp-content|elementor|plugin/i.test(text)) return true;
+      // CMS & WordPress noise
+      if (/תגובות|comment|cookie|wp-content|elementor|plugin|widget|sidebar|footer|header|embed|iframe|script/i.test(text)) return true;
       // Very long multi-word sentences (not real search queries)
-      if (text.split(/\s+/).length > 10) return true;
+      if (text.split(/\s+/).length > 8) return true;
+      // Single-word generic terms that are NOT search queries
+      const singleWordGarbage = /^(feed|home|blog|shop|gallery|menu|login|register|cart|checkout|search|tag|tags|page|post|archive|category|error|null|undefined|favicon|rss|sitemap|api|admin|dashboard|test)$/i;
+      if (singleWordGarbage.test(text.trim())) return true;
+      // Navigation / CTA / branding phrases
+      if (/^(דף הבית|צור קשר|אודות|שירותים|מוצרים|בלוג|חנות|גלריה|ראשי|תפריט|קראו עוד|למידע נוסף|ברוכים הבאים|נעים להכיר|we are|why choose|one stop|our team|our services|about us|contact us|get started|learn more|read more|click here|sign up|log in)/i.test(text.trim())) return true;
+      // Questions/CTAs that are website copy, not search queries
+      if (/\?$/.test(text.trim()) && /^(why choose|what makes|how we|what we|who we|are you)/i.test(text.trim())) return true;
+      // Hebrew site-copy patterns
+      if (/^(למה לבחור בנו|מה מייחד אותנו|הצוות שלנו|השירותים שלנו|הלקוחות שלנו|קצת עלינו)/i.test(text.trim())) return true;
       return false;
     };
 
@@ -900,6 +909,16 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
         queries.push({ query: text, platform, intent });
       }
     };
+
+    // Sanitize products — filter out garbage entries BEFORE building queries
+    const cleanProducts = products.filter(p => {
+      if (!p || p.length < 3 || p.length > 60) return false;
+      if (isGarbageQuery(p.toLowerCase().trim())) return false;
+      // Single word that's not a real service/product term
+      if (p.trim().split(/\s+/).length < 2 && p.length < 8) return false;
+      return true;
+    });
+    log(job, 'generate_queries', `${products.length} מוצרים → ${cleanProducts.length} אחרי סינון`, 'info');
 
     // 0. CLIENT KEYWORDS (HIGHEST PRIORITY) — keywords the client explicitly asked to track
     const clientKws = job.clientKeywords || [];
@@ -979,7 +998,7 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
     }
 
     // 3. Product/service queries with location (ALL platforms)
-    for (const prod of products.slice(0, 5)) {
+    for (const prod of cleanProducts.slice(0, 5)) {
       if (location) {
         if (isHebrew) {
           // Hebrew product+location: "מיתוג עסקי בקרית מוצקין", "מיתוג עסקי קרית מוצקין"
@@ -1011,10 +1030,10 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
         }
       }
     }
-    log(job, 'generate_queries', `${Math.min(5, products.length)} שאילתות מוצרים ליצור`, 'success');
+    log(job, 'generate_queries', `${Math.min(5, cleanProducts.length)} שאילתות מוצרים ליצור`, 'success');
 
     // 4. Informational queries from products (AI platforms only)
-    for (const prod of products.slice(0, 4)) {
+    for (const prod of cleanProducts.slice(0, 4)) {
       const howtoQueries = isHebrew ? [
         `איך לבחור ${prod}`,
         `מה ההבדל בין ${prod}`,
@@ -1033,15 +1052,15 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
     log(job, 'generate_queries', `שאילתות מדעות (how-to) מ-4 מוצרים`, 'success');
 
     // 5. Comparison queries (AI platforms only)
-    if (products.length >= 2) {
+    if (cleanProducts.length >= 2) {
       const comparisonQueries = isHebrew ? [
-        `${products[0]} או ${products[1]}`,
-        `${products[0]} לעומת ${products[1]}`,
-        `מה ההבדל בין ${products[0]} ל${products[1]}`,
+        `${cleanProducts[0]} או ${cleanProducts[1]}`,
+        `${cleanProducts[0]} לעומת ${cleanProducts[1]}`,
+        `מה ההבדל בין ${cleanProducts[0]} ל${cleanProducts[1]}`,
       ] : [
-        `${products[0]} vs ${products[1] || products[0]}`,
-        `${products[0]} alternatives`,
-        `compare ${products[0]} solutions`,
+        `${cleanProducts[0]} vs ${cleanProducts[1] || cleanProducts[0]}`,
+        `${cleanProducts[0]} alternatives`,
+        `compare ${cleanProducts[0]} solutions`,
       ];
       for (const q of comparisonQueries) {
         for (const p of aiPlatforms) {
@@ -1056,6 +1075,8 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
     // Filter out page titles, navigation items, branding phrases, and non-search-worthy text.
     const headingQueries = [...h1Tags, ...h2Tags].filter(tag => {
       if (!tag || tag.length < 5 || tag.length > 80) return false;
+      // Run through the main garbage filter first
+      if (isGarbageQuery(tag)) return false;
       const lower = tag.toLowerCase();
       // Skip common page titles / navigation headings that nobody would search for
       if (/^(דף הבית|צור קשר|אודות|שירותים|מוצרים|בלוג|חנות|גלריה|תפריט|ראשי|home|about|contact|services|products|blog|gallery|menu)$/i.test(lower.trim())) return false;
