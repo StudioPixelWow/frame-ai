@@ -861,10 +861,25 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
     const h1Tags = homepageParsed.h1Tags || [];
     const h2Tags = homepageParsed.h2Tags || [];
 
-    // Helper to add queries with deduplication PER PLATFORM
-    // Bug fix: dedup must be query+platform, not just query — otherwise only 1st platform gets each query
+    // SAFETY: reject garbage queries before they enter the system
+    const isGarbageQuery = (text: string): boolean => {
+      if (!text || text.length < 3) return true;
+      if (text.length > 100) return true;
+      // URLs, CSS files, JS files
+      if (/^https?:\/\//.test(text) || /\.(css|js|html|php|jpg|png|svg|woff|ttf)/.test(text)) return true;
+      // Page titles with separators (e.g., "סטודיו פיקסל - פרסום ומיתוג עסקי")
+      if (/\s[-–—|]\s/.test(text) && text.split(/\s[-–—|]\s/).length > 2) return true;
+      // CMS noise
+      if (/תגובות לפוסט|comment|cookie|wp-content|elementor|plugin/i.test(text)) return true;
+      // Very long multi-word sentences (not real search queries)
+      if (text.split(/\s+/).length > 10) return true;
+      return false;
+    };
+
+    // Helper to add queries with deduplication PER PLATFORM + garbage filter
     const addQuery = (text: string, platform: PlatformId, intent: string) => {
       const normalized = text.toLowerCase().trim();
+      if (isGarbageQuery(normalized)) return; // Skip garbage
       const key = `${normalized}::${platform}`;
       if (normalized && !uniqueQueries.has(key)) {
         uniqueQueries.add(key);

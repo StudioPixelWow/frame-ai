@@ -405,32 +405,63 @@ function extractProducts(scan: any, pages: any[], websiteUrl: string, allEvidenc
 
   const products: Set<string> = new Set();
 
-  // From H1 tags
-  if (scan.h1Tags && Array.isArray(scan.h1Tags)) {
-    scan.h1Tags.forEach((h1: string) => {
-      if (h1 && normalizeText(h1).length > 3) {
-        products.add(h1.trim());
+  // Helper: check if text is a valid product/service name (NOT a page title, URL, heading, or navigation item)
+  const isValidProduct = (text: string): boolean => {
+    if (!text || text.length < 3 || text.length > 60) return false;
+    const lower = text.toLowerCase().trim();
+    // Skip URLs
+    if (/^https?:\/\//.test(lower) || /\.(css|js|html|php|jpg|png|svg)/.test(lower)) return false;
+    // Skip page titles with separators (e.g., "סטודיו פיקסל - פרסום ומיתוג עסקי")
+    if (/\s[-–—|]\s/.test(text)) return false;
+    // Skip navigation/generic headings
+    if (/^(דף הבית|צור קשר|אודות|שירותים|מוצרים|בלוג|גלריה|תפריט|home|about|contact|blog|gallery|menu|faq|privacy|terms)$/i.test(lower)) return false;
+    // Skip headings that start with "דף" or are greeting phrases
+    if (/^(דף |נעים להכיר|ברוכים הבאים|welcome|hello|we are)/i.test(lower)) return false;
+    // Skip long sentences (products are short noun phrases)
+    if (text.split(/\s+/).length > 6) return false;
+    // Skip if it contains "תגובות" (comments), "פוסט" (post), or other CMS noise
+    if (/תגובות|פוסט|post|comment|cookie|copyright|privacy/.test(lower)) return false;
+    return true;
+  };
+
+  // 1. Extract from page URL slugs (most reliable signal for products/services)
+  pages.forEach((p: any) => {
+    const url = p.url || '';
+    const slug = url.replace(/^https?:\/\/[^/]+/, '').replace(/\/$/, '').split('/').pop() || '';
+    const cleanSlug = decodeURIComponent(slug).replace(/[-_]/g, ' ').trim();
+    if (cleanSlug && cleanSlug.length > 3 && cleanSlug.length < 40 && !/^\d+$/.test(cleanSlug)) {
+      // Skip common non-product slugs
+      if (!/^(about|contact|blog|faq|privacy|terms|sitemap|wp-|page|category|tag|author)/.test(cleanSlug)) {
+        if (isValidProduct(cleanSlug)) {
+          products.add(cleanSlug);
+        }
+      }
+    }
+  });
+
+  // 2. Extract REAL service/product terms from H2 tags (only short, descriptive ones)
+  if (scan.h2Tags && Array.isArray(scan.h2Tags)) {
+    scan.h2Tags.forEach((h2: string) => {
+      const clean = h2.trim();
+      if (isValidProduct(clean) && clean.split(/\s+/).length >= 2 && clean.split(/\s+/).length <= 4) {
+        products.add(clean);
       }
     });
   }
 
-  // From H2 tags extracted from pages
-  const h2Tags = extractH2Tags(pages);
-  h2Tags.slice(0, 5).forEach(h2 => {
-    if (normalizeText(h2).length > 3) {
-      products.add(h2.trim());
-    }
-  });
+  // 3. From meta description — extract noun phrases that look like services
+  if (scan.metaDescription) {
+    const desc = scan.metaDescription as string;
+    // Look for comma-separated items in meta description (common pattern: "פרסום, מיתוג, עיצוב גרפי")
+    const commaItems = desc.split(/[,،.·•]/).map((s: string) => s.trim()).filter((s: string) => s.length > 2 && s.length < 40);
+    commaItems.forEach((item: string) => {
+      if (isValidProduct(item) && item.split(/\s+/).length <= 4) {
+        products.add(item);
+      }
+    });
+  }
 
-  // From page titles containing keywords like "products", "services", "menu"
-  const serviceKeywords = ['product', 'service', 'menu', 'offering', 'solution'];
-  pages.forEach((p: any) => {
-    if (p.title && serviceKeywords.some(kw => normalizeText(p.title).includes(kw))) {
-      products.add(p.title.trim());
-    }
-  });
-
-  const productArray = Array.from(products).slice(0, 10);
+  const productArray = Array.from(products).slice(0, 8);
 
   return {
     value: productArray,
