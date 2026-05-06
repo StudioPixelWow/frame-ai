@@ -834,11 +834,13 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
     const h1Tags = homepageParsed.h1Tags || [];
     const h2Tags = homepageParsed.h2Tags || [];
 
-    // Helper to add queries with deduplication
+    // Helper to add queries with deduplication PER PLATFORM
+    // Bug fix: dedup must be query+platform, not just query — otherwise only 1st platform gets each query
     const addQuery = (text: string, platform: PlatformId, intent: string) => {
       const normalized = text.toLowerCase().trim();
-      if (normalized && !uniqueQueries.has(normalized)) {
-        uniqueQueries.add(normalized);
+      const key = `${normalized}::${platform}`;
+      if (normalized && !uniqueQueries.has(key)) {
+        uniqueQueries.add(key);
         queries.push({ query: text, platform, intent });
       }
     };
@@ -934,32 +936,47 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
     }
 
     // 6. H1/H2 derived queries (google_seo)
-    const headingQueries = [...h1Tags, ...h2Tags].filter(tag => tag && tag.length > 5 && tag.length < 120);
+    // IMPORTANT: Only use headings that look like real search terms.
+    // Filter out page titles, navigation items, branding phrases, and non-search-worthy text.
+    const headingQueries = [...h1Tags, ...h2Tags].filter(tag => {
+      if (!tag || tag.length < 5 || tag.length > 80) return false;
+      const lower = tag.toLowerCase();
+      // Skip common page titles / navigation headings that nobody would search for
+      if (/^(דף הבית|צור קשר|אודות|שירותים|מוצרים|בלוג|חנות|גלריה|תפריט|ראשי|home|about|contact|services|products|blog|gallery|menu)$/i.test(lower.trim())) return false;
+      // Skip headings that are just the site name or contain site-specific navigation
+      if (bName && lower.includes(bName.toLowerCase())) return false;
+      // Skip headings with separators typical of title tags (e.g., "סטודיו פיקסל - פרסום ומיתוג")
+      if (/\s[-–—|]\s/.test(tag)) return false;
+      // Skip headings that start with "דף הבית" or are greeting/brand phrases
+      if (/^(דף|נעים להכיר|ברוכים הבאים|welcome|hello)/i.test(lower.trim())) return false;
+      // Skip very generic phrases
+      if (/^(קריאטיב|שירותים שלנו|הצוות שלנו|למה לבחור|why choose)/i.test(lower.trim())) return false;
+      // Must have at least 2 words to be a plausible search query
+      if (tag.trim().split(/\s+/).length < 2) return false;
+      return true;
+    });
     for (const heading of headingQueries.slice(0, 5)) {
-      // Use heading as-is if concise, otherwise extract key terms
-      if (heading.length > 80) {
-        // Extract first noun phrase or significant terms
-        const words = heading.split(/\s+/).slice(0, 5).join(' ');
-        addQuery(words, 'google_seo', 'heading');
-      } else {
-        addQuery(heading, 'google_seo', 'heading');
-      }
+      addQuery(heading, 'google_seo', 'heading');
     }
     if (headingQueries.length > 0) {
       log(job, 'generate_queries', `${headingQueries.length} שאילתות מכותרות H1/H2 ליצור`, 'success');
+    } else {
+      log(job, 'generate_queries', `אין כותרות H1/H2 שמתאימות כשאילתות חיפוש`, 'info');
     }
 
     // 7. Hebrew-aware: detect if content is in Hebrew and generate Hebrew queries for ALL platforms
+    // IMPORTANT: Avoid queries containing the brand name for AI platforms — they trigger anti-echo.
+    // Brand queries are already handled in section 1. Focus on industry/generic Hebrew queries here.
     const isHebrew = /[֐-׿]/.test([bName, industry, ...products, ...h1Tags, ...h2Tags].join(''));
-    if (isHebrew && (industry || bName)) {
+    if (isHebrew && industry) {
       const hebrewQueries = [
-        industry ? `${industry} בישראל` : null,
-        bName ? `${bName} שירותים` : null,
-        industry ? `${industry} טוב ביותר` : null,
-        bName ? `מה זה ${bName}` : null,
-        industry ? `המלצה על ${industry}` : null,
+        `${industry} בישראל`,
+        location ? `${industry} ${location}` : null,
+        `${industry} טוב ביותר`,
+        `המלצה על ${industry}`,
+        `איך לבחור ${industry}`,
       ].filter(Boolean) as string[];
-      for (const q of hebrewQueries.filter(q => !uniqueQueries.has(q.toLowerCase()))) {
+      for (const q of hebrewQueries) {
         for (const p of PLATFORMS) {
           addQuery(q, p.id, 'hebrew');
         }
@@ -979,7 +996,8 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       }
     }
 
-    log(job, 'generate_queries', `נבנו ${queries.length} שאילתות בסך הכל (${uniqueQueries.size} ייחודיות)`, 'success');
+    const uniqueQueryTexts = new Set(queries.map(q => q.query.toLowerCase().trim()));
+    log(job, 'generate_queries', `נבנו ${queries.length} שאילתות בסך הכל (${uniqueQueryTexts.size} ייחודיות × ${PLATFORMS.length} פלטפורמות)`, 'success');
     completeStage(job, 'generate_queries', queries.length);
     stageDurations.generate_queries = Date.now() - s7;
 
