@@ -498,7 +498,7 @@ function SeoGeoWizard() {
       const res = await fetch("/api/seo/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: data.websiteUrl }),
+        body: JSON.stringify({ url: data.websiteUrl, clientKeywords: data.clientKeywords || [] }),
       });
 
       clearInterval(simInterval);
@@ -831,44 +831,48 @@ function SeoGeoWizard() {
       : "";
 
     const queries: VisibilityQuery[] = [];
+    let qIdx = 1;
 
-    // Brand queries
-    if (business && business !== "the business") {
-      queries.push({ id: "q1", query: `${business} reviews`, category: "brand", intent: "navigational", importance: "high" });
-      queries.push({ id: "q2", query: `Why choose ${business}?`, category: "brand", intent: "navigational", importance: "high" });
+    // ── PRIORITY 1: Client keywords (entered in step 3) ──
+    const clientKws = data.clientKeywords || [];
+    for (const kw of clientKws) {
+      const trimmed = kw.trim();
+      if (!trimmed) continue;
+      queries.push({ id: `q${qIdx++}`, query: trimmed, category: "client", intent: "commercial", importance: "high" });
+      // Add location variant if available
+      if (location) {
+        queries.push({ id: `q${qIdx++}`, query: `${trimmed} ${location}`, category: "client", intent: "commercial", importance: "high" });
+      }
     }
 
-    // Service/type queries
+    // ── PRIORITY 2: Brand queries ──
+    if (business && business !== "the business") {
+      queries.push({ id: `q${qIdx++}`, query: `${business}`, category: "brand", intent: "navigational", importance: "high" });
+    }
+
+    // ── PRIORITY 3: Service/type queries ──
     if (businessType && businessType !== "") {
-      queries.push({ id: "q3", query: `Best ${businessType} companies`, category: "comparison", intent: "commercial", importance: "high" });
-      queries.push({ id: "q4", query: `How to choose a ${businessType}?`, category: "general", intent: "informational", importance: "medium" });
+      queries.push({ id: `q${qIdx++}`, query: `${businessType} מומלץ`, category: "comparison", intent: "commercial", importance: "high" });
     }
 
     // Service + location queries
     if (services && location) {
-      queries.push({ id: "q5", query: `${services} near me`, category: "local", intent: "commercial", importance: "high" });
-      queries.push({ id: "q6", query: `${services} in ${location}`, category: "local", intent: "commercial", importance: "high" });
-    }
-
-    // Comparison and pricing queries
-    if (services) {
-      queries.push({ id: "q7", query: `${services} pricing`, category: "product", intent: "transactional", importance: "medium" });
-      queries.push({ id: "q8", query: `${services} guide for beginners`, category: "general", intent: "informational", importance: "low" });
+      queries.push({ id: `q${qIdx++}`, query: `${services} ב${location}`, category: "local", intent: "commercial", importance: "high" });
     }
 
     // Return at least 5 queries, fill with generic ones if needed
-    while (queries.length < 5 && queries.length < 8) {
-      const index = queries.length + 1;
-      queries.push({ id: `q${index}`, query: `Best practices for ${businessType || 'online business'}`, category: "general", intent: "informational", importance: "medium" });
+    while (queries.length < 5) {
+      if (businessType && location) {
+        queries.push({ id: `q${qIdx++}`, query: `${businessType} ב${location}`, category: "local", intent: "commercial", importance: "medium" });
+      } else if (businessType) {
+        queries.push({ id: `q${qIdx++}`, query: `${businessType} הכי טוב`, category: "general", intent: "informational", importance: "medium" });
+      } else {
+        queries.push({ id: `q${qIdx++}`, query: `${business}`, category: "brand", intent: "navigational", importance: "medium" });
+      }
+      if (queries.length >= 8) break;
     }
 
-    return queries.length > 0 ? queries : [
-      { id: "q1", query: `${business} information`, category: "brand", intent: "navigational", importance: "high" },
-      { id: "q2", query: `${business} services`, category: "brand", intent: "navigational", importance: "high" },
-      { id: "q3", query: `How to find ${business}`, category: "general", intent: "informational", importance: "medium" },
-      { id: "q4", query: `${business} reviews`, category: "brand", intent: "navigational", importance: "high" },
-      { id: "q5", query: `${business} near me`, category: "local", intent: "commercial", importance: "medium" },
-    ];
+    return queries;
   };
 
   const updateData = (patch: Partial<WizardData>) => setData(prev => ({ ...prev, ...patch }));

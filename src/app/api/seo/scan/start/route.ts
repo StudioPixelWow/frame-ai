@@ -16,7 +16,7 @@ export const maxDuration = 60;
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { url, scanType = 'quick' } = body;
+    const { url, scanType = 'quick', clientKeywords } = body;
 
     if (!url) {
       return NextResponse.json({ error: 'URL required' }, { status: 400 });
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     const validTypes: ScanType[] = ['quick', 'deep'];
     const type: ScanType = validTypes.includes(scanType) ? scanType : 'quick';
 
-    const jobId = await startScan(url, type);
+    const jobId = await startScan(url, type, Array.isArray(clientKeywords) ? clientKeywords : undefined);
 
     return NextResponse.json({
       jobId,

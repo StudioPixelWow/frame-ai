@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const reqId = Math.random().toString(36).slice(2, 8);
   try {
     const body = await req.json();
-    const { url, async: asyncMode, scanType = 'quick' } = body;
+    const { url, async: asyncMode, scanType = 'quick', clientKeywords } = body;
 
     console.log(`${TAG} [${reqId}] INIT url=${url} scanType=${scanType} async=${!!asyncMode}`);
 
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
     const validTypes: ScanType[] = ['quick', 'deep'];
     const type: ScanType = validTypes.includes(scanType) ? scanType : 'quick';
-    const jobId = await startScan(url, type);
+    const jobId = await startScan(url, type, Array.isArray(clientKeywords) ? clientKeywords : undefined);
     console.log(`${TAG} [${reqId}] JOB_CREATED jobId=${jobId} type=${type}`);
 
     if (asyncMode) {

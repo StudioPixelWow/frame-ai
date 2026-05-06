@@ -141,6 +141,7 @@ export interface ScanJob {
   validation?: ScanValidation;
   result?: ScanResult | null;
   error?: string;
+  clientKeywords?: string[];
 }
 
 export interface ParsedPage {
@@ -622,7 +623,7 @@ function validateScan(job: ScanJob, pages: ScannedPageInfo[], facts: WebsiteFact
 // PIPELINE ORCHESTRATOR
 // ══════════════════════════════════════════════════════════════════════════════
 
-export async function startScan(url: string, scanType: ScanType = 'quick'): Promise<string> {
+export async function startScan(url: string, scanType: ScanType = 'quick', clientKeywords?: string[]): Promise<string> {
   let normalizedUrl = url.trim();
   if (!normalizedUrl.startsWith('http')) normalizedUrl = `https://${normalizedUrl}`;
 
@@ -639,6 +640,7 @@ export async function startScan(url: string, scanType: ScanType = 'quick'): Prom
     platformStatuses: initPlatformStatuses(),
     startedAt: new Date().toISOString(),
     result: null,
+    clientKeywords: clientKeywords && clientKeywords.length > 0 ? clientKeywords : undefined,
   };
 
   jobStore.set(jobId, job);
@@ -886,6 +888,30 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
         queries.push({ query: text, platform, intent });
       }
     };
+
+    // 0. CLIENT KEYWORDS (HIGHEST PRIORITY) — keywords the client explicitly asked to track
+    const clientKws = job.clientKeywords || [];
+    if (clientKws.length > 0) {
+      for (const kw of clientKws) {
+        const trimmed = kw.trim();
+        if (!trimmed) continue;
+        for (const p of PLATFORMS) {
+          addQuery(trimmed, p.id, 'client_keyword');
+        }
+        // Also generate location variations if we have location data
+        if (location) {
+          const locVariations = isHebrew
+            ? [`${trimmed} ב${location}`, `${trimmed} ${location}`]
+            : [`${trimmed} in ${location}`, `${trimmed} ${location}`];
+          for (const v of locVariations) {
+            for (const p of PLATFORMS) {
+              addQuery(v, p.id, 'client_keyword');
+            }
+          }
+        }
+      }
+      log(job, 'generate_queries', `${clientKws.length} ביטויי לקוח (עדיפות ראשונה) — כל הפלטפורמות`, 'success');
+    }
 
     // 1. Brand name queries (ALL platforms — every platform should check brand visibility)
     if (bName) {

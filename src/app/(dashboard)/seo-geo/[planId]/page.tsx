@@ -2676,11 +2676,24 @@ export default function SeoPlanDetail() {
 
           // AI Overview cross-reference: for each unique query, get organic + AIO + AI mention data
           const keywordCrossRef = (() => {
-            const qMap = new Map<string, { query: string; organic: number | null; aioFound: boolean; aiFound: boolean; aiVisibility: number }>();
+            const qMap = new Map<string, { query: string; organic: number | null; aioFound: boolean; aiFound: boolean; aiVisibility: number; status?: string }>();
+
+            // First: add client keywords from plan (highest priority — always shown)
+            const planClientKws: any[] = Array.isArray((safePlan as any)?.clientKeywords) ? (safePlan as any).clientKeywords : [];
+            for (const ck of planClientKws) {
+              const keyword = typeof ck === 'string' ? ck : ck?.keyword;
+              if (!keyword) continue;
+              const key = keyword.toLowerCase();
+              if (!qMap.has(key)) qMap.set(key, { query: keyword, organic: null, aioFound: false, aiFound: false, aiVisibility: 0, status: 'טרם נבדק' });
+            }
+
+            // Then: overlay with real scan data
             for (const q of realQueries) {
               const key = q.query.toLowerCase();
               if (!qMap.has(key)) qMap.set(key, { query: q.query, organic: null, aioFound: false, aiFound: false, aiVisibility: 0 });
               const entry = qMap.get(key)!;
+              // Clear "not yet checked" status once we have real data
+              if (entry.status === 'טרם נבדק') delete entry.status;
               if (q.platform === 'google_seo' && q.found && q.position) entry.organic = q.position;
               if (q.platform === 'google_ai_overview' && q.found) entry.aioFound = true;
               if (!['google_seo', 'google_ai_overview'].includes(q.platform) && q.found) entry.aiFound = true;
@@ -2954,12 +2967,18 @@ export default function SeoPlanDetail() {
                                   ) : <span style={{ color: C.textMuted, fontSize: 12 }}>—</span>}
                                 </td>
                                 <td style={{ ...tdStyle, textAlign: "center" }}>
-                                  <span style={{ fontSize: 12, color: kw.aioFound ? C.text : C.textMuted }}>
-                                    {kw.aioFound ? "יש" : "אין"}
-                                  </span>
+                                  {(kw as any).status === 'טרם נבדק' ? (
+                                    <span style={{ fontSize: 11, color: C.warning }}>טרם נבדק</span>
+                                  ) : (
+                                    <span style={{ fontSize: 12, color: kw.aioFound ? C.text : C.textMuted }}>
+                                      {kw.aioFound ? "יש" : "אין"}
+                                    </span>
+                                  )}
                                 </td>
                                 <td style={{ ...tdStyle, textAlign: "center" }}>
-                                  {kw.aiFound ? (
+                                  {(kw as any).status === 'טרם נבדק' ? (
+                                    <span style={{ fontSize: 11, color: C.warning }}>טרם נבדק</span>
+                                  ) : kw.aiFound ? (
                                     <span style={{
                                       ...tagStyle, background: `${C.success}12`, color: C.success,
                                     }}>
@@ -2971,10 +2990,14 @@ export default function SeoPlanDetail() {
                                   )}
                                 </td>
                                 <td style={{ ...tdStyle, textAlign: "center" }}>
-                                  <span style={{
-                                    fontSize: 13, fontWeight: 700,
-                                    color: kw.aiVisibility > 40 ? C.success : kw.aiVisibility > 0 ? C.warning : C.textMuted,
-                                  }}>{kw.aiVisibility > 0 ? `${kw.aiVisibility}%` : "—"}</span>
+                                  {(kw as any).status === 'טרם נבדק' ? (
+                                    <span style={{ fontSize: 11, color: C.warning }}>טרם נבדק</span>
+                                  ) : (
+                                    <span style={{
+                                      fontSize: 13, fontWeight: 700,
+                                      color: kw.aiVisibility > 40 ? C.success : kw.aiVisibility > 0 ? C.warning : C.textMuted,
+                                    }}>{kw.aiVisibility > 0 ? `${kw.aiVisibility}%` : "—"}</span>
+                                  )}
                                 </td>
                               </tr>
                             );

@@ -4,6 +4,8 @@ import { generate60DayPlan } from '@/lib/seo/plan-engine';
 import type { PlanInput } from '@/lib/seo/plan-engine';
 import { generateWithAI } from '@/lib/ai/openai-client';
 
+export const maxDuration = 300; // 5 minutes — needed for generating 8 full articles
+
 /**
  * Call AI to generate smart keywords for the plan engine.
  * Returns an array of keyword strings prioritized for the business.
@@ -91,6 +93,87 @@ async function generateAIArticles(plan: any, keywords: string[]): Promise<any[]>
     console.error('[60-DAY-PLAN] AI article generation failed:', e);
   }
   return [];
+}
+
+/**
+ * Generate the full article content (1500+ words) for a single article.
+ * Called automatically during plan generation for all 8 articles.
+ */
+async function generateFullArticle(plan: any, article: any): Promise<any> {
+  const facts = plan.websiteScan?.websiteFacts || {};
+  const profile = plan.businessProfile || {};
+  const businessName = plan.clientName || facts.business_name?.value || facts.business_name || '';
+  const businessType = facts.business_type?.value || facts.business_type || profile.business_type || '';
+  const products = facts.main_products_or_services?.value || facts.main_products_or_services || profile.main_products_or_services || [];
+
+  const title = article.title || '';
+  const targetKeyword = article.targetKeyword || title;
+  const outline = article.outline || [];
+
+  const outlineSection = Array.isArray(outline) && outline.length > 0
+    ? `\nמבנה המאמר (כותרות משנה):\n${outline.map((h: string, i: number) => `${i + 1}. ${h}`).join('\n')}`
+    : '';
+
+  const productsStr = Array.isArray(products) && products.length > 0
+    ? `\nשירותים/מוצרים: ${products.join(', ')}`
+    : '';
+
+  try {
+    const result = await generateWithAI(
+      `אתה כותב תוכן SEO מקצועי בעברית עם 15 שנות ניסיון. אתה כותב מאמרים מלאים, עמוקים ומקצועיים שמדרגים גבוה בגוגל ומקבלים אזכורים במנועי AI.
+
+כללים:
+- כתוב בעברית מקצועית וטבעית
+- אורך מינימלי: 1500 מילים
+- שלב את ביטוי המפתח בצורה טבעית (3-5 פעמים)
+- כתוב כותרות H2 ו-H3 ברורות
+- כלול דוגמאות מעשיות ונתונים
+- סיים עם FAQ (3 שאלות ותשובות)
+- סיים עם CTA לעסק
+- אל תכתוב "מאמר זה..." או "במאמר הזה..." — כתוב ישר לתוכן`,
+      `כתוב מאמר SEO מלא בעברית.
+
+שם העסק: ${businessName}
+סוג העסק: ${businessType}${productsStr}
+
+כותרת המאמר: "${title}"
+ביטוי מפתח: "${targetKeyword}"${outlineSection}
+
+כתוב את המאמר המלא (1500+ מילים). כלול:
+1. פתיחה מרתקת (150 מילים)
+2. 4-6 סעיפים עם H2 (כל אחד 200-300 מילים)
+3. תת-סעיפים עם H3 לפחות ב-2 סעיפים
+4. דוגמאות מעשיות ונתונים
+5. FAQ — 3 שאלות ותשובות
+6. סיכום + CTA ל-${businessName}
+
+החזר JSON:
+{
+  "article": "תוכן המאמר המלא בHTML עם תגיות h2, h3, p, ul, li",
+  "wordCount": 1500,
+  "metaTitle": "כותרת Meta (60 תווים)",
+  "metaDescription": "תיאור Meta (155 תווים)",
+  "faq": [{"question": "שאלה", "answer": "תשובה"}]
+}`,
+      { temperature: 0.7, maxTokens: 8000 }
+    );
+
+    if (result.success && result.data) {
+      const data = result.data as any;
+      return {
+        fullArticle: data.article || '',
+        wordCount: data.wordCount || 1500,
+        metaTitle: data.metaTitle || '',
+        metaDescription: data.metaDescription || '',
+        faq: data.faq || [],
+        generatedAt: new Date().toISOString(),
+        status: 'written',
+      };
+    }
+  } catch (e) {
+    console.error(`[60-DAY-PLAN] Failed to generate article "${title}":`, e);
+  }
+  return null;
 }
 
 /**
@@ -212,6 +295,44 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
   if (Object.keys(enrichmentData).length > 0) {
     enrichmentData.aiEnrichedAt = new Date().toISOString();
     await updatePlanSafe(planId, enrichmentData);
+  }
+
+  // ── Step 2: Auto-generate full article content for all 8 articles ──
+  // User requested: "כל 8 מאמרים מוכנים מראש" — all articles pre-written when plan generates
+  const articlesToWrite = enrichmentData.aiArticles || (Array.isArray(plan.aiArticles) ? plan.aiArticles : []);
+  if (articlesToWrite.length > 0) {
+    console.log(`[60-DAY-PLAN] Auto-generating full content for ${articlesToWrite.length} articles...`);
+    const updatedArticles = [...articlesToWrite];
+    let successCount = 0;
+
+    for (let i = 0; i < updatedArticles.length; i++) {
+      const article = updatedArticles[i];
+      // Skip if already written
+      if (article.status === 'written' && article.fullArticle) {
+        successCount++;
+        continue;
+      }
+      try {
+        console.log(`[60-DAY-PLAN] Writing article ${i + 1}/${updatedArticles.length}: "${article.title}"`);
+        const result = await generateFullArticle(plan, article);
+        if (result) {
+          updatedArticles[i] = { ...article, ...result };
+          successCount++;
+          console.log(`[60-DAY-PLAN] Article ${i + 1} written successfully`);
+        }
+      } catch (e) {
+        console.error(`[60-DAY-PLAN] Failed to write article ${i + 1}:`, e);
+      }
+      // Small delay between articles to avoid rate limiting
+      if (i < updatedArticles.length - 1) {
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+
+    console.log(`[60-DAY-PLAN] Articles auto-generated: ${successCount}/${updatedArticles.length}`);
+    await updatePlanSafe(planId, { aiArticles: updatedArticles });
+    // Also update finalArticles so the plan engine uses the written versions
+    finalArticles = updatedArticles;
   }
 
   // Build PlanInput from plan data
