@@ -253,28 +253,55 @@ export function getAllJobs(): ScanJob[] {
     .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
 }
 
+// ── HTML Entity Decoder ────────────────────────────────────────────────────────
+
+function decodeHtmlEntities(text: string): string {
+  return text
+    // Named entities
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&ndash;/g, '–')
+    .replace(/&mdash;/g, '—')
+    .replace(/&laquo;/g, '«')
+    .replace(/&raquo;/g, '»')
+    .replace(/&hellip;/g, '…')
+    .replace(/&copy;/g, '©')
+    .replace(/&reg;/g, '®')
+    .replace(/&trade;/g, '™')
+    // Numeric entities: &#8211; → –, &#34; → ", &#x201C; → "
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+    // Clean up any remaining whitespace
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // ── HTML Parser ────────────────────────────────────────────────────────────────
 
 export function parseHtml(html: string, pageUrl: string): ParsedPage {
   const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  const title = titleMatch ? titleMatch[1].replace(/\s+/g, ' ').trim() : '';
+  const title = titleMatch ? decodeHtmlEntities(titleMatch[1]) : '';
 
   const metaDescMatch = html.match(/<meta\s+[^>]*name=["']?description["']?\s+[^>]*content=["']([^"']*)["']/i)
     || html.match(/<meta\s+[^>]*content=["']([^"']*)["'][^>]*name=["']?description["']?/i);
-  const metaDescription = metaDescMatch ? metaDescMatch[1].trim() : '';
+  const metaDescription = metaDescMatch ? decodeHtmlEntities(metaDescMatch[1]) : '';
 
   const h1Regex = /<h1[^>]*>([\s\S]*?)<\/h1>/gi;
   const h1Tags: string[] = [];
   let m;
   while ((m = h1Regex.exec(html)) !== null) {
-    const text = m[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    const text = decodeHtmlEntities(m[1].replace(/<[^>]+>/g, ''));
     if (text) h1Tags.push(text);
   }
 
   const h2Regex = /<h2[^>]*>([\s\S]*?)<\/h2>/gi;
   const h2Tags: string[] = [];
   while ((m = h2Regex.exec(html)) !== null) {
-    const text = m[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    const text = decodeHtmlEntities(m[1].replace(/<[^>]+>/g, ''));
     if (text) h2Tags.push(text);
   }
 
