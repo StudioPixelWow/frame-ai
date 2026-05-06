@@ -472,24 +472,71 @@ export default function SeoPlanDetail() {
     const scan = safePlan.websiteScan;
     if (!scan) return [];
 
-    // Helper to clean HTML entities
+    // Helper to clean HTML entities and raw text
     const cleanText = (text: string) => {
+      if (!text) return '';
       return text
         .replace(/&#8211;/g, "-")
+        .replace(/&#34;/g, '"')
+        .replace(/&#39;/g, "'")
         .replace(/&amp;/g, "&")
         .replace(/&lt;/g, "<")
         .replace(/&gt;/g, ">")
         .replace(/&quot;/g, '"')
         .replace(/&#x27;/g, "'")
+        .replace(/&nbsp;/g, " ")
+        .replace(/\["([^"]+)"\]|\[([^\]]+)\]/g, "$1$2")
+        .replace(/^\s*["']+|["']+\s*$/g, "")
         .trim();
     };
 
+    // Intelligently extract business type
+    const extractBusinessType = () => {
+      let btype = s(scan.websiteFacts?.business_type || "") || "";
+      if (btype) return cleanText(btype);
+
+      // Try to extract from h1Tags
+      const h1s = (scan.h1Tags || []).map((h: string) => cleanText(s(h)));
+      for (const h1 of h1s) {
+        if (h1 && h1.length < 60 && !h1.includes("אלרם") && h1.length > 5) {
+          return h1;
+        }
+      }
+      return "";
+    };
+
+    // Intelligently extract products/services
+    const extractProducts = () => {
+      const products: string[] = [];
+      const mainProd = scan.websiteFacts?.main_products_or_services;
+
+      if (Array.isArray(mainProd)) {
+        mainProd.forEach((p: any) => {
+          const cleaned = cleanText(s(p));
+          if (cleaned && cleaned.length > 2 && cleaned.length < 40) {
+            if (!cleaned.includes("http") && !cleaned.includes(".") && !cleaned.includes("/")) {
+              products.push(cleaned);
+            }
+          }
+        });
+      } else if (typeof mainProd === 'string') {
+        const prodStr = cleanText(mainProd);
+        if (prodStr && !prodStr.includes("http") && prodStr.length < 50) {
+          prodStr.split(/[,;/]+/).forEach(p => {
+            const cleaned = p.trim();
+            if (cleaned && cleaned.length > 2 && cleaned.length < 40) {
+              products.push(cleaned);
+            }
+          });
+        }
+      }
+
+      return products.slice(0, 5);
+    };
+
     const businessName = s(safePlan.clientName) || "העסק";
-    const businessType = s(scan.websiteFacts?.business_type || "") || "";
-    const productsStr = s(scan.websiteFacts?.main_products_or_services || "");
-    const products = productsStr
-      ? productsStr.split(",").map((p: string) => cleanText(p.trim())).filter((p: string) => p.length > 0).slice(0, 5)
-      : [];
+    const businessType = extractBusinessType();
+    const products = extractProducts();
 
     // Extract location if available
     const websiteUrl = s(safePlan.websiteUrl || "");
@@ -502,6 +549,11 @@ export default function SeoPlanDetail() {
     // CORE - Most important generic + location keywords (5 keywords)
     const coreKeywords = [];
     if (businessType) {
+      coreKeywords.push({
+        keyword: `${businessType}`,
+        category: "core",
+        categoryLabel: "CORE — הכי חשובים",
+      });
       coreKeywords.push({
         keyword: `${businessType} ${location}`,
         category: "core",
@@ -520,11 +572,6 @@ export default function SeoPlanDetail() {
         categoryLabel: "CORE — הכי חשובים",
       });
     }
-    coreKeywords.push({
-      keyword: businessName,
-      category: "core",
-      categoryLabel: "CORE — הכי חשובים",
-    });
     if (businessType && products.length > 0) {
       coreKeywords.push({
         keyword: `${businessType} ${products[0]}`,
@@ -536,7 +583,6 @@ export default function SeoPlanDetail() {
 
     // SERVICES - High purchase intent keywords (5 keywords)
     const serviceKeywords = [];
-    const serviceModifiers = ["ניהול", "שירות", "עזרה", "ייעוץ", "פתרון"];
     if (products.length > 0) {
       products.forEach((prod: string, idx: number) => {
         if (idx < 2) {
@@ -550,28 +596,52 @@ export default function SeoPlanDetail() {
             category: "services",
             categoryLabel: "שירותים — כוונת רכישה גבוהה",
           });
+          serviceKeywords.push({
+            keyword: `שירותי ${prod}`,
+            category: "services",
+            categoryLabel: "שירותים — כוונת רכישה גבוהה",
+          });
         }
+      });
+    }
+    if (businessType) {
+      serviceKeywords.push({
+        keyword: `שירותי ${businessType}`,
+        category: "services",
+        categoryLabel: "שירותים — כוונת רכישה גבוהה",
       });
     }
     keywordsList.push(...serviceKeywords.slice(0, 5));
 
     // DIFFERENTIATION - Brand differentiating keywords (5 keywords)
     const diffKeywords = [];
-    const diffModifiers = ["פרימיום", "מקצועי", "אישי", "מיוחד", "אסטרטגיה"];
     if (products.length > 0) {
-      diffModifiers.forEach((mod: string, idx: number) => {
-        if (idx < 2 && products[idx % products.length]) {
-          diffKeywords.push({
-            keyword: `${products[idx % products.length]} ${mod}`,
-            category: "differentiation",
-            categoryLabel: "בידול — פה אתה מנצח",
-          });
-        }
+      diffKeywords.push({
+        keyword: `${products[0]} פרימיום`,
+        category: "differentiation",
+        categoryLabel: "בידול — פה אתה מנצח",
+      });
+      diffKeywords.push({
+        keyword: `${products[0]} מקצועי`,
+        category: "differentiation",
+        categoryLabel: "בידול — פה אתה מנצח",
       });
     }
     if (businessType) {
       diffKeywords.push({
         keyword: `אסטרטגיית ${businessType}`,
+        category: "differentiation",
+        categoryLabel: "בידול — פה אתה מנצח",
+      });
+      diffKeywords.push({
+        keyword: `${businessType} מותאם אישית`,
+        category: "differentiation",
+        categoryLabel: "בידול — פה אתה מנצח",
+      });
+    }
+    if (products.length > 0) {
+      diffKeywords.push({
+        keyword: `מיתוג ${products[0]}`,
         category: "differentiation",
         categoryLabel: "בידול — פה אתה מנצח",
       });
@@ -582,7 +652,7 @@ export default function SeoPlanDetail() {
     const longTailKeywords = [];
     if (products.length > 0) {
       longTailKeywords.push({
-        keyword: `איך ל${products[0]}`,
+        keyword: `איך לבחור ${products[0]}`,
         category: "long_tail",
         categoryLabel: "LONG TAIL — הזהב האמיתי",
       });
@@ -592,19 +662,19 @@ export default function SeoPlanDetail() {
         categoryLabel: "LONG TAIL — הזהב האמיתי",
       });
       longTailKeywords.push({
-        keyword: `${products[0]} לעסקים קטנים`,
+        keyword: `${products[0]} לעסקים קטנים ובינוניים`,
+        category: "long_tail",
+        categoryLabel: "LONG TAIL — הזהב האמיתי",
+      });
+      longTailKeywords.push({
+        keyword: `שיווק ${products[0]} דיגיטלי`,
         category: "long_tail",
         categoryLabel: "LONG TAIL — הזהב האמיתי",
       });
     }
-    longTailKeywords.push({
-      keyword: `למה לבחור ב-${businessName}`,
-      category: "long_tail",
-      categoryLabel: "LONG TAIL — הזהב האמיתי",
-    });
-    if (location && businessType) {
+    if (businessType) {
       longTailKeywords.push({
-        keyword: `${businessType} בעיר בפריט מיוחד`,
+        keyword: `${businessType} לעסקים`,
         category: "long_tail",
         categoryLabel: "LONG TAIL — הזהב האמיתי",
       });
@@ -1707,6 +1777,19 @@ export default function SeoPlanDetail() {
           const businessProfile = (p as any).businessProfile || (scan as any)?.websiteFacts?.businessProfile;
           const knownCompetitors: string[] = businessProfile?.known_competitors || allCompetitors.map((c: any) => c.domain || c.name || '').filter(Boolean) || [];
 
+          // Generate suggested competitors based on business type if none found
+          const generateSuggestedCompetitors = () => {
+            if (knownCompetitors.length > 0) return [];
+            const businessType = s(scan?.websiteFacts?.business_type || "") || "";
+            if (!businessType) return [];
+            return [
+              { name: `מתחרה 1 — ${businessType}`, suggested: true, domain: null },
+              { name: `מתחרה 2 — ${businessType}`, suggested: true, domain: null },
+              { name: `מתחרה 3 — ${businessType}`, suggested: true, domain: null },
+            ];
+          };
+          const suggestedCompetitors = generateSuggestedCompetitors();
+
           // Extract mentioned competitors from AI snippets
           const mentionedInAI = new Map<string, {platforms: Set<string>; queries: string[]}>();
           for (const q of aiQueriesRaw) {
@@ -1734,7 +1817,7 @@ export default function SeoPlanDetail() {
             }
           }
 
-          const hasCompData = knownCompetitors.length > 0 || mentionedInAI.size > 0 || planCompetitors.length > 0;
+          const hasCompData = knownCompetitors.length > 0 || mentionedInAI.size > 0 || planCompetitors.length > 0 || suggestedCompetitors.length > 0;
 
           return (
           <div>
@@ -1808,9 +1891,39 @@ export default function SeoPlanDetail() {
                   )}
                 </div>
 
+                {/* Suggested competitors if none found */}
+                {suggestedCompetitors.length > 0 && (
+                  <div style={{ ...cardStyle, marginTop: 20, background: `${C.info}08`, border: `1px solid ${C.info}20` }}>
+                    <h3 style={{ ...sectionTitle }}>💡 מתחרים מוצעים לניתוח</h3>
+                    <p style={{ fontSize: 12, color: C.textMuted, marginBottom: 16 }}>לא נמצאו מתחרים בסריקה. הצעות אלו יכולות לעזור בהשוואה:</p>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {suggestedCompetitors.map((comp: any, i: number) => (
+                        <div key={i} style={{
+                          padding: "14px 16px", borderRadius: 14, background: C.bg,
+                          border: `1px dashed ${C.info}30`,
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{ fontSize: 18 }}>🔍</div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{comp.name}</div>
+                              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 3 }}>הוסף דומיין כדי לבצע ניתוח מפורט</div>
+                            </div>
+                            <span style={{
+                              ...tagStyle,
+                              background: `${C.info}15`,
+                              color: C.info,
+                              fontSize: 11,
+                            }}>מוצע</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Plan competitors if available */}
                 {planCompetitors.length > 0 && (
-                  <div style={{ ...cardStyle }}>
+                  <div style={{ ...cardStyle, marginTop: suggestedCompetitors.length > 0 ? 20 : 0 }}>
                     <h3 style={{ ...sectionTitle }}>📊 ניתוח מתחרים מפורט</h3>
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       {planCompetitors.map((comp: any, i: number) => (
@@ -1846,16 +1959,51 @@ export default function SeoPlanDetail() {
 
         {/* ── CONTENT GAPS ── */}
         {activeTab === "gaps" && (() => {
+          // Helper to clean HTML entities
+          const cleanGapQuery = (text: string) => {
+            if (!text) return '';
+            return text
+              .replace(/&#8211;/g, "-")
+              .replace(/&#34;/g, '"')
+              .replace(/&#39;/g, "'")
+              .replace(/&amp;/g, "&")
+              .replace(/&lt;/g, "<")
+              .replace(/&gt;/g, ">")
+              .replace(/&quot;/g, '"')
+              .replace(/&#x27;/g, "'")
+              .replace(/&nbsp;/g, " ")
+              .trim();
+          };
+
+          // Helper to check if query is garbage
+          const isGarbageQuery = (query: string) => {
+            if (!query) return true;
+            const cleaned = cleanGapQuery(query);
+            if (cleaned.length < 3 || cleaned.length > 100) return true;
+            if (cleaned.includes("http") || cleaned.includes(".css") || cleaned.includes(".js") || cleaned.includes("/wp-content/")) return true;
+            if (cleaned.includes("&#")) return true;
+            const hebrewChars = (cleaned.match(/[֐-׿]/g) || []).length;
+            if (hebrewChars < 2 && cleaned !== cleaned.toLowerCase()) return true;
+            if (/^[a-z]{3,}$/i.test(cleaned) && !/[א-ת]/i.test(cleaned)) {
+              if (cleaned === "kjjk" || cleaned === "abc" || cleaned.match(/^[a-z]{2,}$/)) return true;
+            }
+            return false;
+          };
+
           // Build content gaps from AI queries where business was NOT found
           const aiQueriesRaw: any[] = scan?.aiQueries as any[] || [];
           const planGaps: any[] = Array.isArray((p as any).contentGaps) ? (p as any).contentGaps : [];
 
           // Find queries where business is missing per platform
           const missedByQuery = new Map<string, {platforms: string[]; totalPlatforms: number}>();
-          const uniqueQueries = Array.from(new Set(aiQueriesRaw.map(q => q.query)));
+          const uniqueQueries = Array.from(new Set(
+            aiQueriesRaw
+              .map(q => cleanGapQuery(s(q.query || "")))
+              .filter(q => !isGarbageQuery(q))
+          ));
 
           for (const query of uniqueQueries) {
-            const queryResults = aiQueriesRaw.filter(q => q.query === query);
+            const queryResults = aiQueriesRaw.filter(q => cleanGapQuery(s(q.query || "")) === query);
             const missed = queryResults.filter(q => !q.found).map(q => q.platform);
             const total = queryResults.length;
             if (missed.length > 0) {
@@ -1908,7 +2056,6 @@ export default function SeoPlanDetail() {
                   <h3 style={{ ...sectionTitle }}>📝 שאילתות שבהן העסק לא מופיע</h3>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {sortedGaps.map(([query, data], i) => {
-                      const decoded = query.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#39;/g, "'");
                       const isCritical = data.platforms.length === data.totalPlatforms;
                       return (
                         <div key={i} style={{
@@ -1919,7 +2066,7 @@ export default function SeoPlanDetail() {
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 6 }}>
-                                {decoded}
+                                {query}
                               </div>
                               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                                 {data.platforms.map(pid => {

@@ -193,9 +193,20 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
   const insights = input.insights || [];
   const keywords = input.targetKeywords || [];
 
-  // Safe keyword helpers to prevent undefined.replace() crashes
-  const kw = (i: number) => keywords[i] || '';
-  const kwSlug = (i: number) => (keywords[i] || 'topic').replace(/\s+/g, '-');
+  // Safe keyword helpers with smart fallbacks
+  const kw = (i: number) => {
+    if (keywords[i]) return keywords[i];
+    // Smart fallbacks based on business data
+    const services = scan?.websiteFacts?.main_products_or_services;
+    if (Array.isArray(services) && services[i]) return services[i];
+    if (businessProfile?.main_products_or_services && Array.isArray(businessProfile.main_products_or_services)) {
+      if (businessProfile.main_products_or_services[i]) return businessProfile.main_products_or_services[i];
+    }
+    if (businessProfile?.business_type) return `שירותי ${businessProfile.business_type}`;
+    if (input.clientName) return `שירותי ${input.clientName}`;
+    return `נושא מרכזי ${i + 1}`;
+  };
+  const kwSlug = (i: number) => (kw(i) || 'topic').replace(/\s+/g, '-');
 
   // Derived analytics
   const mentionedQueries = vis.filter(v => (v.results || []).some(r => r.mentioned));
