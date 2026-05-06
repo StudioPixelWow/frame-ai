@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server';
 import { ok, err, loadPlan, notFound, updatePlanSafe, logActivity, withErrorBoundary } from '@/lib/seo/api-helpers';
 import { generateWithAI } from '@/lib/ai/openai-client';
 
+// Vercel Hobby max = 60s. Article generation needs the full budget.
+export const maxDuration = 60;
+
 /**
  * POST /api/seo-geo-plans/[planId]/generate-article
  *
@@ -72,7 +75,7 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
   "metaDescription": "תיאור Meta (155 תווים)",
   "faq": [{"question": "שאלה", "answer": "תשובה"}]
 }`,
-      { temperature: 0.7, maxTokens: 8000 }
+      { temperature: 0.7, maxTokens: 4500 }
     );
 
     if (result.success && result.data) {

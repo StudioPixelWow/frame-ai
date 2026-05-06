@@ -2696,30 +2696,43 @@ export default function SeoPlanDetail() {
                 {plannedArticles.length > 0 && (
                   <button
                     onClick={async () => {
-                      // Generate all planned articles sequentially
-                      for (let i = 0; i < aiArticles.length; i++) {
-                        const a = aiArticles[i];
-                        if (a?.fullArticle && a.status === 'written') continue;
-                        setGeneratingArticle(`batch-${i}`);
+                      // Generate planned articles sequentially with progress
+                      const toGenerate = aiArticles
+                        .map((a: any, i: number) => ({ ...a, _idx: i }))
+                        .filter((a: any) => !a.fullArticle || a.status !== 'written');
+                      let completed = 0;
+                      for (const item of toGenerate) {
+                        completed++;
+                        setGeneratingArticle(`כותב מאמר ${completed} מתוך ${toGenerate.length}...`);
                         try {
+                          const controller = new AbortController();
+                          const timeout = setTimeout(() => controller.abort(), 55000);
                           const res = await fetch(`/api/seo-geo-plans/${plan!.id}/generate-article`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
-                              articleIndex: i,
-                              title: a.title || '',
-                              targetKeyword: a.targetKeyword || a.title || '',
-                              outline: a.outline || [],
+                              articleIndex: item._idx,
+                              title: item.title || '',
+                              targetKeyword: item.targetKeyword || item.title || '',
+                              outline: item.outline || [],
                             }),
+                            signal: controller.signal,
                           });
+                          clearTimeout(timeout);
                           if (res.ok) {
                             const data = await res.json();
                             if (data.data?.article) {
-                              setGeneratedArticles(prev => ({ ...prev, [`article-tab-${i}`]: data.data.article }));
+                              setGeneratedArticles(prev => ({ ...prev, [`article-tab-${item._idx}`]: data.data.article }));
                             }
+                          } else {
+                            console.warn(`Article ${completed} failed with status ${res.status}`);
                           }
-                        } catch (e) {
-                          console.error("Failed to generate article", i, e);
+                        } catch (e: any) {
+                          if (e?.name === 'AbortError') {
+                            console.warn(`Article ${completed} timed out — skipping`);
+                          } else {
+                            console.error("Failed to generate article", item._idx, e);
+                          }
                         }
                       }
                       setGeneratingArticle(null);
@@ -2738,7 +2751,7 @@ export default function SeoPlanDetail() {
                       opacity: generatingArticle ? 0.6 : 1,
                     }}
                   >
-                    {generatingArticle ? "⏳ כותב מאמרים..." : "✨ כתוב את כל המאמרים"}
+                    {generatingArticle ? `⏳ ${generatingArticle}` : "✨ כתוב את כל המאמרים"}
                   </button>
                 )}
               </div>
