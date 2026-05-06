@@ -115,12 +115,13 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   completed: { label: "הושלם", color: C.primary },
 };
 
-type TabId = "overview" | "plan" | "tasks" | "ai" | "results" | "competitors" | "gaps" | "keywords" | "reports";
+type TabId = "overview" | "plan" | "tasks" | "articles" | "ai" | "results" | "competitors" | "gaps" | "keywords" | "reports";
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "overview", label: "סקירה", icon: "📊" },
   { id: "plan", label: "תוכנית 60 יום", icon: "📅" },
   { id: "tasks", label: "משימות", icon: "✅" },
+  { id: "articles", label: "מאמרים", icon: "📝" },
   { id: "ai", label: "תוצאות AI", icon: "🤖" },
   { id: "results", label: "תוצאות נראות", icon: "🔎" },
   { id: "competitors", label: "מתחרים", icon: "🏆" },
@@ -232,11 +233,39 @@ export default function SeoPlanDetail() {
   const [enrichingAI, setEnrichingAI] = useState(false);
   const [generatingArticle, setGeneratingArticle] = useState<string | null>(null); // task.id of article being generated
   const [generatedArticles, setGeneratedArticles] = useState<Record<string, string>>({}); // taskId -> full article HTML
+  const [articleError, setArticleError] = useState<string | null>(null);
+
+  // Load previously generated articles from plan's aiArticles on plan load
+  useEffect(() => {
+    if (!plan) return;
+    const aiArticles = Array.isArray((plan as any).aiArticles) ? (plan as any).aiArticles : [];
+    const days = Array.isArray((plan as any).days) ? (plan as any).days : [];
+    const preloaded: Record<string, string> = {};
+    // Match articles that have fullArticle content to their corresponding tasks
+    for (const day of days) {
+      if (!Array.isArray(day?.tasks)) continue;
+      for (const task of day.tasks) {
+        if (task.category !== 'content' && (task as any).type !== 'content') continue;
+        // Find matching article by title
+        const matchIdx = aiArticles.findIndex((a: any) =>
+          a?.fullArticle && a.status === 'written' &&
+          (task.title?.includes(a.title?.slice(0, 20)) || a.title?.includes(task.title?.slice(0, 20)))
+        );
+        if (matchIdx >= 0 && aiArticles[matchIdx]?.fullArticle) {
+          preloaded[task.id] = aiArticles[matchIdx].fullArticle;
+        }
+      }
+    }
+    if (Object.keys(preloaded).length > 0) {
+      setGeneratedArticles(prev => ({ ...prev, ...preloaded }));
+    }
+  }, [plan]);
 
   // Generate full article via AI
   const handleGenerateArticle = useCallback(async (taskTitle: string, taskId: string, articleIndex: number) => {
     if (!plan) return;
     setGeneratingArticle(taskId);
+    setArticleError(null);
     try {
       const aiArticles = Array.isArray((plan as any).aiArticles) ? (plan as any).aiArticles : [];
       const matchingArticle = aiArticles[articleIndex] || {};
@@ -255,10 +284,21 @@ export default function SeoPlanDetail() {
         const data = await res.json();
         if (data.data?.article) {
           setGeneratedArticles(prev => ({ ...prev, [taskId]: data.data.article }));
+          // Scroll to the generated article after a short delay
+          setTimeout(() => {
+            const el = document.getElementById(`article-${taskId}`);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 200);
+        } else {
+          setArticleError(`המאמר נוצר אבל ללא תוכן — נסה שוב`);
         }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setArticleError(`שגיאה ביצירת המאמר: ${errData.error || res.status}`);
       }
     } catch (e) {
       console.error("Failed to generate article:", e);
+      setArticleError("שגיאת רשת — ודא שהאתר מחובר ונסה שוב");
     }
     setGeneratingArticle(null);
   }, [plan]);
@@ -1479,40 +1519,72 @@ export default function SeoPlanDetail() {
                                                         style={{
                                                           ...smallBtnStyle,
                                                           flex: 1,
-                                                          background: generatingArticle === task.id ? `${C.primary}20` : `linear-gradient(135deg, ${C.primary}, ${C.primaryDark || C.primary})`,
-                                                          color: generatingArticle === task.id ? C.primary : "#fff",
-                                                          border: "none",
+                                                          background: generatingArticle === task.id ? `${C.primary}20` : generatedArticles[task.id] ? `#10b98115` : `linear-gradient(135deg, ${C.primary}, ${C.primaryDark || C.primary})`,
+                                                          color: generatingArticle === task.id ? C.primary : generatedArticles[task.id] ? "#10b981" : "#fff",
+                                                          border: generatedArticles[task.id] ? `1px solid #10b98130` : "none",
                                                           cursor: generatingArticle === task.id ? "wait" : "pointer",
                                                           opacity: generatingArticle === task.id ? 0.7 : 1,
                                                         }}
                                                       >
-                                                        {generatingArticle === task.id ? "⏳ כותב מאמר..." : "✨ כתוב מאמר מלא עם AI"}
+                                                        {generatingArticle === task.id ? "⏳ כותב מאמר... (עד 30 שניות)" : generatedArticles[task.id] ? "🔄 כתוב מאמר מחדש" : "✨ כתוב מאמר מלא עם AI"}
                                                       </button>
                                                     )}
                                                   </div>
 
+                                                  {/* Article generation error */}
+                                                  {articleError && generatingArticle === null && expandedTaskId === task.id && (
+                                                    <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 6, background: "#ef444415", border: "1px solid #ef444430", fontSize: 11, color: "#ef4444" }}>
+                                                      {articleError}
+                                                    </div>
+                                                  )}
+
+                                                  {/* Loading indicator for article generation */}
+                                                  {generatingArticle === task.id && (
+                                                    <div style={{
+                                                      marginTop: 12, padding: "16px", borderRadius: 8,
+                                                      background: `${C.primary}08`, border: `1px dashed ${C.primary}40`,
+                                                      textAlign: "center",
+                                                    }}>
+                                                      <div style={{ fontSize: 24, marginBottom: 8, animation: "pulse 1.5s ease-in-out infinite" }}>🤖</div>
+                                                      <div style={{ fontSize: 12, fontWeight: 600, color: C.primary, marginBottom: 4 }}>יוצר מאמר מלא עם AI...</div>
+                                                      <div style={{ fontSize: 11, color: C.textMuted }}>1,500+ מילים, כותרות, FAQ ו-CTA — אנא המתן</div>
+                                                    </div>
+                                                  )}
+
                                                   {/* Show generated full article */}
-                                                  {generatedArticles[task.id] && (
-                                                    <div style={{ marginTop: 12 }}>
-                                                      <div style={{ fontSize: 11, fontWeight: 600, color: "#10b981", marginBottom: 6 }}>✅ מאמר מלא נוצר בהצלחה</div>
+                                                  {generatedArticles[task.id] && !generatingArticle && (
+                                                    <div id={`article-${task.id}`} style={{ marginTop: 12 }}>
+                                                      <div style={{ fontSize: 13, fontWeight: 700, color: "#10b981", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                                                        <span style={{ fontSize: 16 }}>✅</span> מאמר מלא נוצר בהצלחה
+                                                      </div>
                                                       <div style={{
                                                         background: C.card, border: `1px solid #10b98130`,
-                                                        borderRadius: 8, padding: "14px 16px",
-                                                        fontSize: 13, color: C.text, maxHeight: 400, overflow: "auto",
+                                                        borderRadius: 8, padding: "16px 18px",
+                                                        fontSize: 13, color: C.text, maxHeight: 500, overflow: "auto",
                                                         lineHeight: 1.8, direction: "rtl",
                                                       }} dangerouslySetInnerHTML={{ __html: generatedArticles[task.id] }} />
-                                                      <button onClick={() => {
-                                                        // Strip HTML for clipboard
-                                                        const tmp = document.createElement("div");
-                                                        tmp.innerHTML = generatedArticles[task.id];
-                                                        navigator.clipboard.writeText(tmp.textContent || tmp.innerText || '').catch(() => {});
-                                                      }} style={{
-                                                        ...smallBtnStyle,
-                                                        width: "100%", marginTop: 8,
-                                                        background: "#10b98115", color: "#10b981", border: `1px solid #10b98130`,
-                                                      }}>
-                                                        📋 העתק מאמר מלא
-                                                      </button>
+                                                      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                                                        <button onClick={() => {
+                                                          navigator.clipboard.writeText(generatedArticles[task.id] || '').catch(() => {});
+                                                        }} style={{
+                                                          ...smallBtnStyle,
+                                                          flex: 1,
+                                                          background: "#10b98115", color: "#10b981", border: `1px solid #10b98130`,
+                                                        }}>
+                                                          📋 העתק HTML
+                                                        </button>
+                                                        <button onClick={() => {
+                                                          const tmp = document.createElement("div");
+                                                          tmp.innerHTML = generatedArticles[task.id];
+                                                          navigator.clipboard.writeText(tmp.textContent || tmp.innerText || '').catch(() => {});
+                                                        }} style={{
+                                                          ...smallBtnStyle,
+                                                          flex: 1,
+                                                          background: "#10b98115", color: "#10b981", border: `1px solid #10b98130`,
+                                                        }}>
+                                                          📋 העתק טקסט בלבד
+                                                        </button>
+                                                      </div>
                                                     </div>
                                                   )}
                                                 </div>
@@ -1779,6 +1851,164 @@ export default function SeoPlanDetail() {
             )}
           </div>
         )}
+
+        {/* ── ARTICLES ── */}
+        {activeTab === "articles" && (() => {
+          const aiArticles: any[] = Array.isArray((plan as any)?.aiArticles) ? (plan as any).aiArticles : [];
+          const writtenArticles = aiArticles.filter((a: any) => a?.fullArticle && a.status === 'written');
+          const plannedArticles = aiArticles.filter((a: any) => !a?.fullArticle || a.status !== 'written');
+
+          return (
+            <div style={{ direction: "rtl" }}>
+              {/* Summary header */}
+              <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                marginBottom: 16, padding: "12px 16px", borderRadius: 10,
+                background: `${C.primary}08`, border: `1px solid ${C.primary}15`,
+              }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
+                    {writtenArticles.length > 0 ? `${writtenArticles.length} מאמרים נכתבו` : "טרם נכתבו מאמרים"}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                    {plannedArticles.length > 0 ? `${plannedArticles.length} מאמרים מתוכננים` : ""}
+                    {aiArticles.length === 0 ? "לחצו על ״כתוב מאמר מלא עם AI״ בתוך המשימות בתוכנית 60 יום" : ""}
+                  </div>
+                </div>
+                {plannedArticles.length > 0 && (
+                  <button
+                    onClick={async () => {
+                      // Generate all planned articles sequentially
+                      for (let i = 0; i < aiArticles.length; i++) {
+                        const a = aiArticles[i];
+                        if (a?.fullArticle && a.status === 'written') continue;
+                        setGeneratingArticle(`batch-${i}`);
+                        try {
+                          const res = await fetch(`/api/seo-geo-plans/${plan!.id}/generate-article`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              articleIndex: i,
+                              title: a.title || '',
+                              targetKeyword: a.targetKeyword || a.title || '',
+                              outline: a.outline || [],
+                            }),
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            if (data.data?.article) {
+                              setGeneratedArticles(prev => ({ ...prev, [`article-tab-${i}`]: data.data.article }));
+                            }
+                          }
+                        } catch (e) {
+                          console.error("Failed to generate article", i, e);
+                        }
+                      }
+                      setGeneratingArticle(null);
+                      // Refresh plan data
+                      const res = await fetch(`/api/data/seo-plans/${planId}`);
+                      if (res.ok) {
+                        const data = await res.json();
+                        setPlan(data);
+                      }
+                    }}
+                    disabled={!!generatingArticle}
+                    style={{
+                      padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer",
+                      background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark || C.primary})`,
+                      color: "#fff", fontSize: 12, fontWeight: 600,
+                      opacity: generatingArticle ? 0.6 : 1,
+                    }}
+                  >
+                    {generatingArticle ? "⏳ כותב מאמרים..." : "✨ כתוב את כל המאמרים"}
+                  </button>
+                )}
+              </div>
+
+              {/* Written articles */}
+              {writtenArticles.map((article: any, idx: number) => (
+                <div key={idx} style={{
+                  marginBottom: 16, borderRadius: 10, border: `1px solid #10b98130`,
+                  overflow: "hidden", background: C.card,
+                }}>
+                  <div style={{
+                    padding: "12px 16px", borderBottom: `1px solid ${C.borderLight}`,
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{s(article.title)}</div>
+                      <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                        ביטוי: {s(article.targetKeyword)} | {s(article.wordCount || 1500)} מילים
+                        {article.generatedAt ? ` | נוצר: ${new Date(article.generatedAt).toLocaleDateString("he-IL")}` : ""}
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: 10, fontWeight: 600, padding: "3px 10px", borderRadius: 6,
+                      background: "#10b98115", color: "#10b981",
+                    }}>✅ נכתב</span>
+                  </div>
+                  <div style={{
+                    padding: "16px 18px", fontSize: 13, color: C.text,
+                    maxHeight: 400, overflow: "auto", lineHeight: 1.8, direction: "rtl",
+                  }} dangerouslySetInnerHTML={{ __html: article.fullArticle }} />
+                  <div style={{ padding: "8px 16px", borderTop: `1px solid ${C.borderLight}`, display: "flex", gap: 8 }}>
+                    <button onClick={() => {
+                      navigator.clipboard.writeText(article.fullArticle || '').catch(() => {});
+                    }} style={{
+                      ...smallBtnStyle, flex: 1,
+                      background: "#10b98115", color: "#10b981", border: `1px solid #10b98130`,
+                    }}>
+                      📋 העתק HTML
+                    </button>
+                    <button onClick={() => {
+                      const tmp = document.createElement("div");
+                      tmp.innerHTML = article.fullArticle;
+                      navigator.clipboard.writeText(tmp.textContent || tmp.innerText || '').catch(() => {});
+                    }} style={{
+                      ...smallBtnStyle, flex: 1,
+                      background: "#10b98115", color: "#10b981", border: `1px solid #10b98130`,
+                    }}>
+                      📋 העתק טקסט
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Planned articles */}
+              {plannedArticles.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: C.textMuted, marginBottom: 8 }}>מאמרים מתוכננים</div>
+                  {plannedArticles.map((article: any, idx: number) => (
+                    <div key={idx} style={{
+                      padding: "12px 16px", borderRadius: 8, marginBottom: 8,
+                      border: `1px solid ${C.borderLight}`, background: C.card,
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                    }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{s(article.title)}</div>
+                        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                          ביטוי: {s(article.targetKeyword)} | {s(article.wordCount || 1500)} מילים
+                        </div>
+                        {article.whyThisArticle && (
+                          <div style={{ fontSize: 11, color: C.textSecondary, marginTop: 4 }}>💡 {s(article.whyThisArticle)}</div>
+                        )}
+                      </div>
+                      <span style={{
+                        fontSize: 10, fontWeight: 600, padding: "3px 10px", borderRadius: 6,
+                        background: `${C.warning}15`, color: C.warning,
+                      }}>⏳ מתוכנן</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Empty state */}
+              {aiArticles.length === 0 && (
+                <EmptyTab icon="📝" text="טרם נוצרו מאמרים. הרצו את תוכנית 60 היום כדי ליצור נושאי מאמרים, ואז לחצו ״כתוב מאמר מלא עם AI״." />
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── AI RESULTS ── */}
         {activeTab === "ai" && (() => {
