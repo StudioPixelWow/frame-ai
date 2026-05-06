@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { getGuideForTask, TaskGuide } from '@/lib/seo/task-guides';
 
 // ══════════════════════════════════════════════════════════════
 // TYPES
@@ -315,6 +316,11 @@ export default function SeoPlanDetail() {
   const [aiStatusFilter, setAiStatusFilter] = useState<"all" | "found" | "not_found">("all");
   const [aiSearchQuery, setAiSearchQuery] = useState("");
   const [aiQueryDetail, setAiQueryDetail] = useState<{query: string; platform: string; found: boolean; confidence: number; snippet?: string; position?: number; scanMode?: string; checkedAt?: string} | null>(null);
+  const [executingTask, setExecutingTask] = useState<string | null>(null);
+  const [executionResults, setExecutionResults] = useState<Record<string, any>>({});
+  const [wpConnecting, setWpConnecting] = useState(false);
+  const [wpForm, setWpForm] = useState({ siteUrl: '', username: '', applicationPassword: '' });
+  const [showWpPanel, setShowWpPanel] = useState(false);
 
   // Load previously generated articles from plan's aiArticles on plan load
   useEffect(() => {
@@ -560,6 +566,55 @@ export default function SeoPlanDetail() {
     }
     setEnrichingAI(false);
   }, [plan]);
+
+  // בצע משימה אוטומטית
+  const handleAutoExecute = useCallback(async (taskId: string, taskTitle: string) => {
+    if (!plan?.id) return;
+    setExecutingTask(taskId);
+    try {
+      const res = await fetch(`/api/seo-geo-plans/${plan.id}/execute-task`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, taskTitle }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success !== false) {
+        setExecutionResults(prev => ({ ...prev, [taskId]: data }));
+        // Update task status locally
+        updateTaskStatus(taskId, 'done');
+      } else {
+        setExecutionResults(prev => ({ ...prev, [taskId]: { error: data.error || 'שגיאה בביצוע' } }));
+      }
+    } catch (e) {
+      setExecutionResults(prev => ({ ...prev, [taskId]: { error: 'שגיאת רשת' } }));
+    } finally {
+      setExecutingTask(null);
+    }
+  }, [plan?.id]);
+
+  // חבר WordPress
+  const handleConnectWP = useCallback(async () => {
+    if (!plan?.id) return;
+    setWpConnecting(true);
+    try {
+      const res = await fetch(`/api/seo-geo-plans/${plan.id}/connect-wordpress`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(wpForm),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setPlan((prev: any) => prev ? { ...prev, wpConnection: data.connection || wpForm } : prev);
+        setShowWpPanel(false);
+      } else {
+        alert(data.error || 'חיבור נכשל');
+      }
+    } catch (e) {
+      alert('שגיאת רשת');
+    } finally {
+      setWpConnecting(false);
+    }
+  }, [plan?.id, wpForm]);
 
   // ── PRE-RENDER SAFETY: ensure plan is fully sanitized (no objects as children) ──
   // CRITICAL: These useMemo hooks MUST be before any conditional returns (Rules of Hooks)
@@ -1397,6 +1452,104 @@ export default function SeoPlanDetail() {
               </div>
             )}
 
+            {/* WordPress Connection Panel */}
+            {Array.isArray(p.days) && p.days.length > 0 && (
+              <div style={{
+                marginBottom: 16, padding: "12px 16px", borderRadius: 12,
+                background: (p as any)?.wpConnection ? "#10b98115" : "#f59e0b15",
+                border: (p as any)?.wpConnection ? "1px solid #10b98130" : "1px solid #f59e0b30",
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+                  {(p as any)?.wpConnection ? (
+                    <>
+                      <span style={{ fontSize: 16 }}>✅</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "#10b981" }}>
+                        WordPress מחובר: {((p as any).wpConnection?.siteUrl || (p as any).wpConnection?.siteName || 'אתר')}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ fontSize: 16 }}>⚠️</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "#f59e0b" }}>WordPress לא מחובר</span>
+                    </>
+                  )}
+                </div>
+                {!(p as any)?.wpConnection && (
+                  <button onClick={() => setShowWpPanel(true)} style={{
+                    padding: "6px 14px", borderRadius: 8, border: "none",
+                    background: "#f59e0b", color: "#fff", fontWeight: 600, fontSize: 12,
+                    cursor: "pointer", whiteSpace: "nowrap",
+                  }}>
+                    חבר עכשיו
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* WordPress Connection Form */}
+            {showWpPanel && (
+              <div style={{
+                marginBottom: 16, padding: "16px", borderRadius: 12,
+                background: C.card, border: `1px solid ${C.border}`,
+                boxShadow: "0 4px 16px rgba(0,0,0,0.1)",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>חיבור WordPress</div>
+                  <button onClick={() => setShowWpPanel(false)} style={{
+                    background: "none", border: "none", fontSize: 18, cursor: "pointer", color: C.textMuted,
+                  }}>
+                    ✕
+                  </button>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <input
+                    type="text"
+                    placeholder="כתובת אתר (https://example.com)"
+                    value={wpForm.siteUrl}
+                    onChange={e => setWpForm(prev => ({ ...prev, siteUrl: e.target.value }))}
+                    style={{
+                      padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.border}`,
+                      fontSize: 12, fontFamily: "inherit", direction: "ltr",
+                    }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="שם משתמש"
+                    value={wpForm.username}
+                    onChange={e => setWpForm(prev => ({ ...prev, username: e.target.value }))}
+                    style={{
+                      padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.border}`,
+                      fontSize: 12, fontFamily: "inherit",
+                    }}
+                  />
+                  <input
+                    type="password"
+                    placeholder="סיסמת יישום"
+                    value={wpForm.applicationPassword}
+                    onChange={e => setWpForm(prev => ({ ...prev, applicationPassword: e.target.value }))}
+                    style={{
+                      padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.border}`,
+                      fontSize: 12, fontFamily: "inherit",
+                    }}
+                  />
+                  <button
+                    onClick={handleConnectWP}
+                    disabled={wpConnecting || !wpForm.siteUrl || !wpForm.username || !wpForm.applicationPassword}
+                    style={{
+                      padding: "10px 14px", borderRadius: 8, border: "none",
+                      background: wpConnecting ? `${C.primary}40` : C.primary,
+                      color: "#fff", fontWeight: 600, fontSize: 12,
+                      cursor: wpConnecting ? "wait" : "pointer",
+                      opacity: wpConnecting ? 0.6 : 1,
+                    }}
+                  >
+                    {wpConnecting ? "⏳ מתחבר..." : "✅ חבר"}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Phase + Day structure (new) */}
             {Array.isArray(p.phases) && p.phases.length > 0 && Array.isArray(p.days) && p.days.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1679,6 +1832,101 @@ export default function SeoPlanDetail() {
                                                   )}
                                                 </div>
                                               )}
+
+                                              {/* Task Guide Section */}
+                                              {(() => {
+                                                const guide = getGuideForTask(task.title);
+                                                if (!guide) return null;
+                                                return (
+                                                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.borderLight}` }}>
+                                                    <div style={{ fontSize: 11, fontWeight: 600, color: C.textSecondary, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                                                      📖 מדריך שלב אחר שלב
+                                                    </div>
+
+                                                    {/* Steps */}
+                                                    {Array.isArray(guide.steps) && guide.steps.length > 0 && (
+                                                      <div style={{ marginBottom: 12 }}>
+                                                        {guide.steps.map((step: string, idx: number) => (
+                                                          <div key={idx} style={{ display: "flex", gap: 8, marginBottom: 8, fontSize: 12, color: C.text }}>
+                                                            <span style={{ fontWeight: 600, color: C.primary, minWidth: 20 }}>{idx + 1}.</span>
+                                                            <span style={{ lineHeight: 1.5 }}>{step}</span>
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                    )}
+
+                                                    {/* Code Snippet */}
+                                                    {guide.codeSnippet && (
+                                                      <div style={{ marginBottom: 12 }}>
+                                                        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
+                                                          <div style={{ padding: "10px 12px", background: "#f5f5f5", borderBottom: `1px solid ${C.border}`, fontSize: 11, fontWeight: 600, color: C.textSecondary }}>
+                                                            💻 קוד / דוגמה
+                                                          </div>
+                                                          <div style={{ padding: "12px", fontFamily: "monospace", fontSize: 11, color: C.text, maxHeight: 200, overflow: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                                                            {guide.codeSnippet}
+                                                          </div>
+                                                        </div>
+                                                        <button onClick={() => {
+                                                          navigator.clipboard.writeText(guide.codeSnippet || '').catch(() => {});
+                                                        }} style={{
+                                                          ...smallBtnStyle,
+                                                          width: "100%",
+                                                          marginTop: 6,
+                                                          background: `${C.primary}10`,
+                                                          color: C.primary,
+                                                          border: `1px solid ${C.primary}30`,
+                                                        }}>
+                                                          📋 העתק קוד
+                                                        </button>
+                                                      </div>
+                                                    )}
+
+                                                    {/* Auto-Execute Button */}
+                                                    {guide.autoExecutable && (
+                                                      <div style={{ marginBottom: 12 }}>
+                                                        <button onClick={() => handleAutoExecute(task.id, task.title)} disabled={executingTask === task.id} style={{
+                                                          ...smallBtnStyle,
+                                                          width: "100%",
+                                                          background: executingTask === task.id ? `${C.primary}20` : `linear-gradient(135deg, ${C.primary}, ${C.primaryDark || C.primary})`,
+                                                          color: executingTask === task.id ? C.primary : "#fff",
+                                                          border: executingTask === task.id ? `1px solid ${C.primary}30` : "none",
+                                                          cursor: executingTask === task.id ? "wait" : "pointer",
+                                                          opacity: executingTask === task.id ? 0.7 : 1,
+                                                        }}>
+                                                          {executingTask === task.id ? "⏳ מבצע..." : "⚡ בצע אוטומטית"}
+                                                        </button>
+                                                      </div>
+                                                    )}
+
+                                                    {/* Time Saved Indicator */}
+                                                    {guide.manualMinutes && guide.autoMinutes && (
+                                                      <div style={{ marginBottom: 12, padding: "10px 12px", background: "#fef08a15", border: "1px solid #fef08a30", borderRadius: 6, fontSize: 12, color: "#b45309" }}>
+                                                        ⏱️ ידני: {guide.manualMinutes} דקות → אוטומטי: {guide.autoMinutes} דקות
+                                                        <div style={{ fontSize: 11, marginTop: 4, fontWeight: 600 }}>חסכון: {guide.manualMinutes - guide.autoMinutes} דקות ({Math.round(((guide.manualMinutes - guide.autoMinutes) / guide.manualMinutes) * 100)}%)</div>
+                                                      </div>
+                                                    )}
+
+                                                    {/* Tips */}
+                                                    {Array.isArray(guide.tips) && guide.tips.length > 0 && (
+                                                      <div style={{ padding: "10px 12px", background: "#fef08a15", border: "1px solid #fef08a30", borderRadius: 6 }}>
+                                                        <div style={{ fontSize: 11, fontWeight: 600, color: "#b45309", marginBottom: 6 }}>💡 טיפים</div>
+                                                        {guide.tips.map((tip: string, idx: number) => (
+                                                          <div key={idx} style={{ fontSize: 11, color: "#b45309", marginBottom: idx < guide.tips.length - 1 ? 4 : 0, lineHeight: 1.4 }}>
+                                                            • {tip}
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                    )}
+
+                                                    {/* Execution Result */}
+                                                    {executionResults[task.id] && (
+                                                      <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 6, background: executionResults[task.id]?.error ? "#ef444415" : "#10b98115", border: executionResults[task.id]?.error ? "1px solid #ef444430" : "1px solid #10b98130", fontSize: 11, color: executionResults[task.id]?.error ? "#ef4444" : "#10b981" }}>
+                                                        {executionResults[task.id]?.error ? `❌ ${executionResults[task.id].error}` : `✅ ${executionResults[task.id]?.message || 'בוצע בהצלחה'}`}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })()}
 
                                               {taskUrl && (
                                                 <div style={{ marginTop: 12 }}>
