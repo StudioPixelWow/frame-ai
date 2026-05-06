@@ -24,7 +24,7 @@ import { isPlatformAvailable, queryPlatform, type PlatformId as ApiPlatformId } 
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const FETCH_TIMEOUT_MS = 6_000;  // 6s per page (was 10s — reduced for Vercel 60s limit)
+const FETCH_TIMEOUT_MS = 10_000;  // 10s for homepage (some sites are slow on first request)
 const INTERNAL_PAGE_TIMEOUT_MS = 4_000; // 4s for internal pages (server already connected)
 const PAGE_FETCH_BUDGET_MS = 25_000; // Max 25s total for page fetching stage
 const MIN_SCAN_DURATION_MS = 5_000;
@@ -328,31 +328,67 @@ export function parseHtml(html: string, pageUrl: string): ParsedPage {
 
 async function fetchPage(url: string, isInternal = false): Promise<{ html: string | null; durationMs: number; status?: number }> {
   const timeout = isInternal ? INTERNAL_PAGE_TIMEOUT_MS : FETCH_TIMEOUT_MS;
+  const maxRetries = isInternal ? 1 : 2; // Retry homepage up to 2 times
   const start = Date.now();
-  try {
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), timeout);
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PixelSEOScanner/1.0)' },
-    });
-    clearTimeout(tid);
-    const durationMs = Date.now() - start;
-    if (!res.ok) return { html: null, durationMs, status: res.status };
-    return { html: await res.text(), durationMs, status: res.status };
-  } catch {
-    return { html: null, durationMs: Date.now() - start };
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), timeout);
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7',
+        },
+        redirect: 'follow',
+      });
+      clearTimeout(tid);
+      const durationMs = Date.now() - start;
+      if (!res.ok) {
+        if (attempt < maxRetries - 1) continue; // Retry on non-OK
+        return { html: null, durationMs, status: res.status };
+      }
+      const html = await res.text();
+      // Some sites return empty or very minimal HTML — retry if too small
+      if (html.length < 100 && attempt < maxRetries - 1) continue;
+      return { html, durationMs, status: res.status };
+    } catch {
+      if (attempt < maxRetries - 1) {
+        await new Promise(r => setTimeout(r, 1000)); // Wait 1s before retry
+        continue;
+      }
+      return { html: null, durationMs: Date.now() - start };
+    }
   }
+  return { html: null, durationMs: Date.now() - start };
 }
 
 async function checkUrl(url: string): Promise<boolean> {
   try {
     const c = new AbortController();
     const tid = setTimeout(() => c.abort(), 5000);
-    const res = await fetch(url, { method: 'HEAD', signal: c.signal,
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PixelSEOScanner/1.0)' } });
+    // Try HEAD first, fall back to GET if HEAD is blocked (some servers return 405)
+    let res = await fetch(url, { method: 'HEAD', signal: c.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+      } });
     clearTimeout(tid);
-    return res.ok;
+    if (res.ok) return true;
+    if (res.status === 405 || res.status === 403) {
+      // HEAD blocked — try GET
+      const c2 = new AbortController();
+      const tid2 = setTimeout(() => c2.abort(), 5000);
+      res = await fetch(url, { method: 'GET', signal: c2.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        } });
+      clearTimeout(tid2);
+      return res.ok;
+    }
+    return false;
   } catch { return false; }
 }
 
@@ -627,8 +663,10 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
     const { html: homepageHtml, durationMs: loadTimeMs, status: httpStatus } = await fetchPage(normalizedUrl);
 
     if (!homepageHtml) {
-      log(job, 'fetch_homepage', `דף הבית לא נגיש`, 'error', `Status: ${httpStatus || 'timeout'}`);
-      failStage(job, 'fetch_homepage', 'לא ניתן להגיע לאתר');
+      const reason = httpStatus ? `HTTP ${httpStatus}` : 'timeout/connection error';
+      log(job, 'fetch_homepage', `דף הבית לא נגיש (${reason})`, 'error', `ניסיון חיבור ל-${normalizedUrl} נכשל`);
+      console.error(`[SCAN] Homepage fetch failed for ${normalizedUrl}: ${reason}, duration: ${loadTimeMs}ms`);
+      failStage(job, 'fetch_homepage', `לא ניתן להגיע לאתר (${reason})`);
       finalizeUnreachable(job, normalizedUrl, pipelineStart, stageDurations);
       return;
     }
