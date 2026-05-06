@@ -528,16 +528,10 @@ export default function SeoPlanDetail() {
     if (!plan) return;
     setGeneratingPlan(true);
     try {
-      // Use AbortController for 55s timeout — Vercel Hobby has 60s limit
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 55000);
-
       const res = await fetch(`/api/seo-geo-plans/${plan.id}/generate-60-day-plan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
       });
-      clearTimeout(timeout);
 
       if (res.ok) {
         const data = await res.json();
@@ -551,7 +545,6 @@ export default function SeoPlanDetail() {
               tasks: w.tasks.map((t: any) => ({ ...t, status: t.status || "todo" })),
             }));
           }
-          // Add status defaults to days/tasks from 60-day plan
           if (refreshed.days) {
             refreshed.days = refreshed.days.map((d: any) => ({
               ...d,
@@ -568,24 +561,8 @@ export default function SeoPlanDetail() {
         alert("שגיאה ביצירת תוכנית. נסה שוב.");
       }
     } catch (e: any) {
-      if (e?.name === 'AbortError') {
-        console.error("60-day plan generation timed out");
-        alert("הבקשה ארכה יותר מדי זמן. נסה שוב — ייתכן שחלק מהנתונים כבר נשמרו.");
-        // Try to refresh anyway — partial data might have been saved
-        try {
-          const refreshRes = await fetch(`/api/data/seo-plans/${plan.id}`);
-          if (refreshRes.ok) {
-            const refreshed = await refreshRes.json();
-            if (refreshed.days && refreshed.days.length > 0) {
-              const sanitized = nuke(refreshed, 0);
-              setPlan(sanitized as SeoPlan);
-            }
-          }
-        } catch {} // ignore refresh errors
-      } else {
-        console.error("Failed to generate 60-day plan:", e);
-        alert("שגיאה ביצירת תוכנית. נסה שוב.");
-      }
+      console.error("Failed to generate 60-day plan:", e);
+      alert("שגיאה ביצירת תוכנית. נסה שוב.");
     }
     setGeneratingPlan(false);
   }, [plan]);
@@ -2712,8 +2689,6 @@ export default function SeoPlanDetail() {
                         completed++;
                         setGeneratingArticle(`כותב מאמר ${completed} מתוך ${toGenerate.length}...`);
                         try {
-                          const controller = new AbortController();
-                          const timeout = setTimeout(() => controller.abort(), 55000);
                           const res = await fetch(`/api/seo-geo-plans/${plan!.id}/generate-article`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
@@ -2723,9 +2698,7 @@ export default function SeoPlanDetail() {
                               targetKeyword: item.targetKeyword || item.title || '',
                               outline: item.outline || [],
                             }),
-                            signal: controller.signal,
                           });
-                          clearTimeout(timeout);
                           if (res.ok) {
                             const data = await res.json();
                             if (data.data?.article) {
@@ -2735,11 +2708,7 @@ export default function SeoPlanDetail() {
                             console.warn(`Article ${completed} failed with status ${res.status}`);
                           }
                         } catch (e: any) {
-                          if (e?.name === 'AbortError') {
-                            console.warn(`Article ${completed} timed out — skipping`);
-                          } else {
-                            console.error("Failed to generate article", item._idx, e);
-                          }
+                          console.warn(`Article ${completed} failed — skipping`, e?.message || e);
                         }
                       }
                       setGeneratingArticle(null);
