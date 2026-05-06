@@ -325,6 +325,8 @@ export default function SeoPlanDetail() {
   const [wpForm, setWpForm] = useState({ siteUrl: '', username: '', applicationPassword: '' });
   const [showWpPanel, setShowWpPanel] = useState(false);
   const [selectedCalendarDay, setSelectedCalendarDay] = useState<any | null>(null);
+  const [runningAutomation, setRunningAutomation] = useState(false);
+  const [automationStatus, setAutomationStatus] = useState<string | null>(null);
 
   // Load previously generated articles from plan's aiArticles on plan load
   useEffect(() => {
@@ -1519,6 +1521,164 @@ export default function SeoPlanDetail() {
                 )}
               </div>
             )}
+
+            {/* === START AUTOMATION BUTTON === */}
+            {Array.isArray(p.days) && p.days.length > 0 && (p as any)?.wpConnection && (() => {
+              const automLog = (p as any)?.automationLog || [];
+              const isActive = p.status === 'plan_generated';
+              const lastRun = automLog.length > 0 ? automLog[automLog.length - 1] : null;
+              const lastRunDate = lastRun ? new Date(lastRun.date).toLocaleDateString("he-IL") : null;
+              const generatedAt = p.generatedAt ? new Date(p.generatedAt) : null;
+              const currentDay = generatedAt
+                ? Math.floor((new Date().getTime() - generatedAt.getTime()) / (1000 * 60 * 60 * 24)) + 1
+                : 0;
+              const todayTasks = p.days?.find((d: any) => d.day === currentDay)?.tasks || [];
+              const pendingToday = todayTasks.filter((t: any) => t.status !== 'done').length;
+
+              return (
+                <div style={{
+                  marginBottom: 16, padding: "20px 24px", borderRadius: 16,
+                  background: isActive
+                    ? "linear-gradient(135deg, #10b98115, #059e7415)"
+                    : "#f1f5f915",
+                  border: isActive ? "2px solid #10b98140" : `2px solid ${C.border}`,
+                  position: "relative", overflow: "hidden",
+                }}>
+                  {/* Subtle animated pulse for active state */}
+                  {isActive && automLog.length > 0 && (
+                    <div style={{
+                      position: "absolute", top: 16, left: 16,
+                      width: 10, height: 10, borderRadius: "50%",
+                      background: "#10b981",
+                      animation: "pulse-subtle 2s infinite",
+                    }} />
+                  )}
+
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                        {automLog.length > 0 ? (
+                          <>
+                            <span style={{ fontSize: 20 }}>🤖</span>
+                            אוטומציה פעילה
+                          </>
+                        ) : (
+                          <>
+                            <span style={{ fontSize: 20 }}>🚀</span>
+                            התחל עבודה אוטומטית
+                          </>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.6 }}>
+                        {automLog.length > 0 ? (
+                          <>
+                            המערכת רצה אוטומטית כל יום על המשימות שלך.
+                            {lastRunDate && <> ריצה אחרונה: <b>{lastRunDate}</b>.</>}
+                            {` `}הורצו {automLog.length} ריצות עד כה.
+                            {pendingToday > 0 && <> | <b>{pendingToday} משימות ממתינות</b> להיום (יום {currentDay})</>}
+                          </>
+                        ) : (
+                          <>
+                            לחץ להפעלת האוטומציה — המערכת תריץ את המשימות של היום ב-WordPress שלך,
+                            ותמשיך לרוץ כל יום ב-08:00 אוטומטית.
+                            {currentDay > 0 && currentDay <= 60 && pendingToday > 0 && (
+                              <> היום יום {currentDay}, יש {pendingToday} משימות ממתינות.</>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                      <button
+                        onClick={async () => {
+                          setRunningAutomation(true);
+                          setAutomationStatus("מריץ משימות היום...");
+                          try {
+                            // Run today's tasks via the daily runner (without auth for manual trigger)
+                            const todayDayData = p.days?.find((d: any) => d.day === currentDay);
+                            if (!todayDayData?.tasks?.length) {
+                              setAutomationStatus("אין משימות להיום");
+                              setTimeout(() => { setRunningAutomation(false); setAutomationStatus(null); }, 3000);
+                              return;
+                            }
+                            let successCount = 0;
+                            let failCount = 0;
+                            for (const task of todayDayData.tasks) {
+                              if (task.status === 'done') continue;
+                              setAutomationStatus(`מבצע: ${task.title?.slice(0, 40)}...`);
+                              try {
+                                const res = await fetch(`/api/seo-geo-plans/${plan!.id}/execute-task`, {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ taskId: task.id, taskTitle: task.title }),
+                                });
+                                if (res.ok) {
+                                  const data = await res.json();
+                                  if (data.data?.success) successCount++;
+                                  else failCount++;
+                                } else { failCount++; }
+                              } catch { failCount++; }
+                            }
+                            setAutomationStatus(`הושלם! ${successCount} הצליחו${failCount > 0 ? `, ${failCount} נכשלו` : ""}`);
+                            // Refresh plan
+                            const res = await fetch(`/api/data/seo-plans/${planId}`);
+                            if (res.ok) { const data = await res.json(); setPlan(data); }
+                            setTimeout(() => { setAutomationStatus(null); }, 5000);
+                          } catch (e) {
+                            setAutomationStatus("שגיאה בהרצה");
+                            setTimeout(() => { setAutomationStatus(null); }, 3000);
+                          }
+                          setRunningAutomation(false);
+                        }}
+                        disabled={runningAutomation || currentDay < 1 || currentDay > 60}
+                        style={{
+                          padding: "14px 32px", borderRadius: 14, border: "none",
+                          cursor: runningAutomation ? "wait" : "pointer",
+                          background: automLog.length > 0
+                            ? `linear-gradient(135deg, #10b981, #059e74)`
+                            : `linear-gradient(135deg, ${C.primary}, #7c3aed)`,
+                          color: "#fff", fontWeight: 800, fontSize: 15,
+                          opacity: runningAutomation ? 0.7 : 1,
+                          transition: "all 0.3s",
+                          boxShadow: "0 4px 16px rgba(16, 185, 129, 0.3)",
+                          whiteSpace: "nowrap",
+                          minWidth: 200,
+                        }}
+                      >
+                        {runningAutomation ? "⏳ מריץ..." : automLog.length > 0 ? "▶️ הרץ משימות היום" : "🚀 התחל עבודה"}
+                      </button>
+                      {automationStatus && (
+                        <div style={{
+                          fontSize: 11, color: automationStatus.includes("הושלם") ? "#10b981" : automationStatus.includes("שגיאה") ? "#ef4444" : C.primary,
+                          fontWeight: 600, textAlign: "center", maxWidth: 220,
+                        }}>
+                          {automationStatus}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Mini stats row */}
+                  {automLog.length > 0 && (
+                    <div style={{
+                      display: "flex", gap: 16, marginTop: 16, paddingTop: 12,
+                      borderTop: `1px solid ${isActive ? "#10b98120" : C.borderLight}`,
+                    }}>
+                      {[
+                        { label: "ריצות", value: automLog.length, color: "#7c3aed" },
+                        { label: "משימות שהושלמו", value: automLog.reduce((s: number, l: any) => s + (l.successfulTasks || 0), 0), color: "#10b981" },
+                        { label: "יום נוכחי", value: currentDay > 60 ? "הושלם" : `${currentDay}/60`, color: C.primary },
+                      ].map(stat => (
+                        <div key={stat.label} style={{ flex: 1, textAlign: "center" }}>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: stat.color }}>{stat.value}</div>
+                          <div style={{ fontSize: 10, color: C.textMuted }}>{stat.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* WordPress Connection Form */}
             {showWpPanel && (
