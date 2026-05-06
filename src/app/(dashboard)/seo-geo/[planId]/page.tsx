@@ -465,93 +465,154 @@ export default function SeoPlanDetail() {
     return insights;
   }, [safePlan]);
 
-  // ── Auto-generate SEO keywords from scan data ──
+  // ── Auto-generate SMART SEO keywords from business data ──
   const autoKeywords = useMemo(() => {
     if (!safePlan) return [];
 
     const scan = safePlan.websiteScan;
     if (!scan) return [];
 
+    // Helper to clean HTML entities
+    const cleanText = (text: string) => {
+      return text
+        .replace(/&#8211;/g, "-")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#x27;/g, "'")
+        .trim();
+    };
+
     const businessName = s(safePlan.clientName) || "העסק";
+    const businessType = s(scan.websiteFacts?.business_type || "") || "";
     const productsStr = s(scan.websiteFacts?.main_products_or_services || "");
     const products = productsStr
-      ? productsStr.split(",").map((p: string) => p.trim()).filter((p: string) => p.length > 0).slice(0, 3)
+      ? productsStr.split(",").map((p: string) => cleanText(p.trim())).filter((p: string) => p.length > 0).slice(0, 5)
       : [];
-    const h1Tags = Array.isArray(scan.h1Tags) ? scan.h1Tags.filter((t: any) => typeof t === 'string' && t.length > 0).slice(0, 3) : [];
-    const h2Tags = Array.isArray(scan.h2Tags) ? scan.h2Tags.filter((t: any) => typeof t === 'string' && t.length > 0).slice(0, 3) : [];
 
     // Extract location if available
     const websiteUrl = s(safePlan.websiteUrl || "");
     const locationMatch = websiteUrl.match(/\.([a-z]{2})($|\/)/i);
     const location = locationMatch ? (locationMatch[1] === "il" ? "ישראל" : locationMatch[1]) : "ישראל";
 
-    // Keywords for each category
+    // SMART keyword generation based on business data
     const keywordsList: any[] = [];
 
-    // 1. PURCHASE_INTENT (כוונת רכישה) - products + purchase terms
-    const purchaseTerms = ["מחיר", "עלות", "הזמנת", "קנייה", "השכרת", "ביצוע"];
+    // CORE - Most important generic + location keywords (5 keywords)
+    const coreKeywords = [];
+    if (businessType) {
+      coreKeywords.push({
+        keyword: `${businessType} ${location}`,
+        category: "core",
+        categoryLabel: "CORE — הכי חשובים",
+      });
+    }
     if (products.length > 0) {
-      products.slice(0, 2).forEach((prod: string) => {
-        purchaseTerms.slice(0, 2).forEach((term: string) => {
-          keywordsList.push({
-            keyword: `${term} ${prod}`,
-            category: "purchase_intent",
-            categoryLabel: "כוונת רכישה",
+      coreKeywords.push({
+        keyword: products[0],
+        category: "core",
+        categoryLabel: "CORE — הכי חשובים",
+      });
+      coreKeywords.push({
+        keyword: `${products[0]} ${location}`,
+        category: "core",
+        categoryLabel: "CORE — הכי חשובים",
+      });
+    }
+    coreKeywords.push({
+      keyword: businessName,
+      category: "core",
+      categoryLabel: "CORE — הכי חשובים",
+    });
+    if (businessType && products.length > 0) {
+      coreKeywords.push({
+        keyword: `${businessType} ${products[0]}`,
+        category: "core",
+        categoryLabel: "CORE — הכי חשובים",
+      });
+    }
+    keywordsList.push(...coreKeywords.slice(0, 5));
+
+    // SERVICES - High purchase intent keywords (5 keywords)
+    const serviceKeywords = [];
+    const serviceModifiers = ["ניהול", "שירות", "עזרה", "ייעוץ", "פתרון"];
+    if (products.length > 0) {
+      products.forEach((prod: string, idx: number) => {
+        if (idx < 2) {
+          serviceKeywords.push({
+            keyword: `ניהול ${prod}`,
+            category: "services",
+            categoryLabel: "שירותים — כוונת רכישה גבוהה",
           });
-        });
+          serviceKeywords.push({
+            keyword: `${prod} לעסקים`,
+            category: "services",
+            categoryLabel: "שירותים — כוונת רכישה גבוהה",
+          });
+        }
       });
     }
+    keywordsList.push(...serviceKeywords.slice(0, 5));
 
-    // 2. LOCATION (מיקום) - products + location
+    // DIFFERENTIATION - Brand differentiating keywords (5 keywords)
+    const diffKeywords = [];
+    const diffModifiers = ["פרימיום", "מקצועי", "אישי", "מיוחד", "אסטרטגיה"];
     if (products.length > 0) {
-      products.slice(0, 2).forEach((prod: string) => {
-        keywordsList.push({
-          keyword: `${prod} ${location}`,
-          category: "location",
-          categoryLabel: "מיקום",
-        });
+      diffModifiers.forEach((mod: string, idx: number) => {
+        if (idx < 2 && products[idx % products.length]) {
+          diffKeywords.push({
+            keyword: `${products[idx % products.length]} ${mod}`,
+            category: "differentiation",
+            categoryLabel: "בידול — פה אתה מנצח",
+          });
+        }
       });
     }
-
-    // 3. PRODUCT (מוצר/שירות) - direct products + h1/h2 tags
-    products.slice(0, 4).forEach((prod: string) => {
-      keywordsList.push({
-        keyword: prod,
-        category: "product",
-        categoryLabel: "מוצר/שירות",
+    if (businessType) {
+      diffKeywords.push({
+        keyword: `אסטרטגיית ${businessType}`,
+        category: "differentiation",
+        categoryLabel: "בידול — פה אתה מנצח",
       });
-    });
-    h1Tags.slice(0, 2).forEach((tag: string) => {
-      if (tag && tag.length < 60) {
-        keywordsList.push({
-          keyword: tag,
-          category: "product",
-          categoryLabel: "מוצר/שירות",
-        });
-      }
-    });
-    h2Tags.slice(0, 1).forEach((tag: string) => {
-      if (tag && tag.length < 60) {
-        keywordsList.push({
-          keyword: tag,
-          category: "product",
-          categoryLabel: "מוצר/שירות",
-        });
-      }
-    });
+    }
+    keywordsList.push(...diffKeywords.slice(0, 5));
 
-    // 4. TRUST (אמון ומותג) - business + trust terms
-    const trustTerms = ["חוות דעת", "המלצות", "ביקורות", "ציונים", "הוכחות"];
-    trustTerms.slice(0, 3).forEach((term: string) => {
-      keywordsList.push({
-        keyword: `${term} ${businessName}`,
-        category: "trust",
-        categoryLabel: "אמון ומותג",
+    // LONG TAIL - Question/how-to format keywords (5 keywords)
+    const longTailKeywords = [];
+    if (products.length > 0) {
+      longTailKeywords.push({
+        keyword: `איך ל${products[0]}`,
+        category: "long_tail",
+        categoryLabel: "LONG TAIL — הזהב האמיתי",
       });
+      longTailKeywords.push({
+        keyword: `כמה עולה ${products[0]}`,
+        category: "long_tail",
+        categoryLabel: "LONG TAIL — הזהב האמיתי",
+      });
+      longTailKeywords.push({
+        keyword: `${products[0]} לעסקים קטנים`,
+        category: "long_tail",
+        categoryLabel: "LONG TAIL — הזהב האמיתי",
+      });
+    }
+    longTailKeywords.push({
+      keyword: `למה לבחור ב-${businessName}`,
+      category: "long_tail",
+      categoryLabel: "LONG TAIL — הזהב האמיתי",
     });
+    if (location && businessType) {
+      longTailKeywords.push({
+        keyword: `${businessType} בעיר בפריט מיוחד`,
+        category: "long_tail",
+        categoryLabel: "LONG TAIL — הזהב האמיתי",
+      });
+    }
+    keywordsList.push(...longTailKeywords.slice(0, 5));
 
-    // Limit to 20 keywords total
-    const limitedKeywords = keywordsList.slice(0, 20);
+    // Limit to total keywords
+    const limitedKeywords = keywordsList.slice(0, 25);
 
     // Map visibility results to find Google positions
     const visibilityResults: Record<string, number | null> = {};
@@ -1941,10 +2002,10 @@ export default function SeoPlanDetail() {
 
           // Category display config
           const categoryConfig: Record<string, { label: string; color: string; icon: string }> = {
-            purchase_intent: { label: "כוונת רכישה", color: C.danger, icon: "💳" },
-            location: { label: "מיקום", color: C.primary, icon: "📍" },
-            product: { label: "מוצר/שירות", color: C.info, icon: "📦" },
-            trust: { label: "אמון ומותג", color: C.success, icon: "⭐" },
+            core: { label: "CORE — הכי חשובים", color: C.danger, icon: "🎯" },
+            services: { label: "שירותים — כוונת רכישה גבוהה", color: C.primary, icon: "💼" },
+            differentiation: { label: "בידול — פה אתה מנצח", color: C.success, icon: "⚡" },
+            long_tail: { label: "LONG TAIL — הזהב האמיתי", color: C.info, icon: "🔍" },
           };
 
           // Calculate stats
