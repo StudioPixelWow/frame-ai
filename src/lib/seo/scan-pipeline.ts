@@ -360,7 +360,7 @@ export function parseHtml(html: string, pageUrl: string): ParsedPage {
 
 async function fetchPage(url: string, isInternal = false): Promise<{ html: string | null; durationMs: number; status?: number }> {
   const timeout = isInternal ? INTERNAL_PAGE_TIMEOUT_MS : FETCH_TIMEOUT_MS;
-  const maxRetries = isInternal ? 1 : 2; // Retry homepage up to 2 times
+  const maxRetries = isInternal ? 1 : 3; // Retry homepage up to 3 times
   const start = Date.now();
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -371,8 +371,16 @@ async function fetchPage(url: string, isInternal = false): Promise<{ html: strin
         signal: controller.signal,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
           'Accept-Language': 'he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1',
+          'Upgrade-Insecure-Requests': '1',
         },
         redirect: 'follow',
       });
@@ -697,9 +705,9 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
 
     if (!homepageHtml) {
       const reason = httpStatus ? `HTTP ${httpStatus}` : 'timeout/connection error';
-      log(job, 'fetch_homepage', `דף הבית לא נגיש (${reason})`, 'error', `ניסיון חיבור ל-${normalizedUrl} נכשל`);
-      console.error(`[SCAN] Homepage fetch failed for ${normalizedUrl}: ${reason}, duration: ${loadTimeMs}ms`);
-      failStage(job, 'fetch_homepage', `לא ניתן להגיע לאתר (${reason})`);
+      log(job, 'fetch_homepage', `דף הבית לא נגיש (${reason})`, 'error', `ניסיון חיבור ל-${normalizedUrl} נכשל אחרי 3 ניסיונות`);
+      console.error(`[SCAN] Homepage fetch FAILED for ${normalizedUrl}: ${reason}, duration: ${loadTimeMs}ms — all retries exhausted`);
+      failStage(job, 'fetch_homepage', `לא ניתן להגיע לאתר (${reason}) — נסה שוב מאוחר יותר`);
       finalizeUnreachable(job, normalizedUrl, pipelineStart, stageDurations);
       return;
     }
@@ -1327,7 +1335,8 @@ function finalizeUnreachable(job: ScanJob, url: string, start: number, durations
   for (const s of job.stages) {
     if (s.status === 'pending') s.status = 'skipped';
   }
-  job.status = 'completed';
+  job.status = 'failed';
+  job.error = 'לא ניתן להגיע לאתר — ודא שהכתובת נכונה ושהאתר פעיל';
   job.completedAt = new Date().toISOString();
   job.totalDurationMs = Date.now() - start;
   job.progress = 100;

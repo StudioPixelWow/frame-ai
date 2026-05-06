@@ -556,10 +556,12 @@ function ScanPageInner() {
           {/* Status badge */}
           <span style={{
             padding: '4px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700,
-            background: phase === 'scanning' ? C.primaryLight :
+            background: job?.status === 'failed' ? C.dangerLight :
+                       phase === 'scanning' ? C.primaryLight :
                        job?.validation?.passed ? C.successLight :
                        phase === 'done' && !job?.validation?.passed ? C.warningLight : C.borderLight,
-            color: phase === 'scanning' ? C.primary :
+            color: job?.status === 'failed' ? C.danger :
+                  phase === 'scanning' ? C.primary :
                   job?.validation?.passed ? C.success :
                   phase === 'done' && !job?.validation?.passed ? C.warning : C.textMuted,
           }}>
@@ -803,7 +805,8 @@ function ScanPageInner() {
                   {job.progress}%
                 </text>
                 <text x="90" y="104" textAnchor="middle" fontSize="12" fill={C.textSecondary}>
-                  {phase === 'done' ? 'הושלם' :
+                  {job.status === 'failed' ? 'נכשל' :
+                   phase === 'done' ? 'הושלם' :
                    job.status === 'extract_content' ? 'מחלץ תוכן...' :
                    job.status === 'check_visibility' ? 'בודק נראות...' :
                    'סורק אתר...'}
@@ -821,6 +824,31 @@ function ScanPageInner() {
                 </div>
               )}
             </div>
+
+            {/* Error Banner */}
+            {job.status === 'failed' && (
+              <div style={{
+                background: '#FEE2E2', borderRadius: 16, border: '1px solid #FCA5A5',
+                padding: '20px 24px', marginBottom: 16, textAlign: 'center',
+              }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>&#x26A0;&#xFE0F;</div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: '#DC2626', margin: '0 0 8px 0' }}>
+                  הסריקה נכשלה
+                </h3>
+                <p style={{ fontSize: 13, color: '#991B1B', margin: '0 0 16px 0', lineHeight: 1.6 }}>
+                  {(job as any).error || 'לא ניתן להגיע לאתר — ודא שהכתובת נכונה ושהאתר פעיל'}
+                </p>
+                <button
+                  onClick={() => { setPhase('select'); setJob(null); }}
+                  style={{
+                    background: '#DC2626', color: '#fff', border: 'none', borderRadius: 10,
+                    padding: '10px 24px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  נסה שוב
+                </button>
+              </div>
+            )}
 
             {/* Metrics Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
