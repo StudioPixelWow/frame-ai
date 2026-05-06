@@ -65,10 +65,25 @@ function createAuthHeader(username: string, applicationPassword: string): string
   return `Basic ${encoded}`;
 }
 
+// עזר: נרמול URL אתר
+// Helper: Normalize site URL — add https://, strip /wp-admin, trailing slash
+function normalizeSiteUrl(raw: string): string {
+  let url = raw.trim();
+  // הוסף פרוטוקול אם חסר
+  if (!/^https?:\/\//i.test(url)) {
+    url = `https://${url}`;
+  }
+  // הסר /wp-admin ונתיבים מיותרים
+  url = url.replace(/\/wp-admin\/?.*$/i, '');
+  // הסר סלאש בסוף
+  url = url.replace(/\/+$/, '');
+  return url;
+}
+
 // עזר: בניית URL API
 // Helper: Build API URL
 function buildApiUrl(siteUrl: string, endpoint: string): string {
-  const baseUrl = siteUrl.endsWith('/') ? siteUrl.slice(0, -1) : siteUrl;
+  const baseUrl = normalizeSiteUrl(siteUrl);
   return `${baseUrl}/wp-json/wp/v2${endpoint}`;
 }
 
@@ -102,11 +117,19 @@ export async function testConnection(
   conn: WPConnection
 ): Promise<WPConnectionTestResult> {
   try {
+    // נרמל ובדוק URL
+    const normalizedUrl = normalizeSiteUrl(conn.siteUrl);
+    try {
+      new URL(normalizedUrl);
+    } catch {
+      return { success: false, error: `כתובת אתר לא תקינה: ${conn.siteUrl}. יש להזין כתובת כמו https://example.com` };
+    }
+
     const authHeader = createAuthHeader(conn.username, conn.applicationPassword);
 
     // בדוק משתמש (כדי לוודא הרשאה)
     // Check user endpoint to verify credentials
-    const userUrl = buildApiUrl(conn.siteUrl, '/users/me');
+    const userUrl = buildApiUrl(normalizedUrl, '/users/me');
     await fetchWithAuth(userUrl, authHeader);
 
     // קבל מידע אתר
