@@ -947,21 +947,50 @@ export default function SettingsPage() {
     setGmailConnecting(true);
     setGmailTestResult(null);
     try {
-      const res = await fetch('/api/settings/gmail/connect', {
+      // Step 1: Always test the connection first
+      const testRes = await fetch('/api/settings/gmail/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: testOnly ? 'test' : 'connect',
+          action: 'test',
           email: gmailEmail,
           appPassword: gmailAppPassword,
           senderName: gmailSenderName,
         }),
       });
-      const data = await res.json();
-      setGmailTestResult(data.success ? { success: true, message: data.message } : { success: false, error: data.error });
-      if (data.success && !testOnly) {
+      const testData = await testRes.json();
+
+      if (!testData.success) {
+        // Test failed, show error
+        setGmailTestResult({ success: false, error: testData.error });
+        return;
+      }
+
+      // Step 2: Test succeeded. If testOnly is true, automatically save (connect) as well
+      // If testOnly is false, user clicked save button, so we also need to connect
+      const connectRes = await fetch('/api/settings/gmail/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'connect',
+          email: gmailEmail,
+          appPassword: gmailAppPassword,
+          senderName: gmailSenderName,
+        }),
+      });
+      const connectData = await connectRes.json();
+
+      if (connectData.success) {
+        // Both test and save succeeded
+        const successMessage = testOnly
+          ? 'החיבור תקין ונשמר בהצלחה!'
+          : connectData.message || 'החיבור נשמר בהצלחה!';
+        setGmailTestResult({ success: true, message: successMessage });
         setGmailStatus('connected');
         setGmailLastSync(new Date().toISOString());
+      } else {
+        // Test succeeded but save failed
+        setGmailTestResult({ success: false, error: connectData.error || 'שגיאה בשמירת הגדרות' });
       }
     } catch {
       setGmailTestResult({ success: false, error: 'שגיאת רשת' });

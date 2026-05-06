@@ -324,6 +324,7 @@ export default function SeoPlanDetail() {
   const [wpConnecting, setWpConnecting] = useState(false);
   const [wpForm, setWpForm] = useState({ siteUrl: '', username: '', applicationPassword: '' });
   const [showWpPanel, setShowWpPanel] = useState(false);
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<any | null>(null);
 
   // Load previously generated articles from plan's aiArticles on plan load
   useEffect(() => {
@@ -2293,40 +2294,80 @@ export default function SeoPlanDetail() {
                         const isToday = cell.day === currentDayNum;
                         const statusLabel = getStatusLabel(tasks);
 
+                        // Get task status color helper
+                        const getTaskStatusColor = (status: string) => {
+                          switch (status) {
+                            case "done": return "#22c55e";
+                            case "in_progress": return "#f59e0b";
+                            case "waiting": return "#60a5fa";
+                            case "todo": {
+                              const dayData = dayDates.find((dd: any) => dd.tasks === tasks);
+                              return dayData?.dateObj && dayData.dateObj < new Date() ? "#ef4444" : "#94a3b8";
+                            }
+                            default: return "#94a3b8";
+                          }
+                        };
+
                         return (
                           <div
                             key={`day-${cell.day}`}
                             title={`יום ${cell.day}: ${tasks.map((t: any) => t.title).join(", ")} — ${statusLabel}`}
                             style={{
-                              aspectRatio: "1", borderRadius: 10, background: statusColor + "18",
+                              minHeight: 120, borderRadius: 10, background: statusColor + "18",
                               border: isToday ? `2px solid ${C.primary}` : `1px solid ${statusColor}40`,
-                              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                              display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "flex-start",
                               cursor: "pointer", position: "relative", overflow: "hidden",
                               boxShadow: isToday ? `0 0 0 3px ${C.primary}30` : "none",
-                              transition: "transform 0.15s, box-shadow 0.15s",
+                              transition: "transform 0.15s, box-shadow 0.15s, background-color 0.15s",
+                              padding: 8,
+                              gap: 4,
                             }}
-                            onClick={() => {
-                              setSelectedTask(tasks[0] || null);
-                              setActiveTab("plan");
+                            onMouseEnter={(e) => {
+                              (e.currentTarget as HTMLElement).style.backgroundColor = statusColor + "28";
                             }}
+                            onMouseLeave={(e) => {
+                              (e.currentTarget as HTMLElement).style.backgroundColor = statusColor + "18";
+                            }}
+                            onClick={() => setSelectedCalendarDay(cell)}
                           >
                             {/* Day Number */}
                             <div style={{ fontSize: 15, fontWeight: 700, color: statusColor === "#22c55e" ? "#166534" : statusColor === "#ef4444" ? "#991b1b" : C.text }}>
                               {cell.day}
                             </div>
-                            {/* Task Count */}
-                            <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>
-                              {tasks.length > 0 ? `${tasks.length} משימות` : ""}
+
+                            {/* Focus Title */}
+                            {cell.focusTitle && (
+                              <div style={{ fontSize: 10, fontWeight: 600, color: C.textSecondary, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%" }}>
+                                {cell.focusTitle}
+                              </div>
+                            )}
+
+                            {/* Task Details - show up to 2 with status dots */}
+                            <div style={{ display: "flex", flexDirection: "column", gap: 3, width: "100%", flex: 1, justifyContent: "flex-start" }}>
+                              {tasks.slice(0, 2).map((task: any, idx: number) => (
+                                <div key={idx} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.text, width: "100%", overflow: "hidden" }}>
+                                  <div style={{ width: 4, height: 4, borderRadius: "50%", background: getTaskStatusColor(task.status), flexShrink: 0 }} />
+                                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                    {task.title.substring(0, 25)}
+                                  </span>
+                                </div>
+                              ))}
+                              {tasks.length > 2 && (
+                                <div style={{ fontSize: 8, color: C.textMuted, marginTop: 2, fontWeight: 600 }}>
+                                  +{tasks.length - 2} עוד
+                                </div>
+                              )}
                             </div>
+
                             {/* Status Dot */}
                             <div style={{
-                              position: "absolute", top: 4, left: 4, width: 6, height: 6,
+                              position: "absolute", top: 4, right: 4, width: 6, height: 6,
                               borderRadius: "50%", background: statusColor,
                             }} />
                             {/* Today Indicator */}
                             {isToday && (
                               <div style={{
-                                position: "absolute", bottom: 2, fontSize: 8, fontWeight: 700,
+                                position: "absolute", bottom: 4, left: 4, fontSize: 7, fontWeight: 700,
                                 color: C.primary, letterSpacing: 0.5,
                               }}>
                                 היום
@@ -2339,6 +2380,158 @@ export default function SeoPlanDetail() {
                   </div>
                 );
               })}
+
+              {/* Calendar Day Modal */}
+              {selectedCalendarDay && (
+                <div
+                  style={{
+                    position: "fixed", inset: 0, background: "rgba(0, 0, 0, 0.5)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    zIndex: 1000, backdropFilter: "blur(4px)", direction: "rtl",
+                  }}
+                  onClick={() => setSelectedCalendarDay(null)}
+                >
+                  <div
+                    style={{
+                      background: C.bg, borderRadius: 20, maxWidth: 500, width: "90%",
+                      maxHeight: "80vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0, 0, 0, 0.3)",
+                      border: `1px solid ${C.border}`,
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Header */}
+                    <div style={{
+                      padding: "20px 20px", borderBottom: `1px solid ${C.border}`,
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      gap: 12,
+                    }}>
+                      <div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>
+                          יום {selectedCalendarDay.day} — {selectedCalendarDay.focusTitle || "תוכנית יום"}
+                        </div>
+                        {selectedCalendarDay.dateObj && (
+                          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>
+                            {selectedCalendarDay.dateObj.toLocaleDateString("he-IL", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => setSelectedCalendarDay(null)}
+                        style={{
+                          background: "transparent", border: "none", fontSize: 24, cursor: "pointer",
+                          color: C.textMuted, padding: "0 8px", display: "flex", alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {/* Tasks List */}
+                    <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+                      {selectedCalendarDay.tasks && selectedCalendarDay.tasks.length > 0 ? (
+                        selectedCalendarDay.tasks.map((task: any, idx: number) => {
+                          let taskStatusColor = "#94a3b8";
+                          let taskStatusLabel = "טרם התחיל";
+                          if (task.status === "done") {
+                            taskStatusColor = "#22c55e";
+                            taskStatusLabel = "הושלם";
+                          } else if (task.status === "in_progress") {
+                            taskStatusColor = "#f59e0b";
+                            taskStatusLabel = "בתהליך";
+                          } else if (task.status === "waiting") {
+                            taskStatusColor = "#60a5fa";
+                            taskStatusLabel = "ממתין";
+                          } else if (task.status === "todo") {
+                            const dayData = dayDates.find((dd: any) => dd.tasks === selectedCalendarDay.tasks);
+                            if (dayData?.dateObj && dayData.dateObj < new Date()) {
+                              taskStatusColor = "#ef4444";
+                              taskStatusLabel = "לא בוצע";
+                            }
+                          }
+
+                          return (
+                            <div
+                              key={idx}
+                              style={{
+                                display: "flex", gap: 12, padding: 12, borderRadius: 12,
+                                background: taskStatusColor + "12", border: `1px solid ${taskStatusColor}30`,
+                                alignItems: "flex-start",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: 8, height: 8, borderRadius: "50%", background: taskStatusColor,
+                                  marginTop: 4, flexShrink: 0,
+                                }}
+                              />
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                                  {task.title}
+                                </div>
+                                {task.description && (
+                                  <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 4 }}>
+                                    {task.description}
+                                  </div>
+                                )}
+                                <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                                  <span
+                                    style={{
+                                      fontSize: 11, fontWeight: 600, color: taskStatusColor,
+                                      background: taskStatusColor + "20", padding: "2px 8px",
+                                      borderRadius: 4,
+                                    }}
+                                  >
+                                    {taskStatusLabel}
+                                  </span>
+                                  {task.category && (
+                                    <span
+                                      style={{
+                                        fontSize: 11, fontWeight: 600, color: C.textSecondary,
+                                        background: C.border, padding: "2px 8px",
+                                        borderRadius: 4,
+                                      }}
+                                    >
+                                      {task.category}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div style={{ textAlign: "center", color: C.textMuted, padding: "20px" }}>
+                          אין משימות ביום זה
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    <div style={{
+                      padding: "16px 20px", borderTop: `1px solid ${C.border}`,
+                      display: "flex", justifyContent: "flex-start",
+                    }}>
+                      <button
+                        onClick={() => setSelectedCalendarDay(null)}
+                        style={{
+                          background: C.border, color: C.text, border: "none", borderRadius: 8,
+                          padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                          transition: "background-color 0.15s",
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLElement).style.backgroundColor = C.border + "cc";
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLElement).style.backgroundColor = C.border;
+                        }}
+                      >
+                        סגור
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Automation Log */}
               {automationLog.length > 0 && (
