@@ -11,9 +11,9 @@ import { generateWithAI } from '@/lib/ai/openai-client';
 async function generateAIKeywords(plan: any): Promise<string[]> {
   const facts = plan.websiteScan?.websiteFacts || {};
   const profile = plan.businessProfile || {};
-  const businessName = plan.clientName || facts.business_name || '';
-  const businessType = facts.business_type || profile.business_type || '';
-  const products = facts.main_products_or_services || profile.main_products_or_services || [];
+  const businessName = plan.clientName || facts.business_name?.value || facts.business_name || '';
+  const businessType = facts.business_type?.value || facts.business_type || profile.business_type || '';
+  const products = facts.main_products_or_services?.value || facts.main_products_or_services || profile.main_products_or_services || [];
   const audience = facts.target_audience || profile.target_audience || '';
 
   if (!businessName && !businessType) return extractKeywordsFallback(plan);
@@ -52,8 +52,8 @@ async function generateAIKeywords(plan: any): Promise<string[]> {
 async function generateAIArticles(plan: any, keywords: string[]): Promise<any[]> {
   const facts = plan.websiteScan?.websiteFacts || {};
   const profile = plan.businessProfile || {};
-  const businessName = plan.clientName || facts.business_name || '';
-  const businessType = facts.business_type || profile.business_type || '';
+  const businessName = plan.clientName || facts.business_name?.value || facts.business_name || '';
+  const businessType = facts.business_type?.value || facts.business_type || profile.business_type || '';
 
   if (!businessName && !businessType) return [];
 

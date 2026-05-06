@@ -21,11 +21,11 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
 
   if (!title) return err('Missing article title', 400);
 
-  const facts = plan.websiteScan?.websiteFacts || {};
-  const profile = plan.businessProfile || {};
-  const businessName = plan.clientName || facts.business_name || '';
-  const businessType = facts.business_type || profile.business_type || '';
-  const products = facts.main_products_or_services || profile.main_products_or_services || [];
+  const facts = plan.websiteScan?.websiteFacts || {} as any;
+  const profile = plan.businessProfile || {} as any;
+  const businessName = plan.clientName || facts.business_name?.value || facts.business_name || '';
+  const businessType = facts.business_type?.value || facts.business_type || profile.business_type || '';
+  const products = facts.main_products_or_services?.value || facts.main_products_or_services || profile.main_products_or_services || [];
 
   const outlineSection = Array.isArray(outline) && outline.length > 0
     ? `\nמבנה המאמר (כותרות משנה):\n${outline.map((h: string, i: number) => `${i + 1}. ${h}`).join('\n')}`

@@ -200,9 +200,17 @@ export async function generateWithAI(
       };
     }
 
-    // Try to parse as JSON
+    // Try to parse as JSON — handle markdown code blocks wrapping
     try {
-      const parsed = JSON.parse(content);
+      // Strip markdown code blocks if present (```json ... ``` or ``` ... ```)
+      let jsonStr = content.trim();
+      if (jsonStr.startsWith('```')) {
+        // Remove opening ``` (with optional language tag like ```json)
+        jsonStr = jsonStr.replace(/^```(?:json|JSON)?\s*\n?/, '');
+        // Remove closing ```
+        jsonStr = jsonStr.replace(/\n?```\s*$/, '');
+      }
+      const parsed = JSON.parse(jsonStr);
       return { success: true, data: parsed };
     } catch {
       // Return as raw text if not JSON

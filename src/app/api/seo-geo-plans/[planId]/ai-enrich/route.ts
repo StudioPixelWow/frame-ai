@@ -21,10 +21,10 @@ function buildBusinessContext(plan: any): string {
   const profile = plan.businessProfile || {};
 
   // Business identity
-  const businessName = plan.clientName || facts.business_name || profile.business_name || '';
-  const businessType = facts.business_type || profile.business_type || '';
-  const industry = facts.industry || profile.industry || '';
-  const location = facts.location || profile.location || '';
+  const businessName = plan.clientName || facts.business_name?.value || facts.business_name || profile.business_name || '';
+  const businessType = facts.business_type?.value || facts.business_type || profile.business_type || '';
+  const industry = facts.detected_industry?.value || facts.industry || profile.industry || '';
+  const location = facts.detected_location?.value || facts.location || profile.location || '';
 
   if (businessName) parts.push(`שם העסק: ${businessName}`);
   if (businessType) parts.push(`סוג העסק: ${businessType}`);
@@ -32,7 +32,7 @@ function buildBusinessContext(plan: any): string {
   if (location) parts.push(`מיקום: ${location}`);
 
   // Products/Services
-  const products = facts.main_products_or_services || profile.main_products_or_services || [];
+  const products = facts.main_products_or_services?.value || facts.main_products_or_services || profile.main_products_or_services || [];
   if (Array.isArray(products) && products.length > 0) {
     parts.push(`שירותים/מוצרים: ${products.join(', ')}`);
   }
