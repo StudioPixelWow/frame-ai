@@ -695,16 +695,20 @@ export default function SeoPlanDetail() {
 
     // Visibility score: based on AI queries — ONLY count real API results (skip unavailable/simulated)
     const aiQueries = Array.isArray(scan.aiQueries) ? scan.aiQueries.filter((q: any) => q.scanMode === 'real') : [];
+    const allAiQueries = Array.isArray(scan.aiQueries) ? scan.aiQueries : [];
+    const hasUnavailableOnly = aiQueries.length === 0 && allAiQueries.some((q: any) => q.scanMode === 'unavailable');
     const found = aiQueries.filter((q: any) => q.found === true).length;
-    const vis = aiQueries.length > 0 ? Math.round((found / aiQueries.length) * 100) : n(safePlan.visibilityScore);
+    // If all queries are unavailable (no API keys), show 0 explicitly — not the plan default
+    const vis = aiQueries.length > 0 ? Math.round((found / aiQueries.length) * 100) : hasUnavailableOnly ? 0 : n(safePlan.visibilityScore);
 
     // Overall = weighted average
     const overall = Math.round(tech * 0.4 + vis * 0.6);
 
+    // When scan data exists, prefer computed values over plan-level defaults
     return {
-      technical: n(safePlan.technicalScore) || tech,
-      visibility: n(safePlan.visibilityScore) || vis,
-      overall: n(safePlan.overallScore) || overall,
+      technical: tech || n(safePlan.technicalScore),
+      visibility: vis || n(safePlan.visibilityScore),
+      overall: overall || n(safePlan.overallScore),
     };
   }, [safePlan]);
 
@@ -1423,10 +1427,13 @@ export default function SeoPlanDetail() {
                     'ChatGPT': 'chatgpt', 'Gemini': 'gemini', 'Perplexity': 'perplexity', 'Claude': 'claude',
                   };
                   const platId = engToPlat[eng] || '';
-                  const platQueries = aiQ.filter(q => q.platform === platId && q.scanMode === 'real');
-                  const mentioned = platQueries.filter(q => q.found).length;
-                  const total = platQueries.length;
+                  const platAll = aiQ.filter(q => q.platform === platId);
+                  const platReal = platAll.filter(q => q.scanMode === 'real');
+                  const platUnavail = platAll.filter(q => q.scanMode === 'unavailable');
+                  const mentioned = platReal.filter(q => q.found).length;
+                  const total = platReal.length;
                   const pct = total > 0 ? Math.round((mentioned / total) * 100) : 0;
+                  const isUnavailable = platUnavail.length > 0 && total === 0;
                   return (
                     <div key={eng} style={{
                       padding: "8px 14px", borderRadius: 10, background: C.bg,
@@ -1434,8 +1441,8 @@ export default function SeoPlanDetail() {
                       display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
                     }}>
                       <PlatformIconComponent platform={platId} size={18} />
-                      <div style={{ fontSize: 16, fontWeight: 800, color: total === 0 ? C.textMuted : pct > 50 ? C.success : C.danger }}>{total === 0 ? "—" : `${s(pct)}%`}</div>
-                      <div style={{ fontSize: 10, color: C.textMuted }}>{s(eng)}{total === 0 ? " (לא נסרק)" : ""}</div>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: isUnavailable ? "#F59E0B" : total === 0 ? C.textMuted : pct > 50 ? C.success : C.danger }}>{isUnavailable ? "—" : total === 0 ? "—" : `${s(pct)}%`}</div>
+                      <div style={{ fontSize: 10, color: isUnavailable ? "#F59E0B" : C.textMuted }}>{s(eng)}{isUnavailable ? " (API לא מחובר)" : total === 0 ? " (לא נסרק)" : ""}</div>
                     </div>
                   );
                 })}
@@ -2852,10 +2859,13 @@ export default function SeoPlanDetail() {
                 }));
 
           const realQueries = aiQueries.filter(q => q.scanMode === 'real');
+          const unavailableQueries = aiQueries.filter(q => q.scanMode === 'unavailable');
+          const unavailablePlatforms = Array.from(new Set(unavailableQueries.map(q => q.platform)));
           const allPlatforms = Array.from(new Set(realQueries.map(q => q.platform)));
           const totalFound = realQueries.filter(q => q.found).length;
           const totalResults = realQueries.length;
           const score = totalResults > 0 ? Math.round((totalFound / totalResults) * 100) : 0;
+          const hasOnlyUnavailable = realQueries.length === 0 && unavailableQueries.length > 0;
 
           // Time ago helper
           const timeAgo = (dateStr?: string) => {
@@ -2963,6 +2973,42 @@ export default function SeoPlanDetail() {
           <div>
             {aiQueries.length === 0 ? (
               <EmptyTab icon="🤖" text="אין תוצאות AI. חזור לאשף והרץ סריקת נראות." />
+            ) : hasOnlyUnavailable ? (
+              <div>
+                {/* All platforms unavailable — show clear message */}
+                <div style={{
+                  background: `linear-gradient(135deg, #FEF3C7, #FDE68A, #FEF9C3)`,
+                  borderRadius: 20, padding: "28px 32px", marginBottom: 20,
+                  textAlign: "center",
+                }}>
+                  <div style={{ fontSize: 36, marginBottom: 12 }}>⚠️</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "#92400E", marginBottom: 8 }}>
+                    מפתחות API לא מחוברים
+                  </div>
+                  <div style={{ fontSize: 14, color: "#A16207", lineHeight: 1.6, maxWidth: 500, margin: "0 auto" }}>
+                    כדי לבדוק נראות AI אמיתית, יש להגדיר מפתחות API בהגדרות הסביבה של Vercel.
+                    ללא מפתחות — לא ניתן לבדוק אם העסק מוזכר במנועי AI.
+                  </div>
+                  <div style={{ marginTop: 16, display: "flex", justifyContent: "center", gap: 12, flexWrap: "wrap" }}>
+                    {unavailablePlatforms.filter(p => p !== 'google_seo').map(pid => {
+                      const pd = PLATFORM_DISPLAY[pid] || { name: pid, nameHe: pid, color: "#999" };
+                      return (
+                        <div key={pid} style={{
+                          padding: "8px 16px", borderRadius: 10, background: "rgba(255,255,255,0.7)",
+                          border: "1px solid #FCD34D", display: "flex", alignItems: "center", gap: 8,
+                        }}>
+                          <PlatformIconComponent platform={pid} size={18} />
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#92400E" }}>{pd.name}</span>
+                          <span style={{ fontSize: 11, color: "#A16207" }}>— API חסר</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ marginTop: 16, fontSize: 12, color: "#A16207" }}>
+                    מפתחות נדרשים: OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, PERPLEXITY_API_KEY, GOOGLE_SEARCH_API_KEY
+                  </div>
+                </div>
+              </div>
             ) : (
               <>
                 {/* ── Hero: Total mentions + percentage ── */}
