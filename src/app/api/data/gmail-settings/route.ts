@@ -10,7 +10,8 @@ import { ensureSeeded } from '@/lib/db/seed';
 export async function GET() {
   ensureSeeded();
   try {
-    return NextResponse.json(gmailSettings.getAll());
+    const all = await gmailSettings.getAllAsync();
+    return NextResponse.json(all);
   } catch (error) {
     return NextResponse.json(
       { error: 'Failed to fetch gmail settings' },
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
   ensureSeeded();
   try {
     const body = await req.json();
-    const created = gmailSettings.create(body);
+    const created = await gmailSettings.createAsync(body);
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
     return NextResponse.json(

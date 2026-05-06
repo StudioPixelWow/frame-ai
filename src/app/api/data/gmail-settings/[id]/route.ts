@@ -15,7 +15,7 @@ export async function GET(
   ensureSeeded();
   const { id } = await context.params;
   try {
-    const settings = gmailSettings.getById(id);
+    const settings = await gmailSettings.getByIdAsync(id);
     if (!settings) {
       return NextResponse.json(
         { error: 'Gmail settings not found' },
@@ -39,7 +39,7 @@ export async function PUT(
   const { id } = await context.params;
   try {
     const body = await req.json();
-    const updated = gmailSettings.update(id, body);
+    const updated = await gmailSettings.updateAsync(id, body);
     if (!updated) {
       return NextResponse.json(
         { error: 'Gmail settings not found' },
@@ -62,7 +62,7 @@ export async function DELETE(
   ensureSeeded();
   const { id } = await context.params;
   try {
-    const deleted = gmailSettings.delete(id);
+    const deleted = await gmailSettings.deleteAsync(id);
     if (!deleted) {
       return NextResponse.json(
         { error: 'Gmail settings not found' },

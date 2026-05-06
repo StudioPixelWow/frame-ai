@@ -389,9 +389,9 @@ export const PERSISTENCE_MAP: PersistenceEntry[] = [
     module: 'gmail_settings',
     description: 'Gmail integration settings',
     apiRoute: '/api/data/gmail-settings',
-    storage: 'jsonstore',
-    table: 'gmail-settings.json',
-    operations: ['select', 'insert', 'update'],
+    storage: 'supabase',
+    table: 'app_gmail_settings',
+    operations: ['select', 'insert', 'update', 'delete'],
     risk: 'low',
   },
   {
