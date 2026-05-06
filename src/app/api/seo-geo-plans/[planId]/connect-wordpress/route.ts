@@ -11,6 +11,7 @@ import {
 } from '@/lib/seo/api-helpers';
 import { testConnection } from '@/lib/seo/wordpress-client';
 import type { WPConnection } from '@/lib/seo/wordpress-client';
+import { clients } from '@/lib/db';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -94,6 +95,22 @@ async function _POST(
       pagesCount: testResult.pagesCount,
       yoastInstalled: testResult.yoastInstalled,
     });
+
+    // Also save WP credentials to the client record for reuse across plans
+    if (plan.clientId) {
+      try {
+        await clients.updateAsync(plan.clientId, {
+          wpSiteUrl: siteUrl,
+          wpUsername: username,
+          wpApplicationPassword: applicationPassword,
+          wpConnectionStatus: 'connected',
+          wpSiteName: testResult.siteName || '',
+          wpConnectedAt: connectedAt,
+        } as any);
+      } catch (e) {
+        console.warn('[SEO-API] Failed to save WP credentials to client:', e);
+      }
+    }
 
     const response: ConnectWordPressResponse = {
       success: true,

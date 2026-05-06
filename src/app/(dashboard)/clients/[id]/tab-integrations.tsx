@@ -206,6 +206,60 @@ export default function TabIntegrations({ client }: { client: Client }) {
     meta: null, tiktok: null, google: null,
   });
 
+  // ── WordPress connection state ──
+  const c = client as any;
+  const [wpExpanded, setWpExpanded] = useState(false);
+  const [wpForm, setWpForm] = useState({
+    siteUrl: c.wpSiteUrl || c.wp_site_url || '',
+    username: c.wpUsername || c.wp_username || '',
+    applicationPassword: c.wpApplicationPassword || c.wp_application_password || '',
+  });
+  const [wpTesting, setWpTesting] = useState(false);
+  const [wpSaving, setWpSaving] = useState(false);
+  const [wpTestResult, setWpTestResult] = useState<{ success: boolean; siteName?: string; error?: string } | null>(null);
+  const wpConnected = (c.wpConnectionStatus === 'connected' || c.wp_connection_status === 'connected') && !!(c.wpSiteUrl || c.wp_site_url);
+
+  const handleWpTest = useCallback(async () => {
+    if (!wpForm.siteUrl || !wpForm.username || !wpForm.applicationPassword) return;
+    setWpTesting(true);
+    setWpTestResult(null);
+    try {
+      const res = await fetch('/api/seo-geo-plans/test-wp-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getRoleHeaders() },
+        body: JSON.stringify(wpForm),
+      });
+      const data = await res.json();
+      setWpTestResult(data.success ? { success: true, siteName: data.siteName } : { success: false, error: data.error || 'החיבור נכשל' });
+      if (data.success) toast.success(`WordPress מחובר — ${data.siteName || 'אתר מזוהה'}`);
+      else toast.error(data.error || 'החיבור נכשל');
+    } catch {
+      setWpTestResult({ success: false, error: 'שגיאת רשת' });
+      toast.error('שגיאת רשת');
+    } finally { setWpTesting(false); }
+  }, [wpForm, toast]);
+
+  const handleWpSave = useCallback(async () => {
+    setWpSaving(true);
+    try {
+      const res = await fetch(`/api/clients/${client.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...getRoleHeaders() },
+        body: JSON.stringify({
+          wpSiteUrl: wpForm.siteUrl,
+          wpUsername: wpForm.username,
+          wpApplicationPassword: wpForm.applicationPassword,
+          wpConnectionStatus: wpTestResult?.success ? 'connected' : 'not_connected',
+          wpSiteName: wpTestResult?.siteName || '',
+          wpConnectedAt: wpTestResult?.success ? new Date().toISOString() : null,
+        }),
+      });
+      if (res.ok) toast.success('פרטי WordPress נשמרו בכרטיסיית הלקוח');
+      else toast.error('שגיאה בשמירה');
+    } catch { toast.error('שגיאת רשת'); }
+    finally { setWpSaving(false); }
+  }, [client.id, wpForm, wpTestResult, toast]);
+
   // Load all platform statuses
   useEffect(() => {
     async function loadStatuses() {
@@ -635,6 +689,152 @@ export default function TabIntegrations({ client }: { client: Client }) {
           </div>
         );
       })}
+
+      {/* ═══ WORDPRESS CONNECTION (for SEO/GEO) ═══ */}
+      <div style={{
+        background: "var(--surface-raised)",
+        border: `1px solid ${wpConnected ? "rgba(34, 197, 94, 0.25)" : "var(--border)"}`,
+        borderRadius: "0.75rem", padding: "1.25rem", marginBottom: "0.75rem",
+        borderRight: "4px solid #21759b",
+      }}>
+        <div
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+          onClick={() => setWpExpanded(!wpExpanded)}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <span style={{ fontSize: "1.5rem" }}>🌐</span>
+            <div>
+              <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--foreground)" }}>
+                WordPress — פאנל ניהול
+                <span style={{ fontSize: "0.72rem", fontWeight: 400, color: "var(--foreground-muted)", marginRight: "0.5rem" }}>
+                  PIXEL SEO/GEO
+                </span>
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", marginTop: "0.1rem" }}>
+                חיבור לפאנל הניהול של האתר — נדרש לביצוע אוטומטי של משימות SEO (עדכון כותרות, מטא, סכמה ועוד)
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            {wpConnected && (
+              <span style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>
+                {c.wpSiteName || c.wp_site_name || ''}
+              </span>
+            )}
+            <span style={{
+              fontSize: "0.7rem", fontWeight: 700, padding: "0.2rem 0.6rem",
+              borderRadius: "999px",
+              background: wpConnected ? "rgba(34, 197, 94, 0.1)" : "rgba(107, 114, 128, 0.1)",
+              color: wpConnected ? "#22c55e" : "#6b7280",
+              border: `1px solid ${wpConnected ? "rgba(34, 197, 94, 0.2)" : "rgba(107, 114, 128, 0.2)"}`,
+            }}>
+              {wpConnected ? "מחובר" : "לא מחובר"}
+            </span>
+            <span style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", transform: wpExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 150ms" }}>
+              ▼
+            </span>
+          </div>
+        </div>
+
+        {wpExpanded && (
+          <div style={{ marginTop: "1.25rem", borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "1rem" }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.25rem" }}>
+                  כתובת האתר *
+                  <span style={{ fontWeight: 400, fontSize: "0.68rem", marginRight: "0.5rem" }}>(כולל https://)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="https://example.com"
+                  value={wpForm.siteUrl}
+                  onChange={e => setWpForm(prev => ({ ...prev, siteUrl: e.target.value }))}
+                  style={{ ...inputStyle, direction: "ltr" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.25rem" }}>
+                  שם משתמש *
+                </label>
+                <input
+                  type="text"
+                  placeholder="admin"
+                  value={wpForm.username}
+                  onChange={e => setWpForm(prev => ({ ...prev, username: e.target.value }))}
+                  style={{ ...inputStyle, direction: "ltr" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.25rem" }}>
+                  סיסמת יישום (Application Password) *
+                  <span style={{ fontWeight: 400, fontSize: "0.68rem", marginRight: "0.5rem" }}>(לא סיסמת כניסה רגילה)</span>
+                </label>
+                <input
+                  type="password"
+                  placeholder="xxxx xxxx xxxx xxxx xxxx xxxx"
+                  value={wpForm.applicationPassword}
+                  onChange={e => setWpForm(prev => ({ ...prev, applicationPassword: e.target.value }))}
+                  style={{ ...inputStyle, direction: "ltr" }}
+                />
+              </div>
+            </div>
+
+            {/* Help text */}
+            <div style={{
+              padding: "0.6rem 0.85rem", borderRadius: "0.375rem", marginBottom: "0.75rem",
+              background: "rgba(33, 117, 155, 0.06)", border: "1px solid rgba(33, 117, 155, 0.15)",
+              fontSize: "0.72rem", color: "var(--foreground-muted)", lineHeight: 1.6,
+            }}>
+              <strong>איך ליצור סיסמת יישום:</strong> נכנסים לפאנל WordPress ← משתמשים ← הפרופיל שלי ← גוללים למטה ל-&ldquo;Application Passwords&rdquo; ← יוצרים אחד חדש.
+              הסיסמה הזו בטוחה יותר כי היא לא מאפשרת כניסה ישירה לפאנל.
+            </div>
+
+            {/* Test result */}
+            {wpTestResult && (
+              <div style={{
+                padding: "0.6rem 0.85rem", borderRadius: "0.375rem", marginBottom: "0.75rem",
+                background: wpTestResult.success ? "rgba(34, 197, 94, 0.08)" : "rgba(239, 68, 68, 0.08)",
+                border: `1px solid ${wpTestResult.success ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)"}`,
+                fontSize: "0.78rem", color: wpTestResult.success ? "#22c55e" : "#ef4444",
+              }}>
+                {wpTestResult.success
+                  ? `✓ חיבור תקין — אתר: ${wpTestResult.siteName}`
+                  : `✗ ${wpTestResult.error}`}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={handleWpTest}
+                disabled={wpTesting || !wpForm.siteUrl || !wpForm.username || !wpForm.applicationPassword}
+                style={{
+                  padding: "0.5rem 1rem", fontSize: "0.8rem", fontWeight: 600, borderRadius: "0.375rem",
+                  border: "1px solid var(--border)", background: "var(--surface)", color: "var(--foreground)",
+                  cursor: wpTesting ? "wait" : "pointer", opacity: wpTesting || !wpForm.siteUrl ? 0.5 : 1,
+                  fontFamily: "inherit",
+                }}
+              >
+                {wpTesting ? "בודק..." : "🔌 בדוק חיבור"}
+              </button>
+              <button
+                type="button"
+                onClick={handleWpSave}
+                disabled={wpSaving || !wpForm.siteUrl}
+                style={{
+                  padding: "0.5rem 1rem", fontSize: "0.8rem", fontWeight: 600, borderRadius: "0.375rem",
+                  border: "1px solid #21759b", background: "#21759b", color: "#fff",
+                  cursor: wpSaving ? "wait" : "pointer", opacity: wpSaving ? 0.5 : 1,
+                  fontFamily: "inherit",
+                }}
+              >
+                {wpSaving ? "שומר..." : "💾 שמור בכרטיסיית לקוח"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* ═══ OTHER INTEGRATIONS ═══ */}
       {grouped.map(group => (

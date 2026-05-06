@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     const allPlans = await seoGeoPlans.getAllAsync();
     const activePlans = allPlans.filter((p: any) =>
       p.status === 'plan_generated' &&
-      p.wordpressConnection?.siteUrl &&
+      p.wpConnection?.siteUrl &&
       p.days && Array.isArray(p.days) && p.days.length > 0
     );
 
@@ -73,7 +73,7 @@ async function processPlanDailyTasks(plan: any) {
   const facts = plan.websiteScan?.websiteFacts || {};
   const profile = plan.businessProfile || {};
   const context: AutomationContext = {
-    connection: plan.wordpressConnection,
+    connection: plan.wpConnection,
     businessName: plan.clientName || facts.business_name?.value || facts.business_name || '',
     businessType: facts.business_type?.value || facts.business_type || profile.business_type || '',
     industry: facts.detected_industry?.value || facts.industry || profile.industry || '',

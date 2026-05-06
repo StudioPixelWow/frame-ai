@@ -412,6 +412,25 @@ export default function SeoPlanDetail() {
           // Sanitize: single pass through entire object tree
           const sanitized = nuke(data, 0);
           setPlan(sanitized as SeoPlan);
+
+          // Auto-fill WP form from client data if plan has no wpConnection
+          if (!(sanitized as any).wpConnection && sanitized.clientId) {
+            try {
+              const clientRes = await fetch(`/api/data/clients/${sanitized.clientId}`);
+              if (clientRes.ok) {
+                const clientData = await clientRes.json();
+                const wpSite = clientData.wpSiteUrl || clientData.wp_site_url || '';
+                const wpUser = clientData.wpUsername || clientData.wp_username || '';
+                const wpPass = clientData.wpApplicationPassword || clientData.wp_application_password || '';
+                if (wpSite && wpUser && wpPass) {
+                  setWpForm({ siteUrl: wpSite, username: wpUser, applicationPassword: wpPass });
+                }
+              }
+            } catch { /* ignore */ }
+          } else if ((sanitized as any).wpConnection) {
+            const conn = (sanitized as any).wpConnection;
+            if (conn.siteUrl) setWpForm({ siteUrl: conn.siteUrl, username: conn.username || '', applicationPassword: conn.applicationPassword || '' });
+          }
         }
       } catch (e) {
         console.error("Failed to load plan:", e);

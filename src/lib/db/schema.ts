@@ -77,6 +77,13 @@ export interface Client {
   googleConnectionStatus: MetaConnectionStatus;
   googleLastSyncedAt: string | null;
   googleLastSyncError: string;
+  // WordPress Connection (for SEO/GEO automation)
+  wpSiteUrl: string;
+  wpUsername: string;
+  wpApplicationPassword: string;
+  wpConnectionStatus: MetaConnectionStatus;
+  wpSiteName: string;
+  wpConnectedAt: string | null;
 }
 
 // AI Settings
@@ -1833,6 +1840,31 @@ export interface SeoPlan {
   competitors?: SeoCompetitor[];
   reports?: SeoReportMeta[];
   activityLog?: SeoActivityEntry[];
+  // WordPress connection (saved per-plan from connect-wordpress flow)
+  wpConnection?: {
+    siteUrl: string;
+    username: string;
+    applicationPassword: string;
+    connectedAt?: string;
+    siteName?: string;
+    yoastInstalled?: boolean;
+    pagesCount?: number;
+  } | null;
+  // Client email for notifications
+  clientEmail?: string;
+  // Business profile from wizard
+  businessProfile?: Record<string, any>;
+  // AI keywords
+  aiKeywords?: Array<{ keyword: string; [key: string]: any }>;
+  // Automation log
+  automationLog?: Array<{
+    date: string;
+    dayNumber: number;
+    results: any[];
+    totalTasks: number;
+    executedTasks: number;
+    successfulTasks: number;
+  }>;
 }
 
 // ─── SEO/GEO Extended Types ─────────────────────────────────────────────────
