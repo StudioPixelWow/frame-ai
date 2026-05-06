@@ -200,15 +200,15 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
   const insights = input.insights || [];
   const keywords = input.targetKeywords || [];
 
-  // Safe keyword helpers with smart fallbacks
+  // Safe keyword helpers — AI keywords ONLY, no scan H1 fallback
   const kw = (i: number) => {
+    // PRIORITY 1: Use AI-generated keywords (from targetKeywords which should be AI keywords)
     if (keywords[i]) return keywords[i];
-    // Smart fallbacks based on business data
-    const services = scan?.websiteFacts?.main_products_or_services;
-    if (Array.isArray(services) && services[i]) return services[i];
+    // PRIORITY 2: Business profile products (user-confirmed data)
     if (businessProfile?.main_products_or_services && Array.isArray(businessProfile.main_products_or_services)) {
       if (businessProfile.main_products_or_services[i]) return businessProfile.main_products_or_services[i];
     }
+    // PRIORITY 3: Generic placeholder with business context — NEVER use scan H1 tags
     if (businessProfile?.business_type) return `שירותי ${businessProfile.business_type}`;
     if (input.clientName) return `שירותי ${input.clientName}`;
     return `נושא מרכזי ${i + 1}`;
@@ -590,20 +590,21 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
     ),
   ]));
 
-  // Days 16-18: More content articles
+  // Days 16-18: More content articles (AI-powered)
   [16, 17, 18].forEach((d, idx) => {
-    const gapIdx = 5 + idx;
-    const gap = topGaps[gapIdx];
-    const kw = gap?.query || keywords[gapIdx] || `תוכן #${gapIdx + 1}`;
+    const artIdx = 5 + idx;
+    const gap = topGaps[artIdx];
+    const title = articleTitle(artIdx) || gap?.query || `תוכן #${artIdx + 1}`;
+    const brief = articleBrief(artIdx);
 
-    days.push(mkDay(d, `תוכן ממוקד: "${kw}"`, [
+    days.push(mkDay(d, `תוכן ממוקד: "${title}"`, [
       mkTask("content", "high", "high",
-        `כתוב מאמר/מדריך: "${kw}"`,
-        `${gap ? `פער תוכן שזוהה: "${gap.query}" (${gap.intent}, ${gap.importance}). ` : ""}כתוב מדריך מומחה 1200+ מילים. כלול: הגדרות ברורות, צעדים ממוספרים, עצות מעשיות, CTA. שלב בצורה טבעית ${input.clientName}.`,
+        `כתוב מאמר/מדריך: "${title}"`,
+        brief || `${gap ? `פער תוכן שזוהה: "${gap.query}" (${gap.intent}, ${gap.importance}). ` : ""}כתוב מדריך מומחה 1200+ מילים. כלול: הגדרות ברורות, צעדים ממוספרים, עצות מעשיות, CTA. שלב בצורה טבעית ${input.clientName}.`,
         4, null,
-        `מאמר פורסם ואופטימלי עבור "${kw}"`,
+        `מאמר פורסם ואופטימלי עבור "${title}"`,
         gap ? `AI לא מזכיר את ${input.clientName} עבור "${gap.query}" — תוכן ממוקד ישנה את זה` : "מילת-מפתח חשובה הזקוקה לכיסוי",
-        `מדריך: "${kw}"\nאורך: 1200+ מילים\nפורמט: מדריך צעד-אחר-צעד\n\nכותרת: "${kw} — מדריך שלם לשנת ${new Date().getFullYear()}"\n\nפתיחה (100 מילים):\n• מה הנושא?\n• למה זה מצריך מדריך?\n• מה תלמד בעמוד זה?\n\nהגדרה (150 מילים):\n"${kw} אומר בפשטות: [הגדרה 20-שנייה]. ${input.clientName} מתמחה בזה כי...\"\n\nצעדים (צעד אחר צעד):\n1. [צעד ראשון] — הוסף פרטים וקישורים\n2. [צעד שני] — תרשים או תמונה\n3. [צעד שלישי] — דוגמה ממש בעולם\n4. [צעד רביעי] — שגיאות להימנע\n5. [צעד חמישי] — טיפים מתקדמים\n\nעצות מעשיות:\n• טיפ #1: [ערך] + דוגמה\n• טיפ #2: [ערך] + סטטיסטיקה\n• טיפ #3: [ערך] + ציטוט\n\nFAQ:\nS: "איזה טעויות אנשים עושים?"\nת: רשימה של 3-4 טעויות עם פתרונות\n\nFAQ:\nS: "כמה זמן זה לוקח?"\nת: \"בדרך כלל 2-4 שעות עם ${input.clientName}\"\n\nסיכום + CTA:\n"${input.clientName} משתמשת בשיטות אלה כדי להבטיח תוצאות טובות. צרו קשר לייעוץ בחינם."\n\nמילות-מפתח: ${keywords.slice(0, 3).join(", ")}\nIntent: ${gap?.intent || "educational"}`,
+        `מדריך: "${title}"\nאורך: 1200+ מילים\nפורמט: מדריך צעד-אחר-צעד\n\nכותרת: "${title} — מדריך שלם לשנת ${new Date().getFullYear()}"\n\nפתיחה (100 מילים):\n• מה הנושא?\n• למה זה מצריך מדריך?\n• מה תלמד בעמוד זה?\n\nהגדרה (150 מילים):\n"${title} אומר בפשטות: [הגדרה 20-שנייה]. ${input.clientName} מתמחה בזה כי...\"\n\nצעדים (צעד אחר צעד):\n1. [צעד ראשון] — הוסף פרטים וקישורים\n2. [צעד שני] — תרשים או תמונה\n3. [צעד שלישי] — דוגמה ממש בעולם\n4. [צעד רביעי] — שגיאות להימנע\n5. [צעד חמישי] — טיפים מתקדמים\n\nעצות מעשיות:\n• טיפ #1: [ערך] + דוגמה\n• טיפ #2: [ערך] + סטטיסטיקה\n• טיפ #3: [ערך] + ציטוט\n\nFAQ:\nS: "איזה טעויות אנשים עושים?"\nת: רשימה של 3-4 טעויות עם פתרונות\n\nFAQ:\nS: "כמה זמן זה לוקח?"\nת: \"בדרך כלל 2-4 שעות עם ${input.clientName}\"\n\nסיכום + CTA:\n"${input.clientName} משתמשת בשיטות אלה כדי להבטיח תוצאות טובות. צרו קשר לייעוץ בחינם."\n\nמילות-מפתח: ${keywords.slice(0, 3).join(", ")}\nIntent: ${gap?.intent || "educational"}`,
       ),
     ]));
   });

@@ -1210,6 +1210,31 @@ export default function SeoPlanDetail() {
               </div>
             )}
 
+            {/* Regenerate button when plan exists */}
+            {Array.isArray(p.days) && p.days.length > 0 && (
+              <div style={{
+                display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12,
+                marginBottom: 16, padding: "0 4px",
+              }}>
+                <span style={{ fontSize: 12, color: C.textMuted }}>
+                    {p?.generatedAt ? `נוצר: ${new Date(p.generatedAt).toLocaleDateString("he-IL")}` : ""}
+                </span>
+                <button
+                  onClick={handleGenerate60DayPlan}
+                  disabled={generatingPlan}
+                  style={{
+                    padding: "8px 20px", borderRadius: 10, border: `1px solid ${C.border}`,
+                    background: C.card, color: C.text, fontWeight: 600, fontSize: 13,
+                    cursor: generatingPlan ? "wait" : "pointer",
+                    opacity: generatingPlan ? 0.6 : 1, transition: "all 0.2s",
+                    display: "flex", alignItems: "center", gap: 6,
+                  }}
+                >
+                  {generatingPlan ? "⏳ מייצר מחדש..." : "🔄 בנה תוכנית מחדש עם AI"}
+                </button>
+              </div>
+            )}
+
             {/* Phase + Day structure (new) */}
             {Array.isArray(p.phases) && p.phases.length > 0 && Array.isArray(p.days) && p.days.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>

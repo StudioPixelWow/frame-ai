@@ -94,34 +94,35 @@ async function generateAIArticles(plan: any, keywords: string[]): Promise<any[]>
 }
 
 /**
- * Fallback: Extract keywords from plan data (H1/H2 tags, products, queries)
+ * Fallback: Extract keywords from business profile ONLY (no H1 tags — those are unreliable)
  */
 function extractKeywordsFallback(plan: any): string[] {
   const keywords = new Set<string>();
+  const profile = plan.businessProfile || {};
 
-  if (plan.websiteScan?.websiteFacts?.main_products_or_services && Array.isArray(plan.websiteScan.websiteFacts.main_products_or_services)) {
-    plan.websiteScan.websiteFacts.main_products_or_services.forEach((service: string) => {
+  // PRIORITY 1: User-confirmed business profile products
+  const profileProducts = profile.main_products_or_services;
+  if (Array.isArray(profileProducts)) {
+    profileProducts.forEach((service: string) => {
       if (service && typeof service === 'string' && service.length < 50) {
         keywords.add(service.trim());
       }
     });
   }
 
-  if (plan.websiteScan?.h1Tags && Array.isArray(plan.websiteScan.h1Tags)) {
-    plan.websiteScan.h1Tags.forEach((tag: string) => {
-      if (tag && typeof tag === 'string' && tag.length < 50) {
-        keywords.add(tag.trim());
-      }
-    });
+  // PRIORITY 2: WebsiteFacts products (AI-extracted, not raw H1 tags)
+  if (keywords.size === 0 && plan.websiteScan?.websiteFacts?.main_products_or_services) {
+    const facts = plan.websiteScan.websiteFacts.main_products_or_services;
+    if (Array.isArray(facts)) {
+      facts.forEach((service: string) => {
+        if (service && typeof service === 'string' && service.length < 50) {
+          keywords.add(service.trim());
+        }
+      });
+    }
   }
 
-  if (plan.visibilityQueries && Array.isArray(plan.visibilityQueries) && keywords.size === 0) {
-    plan.visibilityQueries.slice(0, 10).forEach((q: any) => {
-      if (q.query && typeof q.query === 'string') {
-        keywords.add(q.query.trim());
-      }
-    });
-  }
+  // NEVER use H1 tags as keywords — they often contain irrelevant content from scanned pages
 
   return Array.from(keywords).slice(0, 20);
 }
@@ -132,13 +133,31 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
   if (error) return error;
   if (!plan) return notFound('Plan');
 
-  // ── Step 1: Generate AI-powered keywords FIRST, then articles based on those keywords ──
+  // ── Step 1: Use existing AI data if available, otherwise generate fresh ──
   console.log('[60-DAY-PLAN] Starting AI enrichment for plan:', planId);
-  const aiKeywords = await generateAIKeywords(plan);
-  console.log('[60-DAY-PLAN] AI keywords generated:', aiKeywords.length);
 
-  // Generate articles using the AI keywords for proper targeting
-  const finalArticles = await generateAIArticles(plan, aiKeywords);
+  // Check if plan already has AI-enriched data (from ai-enrich endpoint)
+  const existingAiKeywords = Array.isArray(plan.aiKeywords) && plan.aiKeywords.length > 0
+    ? plan.aiKeywords.map((k: any) => k.keyword || k).filter(Boolean)
+    : [];
+  const existingAiArticles = Array.isArray(plan.aiArticles) && plan.aiArticles.length > 0
+    ? plan.aiArticles
+    : [];
+
+  let aiKeywords: string[];
+  let finalArticles: any[];
+
+  if (existingAiKeywords.length > 0) {
+    // Use existing AI data — don't regenerate
+    console.log('[60-DAY-PLAN] Using existing AI keywords:', existingAiKeywords.length);
+    aiKeywords = existingAiKeywords;
+    finalArticles = existingAiArticles.length > 0 ? existingAiArticles : await generateAIArticles(plan, aiKeywords);
+  } else {
+    // Generate fresh AI data
+    aiKeywords = await generateAIKeywords(plan);
+    console.log('[60-DAY-PLAN] AI keywords generated:', aiKeywords.length);
+    finalArticles = await generateAIArticles(plan, aiKeywords);
+  }
 
   console.log('[60-DAY-PLAN] AI enrichment complete:', {
     keywords: aiKeywords.length,
@@ -243,7 +262,8 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
     })),
     targetKeywords: aiKeywords.length > 0 ? aiKeywords : extractKeywordsFallback(plan),
     aiArticles: finalArticles,
-    targetLocation: 'Israel',
+    businessProfile: plan.businessProfile || undefined,
+    targetLocation: plan.businessProfile?.location || 'Israel',
     targetLanguage: 'Hebrew',
     insights: (plan.insights || []).map((insight) => ({
       id: insight.id,
