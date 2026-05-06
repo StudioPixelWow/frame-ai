@@ -1808,6 +1808,23 @@ export interface SeoPlanTask {
   kpiTarget: string;
 }
 
+export interface SeoKeywordRankSnapshot {
+  date: string;
+  rank: number | null; // null = not ranked
+}
+
+export interface SeoKeywordTracking {
+  keyword: string;
+  source: 'client' | 'ai';
+  initialRank: number | null;
+  currentRank: number | null;
+  trend: 'up' | 'down' | 'stable' | 'new';
+  lastChecked: string | null;
+  history: SeoKeywordRankSnapshot[];
+  priority: number; // 1 = highest
+  addedAt: string;
+}
+
 export interface SeoPlan {
   id: string;
   clientId: string;
@@ -1856,6 +1873,8 @@ export interface SeoPlan {
   businessProfile?: Record<string, any>;
   // AI keywords
   aiKeywords?: Array<{ keyword: string; [key: string]: any }>;
+  // Client priority keywords (manually entered, up to 10)
+  clientKeywords?: SeoKeywordTracking[];
   // Automation log
   automationLog?: Array<{
     date: string;

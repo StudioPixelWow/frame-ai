@@ -183,6 +183,8 @@ interface WizardData {
   weeks: PlanWeek[];
   totalTasks: number;
   totalHours: number;
+  // Client SEO Keywords
+  clientKeywords: string[];
   // Save
   savedPlanId: string;
 }
@@ -266,6 +268,7 @@ const INITIAL_DATA: WizardData = {
   weeks: [],
   totalTasks: 0,
   totalHours: 0,
+  clientKeywords: [],
   savedPlanId: "",
 };
 
@@ -326,6 +329,9 @@ function SeoGeoWizard() {
     confirmed_at: null as string | null,
   });
   const [profileConfirmed, setProfileConfirmed] = useState(false);
+
+  // Client keywords input
+  const [keywordInput, setKeywordInput] = useState("");
 
   // Visibility state
   const [scanningVisibility, setScanningVisibility] = useState(false);
@@ -712,6 +718,17 @@ function SeoGeoWizard() {
           days: data.days,
           phases: data.phases,
           weeks: data.weeks,
+          clientKeywords: data.clientKeywords.map((kw, i) => ({
+            keyword: kw,
+            source: 'client' as const,
+            initialRank: null,
+            currentRank: null,
+            trend: 'new' as const,
+            lastChecked: null,
+            history: [],
+            priority: i + 1,
+            addedAt: new Date().toISOString(),
+          })),
           overallScore: Math.round((
             (data.scanResult?.domainAuthority || 0) +
             data.visibilityScore +
@@ -1434,6 +1451,103 @@ function SeoGeoWizard() {
                     </div>
                   </div>
                 )}
+
+                {/* ── Client SEO Keywords ── */}
+                <div style={{
+                  background: C.card, borderRadius: 20, border: `1px solid ${C.border}`,
+                  padding: 28, marginTop: 24, boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                    <span style={{ fontSize: 22 }}>🎯</span>
+                    <div>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: 0 }}>ביטויי מפתח של הלקוח</h3>
+                      <p style={{ fontSize: 13, color: C.textSecondary, margin: "4px 0 0 0" }}>
+                        עד 10 ביטויים שהלקוח רוצה להתקדם בהם — ייכללו בעדיפות בתוכנית 60 הימים
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Input row */}
+                  <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                    <input
+                      type="text"
+                      value={keywordInput}
+                      onChange={e => setKeywordInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter" && keywordInput.trim() && data.clientKeywords.length < 10) {
+                          e.preventDefault();
+                          const kw = keywordInput.trim();
+                          if (!data.clientKeywords.includes(kw)) {
+                            updateData({ clientKeywords: [...data.clientKeywords, kw] });
+                          }
+                          setKeywordInput("");
+                        }
+                      }}
+                      placeholder="הקלד ביטוי SEO ולחץ Enter או הוסף..."
+                      disabled={data.clientKeywords.length >= 10}
+                      style={{
+                        flex: 1, padding: "10px 14px",
+                        border: `1px solid ${C.border}`, borderRadius: 10,
+                        fontSize: 14, outline: "none", background: C.bg,
+                        direction: "rtl",
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        const kw = keywordInput.trim();
+                        if (!kw || data.clientKeywords.length >= 10) return;
+                        if (!data.clientKeywords.includes(kw)) {
+                          updateData({ clientKeywords: [...data.clientKeywords, kw] });
+                        }
+                        setKeywordInput("");
+                      }}
+                      disabled={!keywordInput.trim() || data.clientKeywords.length >= 10}
+                      style={{
+                        padding: "10px 20px", borderRadius: 10, border: "none",
+                        background: keywordInput.trim() && data.clientKeywords.length < 10 ? C.primary : C.border,
+                        color: keywordInput.trim() && data.clientKeywords.length < 10 ? "#fff" : C.textMuted,
+                        fontSize: 14, fontWeight: 600, cursor: "pointer",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      הוסף
+                    </button>
+                  </div>
+
+                  {/* Keywords list */}
+                  {data.clientKeywords.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {data.clientKeywords.map((kw, i) => (
+                        <div key={i} style={{
+                          display: "flex", alignItems: "center", gap: 6,
+                          background: C.primaryLight, border: `1px solid ${C.primary}20`,
+                          borderRadius: 20, padding: "6px 12px 6px 8px",
+                          fontSize: 13, color: C.text, fontWeight: 500,
+                        }}>
+                          <span>{kw}</span>
+                          <button
+                            onClick={() => {
+                              updateData({ clientKeywords: data.clientKeywords.filter((_, j) => j !== i) });
+                            }}
+                            style={{
+                              background: "none", border: "none", cursor: "pointer",
+                              color: C.textMuted, fontSize: 16, lineHeight: 1, padding: 0,
+                              display: "flex", alignItems: "center",
+                            }}
+                            title="הסר ביטוי"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Counter */}
+                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 12, textAlign: "left" }}>
+                    {data.clientKeywords.length}/10 ביטויים
+                  </div>
+                </div>
               </div>
             )}
 

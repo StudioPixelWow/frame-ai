@@ -127,6 +127,29 @@ function extractKeywordsFallback(plan: any): string[] {
   return Array.from(keywords).slice(0, 20);
 }
 
+/**
+ * Merge client-provided keywords (priority) with AI-generated keywords.
+ * Client keywords always come first; duplicates are removed.
+ */
+function mergeKeywords(clientKeywords: any[] | undefined, aiKeywords: string[]): string[] {
+  const clientKws: string[] = (clientKeywords || [])
+    .map((k: any) => (typeof k === 'string' ? k : k?.keyword || '').trim())
+    .filter(Boolean);
+
+  if (clientKws.length === 0) return aiKeywords;
+
+  const seen = new Set(clientKws.map(k => k.toLowerCase()));
+  const merged = [...clientKws];
+  for (const kw of aiKeywords) {
+    if (!seen.has(kw.toLowerCase())) {
+      merged.push(kw);
+      seen.add(kw.toLowerCase());
+    }
+  }
+  console.log(`[60-DAY-PLAN] Merged keywords: ${clientKws.length} client + ${merged.length - clientKws.length} AI = ${merged.length} total`);
+  return merged;
+}
+
 export const POST = withErrorBoundary(async (req: NextRequest, context: { params: Promise<{ planId: string }> }) => {
   const { planId } = await context.params;
   const { plan, error } = await loadPlan(planId, req);
@@ -260,7 +283,7 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
       targetValue: g.targetValue,
       priority: g.priority,
     })),
-    targetKeywords: aiKeywords.length > 0 ? aiKeywords : extractKeywordsFallback(plan),
+    targetKeywords: mergeKeywords(plan.clientKeywords, aiKeywords.length > 0 ? aiKeywords : extractKeywordsFallback(plan)),
     aiArticles: finalArticles,
     businessProfile: plan.businessProfile || undefined,
     targetLocation: plan.businessProfile?.location || 'Israel',

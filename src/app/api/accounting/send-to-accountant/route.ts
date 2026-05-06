@@ -130,7 +130,6 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Build HTML email body ──
-    const logoUrl = 'https://s-pixel.co.il/wp-content/uploads/2025/12/rdgik.png';
     const htmlBody = `
 <!DOCTYPE html>
 <html dir="rtl" lang="he">

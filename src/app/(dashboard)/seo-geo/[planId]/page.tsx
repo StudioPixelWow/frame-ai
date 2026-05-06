@@ -308,6 +308,8 @@ export default function SeoPlanDetail() {
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [reports, setReports] = useState<Array<{ id: string; name: string; generatedAt: string; type: string }>>([]);
   const [expandedKeyword, setExpandedKeyword] = useState<string | null>(null);
+  const [editingRanks, setEditingRanks] = useState<Record<number, string>>({});
+  const [savingRanks, setSavingRanks] = useState(false);
   const [enrichingAI, setEnrichingAI] = useState(false);
   const [generatingArticle, setGeneratingArticle] = useState<string | null>(null); // task.id of article being generated
   const [generatedArticles, setGeneratedArticles] = useState<Record<string, string>>({}); // taskId -> full article HTML
@@ -3673,8 +3675,144 @@ export default function SeoPlanDetail() {
             .filter(kw => kw.googlePosition !== null)
             .reduce((sum, kw) => sum + (kw.googlePosition || 0), 0) / Math.max(1, autoKeywords.filter(kw => kw.googlePosition !== null).length);
 
+          // Client keywords from plan
+          const clientKws: any[] = Array.isArray((safePlan as any)?.clientKeywords) ? (safePlan as any).clientKeywords : [];
+
           return (
             <div>
+              {/* ── Client Keywords Tracking ── */}
+              {clientKws.length > 0 && (
+                <div style={{
+                  ...cardStyle,
+                  marginBottom: 24,
+                  border: `2px solid ${C.primary}30`,
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 20 }}>🎯</span>
+                      <h3 style={{ ...sectionTitle, margin: 0 }}>ביטויים של הלקוח — מעקב דירוג</h3>
+                    </div>
+                    <span style={{
+                      ...tagStyle,
+                      background: `${C.primary}15`,
+                      color: C.primary,
+                    }}>
+                      {clientKws.length} ביטויים
+                    </span>
+                  </div>
+
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "2fr 90px 90px 80px 1fr",
+                    gap: 8,
+                    fontSize: 11,
+                    color: C.textMuted,
+                    fontWeight: 600,
+                    marginBottom: 8,
+                    padding: "0 12px",
+                  }}>
+                    <div>ביטוי</div>
+                    <div style={{ textAlign: "center" }}>דירוג התחלתי</div>
+                    <div style={{ textAlign: "center" }}>דירוג נוכחי</div>
+                    <div style={{ textAlign: "center" }}>מגמה</div>
+                    <div>עדכון דירוג</div>
+                  </div>
+
+                  {clientKws.map((kw: any, idx: number) => {
+                    const trendIcon = kw.trend === 'up' ? '📈' : kw.trend === 'down' ? '📉' : kw.trend === 'stable' ? '➡️' : '🆕';
+                    const trendColor = kw.trend === 'up' ? C.success : kw.trend === 'down' ? C.danger : kw.trend === 'stable' ? C.info : C.textMuted;
+                    const trendLabel = kw.trend === 'up' ? 'עולה' : kw.trend === 'down' ? 'יורד' : kw.trend === 'stable' ? 'יציב' : 'חדש';
+                    return (
+                      <div key={idx} style={{
+                        display: "grid",
+                        gridTemplateColumns: "2fr 90px 90px 80px 1fr",
+                        gap: 8,
+                        alignItems: "center",
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        background: idx % 2 === 0 ? C.bg : "transparent",
+                        border: `1px solid ${C.borderLight}`,
+                      }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{s(kw.keyword)}</div>
+                        <div style={{ textAlign: "center", fontSize: 13, color: C.textSecondary }}>
+                          {kw.initialRank !== null ? `#${kw.initialRank}` : '—'}
+                        </div>
+                        <div style={{ textAlign: "center", fontSize: 14, fontWeight: 700, color: kw.currentRank !== null ? trendColor : C.textMuted }}>
+                          {kw.currentRank !== null ? `#${kw.currentRank}` : '—'}
+                        </div>
+                        <div style={{ textAlign: "center" }}>
+                          <span style={{
+                            ...tagStyle,
+                            background: `${trendColor}15`,
+                            color: trendColor,
+                            fontSize: 11,
+                          }}>
+                            {trendIcon} {trendLabel}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                          <input
+                            type="number"
+                            min={1}
+                            max={100}
+                            placeholder="#"
+                            value={editingRanks[idx] ?? ''}
+                            onChange={e => setEditingRanks(prev => ({ ...prev, [idx]: e.target.value }))}
+                            style={{
+                              width: 60, padding: "6px 8px",
+                              border: `1px solid ${C.border}`, borderRadius: 8,
+                              fontSize: 13, outline: "none", background: C.card,
+                              textAlign: "center",
+                            }}
+                          />
+                          <button
+                            onClick={async () => {
+                              const rank = Number(editingRanks[idx]);
+                              if (!rank || rank < 1 || rank > 100) return;
+                              setSavingRanks(true);
+                              try {
+                                const res = await fetch(`/api/seo-geo-plans/${safePlan?.id}/keywords`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ keywordIndex: idx, newRank: rank }),
+                                });
+                                if (res.ok) {
+                                  const updated = await res.json();
+                                  if (updated.clientKeywords) {
+                                    setPlan((prev: any) => prev ? { ...prev, clientKeywords: updated.clientKeywords } : prev);
+                                  }
+                                  setEditingRanks(prev => { const copy = { ...prev }; delete copy[idx]; return copy; });
+                                }
+                              } catch (e) {
+                                console.error('Failed to update rank:', e);
+                              }
+                              setSavingRanks(false);
+                            }}
+                            disabled={savingRanks || !editingRanks[idx]}
+                            style={{
+                              padding: "6px 12px", borderRadius: 8, border: "none",
+                              background: editingRanks[idx] ? C.primary : C.border,
+                              color: editingRanks[idx] ? "#fff" : C.textMuted,
+                              fontSize: 12, fontWeight: 600, cursor: "pointer",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            עדכן
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Last checked info */}
+                  {clientKws.some((kw: any) => kw.lastChecked) && (
+                    <div style={{ fontSize: 11, color: C.textMuted, marginTop: 12, textAlign: "left" }}>
+                      עדכון אחרון: {new Date(clientKws.find((kw: any) => kw.lastChecked)?.lastChecked).toLocaleDateString('he-IL')}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {totalKeywords === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 20px" }}>
                   <div style={{ fontSize: 48, marginBottom: 16 }}>🔑</div>
