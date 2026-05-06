@@ -528,10 +528,17 @@ export default function SeoPlanDetail() {
     if (!plan) return;
     setGeneratingPlan(true);
     try {
+      // Use AbortController for 55s timeout — Vercel Hobby has 60s limit
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 55000);
+
       const res = await fetch(`/api/seo-geo-plans/${plan.id}/generate-60-day-plan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
+
       if (res.ok) {
         const data = await res.json();
         // Refresh plan data
@@ -556,10 +563,29 @@ export default function SeoPlanDetail() {
           setActiveTab("plan");
         }
       } else {
-        console.error("Failed to generate 60-day plan:", await res.text());
+        const errText = await res.text().catch(() => 'Unknown error');
+        console.error("Failed to generate 60-day plan:", errText);
+        alert("שגיאה ביצירת תוכנית. נסה שוב.");
       }
-    } catch (e) {
-      console.error("Failed to generate 60-day plan:", e);
+    } catch (e: any) {
+      if (e?.name === 'AbortError') {
+        console.error("60-day plan generation timed out");
+        alert("הבקשה ארכה יותר מדי זמן. נסה שוב — ייתכן שחלק מהנתונים כבר נשמרו.");
+        // Try to refresh anyway — partial data might have been saved
+        try {
+          const refreshRes = await fetch(`/api/data/seo-plans/${plan.id}`);
+          if (refreshRes.ok) {
+            const refreshed = await refreshRes.json();
+            if (refreshed.days && refreshed.days.length > 0) {
+              const sanitized = nuke(refreshed, 0);
+              setPlan(sanitized as SeoPlan);
+            }
+          }
+        } catch {} // ignore refresh errors
+      } else {
+        console.error("Failed to generate 60-day plan:", e);
+        alert("שגיאה ביצירת תוכנית. נסה שוב.");
+      }
     }
     setGeneratingPlan(false);
   }, [plan]);

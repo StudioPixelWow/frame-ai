@@ -297,42 +297,15 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
     await updatePlanSafe(planId, enrichmentData);
   }
 
-  // ── Step 2: Auto-generate full article content for all 8 articles ──
-  // User requested: "כל 8 מאמרים מוכנים מראש" — all articles pre-written when plan generates
+  // ── Step 2: Article content generation ──
+  // NOTE: Full article generation (8 × 1500 words) takes 2-4 minutes which exceeds
+  // Vercel's 60s timeout on Hobby plan. Articles are generated on-demand via the
+  // /generate-article endpoint instead. We only save the outlines/topics here.
   const articlesToWrite = enrichmentData.aiArticles || (Array.isArray(plan.aiArticles) ? plan.aiArticles : []);
   if (articlesToWrite.length > 0) {
-    console.log(`[60-DAY-PLAN] Auto-generating full content for ${articlesToWrite.length} articles...`);
-    const updatedArticles = [...articlesToWrite];
-    let successCount = 0;
-
-    for (let i = 0; i < updatedArticles.length; i++) {
-      const article = updatedArticles[i];
-      // Skip if already written
-      if (article.status === 'written' && article.fullArticle) {
-        successCount++;
-        continue;
-      }
-      try {
-        console.log(`[60-DAY-PLAN] Writing article ${i + 1}/${updatedArticles.length}: "${article.title}"`);
-        const result = await generateFullArticle(plan, article);
-        if (result) {
-          updatedArticles[i] = { ...article, ...result };
-          successCount++;
-          console.log(`[60-DAY-PLAN] Article ${i + 1} written successfully`);
-        }
-      } catch (e) {
-        console.error(`[60-DAY-PLAN] Failed to write article ${i + 1}:`, e);
-      }
-      // Small delay between articles to avoid rate limiting
-      if (i < updatedArticles.length - 1) {
-        await new Promise(r => setTimeout(r, 1500));
-      }
-    }
-
-    console.log(`[60-DAY-PLAN] Articles auto-generated: ${successCount}/${updatedArticles.length}`);
-    await updatePlanSafe(planId, { aiArticles: updatedArticles });
-    // Also update finalArticles so the plan engine uses the written versions
-    finalArticles = updatedArticles;
+    console.log(`[60-DAY-PLAN] ${articlesToWrite.length} article topics saved. Full content will be generated on-demand.`);
+    // Don't generate full articles here — it takes too long and causes timeout
+    finalArticles = articlesToWrite;
   }
 
   // Build PlanInput from plan data
