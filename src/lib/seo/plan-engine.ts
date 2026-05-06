@@ -30,6 +30,13 @@ export interface PlanInput {
   targetLocation: string;
   targetLanguage: string;
   insights: InsightInput[];
+  aiArticles?: Array<{
+    title: string;
+    targetKeyword: string;
+    outline?: string[];
+    wordCount?: number;
+    whyThisArticle?: string;
+  }>;
   businessProfile?: {
     business_name: string;
     business_type: string;
@@ -207,6 +214,33 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
     return `נושא מרכזי ${i + 1}`;
   };
   const kwSlug = (i: number) => (kw(i) || 'topic').replace(/\s+/g, '-');
+
+  // AI-generated article topics (from GPT)
+  const aiArticles = input.aiArticles || [];
+  const aiArticle = (i: number) => {
+    if (aiArticles[i]) return aiArticles[i];
+    return null;
+  };
+  // Smart article title — uses AI article if available, otherwise kw()
+  const articleTitle = (i: number) => {
+    const art = aiArticle(i);
+    if (art?.title) return art.title;
+    return kw(i);
+  };
+  // Smart content brief — uses AI outline if available
+  const articleBrief = (i: number) => {
+    const art = aiArticle(i);
+    if (art) {
+      const parts: string[] = [];
+      parts.push(`נושא: ${art.title}`);
+      if (art.targetKeyword) parts.push(`ביטוי מפתח: ${art.targetKeyword}`);
+      if (art.outline && art.outline.length > 0) parts.push(`מבנה: ${art.outline.join(' | ')}`);
+      if (art.wordCount) parts.push(`אורך: ${art.wordCount}+ מילים`);
+      if (art.whyThisArticle) parts.push(`חשיבות: ${art.whyThisArticle}`);
+      return parts.join('. ');
+    }
+    return `כתוב מאמר מומחה ועמוק על "${kw(i)}". מבנה: כותרת עם מילת-מפתח, intro, 4-6 תתסעיפים עם H2/H3, סיכום עם CTA.`;
+  };
 
   // Derived analytics
   const mentionedQueries = vis.filter(v => (v.results || []).some(r => r.mentioned));
@@ -473,19 +507,20 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
     ),
   ]));
 
-  // Days 9-11: Writing content for top gaps
+  // Days 9-11: Writing content for top gaps (AI-powered article topics)
   const contentDays = [9, 10, 11];
   contentDays.forEach((d, idx) => {
     const gap = topGaps[idx];
-    const kw = gap?.query || keywords[idx] || `נושא #${idx + 1}`;
+    const title = articleTitle(idx) || gap?.query || `נושא #${idx + 1}`;
+    const brief = articleBrief(idx);
     const pageUrl = pages.find(p => p.wordCount > 300)?.url || null;
 
-    days.push(mkDay(d, `כתיבת מאמר מומחה: "${kw}"`, [
+    days.push(mkDay(d, `כתיבת מאמר מומחה: "${title}"`, [
       mkTask("content", "high", "high",
-        `כתוב מאמר 1500+ מילים: "${kw}"`,
-        `כתוב מאמר מומחה ועמוק המענה ל-"${kw}". מבנה: כותרת עם מילת-מפתח, intro (150 מילים), 4-6 תתסעיפים עם H2/H3, סיכום עם CTA. כלול נתונים, דוגמאות, ציטוטי מומחים. הוסף FAQ עם 3-5 שאלות בתחתית.`,
+        `כתוב מאמר 1500+ מילים: "${title}"`,
+        brief,
         5, pageUrl,
-        `מאמר פורסם, אופטימלי עבור "${kw}", דורג והוא מוכן ל-AI`,
+        `מאמר פורסם, אופטימלי עבור "${title}", דורג והוא מוכן ל-AI`,
         gap ? `שאילתה שזוהתה כפער — ${input.clientName} חסר מ-${missedQueries.length > 0 ? "תוצאות AI" : "תוצאות חיפוש"}` : "מילת-מפתח ליבה חסרה מאתר",
         `מאמר: "${kw}"\nאורך: 1500+ מילים\nקהל יעד: ${loc || "השוק שלך"}\n\nכותרת: "${kw} — מדריך קיבוצי לשנת ${new Date().getFullYear()}"\n\nמבנה:\n1. הקדמה (150 מילים)\n   • מה הבעיה עם ${kw}?\n   • למה זה חשוב ל-${input.clientName}?\n\n2. הגדרה: מה זה ${kw}?\n   • הסבר לנתחילים\n   • שימוש בעולם האמיתי\n\n3. ${keywords[1] || "יתרונות מרכזיים"}\n   • יתרון #1 עם דוגמה\n   • יתרון #2 עם נתון/נתון\n   • יתרון #3 עם מקרה בחינה\n\n4. ${keywords[2] || "כיצד להשתמש"} — צעדים מעשיים\n   • צעד 1: בחר כלי\n   • צעד 2: הגדר\n   • צעד 3: בצע\n\n5. טעויות נפוצות להימנע\n   • טעות #1: ...\n   • טעות #2: ...\n\n6. FAQ (3-5 שאלות מ-AI)\n   • "${missedQueries[idx]?.query || "שאלה #1"}?"\n   • "כמה עולה?"\n   • "האם זה עובד ל-${loc || "עסקים"}?"\n\n7. סיכום + CTA\n   • תזכורת ערך\n   • "צרו קשר עם ${input.clientName} לעזרה"\n\nמילות-מפתח: ${keywords.slice(0, 5).join(", ")}\nאורך צפוי: 1500+ מילים`,
       ),
@@ -518,14 +553,16 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
     ),
   ]));
 
-  // Days 13-14: More content for missed queries
+  // Days 13-14: More content for missed queries (AI-powered)
   [13, 14].forEach((d, idx) => {
     const gap = topGaps[3 + idx];
-    const kw = gap?.query || keywords[3 + idx] || `נושא ${idx + 4}`;
-    days.push(mkDay(d, `מאמר מאופטימל עבור AI: "${kw}"`, [
+    const artIdx = 3 + idx;
+    const title = articleTitle(artIdx) || gap?.query || kw(artIdx);
+    const brief = articleBrief(artIdx);
+    days.push(mkDay(d, `מאמר מאופטימל עבור AI: "${title}"`, [
       mkTask("content", "high", "high",
-        `כתוב מאמר מאופטימל עבור AI: "${kw}"`,
-        `כתוב מאמר המענה ישירות ל-"${kw}" בפורמט המעודף ל-AI: תשובה ישירה בפסקה הראשונה, רשימות ממוספרות, הגדרות ברורות, מקורות נתונים מצוטטים. ${gap ? `פער שזוהה: ${input.clientName} לא מוזכר בתוצאות AI לשאילתה זו.` : ""}`,
+        `כתוב מאמר מאופטימל עבור AI: "${title}"`,
+        brief || `כתוב מאמר המענה ישירות ל-"${title}" בפורמט המעודף ל-AI: תשובה ישירה בפסקה הראשונה, רשימות ממוספרות, הגדרות ברורות, מקורות נתונים מצוטטים. ${gap ? `פער שזוהה: ${input.clientName} לא מוזכר בתוצאות AI לשאילתה זו.` : ""}`,
         5, null,
         `מאמר-friendly עבור AI פורסם, אופטימלי עבור "${kw}"`,
         "מנועי AI מעדיפים תוכן מובנה עם תשובות ישירות — פורמט שונה מ-SEO קלאסי",

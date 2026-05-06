@@ -229,6 +229,7 @@ export default function SeoPlanDetail() {
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [reports, setReports] = useState<Array<{ id: string; name: string; generatedAt: string; type: string }>>([]);
   const [expandedKeyword, setExpandedKeyword] = useState<string | null>(null);
+  const [enrichingAI, setEnrichingAI] = useState(false);
 
   // Fetch plan
   useEffect(() => {
@@ -380,6 +381,32 @@ export default function SeoPlanDetail() {
     setGeneratingPlan(false);
   }, [plan]);
 
+  // AI Enrich — generate smart keywords, competitors, articles via GPT
+  const handleAIEnrich = useCallback(async () => {
+    if (!plan) return;
+    setEnrichingAI(true);
+    try {
+      const res = await fetch(`/api/seo-geo-plans/${plan.id}/ai-enrich`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (res.ok) {
+        // Refresh plan data
+        const refreshRes = await fetch(`/api/data/seo-plans/${plan.id}`);
+        if (refreshRes.ok) {
+          const refreshed = await refreshRes.json();
+          setPlan(refreshed);
+        }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        console.error("AI enrich failed:", errData);
+      }
+    } catch (e) {
+      console.error("AI enrich error:", e);
+    }
+    setEnrichingAI(false);
+  }, [plan]);
+
   // ── PRE-RENDER SAFETY: ensure plan is fully sanitized (no objects as children) ──
   // CRITICAL: These useMemo hooks MUST be before any conditional returns (Rules of Hooks)
   const safePlan = useMemo(() => {
@@ -469,6 +496,21 @@ export default function SeoPlanDetail() {
   const autoKeywords = useMemo(() => {
     if (!safePlan) return [];
 
+    // ── PRIORITY 1: Use AI-generated keywords if available ──
+    const p = safePlan as any;
+    const aiKw = p.aiKeywords;
+    if (Array.isArray(aiKw) && aiKw.length > 0) {
+      return aiKw.map((k: any) => ({
+        keyword: k.keyword || '',
+        category: k.category || 'CORE',
+        searchVolume: k.searchVolume || 'בינוני',
+        difficulty: k.difficulty || 'בינוני',
+        intent: k.intent || 'מידעי',
+        source: 'ai' as const,
+      }));
+    }
+
+    // ── FALLBACK: deterministic generation from scan data ──
     const scan = safePlan.websiteScan;
     if (!scan) return [];
 
@@ -1769,16 +1811,32 @@ export default function SeoPlanDetail() {
 
         {/* ── COMPETITORS ── */}
         {activeTab === "competitors" && (() => {
+          // ── PRIORITY 1: AI-generated competitors ──
+          const aiCompetitors: any[] = Array.isArray((p as any).aiCompetitors) ? (p as any).aiCompetitors : [];
+
           // Extract competitor data from scan pipeline aiQueries + plan.competitors
           const aiQueriesRaw: any[] = scan?.aiQueries as any[] || [];
           const planCompetitors: any[] = Array.isArray((p as any).competitors) ? (p as any).competitors : [];
           const scanCompetitors: any[] = Array.isArray((scan as any)?.competitors) ? (scan as any).competitors : [];
           const allCompetitors = [...planCompetitors, ...scanCompetitors];
           const businessProfile = (p as any).businessProfile || (scan as any)?.websiteFacts?.businessProfile;
-          const knownCompetitors: string[] = businessProfile?.known_competitors || allCompetitors.map((c: any) => c.domain || c.name || '').filter(Boolean) || [];
+          const knownCompetitors: string[] = aiCompetitors.length > 0
+            ? aiCompetitors.map((c: any) => c.name || c.domain || '').filter(Boolean)
+            : businessProfile?.known_competitors || allCompetitors.map((c: any) => c.domain || c.name || '').filter(Boolean) || [];
 
-          // Generate suggested competitors based on business type if none found
+          // Use AI-generated competitors if available, otherwise suggest generics
           const generateSuggestedCompetitors = () => {
+            // AI competitors are already in the main list via knownCompetitors
+            if (aiCompetitors.length > 0) return aiCompetitors.map((c: any) => ({
+              name: c.name || '',
+              domain: c.domain || '',
+              strengths: c.strengths || [],
+              weaknesses: c.weaknesses || [],
+              estimatedTraffic: c.estimatedTraffic || 'בינוני',
+              mainKeywords: c.mainKeywords || [],
+              suggested: false,
+              source: 'ai',
+            }));
             if (knownCompetitors.length > 0) return [];
             const businessType = s(scan?.websiteFacts?.business_type || "") || "";
             if (!businessType) return [];
@@ -2130,6 +2188,56 @@ export default function SeoPlanDetail() {
                     </div>
                   </div>
                 )}
+
+                {/* AI-generated article suggestions */}
+                {(() => {
+                  const aiArts: any[] = Array.isArray((p as any).aiArticles) ? (p as any).aiArticles : [];
+                  if (aiArts.length === 0) return null;
+                  return (
+                    <div style={{ ...cardStyle, marginTop: 20 }}>
+                      <h3 style={{ ...sectionTitle }}>🤖 מאמרים מומלצים ע״י AI</h3>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                        {aiArts.map((art: any, i: number) => (
+                          <div key={art.id || i} style={{
+                            padding: "16px", borderRadius: 14, background: C.bg,
+                            border: `1px solid ${C.borderLight}`,
+                          }}>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 6 }}>
+                              {art.title}
+                            </div>
+                            {art.targetKeyword && (
+                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                                <span style={{ ...tagStyle, background: `${C.primary}12`, color: C.primary }}>
+                                  🎯 {art.targetKeyword}
+                                </span>
+                                {art.wordCount && (
+                                  <span style={{ ...tagStyle, background: `${C.info}12`, color: C.info }}>
+                                    {art.wordCount}+ מילים
+                                  </span>
+                                )}
+                                {art.status && (
+                                  <span style={{ ...tagStyle, background: `${C.success}12`, color: C.success }}>
+                                    {art.status === 'planned' ? 'מתוכנן' : art.status}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {art.outline && art.outline.length > 0 && (
+                              <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 6 }}>
+                                <strong>מבנה:</strong> {art.outline.join(' → ')}
+                              </div>
+                            )}
+                            {art.whyThisArticle && (
+                              <div style={{ fontSize: 12, color: C.textSecondary, fontStyle: "italic" }}>
+                                💡 {art.whyThisArticle}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </>
             )}
           </div>
@@ -2166,9 +2274,51 @@ export default function SeoPlanDetail() {
           return (
             <div>
               {totalKeywords === 0 ? (
-                <EmptyTab icon="🔑" text="אין ביטויי SEO זמינים. בדוק שהסריקה טכנית הושלמה." />
+                <div style={{ textAlign: "center", padding: "40px 20px" }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>🔑</div>
+                  <p style={{ color: C.textMuted, fontSize: 15, marginBottom: 20 }}>
+                    אין ביטויי SEO זמינים. ניתן להפעיל העשרת AI לגילוי ביטויים חכמים.
+                  </p>
+                  <button
+                    onClick={handleAIEnrich}
+                    disabled={enrichingAI}
+                    style={{
+                      background: enrichingAI ? C.border : `linear-gradient(135deg, ${C.primary}, ${C.info})`,
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 12,
+                      padding: "12px 28px",
+                      fontSize: 15,
+                      fontWeight: 700,
+                      cursor: enrichingAI ? "not-allowed" : "pointer",
+                      opacity: enrichingAI ? 0.7 : 1,
+                    }}
+                  >
+                    {enrichingAI ? "⏳ מעשיר עם AI..." : "🤖 העשרת AI — ביטויים, מתחרים ומאמרים"}
+                  </button>
+                </div>
               ) : (
                 <>
+                  {/* AI re-enrich button */}
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+                    <button
+                      onClick={handleAIEnrich}
+                      disabled={enrichingAI}
+                      style={{
+                        background: enrichingAI ? C.border : `${C.primary}15`,
+                        color: enrichingAI ? C.textMuted : C.primary,
+                        border: `1px solid ${enrichingAI ? C.border : C.primary}30`,
+                        borderRadius: 8,
+                        padding: "6px 16px",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: enrichingAI ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {enrichingAI ? "⏳ מעשיר..." : "🤖 רענן עם AI"}
+                    </button>
+                  </div>
+
                   {/* Summary stats */}
                   <div style={{
                     display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20,
