@@ -90,15 +90,91 @@ const C = {
   neon: "#e9fe00", neonEnd: "#d3e200",
 };
 
-const AI_ENGINES = ["ChatGPT", "Gemini", "Perplexity", "Claude", "Copilot"];
+const AI_ENGINES = ["ChatGPT", "Gemini", "Perplexity", "Claude"];
 
-const PLATFORM_DISPLAY: Record<string, { name: string; icon: string }> = {
-  google_seo: { name: "Google SEO", icon: "🔍" },
-  google_ai_overview: { name: "AI Overview", icon: "✨" },
-  gemini: { name: "Gemini", icon: "💎" },
-  chatgpt: { name: "ChatGPT", icon: "🤖" },
-  claude: { name: "Claude", icon: "🧠" },
-  perplexity: { name: "Perplexity", icon: "🔮" },
+// ── Platform SVG Icons ──
+function GoogleIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.96 10.96 0 0 0 1 12c0 1.77.42 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+    </svg>
+  );
+}
+
+function ChatGPTIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M22.28 9.37a6.07 6.07 0 0 0-.52-4.98 6.15 6.15 0 0 0-6.64-2.96A6.07 6.07 0 0 0 10.54 0a6.15 6.15 0 0 0-5.86 4.25 6.07 6.07 0 0 0-4.06 2.93 6.15 6.15 0 0 0 .76 7.2 6.07 6.07 0 0 0 .52 4.97 6.15 6.15 0 0 0 6.64 2.97A6.07 6.07 0 0 0 13.12 24a6.15 6.15 0 0 0 5.86-4.25 6.07 6.07 0 0 0 4.06-2.93 6.15 6.15 0 0 0-.76-7.2v-.25zm-9.16 13.06a4.6 4.6 0 0 1-2.96-1.08l.15-.08 4.92-2.84a.8.8 0 0 0 .4-.7v-6.93l2.08 1.2a.07.07 0 0 1 .04.06v5.75a4.62 4.62 0 0 1-4.63 4.62zM3.6 18.28a4.58 4.58 0 0 1-.55-3.09l.15.09 4.92 2.84a.8.8 0 0 0 .8 0l6.01-3.47v2.4a.08.08 0 0 1-.03.06l-4.97 2.87a4.62 4.62 0 0 1-6.33-1.7zM2.34 7.89A4.58 4.58 0 0 1 4.74 5.8v5.85a.8.8 0 0 0 .4.7l6.01 3.47-2.08 1.2a.08.08 0 0 1-.07 0L4.03 14.15a4.62 4.62 0 0 1-1.7-6.26zm16.58 3.86-6.01-3.47 2.08-1.2a.08.08 0 0 1 .07 0l4.97 2.87a4.62 4.62 0 0 1-.71 8.34v-5.85a.8.8 0 0 0-.4-.7zm2.07-3.1-.15-.09-4.92-2.84a.8.8 0 0 0-.8 0L9.11 9.19v-2.4a.08.08 0 0 1 .03-.06l4.97-2.87a4.62 4.62 0 0 1 6.88 4.78zM8.02 13.28l-2.08-1.2a.07.07 0 0 1-.04-.06V6.27a4.62 4.62 0 0 1 7.58-3.54l-.15.08-4.92 2.84a.8.8 0 0 0-.4.7v6.93zm1.13-2.43L12 9.13l2.85 1.64v3.29L12 15.7l-2.85-1.64v-3.22z" fill="#10A37F"/>
+    </svg>
+  );
+}
+
+function GeminiIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M12 24A14.3 14.3 0 0 0 0 12 14.3 14.3 0 0 0 12 0a14.3 14.3 0 0 0 0 12 14.3 14.3 0 0 0 0 12z" fill="url(#gemini_g)"/>
+      <defs>
+        <linearGradient id="gemini_g" x1="0" y1="0" x2="24" y2="24">
+          <stop stopColor="#1C7CEF"/><stop offset="1" stopColor="#A040CF"/>
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
+function ClaudeIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M16.98 3.41L14.2 12.78l6.18-5.89a.55.55 0 0 0-.16-.88l-2.62-1.33a.55.55 0 0 0-.62.73zM13.46 2.04L10.87 12.74l-3.3-9.36a.55.55 0 0 0-.72-.33L4.48 4.16a.55.55 0 0 0-.28.77L10.63 17.8a.55.55 0 0 0 .96.04l7.26-13.25a.55.55 0 0 0-.22-.76l-4.5-2a.55.55 0 0 0-.67.21z" fill="#D97757"/>
+    </svg>
+  );
+}
+
+function PerplexityIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M12 1L4 5v6.5L12 16l8-4.5V5L12 1z" stroke="#20808D" strokeWidth="1.8" fill="none"/>
+      <path d="M12 16v7M4 11.5L12 16l8-4.5" stroke="#20808D" strokeWidth="1.8" fill="none"/>
+      <path d="M12 1v15" stroke="#20808D" strokeWidth="1.8"/>
+      <circle cx="12" cy="8" r="2.5" fill="#20808D"/>
+    </svg>
+  );
+}
+
+function AIOverviewIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" opacity="0.5"/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" opacity="0.5"/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.96 10.96 0 0 0 1 12c0 1.77.42 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" opacity="0.5"/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" opacity="0.5"/>
+      <path d="M8 10h8M8 12.5h6M8 15h4" stroke="#4285F4" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function PlatformIconComponent({ platform, size = 20 }: { platform: string; size?: number }) {
+  switch (platform) {
+    case 'google_seo': return <GoogleIcon size={size} />;
+    case 'google_ai_overview': return <AIOverviewIcon size={size} />;
+    case 'gemini': return <GeminiIcon size={size} />;
+    case 'chatgpt': return <ChatGPTIcon size={size} />;
+    case 'claude': return <ClaudeIcon size={size} />;
+    case 'perplexity': return <PerplexityIcon size={size} />;
+    default: return <GoogleIcon size={size} />;
+  }
+}
+
+const PLATFORM_DISPLAY: Record<string, { name: string; nameHe: string; color: string }> = {
+  google_seo: { name: "Google SEO", nameHe: "גוגל אורגני", color: "#4285F4" },
+  google_ai_overview: { name: "AI Overview", nameHe: "סקירת AI", color: "#34A853" },
+  gemini: { name: "Gemini", nameHe: "ג׳מיני", color: "#886FBF" },
+  chatgpt: { name: "ChatGPT", nameHe: "צ׳אט GPT", color: "#10A37F" },
+  claude: { name: "Claude", nameHe: "קלוד", color: "#D97757" },
+  perplexity: { name: "Perplexity", nameHe: "פרפלקסיטי", color: "#20808D" },
 };
 
 const AI_PLATFORM_IDS = ["chatgpt", "gemini", "perplexity", "claude", "google_ai_overview"] as const;
@@ -234,6 +310,9 @@ export default function SeoPlanDetail() {
   const [generatingArticle, setGeneratingArticle] = useState<string | null>(null); // task.id of article being generated
   const [generatedArticles, setGeneratedArticles] = useState<Record<string, string>>({}); // taskId -> full article HTML
   const [articleError, setArticleError] = useState<string | null>(null);
+  const [aiSubTab, setAiSubTab] = useState<"engines" | "seo" | "ai_overview" | "geo">("engines");
+  const [aiPlatformFilter, setAiPlatformFilter] = useState<string>("all");
+  const [aiQueryDetail, setAiQueryDetail] = useState<{query: string; platform: string; found: boolean; confidence: number; snippet?: string; position?: number; scanMode?: string} | null>(null);
 
   // Load previously generated articles from plan's aiArticles on plan load
   useEffect(() => {
@@ -1234,14 +1313,11 @@ export default function SeoPlanDetail() {
                 {AI_ENGINES.map(eng => {
                   // Use real scan pipeline data (aiQueries) instead of legacy visibilityResults
                   const aiQ = Array.isArray(scan?.aiQueries) ? (scan.aiQueries as any[]) : [];
-                  // Map engine display names to platform IDs used in scan pipeline
-                  const engToPlat: Record<string, string[]> = {
-                    'ChatGPT': ['chatgpt'], 'Gemini': ['gemini'], 'Perplexity': ['perplexity'],
-                    'Claude': ['claude'], 'Copilot': ['copilot'],
-                    'Google': ['google_seo', 'google_ai_overview'],
+                  const engToPlat: Record<string, string> = {
+                    'ChatGPT': 'chatgpt', 'Gemini': 'gemini', 'Perplexity': 'perplexity', 'Claude': 'claude',
                   };
-                  const platIds = engToPlat[eng] || [];
-                  const platQueries = aiQ.filter(q => platIds.includes(q.platform) && q.scanMode === 'real');
+                  const platId = engToPlat[eng] || '';
+                  const platQueries = aiQ.filter(q => q.platform === platId && q.scanMode === 'real');
                   const mentioned = platQueries.filter(q => q.found).length;
                   const total = platQueries.length;
                   const pct = total > 0 ? Math.round((mentioned / total) * 100) : 0;
@@ -1249,9 +1325,11 @@ export default function SeoPlanDetail() {
                     <div key={eng} style={{
                       padding: "8px 14px", borderRadius: 10, background: C.bg,
                       border: `1px solid ${C.borderLight}`, textAlign: "center", minWidth: 80,
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
                     }}>
+                      <PlatformIconComponent platform={platId} size={18} />
                       <div style={{ fontSize: 16, fontWeight: 800, color: total === 0 ? C.textMuted : pct > 50 ? C.success : C.danger }}>{total === 0 ? "—" : `${s(pct)}%`}</div>
-                      <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{s(eng)}{total === 0 ? " (לא נסרק)" : ""}</div>
+                      <div style={{ fontSize: 10, color: C.textMuted }}>{s(eng)}{total === 0 ? " (לא נסרק)" : ""}</div>
                     </div>
                   );
                 })}
@@ -2023,7 +2101,7 @@ export default function SeoPlanDetail() {
         {/* ── AI RESULTS ── */}
         {activeTab === "ai" && (() => {
           // Read AI queries from scan pipeline format (websiteScan.aiQueries) or flat visibilityResults
-          const aiQueries: Array<{platform: string; query: string; found: boolean; confidence: number; snippet?: string; scanMode?: string}> =
+          const aiQueries: Array<{platform: string; query: string; found: boolean; confidence: number; snippet?: string; scanMode?: string; position?: number}> =
             (scan?.aiQueries as any[] || []).length > 0
               ? (scan?.aiQueries as any[])
               : (Array.isArray(p.visibilityResults) ? p.visibilityResults : []).map((vr: any) => ({
@@ -2035,13 +2113,28 @@ export default function SeoPlanDetail() {
                   scanMode: 'real',
                 }));
 
-          // Group by unique queries
-          const uniqueQueries = Array.from(new Set(aiQueries.map(q => q.query)));
-          // Group by platform
-          const platforms = Array.from(new Set(aiQueries.map(q => q.platform)));
-          const totalScanned = aiQueries.filter(q => q.scanMode === 'real').length;
-          const totalFound = aiQueries.filter(q => q.scanMode === 'real' && q.found).length;
-          const score = totalScanned > 0 ? Math.round((totalFound / totalScanned) * 100) : n(p.visibilityScore);
+          const realQueries = aiQueries.filter(q => q.scanMode === 'real');
+          const aiPlatformQueries = realQueries.filter(q => !['google_seo'].includes(q.platform));
+          const seoPlatformQueries = realQueries.filter(q => q.platform === 'google_seo');
+          const aiOverviewQueries = realQueries.filter(q => q.platform === 'google_ai_overview');
+          const geoQueries = realQueries.filter(q => q.found); // queries where business IS mentioned = GEO success
+
+          // Filtered queries based on platform filter
+          const filteredQueries = aiPlatformFilter === "all"
+            ? aiPlatformQueries
+            : aiPlatformQueries.filter(q => q.platform === aiPlatformFilter);
+
+          const aiPlatforms = Array.from(new Set(aiPlatformQueries.map(q => q.platform)));
+          const totalFound = aiPlatformQueries.filter(q => q.found).length;
+          const score = aiPlatformQueries.length > 0 ? Math.round((totalFound / aiPlatformQueries.length) * 100) : 0;
+
+          // Sub-tab definitions
+          const subTabs = [
+            { id: "engines" as const, label: "מנועי AI", count: aiPlatformQueries.length },
+            { id: "seo" as const, label: "תוצאות אורגניות", count: seoPlatformQueries.length },
+            { id: "ai_overview" as const, label: "AI Overview", count: aiOverviewQueries.length },
+            { id: "geo" as const, label: "שאילתות GEO", count: geoQueries.length },
+          ];
 
           return (
           <div>
@@ -2049,7 +2142,7 @@ export default function SeoPlanDetail() {
               <EmptyTab icon="🤖" text="אין תוצאות AI. חזור לאשף והרץ סריקת נראות." />
             ) : (
               <>
-                {/* Score hero */}
+                {/* Score hero with real icons */}
                 <div style={{
                   background: `linear-gradient(135deg, ${C.neon}, ${C.neonEnd})`,
                   borderRadius: 20, padding: 28, marginBottom: 20, color: "#1A1A2E",
@@ -2060,95 +2153,491 @@ export default function SeoPlanDetail() {
                     <div style={{ fontSize: 14, opacity: 0.8 }}>ציון נראות AI</div>
                   </div>
                   <div style={{ flex: 1, display: "flex", gap: 12, flexWrap: "wrap" }}>
-                    {platforms.map(pid => {
-                      const pd = PLATFORM_DISPLAY[pid] || { name: pid, icon: "🔍" };
-                      const platQueries = aiQueries.filter(q => q.platform === pid);
+                    {aiPlatforms.map(pid => {
+                      const pd = PLATFORM_DISPLAY[pid] || { name: pid, nameHe: pid, color: C.text };
+                      const platQueries = aiPlatformQueries.filter(q => q.platform === pid);
                       const platFound = platQueries.filter(q => q.found).length;
+                      const platScore = platQueries.length > 0 ? Math.round((platFound / platQueries.length) * 100) : 0;
                       return (
-                        <div key={pid} style={{
-                          background: "rgba(255,255,255,0.5)", borderRadius: 12,
-                          padding: "12px 18px", textAlign: "center", minWidth: 100,
+                        <button key={pid} onClick={() => { setAiSubTab("engines"); setAiPlatformFilter(pid === aiPlatformFilter ? "all" : pid); }} style={{
+                          background: aiPlatformFilter === pid ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.5)",
+                          borderRadius: 12, padding: "12px 18px", textAlign: "center", minWidth: 100,
+                          border: aiPlatformFilter === pid ? `2px solid ${pd.color}` : "2px solid transparent",
+                          cursor: "pointer", transition: "all 0.2s",
                         }}>
-                          <div style={{ fontSize: 20, marginBottom: 4 }}>{pd.icon}</div>
-                          <div style={{ fontSize: 18, fontWeight: 800 }}>{platFound}/{platQueries.length}</div>
+                          <div style={{ display: "flex", justifyContent: "center", marginBottom: 6 }}>
+                            <PlatformIconComponent platform={pid} size={24} />
+                          </div>
+                          <div style={{ fontSize: 18, fontWeight: 800 }}>{platScore}%</div>
+                          <div style={{ fontSize: 10, opacity: 0.7, marginTop: 2 }}>{platFound}/{platQueries.length}</div>
                           <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{pd.name}</div>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
                 </div>
 
-                {/* Cross-platform matrix table */}
-                <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                    <thead>
-                      <tr style={{ background: C.bg }}>
-                        <th style={thStyle}>שאילתה</th>
-                        {platforms.map(pid => {
-                          const pd = PLATFORM_DISPLAY[pid] || { name: pid, icon: "🔍" };
-                          return <th key={pid} style={{ ...thStyle, textAlign: "center", minWidth: 80 }}>{pd.icon} {pd.name}</th>;
-                        })}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {uniqueQueries.map((query, i) => {
-                        const decoded = (query || '').replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#39;/g, "'");
+                {/* Sub-tab navigation */}
+                <div style={{
+                  display: "flex", gap: 4, background: C.bg, borderRadius: 14, padding: 4, marginBottom: 20,
+                }}>
+                  {subTabs.map(tab => (
+                    <button key={tab.id} onClick={() => { setAiSubTab(tab.id); if (tab.id !== "engines") setAiPlatformFilter("all"); }}
+                      style={{
+                        flex: 1, padding: "10px 16px", borderRadius: 10, border: "none", cursor: "pointer",
+                        background: aiSubTab === tab.id ? C.card : "transparent",
+                        color: aiSubTab === tab.id ? C.text : C.textMuted,
+                        fontWeight: aiSubTab === tab.id ? 700 : 500,
+                        fontSize: 13, transition: "all 0.2s",
+                        boxShadow: aiSubTab === tab.id ? "0 2px 8px rgba(0,0,0,0.06)" : "none",
+                      }}>
+                      {tab.label}
+                      <span style={{
+                        marginRight: 6, fontSize: 10, padding: "2px 6px", borderRadius: 6,
+                        background: aiSubTab === tab.id ? `${C.primary}15` : `${C.textMuted}10`,
+                        color: aiSubTab === tab.id ? C.primary : C.textMuted,
+                      }}>{tab.count}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* ── SUB-TAB: AI Engines ── */}
+                {aiSubTab === "engines" && (
+                  <>
+                    {/* Platform filter bar */}
+                    <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+                      <button onClick={() => setAiPlatformFilter("all")} style={{
+                        ...smallBtnStyle,
+                        background: aiPlatformFilter === "all" ? C.primary : "transparent",
+                        color: aiPlatformFilter === "all" ? "#fff" : C.textSecondary,
+                        border: aiPlatformFilter === "all" ? `1px solid ${C.primary}` : `1px solid ${C.border}`,
+                      }}>הכל ({aiPlatformQueries.length})</button>
+                      {aiPlatforms.map(pid => {
+                        const pd = PLATFORM_DISPLAY[pid] || { name: pid, nameHe: pid, color: C.text };
+                        const cnt = aiPlatformQueries.filter(q => q.platform === pid).length;
                         return (
-                          <tr key={i} style={{ borderBottom: `1px solid ${C.borderLight}` }}>
-                            <td style={{ ...tdStyle, maxWidth: 300, fontSize: 12 }}>{decoded}</td>
-                            {platforms.map(pid => {
-                              const result = aiQueries.find(q => q.platform === pid && q.query === query);
-                              if (!result) return <td key={pid} style={{ ...tdStyle, textAlign: "center" }}>
-                                <span style={{ color: C.textMuted, fontSize: 11 }}>—</span>
-                              </td>;
-                              return (
-                                <td key={pid} style={{ ...tdStyle, textAlign: "center" }}>
+                          <button key={pid} onClick={() => setAiPlatformFilter(pid === aiPlatformFilter ? "all" : pid)} style={{
+                            ...smallBtnStyle, display: "inline-flex", alignItems: "center", gap: 6,
+                            background: aiPlatformFilter === pid ? `${pd.color}15` : "transparent",
+                            color: aiPlatformFilter === pid ? pd.color : C.textSecondary,
+                            border: aiPlatformFilter === pid ? `1px solid ${pd.color}40` : `1px solid ${C.border}`,
+                          }}>
+                            <PlatformIconComponent platform={pid} size={14} />
+                            {pd.name} ({cnt})
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Query results list */}
+                    <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ background: C.bg }}>
+                            <th style={{ ...thStyle, width: 36 }}></th>
+                            <th style={thStyle}>שאילתה</th>
+                            <th style={{ ...thStyle, textAlign: "center", width: 100 }}>פלטפורמה</th>
+                            <th style={{ ...thStyle, textAlign: "center", width: 80 }}>סטטוס</th>
+                            <th style={{ ...thStyle, textAlign: "center", width: 80 }}>ביטחון</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredQueries.map((q, i) => {
+                            const pd = PLATFORM_DISPLAY[q.platform] || { name: q.platform, nameHe: q.platform, color: C.text };
+                            const decoded = (q.query || '').replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#39;/g, "'");
+                            return (
+                              <tr key={i}
+                                onClick={() => setAiQueryDetail(q as any)}
+                                style={{
+                                  borderBottom: `1px solid ${C.borderLight}`, cursor: "pointer",
+                                  transition: "background 0.15s",
+                                }}
+                                onMouseEnter={e => (e.currentTarget.style.background = `${C.bg}`)}
+                                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                              >
+                                <td style={{ ...tdStyle, textAlign: "center" }}>
                                   <div style={{
                                     width: 28, height: 28, borderRadius: 8, margin: "0 auto",
                                     display: "flex", alignItems: "center", justifyContent: "center",
                                     fontSize: 14,
-                                    background: result.found ? `${C.success}15` : `${C.danger}10`,
-                                    color: result.found ? C.success : C.danger,
+                                    background: q.found ? `${C.success}15` : `${C.danger}10`,
+                                    color: q.found ? C.success : C.danger,
                                   }}>
-                                    {result.found ? "✓" : "✗"}
+                                    {q.found ? "✓" : "✗"}
                                   </div>
-                                  {result.confidence > 0 && (
-                                    <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>{result.confidence}%</div>
+                                </td>
+                                <td style={{ ...tdStyle, maxWidth: 350, fontSize: 12 }}>{decoded}</td>
+                                <td style={{ ...tdStyle, textAlign: "center" }}>
+                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                                    <PlatformIconComponent platform={q.platform} size={16} />
+                                    <span style={{ fontSize: 11, color: C.textSecondary }}>{pd.name}</span>
+                                  </div>
+                                </td>
+                                <td style={{ ...tdStyle, textAlign: "center" }}>
+                                  <span style={{
+                                    ...tagStyle,
+                                    background: q.found ? `${C.success}12` : `${C.danger}10`,
+                                    color: q.found ? C.success : C.danger,
+                                  }}>
+                                    {q.found ? "מוזכר" : "לא נמצא"}
+                                  </span>
+                                </td>
+                                <td style={{ ...tdStyle, textAlign: "center" }}>
+                                  {q.confidence > 0 ? (
+                                    <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                                      <div style={{
+                                        width: 40, height: 4, borderRadius: 2, background: `${C.border}`,
+                                        overflow: "hidden",
+                                      }}>
+                                        <div style={{
+                                          width: `${q.confidence}%`, height: "100%", borderRadius: 2,
+                                          background: q.confidence > 60 ? C.success : q.confidence > 30 ? C.warning : C.danger,
+                                        }} />
+                                      </div>
+                                      <span style={{ fontSize: 10, color: C.textMuted }}>{q.confidence}%</span>
+                                    </div>
+                                  ) : (
+                                    <span style={{ fontSize: 10, color: C.textMuted }}>—</span>
                                   )}
                                 </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      {filteredQueries.length === 0 && (
+                        <div style={{ padding: 40, textAlign: "center", color: C.textMuted, fontSize: 13 }}>
+                          אין תוצאות לפלטפורמה שנבחרה
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Snippets section */}
+                    {filteredQueries.filter(q => q.found && q.snippet).length > 0 && (
+                      <div style={{ ...cardStyle, marginTop: 20 }}>
+                        <h3 style={{ ...sectionTitle }}>קטעי תשובה שבהם הוזכר העסק</h3>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                          {filteredQueries.filter(q => q.found && q.snippet).slice(0, 8).map((q, i) => {
+                            const pd = PLATFORM_DISPLAY[q.platform] || { name: q.platform, nameHe: q.platform, color: C.text };
+                            return (
+                              <div key={i} onClick={() => setAiQueryDetail(q as any)} style={{
+                                padding: "14px 16px", borderRadius: 14, background: `${C.success}06`,
+                                border: `1px solid ${C.success}20`, cursor: "pointer",
+                                transition: "all 0.15s",
+                              }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                                  <PlatformIconComponent platform={q.platform} size={18} />
+                                  <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{pd.name}</span>
+                                  <span style={{ fontSize: 10, color: C.textMuted }}>·</span>
+                                  <span style={{ fontSize: 11, color: C.textMuted }}>{(q.query || '').replace(/&quot;/g, '"').slice(0, 60)}</span>
+                                </div>
+                                <div style={{ fontSize: 12, color: C.textSecondary, lineHeight: 1.6, direction: "ltr", textAlign: "left" }}>
+                                  {(q.snippet || '').slice(0, 250)}{(q.snippet || '').length > 250 ? "..." : ""}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* ── SUB-TAB: SEO Organic ── */}
+                {aiSubTab === "seo" && (
+                  <div>
+                    {seoPlatformQueries.length === 0 ? (
+                      <div style={{ ...cardStyle, textAlign: "center", padding: 48 }}>
+                        <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><GoogleIcon size={36} /></div>
+                        <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>אין תוצאות אורגניות</h3>
+                        <p style={{ color: C.textMuted, fontSize: 13 }}>הרצו סריקה מלאה כדי לבדוק דירוג אורגני בגוגל</p>
+                      </div>
+                    ) : (
+                      <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+                        <div style={{ padding: "16px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 10 }}>
+                          <GoogleIcon size={22} />
+                          <h3 style={{ ...sectionTitle, margin: 0 }}>תוצאות אורגניות בגוגל</h3>
+                          <span style={{ ...tagStyle, background: `${C.primary}12`, color: C.primary, marginRight: "auto" }}>
+                            {seoPlatformQueries.filter(q => q.found).length}/{seoPlatformQueries.length} נמצאו
+                          </span>
+                        </div>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                          <thead>
+                            <tr style={{ background: C.bg }}>
+                              <th style={thStyle}>ביטוי חיפוש</th>
+                              <th style={{ ...thStyle, textAlign: "center", width: 100 }}>נמצא</th>
+                              <th style={{ ...thStyle, textAlign: "center", width: 80 }}>מיקום</th>
+                              <th style={{ ...thStyle, textAlign: "center", width: 80 }}>ביטחון</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {seoPlatformQueries.map((q, i) => {
+                              const decoded = (q.query || '').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+                              return (
+                                <tr key={i} onClick={() => setAiQueryDetail(q as any)}
+                                  style={{ borderBottom: `1px solid ${C.borderLight}`, cursor: "pointer", transition: "background 0.15s" }}
+                                  onMouseEnter={e => (e.currentTarget.style.background = C.bg)}
+                                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                                >
+                                  <td style={{ ...tdStyle, fontSize: 12 }}>{decoded}</td>
+                                  <td style={{ ...tdStyle, textAlign: "center" }}>
+                                    <span style={{
+                                      ...tagStyle,
+                                      background: q.found ? `${C.success}12` : `${C.danger}10`,
+                                      color: q.found ? C.success : C.danger,
+                                    }}>
+                                      {q.found ? "מדורג" : "לא נמצא"}
+                                    </span>
+                                  </td>
+                                  <td style={{ ...tdStyle, textAlign: "center", fontWeight: 700, color: q.position ? C.text : C.textMuted }}>
+                                    {q.position ? `#${q.position}` : "—"}
+                                  </td>
+                                  <td style={{ ...tdStyle, textAlign: "center", fontSize: 11, color: C.textMuted }}>
+                                    {q.confidence > 0 ? `${q.confidence}%` : "—"}
+                                  </td>
+                                </tr>
                               );
                             })}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                {/* Snippets section */}
-                {aiQueries.filter(q => q.found && q.snippet).length > 0 && (
-                  <div style={{ ...cardStyle, marginTop: 20 }}>
-                    <h3 style={{ ...sectionTitle }}>💬 קטעי תשובה שבהם הוזכר העסק</h3>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                      {aiQueries.filter(q => q.found && q.snippet).slice(0, 8).map((q, i) => {
-                        const pd = PLATFORM_DISPLAY[q.platform] || { name: q.platform, icon: "🔍" };
-                        return (
-                          <div key={i} style={{
-                            padding: "14px 16px", borderRadius: 14, background: `${C.success}06`,
-                            border: `1px solid ${C.success}20`,
-                          }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                              <span style={{ fontSize: 16 }}>{pd.icon}</span>
-                              <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{pd.name}</span>
-                              <span style={{ fontSize: 10, color: C.textMuted }}>·</span>
-                              <span style={{ fontSize: 11, color: C.textMuted }}>{(q.query || '').replace(/&quot;/g, '"').slice(0, 60)}</span>
-                            </div>
-                            <div style={{ fontSize: 12, color: C.textSecondary, lineHeight: 1.6, direction: "ltr", textAlign: "left" }}>
-                              {(q.snippet || '').slice(0, 250)}{(q.snippet || '').length > 250 ? "..." : ""}
+                {/* ── SUB-TAB: AI Overview ── */}
+                {aiSubTab === "ai_overview" && (
+                  <div>
+                    {aiOverviewQueries.length === 0 ? (
+                      <div style={{ ...cardStyle, textAlign: "center", padding: 48 }}>
+                        <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><AIOverviewIcon size={36} /></div>
+                        <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>אין תוצאות AI Overview</h3>
+                        <p style={{ color: C.textMuted, fontSize: 13 }}>הרצו סריקה מלאה כדי לבדוק הופעה ב-AI Overview של גוגל</p>
+                      </div>
+                    ) : (
+                      <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+                        <div style={{ padding: "16px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 10 }}>
+                          <AIOverviewIcon size={22} />
+                          <h3 style={{ ...sectionTitle, margin: 0 }}>Google AI Overview</h3>
+                          <span style={{ ...tagStyle, background: `${C.success}12`, color: C.success, marginRight: "auto" }}>
+                            {aiOverviewQueries.filter(q => q.found).length}/{aiOverviewQueries.length} מופיעים
+                          </span>
+                        </div>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                          <thead>
+                            <tr style={{ background: C.bg }}>
+                              <th style={{ ...thStyle, width: 36 }}></th>
+                              <th style={thStyle}>ביטוי</th>
+                              <th style={{ ...thStyle, textAlign: "center", width: 100 }}>מופיע ב-AIO</th>
+                              <th style={{ ...thStyle, textAlign: "center", width: 80 }}>ביטחון</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {aiOverviewQueries.map((q, i) => {
+                              const decoded = (q.query || '').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+                              return (
+                                <tr key={i} onClick={() => setAiQueryDetail(q as any)}
+                                  style={{ borderBottom: `1px solid ${C.borderLight}`, cursor: "pointer", transition: "background 0.15s" }}
+                                  onMouseEnter={e => (e.currentTarget.style.background = C.bg)}
+                                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                                >
+                                  <td style={{ ...tdStyle, textAlign: "center" }}>
+                                    <div style={{
+                                      width: 28, height: 28, borderRadius: 8, margin: "0 auto",
+                                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14,
+                                      background: q.found ? `${C.success}15` : `${C.danger}10`,
+                                      color: q.found ? C.success : C.danger,
+                                    }}>{q.found ? "✓" : "✗"}</div>
+                                  </td>
+                                  <td style={{ ...tdStyle, fontSize: 12 }}>{decoded}</td>
+                                  <td style={{ ...tdStyle, textAlign: "center" }}>
+                                    <span style={{
+                                      ...tagStyle,
+                                      background: q.found ? `${C.success}12` : `${C.danger}10`,
+                                      color: q.found ? C.success : C.danger,
+                                    }}>{q.found ? "מופיע" : "לא מופיע"}</span>
+                                  </td>
+                                  <td style={{ ...tdStyle, textAlign: "center", fontSize: 11, color: C.textMuted }}>
+                                    {q.confidence > 0 ? `${q.confidence}%` : "—"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── SUB-TAB: GEO Queries ── */}
+                {aiSubTab === "geo" && (
+                  <div>
+                    {geoQueries.length === 0 ? (
+                      <div style={{ ...cardStyle, textAlign: "center", padding: 48 }}>
+                        <div style={{ fontSize: 36, marginBottom: 16 }}>🌍</div>
+                        <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>אין שאילתות GEO פעילות</h3>
+                        <p style={{ color: C.textMuted, fontSize: 13 }}>שאילתות שבהן העסק מוזכר ב-AI יופיעו כאן</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ ...cardStyle, marginBottom: 16, padding: "16px 20px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                            <span style={{ fontSize: 22 }}>🌍</span>
+                            <div>
+                              <h3 style={{ ...sectionTitle, margin: 0 }}>שאילתות GEO — קידום בבינה מלאכותית</h3>
+                              <p style={{ fontSize: 12, color: C.textMuted, margin: "4px 0 0" }}>
+                                שאילתות שבהן העסק כבר מוזכר בתוצאות AI — אלו הן נקודות חוזק ב-GEO
+                              </p>
                             </div>
                           </div>
-                        );
-                      })}
+                        </div>
+                        <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                            <thead>
+                              <tr style={{ background: C.bg }}>
+                                <th style={thStyle}>שאילתה</th>
+                                <th style={{ ...thStyle, textAlign: "center", width: 120 }}>פלטפורמה</th>
+                                <th style={{ ...thStyle, textAlign: "center", width: 80 }}>ביטחון</th>
+                                <th style={{ ...thStyle, textAlign: "center", width: 60 }}></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {geoQueries.map((q, i) => {
+                                const pd = PLATFORM_DISPLAY[q.platform] || { name: q.platform, nameHe: q.platform, color: C.text };
+                                const decoded = (q.query || '').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+                                return (
+                                  <tr key={i}
+                                    onClick={() => setAiQueryDetail(q as any)}
+                                    style={{ borderBottom: `1px solid ${C.borderLight}`, cursor: "pointer", transition: "background 0.15s" }}
+                                    onMouseEnter={e => (e.currentTarget.style.background = C.bg)}
+                                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                                  >
+                                    <td style={{ ...tdStyle, fontSize: 12 }}>{decoded}</td>
+                                    <td style={{ ...tdStyle, textAlign: "center" }}>
+                                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                                        <PlatformIconComponent platform={q.platform} size={16} />
+                                        <span style={{ fontSize: 11, color: C.textSecondary }}>{pd.name}</span>
+                                      </div>
+                                    </td>
+                                    <td style={{ ...tdStyle, textAlign: "center" }}>
+                                      <span style={{
+                                        fontSize: 12, fontWeight: 700,
+                                        color: q.confidence > 60 ? C.success : q.confidence > 30 ? C.warning : C.danger,
+                                      }}>{q.confidence}%</span>
+                                    </td>
+                                    <td style={{ ...tdStyle, textAlign: "center" }}>
+                                      <span style={{ fontSize: 10, color: C.primary, cursor: "pointer" }}>פרטים ←</span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Query Detail Popup Modal ── */}
+                {aiQueryDetail && (
+                  <div onClick={() => setAiQueryDetail(null)} style={{
+                    position: "fixed", inset: 0, zIndex: 9999,
+                    background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <div onClick={e => e.stopPropagation()} style={{
+                      background: C.card, borderRadius: 24, width: "90%", maxWidth: 600,
+                      maxHeight: "80vh", overflow: "auto", padding: 32,
+                      boxShadow: "0 24px 80px rgba(0,0,0,0.2)",
+                    }}>
+                      {/* Header */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          <PlatformIconComponent platform={aiQueryDetail.platform} size={28} />
+                          <div>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
+                              {(PLATFORM_DISPLAY[aiQueryDetail.platform] || { name: aiQueryDetail.platform }).name}
+                            </div>
+                            <div style={{ fontSize: 11, color: C.textMuted }}>פרטי שאילתה</div>
+                          </div>
+                        </div>
+                        <button onClick={() => setAiQueryDetail(null)} style={{
+                          width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.border}`,
+                          background: "transparent", cursor: "pointer", fontSize: 16, color: C.textMuted,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                        }}>✕</button>
+                      </div>
+
+                      {/* Query text */}
+                      <div style={{
+                        background: C.bg, borderRadius: 14, padding: "14px 18px", marginBottom: 20,
+                        border: `1px solid ${C.border}`,
+                      }}>
+                        <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>שאילתה</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: C.text, lineHeight: 1.5 }}>
+                          {(aiQueryDetail.query || '').replace(/&quot;/g, '"').replace(/&amp;/g, '&')}
+                        </div>
+                      </div>
+
+                      {/* Status row */}
+                      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+                        <div style={{
+                          flex: 1, background: aiQueryDetail.found ? `${C.success}08` : `${C.danger}08`,
+                          borderRadius: 14, padding: "14px 16px", textAlign: "center",
+                          border: `1px solid ${aiQueryDetail.found ? C.success : C.danger}20`,
+                        }}>
+                          <div style={{ fontSize: 24, fontWeight: 800, color: aiQueryDetail.found ? C.success : C.danger }}>
+                            {aiQueryDetail.found ? "נמצא" : "לא נמצא"}
+                          </div>
+                          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>סטטוס הופעה</div>
+                        </div>
+                        <div style={{
+                          flex: 1, background: C.bg, borderRadius: 14, padding: "14px 16px", textAlign: "center",
+                          border: `1px solid ${C.border}`,
+                        }}>
+                          <div style={{ fontSize: 24, fontWeight: 800, color: C.text }}>
+                            {aiQueryDetail.confidence > 0 ? `${aiQueryDetail.confidence}%` : "—"}
+                          </div>
+                          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>רמת ביטחון</div>
+                        </div>
+                        {aiQueryDetail.position && (
+                          <div style={{
+                            flex: 1, background: C.bg, borderRadius: 14, padding: "14px 16px", textAlign: "center",
+                            border: `1px solid ${C.border}`,
+                          }}>
+                            <div style={{ fontSize: 24, fontWeight: 800, color: C.primary }}>#{aiQueryDetail.position}</div>
+                            <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>מיקום</div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Snippet */}
+                      {aiQueryDetail.snippet && (
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 8 }}>תוכן התשובה:</div>
+                          <div style={{
+                            background: C.bg, borderRadius: 14, padding: "16px 18px",
+                            border: `1px solid ${C.border}`,
+                            fontSize: 13, color: C.textSecondary, lineHeight: 1.8,
+                            direction: "ltr", textAlign: "left", maxHeight: 200, overflow: "auto",
+                          }}>
+                            {aiQueryDetail.snippet}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Scan mode badge */}
+                      <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
+                        <span style={{
+                          ...tagStyle, fontSize: 9,
+                          background: aiQueryDetail.scanMode === 'real' ? `${C.success}10` : `${C.warning}10`,
+                          color: aiQueryDetail.scanMode === 'real' ? C.success : C.warning,
+                        }}>
+                          {aiQueryDetail.scanMode === 'real' ? 'סריקה אמיתית' : aiQueryDetail.scanMode === 'simulated' ? 'סימולציה' : 'לא זמין'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -2324,7 +2813,7 @@ export default function SeoPlanDetail() {
                               <div style={{ display: "flex", gap: 4 }}>
                                 {Array.from(aiData.platforms).map(pid => {
                                   const pd = PLATFORM_DISPLAY[pid];
-                                  return pd ? <span key={pid} title={pd.name} style={{ fontSize: 16 }}>{pd.icon}</span> : null;
+                                  return pd ? <span key={pid} title={pd.name} style={{ display: "inline-flex" }}><PlatformIconComponent platform={pid} size={18} /></span> : null;
                                 })}
                               </div>
                             )}
@@ -2530,14 +3019,15 @@ export default function SeoPlanDetail() {
                               </div>
                               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                                 {data.platforms.map(pid => {
-                                  const pd = PLATFORM_DISPLAY[pid] || { name: pid, icon: "🔍" };
+                                  const pd = PLATFORM_DISPLAY[pid] || { name: pid, nameHe: pid, color: C.text };
                                   return (
                                     <span key={pid} style={{
                                       ...tagStyle,
                                       background: `${C.danger}10`,
                                       color: C.danger,
+                                      display: "inline-flex", alignItems: "center", gap: 4,
                                     }}>
-                                      {pd.icon} לא מופיע ב-{pd.name}
+                                      <PlatformIconComponent platform={pid} size={14} /> לא מופיע ב-{pd.name}
                                     </span>
                                   );
                                 })}
