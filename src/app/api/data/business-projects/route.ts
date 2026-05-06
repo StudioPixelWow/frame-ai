@@ -121,19 +121,16 @@ export async function GET(req: NextRequest) {
 
     const { data: rows, error } = await query;
     if (error) {
-      // If the table doesn't exist yet, return empty instead of crashing
-      if (isTableMissingError(error.message)) {
-        console.warn('[API] GET /api/data/business-projects table not found — returning empty');
-        return NextResponse.json([]);
-      }
-      console.error('[API] GET /api/data/business-projects supabase error:', error);
-      return NextResponse.json({ error: error.message, code: (error as any).code ?? null }, { status: 500 });
+      // Return empty array for any table/schema error — this is a non-critical read
+      // and a 500 causes the useData hook to retry infinitely, freezing the UI
+      console.warn('[API] GET /api/data/business-projects supabase error (returning []):', error.message);
+      return NextResponse.json([]);
     }
     return NextResponse.json((rows ?? []).map((r) => rowToProject(r as Row)));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[API] GET /api/data/business-projects error:', msg);
-    return NextResponse.json({ error: `Failed to fetch business projects: ${msg}` }, { status: 500 });
+    console.warn('[API] GET /api/data/business-projects error (returning []):', msg);
+    return NextResponse.json([]);
   }
 }
 
