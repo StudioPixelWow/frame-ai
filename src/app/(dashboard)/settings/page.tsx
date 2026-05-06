@@ -97,16 +97,6 @@ export default function SettingsPage() {
   const [gmailLastSync, setGmailLastSync] = useState<string | null>(null);
   const [gmailLastError, setGmailLastError] = useState('');
   const [gmailConnecting, setGmailConnecting] = useState(false);
-  const [gmailTesting, setGmailTesting] = useState(false);
-  const [gmailSetupError, setGmailSetupError] = useState('');
-  const [gmailConfigStatus, setGmailConfigStatus] = useState<{
-    configured: boolean;
-    vars: { GOOGLE_CLIENT_ID: boolean; GOOGLE_CLIENT_SECRET: boolean; GOOGLE_REDIRECT_URI: boolean };
-    redirectUri: string;
-    isLocalhost: boolean;
-    clientIdPreview: string | null;
-  } | null>(null);
-  const [showSetupHelp, setShowSetupHelp] = useState(false);
 
   // Local state for all settings
   const [general, setGeneral] = useState<GeneralSettings>({
@@ -244,30 +234,6 @@ export default function SettingsPage() {
     }
   }, [gmailSettingsHook.data]);
 
-  // Pre-check Gmail OAuth availability & config status
-  useEffect(() => {
-    // Always fetch config status for dev info
-    fetch('/api/auth/gmail/status').then(r => r.json()).then(data => {
-      setGmailConfigStatus(data);
-      if (!data.configured) {
-        setGmailSetupError('חסרים משתני סביבה נדרשים לחיבור Gmail');
-      } else {
-        setGmailSetupError('');
-      }
-    }).catch(() => {});
-
-    if (gmailStatus === 'not_connected') {
-      fetch('/api/auth/gmail/url').then(async r => {
-        if (!r.ok) {
-          const data = await r.json().catch(() => ({}));
-          const err = data.error || '';
-          if (err.includes('GOOGLE_CLIENT_ID') || err.includes('הגדרות השרת')) {
-            setGmailSetupError(err);
-          }
-        }
-      }).catch(() => {});
-    }
-  }, [gmailStatus]);
 
   // Load stock media settings on mount
   useEffect(() => {
@@ -278,128 +244,8 @@ export default function SettingsPage() {
     }).catch(() => {});
   }, []);
 
-  // Gmail actions
-  const handleGmailConnect = async () => {
-    setGmailConnecting(true);
-    try {
-      // 1. Get the Google OAuth URL from our API
-      const urlRes = await fetch('/api/auth/gmail/url');
-      const urlData = await urlRes.json();
-      if (!urlRes.ok || !urlData.url) {
-        const errMsg = urlData.error || 'שגיאה בהתחלת חיבור Gmail';
-        toast(errMsg, 'error');
-        // Persist setup error for inline display
-        if (errMsg.includes('GOOGLE_CLIENT_ID') || errMsg.includes('הגדרות השרת')) {
-          setGmailSetupError(errMsg);
-        }
-        setGmailConnecting(false);
-        return;
-      }
-      // Clear any previous setup error on successful URL fetch
-      setGmailSetupError('');
 
-      // 2. Open Google OAuth in a popup window
-      const width = 520;
-      const height = 640;
-      const left = window.screenX + (window.outerWidth - width) / 2;
-      const top = window.screenY + (window.outerHeight - height) / 2;
-      const popup = window.open(
-        urlData.url,
-        'gmail-oauth',
-        `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes`
-      );
 
-      if (!popup) {
-        // Popup blocked — fallback to redirect
-        toast('חלון הקופץ נחסם. מפנה לדף ההתחברות...', 'error');
-        window.location.href = urlData.url;
-        return;
-      }
-
-      // 3. Listen for the OAuth success message from the popup
-      const handleMessage = (event: MessageEvent) => {
-        if (event.data?.type === 'gmail-oauth-success') {
-          window.removeEventListener('message', handleMessage);
-          clearInterval(pollTimer);
-          setGmailStatus('connected');
-          setGmailEmail(event.data.email || '');
-          setGmailLastSync(new Date().toISOString());
-          setGmailLastError('');
-          toast('Gmail חובר בהצלחה', 'success');
-          gmailSettingsHook.refetch();
-          setGmailConnecting(false);
-        }
-      };
-      window.addEventListener('message', handleMessage);
-
-      // 4. Poll to detect if popup was closed without completing
-      const pollTimer = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(pollTimer);
-          window.removeEventListener('message', handleMessage);
-          // Check if we got connected (the message handler may have fired)
-          gmailSettingsHook.refetch();
-          setGmailConnecting(false);
-        }
-      }, 500);
-
-    } catch (err: any) {
-      console.error('[Gmail OAuth] Error:', err);
-      toast('שגיאה בחיבור Gmail', 'error');
-      setGmailConnecting(false);
-    }
-  };
-
-  const handleGmailDisconnect = async () => {
-    setGmailConnecting(true);
-    try {
-      const res = await fetch('/api/settings/gmail/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'disconnect' }),
-      });
-      const data = await res.json();
-      if (data.status === 'not_connected') {
-        setGmailStatus('not_connected');
-        setGmailEmail('');
-        setGmailLastSync(null);
-        setGmailLastError('');
-        toast('Gmail נותק בהצלחה', 'success');
-        gmailSettingsHook.refetch();
-      }
-    } catch {
-      toast('שגיאה בניתוק Gmail', 'error');
-    } finally {
-      setGmailConnecting(false);
-    }
-  };
-
-  const handleGmailReconnect = async () => {
-    // Reconnect uses the same OAuth flow as connect
-    await handleGmailConnect();
-  };
-
-  const handleGmailTest = async () => {
-    setGmailTesting(true);
-    try {
-      const res = await fetch('/api/settings/gmail/test', { method: 'POST' });
-      const data = await res.json();
-      if (data.status === 'connected') {
-        setGmailStatus('connected');
-        setGmailLastSync(new Date().toISOString());
-        setGmailLastError('');
-        toast('בדיקת חיבור Gmail — תקין', 'success');
-      } else {
-        setGmailStatus(data.status === 'error' ? 'error' : 'not_connected');
-        setGmailLastError(data.message || '');
-        toast(data.message || 'שגיאה בבדיקת החיבור', 'error');
-      }
-    } catch {
-      toast('שגיאה בבדיקת חיבור Gmail', 'error');
-    } finally {
-      setGmailTesting(false);
-    }
-  };
 
   const saveGmailSettings = async () => {
     const g = gmailSettingsHook.data?.[0];
@@ -1093,6 +939,50 @@ export default function SettingsPage() {
     </div>
   );
 
+  const [gmailAppPassword, setGmailAppPassword] = useState('');
+  const [gmailConnecting, setGmailConnecting] = useState(false);
+  const [gmailTestResult, setGmailTestResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null);
+
+  const handleGmailConnect = async (testOnly = false) => {
+    if (!gmailEmail || !gmailAppPassword) return;
+    setGmailConnecting(true);
+    setGmailTestResult(null);
+    try {
+      const res = await fetch('/api/settings/gmail/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: testOnly ? 'test' : 'connect',
+          email: gmailEmail,
+          appPassword: gmailAppPassword,
+          senderName: gmailSenderName,
+        }),
+      });
+      const data = await res.json();
+      setGmailTestResult(data.success ? { success: true, message: data.message } : { success: false, error: data.error });
+      if (data.success && !testOnly) {
+        setGmailStatus('connected');
+        setGmailLastSync(new Date().toISOString());
+      }
+    } catch {
+      setGmailTestResult({ success: false, error: 'שגיאת רשת' });
+    } finally { setGmailConnecting(false); }
+  };
+
+  const handleGmailDisconnect = async () => {
+    try {
+      await fetch('/api/settings/gmail/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'disconnect' }),
+      });
+      setGmailStatus('not_connected');
+      setGmailEmail('');
+      setGmailAppPassword('');
+      setGmailTestResult(null);
+    } catch {}
+  };
+
   const renderGmailSection = () => {
     const statusConfig: Record<GmailConnectionStatus, { label: string; color: string; icon: string }> = {
       connected: { label: 'מחובר', color: '#22c55e', icon: '✅' },
@@ -1104,11 +994,12 @@ export default function SettingsPage() {
 
     return (
       <div>
-        <h2 style={sectionHeaderStyle}>Gmail Integration</h2>
+        <h2 style={sectionHeaderStyle}>חיבור Gmail — מייל המערכת</h2>
 
-        {/* Connection Status Card */}
+        {/* Simple Gmail Connection — App Password */}
         <div style={{ ...cardStyle, border: `1px solid ${currentStatus.color}30`, marginBottom: '1.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+          {/* Status badge */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <div style={{
                 width: 48, height: 48, borderRadius: 12,
@@ -1119,7 +1010,7 @@ export default function SettingsPage() {
                 {currentStatus.icon}
               </div>
               <div>
-                <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--foreground)' }}>סטטוס חיבור Gmail</div>
+                <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--foreground)' }}>מייל המערכת</div>
                 <div style={{ fontSize: '0.85rem', color: currentStatus.color, fontWeight: 600, marginTop: 2 }}>
                   {currentStatus.label}
                 </div>
@@ -1134,8 +1025,8 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Connected details */}
-          {gmailStatus === 'connected' && (
+          {/* Connected account info */}
+          {gmailStatus === 'connected' && gmailEmail && (
             <div style={{
               background: 'var(--surface)', borderRadius: 8, padding: '0.75rem 1rem',
               border: '1px solid var(--border)', marginBottom: '1rem',
@@ -1165,236 +1056,6 @@ export default function SettingsPage() {
               {gmailLastError}
             </div>
           )}
-
-          {/* Developer config status panel */}
-          {gmailConfigStatus && (
-            <div style={{
-              background: gmailConfigStatus.configured ? '#22c55e08' : '#f59e0b10',
-              borderRadius: 8, padding: '0.85rem 1rem',
-              border: `1px solid ${gmailConfigStatus.configured ? '#22c55e30' : '#f59e0b30'}`,
-              marginBottom: '1rem',
-            }}>
-              {/* Config status header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: gmailConfigStatus.configured ? '#22c55e' : '#f59e0b' }}>
-                  {gmailConfigStatus.configured ? '✅ הגדרות OAuth תקינות' : '⚠️ הגדרת Google OAuth חסרה'}
-                </div>
-                <button onClick={() => setShowSetupHelp(!showSetupHelp)} style={{
-                  background: 'transparent', border: '1px solid var(--border)', borderRadius: 6,
-                  padding: '0.25rem 0.6rem', fontSize: '0.72rem', cursor: 'pointer',
-                  color: 'var(--foreground-muted)',
-                }}>
-                  {showSetupHelp ? 'הסתר מדריך' : '🔧 מדריך הגדרה'}
-                </button>
-              </div>
-
-              {/* Env var status indicators */}
-              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', fontSize: '0.78rem', marginBottom: showSetupHelp ? '0.75rem' : 0 }}>
-                {([
-                  { key: 'GOOGLE_CLIENT_ID', label: 'Client ID', set: gmailConfigStatus.vars.GOOGLE_CLIENT_ID },
-                  { key: 'GOOGLE_CLIENT_SECRET', label: 'Client Secret', set: gmailConfigStatus.vars.GOOGLE_CLIENT_SECRET },
-                  { key: 'GOOGLE_REDIRECT_URI', label: 'Redirect URI', set: gmailConfigStatus.vars.GOOGLE_REDIRECT_URI },
-                ] as const).map(v => (
-                  <div key={v.key} style={{
-                    display: 'flex', gap: '0.3rem', alignItems: 'center',
-                    padding: '0.2rem 0.5rem', borderRadius: 4,
-                    background: v.set ? '#22c55e10' : '#ef444410',
-                    border: `1px solid ${v.set ? '#22c55e25' : '#ef444425'}`,
-                  }}>
-                    <span style={{ color: v.set ? '#22c55e' : '#ef4444', fontSize: '0.72rem' }}>
-                      {v.set ? '●' : '○'}
-                    </span>
-                    <code style={{ fontSize: '0.7rem', color: 'var(--foreground)', fontFamily: 'monospace' }}>{v.key}</code>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--foreground-muted)' }}>
-                      {v.set ? (v.key === 'GOOGLE_CLIENT_ID' && gmailConfigStatus.clientIdPreview ? gmailConfigStatus.clientIdPreview : '✓') : 'חסר'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Redirect URI info */}
-              {gmailConfigStatus.configured && (
-                <div style={{ fontSize: '0.72rem', color: 'var(--foreground-muted)', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                  <span>Redirect URI:</span>
-                  <code style={{ fontSize: '0.68rem', background: 'var(--surface)', padding: '0.1rem 0.35rem', borderRadius: 3, fontFamily: 'monospace' }}>
-                    {gmailConfigStatus.redirectUri}
-                  </code>
-                  {gmailConfigStatus.isLocalhost && (
-                    <span style={{ color: '#3b82f6', fontSize: '0.65rem' }}>🏠 localhost</span>
-                  )}
-                </div>
-              )}
-
-              {/* Expandable setup help */}
-              {showSetupHelp && (
-                <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.75rem', marginTop: '0.5rem' }}>
-                  <div style={{ fontSize: '0.82rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--foreground)' }}>
-                    📋 מדריך הגדרה מהיר
-                  </div>
-
-                  {/* Step 1 */}
-                  <div style={{ marginBottom: '0.75rem' }}>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--foreground)', marginBottom: '0.25rem' }}>
-                      1. צור פרויקט ב-Google Cloud Console
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)', lineHeight: 1.6 }}>
-                      {'עבור ל-'}{' '}
-                      <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer"
-                        style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
-                        Google Cloud Console → Credentials
-                      </a>
-                      {' '}{'וצור OAuth 2.0 Client ID מסוג "Web application".'}
-                    </div>
-                  </div>
-
-                  {/* Step 2 */}
-                  <div style={{ marginBottom: '0.75rem' }}>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--foreground)', marginBottom: '0.25rem' }}>
-                      2. הגדר Authorized redirect URIs
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)', lineHeight: 1.6 }}>
-                      הוסף את הכתובת הבאה ל-Authorized redirect URIs:
-                    </div>
-                    <code style={{
-                      display: 'block', background: 'var(--surface)', borderRadius: 4, padding: '0.35rem 0.5rem',
-                      fontSize: '0.72rem', color: 'var(--accent)', marginTop: '0.25rem', direction: 'ltr', textAlign: 'left',
-                      border: '1px solid var(--border)', fontFamily: 'monospace',
-                    }}>
-                      http://localhost:3000/auth/gmail/callback
-                    </code>
-                  </div>
-
-                  {/* Step 3 */}
-                  <div style={{ marginBottom: '0.75rem' }}>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--foreground)', marginBottom: '0.25rem' }}>
-                      3. צור קובץ <code style={{ fontSize: '0.72rem', background: 'var(--surface-raised)', padding: '0.1rem 0.3rem', borderRadius: 3 }}>.env.local</code> בתיקיית הפרויקט
-                    </div>
-                    <pre style={{
-                      background: '#1a1a2e', borderRadius: 6, padding: '0.65rem 0.75rem',
-                      fontSize: '0.72rem', color: '#e2e8f0', marginTop: '0.25rem',
-                      border: '1px solid #334155', overflowX: 'auto', direction: 'ltr', textAlign: 'left',
-                      fontFamily: 'monospace', lineHeight: 1.7,
-                    }}>
-{`GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:3000/auth/gmail/callback`}
-                    </pre>
-                  </div>
-
-                  {/* Step 4 */}
-                  <div style={{ marginBottom: '0.5rem' }}>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--foreground)', marginBottom: '0.25rem' }}>
-                      4. הפעל מחדש את שרת הפיתוח
-                    </div>
-                    <code style={{
-                      display: 'block', background: '#1a1a2e', borderRadius: 4, padding: '0.35rem 0.5rem',
-                      fontSize: '0.72rem', color: '#e2e8f0', direction: 'ltr', textAlign: 'left',
-                      border: '1px solid #334155', fontFamily: 'monospace',
-                    }}>
-                      npm run dev
-                    </code>
-                  </div>
-
-                  {/* Localhost note */}
-                  <div style={{
-                    marginTop: '0.75rem', padding: '0.5rem 0.75rem', borderRadius: 6,
-                    background: '#3b82f608', border: '1px solid #3b82f620',
-                    fontSize: '0.72rem', color: '#3b82f6', lineHeight: 1.6,
-                  }}>
-                    💡 <strong>פיתוח מקומי:</strong> Google OAuth תומך ב-localhost ללא HTTPS.
-                    ודא שה-redirect URI בקונסול תואם בדיוק לכתובת ב-<code style={{ fontSize: '0.68rem' }}>.env.local</code>.
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Fallback: setup error without config status (API failed) */}
-          {gmailSetupError && !gmailConfigStatus && (
-            <div style={{
-              background: '#f59e0b10', borderRadius: 8, padding: '1rem',
-              border: '1px solid #f59e0b30', marginBottom: '1rem',
-            }}>
-              <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#f59e0b', marginBottom: '0.5rem' }}>
-                ⚠️ הגדרת Google OAuth חסרה
-              </div>
-              <div style={{ fontSize: '0.82rem', color: 'var(--foreground-muted)', lineHeight: 1.6 }}>
-                {gmailSetupError}
-              </div>
-            </div>
-          )}
-
-          {/* Action buttons */}
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {gmailStatus === 'not_connected' && (
-              <button
-                className="mod-btn"
-                onClick={handleGmailConnect}
-                disabled={gmailConnecting || (gmailConfigStatus !== null && !gmailConfigStatus.configured)}
-                title={gmailConfigStatus && !gmailConfigStatus.configured ? 'יש להגדיר משתני סביבה לפני חיבור Gmail — ראה מדריך הגדרה למעלה' : undefined}
-                style={{
-                  background: (gmailConfigStatus && !gmailConfigStatus.configured) ? '#9ca3af' : '#ea4335',
-                  color: '#fff', padding: '0.5rem 1.25rem',
-                  borderRadius: 8, fontSize: '0.85rem', fontWeight: 600, border: 'none',
-                  cursor: (gmailConfigStatus && !gmailConfigStatus.configured) ? 'not-allowed' : 'pointer',
-                  opacity: gmailConnecting ? 0.7 : 1,
-                }}
-              >
-                {gmailConnecting ? 'מתחבר...' : (gmailConfigStatus && !gmailConfigStatus.configured) ? '⚠️ הגדרה חסרה' : 'חבר Gmail'}
-              </button>
-            )}
-            {gmailStatus === 'connected' && (
-              <>
-                <button
-                  className="mod-btn-ghost"
-                  onClick={handleGmailTest}
-                  disabled={gmailTesting}
-                  style={{ padding: '0.5rem 1rem', borderRadius: 8, fontSize: '0.85rem' }}
-                >
-                  {gmailTesting ? 'בודק...' : 'בדיקת חיבור'}
-                </button>
-                <button
-                  className="mod-btn-ghost"
-                  onClick={handleGmailReconnect}
-                  disabled={gmailConnecting}
-                  style={{ padding: '0.5rem 1rem', borderRadius: 8, fontSize: '0.85rem' }}
-                >
-                  {gmailConnecting ? 'מתחבר מחדש...' : 'חבר מחדש'}
-                </button>
-                <button
-                  className="mod-btn-ghost"
-                  onClick={handleGmailDisconnect}
-                  disabled={gmailConnecting}
-                  style={{ padding: '0.5rem 1rem', borderRadius: 8, fontSize: '0.85rem', color: '#ef4444' }}
-                >
-                  נתק Gmail
-                </button>
-              </>
-            )}
-            {gmailStatus === 'error' && (
-              <>
-                <button
-                  className="mod-btn"
-                  onClick={handleGmailReconnect}
-                  disabled={gmailConnecting}
-                  style={{
-                    background: '#ea4335', color: '#fff', padding: '0.5rem 1.25rem',
-                    borderRadius: 8, fontSize: '0.85rem', fontWeight: 600, border: 'none', cursor: 'pointer',
-                  }}
-                >
-                  {gmailConnecting ? 'מתחבר...' : 'חבר מחדש'}
-                </button>
-                <button
-                  className="mod-btn-ghost"
-                  onClick={handleGmailDisconnect}
-                  disabled={gmailConnecting}
-                  style={{ padding: '0.5rem 1rem', borderRadius: 8, fontSize: '0.85rem', color: '#ef4444' }}
-                >
-                  נתק Gmail
-                </button>
-              </>
-            )}
-          </div>
         </div>
 
         {/* Sender Settings Card */}
@@ -1502,16 +1163,92 @@ GOOGLE_REDIRECT_URI=http://localhost:3000/auth/gmail/callback`}
           ))}
         </div>
 
-        {/* Info note */}
+        {/* Connection Form */}
+        <div style={cardStyle}>
+          <div style={{ ...formGroupStyle, gridTemplateColumns: '1fr' }}>
+            <div>
+              <label style={labelStyle}>כתובת Gmail *</label>
+              <input
+                type="email"
+                value={gmailEmail}
+                onChange={e => setGmailEmail(e.target.value)}
+                style={{ ...inputStyle, direction: 'ltr' }}
+                placeholder="your.email@gmail.com"
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>סיסמת אפליקציה (App Password) *</label>
+              <input
+                type="password"
+                value={gmailAppPassword}
+                onChange={e => setGmailAppPassword(e.target.value)}
+                style={{ ...inputStyle, direction: 'ltr' }}
+                placeholder="xxxx xxxx xxxx xxxx"
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>שם השולח (יופיע בשדה From)</label>
+              <input
+                type="text"
+                value={gmailSenderName}
+                onChange={e => setGmailSenderName(e.target.value)}
+                style={inputStyle}
+                placeholder="Studio Pixel"
+              />
+            </div>
+          </div>
+
+          {/* Test result */}
+          {gmailTestResult && (
+            <div style={{
+              padding: '0.7rem 1rem', borderRadius: 8, marginBottom: '1rem',
+              background: gmailTestResult.success ? '#22c55e10' : '#ef444410',
+              border: `1px solid ${gmailTestResult.success ? '#22c55e30' : '#ef444430'}`,
+              fontSize: '0.85rem', color: gmailTestResult.success ? '#22c55e' : '#ef4444',
+            }}>
+              {gmailTestResult.success ? `✓ ${gmailTestResult.message || 'החיבור תקין!'}` : `✗ ${gmailTestResult.error}`}
+            </div>
+          )}
+
+          {/* Buttons */}
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              style={{ ...buttonStyle, opacity: gmailConnecting || !gmailEmail || !gmailAppPassword ? 0.5 : 1 }}
+              onClick={() => handleGmailConnect(true)}
+              disabled={gmailConnecting || !gmailEmail || !gmailAppPassword}
+            >
+              {gmailConnecting ? 'בודק...' : '🔌 בדוק חיבור'}
+            </button>
+            <button
+              style={{ ...buttonStyle, background: '#22c55e', color: '#fff', border: '1px solid #22c55e', opacity: gmailConnecting || !gmailEmail || !gmailAppPassword ? 0.5 : 1 }}
+              onClick={() => handleGmailConnect(false)}
+              disabled={gmailConnecting || !gmailEmail || !gmailAppPassword}
+            >
+              {gmailConnecting ? 'מחבר...' : '💾 חבר ושמור'}
+            </button>
+            {gmailStatus === 'connected' && (
+              <button
+                style={{ ...buttonStyle, color: '#ef4444', border: '1px solid #ef444430' }}
+                onClick={handleGmailDisconnect}
+              >
+                נתק Gmail
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Setup guide */}
         <div style={{
           background: 'var(--accent)08', border: '1px solid var(--accent)20',
           borderRadius: 10, padding: '1rem', fontSize: '0.82rem', color: 'var(--foreground-muted)',
-          lineHeight: 1.7,
+          lineHeight: 1.8,
         }}>
-          <strong style={{ color: 'var(--foreground)' }}>שים לב:</strong>{' '}
-          חיבור Gmail משתמש ב-OAuth 2.0 של Google ומאפשר לפלטפורמה לשלוח ולקרוא אימיילים בשמך.
-          אין אחסון של סיסמאות — רק טוקן גישה מאובטח.
-          ניתן לנתק בכל עת.
+          <strong style={{ color: 'var(--foreground)' }}>איך ליצור סיסמת אפליקציה:</strong><br />
+          1. נכנסים ל-<span style={{ direction: 'ltr', display: 'inline' }}>myaccount.google.com</span> ← אבטחה ← אימות דו-שלבי (חייב להיות מופעל)<br />
+          2. בתחתית — &ldquo;סיסמאות אפליקציה&rdquo; (App Passwords)<br />
+          3. יוצרים סיסמה חדשה עם השם &ldquo;PIXEL Studio&rdquo;<br />
+          4. מעתיקים את ה-16 תווים שמתקבלים ומדביקים כאן<br /><br />
+          <strong>כל הדיוור במערכת ישלח מהכתובת הזו:</strong> דוחות SEO, התראות ללקוחות, שליחה לרואה חשבון, ועוד.
         </div>
       </div>
     );
@@ -2185,11 +1922,11 @@ GOOGLE_REDIRECT_URI=http://localhost:3000/auth/gmail/callback`}
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button onClick={() => setActiveSection('gmail')} style={{ ...buttonStyle, flex: 1, padding: '8px 12px', fontSize: '0.75rem' }}>הגדר</button>
             {gmailStatus === 'not_connected' ? (
-              <button onClick={handleGmailConnect} style={{ ...secondaryButtonStyle, flex: 1, padding: '8px 12px', fontSize: '0.75rem' }}>חבר</button>
+              <button onClick={() => handleGmailConnect(false)} style={{ ...secondaryButtonStyle, flex: 1, padding: '8px 12px', fontSize: '0.75rem' }}>חבר</button>
             ) : gmailStatus === 'connected' ? (
-              <button onClick={handleGmailTest} style={{ ...secondaryButtonStyle, flex: 1, padding: '8px 12px', fontSize: '0.75rem' }}>בדוק</button>
+              <button onClick={() => handleGmailConnect(true)} style={{ ...secondaryButtonStyle, flex: 1, padding: '8px 12px', fontSize: '0.75rem' }}>בדוק</button>
             ) : (
-              <button onClick={handleGmailReconnect} style={{ ...secondaryButtonStyle, flex: 1, padding: '8px 12px', fontSize: '0.75rem' }}>חבר מחדש</button>
+              <button onClick={() => handleGmailConnect(false)} style={{ ...secondaryButtonStyle, flex: 1, padding: '8px 12px', fontSize: '0.75rem' }}>חבר מחדש</button>
             )}
           </div>
         </div>

@@ -1,100 +1,104 @@
 /**
- * POST /api/settings/gmail/connect - Initiate Gmail OAuth connection
- * This simulates the OAuth flow. In production, this would redirect to Google's OAuth consent screen.
+ * POST /api/settings/gmail/connect
+ * Connect Gmail using App Password — tests connection then saves credentials.
+ *
+ * Actions:
+ *  - connect: { email, appPassword, senderName } — test + save
+ *  - disconnect: {} — clear credentials
+ *  - test: { email, appPassword } — test only, don't save
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { gmailSettings } from '@/lib/db';
-import { ensureSeeded } from '@/lib/db/seed';
+import { testGmailConnection, clearEmailCredentialCache } from '@/lib/email/email-service';
 
 export async function POST(request: NextRequest) {
-  ensureSeeded();
-
   try {
     const body = await request.json().catch(() => ({}));
-    const action = body.action as string;
-
-    const settings = gmailSettings.getAll();
-    const current = settings[0];
-
-    if (!current) {
-      return NextResponse.json({ error: 'Gmail settings not found' }, { status: 404 });
-    }
-
+    const action = (body.action as string) || 'connect';
     const now = new Date().toISOString();
 
-    if (action === 'connect') {
-      // Simulate OAuth connection — in production this would use Google OAuth2 flow
-      // with client_id, client_secret, redirect_uri, and proper token exchange
-      gmailSettings.update(current.id, {
-        connectionStatus: 'connected',
-        connectedEmail: body.email || 'tal.pixeld@gmail.com',
-        accessToken: body.accessToken || 'simulated_access_token',
-        refreshToken: body.refreshToken || 'simulated_refresh_token',
-        tokenExpiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
-        lastSyncAt: now,
-        lastError: '',
-        updatedAt: now,
-      });
-
-      return NextResponse.json({
-        status: 'connected',
-        message: 'Gmail חובר בהצלחה',
-        email: body.email || 'tal.pixeld@gmail.com',
-      });
-    }
-
+    // ── Disconnect ──
     if (action === 'disconnect') {
-      gmailSettings.update(current.id, {
-        connectionStatus: 'not_connected',
-        connectedEmail: '',
-        accessToken: '',
-        refreshToken: '',
+      const existing = await gmailSettings.getAllAsync();
+      if (existing[0]) {
+        await gmailSettings.updateAsync(existing[0].id, {
+          connectionStatus: 'not_connected',
+          connectedEmail: '',
+          accessToken: '',
+          refreshToken: '',
+          tokenExpiresAt: null,
+          lastSyncAt: null,
+          lastError: '',
+          updatedAt: now,
+        });
+      }
+      clearEmailCredentialCache();
+      return NextResponse.json({ status: 'not_connected', message: 'Gmail נותק בהצלחה' });
+    }
+
+    // ── Connect or Test ──
+    const { email, appPassword, senderName } = body;
+    if (!email || !appPassword) {
+      return NextResponse.json({ success: false, error: 'חסר אימייל או סיסמת אפליקציה' }, { status: 400 });
+    }
+
+    // Test SMTP connection
+    const testResult = await testGmailConnection(email, appPassword);
+    if (!testResult.success) {
+      return NextResponse.json({
+        success: false,
+        status: 'error',
+        error: testResult.error || 'החיבור נכשל — בדוק את סיסמת האפליקציה',
+      });
+    }
+
+    // If just testing, return success without saving
+    if (action === 'test') {
+      return NextResponse.json({ success: true, status: 'valid', message: 'החיבור תקין!' });
+    }
+
+    // Save credentials to DB
+    const existing = await gmailSettings.getAllAsync();
+    const settingsData = {
+      connectedEmail: email,
+      accessToken: appPassword, // App password stored in accessToken field
+      refreshToken: '',
+      senderDisplayName: senderName || 'PIXEL Studio',
+      replyToEmail: email,
+      connectionStatus: 'connected' as const,
+      lastSyncAt: now,
+      lastError: '',
+      isSystemEmailOrigin: true,
+      updatedAt: now,
+    };
+
+    if (existing.length > 0) {
+      await gmailSettings.updateAsync(existing[0].id, settingsData);
+    } else {
+      await gmailSettings.createAsync({
+        ...settingsData,
         tokenExpiresAt: null,
-        lastSyncAt: null,
-        lastError: '',
-        updatedAt: now,
-      });
-
-      return NextResponse.json({
-        status: 'not_connected',
-        message: 'Gmail נותק בהצלחה',
+        defaultSignature: '',
+        createdAt: now,
       });
     }
 
-    if (action === 'reconnect') {
-      gmailSettings.update(current.id, {
-        connectionStatus: 'reconnecting',
-        lastError: '',
-        updatedAt: now,
-      });
+    clearEmailCredentialCache();
 
-      // Simulate re-authentication
-      setTimeout(async () => {
-        // This would be handled by the OAuth callback in production
-      }, 0);
-
-      gmailSettings.update(current.id, {
-        connectionStatus: 'connected',
-        accessToken: 'refreshed_access_token_' + Date.now(),
-        tokenExpiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
-        lastSyncAt: now,
-        lastError: '',
-        updatedAt: now,
-      });
-
-      return NextResponse.json({
-        status: 'connected',
-        message: 'Gmail חובר מחדש בהצלחה',
-        email: current.connectedEmail,
-      });
-    }
-
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-  } catch (error: any) {
     return NextResponse.json({
+      success: true,
+      status: 'connected',
+      email,
+      senderName: senderName || 'PIXEL Studio',
+      message: 'Gmail מחובר בהצלחה — כל הדיוור במערכת ישלח מהכתובת הזו',
+    });
+  } catch (error: any) {
+    console.error('[Gmail-Connect] Error:', error);
+    return NextResponse.json({
+      success: false,
       status: 'error',
-      message: `שגיאה: ${error.message}`,
+      error: `שגיאה: ${error.message}`,
     }, { status: 500 });
   }
 }

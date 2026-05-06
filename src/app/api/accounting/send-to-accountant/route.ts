@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientFiles } from "@/lib/db";
+import { sendEmail } from "@/lib/email/email-service";
 
 const PERIODS: Record<string, { name: string; startMonth: number; endMonth: number }> = {
   "jan-feb": { name: "ינואר-פברואר", startMonth: 0, endMonth: 1 },
@@ -128,18 +129,64 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── In production: send via SMTP/SendGrid with real attachments ──
-    // For now, return the full email preview so the UI can display it
-    // TODO: Integrate with email service (SendGrid/Resend/Nodemailer)
-    //
-    // Production implementation would:
-    // 1. Fetch each fileUrl as a blob
-    // 2. Attach to email via SendGrid/Resend API
-    // 3. Send to accountantEmail
+    // ── Build HTML email body ──
+    const logoUrl = 'https://s-pixel.co.il/wp-content/uploads/2025/12/rdgik.png';
+    const htmlBody = `
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; padding: 20px; margin: 0;">
+  <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+    <div style="background: linear-gradient(135deg, #2563eb, #1d4ed8); padding: 24px 32px; color: white;">
+      <img src="${logoUrl}" alt="PIXEL Studio" style="height: 32px; margin-bottom: 8px;" />
+      <div style="font-size: 20px; font-weight: 700;">מסמכים לרואה חשבון</div>
+    </div>
+    <div style="padding: 32px;">
+      <p style="font-size: 15px; color: #334155;">שלום,</p>
+      <p style="font-size: 15px; color: #334155;">מצורפים ${docs.length} מסמכים לתקופה <strong>${periodName} ${year}</strong>.</p>
+      ${message ? `<p style="font-size: 14px; color: #64748b; background: #f1f5f9; padding: 12px; border-radius: 8px;">📝 ${message}</p>` : ''}
+      <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+        <thead><tr style="background: #f8fafc;">
+          <th style="padding: 8px 12px; text-align: right; font-size: 12px; color: #64748b;">#</th>
+          <th style="padding: 8px 12px; text-align: right; font-size: 12px; color: #64748b;">קובץ</th>
+          <th style="padding: 8px 12px; text-align: right; font-size: 12px; color: #64748b;">גודל</th>
+        </tr></thead>
+        <tbody>${attachments.map((a: any, i: number) => `<tr>
+          <td style="padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 13px;">${i + 1}</td>
+          <td style="padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 13px;">${a.accessible ? `<a href="${a.fileUrl}" style="color: #2563eb;">${a.fileName}</a>` : a.fileName}</td>
+          <td style="padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 13px;">${(a.fileSize / 1024).toFixed(0)} KB</td>
+        </tr>`).join('')}</tbody>
+      </table>
+      <p style="font-size: 13px; color: #94a3b8;">גודל כולל: ${(totalSize / 1024).toFixed(0)} KB</p>
+    </div>
+    <div style="background: #f8fafc; padding: 16px 32px; border-top: 1px solid #e2e8f0;">
+      <div style="font-size: 12px; color: #94a3b8; text-align: center;">נשלח באמצעות PixelManageAI · סטודיו פיקסל</div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    // ── Build file attachments for email ──
+    const emailAttachments = attachments
+      .filter((a: any) => a.accessible && a.fileUrl)
+      .map((a: any) => ({
+        filename: a.fileName,
+        url: a.fileUrl,
+        contentType: a.documentType === 'pdf' ? 'application/pdf' : 'application/octet-stream',
+      }));
+
+    // ── Send real email via Gmail SMTP ──
+    const result = await sendEmail({
+      to,
+      subject,
+      html: htmlBody,
+      text: emailBody,
+      attachments: emailAttachments.length > 0 ? emailAttachments : undefined,
+    });
 
     return NextResponse.json({
-      success: true,
-      mock: true, // Flag: real email not yet configured
+      success: result.success,
+      mock: result.mock || false,
       emailPreview: {
         to,
         subject,
@@ -152,6 +199,7 @@ export async function POST(req: NextRequest) {
         periodName,
         year,
       },
+      ...(result.error ? { error: result.error } : {}),
     });
   } catch (error) {
     console.error("[SendToAccountant] Error:", error);

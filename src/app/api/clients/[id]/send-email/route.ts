@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { clientEmailLogs } from "@/lib/db";
 import { ensureSeeded } from "@/lib/db/seed";
 import { getClientById } from "@/lib/db/client-helpers";
+import { sendEmail } from "@/lib/email/email-service";
 
 export async function POST(
   req: NextRequest,
@@ -13,23 +14,38 @@ export async function POST(
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 
   const body = await req.json();
-  const { emailType, subject, recipientEmail } = body;
+  const { emailType, subject, recipientEmail, html, text } = body;
 
   if (!emailType || !subject) {
     return NextResponse.json({ error: "Missing emailType or subject" }, { status: 400 });
   }
 
-  // Log the email (in production, this would send via SMTP/SendGrid/etc.)
+  const to = recipientEmail || client.email;
   const now = new Date().toISOString();
-  const log = clientEmailLogs.create({
+
+  // Send real email via Gmail SMTP
+  const result = await sendEmail({
+    to,
+    subject,
+    html: html || undefined,
+    text: text || `${subject}\n\nנשלח ללקוח ${client.name || ''} מ-PixelManageAI`,
+  });
+
+  // Log the email
+  const log = await clientEmailLogs.createAsync({
     clientId: client.id,
-    emailType: emailType,
-    subject: subject,
-    recipientEmail: recipientEmail || client.email,
+    emailType,
+    subject,
+    recipientEmail: to,
     sentAt: now,
-    status: "sent", // Mock: always succeeds
+    status: result.success ? "sent" : "failed",
     createdAt: now,
   });
 
-  return NextResponse.json({ success: true, emailLog: log });
+  return NextResponse.json({
+    success: result.success,
+    mock: result.mock || false,
+    emailLog: log,
+    ...(result.error ? { error: result.error } : {}),
+  });
 }
