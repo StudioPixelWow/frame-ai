@@ -805,10 +805,12 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       }
     };
 
-    // 1. Brand name queries (only for google_seo)
+    // 1. Brand name queries (ALL platforms — every platform should check brand visibility)
     if (bName) {
-      addQuery(bName, 'google_seo', 'brand');
-      log(job, 'generate_queries', `שאילתת מותג: "${bName}"`, 'success');
+      for (const p of PLATFORMS) {
+        addQuery(bName, p.id, 'brand');
+      }
+      log(job, 'generate_queries', `שאילתת מותג: "${bName}" — כל הפלטפורמות`, 'success');
     }
 
     // 2. Industry + location queries (all platforms)
@@ -840,20 +842,20 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       log(job, 'generate_queries', `${baseQueries.length} שאילתות כלליות`, 'success');
     }
 
-    // 3. Product/service queries with location (google_seo + chatgpt)
+    // 3. Product/service queries with location (ALL platforms)
     const aiPlatforms: PlatformId[] = ['chatgpt', 'gemini', 'claude', 'perplexity'];
-    const seoAiPlatforms: PlatformId[] = ['google_seo', 'chatgpt'];
 
     for (const prod of products.slice(0, 5)) {
-      // "Product in Location" for search engines and ChatGPT
+      // "Product in Location" — ALL platforms need this
       if (location) {
         const q = `${prod} ${location}`;
-        for (const p of seoAiPlatforms) {
-          addQuery(q, p, 'product');
+        for (const p of PLATFORMS) {
+          addQuery(q, p.id, 'product');
         }
       } else {
-        addQuery(prod, 'google_seo', 'product');
-        addQuery(prod, 'chatgpt', 'product');
+        for (const p of PLATFORMS) {
+          addQuery(prod, p.id, 'product');
+        }
       }
 
       // AI-only: "best {product}" comparison
@@ -909,20 +911,34 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       log(job, 'generate_queries', `${headingQueries.length} שאילתות מכותרות H1/H2 ליצור`, 'success');
     }
 
-    // 7. Hebrew-aware: detect if content is in Hebrew and generate Hebrew queries if applicable
+    // 7. Hebrew-aware: detect if content is in Hebrew and generate Hebrew queries for ALL platforms
     const isHebrew = /[֐-׿]/.test([bName, industry, ...products, ...h1Tags, ...h2Tags].join(''));
-    if (isHebrew && industry) {
+    if (isHebrew && (industry || bName)) {
       const hebrewQueries = [
-        `${industry} בישראל`,
-        `${bName || industry} - שירותים`,
-        `${industry} טוב ביותר`,
-      ];
-      for (const q of hebrewQueries.filter(q => q && !uniqueQueries.has(q.toLowerCase()))) {
-        for (const p of ['google_seo', 'chatgpt'] as PlatformId[]) {
-          addQuery(q, p, 'hebrew');
+        industry ? `${industry} בישראל` : null,
+        bName ? `${bName} שירותים` : null,
+        industry ? `${industry} טוב ביותר` : null,
+        bName ? `מה זה ${bName}` : null,
+        industry ? `המלצה על ${industry}` : null,
+      ].filter(Boolean) as string[];
+      for (const q of hebrewQueries.filter(q => !uniqueQueries.has(q.toLowerCase()))) {
+        for (const p of PLATFORMS) {
+          addQuery(q, p.id, 'hebrew');
         }
       }
-      log(job, 'generate_queries', `שאילתות בעברית הוספו`, 'success');
+      log(job, 'generate_queries', `${hebrewQueries.length} שאילתות בעברית — כל הפלטפורמות`, 'success');
+    }
+
+    // 8. Fallback: ensure EVERY platform has at least 1 query (prevent "skipped")
+    for (const platform of PLATFORMS) {
+      const platformHasQueries = queries.some(q => q.platform === platform.id);
+      if (!platformHasQueries && bName) {
+        addQuery(bName, platform.id, 'brand_fallback');
+        if (industry) {
+          addQuery(`${industry} services`, platform.id, 'fallback');
+        }
+        log(job, 'generate_queries', `${platform.name} — הוספת שאילתות fallback`, 'info');
+      }
     }
 
     log(job, 'generate_queries', `נבנו ${queries.length} שאילתות בסך הכל (${uniqueQueries.size} ייחודיות)`, 'success');

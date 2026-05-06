@@ -230,6 +230,38 @@ export default function SeoPlanDetail() {
   const [reports, setReports] = useState<Array<{ id: string; name: string; generatedAt: string; type: string }>>([]);
   const [expandedKeyword, setExpandedKeyword] = useState<string | null>(null);
   const [enrichingAI, setEnrichingAI] = useState(false);
+  const [generatingArticle, setGeneratingArticle] = useState<string | null>(null); // task.id of article being generated
+  const [generatedArticles, setGeneratedArticles] = useState<Record<string, string>>({}); // taskId -> full article HTML
+
+  // Generate full article via AI
+  const handleGenerateArticle = useCallback(async (taskTitle: string, taskId: string, articleIndex: number) => {
+    if (!plan) return;
+    setGeneratingArticle(taskId);
+    try {
+      const aiArticles = Array.isArray((plan as any).aiArticles) ? (plan as any).aiArticles : [];
+      const matchingArticle = aiArticles[articleIndex] || {};
+
+      const res = await fetch(`/api/seo-geo-plans/${plan.id}/generate-article`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          articleIndex,
+          title: matchingArticle.title || taskTitle,
+          targetKeyword: matchingArticle.targetKeyword || taskTitle,
+          outline: matchingArticle.outline || [],
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.data?.article) {
+          setGeneratedArticles(prev => ({ ...prev, [taskId]: data.data.article }));
+        }
+      }
+    } catch (e) {
+      console.error("Failed to generate article:", e);
+    }
+    setGeneratingArticle(null);
+  }, [plan]);
 
   // Fetch plan
   useEffect(() => {
@@ -1425,15 +1457,64 @@ export default function SeoPlanDetail() {
                                                   }}>
                                                     {s(taskBrief)}
                                                   </div>
-                                                  <button onClick={() => {
-                                                    navigator.clipboard.writeText(String(taskBrief)).catch(() => {});
-                                                  }} style={{
-                                                    ...smallBtnStyle,
-                                                    width: "100%", marginTop: 8,
-                                                    background: `${C.primary}10`, color: C.primary, border: `1px solid ${C.primary}30`,
-                                                  }}>
-                                                    📋 העתק תקציר
-                                                  </button>
+                                                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                                                    <button onClick={() => {
+                                                      navigator.clipboard.writeText(String(taskBrief)).catch(() => {});
+                                                    }} style={{
+                                                      ...smallBtnStyle,
+                                                      flex: 1,
+                                                      background: `${C.primary}10`, color: C.primary, border: `1px solid ${C.primary}30`,
+                                                    }}>
+                                                      📋 העתק תקציר
+                                                    </button>
+                                                    {(task.category === "content" || (task as any).type === "content") && (
+                                                      <button
+                                                        onClick={() => {
+                                                          // Find article index from task title match
+                                                          const aiArticles = Array.isArray((plan as any)?.aiArticles) ? (plan as any).aiArticles : [];
+                                                          const artIdx = aiArticles.findIndex((a: any) => task.title.includes(a.title) || a.title?.includes(task.title?.slice(0, 20)));
+                                                          handleGenerateArticle(task.title, task.id, artIdx >= 0 ? artIdx : 0);
+                                                        }}
+                                                        disabled={generatingArticle === task.id}
+                                                        style={{
+                                                          ...smallBtnStyle,
+                                                          flex: 1,
+                                                          background: generatingArticle === task.id ? `${C.primary}20` : `linear-gradient(135deg, ${C.primary}, ${C.primaryDark || C.primary})`,
+                                                          color: generatingArticle === task.id ? C.primary : "#fff",
+                                                          border: "none",
+                                                          cursor: generatingArticle === task.id ? "wait" : "pointer",
+                                                          opacity: generatingArticle === task.id ? 0.7 : 1,
+                                                        }}
+                                                      >
+                                                        {generatingArticle === task.id ? "⏳ כותב מאמר..." : "✨ כתוב מאמר מלא עם AI"}
+                                                      </button>
+                                                    )}
+                                                  </div>
+
+                                                  {/* Show generated full article */}
+                                                  {generatedArticles[task.id] && (
+                                                    <div style={{ marginTop: 12 }}>
+                                                      <div style={{ fontSize: 11, fontWeight: 600, color: "#10b981", marginBottom: 6 }}>✅ מאמר מלא נוצר בהצלחה</div>
+                                                      <div style={{
+                                                        background: C.card, border: `1px solid #10b98130`,
+                                                        borderRadius: 8, padding: "14px 16px",
+                                                        fontSize: 13, color: C.text, maxHeight: 400, overflow: "auto",
+                                                        lineHeight: 1.8, direction: "rtl",
+                                                      }} dangerouslySetInnerHTML={{ __html: generatedArticles[task.id] }} />
+                                                      <button onClick={() => {
+                                                        // Strip HTML for clipboard
+                                                        const tmp = document.createElement("div");
+                                                        tmp.innerHTML = generatedArticles[task.id];
+                                                        navigator.clipboard.writeText(tmp.textContent || tmp.innerText || '').catch(() => {});
+                                                      }} style={{
+                                                        ...smallBtnStyle,
+                                                        width: "100%", marginTop: 8,
+                                                        background: "#10b98115", color: "#10b981", border: `1px solid #10b98130`,
+                                                      }}>
+                                                        📋 העתק מאמר מלא
+                                                      </button>
+                                                    </div>
+                                                  )}
                                                 </div>
                                               )}
 
