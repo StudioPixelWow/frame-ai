@@ -96,7 +96,6 @@ export default function SettingsPage() {
   const [gmailSignature, setGmailSignature] = useState('');
   const [gmailLastSync, setGmailLastSync] = useState<string | null>(null);
   const [gmailLastError, setGmailLastError] = useState('');
-  const [gmailConnecting, setGmailConnecting] = useState(false);
 
   // Local state for all settings
   const [general, setGeneral] = useState<GeneralSettings>({

@@ -11,7 +11,7 @@ import {
 } from '@/lib/seo/api-helpers';
 import { testConnection } from '@/lib/seo/wordpress-client';
 import type { WPConnection } from '@/lib/seo/wordpress-client';
-import { clients } from '@/lib/db';
+import { updateClientById } from '@/lib/db/client-helpers';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -99,7 +99,7 @@ async function _POST(
     // Also save WP credentials to the client record for reuse across plans
     if (plan.clientId) {
       try {
-        await clients.updateAsync(plan.clientId, {
+        await updateClientById(plan.clientId, {
           wpSiteUrl: siteUrl,
           wpUsername: username,
           wpApplicationPassword: applicationPassword,

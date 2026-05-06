@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { seoGeoPlans } from '@/lib/db';
+import { seoPlans } from '@/lib/db';
 import { executeAutoTask, mapPlanTaskToAutoType, AutomationContext, AutoTaskResult } from '@/lib/seo/seo-automator';
 import { updatePlanSafe, logActivity } from '@/lib/seo/api-helpers';
 import { sendSeoTaskEmail, sendSeoDailySummaryEmail } from '@/lib/seo/seo-email-service';
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   console.log('[SEO-CRON] Daily runner started at', new Date().toISOString());
 
   try {
-    const allPlans = await seoGeoPlans.getAllAsync();
+    const allPlans = await seoPlans.getAllAsync();
     const activePlans = allPlans.filter((p: any) =>
       p.status === 'plan_generated' &&
       p.wpConnection?.siteUrl &&
