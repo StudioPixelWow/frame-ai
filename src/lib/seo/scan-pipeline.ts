@@ -853,9 +853,20 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       log(job, 'generate_queries', `שאילתת מותג: "${bName}" — כל הפלטפורמות`, 'success');
     }
 
+    // Detect language — Hebrew sites need Hebrew queries, English sites need English queries
+    const isHebrew = /[֐-׿]/.test([bName, industry, ...products, ...h1Tags, ...h2Tags].join(''));
+    const aiPlatforms: PlatformId[] = ['chatgpt', 'gemini', 'claude', 'perplexity'];
+
     // 2. Industry + location queries (all platforms)
+    // CRITICAL: Generate queries in the SITE'S LANGUAGE — real search terms people actually type
     if (industry && location) {
-      const baseQueries = [
+      const baseQueries = isHebrew ? [
+        `${industry} ב${location}`,           // "משרד פרסום בקרית מוצקין"
+        `${industry} ${location}`,             // "משרד פרסום קרית מוצקין"
+        `${industry} טוב ב${location}`,        // "משרד פרסום טוב בקרית מוצקין"
+        `${industry} מומלץ ב${location}`,      // "משרד פרסום מומלץ בקרית מוצקין"
+        `${industry} באזור ${location}`,       // "משרד פרסום באזור קרית מוצקין"
+      ] : [
         `best ${industry} in ${location}`,
         `top ${industry} ${location}`,
         `${industry} services ${location}`,
@@ -866,9 +877,14 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
           addQuery(q, p.id, 'local');
         }
       }
-      log(job, 'generate_queries', `${baseQueries.length} שאילתות מקומיות ליצור ע"י ${PLATFORMS.length} פלטפורמות`, 'success');
+      log(job, 'generate_queries', `${baseQueries.length} שאילתות מקומיות (${isHebrew ? 'עברית' : 'אנגלית'})`, 'success');
     } else if (industry) {
-      const baseQueries = [
+      const baseQueries = isHebrew ? [
+        `${industry} מומלץ`,
+        `${industry} הכי טוב`,
+        `איך לבחור ${industry}`,
+        `המלצה על ${industry}`,
+      ] : [
         `best ${industry} services`,
         `top ${industry} companies`,
         `how to choose ${industry}`,
@@ -883,14 +899,19 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
     }
 
     // 3. Product/service queries with location (ALL platforms)
-    const aiPlatforms: PlatformId[] = ['chatgpt', 'gemini', 'claude', 'perplexity'];
-
     for (const prod of products.slice(0, 5)) {
-      // "Product in Location" — ALL platforms need this
       if (location) {
-        const q = `${prod} ${location}`;
-        for (const p of PLATFORMS) {
-          addQuery(q, p.id, 'product');
+        if (isHebrew) {
+          // Hebrew product+location: "מיתוג עסקי בקרית מוצקין", "מיתוג עסקי קרית מוצקין"
+          for (const p of PLATFORMS) {
+            addQuery(`${prod} ב${location}`, p.id, 'product');
+            addQuery(`${prod} ${location}`, p.id, 'product');
+          }
+        } else {
+          const q = `${prod} ${location}`;
+          for (const p of PLATFORMS) {
+            addQuery(q, p.id, 'product');
+          }
         }
       } else {
         for (const p of PLATFORMS) {
@@ -898,16 +919,27 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
         }
       }
 
-      // AI-only: "best {product}" comparison
-      for (const p of aiPlatforms) {
-        addQuery(`best ${prod}`, p, 'product');
+      // AI-only: comparison queries
+      if (isHebrew) {
+        for (const p of aiPlatforms) {
+          addQuery(`${prod} הכי טוב`, p, 'product');
+          addQuery(`${prod} מומלץ`, p, 'product');
+        }
+      } else {
+        for (const p of aiPlatforms) {
+          addQuery(`best ${prod}`, p, 'product');
+        }
       }
     }
     log(job, 'generate_queries', `${Math.min(5, products.length)} שאילתות מוצרים ליצור`, 'success');
 
-    // 4. "How to" / informational queries from products (AI platforms only)
+    // 4. Informational queries from products (AI platforms only)
     for (const prod of products.slice(0, 4)) {
-      const howtoQueries = [
+      const howtoQueries = isHebrew ? [
+        `איך לבחור ${prod}`,
+        `מה ההבדל בין ${prod}`,
+        `למה צריך ${prod}`,
+      ] : [
         `how to choose ${prod}`,
         `${prod} vs alternatives`,
         `best practices for ${prod}`,
@@ -922,7 +954,11 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
 
     // 5. Comparison queries (AI platforms only)
     if (products.length >= 2) {
-      const comparisonQueries = [
+      const comparisonQueries = isHebrew ? [
+        `${products[0]} או ${products[1]}`,
+        `${products[0]} לעומת ${products[1]}`,
+        `מה ההבדל בין ${products[0]} ל${products[1]}`,
+      ] : [
         `${products[0]} vs ${products[1] || products[0]}`,
         `${products[0]} alternatives`,
         `compare ${products[0]} solutions`,
@@ -964,10 +1000,8 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       log(job, 'generate_queries', `אין כותרות H1/H2 שמתאימות כשאילתות חיפוש`, 'info');
     }
 
-    // 7. Hebrew-aware: detect if content is in Hebrew and generate Hebrew queries for ALL platforms
-    // IMPORTANT: Avoid queries containing the brand name for AI platforms — they trigger anti-echo.
-    // Brand queries are already handled in section 1. Focus on industry/generic Hebrew queries here.
-    const isHebrew = /[֐-׿]/.test([bName, industry, ...products, ...h1Tags, ...h2Tags].join(''));
+    // 7. Additional Hebrew queries — generic industry terms not already covered
+    // (isHebrew is already computed in section 2)
     if (isHebrew && industry) {
       const hebrewQueries = [
         `${industry} בישראל`,
