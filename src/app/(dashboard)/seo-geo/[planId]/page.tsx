@@ -284,7 +284,8 @@ export default function SeoPlanDetail() {
         const data = await res.json();
         if (data.data?.article) {
           setGeneratedArticles(prev => ({ ...prev, [taskId]: data.data.article }));
-          // Scroll to the generated article after a short delay
+          // Switch to articles tab and scroll to the generated article
+          setActiveTab("articles");
           setTimeout(() => {
             const el = document.getElementById(`article-${taskId}`);
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });

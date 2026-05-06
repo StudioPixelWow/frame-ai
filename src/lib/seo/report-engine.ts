@@ -187,6 +187,66 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he", busin
     });
   }
 
+  // ── Compute real scores (used for both hero AND body) ──
+  const computedScores = (() => {
+    const scan = plan.websiteScan;
+    let technical = plan.technicalScore || 0;
+    let visibility = plan.visibilityScore || 0;
+    let content = plan.contentScore || 0;
+
+    // Technical: start at 0, earn points for each real signal
+    if (technical === 0 && scan) {
+      technical = 0;
+      if (scan.hasSSL) technical += 15;
+      if (scan.mobileOptimized) technical += 15;
+      if (scan.hasRobotsTxt) technical += 10;
+      if (scan.hasSitemap) technical += 10;
+      if (scan.structuredData) technical += 10;
+      if (scan.metaTitle) technical += 10;
+      if (scan.metaDescription) technical += 10;
+      if (scan.loadTimeMs && scan.loadTimeMs < 3000) technical += 10;
+      if (scan.openGraph) technical += 5;
+      if (scan.canonicalTags) technical += 5;
+      const issueCount = scan.issues?.length || 0;
+      technical = Math.max(0, Math.min(100, technical - issueCount * 5));
+    }
+
+    // AI Visibility: real ratio of found vs total queries
+    if (visibility === 0 && scan) {
+      const aiQ = scan.aiQueries || [];
+      const found = aiQ.filter((q: any) => q.found).length;
+      visibility = aiQ.length > 0 ? Math.round((found / aiQ.length) * 100) : 0;
+    }
+
+    // Content: start at 0, much stricter scoring
+    if (content === 0 && scan) {
+      content = 0;
+      // Basic meta tags — necessary but not sufficient
+      if (scan.metaTitle && scan.metaTitle.length > 10) content += 10;
+      if (scan.metaDescription && scan.metaDescription.length > 50) content += 10;
+      // Real content signals
+      if (scan.h1Tags?.length) content += 5;
+      if ((scan.h1Tags?.length || 0) > 0 && (scan.h2Tags?.length || 0) > 2) content += 10;
+      if (scan.structuredData) content += 10;
+      // Page count — more pages = more content
+      const pages = scan.totalPages || scan.indexedPages || 0;
+      if (pages >= 5) content += 10;
+      if (pages >= 10) content += 10;
+      if (pages >= 20) content += 5;
+      // Scanned pages with actual content
+      const scannedPages = plan.scannedPages || [];
+      const pagesWithContent = scannedPages.filter((p: any) => (p.wordCount || 0) > 200).length;
+      if (pagesWithContent >= 3) content += 10;
+      if (pagesWithContent >= 5) content += 10;
+      // AI articles written
+      const aiArticles = Array.isArray(plan.aiArticles) ? plan.aiArticles.filter((a: any) => a?.fullArticle) : [];
+      if (aiArticles.length >= 2) content += 10;
+    }
+
+    const overall = plan.overallScore || Math.round(technical * 0.3 + visibility * 0.4 + content * 0.3);
+    return { technical, visibility, content, overall };
+  })();
+
   // Build sections
   const sections: ReportSection[] = [];
 
@@ -209,44 +269,11 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he", busin
         ? `ניתוח מקיף של SEO ונראות AI (GEO) עבור ${plan.clientName || "הלקוח"} (${domain}). מבוסס על סריקה טכנית מלאה, בדיקת נוכחות ב-5 מנועי AI מובילים, וניתוח ${visQueries.length} שאילתות רלוונטיות.${businessProfile?.business_name ? ` עסק: ${businessProfile.business_name}${businessProfile.industry ? ` (${businessProfile.industry})` : ""}${businessProfile.location ? ` ב${businessProfile.location}` : ""}.` : ""}`
         : `Comprehensive SEO and AI visibility (GEO) analysis for ${plan.clientName || "the client"} (${domain}). Based on full technical scan, presence checks across 5 leading AI engines, and analysis of ${visQueries.length} relevant queries.${businessProfile?.business_name ? ` Business: ${businessProfile.business_name}${businessProfile.industry ? ` (${businessProfile.industry})` : ""}${businessProfile.location ? ` in ${businessProfile.location}` : ""}.` : ""}`},
       { type: "stat_row", stats: (() => {
-        // Compute scores from websiteScan if plan fields are 0
-        const scan = plan.websiteScan;
-        let techScore = plan.technicalScore || 0;
-        let visScore = plan.visibilityScore || 0;
-        let contScore = plan.contentScore || 0;
-
-        if (techScore === 0 && scan) {
-          techScore = 50;
-          if (scan.hasSSL) techScore += 10;
-          if (scan.mobileOptimized) techScore += 10;
-          if (scan.hasRobotsTxt) techScore += 5;
-          if (scan.hasSitemap) techScore += 5;
-          if (scan.structuredData) techScore += 5;
-          if (scan.metaTitle) techScore += 5;
-          if (scan.metaDescription) techScore += 5;
-          if (scan.loadTimeMs && scan.loadTimeMs < 3000) techScore += 5;
-          const issueCount = scan.issues?.length || 0;
-          techScore = Math.max(0, Math.min(100, techScore - issueCount * 3));
-        }
-        if (visScore === 0 && scan) {
-          const aiQ = scan.aiQueries || [];
-          const found = aiQ.filter((q: any) => q.found).length;
-          visScore = aiQ.length > 0 ? Math.round((found / aiQ.length) * 100) : 0;
-        }
-        if (contScore === 0 && scan) {
-          contScore = 50;
-          if (scan.metaTitle) contScore += 15;
-          if (scan.metaDescription) contScore += 15;
-          if (scan.h1Tags?.length) contScore += 10;
-          if (scan.structuredData) contScore += 10;
-        }
-        const overallScore = plan.overallScore || Math.round(techScore * 0.3 + visScore * 0.4 + contScore * 0.3);
-
         return [
-          { label: he ? "ציון כללי" : "Overall Score", value: `${overallScore}%`, color: scoreColor(overallScore), icon: "📊" },
-          { label: he ? "ציון טכני" : "Technical Score", value: `${techScore}%`, color: scoreColor(techScore), icon: "🔧" },
-          { label: he ? "נראות AI" : "AI Visibility", value: `${visScore}%`, color: scoreColor(visScore), icon: "🤖" },
-          { label: he ? "תוכן" : "Content", value: `${contScore}%`, color: scoreColor(contScore), icon: "📝" },
+          { label: he ? "ציון כללי" : "Overall Score", value: `${computedScores.overall}%`, color: scoreColor(computedScores.overall), icon: "📊" },
+          { label: he ? "ציון טכני" : "Technical Score", value: `${computedScores.technical}%`, color: scoreColor(computedScores.technical), icon: "🔧" },
+          { label: he ? "נראות AI" : "AI Visibility", value: `${computedScores.visibility}%`, color: scoreColor(computedScores.visibility), icon: "🤖" },
+          { label: he ? "תוכן" : "Content", value: `${computedScores.content}%`, color: scoreColor(computedScores.content), icon: "📝" },
         ];
       })()},
       { type: "paragraph", text: he
@@ -490,13 +517,13 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he", busin
     title: he ? "תוצאות צפויות" : "Expected Results",
     titleEn: "Expected Results",
     content: [
-      { type: "paragraph", text: he ? `על בסיס המצב הנוכחי (ציון ${plan.overallScore || 0}%) והפעולות המומלצות, אלו התוצאות הצפויות לאחר 60 יום:` : `Based on current status (score ${plan.overallScore || 0}%) and recommended actions, here are expected results after 60 days:` },
+      { type: "paragraph", text: he ? `על בסיס המצב הנוכחי (ציון ${computedScores.overall}%) והפעולות המומלצות, אלו התוצאות הצפויות לאחר 60 יום:` : `Based on current status (score ${computedScores.overall}%) and recommended actions, here are expected results after 60 days:` },
       { type: "table",
         headers: he ? ["מדד", "נוכחי", "יעד 60 יום", "שיפור צפוי"] : ["Metric", "Current", "60-Day Target", "Expected Improvement"],
         rows: [
-          [he ? "ציון טכני" : "Technical Score", `${plan.technicalScore || 0}%`, `${Math.min(100, (plan.technicalScore || 0) + 25)}%`, `+${Math.min(25, 100 - (plan.technicalScore || 0))}%`],
-          [he ? "נראות AI" : "AI Visibility", `${plan.visibilityScore || 0}%`, `${Math.min(100, (plan.visibilityScore || 0) + 20)}%`, `+${Math.min(20, 100 - (plan.visibilityScore || 0))}%`],
-          [he ? "ציון כללי" : "Overall Score", `${plan.overallScore || 0}%`, `${Math.min(100, (plan.overallScore || 0) + 20)}%`, `+${Math.min(20, 100 - (plan.overallScore || 0))}%`],
+          [he ? "ציון טכני" : "Technical Score", `${computedScores.technical}%`, `${Math.min(100, computedScores.technical + 25)}%`, `+${Math.min(25, 100 - computedScores.technical)}%`],
+          [he ? "נראות AI" : "AI Visibility", `${computedScores.visibility}%`, `${Math.min(100, computedScores.visibility + 20)}%`, `+${Math.min(20, 100 - computedScores.visibility)}%`],
+          [he ? "ציון כללי" : "Overall Score", `${computedScores.overall}%`, `${Math.min(100, computedScores.overall + 20)}%`, `+${Math.min(20, 100 - computedScores.overall)}%`],
           [he ? "אזכורים בשאילתות AI" : "AI Query Mentions", `${mentionedQueries.length}/${visResults.length}`, `${Math.min(visResults.length, mentionedQueries.length + Math.ceil(missedQueries.length * 0.4))}/${visResults.length}`, `+${Math.ceil(missedQueries.length * 0.4)}`],
         ],
       },
@@ -542,10 +569,10 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he", busin
     language,
     sections,
     meta: {
-      overallScore: plan.overallScore || 0,
-      technicalScore: plan.technicalScore || 0,
-      contentScore: plan.contentScore || 0,
-      visibilityScore: plan.visibilityScore || 0,
+      overallScore: computedScores.overall,
+      technicalScore: computedScores.technical,
+      contentScore: computedScores.content,
+      visibilityScore: computedScores.visibility,
       totalFindings: technicalFindings.length,
       criticalFindings: technicalFindings.filter(f => f.severity === "critical").length,
       totalRecommendations: actions.length,
