@@ -132,18 +132,13 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
   if (error) return error;
   if (!plan) return notFound('Plan');
 
-  // ── Step 1: Generate AI-powered keywords and articles ──
+  // ── Step 1: Generate AI-powered keywords FIRST, then articles based on those keywords ──
   console.log('[60-DAY-PLAN] Starting AI enrichment for plan:', planId);
-  const [aiKeywords, aiArticles] = await Promise.all([
-    generateAIKeywords(plan),
-    generateAIArticles(plan, []),
-  ]);
+  const aiKeywords = await generateAIKeywords(plan);
+  console.log('[60-DAY-PLAN] AI keywords generated:', aiKeywords.length);
 
-  // If we got AI keywords, regenerate articles with them for better targeting
-  let finalArticles = aiArticles;
-  if (aiKeywords.length > 0 && aiArticles.length === 0) {
-    finalArticles = await generateAIArticles(plan, aiKeywords);
-  }
+  // Generate articles using the AI keywords for proper targeting
+  const finalArticles = await generateAIArticles(plan, aiKeywords);
 
   console.log('[60-DAY-PLAN] AI enrichment complete:', {
     keywords: aiKeywords.length,

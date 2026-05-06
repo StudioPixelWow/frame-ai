@@ -500,12 +500,23 @@ export default function SeoPlanDetail() {
     const p = safePlan as any;
     const aiKw = p.aiKeywords;
     if (Array.isArray(aiKw) && aiKw.length > 0) {
-      return aiKw.map((k: any) => ({
+      // Normalize category keys from AI (CORE→core, שירותים→services, etc.)
+      const catMap: Record<string, string> = {
+        'CORE': 'core', 'core': 'core',
+        'שירותים': 'services', 'services': 'services',
+        'בידול': 'differentiation', 'differentiation': 'differentiation',
+        'LONG TAIL': 'long_tail', 'long_tail': 'long_tail', 'longTail': 'long_tail',
+      };
+      return aiKw.map((k: any, idx: number) => ({
+        id: `kw-ai-${idx}`,
         keyword: k.keyword || '',
-        category: k.category || 'CORE',
+        category: catMap[k.category] || 'core',
         searchVolume: k.searchVolume || 'בינוני',
         difficulty: k.difficulty || 'בינוני',
         intent: k.intent || 'מידעי',
+        googlePosition: null,
+        aiMentioned: false,
+        actionPlan: `ביטוי שנבחר ע״י AI. קדם עם תוכן ייעודי, Meta Tags ו-Schema.`,
         source: 'ai' as const,
       }));
     }
@@ -1837,14 +1848,8 @@ export default function SeoPlanDetail() {
               suggested: false,
               source: 'ai',
             }));
-            if (knownCompetitors.length > 0) return [];
-            const businessType = s(scan?.websiteFacts?.business_type || "") || "";
-            if (!businessType) return [];
-            return [
-              { name: `מתחרה 1 — ${businessType}`, suggested: true, domain: null },
-              { name: `מתחרה 2 — ${businessType}`, suggested: true, domain: null },
-              { name: `מתחרה 3 — ${businessType}`, suggested: true, domain: null },
-            ];
+            // No fake competitors — if no AI data, show empty + enrich button
+            return [];
           };
           const suggestedCompetitors = generateSuggestedCompetitors();
 
@@ -1880,7 +1885,29 @@ export default function SeoPlanDetail() {
           return (
           <div>
             {!hasCompData ? (
-              <EmptyTab icon="🏆" text="אין נתוני מתחרים עדיין. הרץ סריקת נראות כדי לזהות מתחרים שמוזכרים בתשובות AI." />
+              <div style={{ textAlign: "center", padding: "40px 20px" }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>🏆</div>
+                <p style={{ color: C.textMuted, fontSize: 15, marginBottom: 20 }}>
+                  אין נתוני מתחרים. לחץ להפעלת AI לזיהוי מתחרים אמיתיים בתחום.
+                </p>
+                <button
+                  onClick={handleAIEnrich}
+                  disabled={enrichingAI}
+                  style={{
+                    background: enrichingAI ? C.border : `linear-gradient(135deg, ${C.primary}, ${C.info})`,
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 12,
+                    padding: "12px 28px",
+                    fontSize: 15,
+                    fontWeight: 700,
+                    cursor: enrichingAI ? "not-allowed" : "pointer",
+                    opacity: enrichingAI ? 0.7 : 1,
+                  }}
+                >
+                  {enrichingAI ? "⏳ מחפש מתחרים..." : "🤖 חפש מתחרים עם AI"}
+                </button>
+              </div>
             ) : (
               <>
                 {/* Summary */}
@@ -1949,30 +1976,46 @@ export default function SeoPlanDetail() {
                   )}
                 </div>
 
-                {/* Suggested competitors if none found */}
-                {suggestedCompetitors.length > 0 && (
-                  <div style={{ ...cardStyle, marginTop: 20, background: `${C.info}08`, border: `1px solid ${C.info}20` }}>
-                    <h3 style={{ ...sectionTitle }}>💡 מתחרים מוצעים לניתוח</h3>
-                    <p style={{ fontSize: 12, color: C.textMuted, marginBottom: 16 }}>לא נמצאו מתחרים בסריקה. הצעות אלו יכולות לעזור בהשוואה:</p>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* AI-generated competitors with details */}
+                {suggestedCompetitors.length > 0 && suggestedCompetitors[0]?.source === 'ai' && (
+                  <div style={{ ...cardStyle, marginTop: 20 }}>
+                    <h3 style={{ ...sectionTitle }}>🤖 מתחרים שזוהו ע״י AI</h3>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                       {suggestedCompetitors.map((comp: any, i: number) => (
                         <div key={i} style={{
-                          padding: "14px 16px", borderRadius: 14, background: C.bg,
-                          border: `1px dashed ${C.info}30`,
+                          padding: "16px", borderRadius: 14, background: C.bg,
+                          border: `1px solid ${C.borderLight}`,
                         }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{ fontSize: 18 }}>🔍</div>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{comp.name}</div>
-                              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 3 }}>הוסף דומיין כדי לבצע ניתוח מפורט</div>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                            <div>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{comp.name}</div>
+                              {comp.domain && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>🌐 {comp.domain}</div>}
                             </div>
-                            <span style={{
-                              ...tagStyle,
-                              background: `${C.info}15`,
-                              color: C.info,
-                              fontSize: 11,
-                            }}>מוצע</span>
+                            {comp.estimatedTraffic && (
+                              <span style={{ ...tagStyle, background: `${C.primary}12`, color: C.primary }}>
+                                תנועה: {comp.estimatedTraffic}
+                              </span>
+                            )}
                           </div>
+                          {comp.strengths?.length > 0 && (
+                            <div style={{ fontSize: 12, color: C.success, marginBottom: 4 }}>
+                              💪 חוזקות: {comp.strengths.join(', ')}
+                            </div>
+                          )}
+                          {comp.weaknesses?.length > 0 && (
+                            <div style={{ fontSize: 12, color: C.warning, marginBottom: 4 }}>
+                              ⚠️ חולשות: {comp.weaknesses.join(', ')}
+                            </div>
+                          )}
+                          {comp.mainKeywords?.length > 0 && (
+                            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
+                              {comp.mainKeywords.map((kw: string, ki: number) => (
+                                <span key={ki} style={{ ...tagStyle, background: `${C.info}10`, color: C.info, fontSize: 10 }}>
+                                  {kw}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
