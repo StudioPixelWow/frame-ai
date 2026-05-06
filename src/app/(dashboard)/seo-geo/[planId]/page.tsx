@@ -318,7 +318,7 @@ export default function SeoPlanDetail() {
   const [aiPlatformFilter, setAiPlatformFilter] = useState<string>("all");
   const [aiStatusFilter, setAiStatusFilter] = useState<"all" | "found" | "not_found">("all");
   const [aiSearchQuery, setAiSearchQuery] = useState("");
-  const [aiQueryDetail, setAiQueryDetail] = useState<{query: string; platform: string; found: boolean; confidence: number; snippet?: string; position?: number; scanMode?: string; checkedAt?: string} | null>(null);
+  const [aiQueryDetail, setAiQueryDetail] = useState<{query: string; platform: string; found: boolean; confidence: number; snippet?: string; position?: number; scanMode?: string; checkedAt?: string; responseText?: string; sources?: {url: string; domain: string; title?: string}[]; mentionType?: string; sourcesCount?: number} | null>(null);
   const [executingTask, setExecutingTask] = useState<string | null>(null);
   const [executionResults, setExecutionResults] = useState<Record<string, any>>({});
   const [wpConnecting, setWpConnecting] = useState(false);
@@ -2831,7 +2831,15 @@ export default function SeoPlanDetail() {
           };
 
           // Extract URLs/domains from snippet
-          const extractSources = (snippet?: string, targetUrl?: string) => {
+          const extractSources = (snippet?: string, targetUrl?: string, backendSources?: {url: string; domain: string; title?: string}[]) => {
+            const tDomain = targetUrl ? targetUrl.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0] : '';
+            // Prefer backend-extracted sources if available
+            if (backendSources && backendSources.length > 0) {
+              return backendSources.map(s => ({
+                domain: s.domain, url: s.url, title: s.title,
+                isOwn: tDomain ? s.domain.includes(tDomain) || tDomain.includes(s.domain) : false,
+              }));
+            }
             if (!snippet) return [];
             const urlRegex = /https?:\/\/[^\s),\]]+/g;
             const domainRegex = /\b([a-z0-9][-a-z0-9]*\.(?:com|co\.il|org\.il|net|io|org|info|biz|me|ai|dev|app|co|il)(?:\.[a-z]{2})?)\b/gi;
@@ -2840,7 +2848,6 @@ export default function SeoPlanDetail() {
             const sourceMap = new Map<string, string>();
             urls.forEach(u => { try { const d = new URL(u).hostname.replace(/^www\./, ''); sourceMap.set(d, u); } catch {} });
             domains.forEach(d => { const clean = d.replace(/^www\./, ''); if (!sourceMap.has(clean)) sourceMap.set(clean, `https://${clean}`); });
-            const tDomain = targetUrl ? targetUrl.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0] : '';
             return Array.from(sourceMap.entries()).map(([domain, url]) => ({
               domain, url, isOwn: tDomain ? domain.includes(tDomain) || tDomain.includes(domain) : false,
             }));
@@ -3046,7 +3053,7 @@ export default function SeoPlanDetail() {
                       {filteredResults.map((q, i) => {
                         const pd = PLATFORM_DISPLAY[q.platform] || { name: q.platform, nameHe: q.platform, color: C.text };
                         const decoded = (q.query || '').replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#39;/g, "'");
-                        const sources = extractSources(q.snippet, p.targetUrl);
+                        const sources = extractSources(q.snippet, p.targetUrl, (q as any).sources);
                         const ownSource = sources.find(s => s.isOwn);
                         return (
                           <div key={i} onClick={() => setAiQueryDetail(q)} style={{
@@ -3071,16 +3078,26 @@ export default function SeoPlanDetail() {
                                   <span style={{ fontSize: 12, color: C.textSecondary }}>{pd.name}</span>
                                 </div>
                                 <span style={{ fontSize: 11, color: C.textMuted }}>{timeAgo(q.checkedAt)}</span>
-                                {q.found && (
+                                {q.found && (() => {
+                                  const mt = (q as any).mentionType;
+                                  const sc = (q as any).sourcesCount || sources.length;
+                                  const conf = q.confidence;
+                                  return (
                                   <>
                                     <span style={{
                                       ...tagStyle, background: `${C.success}12`, color: C.success,
                                     }}>אוזכר</span>
-                                    {q.snippet && <span style={{ ...tagStyle, background: `${C.info}10`, color: C.info }}>בטקסט</span>}
-                                    {sources.length > 0 && <span style={{ ...tagStyle, background: `${C.primary}10`, color: C.primary }}>במקורות</span>}
-                                    {sources.length > 0 && <span style={{ ...tagStyle, background: `${C.textMuted}10`, color: C.textMuted }}>{sources.length} מקורות</span>}
+                                    {(mt === 'in_text' || mt === 'both' || (!mt && q.snippet)) && <span style={{ ...tagStyle, background: `${C.info}10`, color: C.info }}>בטקסט</span>}
+                                    {(mt === 'in_sources' || mt === 'both' || (!mt && sources.length > 0)) && <span style={{ ...tagStyle, background: `${C.primary}10`, color: C.primary }}>במקורות</span>}
+                                    {sc > 0 && <span style={{ ...tagStyle, background: `${C.textMuted}10`, color: C.textMuted }}>{sc} מקורות</span>}
+                                    <span style={{
+                                      ...tagStyle,
+                                      background: conf >= 70 ? `${C.success}10` : conf >= 40 ? '#f59e0b10' : `${C.textMuted}10`,
+                                      color: conf >= 70 ? C.success : conf >= 40 ? '#f59e0b' : C.textMuted,
+                                    }}>{conf >= 70 ? 'גבוהה' : conf >= 40 ? 'בינונית' : 'נמוכה'}</span>
                                   </>
-                                )}
+                                  );
+                                })()}
                                 {!q.found && <span style={{ ...tagStyle, background: `${C.danger}10`, color: C.danger }}>לא אוזכר</span>}
                               </div>
                               {/* Show own source highlight */}
@@ -3253,7 +3270,7 @@ export default function SeoPlanDetail() {
                 {/* ── Query Detail Popup Modal (upgraded) ── */}
                 {aiQueryDetail && (() => {
                   const detailPd = PLATFORM_DISPLAY[aiQueryDetail.platform] || { name: aiQueryDetail.platform, nameHe: aiQueryDetail.platform, color: C.text };
-                  const detailSources = extractSources(aiQueryDetail.snippet, p.targetUrl);
+                  const detailSources = extractSources(aiQueryDetail.snippet, p.targetUrl, aiQueryDetail.sources);
                   return (
                   <div onClick={() => setAiQueryDetail(null)} style={{
                     position: "fixed", inset: 0, zIndex: 9999,
@@ -3312,16 +3329,45 @@ export default function SeoPlanDetail() {
                           </div>
                         </div>
                       </div>
+                      {/* Mention type + Sources count */}
+                      <div style={{
+                        padding: "12px 24px", display: "flex", gap: 12, borderBottom: `1px solid ${C.borderLight}`,
+                        flexWrap: "wrap",
+                      }}>
+                        {aiQueryDetail.mentionType && aiQueryDetail.mentionType !== 'none' && (
+                          <span style={{
+                            ...tagStyle,
+                            background: aiQueryDetail.mentionType === 'both' ? `${C.success}12` : `${C.info}10`,
+                            color: aiQueryDetail.mentionType === 'both' ? C.success : C.info,
+                          }}>
+                            {aiQueryDetail.mentionType === 'both' ? 'בטקסט + במקורות' : aiQueryDetail.mentionType === 'in_text' ? 'בטקסט' : 'במקורות'}
+                          </span>
+                        )}
+                        {detailSources.length > 0 && (
+                          <span style={{ ...tagStyle, background: `${C.primary}10`, color: C.primary }}>
+                            {detailSources.length} מקורות
+                          </span>
+                        )}
+                        {aiQueryDetail.confidence > 0 && (
+                          <span style={{
+                            ...tagStyle,
+                            background: aiQueryDetail.confidence >= 70 ? `${C.success}10` : aiQueryDetail.confidence >= 40 ? '#f59e0b10' : `${C.textMuted}10`,
+                            color: aiQueryDetail.confidence >= 70 ? C.success : aiQueryDetail.confidence >= 40 ? '#f59e0b' : C.textMuted,
+                          }}>
+                            אמינות: {aiQueryDetail.confidence >= 70 ? 'גבוהה' : aiQueryDetail.confidence >= 40 ? 'בינונית' : 'נמוכה'}
+                          </span>
+                        )}
+                      </div>
                       {/* Response content */}
-                      {aiQueryDetail.snippet && (
+                      {(aiQueryDetail.responseText || aiQueryDetail.snippet) && (
                         <div style={{ padding: "16px 24px", borderBottom: `1px solid ${C.borderLight}` }}>
                           <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 10 }}>תשובה:</div>
                           <div style={{
                             fontSize: 13, color: C.textSecondary, lineHeight: 1.9,
-                            direction: "rtl", textAlign: "right", maxHeight: 280, overflow: "auto",
+                            direction: "rtl", textAlign: "right", maxHeight: 400, overflow: "auto",
                             whiteSpace: "pre-wrap",
                           }}>
-                            {aiQueryDetail.snippet}
+                            {aiQueryDetail.responseText || aiQueryDetail.snippet}
                           </div>
                         </div>
                       )}

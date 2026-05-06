@@ -19,6 +19,9 @@ export interface PlatformQueryResult {
   confidence: number;
   scanMode: 'real' | 'unavailable';
   raw?: any;
+  responseText?: string;       // Full AI response text (not truncated)
+  sources?: { url: string; domain: string; title?: string }[];  // Extracted URLs from response
+  mentionType?: 'in_text' | 'in_sources' | 'both' | 'none';    // Where business was mentioned
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -133,6 +136,71 @@ function isBusinessMentioned(answer: string, businessName: string, targetDomain?
   return { found: false, confidence: 0 };
 }
 
+/**
+ * Extract source URLs from AI response text
+ */
+function extractSourceUrls(text: string): { url: string; domain: string; title?: string }[] {
+  const urls: { url: string; domain: string; title?: string }[] = [];
+  const seen = new Set<string>();
+  // Match URLs in text
+  const urlRegex = /https?:\/\/[^\s\)\]\},<>"]+/gi;
+  const matches = text.match(urlRegex) || [];
+  for (const rawUrl of matches) {
+    const url = rawUrl.replace(/[.\,;:]+$/, ''); // trim trailing punctuation
+    try {
+      const parsed = new URL(url);
+      const domain = parsed.hostname.replace(/^www\./, '');
+      if (!seen.has(domain)) {
+        seen.add(domain);
+        urls.push({ url, domain });
+      }
+    } catch {}
+  }
+  // Also match domain patterns without protocol (e.g., "playit.org.il")
+  const domainRegex = /\b([a-z0-9][-a-z0-9]*\.(?:com|co\.il|org\.il|net\.il|ac\.il|org|net|io|ai|dev|app|info|biz|me))\b/gi;
+  const domainMatches = text.match(domainRegex) || [];
+  for (const domain of domainMatches) {
+    const clean = domain.toLowerCase();
+    if (!seen.has(clean)) {
+      seen.add(clean);
+      urls.push({ url: `https://${clean}`, domain: clean });
+    }
+  }
+  return urls;
+}
+
+/**
+ * Determine where the business was mentioned in the response
+ */
+function determineMentionType(
+  responseText: string,
+  sources: { url: string; domain: string }[],
+  businessName: string,
+  targetDomain?: string
+): 'in_text' | 'in_sources' | 'both' | 'none' {
+  const textLower = responseText.toLowerCase();
+  const nameLower = businessName.toLowerCase();
+  const domainClean = targetDomain?.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase() || '';
+  const domainShort = domainClean.replace(/^www\./, '').split('.')[0];
+
+  // Check if mentioned in the body text (name or domain)
+  const inText = textLower.includes(nameLower) ||
+    (domainShort.length > 3 && textLower.includes(domainShort)) ||
+    (domainClean && textLower.includes(domainClean));
+
+  // Check if mentioned in extracted source URLs
+  const inSources = sources.some(s => {
+    const sDomain = s.domain.toLowerCase();
+    return (domainClean && sDomain.includes(domainClean.replace(/^www\./, ''))) ||
+           (domainShort.length > 3 && sDomain.includes(domainShort));
+  });
+
+  if (inText && inSources) return 'both';
+  if (inText) return 'in_text';
+  if (inSources) return 'in_sources';
+  return 'none';
+}
+
 // ── Google Custom Search (SEO + AI Overview) ──────────────────────────────────
 
 export function isGoogleAvailable(): boolean {
@@ -238,10 +306,15 @@ export async function queryChatGPT(query: string, businessName: string, targetDo
     const data = await res.json();
     const answer = data.choices?.[0]?.message?.content || '';
     const match = isBusinessMentioned(answer, businessName, targetDomain, query);
+    const sources = extractSourceUrls(answer);
+    const mentionType = determineMentionType(answer, sources, businessName, targetDomain);
 
     return {
       found: match.found,
       snippet: answer.slice(0, 300),
+      responseText: answer,
+      sources,
+      mentionType,
       confidence: match.confidence,
       scanMode: 'real',
     };
@@ -280,10 +353,15 @@ export async function queryClaude(query: string, businessName: string, targetDom
     const data = await res.json();
     const answer = data.content?.[0]?.text || '';
     const match = isBusinessMentioned(answer, businessName, targetDomain, query);
+    const sources = extractSourceUrls(answer);
+    const mentionType = determineMentionType(answer, sources, businessName, targetDomain);
 
     return {
       found: match.found,
       snippet: answer.slice(0, 300),
+      responseText: answer,
+      sources,
+      mentionType,
       confidence: match.confidence,
       scanMode: 'real',
     };
@@ -320,11 +398,27 @@ export async function queryPerplexity(query: string, businessName: string, targe
 
     const data = await res.json();
     const answer = data.choices?.[0]?.message?.content || '';
+    const citations = Array.isArray(data.citations) ? data.citations : [];
     const match = isBusinessMentioned(answer, businessName, targetDomain, query);
+    const sources = extractSourceUrls(answer);
+    // Add Perplexity citations that aren't already in sources
+    for (const citUrl of citations) {
+      try {
+        const parsed = new URL(citUrl);
+        const domain = parsed.hostname.replace(/^www\./, '');
+        if (!sources.find(s => s.domain === domain)) {
+          sources.push({ url: citUrl, domain });
+        }
+      } catch {}
+    }
+    const mentionType = determineMentionType(answer, sources, businessName, targetDomain);
 
     return {
       found: match.found,
       snippet: answer.slice(0, 300),
+      responseText: answer,
+      sources,
+      mentionType,
       confidence: match.confidence,
       scanMode: 'real',
     };
@@ -360,10 +454,15 @@ export async function queryGemini(query: string, businessName: string, targetDom
     const data = await res.json();
     const answer = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const match = isBusinessMentioned(answer, businessName, targetDomain, query);
+    const sources = extractSourceUrls(answer);
+    const mentionType = determineMentionType(answer, sources, businessName, targetDomain);
 
     return {
       found: match.found,
       snippet: answer.slice(0, 300),
+      responseText: answer,
+      sources,
+      mentionType,
       confidence: match.confidence,
       scanMode: 'real',
     };

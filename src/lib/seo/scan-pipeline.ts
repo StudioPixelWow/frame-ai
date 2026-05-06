@@ -186,6 +186,10 @@ export interface AIQueryResult {
   confidence: number;
   checkedAt: string;
   scanMode: 'real' | 'simulated' | 'unavailable';
+  responseText?: string;
+  sources?: { url: string; domain: string; title?: string }[];
+  mentionType?: 'in_text' | 'in_sources' | 'both' | 'none';
+  sourcesCount?: number;
 }
 
 export interface Competitor {
@@ -1154,6 +1158,10 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
           aiResults.push({
             query: q.query, platform: platform.id, found: result.found,
             position: result.position, snippet: result.snippet,
+            responseText: result.responseText,
+            sources: result.sources,
+            mentionType: result.mentionType,
+            sourcesCount: result.sources?.length || 0,
             confidence: result.confidence,
             checkedAt: new Date().toISOString(), scanMode: result.scanMode,
           });
