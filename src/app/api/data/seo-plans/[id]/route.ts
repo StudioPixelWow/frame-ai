@@ -11,6 +11,8 @@ const CONTAINER_KEYS = new Set([
   'scannedPages','platformStatuses','websiteFacts','metrics',
   'h1Tags','h2Tags','schemaTypes','techStack',
   'wpConnection','businessProfile','automationLog','automationResults',
+  'clientKeywords','aiKeywords','aiArticles','aiCompetitors','aiContentGaps',
+  'contentGaps','competitors','gmailSettings','emailSettings',
 ]);
 
 function serverSanitize(obj: any, depth = 0): any {
