@@ -1173,6 +1173,34 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
     }
   }
 
+  // ─── Inject 3 daily SEO article tasks per day ─────────────────────
+  // Each day gets 3 article tasks that cycle through client keywords
+  // Scheduled publish times: 08:00, 12:00, 17:00
+  if (keywords.length > 0) {
+    const articleTimes = ['08:00', '12:00', '17:00'];
+    for (const dayPlan of days) {
+      for (let ai = 0; ai < 3; ai++) {
+        // Cycle through keywords: day 1 gets kw 0,1,2 — day 2 gets kw 3,4,5 — etc.
+        const kwIndex = ((dayPlan.day - 1) * 3 + ai) % keywords.length;
+        const targetKw = keywords[kwIndex];
+        const publishTime = articleTimes[ai];
+
+        dayPlan.tasks.push({
+          id: mkId(),
+          title: `פרסום מאמר SEO יומי — "${targetKw}" (${publishTime})`,
+          type: 'content',
+          description: `מאמר SEO אוטומטי ממוקד בביטוי "${targetKw}". המאמר ייכתב על ידי AI, יכלול תמונה ראשית מיוצרת (DALL-E), ויפורסם אוטומטית לוורדפרס בשעה ${publishTime}.`,
+          impactLevel: 'high',
+          effortHours: 0.5,
+          relatedPageUrl: null,
+          expectedOutcome: `מאמר בלוג חדש ממוקד בביטוי "${targetKw}" מפורסם באתר עם תמונה ראשית ו-Yoast SEO מותאם`,
+          reason: `פרסום 3 מאמרי SEO יומיים בונה סמכות תוכן, מגביר נוכחות אורגנית, ומחזק את הביטויים הממוקדים של הלקוח`,
+          contentBrief: `ביטוי מפתח: ${targetKw}\nשעת פרסום: ${publishTime}\nסוג: מאמר SEO יומי אוטומטי\nתמונה: AI (DALL-E)\nאורך: 800-1200 מילים`,
+        });
+      }
+    }
+  }
+
   // Sort by day
   days.sort((a, b) => a.day - b.day);
 

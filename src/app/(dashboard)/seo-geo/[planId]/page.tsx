@@ -1614,6 +1614,7 @@ export default function SeoPlanDetail() {
                               'image alt', 'alt text', 'תמונות', 'images',
                               'internal link', 'קישורים פנימיים', 'linking',
                               'content optimization', 'optimize content', 'תוכן', 'content', 'optimization',
+                              'מאמר seo יומי', 'פרסום מאמר seo', 'פרסום מאמר', 'מאמר יומי', 'daily seo article',
                             ];
                             const isAutomatable = (title: string) => {
                               const t = title.toLowerCase().trim();

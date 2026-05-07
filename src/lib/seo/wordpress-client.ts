@@ -537,6 +537,128 @@ export async function getSiteInfo(conn: WPConnection): Promise<SiteInfo> {
   }
 }
 
+// ============================================================================
+// יצירת פוסטים ותמונות — Article Publishing
+// ============================================================================
+
+export interface WPPostCreateResult {
+  success: boolean;
+  postId?: number;
+  postUrl?: string;
+  error?: string;
+}
+
+export interface WPMediaUploadResult {
+  success: boolean;
+  mediaId?: number;
+  mediaUrl?: string;
+  error?: string;
+}
+
+/**
+ * Upload media (image) to WordPress media library
+ */
+export async function uploadMedia(
+  conn: WPConnection,
+  imageBuffer: Buffer,
+  filename: string,
+  mimeType: string = 'image/png'
+): Promise<WPMediaUploadResult> {
+  try {
+    const normalizedUrl = normalizeSiteUrl(conn.siteUrl);
+    const authHeader = createAuthHeader(conn.username, conn.applicationPassword);
+    const url = `${normalizedUrl}/wp-json/wp/v2/media`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': authHeader,
+        'Content-Type': mimeType,
+        'Content-Disposition': `attachment; filename="${filename}"`,
+      },
+      body: imageBuffer,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, error: `Upload failed (${response.status}): ${errorText}` };
+    }
+
+    const result = await response.json();
+    return {
+      success: true,
+      mediaId: result.id,
+      mediaUrl: result.source_url || result.guid?.rendered,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Media upload failed',
+    };
+  }
+}
+
+/**
+ * Create a WordPress post (article) with optional featured image and scheduled time
+ */
+export async function createPost(
+  conn: WPConnection,
+  options: {
+    title: string;
+    content: string;
+    status?: 'publish' | 'draft' | 'future';   // 'future' = scheduled
+    date?: string;                               // ISO 8601 for scheduled publish
+    featuredMediaId?: number;                    // Featured image media ID
+    categories?: number[];
+    tags?: number[];
+    metaTitle?: string;                          // Yoast meta title
+    metaDescription?: string;                    // Yoast meta description
+    focusKeyword?: string;                       // Yoast focus keyword
+  }
+): Promise<WPPostCreateResult> {
+  try {
+    const authHeader = createAuthHeader(conn.username, conn.applicationPassword);
+    const url = buildApiUrl(conn.siteUrl, '/posts');
+
+    const body: Record<string, any> = {
+      title: options.title,
+      content: options.content,
+      status: options.status || 'publish',
+    };
+
+    if (options.date) body.date = options.date;
+    if (options.featuredMediaId) body.featured_media = options.featuredMediaId;
+    if (options.categories?.length) body.categories = options.categories;
+    if (options.tags?.length) body.tags = options.tags;
+
+    // Yoast meta fields
+    if (options.metaTitle || options.metaDescription || options.focusKeyword) {
+      body.meta = {};
+      if (options.metaTitle) body.meta.yoast_wpseo_title = options.metaTitle;
+      if (options.metaDescription) body.meta.yoast_wpseo_metadesc = options.metaDescription;
+      if (options.focusKeyword) body.meta.yoast_wpseo_focuskw = options.focusKeyword;
+    }
+
+    const response = await fetchWithAuth(url, authHeader, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+
+    const result = await response.json();
+
+    return {
+      success: true,
+      postId: result.id,
+      postUrl: result.link || result.guid?.rendered,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Post creation failed',
+    };
+  }
+}
+
 // עזר: הוסף או עדכן LocalBusiness schema
 // Helper: Add or update LocalBusiness schema to page
 export function generateLocalBusinessSchema(

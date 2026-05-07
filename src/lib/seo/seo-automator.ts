@@ -1,8 +1,9 @@
 // SEO Task Automation Engine
 // מנוע אוטומציה לבצוע משימות SEO לפי תוכנית 60 יום
 
-import { WPConnection, getPages, updateYoastMeta, updatePageContent, analyzeHeadings, generateLocalBusinessSchema, generateOptimalRobotsTxt, getRobotsTxt, WPPage } from './wordpress-client';
+import { WPConnection, getPages, updateYoastMeta, updatePageContent, analyzeHeadings, generateLocalBusinessSchema, generateOptimalRobotsTxt, getRobotsTxt, WPPage, uploadMedia, createPost } from './wordpress-client';
 import { generateWithAI } from '@/lib/ai/openai-client';
+import { generateArticleImage } from './image-generator';
 
 // ============================================================================
 // סוגי משימות וממשקים
@@ -17,7 +18,8 @@ export type AutoTaskType =
   | 'schema_markup'
   | 'image_alt_text'
   | 'internal_linking'
-  | 'content_optimization';
+  | 'content_optimization'
+  | 'daily_seo_article';
 
 export interface AutoTaskResult {
   taskType: AutoTaskType;
@@ -824,6 +826,208 @@ const executeContentOptimization: ExecutorFunction = async (context: AutomationC
 };
 
 // ============================================================================
+// Daily SEO Article Executor
+// ============================================================================
+
+/**
+ * Execute a daily SEO article task:
+ * 1. Generate article content via AI (targeting a specific keyword)
+ * 2. Generate featured image via DALL-E
+ * 3. Upload image to WordPress media library
+ * 4. Create WordPress post (scheduled or published) with featured image + Yoast meta
+ */
+const executeDailySeoArticle: ExecutorFunction = async (context) => {
+  const startTime = new Date().toISOString();
+  const changes: AutoTaskChange[] = [];
+
+  try {
+    // Pick a keyword to target (cycle through available keywords)
+    const keywords = context.targetKeywords || [];
+    if (keywords.length === 0) {
+      return {
+        taskType: 'daily_seo_article',
+        success: false,
+        pagesAffected: 0,
+        changes: [],
+        error: 'אין ביטויי SEO מוגדרים — הוסף ביטויים בשלב ההגדרות',
+        executedAt: startTime,
+      };
+    }
+
+    // Use a random keyword from the list for variety
+    const keyword = keywords[Math.floor(Math.random() * keywords.length)];
+    const currentYear = new Date().getFullYear();
+
+    // --- Step 1: Generate article content via AI ---
+    const articlePrompt = `אתה כותב תוכן SEO מקצועי בעברית. כתוב מאמר שלם ומקיף בעברית עבור בלוג של ${context.businessName || 'עסק'}.
+
+נתוני העסק:
+- שם: ${context.businessName || 'העסק'}
+- סוג: ${context.businessType || 'עסק'}
+- תחום: ${context.industry || 'כללי'}
+- מוצרים/שירותים: ${context.products?.join(', ') || 'לא צוינו'}
+- מיקום: ${context.location || 'ישראל'}
+
+ביטוי SEO ממוקד: "${keyword}"
+השנה הנוכחית: ${currentYear}
+
+הוראות:
+1. כתוב כותרת מושכת ואופטימלית ל-SEO (עד 60 תווים) שכוללת את הביטוי "${keyword}" ואת שנת ${currentYear}
+2. כתוב מאמר של 800-1200 מילים בעברית תקינה
+3. השתמש בכותרות משנה (H2, H3) עם הביטוי הממוקד
+4. כלול את הביטוי "${keyword}" באופן טבעי 5-8 פעמים לאורך המאמר
+5. כלול פסקת פתיחה חזקה ופסקת סיכום עם קריאה לפעולה
+6. כתוב ב-HTML תקין (h2, h3, p, ul, li, strong)
+7. אל תשתמש בשנים ישנות — השתמש בשנת ${currentYear} בלבד
+8. כתוב meta description אופטימלי (עד 155 תווים)
+
+החזר בפורמט JSON:
+{
+  "title": "כותרת המאמר",
+  "content": "<h2>...</h2><p>...</p>...",
+  "metaDescription": "תיאור מטא קצר",
+  "metaTitle": "כותרת מטא אופטימלית"
+}`;
+
+    const aiResult = await generateWithAI(
+      'אתה כותב תוכן SEO מקצועי. החזר JSON בלבד ללא markdown.',
+      articlePrompt,
+      { temperature: 0.7, maxTokens: 4000 }
+    );
+
+    if (!aiResult.success || !aiResult.text) {
+      return {
+        taskType: 'daily_seo_article',
+        success: false,
+        pagesAffected: 0,
+        changes: [],
+        error: `יצירת מאמר נכשלה: ${aiResult.error || 'תשובת AI ריקה'}`,
+        executedAt: startTime,
+      };
+    }
+
+    // Parse AI response
+    let articleData: { title: string; content: string; metaDescription: string; metaTitle: string };
+    try {
+      const cleaned = aiResult.text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+      articleData = JSON.parse(cleaned);
+    } catch {
+      return {
+        taskType: 'daily_seo_article',
+        success: false,
+        pagesAffected: 0,
+        changes: [],
+        error: 'פענוח תשובת AI נכשל — פורמט JSON לא תקין',
+        executedAt: startTime,
+      };
+    }
+
+    if (!articleData.title || !articleData.content) {
+      return {
+        taskType: 'daily_seo_article',
+        success: false,
+        pagesAffected: 0,
+        changes: [],
+        error: 'מאמר חסר כותרת או תוכן',
+        executedAt: startTime,
+      };
+    }
+
+    console.log(`[SEO-ARTICLE] Generated article: "${articleData.title}" for keyword "${keyword}"`);
+
+    // --- Step 2: Generate featured image via DALL-E ---
+    let featuredMediaId: number | undefined;
+    let imageUrl: string | undefined;
+
+    const imageResult = await generateArticleImage(
+      articleData.title,
+      keyword,
+      context.businessType || context.industry || 'business'
+    );
+
+    if (imageResult.success && imageResult.imageBuffer) {
+      console.log(`[SEO-ARTICLE] Image generated (${imageResult.imageBuffer.length} bytes)`);
+
+      // --- Step 3: Upload image to WordPress ---
+      const slugTitle = articleData.title.replace(/[^a-zA-Z0-9֐-׿]/g, '-').slice(0, 50);
+      const filename = `seo-article-${slugTitle}-${Date.now()}.png`;
+
+      try {
+        const uploadResult = await uploadMedia(
+          context.connection,
+          imageResult.imageBuffer,
+          filename,
+          'image/png'
+        );
+
+        if (uploadResult.success && uploadResult.mediaId) {
+          featuredMediaId = uploadResult.mediaId;
+          imageUrl = uploadResult.mediaUrl;
+          console.log(`[SEO-ARTICLE] Image uploaded to WP: mediaId=${featuredMediaId}`);
+        } else {
+          console.warn(`[SEO-ARTICLE] Image upload failed: ${uploadResult.error}`);
+        }
+      } catch (uploadErr) {
+        console.warn(`[SEO-ARTICLE] Image upload error: ${uploadErr instanceof Error ? uploadErr.message : 'Unknown'}`);
+      }
+    } else {
+      console.warn(`[SEO-ARTICLE] Image generation failed: ${imageResult.error}`);
+    }
+
+    // --- Step 4: Create WordPress post ---
+    const postResult = await createPost(context.connection, {
+      title: articleData.title,
+      content: articleData.content,
+      status: 'publish',
+      featuredMediaId,
+      metaTitle: articleData.metaTitle || articleData.title,
+      metaDescription: articleData.metaDescription || '',
+      focusKeyword: keyword,
+    });
+
+    if (!postResult.success) {
+      return {
+        taskType: 'daily_seo_article',
+        success: false,
+        pagesAffected: 0,
+        changes: [],
+        error: `פרסום מאמר נכשל: ${postResult.error}`,
+        executedAt: startTime,
+      };
+    }
+
+    console.log(`[SEO-ARTICLE] Post published: ID=${postResult.postId}, URL=${postResult.postUrl}`);
+
+    changes.push({
+      pageId: postResult.postId || 0,
+      pageTitle: articleData.title,
+      pageUrl: postResult.postUrl || '',
+      field: 'מאמר SEO יומי',
+      oldValue: '',
+      newValue: `מאמר "${articleData.title}" פורסם | ביטוי: "${keyword}" | תמונה: ${featuredMediaId ? 'כן' : 'לא'}`,
+      applied: true,
+    });
+
+    return {
+      taskType: 'daily_seo_article',
+      success: true,
+      pagesAffected: 1,
+      changes,
+      executedAt: startTime,
+    };
+  } catch (error) {
+    return {
+      taskType: 'daily_seo_article',
+      success: false,
+      pagesAffected: 0,
+      changes,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      executedAt: startTime,
+    };
+  }
+};
+
+// ============================================================================
 // מיפוי Executor Functions
 // ============================================================================
 
@@ -837,6 +1041,7 @@ const executors: Record<AutoTaskType, ExecutorFunction> = {
   image_alt_text: executeImageAltText,
   internal_linking: executeInternalLinking,
   content_optimization: executeContentOptimization,
+  daily_seo_article: executeDailySeoArticle,
 };
 
 // ============================================================================
@@ -973,6 +1178,18 @@ export function mapPlanTaskToAutoType(planTaskTitle: string): AutoTaskType | nul
     normalizedTitle.includes('linking')
   ) {
     return 'internal_linking';
+  }
+
+  // Daily SEO Article (must be checked BEFORE content_optimization to avoid false match)
+  if (
+    normalizedTitle.includes('מאמר seo יומי') ||
+    normalizedTitle.includes('פרסום מאמר seo') ||
+    normalizedTitle.includes('פרסום מאמר') ||
+    normalizedTitle.includes('מאמר יומי') ||
+    normalizedTitle.includes('daily seo article') ||
+    normalizedTitle.includes('daily_seo_article')
+  ) {
+    return 'daily_seo_article';
   }
 
   // Content Optimization
