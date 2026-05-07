@@ -376,8 +376,9 @@ export default function SeoPlanDetail() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.data?.article) {
-          setGeneratedArticles(prev => ({ ...prev, [taskId]: data.data.article }));
+        const articleContent = data.data?.article || data.article;
+        if (articleContent) {
+          setGeneratedArticles(prev => ({ ...prev, [taskId]: articleContent }));
           // Switch to articles tab and scroll to the generated article
           setActiveTab("articles");
           setTimeout(() => {
