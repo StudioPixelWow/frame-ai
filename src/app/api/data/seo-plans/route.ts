@@ -33,6 +33,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    console.log('[SEO-PLANS-POST] clientKeywords received:', JSON.stringify(body.clientKeywords)?.slice(0, 300));
+    console.log('[SEO-PLANS-POST] clientKeywords count:', body.clientKeywords?.length ?? 'undefined');
     const now = new Date().toISOString();
     const plan = {
       // Defaults first — body values override them

@@ -701,6 +701,8 @@ function SeoGeoWizard() {
   const savePlan = async () => {
     setSaving(true);
     setErrorMsg("");
+    console.log('[SEO-WIZARD-SAVE] clientKeywords in state:', JSON.stringify(data.clientKeywords));
+    console.log('[SEO-WIZARD-SAVE] clientKeywords count:', data.clientKeywords?.length);
     try {
       const res = await fetch("/api/data/seo-plans", {
         method: "POST",

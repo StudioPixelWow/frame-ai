@@ -61,8 +61,14 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
     const { id } = await context.params;
     const item = await seoPlans.getByIdAsync(id);
     if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    // DEBUG: Log raw clientKeywords from DB
+    const rawCK = (item as any).clientKeywords;
+    console.log(`[SEO-PLAN-GET] id=${id} clientKeywords type=${typeof rawCK} isArray=${Array.isArray(rawCK)} length=${rawCK?.length ?? 'N/A'}`);
+    if (rawCK) console.log(`[SEO-PLAN-GET] clientKeywords sample:`, JSON.stringify(rawCK)?.slice(0, 300));
     // SERVER-SIDE sanitization — strip all evidence-pattern objects before sending to client
     const sanitized = serverSanitize(JSON.parse(JSON.stringify(item)));
+    const sanitizedCK = (sanitized as any).clientKeywords;
+    console.log(`[SEO-PLAN-GET] AFTER sanitize clientKeywords type=${typeof sanitizedCK} isArray=${Array.isArray(sanitizedCK)} length=${sanitizedCK?.length ?? 'N/A'}`);
     return NextResponse.json(sanitized);
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });

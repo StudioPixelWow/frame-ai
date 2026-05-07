@@ -406,6 +406,12 @@ export default function SeoPlanDetail() {
         if (res.ok) {
           const data = await res.json();
 
+          // DEBUG: Log raw API response for clientKeywords
+          console.log('[PLAN-DETAIL-DEBUG] Raw API clientKeywords:', JSON.stringify(data.clientKeywords)?.slice(0, 500));
+          console.log('[PLAN-DETAIL-DEBUG] Raw API clientKeywords type:', typeof data.clientKeywords, 'isArray:', Array.isArray(data.clientKeywords), 'length:', data.clientKeywords?.length ?? 'N/A');
+          // Store debug info for display
+          (window as any).__debugRawClientKeywords = data.clientKeywords;
+
           // Normalize task statuses in weeks/phases
           if (data.weeks) {
             data.weeks = (Array.isArray(data.weeks) ? data.weeks : []).map((w: PlanWeek) => ({
@@ -416,6 +422,7 @@ export default function SeoPlanDetail() {
 
           // Sanitize: single pass through entire object tree
           const sanitized = nuke(data, 0);
+          console.log('[PLAN-DETAIL-DEBUG] After nuke() clientKeywords:', JSON.stringify((sanitized as any).clientKeywords)?.slice(0, 500));
           setPlan(sanitized as SeoPlan);
 
           // Auto-fill WP form from client data if plan has no wpConnection
@@ -4593,6 +4600,15 @@ export default function SeoPlanDetail() {
                   <p style={{ color: C.textMuted, fontSize: 14 }}>
                     לא הוזנו ביטויי SEO ידניים. ביטויים ידניים מוזנים בשלב 3 של יצירת תוכנית חדשה.
                   </p>
+                  {/* DEBUG: Show raw clientKeywords data for troubleshooting */}
+                  <div style={{ marginTop: 16, padding: 12, background: '#fff3cd', borderRadius: 8, textAlign: 'left', direction: 'ltr', fontSize: 11, fontFamily: 'monospace', color: '#856404' }}>
+                    <strong>DEBUG clientKeywords:</strong><br/>
+                    safePlan.clientKeywords type: {typeof (safePlan as any)?.clientKeywords}<br/>
+                    isArray: {String(Array.isArray((safePlan as any)?.clientKeywords))}<br/>
+                    length: {(safePlan as any)?.clientKeywords?.length ?? 'N/A'}<br/>
+                    raw: {JSON.stringify((safePlan as any)?.clientKeywords)?.slice(0, 200) || 'undefined'}<br/>
+                    plan keys: {Object.keys(safePlan || {}).filter(k => k.toLowerCase().includes('keyword')).join(', ') || 'none with "keyword"'}
+                  </div>
                 </div>
               )}
 
