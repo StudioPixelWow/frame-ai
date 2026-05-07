@@ -159,6 +159,21 @@ function ScanPageInner() {
   const [job, setJobRaw] = useState<ScanJob | null>(null);
   const [savedPlanId, setSavedPlanId] = useState<string>(planId);
 
+  // ── Read wizard data from sessionStorage (clientKeywords, goals, etc.) ──
+  const wizardDataRef = useRef<{ clientKeywords?: string[]; goals?: any[]; clientId?: string; clientName?: string; websiteUrl?: string }>({});
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('seo-wizard-data');
+      if (raw) {
+        wizardDataRef.current = JSON.parse(raw);
+        console.log('[PIXEL-SEO-SCAN-UI] Loaded wizard data from sessionStorage:', {
+          clientKeywords: wizardDataRef.current.clientKeywords?.length ?? 0,
+          goals: wizardDataRef.current.goals?.length ?? 0,
+        });
+      }
+    } catch (e) { console.warn('[PIXEL-SEO-SCAN-UI] Failed to read wizard data from sessionStorage:', e); }
+  }, []);
+
   // ── GUARD: Never allow phase to regress from 'scanning' back to 'select' ──
   // Only an explicit user action (rescan button) should reset to 'select'.
   const scanActiveRef = useRef(false);
@@ -381,12 +396,28 @@ function ScanPageInner() {
 
       // ── PERSIST: Save scan results to seo-plans DB ──────────────
       try {
-        const clientId = searchParams.get("clientId") || '';
+        const clientId = searchParams.get("clientId") || wizardDataRef.current.clientId || '';
+        // Build clientKeywords in the mapped format from wizard's raw string[]
+        const rawKeywords = wizardDataRef.current.clientKeywords || [];
+        const mappedClientKeywords = rawKeywords.map((kw: string) => ({
+          keyword: kw,
+          source: 'manual' as const,
+          initialRank: null,
+          currentRank: null,
+          trend: 'stable' as const,
+          lastChecked: null,
+          history: [],
+          aiVisibility: {},
+        }));
+        console.log('[PIXEL-SEO-SCAN-UI] Including clientKeywords in plan:', mappedClientKeywords.length, 'keywords');
         const planPayload = {
           clientId,
-          clientName: clientName || data.websiteFacts?.business_name?.value || '',
+          clientName: clientName || wizardDataRef.current.clientName || data.websiteFacts?.business_name?.value || '',
           websiteUrl: scanUrl,
           status: 'scanned',
+          // Include wizard data so it persists even if user doesn't complete the full wizard
+          ...(mappedClientKeywords.length > 0 ? { clientKeywords: mappedClientKeywords } : {}),
+          ...(wizardDataRef.current.goals?.length ? { goals: wizardDataRef.current.goals } : {}),
           websiteScan: {
             url: data.url || scanUrl,
             scannedAt: data.scannedAt || new Date().toISOString(),

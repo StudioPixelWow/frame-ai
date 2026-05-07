@@ -701,13 +701,30 @@ function SeoGeoWizard() {
   const savePlan = async () => {
     setSaving(true);
     setErrorMsg("");
-    console.log('[SEO-WIZARD-SAVE] clientKeywords in state:', JSON.stringify(data.clientKeywords));
-    console.log('[SEO-WIZARD-SAVE] clientKeywords count:', data.clientKeywords?.length);
+    // DEBUG: capture keywords at exact moment of save
+    const kwSnapshot = [...(data.clientKeywords || [])];
+    console.log('[SEO-WIZARD-SAVE] clientKeywords in state:', JSON.stringify(kwSnapshot));
+    console.log('[SEO-WIZARD-SAVE] clientKeywords count:', kwSnapshot.length);
+    console.log('[SEO-WIZARD-SAVE] full data keys:', Object.keys(data).join(', '));
+    // Visual debug alert - remove after debugging
+    if (kwSnapshot.length === 0) {
+      console.warn('[SEO-WIZARD-SAVE] ⚠️ clientKeywords is EMPTY at save time!');
+    }
     try {
-      const res = await fetch("/api/data/seo-plans", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      // Build the mapped keywords BEFORE the fetch to capture them
+      const mappedKeywords = kwSnapshot.map((kw, i) => ({
+        keyword: kw,
+        source: 'client' as const,
+        initialRank: null,
+        currentRank: null,
+        trend: 'new' as const,
+        lastChecked: null,
+        history: [],
+        priority: i + 1,
+        addedAt: new Date().toISOString(),
+      }));
+      console.log('[SEO-WIZARD-SAVE] mappedKeywords count:', mappedKeywords.length);
+      const postBody = {
           clientId: data.clientId,
           clientName: data.clientName,
           websiteUrl: data.websiteUrl,
@@ -720,17 +737,7 @@ function SeoGeoWizard() {
           days: data.days,
           phases: data.phases,
           weeks: data.weeks,
-          clientKeywords: data.clientKeywords.map((kw, i) => ({
-            keyword: kw,
-            source: 'client' as const,
-            initialRank: null,
-            currentRank: null,
-            trend: 'new' as const,
-            lastChecked: null,
-            history: [],
-            priority: i + 1,
-            addedAt: new Date().toISOString(),
-          })),
+          clientKeywords: mappedKeywords,
           overallScore: Math.round((
             (data.scanResult?.domainAuthority || 0) +
             data.visibilityScore +
@@ -743,15 +750,34 @@ function SeoGeoWizard() {
             (data.scanResult.hasSitemap ? 25 : 0) +
             (data.scanResult.hasRobotsTxt ? 25 : 0)
           ) : 0,
-          contentScore: 0, // Cannot determine without real content analysis
+          contentScore: 0,
           visibilityScore: data.visibilityScore,
           totalTasks: data.totalTasks,
           completedTasks: 0,
           generatedAt: new Date().toISOString(),
-        }),
+      };
+      console.log('[SEO-WIZARD-SAVE] postBody.clientKeywords count:', postBody.clientKeywords?.length);
+      const res = await fetch("/api/data/seo-plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(postBody),
       });
       if (res.ok) {
         const saved = await res.json();
+        // FAILSAFE: Explicitly PUT clientKeywords right after creation
+        // This guarantees keywords persist even if the POST body had issues
+        if (saved.id && mappedKeywords.length > 0) {
+          try {
+            await fetch(`/api/data/seo-plans/${saved.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ clientKeywords: mappedKeywords }),
+            });
+            console.log('[SEO-WIZARD-SAVE] FAILSAFE PUT clientKeywords OK for', saved.id);
+          } catch (e2) {
+            console.warn('[SEO-WIZARD-SAVE] FAILSAFE PUT failed:', e2);
+          }
+        }
         setData(prev => ({ ...prev, savedPlanId: saved.id }));
         router.push(`/seo-geo/${saved.id}`);
       } else {
@@ -1594,7 +1620,18 @@ function SeoGeoWizard() {
                           const params = new URLSearchParams();
                           if (data.websiteUrl) params.set("url", data.websiteUrl);
                           if (data.clientName) params.set("client", data.clientName);
+                          if (data.clientId) params.set("clientId", data.clientId);
                           if (data.planId) params.set("planId", data.planId);
+                          // Pass wizard data to scan page via sessionStorage (too large for URL params)
+                          try {
+                            sessionStorage.setItem('seo-wizard-data', JSON.stringify({
+                              clientKeywords: data.clientKeywords || [],
+                              goals: data.goals?.filter((g: any) => g.selected) || [],
+                              clientId: data.clientId || '',
+                              clientName: data.clientName || '',
+                              websiteUrl: data.websiteUrl || '',
+                            }));
+                          } catch (e) { console.warn('[SEO-WIZARD] Failed to store wizard data in sessionStorage:', e); }
                           router.push(`/seo-geo/scan?${params.toString()}`);
                         }}
                         style={{

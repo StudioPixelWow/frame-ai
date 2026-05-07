@@ -75,6 +75,7 @@ interface SeoPlan {
   weeks?: PlanWeek[]; // fallback for backward compatibility
   phases?: PlanPhase[]; // new structure
   days?: PlanDay[]; // flat list of days
+  clientKeywords?: any[]; // manual SEO keywords from wizard step 3
 }
 
 // ══════════════════════════════════════════════════════════════
