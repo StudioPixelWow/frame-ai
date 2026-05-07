@@ -97,6 +97,7 @@ async function _POST(
       targetKeywords: Array.isArray((plan as any).aiKeywords)
         ? (plan as any).aiKeywords.map((k: any) => k.keyword || k).filter(Boolean)
         : [],
+      planId: plan.id,
     };
 
     // Execute the automation task

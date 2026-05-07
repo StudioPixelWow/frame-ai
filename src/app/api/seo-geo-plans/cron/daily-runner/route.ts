@@ -83,6 +83,7 @@ async function processPlanDailyTasks(plan: any) {
     })(),
     location: facts.detected_location?.value || facts.location || profile.location || 'Israel',
     targetKeywords: Array.isArray(plan.aiKeywords) ? plan.aiKeywords.map((k: any) => k.keyword || k).filter(Boolean) : [],
+    planId: plan.id,
   };
 
   const executionResults: any[] = [];

@@ -48,6 +48,7 @@ export interface AutomationContext {
   products: string[];
   location: string;
   targetKeywords: string[];
+  planId?: string;
 }
 
 // ============================================================================
@@ -997,6 +998,48 @@ const executeDailySeoArticle: ExecutorFunction = async (context) => {
     }
 
     console.log(`[SEO-ARTICLE] Post published: ID=${postResult.postId}, URL=${postResult.postUrl}`);
+
+    // --- Step 5: Update aiArticles in plan DB to save article + image ---
+    try {
+      const { updatePlanSafe } = await import('./api-helpers');
+      const planId = context.planId;
+      if (planId) {
+        const { supabase } = await import('@/lib/supabase');
+        const { data: planRow } = await supabase.from('seo_plans').select('data').eq('id', planId).single();
+        const planData = planRow?.data || {};
+        const existingArticles: any[] = Array.isArray(planData.aiArticles) ? planData.aiArticles : [];
+        // Find matching daily article entry by keyword and update it
+        const matchIdx = existingArticles.findIndex((a: any) =>
+          a?.type === 'daily_seo_article' &&
+          a?.targetKeyword === keyword &&
+          a?.status !== 'written'
+        );
+        const articleEntry = {
+          id: matchIdx >= 0 ? existingArticles[matchIdx].id : `daily-article-${Date.now()}`,
+          title: articleData.title,
+          targetKeyword: keyword,
+          wordCount: articleData.content.split(/\s+/).length,
+          status: 'written',
+          type: 'daily_seo_article',
+          fullArticle: articleData.content,
+          imageUrl: imageUrl || null,
+          wpPostId: postResult.postId,
+          wpPostUrl: postResult.postUrl,
+          generatedAt: new Date().toISOString(),
+          scheduledDay: matchIdx >= 0 ? existingArticles[matchIdx].scheduledDay : null,
+          scheduledTime: matchIdx >= 0 ? existingArticles[matchIdx].scheduledTime : null,
+        };
+        if (matchIdx >= 0) {
+          existingArticles[matchIdx] = articleEntry;
+        } else {
+          existingArticles.push(articleEntry);
+        }
+        await updatePlanSafe(planId, { aiArticles: existingArticles });
+        console.log(`[SEO-ARTICLE] Updated aiArticles in plan DB — article "${articleData.title}" saved with image`);
+      }
+    } catch (dbErr) {
+      console.warn(`[SEO-ARTICLE] Failed to update aiArticles in plan DB: ${dbErr instanceof Error ? dbErr.message : 'Unknown'}`);
+    }
 
     changes.push({
       pageId: postResult.postId || 0,

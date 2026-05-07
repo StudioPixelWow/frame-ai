@@ -2852,7 +2852,9 @@ export default function SeoPlanDetail() {
         {activeTab === "articles" && (() => {
           const aiArticles: any[] = Array.isArray((plan as any)?.aiArticles) ? (plan as any).aiArticles : [];
           const writtenArticles = aiArticles.filter((a: any) => a?.fullArticle && a.status === 'written');
-          const plannedArticles = aiArticles.filter((a: any) => !a?.fullArticle || a.status !== 'written');
+          const dailyPlanned = aiArticles.filter((a: any) => a?.type === 'daily_seo_article' && a.status !== 'written');
+          const otherPlanned = aiArticles.filter((a: any) => a?.type !== 'daily_seo_article' && (!a?.fullArticle || a.status !== 'written'));
+          const plannedArticles = [...otherPlanned, ...dailyPlanned];
 
           return (
             <div style={{ direction: "rtl" }}>
@@ -2867,7 +2869,8 @@ export default function SeoPlanDetail() {
                     {writtenArticles.length > 0 ? `${writtenArticles.length} מאמרים נכתבו` : "טרם נכתבו מאמרים"}
                   </div>
                   <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                    {plannedArticles.length > 0 ? `${plannedArticles.length} מאמרים מתוכננים` : ""}
+                    {otherPlanned.length > 0 ? `${otherPlanned.length} מאמרים מתוכננים` : ""}
+                    {dailyPlanned.length > 0 ? `${otherPlanned.length > 0 ? ' | ' : ''}${dailyPlanned.length} מאמרים יומיים אוטומטיים` : ""}
                     {aiArticles.length === 0 ? "לחצו על ״כתוב מאמר מלא עם AI״ בתוך המשימות בתוכנית 60 יום" : ""}
                   </div>
                 </div>
@@ -2932,6 +2935,14 @@ export default function SeoPlanDetail() {
                   marginBottom: 16, borderRadius: 10, border: `1px solid #10b98130`,
                   overflow: "hidden", background: C.card,
                 }}>
+                  {/* Featured image preview */}
+                  {article.imageUrl && (
+                    <div style={{ width: "100%", maxHeight: 220, overflow: "hidden", borderBottom: `1px solid ${C.borderLight}` }}>
+                      <img src={article.imageUrl} alt={article.title || 'תמונת מאמר'} style={{
+                        width: "100%", height: 220, objectFit: "cover",
+                      }} />
+                    </div>
+                  )}
                   <div style={{
                     padding: "12px 16px", borderBottom: `1px solid ${C.borderLight}`,
                     display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -2941,7 +2952,13 @@ export default function SeoPlanDetail() {
                       <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
                         ביטוי: {s(article.targetKeyword)} | {s(article.wordCount || 1500)} מילים
                         {article.generatedAt ? ` | נוצר: ${new Date(article.generatedAt).toLocaleDateString("he-IL")}` : ""}
+                        {article.type === 'daily_seo_article' && article.scheduledDay ? ` | יום ${article.scheduledDay} (${article.scheduledTime || ''})` : ""}
                       </div>
+                      {article.wpPostUrl && (
+                        <div style={{ fontSize: 11, color: C.primary, marginTop: 2 }}>
+                          🔗 <a href={article.wpPostUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.primary }}>צפה בוורדפרס</a>
+                        </div>
+                      )}
                     </div>
                     <span style={{
                       fontSize: 10, fontWeight: 600, padding: "3px 10px", borderRadius: 6,
@@ -2975,12 +2992,12 @@ export default function SeoPlanDetail() {
                 </div>
               ))}
 
-              {/* Planned articles */}
-              {plannedArticles.length > 0 && (
+              {/* Planned articles — non-daily */}
+              {otherPlanned.length > 0 && (
                 <div style={{ marginTop: 12 }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: C.textMuted, marginBottom: 8 }}>מאמרים מתוכננים</div>
-                  {plannedArticles.map((article: any, idx: number) => (
-                    <div key={idx} style={{
+                  {otherPlanned.map((article: any, idx: number) => (
+                    <div key={`other-${idx}`} style={{
                       padding: "12px 16px", borderRadius: 8, marginBottom: 8,
                       border: `1px solid ${C.borderLight}`, background: C.card,
                       display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -3000,6 +3017,55 @@ export default function SeoPlanDetail() {
                       }}>⏳ מתוכנן</span>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Daily SEO articles */}
+              {dailyPlanned.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: C.textMuted, marginBottom: 4 }}>
+                    מאמרים יומיים אוטומטיים ({dailyPlanned.length} מאמרים ב-60 יום)
+                  </div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 12 }}>
+                    3 מאמרים מתפרסמים אוטומטית מדי יום בשעות 08:00, 12:00, 17:00 — כולל תמונה מ-AI
+                  </div>
+                  {/* Show first 15 daily articles as preview, with "show more" */}
+                  {dailyPlanned.slice(0, 15).map((article: any, idx: number) => (
+                    <div key={`daily-${idx}`} style={{
+                      padding: "10px 14px", borderRadius: 8, marginBottom: 6,
+                      border: `1px solid ${C.borderLight}`, background: C.card,
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{
+                          width: 40, height: 40, borderRadius: 8, background: `${C.primary}10`,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 11, fontWeight: 700, color: C.primary, flexShrink: 0,
+                        }}>
+                          {article.imageUrl ? (
+                            <img src={article.imageUrl} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }} />
+                          ) : (
+                            `יום ${article.scheduledDay || '?'}`
+                          )}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{s(article.title)}</div>
+                          <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>
+                            ביטוי: {s(article.targetKeyword)} | {article.scheduledTime || ''} | {s(article.wordCount || 1000)} מילים | תמונה: AI (DALL-E)
+                          </div>
+                        </div>
+                      </div>
+                      <span style={{
+                        fontSize: 9, fontWeight: 600, padding: "2px 8px", borderRadius: 6,
+                        background: `${C.primary}10`, color: C.primary, whiteSpace: "nowrap",
+                      }}>🤖 אוטומטי</span>
+                    </div>
+                  ))}
+                  {dailyPlanned.length > 15 && (
+                    <div style={{ fontSize: 11, color: C.textMuted, textAlign: "center", padding: 8 }}>
+                      + {dailyPlanned.length - 15} מאמרים נוספים...
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -3470,17 +3536,33 @@ export default function SeoPlanDetail() {
                 )}
 
                 {/* ══ SUB-TAB: Queries (השאילתות) ══ */}
-                {aiSubTab === "queries" && (
+                {aiSubTab === "queries" && (() => {
+                  // Filter queries to show ONLY those derived from client keywords
+                  const clientKwList: string[] = (Array.isArray((safePlan as any)?.clientKeywords) ? (safePlan as any).clientKeywords : [])
+                    .map((ck: any) => (typeof ck === 'string' ? ck : ck?.keyword || '').toLowerCase().trim())
+                    .filter(Boolean);
+                  const clientFilteredQueries = clientKwList.length > 0
+                    ? uniqueQueries.filter(uq => {
+                        const qLower = (uq.query || '').toLowerCase();
+                        return clientKwList.some(kw => qLower.includes(kw) || kw.includes(qLower));
+                      })
+                    : uniqueQueries;
+                  return (
                   <div>
                     <div style={{ textAlign: "center", marginBottom: 24 }}>
                       <h3 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 8px" }}>השאילתות שלנו בודקות</h3>
                       <p style={{ fontSize: 13, color: C.textMuted, maxWidth: 500, margin: "0 auto" }}>
-                        הנה רשימת השאלות והביטויים שאנחנו בודקים עבורך במנועי ה-AI השונים, כדי לוודא שהמותג שלך מופיע בתשובות
+                        הנה רשימת הביטויים שהזנת ידנית, שאנחנו בודקים עבורך במנועי ה-AI השונים כדי לוודא שהמותג שלך מופיע בתשובות
                       </p>
                     </div>
+                    {clientKwList.length === 0 && (
+                      <div style={{ textAlign: "center", padding: 32, color: C.textMuted, fontSize: 14 }}>
+                        לא הוזנו ביטויי SEO. חזור לאשף והוסף ביטויים בשלב ביטויי הלקוח.
+                      </div>
+                    )}
                     {/* Cards grid */}
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
-                      {uniqueQueries.map((uq, i) => {
+                      {clientFilteredQueries.map((uq, i) => {
                         const decoded = (uq.query || '').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
                         return (
                           <div key={i} style={{
@@ -3513,7 +3595,8 @@ export default function SeoPlanDetail() {
                       })}
                     </div>
                   </div>
-                )}
+                  );
+                })()}
 
                 {/* ── Query Detail Popup Modal (upgraded) ── */}
                 {aiQueryDetail && (() => {

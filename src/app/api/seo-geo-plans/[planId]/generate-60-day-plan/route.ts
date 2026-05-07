@@ -399,12 +399,20 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
   // Call plan engine
   const generatedPlan = generate60DayPlan(planInput);
 
+  // Merge daily article entries into aiArticles so they appear in the Articles tab
+  const existingAiArticlesForMerge: any[] = Array.isArray(plan.aiArticles) ? plan.aiArticles : [];
+  const dailyEntries = generatedPlan.dailyArticleEntries || [];
+  // Remove old daily articles (type === 'daily_seo_article') and add fresh ones
+  const nonDailyArticles = existingAiArticlesForMerge.filter((a: any) => a?.type !== 'daily_seo_article');
+  const mergedAiArticles = [...nonDailyArticles, ...dailyEntries];
+
   // Update plan with generated data
   const updated = await updatePlanSafe(planId, {
     days: generatedPlan.days,
     phases: generatedPlan.phases,
     totalTasks: generatedPlan.totalTasks,
     totalHours: generatedPlan.totalHours,
+    aiArticles: mergedAiArticles,
     status: 'plan_generated',
     generatedAt: new Date().toISOString(),
   });

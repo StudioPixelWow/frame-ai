@@ -1176,6 +1176,19 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
   // ─── Inject 3 daily SEO article tasks per day ─────────────────────
   // Each day gets 3 article tasks that cycle through client keywords
   // Scheduled publish times: 08:00, 12:00, 17:00
+  const dailyArticleEntries: Array<{
+    id: string;
+    title: string;
+    targetKeyword: string;
+    outline: string[];
+    wordCount: number;
+    whyThisArticle: string;
+    status: string;
+    scheduledDay: number;
+    scheduledTime: string;
+    type: string;
+  }> = [];
+
   if (keywords.length > 0) {
     const articleTimes = ['08:00', '12:00', '17:00'];
     for (const dayPlan of days) {
@@ -1184,9 +1197,10 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
         const kwIndex = ((dayPlan.day - 1) * 3 + ai) % keywords.length;
         const targetKw = keywords[kwIndex];
         const publishTime = articleTimes[ai];
+        const taskId = mkId();
 
         dayPlan.tasks.push({
-          id: mkId(),
+          id: taskId,
           title: `פרסום מאמר SEO יומי — "${targetKw}" (${publishTime})`,
           type: 'content',
           description: `מאמר SEO אוטומטי ממוקד בביטוי "${targetKw}". המאמר ייכתב על ידי AI, יכלול תמונה ראשית מיוצרת (DALL-E), ויפורסם אוטומטית לוורדפרס בשעה ${publishTime}.`,
@@ -1196,6 +1210,25 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
           expectedOutcome: `מאמר בלוג חדש ממוקד בביטוי "${targetKw}" מפורסם באתר עם תמונה ראשית ו-Yoast SEO מותאם`,
           reason: `פרסום 3 מאמרי SEO יומיים בונה סמכות תוכן, מגביר נוכחות אורגנית, ומחזק את הביטויים הממוקדים של הלקוח`,
           contentBrief: `ביטוי מפתח: ${targetKw}\nשעת פרסום: ${publishTime}\nסוג: מאמר SEO יומי אוטומטי\nתמונה: AI (DALL-E)\nאורך: 800-1200 מילים`,
+        });
+
+        // Also create an aiArticles entry so daily articles appear in the Articles tab
+        dailyArticleEntries.push({
+          id: `daily-article-${taskId}`,
+          title: `מאמר SEO יומי — "${targetKw}"`,
+          targetKeyword: targetKw,
+          outline: [
+            `מבוא — מהו ${targetKw} ולמה זה חשוב`,
+            `הסבר מעמיק על ${targetKw}`,
+            `טיפים מעשיים ויישום`,
+            `סיכום וקריאה לפעולה`,
+          ],
+          wordCount: 1000,
+          whyThisArticle: `מאמר יומי אוטומטי לחיזוק ביטוי "${targetKw}" — יום ${dayPlan.day}, שעה ${publishTime}`,
+          status: 'planned',
+          scheduledDay: dayPlan.day,
+          scheduledTime: publishTime,
+          type: 'daily_seo_article',
         });
       }
     }
@@ -1229,6 +1262,7 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
     totalHours,
     phases: phaseOverviews,
     generatedAt: now.toISOString(),
+    dailyArticleEntries,
   };
 
   // ─── Helper: make a day ──────────────────────────────────────────
