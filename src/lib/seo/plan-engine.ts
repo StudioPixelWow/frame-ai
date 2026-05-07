@@ -1209,7 +1209,7 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
           relatedPageUrl: null,
           expectedOutcome: `מאמר בלוג חדש ממוקד בביטוי "${targetKw}" מפורסם באתר עם תמונה ראשית ו-Yoast SEO מותאם`,
           reason: `פרסום 3 מאמרי SEO יומיים בונה סמכות תוכן, מגביר נוכחות אורגנית, ומחזק את הביטויים הממוקדים של הלקוח`,
-          contentBrief: `ביטוי מפתח: ${targetKw}\nשעת פרסום: ${publishTime}\nסוג: מאמר SEO יומי אוטומטי\nתמונה: AI (DALL-E)\nאורך: 800-1200 מילים`,
+          contentBrief: `ביטוי מפתח: ${targetKw}\nסוג: מאמר SEO יומי אוטומטי\nתמונה: AI (DALL-E)\nאורך: 800-1200 מילים`,
         });
 
         // Also create an aiArticles entry so daily articles appear in the Articles tab

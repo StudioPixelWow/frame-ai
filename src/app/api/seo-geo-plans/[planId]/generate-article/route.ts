@@ -76,16 +76,39 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
     );
 
     if (result.success && result.data) {
-      const data = result.data as any;
+      let data: any;
+
+      // Handle both parsed JSON and raw text responses
+      if (typeof result.data === 'string') {
+        // AI returned raw text instead of JSON — wrap it as article HTML
+        const rawText = result.data as string;
+        data = {
+          article: rawText,
+          wordCount: rawText.split(/\s+/).length,
+          metaTitle: title,
+          metaDescription: `${title} — ${businessName}`,
+          faq: [],
+        };
+        console.log('[GENERATE-ARTICLE] AI returned raw text, wrapping as article');
+      } else {
+        data = result.data;
+      }
+
+      // Ensure article content exists
+      const articleContent = data.article || data.content || data.text || '';
+      if (!articleContent) {
+        console.error('[GENERATE-ARTICLE] No article content in AI response:', JSON.stringify(data).slice(0, 500));
+        return err('AI returned empty article content — try again', 500);
+      }
 
       // Save to plan's aiArticles
       const existingArticles = Array.isArray(plan.aiArticles) ? [...plan.aiArticles] : [];
       if (typeof articleIndex === 'number' && articleIndex >= 0 && articleIndex < existingArticles.length) {
         existingArticles[articleIndex] = {
           ...existingArticles[articleIndex],
-          fullArticle: data.article || '',
-          wordCount: data.wordCount || 1500,
-          metaTitle: data.metaTitle || '',
+          fullArticle: articleContent,
+          wordCount: data.wordCount || articleContent.split(/\s+/).length,
+          metaTitle: data.metaTitle || title,
           metaDescription: data.metaDescription || '',
           faq: data.faq || [],
           generatedAt: new Date().toISOString(),
@@ -97,20 +120,21 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
       logActivity(planId, 'generate_article', {
         title,
         targetKeyword,
-        wordCount: data.wordCount,
+        wordCount: data.wordCount || articleContent.split(/\s+/).length,
         articleIndex,
       });
 
       return ok({
-        article: data.article || '',
-        wordCount: data.wordCount || 0,
-        metaTitle: data.metaTitle || '',
+        article: articleContent,
+        wordCount: data.wordCount || articleContent.split(/\s+/).length,
+        metaTitle: data.metaTitle || title,
         metaDescription: data.metaDescription || '',
         faq: data.faq || [],
       });
     }
 
-    return err('AI failed to generate article', 500);
+    console.error('[GENERATE-ARTICLE] AI call failed:', result.error);
+    return err(`AI failed to generate article: ${result.error || 'unknown error'}`, 500);
   } catch (e) {
     console.error('[GENERATE-ARTICLE] Error:', e);
     return err('Failed to generate article', 500);

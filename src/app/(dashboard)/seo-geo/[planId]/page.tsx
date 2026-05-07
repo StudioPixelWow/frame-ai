@@ -2452,14 +2452,18 @@ export default function SeoPlanDetail() {
               {Object.entries(months).map(([monthKey, monthDays]) => {
                 const [year, month] = monthKey.split("-").map(Number);
                 const monthName = HEB_MONTHS[month - 1];
-                const firstDayOfMonth = new Date(year, month - 1, 1);
-                const startDow = firstDayOfMonth.getDay(); // 0=Sun
                 const daysInMonth = new Date(year, month, 0).getDate();
 
-                // בנה grid עם ימים ריקים בהתחלה
+                // קבע את היום הראשון שנציג בחודש — מתאריך יצירת התוכנית או 1 לחודש
+                const isFirstMonth = generatedAt && generatedAt.getFullYear() === year && (generatedAt.getMonth() + 1) === month;
+                const startDate = isFirstMonth ? generatedAt!.getDate() : 1;
+                const firstDayOfRange = new Date(year, month - 1, startDate);
+                const startDow = firstDayOfRange.getDay(); // 0=Sun
+
+                // בנה grid — מתחיל מתאריך התוכנית (לא מה-1 לחודש)
                 const calendarCells: (any | null)[] = [];
                 for (let i = 0; i < startDow; i++) calendarCells.push(null);
-                for (let d = 1; d <= daysInMonth; d++) {
+                for (let d = startDate; d <= daysInMonth; d++) {
                   const matchDay = monthDays.find((md: any) => md.dateObj?.getDate() === d);
                   calendarCells.push(matchDay || { dayOfMonth: d, empty: true });
                 }
@@ -2534,9 +2538,9 @@ export default function SeoPlanDetail() {
                             }}
                             onClick={() => setSelectedCalendarDay(cell)}
                           >
-                            {/* Day Number */}
+                            {/* Day Number — actual calendar date */}
                             <div style={{ fontSize: 15, fontWeight: 700, color: statusColor === "#22c55e" ? "#166534" : statusColor === "#ef4444" ? "#991b1b" : C.text }}>
-                              {cell.day}
+                              {cell.dateObj ? cell.dateObj.getDate() : cell.day}
                             </div>
 
                             {/* Focus Title */}
@@ -3541,12 +3545,19 @@ export default function SeoPlanDetail() {
                   const clientKwList: string[] = (Array.isArray((safePlan as any)?.clientKeywords) ? (safePlan as any).clientKeywords : [])
                     .map((ck: any) => (typeof ck === 'string' ? ck : ck?.keyword || '').toLowerCase().trim())
                     .filter(Boolean);
-                  const clientFilteredQueries = clientKwList.length > 0
-                    ? uniqueQueries.filter(uq => {
-                        const qLower = (uq.query || '').toLowerCase();
-                        return clientKwList.some(kw => qLower.includes(kw) || kw.includes(qLower));
-                      })
+
+                  // Detect if business is Hebrew — filter out English-only queries
+                  const isHebrewBiz = /[֐-׿]/.test([safePlan.clientName || '', safePlan.websiteUrl || ''].join(''));
+                  const hebrewFiltered = isHebrewBiz
+                    ? uniqueQueries.filter(uq => /[֐-׿]/.test(uq.query || ''))
                     : uniqueQueries;
+
+                  const clientFilteredQueries = clientKwList.length > 0
+                    ? hebrewFiltered.filter(uq => {
+                        const qLower = (uq.query || '').toLowerCase();
+                        return clientKwList.some(kw => qLower.includes(kw));
+                      })
+                    : hebrewFiltered;
                   return (
                   <div>
                     <div style={{ textAlign: "center", marginBottom: 24 }}>
