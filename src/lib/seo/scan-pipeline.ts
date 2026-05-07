@@ -920,16 +920,24 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
     });
     log(job, 'generate_queries', `${products.length} מוצרים → ${cleanProducts.length} אחרי סינון`, 'info');
 
+    // Detect language — Hebrew sites need Hebrew queries, English sites need English queries
+    // MUST be declared before clientKeywords section which uses isHebrew
+    const isHebrew = /[֐-׿]/.test([bName, industry, ...products, ...h1Tags, ...h2Tags].join(''));
+    const aiPlatforms: PlatformId[] = ['chatgpt', 'gemini', 'claude', 'perplexity'];
+
     // 0. CLIENT KEYWORDS (HIGHEST PRIORITY) — keywords the client explicitly asked to track
+    // When client keywords exist, they are the ONLY source of queries (no auto-generated ones)
     const clientKws = job.clientKeywords || [];
-    if (clientKws.length > 0) {
+    const hasClientKeywords = clientKws.length > 0;
+    if (hasClientKeywords) {
       for (const kw of clientKws) {
         const trimmed = kw.trim();
         if (!trimmed) continue;
+        // Base keyword on ALL platforms
         for (const p of PLATFORMS) {
           addQuery(trimmed, p.id, 'client_keyword');
         }
-        // Also generate location variations if we have location data
+        // Location variations
         if (location) {
           const locVariations = isHebrew
             ? [`${trimmed} ב${location}`, `${trimmed} ${location}`]
@@ -940,11 +948,38 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
             }
           }
         }
+        // Comparison/recommendation variations (AI platforms)
+        if (isHebrew) {
+          for (const p of aiPlatforms) {
+            addQuery(`${trimmed} הכי טוב`, p, 'client_keyword');
+            addQuery(`${trimmed} מומלץ`, p, 'client_keyword');
+          }
+        } else {
+          for (const p of aiPlatforms) {
+            addQuery(`best ${trimmed}`, p, 'client_keyword');
+            addQuery(`${trimmed} recommended`, p, 'client_keyword');
+          }
+        }
+        // Informational variations (AI platforms)
+        const infoQueries = isHebrew ? [
+          `איך לבחור ${trimmed}`,
+          `מה ההבדל בין ${trimmed}`,
+          `למה צריך ${trimmed}`,
+        ] : [
+          `how to choose ${trimmed}`,
+          `${trimmed} vs alternatives`,
+          `why ${trimmed}`,
+        ];
+        for (const q of infoQueries) {
+          for (const p of aiPlatforms) {
+            addQuery(q, p, 'client_keyword');
+          }
+        }
       }
-      log(job, 'generate_queries', `${clientKws.length} ביטויי לקוח (עדיפות ראשונה) — כל הפלטפורמות`, 'success');
+      log(job, 'generate_queries', `${clientKws.length} ביטויי לקוח — שאילתות נבנות אך ורק מביטויי הלקוח`, 'success');
     }
 
-    // 1. Brand name queries (ALL platforms — every platform should check brand visibility)
+    // 1. Brand name queries (ALL platforms — always check brand visibility)
     if (bName) {
       for (const p of PLATFORMS) {
         addQuery(bName, p.id, 'brand');
@@ -952,9 +987,10 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       log(job, 'generate_queries', `שאילתת מותג: "${bName}" — כל הפלטפורמות`, 'success');
     }
 
-    // Detect language — Hebrew sites need Hebrew queries, English sites need English queries
-    const isHebrew = /[֐-׿]/.test([bName, industry, ...products, ...h1Tags, ...h2Tags].join(''));
-    const aiPlatforms: PlatformId[] = ['chatgpt', 'gemini', 'claude', 'perplexity'];
+    // ── Sections 2-7: Auto-generated queries ──────────────────────────────────
+    // ONLY generate these when NO client keywords were provided.
+    // When client keywords exist, ALL queries come exclusively from them.
+    if (!hasClientKeywords) {
 
     // 2. Industry + location queries (all platforms)
     // CRITICAL: Generate queries in the SITE'S LANGUAGE — real search terms people actually type
@@ -1102,7 +1138,6 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
     }
 
     // 7. Additional Hebrew queries — generic industry terms not already covered
-    // (isHebrew is already computed in section 2)
     if (isHebrew && industry) {
       const hebrewQueries = [
         `${industry} בישראל`,
@@ -1118,6 +1153,8 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       }
       log(job, 'generate_queries', `${hebrewQueries.length} שאילתות בעברית — כל הפלטפורמות`, 'success');
     }
+
+    } // end if (!hasClientKeywords)
 
     // 8. Fallback: ensure EVERY platform has at least 1 query (prevent "skipped")
     for (const platform of PLATFORMS) {
