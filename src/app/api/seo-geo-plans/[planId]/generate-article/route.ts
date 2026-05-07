@@ -53,8 +53,10 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
       `כתוב מאמר SEO בעברית.
 
 עסק: ${businessName} (${businessType})${productsStr}
+השנה הנוכחית: ${new Date().getFullYear()}
 כותרת: "${title}"
 ביטוי מפתח: "${targetKeyword || title}"${outlineSection}
+חשוב: כל אזכור שנה חייב להיות ${new Date().getFullYear()} בלבד.
 
 כתוב מאמר (600-800 מילים):
 1. פתיחה (80 מילים)

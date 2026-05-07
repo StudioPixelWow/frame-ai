@@ -242,6 +242,9 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
     return `כתוב מאמר מומחה ועמוק על "${kw(i)}". מבנה: כותרת עם מילת-מפתח, intro, 4-6 תתסעיפים עם H2/H3, סיכום עם CTA.`;
   };
 
+  // Fallback page count when scannedPages array is empty but totalPages exists
+  const estimatedPageCount = pages.length > 0 ? pages.length : Math.max(scan?.totalPages || 0, 1);
+
   // Derived analytics
   const mentionedQueries = vis.filter(v => (v.results || []).some(r => r.mentioned));
   const missedQueries = vis.filter(v => !(v.results || []).some(r => r.mentioned));
@@ -397,24 +400,25 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
 
   // Day 4: On-Page — meta tags
   const metaPages = pagesNeedingMeta.length > 0 ? pagesNeedingMeta : pages.slice(0, 5);
+  const metaPageCount = metaPages.length > 0 ? Math.min(metaPages.length, 10) : Math.min(estimatedPageCount, 10);
   const locStr = loc ? ` ב-${loc}` : "";
   days.push(mkDay(4, "אופטימיזציה של Meta Tags ומבנה כותרים", [
     mkTask("onpage", "high", "high",
-      `כתוב Meta Titles ייחודיים עבור ${Math.min(metaPages.length, 10)} עמודים`,
+      `כתוב Meta Titles ייחודיים עבור ${metaPageCount} עמודים`,
       `כתוב Title tag ייחודי לכל עמוד (50-60 תווים). כלול מילת-מפתח ראשונה${locStr}. פורמט מומלץ: "Keyword | ${input.clientName}". עמודים לעדכון: ${metaPages.slice(0, 5).map(p => p.url).join(", ")}`,
       3, metaPages[0]?.url || null,
       "Meta Title ייחודי ואופטימלי בכל עמוד",
       "Title tag הוא גורם דירוג on-page החזק ביותר — משפיע ישירות על CTR בתוצאות חיפוש",
     ),
     mkTask("onpage", "high", "high",
-      `כתוב Meta Descriptions עבור ${Math.min(metaPages.length, 10)} עמודים`,
+      `כתוב Meta Descriptions עבור ${metaPageCount} עמודים`,
       `כתוב Description ייחודי (150-160 תווים) עם CTA ומילת-מפתח. דוגמה: "${kw(0)} מומחיות${locStr} — ${input.clientName}. צור קשר להתייעצות בחינם!"`,
       2.5, metaPages[0]?.url || null,
       "Meta Description ממוקד CTR בכל עמוד",
       "תיאורים טובים מגבירים CTR אפילו ללא שינוי דירוג — יותר קליקים = יותר traffic מאותה תנוחה",
     ),
     mkTask("onpage", "medium", "medium",
-      `תיקון מבנה כותרים H1-H3 ב-${pagesNeedingH1.length > 0 ? pagesNeedingH1.length : "כל"} עמודים`,
+      `תיקון מבנה כותרים H1-H3 ב-${pagesNeedingH1.length > 0 ? pagesNeedingH1.length : estimatedPageCount} עמודים`,
       `וודא H1 ייחודי בכל עמוד עם מילת-מפתח. ${pagesNeedingH1.length > 0 ? `${pagesNeedingH1.length} עמודים חסרים H1: ${pagesNeedingH1.slice(0, 3).map(p => p.url).join(", ")}` : "בדוק היררכיה H2-H3 בכל עמודים."}`,
       2, pagesNeedingH1[0]?.url || null,
       "כל עמוד עם H1 ייחודי והיררכיה נכונה",
@@ -425,7 +429,7 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
   // Day 5: Images + internal linking
   days.push(mkDay(5, "אופטימיזציה של תמונות וקישורים פנימיים", [
     mkTask("onpage", "medium", "medium",
-      `הוסף Alt Text ל-${pagesNeedingAlt.length > 0 ? pagesNeedingAlt.length + " עמודים ללא Alt" : "כל התמונות"}`,
+      `הוסף Alt Text ל-${pagesNeedingAlt.length > 0 ? pagesNeedingAlt.length + " עמודים ללא Alt" : `${estimatedPageCount} עמודים — כל התמונות`}`,
       `סרוק את כל התמונות ב-${domain}. הוסף תיאור alt עם מילות-מפתח. ${pagesNeedingAlt.length > 0 ? `עמודים ללא alt: ${pagesNeedingAlt.slice(0, 3).map(p => p.url).join(", ")}` : "וודא שalt text לא כפול."} דחוס לפורמט WebP.`,
       3, pagesNeedingAlt[0]?.url || null,
       "100% של התמונות עם alt text, פורמט WebP",
@@ -537,7 +541,7 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
   // Day 12: Update existing thin content
   days.push(mkDay(12, "שדרוג תוכן קיים תשוש", [
     mkTask("content", "high", "high",
-      `שדרוג ${Math.min(thinPages.length, 5) || 5} עמודים עם תוכן תשוש`,
+      `שדרוג ${thinPages.length > 0 ? Math.min(thinPages.length, 5) : Math.min(estimatedPageCount, 5)} עמודים עם תוכן תשוש`,
       `${thinPages.length > 0 ? `נמצאו ${thinPages.length} עמודים עם פחות מ-300 מילים: ${thinPages.slice(0, 3).map(p => p.url).join(", ")}` : `עדכן 5 עמודים חשובים ב-${domain}`}. לכל עמוד: הרחב ל-800+ מילים, הוסף H2/H3, שלב מילות-מפתח, הוסף FAQ, עדכן תאריך.`,
       4, thinPages[0]?.url || null,
       "כל עמודי תשוש הורחבו ל-800+ מילים",

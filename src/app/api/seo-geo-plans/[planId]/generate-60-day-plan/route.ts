@@ -66,9 +66,11 @@ async function generateAIArticles(plan: any, keywords: string[]): Promise<any[]>
       `אתה מומחה תוכן ו-SEO ישראלי עם 15 שנות ניסיון. אתה יוצר תוכניות תוכן אסטרטגיות לעסקים.`,
       `העסק: ${businessName} (${businessType})
 ביטויי מפתח: ${topKeywords}
+השנה הנוכחית: ${new Date().getFullYear()}
 
 צור 8 נושאי מאמרים אסטרטגיים שיקדמו את העסק בגוגל ובפלטפורמות AI.
 כל מאמר חייב לקדם ביטוי מפתח ספציפי.
+חשוב: אל תשתמש בשנים ישנות בכותרות — השתמש בשנת ${new Date().getFullYear()} בלבד.
 
 החזר JSON בלבד:
 {"articles": [
@@ -135,9 +137,11 @@ async function generateFullArticle(plan: any, article: any): Promise<any> {
 
 שם העסק: ${businessName}
 סוג העסק: ${businessType}${productsStr}
+השנה הנוכחית: ${new Date().getFullYear()}
 
 כותרת המאמר: "${title}"
 ביטוי מפתח: "${targetKeyword}"${outlineSection}
+חשוב: כל אזכור שנה במאמר חייב להיות ${new Date().getFullYear()} — אל תשתמש בשנים ישנות.
 
 כתוב את המאמר המלא (1500+ מילים). כלול:
 1. פתיחה מרתקת (150 מילים)

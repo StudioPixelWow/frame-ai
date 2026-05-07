@@ -1924,7 +1924,7 @@ export default function SeoPlanDetail() {
                                           {isExpanded && (
                                             <div style={{
                                               padding: "14px 12px", borderTop: `1px solid ${C.borderLight}`,
-                                              background: C.bg, fontSize: 13,
+                                              background: C.bg, fontSize: 13, direction: "rtl", textAlign: "right",
                                             }}>
                                               {taskDesc && (
                                                 <div style={{ marginBottom: 12 }}>
@@ -1959,9 +1959,10 @@ export default function SeoPlanDetail() {
                                                   <div style={{ fontSize: 11, fontWeight: 600, color: C.textSecondary, marginBottom: 6 }}>📋 תקציר תוכן מוכן</div>
                                                   <div style={{
                                                     background: C.card, border: `1px solid ${C.border}`,
-                                                    borderRadius: 8, padding: "10px 12px", fontFamily: "monospace",
-                                                    fontSize: 11, color: C.text, maxHeight: 120, overflow: "auto",
-                                                    lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word",
+                                                    borderRadius: 8, padding: "10px 12px",
+                                                    fontSize: 12, color: C.text, maxHeight: 120, overflow: "auto",
+                                                    lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word",
+                                                    direction: "rtl", textAlign: "right",
                                                   }}>
                                                     {s(taskBrief)}
                                                   </div>
