@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { seoPlans } from '@/lib/db';
 import { executeAutoTask, mapPlanTaskToAutoType, AutomationContext, AutoTaskResult } from '@/lib/seo/seo-automator';
-import { updatePlanSafe, logActivity } from '@/lib/seo/api-helpers';
+import { updatePlanSafe, logActivity, mergeAllKeywords } from '@/lib/seo/api-helpers';
 import { sendSeoTaskEmail, sendSeoDailySummaryEmail } from '@/lib/seo/seo-email-service';
 
 export const dynamic = 'force-dynamic';
@@ -82,7 +82,7 @@ async function processPlanDailyTasks(plan: any) {
       return Array.isArray(p) ? p : [];
     })(),
     location: facts.detected_location?.value || facts.location || profile.location || 'Israel',
-    targetKeywords: Array.isArray(plan.aiKeywords) ? plan.aiKeywords.map((k: any) => k.keyword || k).filter(Boolean) : [],
+    targetKeywords: mergeAllKeywords(plan),
     planId: plan.id,
   };
 

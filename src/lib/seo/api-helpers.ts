@@ -163,6 +163,36 @@ export async function parseBody<T = Record<string, unknown>>(req: NextRequest): 
   }
 }
 
+// ── Keyword merger ─────────────────────────────────────────────────────────
+// Merges clientKeywords (user-entered, priority) with aiKeywords (AI-generated)
+// into a flat string[]. clientKeywords come first (higher priority).
+
+export function mergeAllKeywords(plan: any): string[] {
+  // Extract client keywords — handle both string[] and object[] formats
+  const clientKws: string[] = (Array.isArray(plan.clientKeywords) ? plan.clientKeywords : [])
+    .map((k: any) => (typeof k === 'string' ? k : k?.keyword || '').trim())
+    .filter(Boolean);
+
+  // Extract AI keywords
+  const aiKws: string[] = (Array.isArray(plan.aiKeywords) ? plan.aiKeywords : [])
+    .map((k: any) => (typeof k === 'string' ? k : k?.keyword || '').trim())
+    .filter(Boolean);
+
+  if (clientKws.length === 0) return aiKws;
+  if (aiKws.length === 0) return clientKws;
+
+  // Merge: client first, then AI (no duplicates)
+  const seen = new Set(clientKws.map(k => k.toLowerCase()));
+  const merged = [...clientKws];
+  for (const kw of aiKws) {
+    if (!seen.has(kw.toLowerCase())) {
+      merged.push(kw);
+      seen.add(kw.toLowerCase());
+    }
+  }
+  return merged;
+}
+
 // ── ID generator ────────────────────────────────────────────────────────────
 
 export function generateId(prefix: string): string {

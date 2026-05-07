@@ -8,6 +8,7 @@ import {
   logActivity,
   parseBody,
   withErrorBoundary,
+  mergeAllKeywords,
 } from '@/lib/seo/api-helpers';
 import {
   executeAutoTask,
@@ -94,9 +95,7 @@ async function _POST(
         return Array.isArray(p) ? p : [];
       })(),
       location: facts.detected_location?.value || facts.location || profile.location || 'Israel',
-      targetKeywords: Array.isArray((plan as any).aiKeywords)
-        ? (plan as any).aiKeywords.map((k: any) => k.keyword || k).filter(Boolean)
-        : [],
+      targetKeywords: mergeAllKeywords(plan),
       planId: plan.id,
     };
 

@@ -745,6 +745,7 @@ function SeoGeoWizard() {
           visibilityScore: data.visibilityScore,
           totalTasks: data.totalTasks,
           completedTasks: 0,
+          generatedAt: new Date().toISOString(),
         }),
       });
       if (res.ok) {
