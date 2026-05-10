@@ -94,18 +94,53 @@ async function fetchWithAuth(
   authHeader: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      ...options.headers,
-      Authorization: authHeader,
-      'Content-Type': 'application/json',
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: authHeader,
+        'Content-Type': 'application/json',
+      },
+    });
+  } catch (fetchErr: any) {
+    // Network error — DNS failure, unreachable host, etc.
+    throw new Error(
+      `לא ניתן להתחבר לאתר (${url}). בדוק שכתובת האתר נכונה ושהאתר פעיל. (${fetchErr.message})`
+    );
+  }
+
+  // Detect HTML responses — WordPress returned a page instead of JSON
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('text/html')) {
+    const snippet = (await response.text()).slice(0, 200);
+    throw new Error(
+      `האתר מחזיר דף HTML במקום REST API JSON (${url}). ` +
+      `סיבות אפשריות: כתובת האתר שגויה, REST API חסום על-ידי תוסף אבטחה, ` +
+      `או שצריך להוסיף www בכתובת. נסה לגלוש ל-${url} בדפדפן ובדוק שמחזיר JSON.`
+    );
+  }
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`HTTP ${response.status}: ${error}`);
+    // Try to parse as JSON for structured WP errors
+    try {
+      const wpError = JSON.parse(error);
+      const code = wpError.code || '';
+      const message = wpError.message || error;
+      if (code === 'rest_not_logged_in' || code === 'rest_forbidden') {
+        throw new Error(
+          `שגיאת הרשאה (${code}): ${message}. ` +
+          `יתכן שסיסמת האפליקציה פגה או בוטלה — צור חדשה בממשק WordPress.`
+        );
+      }
+      throw new Error(`HTTP ${response.status}: ${message} (${code})`);
+    } catch (parseErr) {
+      if (parseErr instanceof Error && parseErr.message.startsWith('שגיאת')) throw parseErr;
+      if (parseErr instanceof Error && parseErr.message.startsWith('HTTP')) throw parseErr;
+      throw new Error(`HTTP ${response.status}: ${error}`);
+    }
   }
 
   return response;
