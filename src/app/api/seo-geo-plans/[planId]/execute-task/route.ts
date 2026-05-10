@@ -201,17 +201,30 @@ async function _POST(
       }
     }
 
-    // Update task status to "done" in the plan if tasks exist — only if task succeeded
-    const tasks = (plan as any).tasks || [];
-    const taskIndex = tasks.findIndex((t: any) => t.id === taskId);
-    if (taskIndex >= 0 && result.success) {
-      tasks[taskIndex] = {
-        ...tasks[taskIndex],
-        status: 'done',
-        completedAt: new Date().toISOString(),
-      };
-      await updatePlanSafe(planId, { tasks } as any);
-    } else if (taskIndex >= 0 && !result.success) {
+    // Update task status to "done" in the plan — tasks are inside days[].tasks[]
+    if (result.success) {
+      const days = (plan as any).days || [];
+      let taskFound = false;
+      for (const day of days) {
+        if (!Array.isArray(day.tasks)) continue;
+        const taskIndex = day.tasks.findIndex((t: any) => t.id === taskId);
+        if (taskIndex >= 0) {
+          day.tasks[taskIndex] = {
+            ...day.tasks[taskIndex],
+            status: 'done',
+            completedAt: new Date().toISOString(),
+          };
+          taskFound = true;
+          console.log(`[EXECUTE-TASK] ✅ Marked task "${taskTitle}" as done (day ${day.day})`);
+          break;
+        }
+      }
+      if (taskFound) {
+        await updatePlanSafe(planId, { days } as any);
+      } else {
+        console.warn(`[EXECUTE-TASK] Task "${taskTitle}" (id=${taskId}) not found in any day — status not updated`);
+      }
+    } else {
       console.warn(`[EXECUTE-TASK] Task "${taskTitle}" failed — NOT marking as done. Error: ${result.error}`);
     }
 
