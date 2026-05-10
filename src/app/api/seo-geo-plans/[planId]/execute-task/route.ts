@@ -25,6 +25,7 @@ interface ExecuteTaskRequest {
   taskId: string;
   taskTitle: string;
   taskType?: string;
+  wpConnection?: WPConnection;
 }
 
 interface ExecuteTaskResponse {
@@ -55,7 +56,7 @@ async function _POST(
     return err('Request body is required', 400);
   }
 
-  const { taskId, taskTitle, taskType: providedTaskType } = body;
+  const { taskId, taskTitle, taskType: providedTaskType, wpConnection: bodyWpConnection } = body;
 
   // Validate required fields
   if (!taskId || !taskTitle) {
@@ -63,9 +64,17 @@ async function _POST(
   }
 
   try {
-    // Check if WordPress is connected — try plan first, then fall back to client record
+    // Check if WordPress is connected — try plan first, then request body, then client record
     let wpConnection = (plan as any).wpConnection as WPConnection | undefined;
-    console.log(`[EXECUTE-TASK] planId=${planId}, taskTitle="${taskTitle}", wpConnection=${wpConnection ? 'YES' : 'NO'}`);
+    console.log(`[EXECUTE-TASK] planId=${planId}, taskTitle="${taskTitle}", wpConnection from plan=${wpConnection ? 'YES' : 'NO'}, from body=${bodyWpConnection ? 'YES' : 'NO'}`);
+
+    // Fallback 1: Use wpConnection from request body (sent by frontend)
+    if (!wpConnection && bodyWpConnection?.siteUrl && bodyWpConnection?.username && bodyWpConnection?.applicationPassword) {
+      wpConnection = bodyWpConnection;
+      console.log(`[EXECUTE-TASK] Using wpConnection from request body`);
+      // Save back to plan for next time
+      await updatePlanSafe(planId, { wpConnection: wpConnection as any });
+    }
 
     if (!wpConnection && plan.clientId) {
       // Fallback: load WP credentials from client record
