@@ -622,7 +622,7 @@ export default function SeoPlanDetail() {
       const res = await fetch(`/api/seo-geo-plans/${plan.id}/execute-task`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId, taskTitle, wpConnection: (plan as any)?.wpConnection || undefined }),
+        body: JSON.stringify({ taskId, taskTitle, wpConnection: (plan as any)?.wpConnection || (wpForm?.siteUrl && wpForm?.username && wpForm?.applicationPassword ? wpForm : undefined) }),
       });
       const data = await res.json();
       if (res.ok && data.success !== false) {
@@ -1646,7 +1646,7 @@ export default function SeoPlanDetail() {
                                   body: JSON.stringify({
                                     taskId: task.id,
                                     taskTitle: task.title,
-                                    wpConnection: (plan as any)?.wpConnection || undefined,
+                                    wpConnection: (plan as any)?.wpConnection || (wpForm?.siteUrl && wpForm?.username && wpForm?.applicationPassword ? wpForm : undefined),
                                   }),
                                 });
                                 const data = await res.json().catch(() => ({}));

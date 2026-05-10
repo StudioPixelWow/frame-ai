@@ -1,7 +1,7 @@
 // SEO Task Automation Engine
 // מנוע אוטומציה לבצוע משימות SEO לפי תוכנית 60 יום
 
-import { WPConnection, getPages, updateYoastMeta, updatePageContent, analyzeHeadings, generateLocalBusinessSchema, generateOptimalRobotsTxt, getRobotsTxt, WPPage, uploadMedia, createPost } from './wordpress-client';
+import { WPConnection, getPages, updateYoastMeta, updatePageContent, analyzeHeadings, generateLocalBusinessSchema, generateOptimalRobotsTxt, getRobotsTxt, WPPage, uploadMedia, createPost, getOrCreateCategory } from './wordpress-client';
 import { generateWithAI } from '@/lib/ai/openai-client';
 import { generateArticleImage } from './image-generator';
 
@@ -983,12 +983,25 @@ const executeDailySeoArticle: ExecutorFunction = async (context) => {
       console.warn(`[SEO-ARTICLE] Image generation failed: ${imageResult.error}`);
     }
 
-    // --- Step 4: Create WordPress post ---
+    // --- Step 4: Get or create "מאמרים" category ---
+    let categoryIds: number[] = [];
+    try {
+      const catId = await getOrCreateCategory(context.connection, 'מאמרים');
+      if (catId) {
+        categoryIds = [catId];
+        console.log(`[SEO-ARTICLE] Using category "מאמרים" → ID=${catId}`);
+      }
+    } catch (catErr) {
+      console.warn(`[SEO-ARTICLE] Failed to get/create category, publishing without category:`, catErr);
+    }
+
+    // --- Step 5: Create WordPress post ---
     const postResult = await createPost(context.connection, {
       title: articleData.title,
       content: articleData.content,
       status: 'publish',
       featuredMediaId,
+      categories: categoryIds.length > 0 ? categoryIds : undefined,
       metaTitle: articleData.metaTitle || articleData.title,
       metaDescription: articleData.metaDescription || '',
       focusKeyword: keyword,

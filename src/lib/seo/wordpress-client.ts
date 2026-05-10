@@ -659,6 +659,51 @@ export async function createPost(
   }
 }
 
+/**
+ * Get or create a WordPress category by name.
+ * Returns the category ID, or null on failure.
+ */
+export async function getOrCreateCategory(
+  conn: WPConnection,
+  categoryName: string
+): Promise<number | null> {
+  try {
+    const authHeader = createAuthHeader(conn.username, conn.applicationPassword);
+
+    // Search for existing category
+    const searchUrl = buildApiUrl(conn.siteUrl, `/categories?search=${encodeURIComponent(categoryName)}&per_page=100`);
+    const searchRes = await fetchWithAuth(searchUrl, authHeader, { method: 'GET' });
+    const categories = await searchRes.json();
+
+    if (Array.isArray(categories)) {
+      const exact = categories.find((c: any) => c.name === categoryName || c.slug === categoryName.toLowerCase());
+      if (exact) {
+        console.log(`[WP-CLIENT] Found existing category "${categoryName}" → ID=${exact.id}`);
+        return exact.id;
+      }
+    }
+
+    // Category not found — create it
+    const createUrl = buildApiUrl(conn.siteUrl, '/categories');
+    const createRes = await fetchWithAuth(createUrl, authHeader, {
+      method: 'POST',
+      body: JSON.stringify({ name: categoryName }),
+    });
+    const created = await createRes.json();
+
+    if (created?.id) {
+      console.log(`[WP-CLIENT] Created new category "${categoryName}" → ID=${created.id}`);
+      return created.id;
+    }
+
+    console.warn(`[WP-CLIENT] Failed to create category "${categoryName}":`, created);
+    return null;
+  } catch (error) {
+    console.warn(`[WP-CLIENT] getOrCreateCategory error:`, error);
+    return null;
+  }
+}
+
 // עזר: הוסף או עדכן LocalBusiness schema
 // Helper: Add or update LocalBusiness schema to page
 export function generateLocalBusinessSchema(
