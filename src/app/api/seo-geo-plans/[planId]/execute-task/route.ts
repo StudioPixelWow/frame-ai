@@ -65,7 +65,9 @@ async function _POST(
   try {
     // Check if WordPress is connected
     const wpConnection = (plan as any).wpConnection as WPConnection | undefined;
+    console.log(`[EXECUTE-TASK] planId=${planId}, taskTitle="${taskTitle}", wpConnection=${wpConnection ? 'YES' : 'NO'}`);
     if (!wpConnection) {
+      console.error(`[EXECUTE-TASK] No wpConnection found in plan. Plan keys: ${Object.keys(plan as any).join(', ')}`);
       return err('WordPress לא מחובר', 400);
     }
 
@@ -78,6 +80,7 @@ async function _POST(
       autoTaskType = mapPlanTaskToAutoType(taskTitle);
     }
 
+    console.log(`[EXECUTE-TASK] taskTitle="${taskTitle}" → autoTaskType=${autoTaskType}`);
     if (!autoTaskType) {
       return err('לא ניתן לזהות סוג משימה', 400);
     }

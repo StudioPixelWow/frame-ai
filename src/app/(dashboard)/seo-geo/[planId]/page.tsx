@@ -1626,6 +1626,7 @@ export default function SeoPlanDetail() {
 
                             let successCount = 0;
                             let failCount = 0;
+                            let skippedCount = 0;
                             for (const task of autoTasks) {
                               setAutomationStatus(`מבצע: ${task.title?.slice(0, 40)}...`);
                               try {
@@ -1634,15 +1635,21 @@ export default function SeoPlanDetail() {
                                   headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify({ taskId: task.id, taskTitle: task.title }),
                                 });
-                                if (res.ok) {
-                                  const data = await res.json();
-                                  if (data.success || data.data?.success) successCount++;
-                                  else failCount++;
-                                } else { failCount++; }
-                              } catch { failCount++; }
+                                const data = await res.json().catch(() => ({}));
+                                if (res.ok && (data.success || data.data?.success)) {
+                                  successCount++;
+                                } else if (res.status === 400 && (data.error?.includes('לא ניתן לזהות') || data.error?.includes('סוג משימה'))) {
+                                  // Task not automatable — skip silently, don't count as failure
+                                  skippedCount++;
+                                  console.log(`[AUTOMATION] Skipped non-automatable task: "${task.title}"`);
+                                } else {
+                                  failCount++;
+                                  console.error(`[AUTOMATION] Task failed: "${task.title}"`, data.error || data);
+                                }
+                              } catch (e) { failCount++; console.error(`[AUTOMATION] Network error for task: "${task.title}"`, e); }
                             }
-                            const manualNote = manualTasks.length > 0 ? ` | ${manualTasks.length} ידניות` : "";
-                            setAutomationStatus(`הושלם! ${successCount} הצליחו${failCount > 0 ? `, ${failCount} נכשלו` : ""}${manualNote}`);
+                            const skipNote = skippedCount > 0 ? ` | ${skippedCount} ידניות` : "";
+                            setAutomationStatus(`הושלם! ${successCount} הצליחו${failCount > 0 ? `, ${failCount} נכשלו` : ""}${skipNote}`);
                             // Refresh plan
                             const res = await fetch(`/api/data/seo-plans/${planId}`);
                             if (res.ok) { const data = await res.json(); setPlan(data); }
