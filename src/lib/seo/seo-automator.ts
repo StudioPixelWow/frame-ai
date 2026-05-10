@@ -49,6 +49,8 @@ export interface AutomationContext {
   location: string;
   targetKeywords: string[];
   planId?: string;
+  /** Specific keyword extracted from task title — used instead of random pick */
+  specificKeyword?: string;
 }
 
 // ============================================================================
@@ -842,9 +844,9 @@ const executeDailySeoArticle: ExecutorFunction = async (context) => {
   const changes: AutoTaskChange[] = [];
 
   try {
-    // Pick a keyword to target (cycle through available keywords)
+    // Pick a keyword to target — prefer specific keyword from task title
     const keywords = context.targetKeywords || [];
-    if (keywords.length === 0) {
+    if (keywords.length === 0 && !context.specificKeyword) {
       return {
         taskType: 'daily_seo_article',
         success: false,
@@ -855,8 +857,9 @@ const executeDailySeoArticle: ExecutorFunction = async (context) => {
       };
     }
 
-    // Use a random keyword from the list for variety
-    const keyword = keywords[Math.floor(Math.random() * keywords.length)];
+    // Use specific keyword from task title if available, otherwise random
+    const keyword = context.specificKeyword || keywords[Math.floor(Math.random() * keywords.length)];
+    console.log(`[SEO-ARTICLE] Using keyword: "${keyword}" (source: ${context.specificKeyword ? 'task title' : 'random'})`);
     const currentYear = new Date().getFullYear();
 
     // --- Step 1: Generate article content via AI ---

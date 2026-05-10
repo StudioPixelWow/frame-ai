@@ -1652,13 +1652,18 @@ export default function SeoPlanDetail() {
                                 const data = await res.json().catch(() => ({}));
                                 if (res.ok && (data.success || data.data?.success)) {
                                   successCount++;
+                                  if (data.taskType === 'daily_seo_article') {
+                                    console.log(`[AUTOMATION] ✅ Article written: "${task.title}" — type=${data.taskType}, pages=${data.pagesAffected}, changes=${data.changesCount}`);
+                                  } else {
+                                    console.log(`[AUTOMATION] ✅ Task done: "${task.title}" — type=${data.taskType}`);
+                                  }
                                 } else if (res.status === 400 && (data.error?.includes('לא ניתן לזהות') || data.error?.includes('סוג משימה'))) {
                                   // Task not automatable — skip silently, don't count as failure
                                   skippedCount++;
                                   console.log(`[AUTOMATION] Skipped non-automatable task: "${task.title}"`);
                                 } else {
                                   failCount++;
-                                  console.error(`[AUTOMATION] Task failed: "${task.title}"`, data.error || data);
+                                  console.error(`[AUTOMATION] ❌ Task failed: "${task.title}" — status=${res.status}, error="${data.error || JSON.stringify(data).slice(0, 200)}"`);
                                 }
                               } catch (e) { failCount++; console.error(`[AUTOMATION] Network error for task: "${task.title}"`, e); }
                             }

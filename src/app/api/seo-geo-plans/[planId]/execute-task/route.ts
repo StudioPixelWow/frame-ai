@@ -115,6 +115,17 @@ async function _POST(
       return err('לא ניתן לזהות סוג משימה', 400);
     }
 
+    // Extract specific keyword from task title if it's a daily article task
+    // Task titles look like: פרסום מאמר SEO יומי — "keyword" (08:00)
+    let specificKeyword: string | undefined;
+    if (autoTaskType === 'daily_seo_article') {
+      const kwMatch = taskTitle.match(/—\s*[""״]([^""״]+)[""״]/);
+      if (kwMatch?.[1]) {
+        specificKeyword = kwMatch[1].trim();
+        console.log(`[EXECUTE-TASK] Extracted specific keyword from title: "${specificKeyword}"`);
+      }
+    }
+
     // Build automation context from plan data (matching daily-runner pattern)
     const facts = (plan as any).websiteScan?.websiteFacts || {};
     const profile = (plan as any).businessProfile || {};
@@ -130,6 +141,7 @@ async function _POST(
       location: facts.detected_location?.value || facts.location || profile.location || 'Israel',
       targetKeywords: mergeAllKeywords(plan),
       planId: plan.id,
+      specificKeyword,
     };
 
     // Execute the automation task
@@ -154,16 +166,53 @@ async function _POST(
       return err('Failed to save task results', 500);
     }
 
-    // Update task status to "done" in the plan if tasks exist
+    // For article tasks: verify the article was actually saved to aiArticles
+    if (autoTaskType === 'daily_seo_article' && result.success) {
+      try {
+        const { supabase } = await import('@/lib/supabase');
+        const { data: freshPlan } = await supabase.from('seo_plans').select('data').eq('id', planId).single();
+        const freshArticles: any[] = Array.isArray(freshPlan?.data?.aiArticles) ? freshPlan.data.aiArticles : [];
+        const savedArticle = freshArticles.find((a: any) => a?.status === 'written' && a?.wpPostUrl);
+        if (savedArticle) {
+          console.log(`[EXECUTE-TASK] ✅ Article verified in aiArticles: "${savedArticle.title}" → ${savedArticle.wpPostUrl}`);
+        } else {
+          console.warn(`[EXECUTE-TASK] ⚠️ Article task succeeded but no written article found in aiArticles! Saving fallback...`);
+          // Fallback: save article from result changes if available
+          const articleChange = result.changes.find((c: any) => c.field === 'מאמר SEO יומי');
+          if (articleChange) {
+            freshArticles.push({
+              id: `daily-article-fallback-${Date.now()}`,
+              title: articleChange.pageTitle || taskTitle,
+              targetKeyword: specificKeyword || '',
+              wordCount: 0,
+              status: 'written',
+              type: 'daily_seo_article',
+              fullArticle: `<p>${articleChange.newValue}</p>`,
+              wpPostUrl: articleChange.pageUrl || '',
+              wpPostId: articleChange.pageId || 0,
+              generatedAt: new Date().toISOString(),
+            });
+            await updatePlanSafe(planId, { aiArticles: freshArticles } as any);
+            console.log(`[EXECUTE-TASK] Fallback article saved to aiArticles`);
+          }
+        }
+      } catch (verifyErr) {
+        console.warn(`[EXECUTE-TASK] Article verification failed:`, verifyErr);
+      }
+    }
+
+    // Update task status to "done" in the plan if tasks exist — only if task succeeded
     const tasks = (plan as any).tasks || [];
     const taskIndex = tasks.findIndex((t: any) => t.id === taskId);
-    if (taskIndex >= 0) {
+    if (taskIndex >= 0 && result.success) {
       tasks[taskIndex] = {
         ...tasks[taskIndex],
         status: 'done',
         completedAt: new Date().toISOString(),
       };
       await updatePlanSafe(planId, { tasks } as any);
+    } else if (taskIndex >= 0 && !result.success) {
+      console.warn(`[EXECUTE-TASK] Task "${taskTitle}" failed — NOT marking as done. Error: ${result.error}`);
     }
 
     // Log the activity

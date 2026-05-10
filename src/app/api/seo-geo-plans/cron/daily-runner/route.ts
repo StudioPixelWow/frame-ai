@@ -100,6 +100,19 @@ async function processPlanDailyTasks(plan: any) {
     }
 
     try {
+      // Extract specific keyword from task title for article tasks
+      if (autoType === 'daily_seo_article') {
+        const kwMatch = task.title?.match(/—\s*[""״]([^""״]+)[""״]/);
+        if (kwMatch?.[1]) {
+          context.specificKeyword = kwMatch[1].trim();
+          console.log(`[SEO-CRON] Extracted keyword for article: "${context.specificKeyword}"`);
+        } else {
+          context.specificKeyword = undefined;
+        }
+      } else {
+        context.specificKeyword = undefined;
+      }
+
       const result: AutoTaskResult = await executeAutoTask(autoType, context);
       updatedTasks[i] = { ...task, status: result.success ? 'done' : 'in_progress' };
       executionResults.push({
