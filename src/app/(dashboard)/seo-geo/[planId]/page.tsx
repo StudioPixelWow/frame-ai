@@ -244,6 +244,16 @@ function s(val: unknown): string {
   return String(val);
 }
 
+/** Strip publication time like "(08:00)" from daily article task titles for cleaner display */
+function stripTime(title: string): string {
+  return title.replace(/\s*\(\d{2}:\d{2}\)\s*$/, '').trim();
+}
+
+/** Check if a string contains Hebrew characters */
+function hasHebrew(text: string): boolean {
+  return /[֐-׿]/.test(text);
+}
+
 /** Force any value to a number. Objects get 0. */
 function n(val: unknown): number {
   if (typeof val === 'number') return val;
@@ -1902,7 +1912,7 @@ export default function SeoPlanDetail() {
                                                 fontSize: 12, fontWeight: 600, color: C.text,
                                                 textDecoration: task.status === "done" ? "line-through" : "none",
                                                 opacity: task.status === "done" ? 0.6 : 1,
-                                              }}>{s(task.title)}</div>
+                                              }}>{s(stripTime(task.title))}</div>
                                             </div>
 
                                             {/* Impact badge */}
@@ -2276,7 +2286,7 @@ export default function SeoPlanDetail() {
                                     fontSize: 13, fontWeight: 600, color: C.text,
                                     textDecoration: task.status === "done" ? "line-through" : "none",
                                     opacity: task.status === "done" ? 0.6 : 1,
-                                  }}>{s(task.title)}</div>
+                                  }}>{s(stripTime(task.title))}</div>
                                   <div style={{ display: "flex", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
                                     <span style={{ ...tagStyle, background: `${C.primary}10`, color: C.primary }}>
                                       🏷️ {s(task.category)}
@@ -2557,7 +2567,7 @@ export default function SeoPlanDetail() {
                                 <div key={idx} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.text, width: "100%", overflow: "hidden" }}>
                                   <div style={{ width: 4, height: 4, borderRadius: "50%", background: getTaskStatusColor(task.status), flexShrink: 0 }} />
                                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                    {task.title.substring(0, 25)}
+                                    {stripTime(task.title).substring(0, 25)}
                                   </span>
                                 </div>
                               ))}
@@ -2676,7 +2686,7 @@ export default function SeoPlanDetail() {
                               />
                               <div style={{ flex: 1 }}>
                                 <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
-                                  {task.title}
+                                  {stripTime(task.title)}
                                 </div>
                                 {task.description && (
                                   <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 4 }}>
@@ -2814,7 +2824,7 @@ export default function SeoPlanDetail() {
                             <div style={{
                               fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 8,
                               lineHeight: 1.5,
-                            }}>{s(task.title)}</div>
+                            }}>{s(stripTime(task.title))}</div>
 
                             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
                               <span style={{ ...tagStyle, background: `${C.primary}10`, color: C.primary }}>{s(task.category)}</span>
@@ -3084,13 +3094,15 @@ export default function SeoPlanDetail() {
 
         {/* ── AI RESULTS ── */}
         {activeTab === "ai" && (() => {
-          const aiQueries: Array<{platform: string; query: string; found: boolean; confidence: number; snippet?: string; scanMode?: string; position?: number; checkedAt?: string}> =
+          const aiQueriesRaw: Array<{platform: string; query: string; found: boolean; confidence: number; snippet?: string; scanMode?: string; position?: number; checkedAt?: string}> =
             (scan?.aiQueries as any[] || []).length > 0
               ? (scan?.aiQueries as any[])
               : (Array.isArray(p.visibilityResults) ? p.visibilityResults : []).map((vr: any) => ({
                   platform: vr.engine || '', query: vr.query || '', found: !!vr.mentioned,
                   confidence: vr.found ? 80 : 0, snippet: vr.context || '', scanMode: 'real',
                 }));
+          // Filter out English-only queries — keep only queries with Hebrew text
+          const aiQueries = aiQueriesRaw.filter(q => hasHebrew(q.query));
 
           const realQueries = aiQueries.filter(q => q.scanMode === 'real');
           const unavailableQueries = aiQueries.filter(q => q.scanMode === 'unavailable');
@@ -3791,7 +3803,7 @@ export default function SeoPlanDetail() {
           const aiCompetitors: any[] = Array.isArray((p as any).aiCompetitors) ? (p as any).aiCompetitors : [];
 
           // Extract competitor data from scan pipeline aiQueries + plan.competitors
-          const aiQueriesRaw: any[] = scan?.aiQueries as any[] || [];
+          const aiQueriesRaw: any[] = (scan?.aiQueries as any[] || []).filter((q: any) => hasHebrew(q.query || ''));
           const planCompetitors: any[] = Array.isArray((p as any).competitors) ? (p as any).competitors : [];
           const scanCompetitors: any[] = Array.isArray((scan as any)?.competitors) ? (scan as any).competitors : [];
           const allCompetitors = [...planCompetitors, ...scanCompetitors];
@@ -4057,7 +4069,7 @@ export default function SeoPlanDetail() {
           };
 
           // Build content gaps from AI queries where business was NOT found
-          const aiQueriesRaw: any[] = scan?.aiQueries as any[] || [];
+          const aiQueriesRaw: any[] = (scan?.aiQueries as any[] || []).filter((q: any) => hasHebrew(q.query || ''));
           const planGaps: any[] = Array.isArray((p as any).contentGaps) ? (p as any).contentGaps : [];
 
           // Find queries where business is missing per platform
