@@ -1026,7 +1026,7 @@ const executeDailySeoArticle: ExecutorFunction = async (context) => {
       const planId = context.planId;
       if (planId) {
         const { supabase } = await import('@/lib/supabase');
-        const { data: planRow } = await supabase.from('seo_plans').select('data').eq('id', planId).single();
+        const { data: planRow } = await supabase.from('app_seo_plans').select('data').eq('id', planId).single();
         const planData = planRow?.data || {};
         const existingArticles: any[] = Array.isArray(planData.aiArticles) ? planData.aiArticles : [];
         // Find matching daily article entry by keyword and update it

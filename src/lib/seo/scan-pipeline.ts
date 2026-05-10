@@ -884,7 +884,9 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       // Page titles with separators
       if (/\s[-–—|]\s/.test(text) && text.split(/\s[-–—|]\s/).length > 2) return true;
       // CMS & WordPress noise
-      if (/תגובות|comment|cookie|wp-content|elementor|plugin|widget|sidebar|footer|header|embed|iframe|script/i.test(text)) return true;
+      if (/תגובות|comment|cookie|wp-content|wp.json|wp json|elementor|plugin|widget|sidebar|footer|header|embed|iframe|script|branding|favicon/i.test(text)) return true;
+      // Legal / policy pages — never real search queries
+      if (/מדיניות פרטיות|מדיניות|תנאי שימוש|תקנון|הצהרת נגישות|נגישות|privacy policy|terms of use|terms of service|cookie policy|disclaimer|legal notice/i.test(text)) return true;
       // Very long multi-word sentences (not real search queries)
       if (text.split(/\s+/).length > 8) return true;
       // Single-word generic terms that are NOT search queries

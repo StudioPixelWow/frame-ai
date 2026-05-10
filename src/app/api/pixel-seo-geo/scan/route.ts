@@ -112,7 +112,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<ScanResponse 
     // Update plan in DB
     try {
       await supabase
-        .from('seo_plans')
+        .from('app_seo_plans')
         .update({ data: updatePayload })
         .eq('id', planId);
     } catch (dbErr: any) {

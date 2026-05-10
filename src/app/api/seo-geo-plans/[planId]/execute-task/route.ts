@@ -170,7 +170,7 @@ async function _POST(
     if (autoTaskType === 'daily_seo_article' && result.success) {
       try {
         const { supabase } = await import('@/lib/supabase');
-        const { data: freshPlan } = await supabase.from('seo_plans').select('data').eq('id', planId).single();
+        const { data: freshPlan } = await supabase.from('app_seo_plans').select('data').eq('id', planId).single();
         const freshArticles: any[] = Array.isArray(freshPlan?.data?.aiArticles) ? freshPlan.data.aiArticles : [];
         const savedArticle = freshArticles.find((a: any) => a?.status === 'written' && a?.wpPostUrl);
         if (savedArticle) {
