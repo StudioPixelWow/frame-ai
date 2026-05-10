@@ -1613,35 +1613,16 @@ export default function SeoPlanDetail() {
                               return;
                             }
 
-                            // Client-side check: which tasks are automatable (mirrors mapPlanTaskToAutoType)
-                            const AUTO_KEYWORDS = [
-                              'meta title', 'meta description',
-                              'robots.txt', 'רובוטס',
-                              'canonical', 'קנוני',
-                              'כותרים', 'h1-h3', 'heading', 'headings',
-                              'schema', 'סכמה', 'json-ld',
-                              'image alt', 'alt text', 'תמונות', 'images',
-                              'internal link', 'קישורים פנימיים', 'linking',
-                              'content optimization', 'optimize content', 'תוכן', 'content', 'optimization',
-                              'מאמר seo יומי', 'פרסום מאמר seo', 'פרסום מאמר', 'מאמר יומי', 'daily seo article',
-                            ];
-                            const isAutomatable = (title: string) => {
-                              const t = title.toLowerCase().trim();
-                              return AUTO_KEYWORDS.some(kw => t.includes(kw));
-                            };
-
+                            // Send ALL pending tasks to server — server-side mapPlanTaskToAutoType decides what's automatable
                             const pendingTasks = todayDayData.tasks.filter((t: any) => t.status !== 'done');
-                            const autoTasks = pendingTasks.filter((t: any) => isAutomatable(t.title || ''));
-                            const manualTasks = pendingTasks.filter((t: any) => !isAutomatable(t.title || ''));
-
-                            if (autoTasks.length === 0) {
-                              const manualMsg = manualTasks.length > 0
-                                ? `${manualTasks.length} משימות ידניות (דילוג) — אין משימות אוטומטיות להיום`
-                                : "אין משימות ממתינות להיום";
-                              setAutomationStatus(manualMsg);
-                              setTimeout(() => { setRunningAutomation(false); setAutomationStatus(null); }, 4000);
+                            if (pendingTasks.length === 0) {
+                              setAutomationStatus("אין משימות ממתינות להיום");
+                              setTimeout(() => { setRunningAutomation(false); setAutomationStatus(null); }, 3000);
                               return;
                             }
+                            // Use all pending tasks — the server will skip non-automatable ones (returns 400)
+                            const autoTasks = pendingTasks;
+                            const manualTasks: any[] = [];
 
                             let successCount = 0;
                             let failCount = 0;
@@ -1655,7 +1636,7 @@ export default function SeoPlanDetail() {
                                 });
                                 if (res.ok) {
                                   const data = await res.json();
-                                  if (data.data?.success) successCount++;
+                                  if (data.success || data.data?.success) successCount++;
                                   else failCount++;
                                 } else { failCount++; }
                               } catch { failCount++; }
