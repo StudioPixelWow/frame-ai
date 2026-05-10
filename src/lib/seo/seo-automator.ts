@@ -896,7 +896,7 @@ const executeDailySeoArticle: ExecutorFunction = async (context) => {
       { temperature: 0.7, maxTokens: 4000 }
     );
 
-    if (!aiResult.success || !aiResult.text) {
+    if (!aiResult.success || !aiResult.data) {
       return {
         taskType: 'daily_seo_article',
         success: false,
@@ -907,11 +907,16 @@ const executeDailySeoArticle: ExecutorFunction = async (context) => {
       };
     }
 
-    // Parse AI response
+    // Parse AI response — data can be parsed JSON object or raw text string
     let articleData: { title: string; content: string; metaDescription: string; metaTitle: string };
     try {
-      const cleaned = aiResult.text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-      articleData = JSON.parse(cleaned);
+      if (typeof aiResult.data === 'object' && aiResult.data !== null) {
+        // Already parsed by generateWithAI
+        articleData = aiResult.data as any;
+      } else {
+        const cleaned = String(aiResult.data).replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        articleData = JSON.parse(cleaned);
+      }
     } catch {
       return {
         taskType: 'daily_seo_article',

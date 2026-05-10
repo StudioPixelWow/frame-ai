@@ -135,15 +135,20 @@ export default function SeoGeoDashboard() {
 
     fetchPlans();
 
-    // Fetch platform availability — try API first, fall back to scan data from plans
+    // Fetch platform availability — convert API response format, fall back to scan data
     fetch('/api/seo/platform-status').then(r => r.ok ? r.json() : {}).then(data => {
       if (data.platforms) {
-        const hasAnyReal = Object.values(data.platforms).some((s: any) => s === 'real');
+        // API returns { platforms: { id: { available: bool, name: string } } }
+        // Convert to { id: 'real' | 'unavailable' } for our state
+        const converted: Record<string, 'real' | 'unavailable'> = {};
+        for (const [id, info] of Object.entries(data.platforms)) {
+          converted[id] = (info as any).available ? 'real' : 'unavailable';
+        }
+        const hasAnyReal = Object.values(converted).some(s => s === 'real');
         if (hasAnyReal) {
-          setPlatformStatus(data.platforms);
+          setPlatformStatus(converted);
         } else {
           // All show unavailable from env vars — check if any plan had successful scans
-          // Mark all platforms as 'real' if we have plans with scan data
           fetch('/api/data/seo-plans').then(r => r.ok ? r.json() : []).then((allPlans: any[]) => {
             if (Array.isArray(allPlans) && allPlans.length > 0) {
               const anyWithScans = allPlans.some((p: any) => p.websiteScan?.aiQueries?.length > 0 || p.websiteScan?.platformStatuses);
