@@ -63,12 +63,33 @@ async function _POST(
   }
 
   try {
-    // Check if WordPress is connected
-    const wpConnection = (plan as any).wpConnection as WPConnection | undefined;
+    // Check if WordPress is connected — try plan first, then fall back to client record
+    let wpConnection = (plan as any).wpConnection as WPConnection | undefined;
     console.log(`[EXECUTE-TASK] planId=${planId}, taskTitle="${taskTitle}", wpConnection=${wpConnection ? 'YES' : 'NO'}`);
+
+    if (!wpConnection && plan.clientId) {
+      // Fallback: load WP credentials from client record
+      try {
+        const { getClientById } = await import('@/lib/db/client-helpers');
+        const client = await getClientById(plan.clientId);
+        if (client && (client as any).wpSiteUrl && (client as any).wpUsername && (client as any).wpApplicationPassword) {
+          wpConnection = {
+            siteUrl: (client as any).wpSiteUrl,
+            username: (client as any).wpUsername,
+            applicationPassword: (client as any).wpApplicationPassword,
+          };
+          console.log(`[EXECUTE-TASK] Loaded wpConnection from client record (fallback)`);
+          // Save back to plan for next time
+          await updatePlanSafe(planId, { wpConnection: wpConnection as any });
+        }
+      } catch (e) {
+        console.warn(`[EXECUTE-TASK] Failed to load wpConnection from client:`, e);
+      }
+    }
+
     if (!wpConnection) {
-      console.error(`[EXECUTE-TASK] No wpConnection found in plan. Plan keys: ${Object.keys(plan as any).join(', ')}`);
-      return err('WordPress לא מחובר', 400);
+      console.error(`[EXECUTE-TASK] No wpConnection found. Plan keys: ${Object.keys(plan as any).join(', ')}`);
+      return err('WordPress לא מחובר — חבר את WordPress מחדש בדף התוכנית', 400);
     }
 
     // Determine automation task type
