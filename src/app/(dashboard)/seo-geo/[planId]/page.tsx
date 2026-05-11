@@ -5383,7 +5383,50 @@ export default function SeoPlanDetail() {
           });
 
           const hasBaseline = !!baseline;
-          const hasSnapshots = dailySnapshots.length > 0;
+          // Build "day 0" snapshot from initial scan if no snapshots exist yet
+          const initialSnapshot = (!dailySnapshots.length && currentScan) ? [{
+            date: planAny?.generatedAt || planAny?.createdAt || new Date().toISOString(),
+            timestamp: planAny?.generatedAt || planAny?.createdAt || new Date().toISOString(),
+            dayLabel: 'נקודת מוצא',
+            isBaseline: true,
+            overallScore: (() => {
+              let s = 0;
+              if (currentScan.hasSSL) s += 15;
+              if (currentScan.hasSitemap) s += 10;
+              if (currentScan.hasRobotsTxt) s += 10;
+              if (currentScan.structuredData) s += 10;
+              if (currentScan.openGraph) s += 5;
+              if ((currentScan.loadTimeMs || 5000) < 3000) s += 10;
+              if (currentScan.metaDescription) s += 10;
+              if (currentScan.h1) s += 10;
+              const aiPct = currentTotal > 0 ? (currentFound / currentTotal) * 100 : 0;
+              s += Math.round(aiPct * 0.2);
+              return Math.min(s, 100);
+            })(),
+            technicalScore: (() => {
+              let s = 0;
+              if (currentScan.hasSSL) s += 20;
+              if (currentScan.hasSitemap) s += 20;
+              if (currentScan.hasRobotsTxt) s += 20;
+              if (currentScan.structuredData) s += 20;
+              if (currentScan.openGraph) s += 10;
+              if ((currentScan.loadTimeMs || 5000) < 3000) s += 10;
+              return Math.min(s, 100);
+            })(),
+            aiVisibility: {
+              totalQueries: currentTotal,
+              totalFound: currentFound,
+              byPlatform: {},
+            },
+            keywordRanks: currentKw.map((kw: any) => ({
+              keyword: typeof kw === 'string' ? kw : kw.keyword,
+              googleRank: typeof kw === 'string' ? null : (kw.currentRank || null),
+              previousRank: null,
+              change: 0,
+            })),
+          }] : [];
+          const effectiveSnapshots = dailySnapshots.length > 0 ? dailySnapshots : initialSnapshot;
+          const hasSnapshots = effectiveSnapshots.length > 0;
 
           // Calculate day number in 60-day plan
           const genDate = planAny?.generatedAt ? new Date(planAny.generatedAt) : null;
@@ -5395,7 +5438,7 @@ export default function SeoPlanDetail() {
           const chartPadding = { top: 20, right: 20, bottom: 30, left: 40 };
           const innerW = chartWidth - chartPadding.left - chartPadding.right;
           const innerH = chartHeight - chartPadding.top - chartPadding.bottom;
-          const lastN = dailySnapshots.slice(-30); // last 30 days
+          const lastN = effectiveSnapshots.slice(-30); // last 30 days
           const maxScore = 100;
 
           return (
@@ -5407,9 +5450,11 @@ export default function SeoPlanDetail() {
                   <p style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
                     {hasBaseline
                       ? `יום ${Math.min(dayNumber, 60)} מתוך 60 | נקודת התחלה: ${new Date(baselineDate).toLocaleDateString('he-IL')} | סריקה אחרונה: ${lastRescan ? new Date(lastRescan).toLocaleDateString('he-IL') : '—'}`
-                      : hasSnapshots
+                      : hasSnapshots && dailySnapshots.length > 0
                         ? `סריקה יומית אוטומטית פעילה — ${dailySnapshots.length} סריקות בוצעו`
-                        : 'הסריקה היומית האוטומטית תתחיל לפעול בקרוב'}
+                        : currentScan
+                          ? `נקודת מוצא — נתוני הסריקה הראשונית | הסריקה היומית תתחיל מחר ב-08:00`
+                          : 'הסריקה היומית האוטומטית תתחיל לפעול בקרוב'}
                   </p>
                 </div>
                 <button
@@ -5431,7 +5476,7 @@ export default function SeoPlanDetail() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
                 {[
                   { label: "יום בתוכנית", value: `${Math.min(dayNumber, 60)}/60`, icon: "📅", sub: dayNumber > 0 ? `${Math.round((dayNumber/60)*100)}% הושלמו` : 'טרם החל', color: '#6366f1' },
-                  { label: "סריקות יומיות", value: dailySnapshots.length, icon: "🔍", sub: hasBaseline ? `+ ${history.length} ידניות` : 'אוטומטי כל 24 שעות', color: '#3b82f6' },
+                  { label: "סריקות יומיות", value: effectiveSnapshots.length, icon: "🔍", sub: hasBaseline ? `+ ${history.length} ידניות` : 'אוטומטי כל 24 שעות', color: '#3b82f6' },
                   { label: "נראות AI", value: currentTotal > 0 ? `${Math.round((currentFound / currentTotal) * 100)}%` : '—', icon: "🤖", sub: baselineTotal > 0 ? `היה: ${Math.round((baselineFound / Math.max(baselineTotal, 1)) * 100)}%` : '—', color: currentFound > baselineFound ? '#10b981' : '#f59e0b' },
                   { label: "ביטויים שעלו", value: keywordChanges.filter((k: any) => k.improved).length, icon: "🚀", sub: `מתוך ${currentKw.length} ביטויים`, color: '#10b981' },
                 ].map((card, i) => (
@@ -5519,7 +5564,7 @@ export default function SeoPlanDetail() {
               {/* Daily Snapshots Timeline */}
               {hasSnapshots && (
                 <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>📅 סריקות יומיות — {dailySnapshots.length} ימים</h3>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>📅 סריקות יומיות — {effectiveSnapshots.length} ימים</h3>
                   <div style={{ maxHeight: 400, overflowY: "auto" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                       <thead style={{ position: "sticky", top: 0, background: C.cardBg, zIndex: 1 }}>
@@ -5532,8 +5577,8 @@ export default function SeoPlanDetail() {
                         </tr>
                       </thead>
                       <tbody>
-                        {dailySnapshots.slice().reverse().map((snap: any, i: number) => {
-                          const prev = i < dailySnapshots.length - 1 ? dailySnapshots[dailySnapshots.length - 2 - i] : null;
+                        {effectiveSnapshots.slice().reverse().map((snap: any, i: number) => {
+                          const prev = i < effectiveSnapshots.length - 1 ? effectiveSnapshots[effectiveSnapshots.length - 2 - i] : null;
                           const scoreDelta = prev ? (snap.overallScore || 0) - (prev.overallScore || 0) : 0;
                           const aiPct = snap.aiVisibility?.totalQueries > 0 ? Math.round((snap.aiVisibility.totalFound / snap.aiVisibility.totalQueries) * 100) : 0;
                           const rankedKw = (snap.keywordRanks || []).filter((k: any) => k.googleRank !== null && k.googleRank > 0).length;
@@ -5543,8 +5588,13 @@ export default function SeoPlanDetail() {
                           return (
                             <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i === 0 ? 'rgba(16,185,129,0.04)' : 'transparent' }}>
                               <td style={{ padding: "10px 12px", fontWeight: 600 }}>
-                                {new Date(snap.timestamp || snap.date).toLocaleDateString('he-IL')}
-                                {i === 0 && <span style={{ fontSize: 10, color: '#10b981', marginRight: 6 }}>אחרון</span>}
+                                {snap.isBaseline
+                                  ? <span style={{ color: '#6366f1' }}>📍 נקודת מוצא — {new Date(snap.timestamp || snap.date).toLocaleDateString('he-IL')}</span>
+                                  : <>
+                                      {new Date(snap.timestamp || snap.date).toLocaleDateString('he-IL')}
+                                      {i === 0 && <span style={{ fontSize: 10, color: '#10b981', marginRight: 6 }}>אחרון</span>}
+                                    </>
+                                }
                               </td>
                               <td style={{ padding: "10px 12px", textAlign: "center" }}>
                                 <span style={{ fontWeight: 700, color: (snap.overallScore || 0) >= 50 ? '#10b981' : '#f59e0b' }}>
@@ -5694,8 +5744,8 @@ export default function SeoPlanDetail() {
                 </div>
               )}
 
-              {/* Empty state — no snapshots and no baseline */}
-              {!hasBaseline && !hasSnapshots && (
+              {/* Empty state — no scan data at all */}
+              {!hasBaseline && !hasSnapshots && !currentScan && (
                 <div style={{ background: C.cardBg, borderRadius: 16, padding: 48, textAlign: "center", border: `1px solid ${C.border}` }}>
                   <div style={{ fontSize: 48, marginBottom: 16 }}>📊</div>
                   <h3 style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>הסריקה היומית תתחיל בקרוב</h3>
