@@ -251,7 +251,7 @@ async function querySerper(query: string, targetDomain: string): Promise<Platfor
       const link = (organic[i].link || '').toLowerCase();
       const resultDomain = (organic[i].domain || '').toLowerCase();
       if (link.includes(domainNoWww) || resultDomain.includes(domainNoWww)) {
-        const position = organic[i].position || (i + 1);
+        const position = typeof organic[i].position === 'number' ? organic[i].position : (i + 1);
         console.log(`[SERPER] FOUND at position ${position}: ${link}`);
         return {
           found: true,
