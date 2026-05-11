@@ -14,6 +14,9 @@ import {
   type PlatformId,
 } from '@/lib/seo/platform-apis';
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 /**
  * POST /api/seo-geo-plans/[planId]/check-keyword
  *

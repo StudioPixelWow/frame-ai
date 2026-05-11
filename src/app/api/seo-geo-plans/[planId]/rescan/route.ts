@@ -8,6 +8,9 @@ import {
   withErrorBoundary,
 } from '@/lib/seo/api-helpers';
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 /**
  * POST /api/seo-geo-plans/[planId]/rescan
  *
@@ -83,14 +86,20 @@ function calcTechnicalScore(scan: any): number {
 
 export const POST = withErrorBoundary(async (req: NextRequest, context: { params: Promise<{ planId: string }> }) => {
   const { planId } = await context.params;
+  console.log(`[RESCAN] Starting rescan for plan: ${planId}`);
+
   const { plan, error } = await loadPlan(planId, req);
-  if (error) return error;
+  if (error) {
+    console.error('[RESCAN] loadPlan error');
+    return error;
+  }
   if (!plan) return err('תוכנית לא נמצאה', 404);
 
   const now = new Date().toISOString();
   const planAny = plan as any;
-  const websiteUrl = planAny.websiteUrl || planAny.url || '';
+  const websiteUrl = planAny.websiteUrl || planAny.url || planAny.domain || '';
 
+  console.log(`[RESCAN] Plan loaded. URL: ${websiteUrl}, clientName: ${planAny.clientName || planAny.businessName}`);
   if (!websiteUrl) return err('כתובת אתר חסרה בתוכנית', 400);
 
   // ── Save baseline on first rescan ──
@@ -116,11 +125,13 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
   const html = await fetchPage(websiteUrl);
 
   if (!html) {
+    console.log(`[RESCAN] Website unreachable: ${websiteUrl}`);
     return ok({
       status: 'unavailable',
-      message: 'האתר לא נגיש כרגע. נסה שוב מאוחר יותר.',
+      message: `האתר ${websiteUrl} לא נגיש כרגע. נסה שוב מאוחר יותר.`,
     });
   }
+  console.log(`[RESCAN] Fetched ${html.length} bytes in ${Date.now() - startTime}ms`);
 
   const loadTimeMs = Date.now() - startTime;
   const parsed = parseHtml(html);
@@ -245,7 +256,11 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
     lastRescanAt: now,
   } as any);
 
-  if (!updated) return err('שגיאה בשמירת תוצאות הסריקה', 500);
+  if (!updated) {
+    console.error('[RESCAN] updatePlanSafe returned null');
+    return err('שגיאה בשמירת תוצאות הסריקה', 500);
+  }
+  console.log(`[RESCAN] Saved successfully. Technical: ${technicalScore}, Scans: ${scanHistory.length}`);
 
   logActivity(planId, 'rescan', {
     technicalScore,
