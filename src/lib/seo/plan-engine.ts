@@ -227,6 +227,18 @@ export interface GeneratedPlan {
   totalHours: number;
   phases: PhaseOverview[];
   generatedAt: string;
+  dailyArticleEntries?: Array<{
+    id: string;
+    title: string;
+    targetKeyword: string;
+    outline: string[];
+    wordCount: number;
+    whyThisArticle: string;
+    status: string;
+    scheduledDay: number;
+    scheduledTime: string;
+    type: string;
+  }>;
 }
 
 export interface PhaseOverview {

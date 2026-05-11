@@ -94,6 +94,7 @@ const sections = [
   { href: "/content",         icon: <ContentIcon />,         label: "Content" },
   { href: "/bi-dashboard",    icon: <BIIcon />,              label: "BI Dashboard" },
   { href: "/seo-geo/dashboard", icon: <SeoGeoIcon />,        label: "PIXEL SEO/GEO" },
+  { href: "/seo-activity-center", icon: <BIIcon />,          label: "מרכז פעילות SEO" },
   { href: "/reports",         icon: <ReportsIcon />,         label: "Reports" },
   { href: "/editor",          icon: <VideoEditorIcon />,     label: "Video Editor" },
   { href: "/settings",        icon: <SettingsIcon />,        label: "Settings" },

@@ -447,7 +447,7 @@ function generateStrategicInsights(
       description: `יש ${quickWins.length} ביטויים שבהם אנחנו כבר בעמוד 1 אבל ממיקום 4-10. שיפור קטן יכול להביא קפיצה משמעותית בתנועה.`,
       priority: 'high',
       action: `שפר meta titles, descriptions, ותוכן עבור: ${quickWins.slice(0, 3).map(q => `"${q.keyword}"`).join(', ')}`,
-      relatedCompetitors: [...new Set(quickWins.map(q => q.competitorDomain))].slice(0, 3),
+      relatedCompetitors: Array.from(new Set(quickWins.map(q => q.competitorDomain))).slice(0, 3),
       estimatedTimeWeeks: 2,
     });
   }
@@ -462,7 +462,7 @@ function generateStrategicInsights(
       description: `מתחרים מדורגים על ${missingTopics.length} נושאים שאין לנו תוכן עליהם. יצירת תוכן ייעודי תפתח מקורות תנועה חדשים.`,
       priority: 'high',
       action: `צור תוכן עבור: ${missingTopics.slice(0, 5).map(t => `"${t.topic}"`).join(', ')}`,
-      relatedCompetitors: [...new Set(missingTopics.flatMap(t => t.competitorsCovering))].slice(0, 3),
+      relatedCompetitors: Array.from(new Set(missingTopics.flatMap(t => t.competitorsCovering))).slice(0, 3),
       estimatedTimeWeeks: 4,
     });
   }
@@ -530,15 +530,15 @@ export function analyzeCompetitors(input: CompetitorAnalysisInput): CompetitorAn
 
   // Step 3: Merge competitor data
   const allDomains = new Set([
-    ...serpCompetitors.keys(),
-    ...aiCompetitors.keys(),
+    ...Array.from(serpCompetitors.keys()),
+    ...Array.from(aiCompetitors.keys()),
     ...(input.knownCompetitors || []).map(normalizeCompetitorDomain),
   ]);
   allDomains.delete(ourDomain);
 
   const competitors: DiscoveredCompetitor[] = [];
 
-  for (const domain of allDomains) {
+  for (const domain of Array.from(allDomains)) {
     const serpData = serpCompetitors.get(domain);
     const aiData = aiCompetitors.get(domain);
 

@@ -124,11 +124,11 @@ function extractWords(text: string): string[] {
 
 function cosineSimilarity(a: Map<string, number>, b: Map<string, number>): number {
   let dot = 0, magA = 0, magB = 0;
-  for (const [key, val] of a) {
+  for (const [key, val] of Array.from(a)) {
     magA += val * val;
     if (b.has(key)) dot += val * b.get(key)!;
   }
-  for (const val of b.values()) magB += val * val;
+  for (const val of Array.from(b.values())) magB += val * val;
   if (magA === 0 || magB === 0) return 0;
   return dot / (Math.sqrt(magA) * Math.sqrt(magB));
 }
@@ -138,7 +138,7 @@ function buildTfVector(words: string[]): Map<string, number> {
   for (const w of words) freq.set(w, (freq.get(w) || 0) + 1);
   const total = words.length || 1;
   const tf = new Map<string, number>();
-  for (const [w, c] of freq) tf.set(w, c / total);
+  for (const [w, c] of Array.from(freq)) tf.set(w, c / total);
   return tf;
 }
 
@@ -239,7 +239,7 @@ function extractEntities(pages: ParsedPageData[], businessName: string, products
       ...(page.paragraphs || []).slice(0, 5),
     ].join(' ').toLowerCase();
 
-    for (const [entity, data] of entityMap) {
+    for (const [entity, data] of Array.from(entityMap)) {
       if (allText.includes(entity)) {
         data.pages.add(page.url);
         // Count approximate mentions
@@ -293,7 +293,7 @@ function extractEntities(pages: ParsedPageData[], businessName: string, products
   const maxMentions = Math.max(1, ...Array.from(entityMap.values()).map(e => e.mentions));
   const entities: ExtractedEntity[] = [];
 
-  for (const [name, data] of entityMap) {
+  for (const [name, data] of Array.from(entityMap)) {
     const prominence = Math.round((data.mentions / maxMentions) * 70 + (data.pages.size / Math.max(1, pages.length)) * 30);
     entities.push({
       name,
@@ -497,7 +497,7 @@ function analyzeLinkGraph(pages: ParsedPageData[]): { linkMap: Map<string, Set<s
   }
 
   // Ensure all crawled pages are in inLinks map
-  for (const url of allUrls) {
+  for (const url of Array.from(allUrls)) {
     if (!inLinks.has(url)) inLinks.set(url, new Set());
   }
 
@@ -507,16 +507,16 @@ function analyzeLinkGraph(pages: ParsedPageData[]): { linkMap: Map<string, Set<s
   // Find extremes
   let maxIn = { url: '', count: 0 };
   let maxOut = { url: '', count: 0 };
-  for (const [url, sources] of inLinks) {
+  for (const [url, sources] of Array.from(inLinks)) {
     if (sources.size > maxIn.count) maxIn = { url, count: sources.size };
   }
-  for (const [url, count] of outLinks) {
+  for (const [url, count] of Array.from(outLinks)) {
     if (count > maxOut.count) maxOut = { url, count };
   }
 
   // Find orphan pages (no internal links pointing to them, excluding homepage)
   const orphanPages: string[] = [];
-  for (const url of allUrls) {
+  for (const url of Array.from(allUrls)) {
     const ins = inLinks.get(url)?.size || 0;
     if (ins === 0 && !url.match(/^https?:\/\/[^/]+\/?$/)) {
       orphanPages.push(url);
@@ -525,13 +525,13 @@ function analyzeLinkGraph(pages: ParsedPageData[]): { linkMap: Map<string, Set<s
 
   // Find dead-end pages (no outgoing links)
   const deadEndPages: string[] = [];
-  for (const [url, count] of outLinks) {
+  for (const [url, count] of Array.from(outLinks)) {
     if (count === 0) deadEndPages.push(url);
   }
 
   // Find hub pages (high in + out)
   const hubPages: string[] = [];
-  for (const url of allUrls) {
+  for (const url of Array.from(allUrls)) {
     const ins = inLinks.get(url)?.size || 0;
     const outs = outLinks.get(url) || 0;
     if (ins >= 3 && outs >= 3) hubPages.push(url);
