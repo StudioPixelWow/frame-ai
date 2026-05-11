@@ -480,22 +480,52 @@ export default function SeoPlanDetail() {
     return [];
   }, [plan?.days, plan?.weeks]);
 
-  // Update task status
+  // Update task status — handles both weeks[] and days[] structures
   const updateTaskStatus = useCallback(async (taskId: string, newStatus: PlanTask["status"]) => {
     if (!plan) return;
+
+    const updatePayload: Record<string, any> = {};
+
+    // Update in weeks[] if present
     const updatedWeeks = (Array.isArray(plan.weeks) ? plan.weeks : []).map(w => ({
       ...w,
       tasks: w.tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t),
     }));
-    const completedCount = updatedWeeks.flatMap(w => w.tasks).filter(t => t.status === "done").length;
-    const updatedPlan = { ...plan, weeks: updatedWeeks, completedTasks: completedCount };
-    setPlan(updatedPlan);
+    if (Array.isArray(plan.weeks) && plan.weeks.length > 0) {
+      updatePayload.weeks = updatedWeeks;
+    }
+
+    // Update in days[] (60-day plan structure)
+    const planAny = plan as any;
+    let updatedDays = planAny.days;
+    if (Array.isArray(planAny.days) && planAny.days.length > 0) {
+      updatedDays = planAny.days.map((d: any) => ({
+        ...d,
+        tasks: (d.tasks || []).map((t: any) => t.id === taskId ? { ...t, status: newStatus } : t),
+      }));
+      updatePayload.days = updatedDays;
+    }
+
+    // Count completed tasks across both structures
+    const weeksDone = updatedWeeks.flatMap(w => w.tasks).filter(t => t.status === "done").length;
+    const daysDone = (updatedDays || []).flatMap((d: any) => d.tasks || []).filter((t: any) => t.status === "done").length;
+    const completedCount = weeksDone + daysDone;
+    updatePayload.completedTasks = completedCount;
+
+    // Update local state immediately
+    const updatedPlan = {
+      ...plan,
+      weeks: updatedWeeks,
+      ...(updatedDays ? { days: updatedDays } : {}),
+      completedTasks: completedCount,
+    };
+    setPlan(updatedPlan as any);
 
     try {
       await fetch(`/api/data/seo-plans/${plan.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ weeks: updatedWeeks, completedTasks: completedCount }),
+        body: JSON.stringify(updatePayload),
       });
     } catch (e) {
       console.error("Failed to update task:", e);
