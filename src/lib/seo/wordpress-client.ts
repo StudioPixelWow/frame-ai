@@ -5,6 +5,7 @@ export interface WPConnection {
   siteUrl: string;
   username: string;
   applicationPassword: string;
+  useAltApiFormat?: boolean;  // True if site uses ?rest_route= instead of /wp-json/
 }
 
 export interface YoastMeta {
@@ -32,6 +33,8 @@ export interface WPConnectionTestResult {
   yoastInstalled?: boolean;
   pagesCount?: number;
   error?: string;
+  resolvedSiteUrl?: string;    // The actual working URL (may differ from input — www vs no-www)
+  useAltApiFormat?: boolean;   // True if site uses ?rest_route= instead of /wp-json/
 }
 
 export interface WPUpdateResult {
@@ -80,11 +83,46 @@ function normalizeSiteUrl(raw: string): string {
   return url;
 }
 
-// עזר: בניית URL API
-// Helper: Build API URL
+// עזר: בניית URL API — Pretty Permalinks format
+// Helper: Build API URL — Pretty Permalinks format
 function buildApiUrl(siteUrl: string, endpoint: string): string {
   const baseUrl = normalizeSiteUrl(siteUrl);
   return `${baseUrl}/wp-json/wp/v2${endpoint}`;
+}
+
+// עזר: בניית URL API — Query String format (fallback for plain permalinks)
+// Helper: Build API URL — Query String format
+function buildApiUrlAlt(siteUrl: string, endpoint: string): string {
+  const baseUrl = normalizeSiteUrl(siteUrl);
+  // Separate endpoint path from query params
+  const [path, query] = endpoint.split('?');
+  const restRoute = `/wp/v2${path}`;
+  return query
+    ? `${baseUrl}/?rest_route=${encodeURIComponent(restRoute)}&${query}`
+    : `${baseUrl}/?rest_route=${encodeURIComponent(restRoute)}`;
+}
+
+// Smart API URL builder — picks format based on connection's useAltApiFormat flag
+export function buildSmartApiUrl(conn: { siteUrl: string; useAltApiFormat?: boolean }, endpoint: string): string {
+  return (conn as any).useAltApiFormat ? buildApiUrlAlt(conn.siteUrl, endpoint) : buildSmartApiUrl(conn, endpoint);
+}
+
+// עזר: מחזיר את כל הווריאציות האפשריות של URL (www / no-www × pretty / query-string)
+function getUrlVariants(siteUrl: string): string[] {
+  const base = normalizeSiteUrl(siteUrl);
+  const parsed = new URL(base);
+  const variants: string[] = [base];
+
+  // Add www / non-www variant
+  if (parsed.hostname.startsWith('www.')) {
+    const noWww = base.replace('://www.', '://');
+    variants.push(noWww);
+  } else {
+    const withWww = base.replace('://', '://www.');
+    variants.push(withWww);
+  }
+
+  return variants;
 }
 
 // עזר: ביצוע בקשת fetch עם Auth
@@ -147,7 +185,7 @@ async function fetchWithAuth(
 }
 
 // בדוק חיבור לאתר וורדפרס
-// Test WordPress connection and retrieve site information
+// Test WordPress connection — tries multiple URL formats automatically
 export async function testConnection(
   conn: WPConnection
 ): Promise<WPConnectionTestResult> {
@@ -162,14 +200,51 @@ export async function testConnection(
 
     const authHeader = createAuthHeader(conn.username, conn.applicationPassword);
 
-    // בדוק משתמש (כדי לוודא הרשאה)
-    // Check user endpoint to verify credentials
-    const userUrl = buildApiUrl(normalizedUrl, '/users/me');
-    await fetchWithAuth(userUrl, authHeader);
+    // Try all URL combinations: (www / no-www) × (pretty permalinks / query string)
+    const urlVariants = getUrlVariants(normalizedUrl);
+    const urlBuilders = [buildApiUrl, buildApiUrlAlt];
+    let workingBaseUrl: string | null = null;
+    let useAltFormat = false;
+    const errors: string[] = [];
+
+    for (const baseUrl of urlVariants) {
+      for (const builder of urlBuilders) {
+        const testUrl = builder === buildApiUrl
+          ? `${baseUrl}/wp-json/wp/v2/users/me`
+          : `${baseUrl}/?rest_route=/wp/v2/users/me`;
+        try {
+          console.log(`[WP-TEST] Trying: ${testUrl}`);
+          await fetchWithAuth(testUrl, authHeader);
+          workingBaseUrl = baseUrl;
+          useAltFormat = builder === buildApiUrlAlt;
+          console.log(`[WP-TEST] ✅ Success with: ${testUrl} (alt=${useAltFormat})`);
+          break;
+        } catch (e: any) {
+          const msg = e.message || '';
+          console.log(`[WP-TEST] ❌ Failed: ${testUrl} — ${msg.slice(0, 100)}`);
+          // If auth error, don't try other URLs — credentials are wrong
+          if (msg.includes('שגיאת הרשאה') || msg.includes('rest_not_logged_in') || msg.includes('401')) {
+            return { success: false, error: msg };
+          }
+          errors.push(`${testUrl}: ${msg.slice(0, 80)}`);
+        }
+      }
+      if (workingBaseUrl) break;
+    }
+
+    if (!workingBaseUrl) {
+      return {
+        success: false,
+        error: `לא הצלחנו להתחבר ל-REST API של WordPress. ניסינו את כל הפורמטים:\n${errors.join('\n')}\n\nבדוק: (1) האם REST API מופעל באתר, (2) האם אין תוסף אבטחה שחוסם גישה, (3) שמבנה קישורים (Permalinks) לא מוגדר על "רגיל/Plain".`,
+      };
+    }
+
+    // Use the working URL format for remaining calls
+    const apiBuild = useAltFormat ? buildApiUrlAlt : buildApiUrl;
 
     // קבל מידע אתר
     // Get site settings
-    const settingsUrl = buildApiUrl(conn.siteUrl, '/settings');
+    const settingsUrl = apiBuild(workingBaseUrl, '/settings');
     const settingsResponse = await fetchWithAuth(settingsUrl, authHeader);
     const settingsData = await settingsResponse.json();
 
@@ -177,7 +252,7 @@ export async function testConnection(
     // Check if Yoast is installed by trying to fetch plugins
     let yoastInstalled = false;
     try {
-      const pluginsUrl = buildApiUrl(conn.siteUrl, '/plugins');
+      const pluginsUrl = apiBuild(workingBaseUrl, '/plugins');
       const pluginsResponse = await fetchWithAuth(pluginsUrl, authHeader);
       if (pluginsResponse.ok) {
         const plugins = await pluginsResponse.json();
@@ -192,7 +267,7 @@ export async function testConnection(
 
     // ספור דפים
     // Count pages
-    const pagesUrl = buildApiUrl(conn.siteUrl, '/pages?per_page=1');
+    const pagesUrl = apiBuild(workingBaseUrl, '/pages?per_page=1');
     const pagesResponse = await fetchWithAuth(pagesUrl, authHeader);
     const pagesCount = parseInt(
       pagesResponse.headers.get('X-WP-Total') || '0'
@@ -204,6 +279,9 @@ export async function testConnection(
       wpVersion: settingsData.version,
       yoastInstalled,
       pagesCount,
+      // Return the working URL so it can be saved for future API calls
+      resolvedSiteUrl: workingBaseUrl,
+      useAltApiFormat: useAltFormat,
     };
   } catch (error) {
     return {
@@ -226,7 +304,7 @@ export async function getPages(conn: WPConnection): Promise<WPPage[]> {
     let hasMore = true;
 
     while (hasMore) {
-      const url = buildApiUrl(conn.siteUrl, `/pages?per_page=100&page=${page}`);
+      const url = buildSmartApiUrl(conn, `/pages?per_page=100&page=${page}`);
       const response = await fetchWithAuth(url, authHeader);
       const data = await response.json();
 
@@ -263,7 +341,7 @@ export async function getPosts(conn: WPConnection): Promise<WPPage[]> {
     let hasMore = true;
 
     while (hasMore) {
-      const url = buildApiUrl(conn.siteUrl, `/posts?per_page=100&page=${page}`);
+      const url = buildSmartApiUrl(conn, `/posts?per_page=100&page=${page}`);
       const response = await fetchWithAuth(url, authHeader);
       const data = await response.json();
 
@@ -379,7 +457,7 @@ export async function updateYoastMeta(
       metaBody.yoast_wpseo_focuskw = meta.focusKeyword;
     }
 
-    const url = buildApiUrl(conn.siteUrl, `/pages/${pageId}`);
+    const url = buildSmartApiUrl(conn, `/pages/${pageId}`);
     const response = await fetchWithAuth(url, authHeader, {
       method: 'POST',
       body: JSON.stringify({ meta: metaBody }),
@@ -412,7 +490,7 @@ export async function updatePageContent(
   try {
     const authHeader = createAuthHeader(conn.username, conn.applicationPassword);
 
-    const url = buildApiUrl(conn.siteUrl, `/pages/${pageId}`);
+    const url = buildSmartApiUrl(conn, `/pages/${pageId}`);
     const response = await fetchWithAuth(url, authHeader, {
       method: 'POST',
       body: JSON.stringify({ content }),
@@ -549,7 +627,7 @@ export async function getSiteInfo(conn: WPConnection): Promise<SiteInfo> {
 
     // קבל הגדרות אתר
     // Get site settings
-    const settingsUrl = buildApiUrl(conn.siteUrl, '/settings');
+    const settingsUrl = buildSmartApiUrl(conn, '/settings');
     const settingsResponse = await fetchWithAuth(settingsUrl, authHeader);
     const settingsData = await settingsResponse.json();
 
@@ -653,7 +731,7 @@ export async function createPost(
 ): Promise<WPPostCreateResult> {
   try {
     const authHeader = createAuthHeader(conn.username, conn.applicationPassword);
-    const url = buildApiUrl(conn.siteUrl, '/posts');
+    const url = buildSmartApiUrl(conn, '/posts');
 
     const body: Record<string, any> = {
       title: options.title,
@@ -706,7 +784,7 @@ export async function getOrCreateCategory(
     const authHeader = createAuthHeader(conn.username, conn.applicationPassword);
 
     // Search for existing category
-    const searchUrl = buildApiUrl(conn.siteUrl, `/categories?search=${encodeURIComponent(categoryName)}&per_page=100`);
+    const searchUrl = buildSmartApiUrl(conn, `/categories?search=${encodeURIComponent(categoryName)}&per_page=100`);
     const searchRes = await fetchWithAuth(searchUrl, authHeader, { method: 'GET' });
     const categories = await searchRes.json();
 
@@ -719,7 +797,7 @@ export async function getOrCreateCategory(
     }
 
     // Category not found — create it
-    const createUrl = buildApiUrl(conn.siteUrl, '/categories');
+    const createUrl = buildSmartApiUrl(conn, '/categories');
     const createRes = await fetchWithAuth(createUrl, authHeader, {
       method: 'POST',
       body: JSON.stringify({ name: categoryName }),

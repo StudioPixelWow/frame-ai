@@ -24,6 +24,8 @@ export async function POST(req: NextRequest) {
         siteName: result.siteName || 'WordPress Site',
         yoastInstalled: result.yoastInstalled || false,
         pagesCount: result.pagesCount || 0,
+        resolvedSiteUrl: result.resolvedSiteUrl,
+        useAltApiFormat: result.useAltApiFormat,
       });
     } else {
       return NextResponse.json({

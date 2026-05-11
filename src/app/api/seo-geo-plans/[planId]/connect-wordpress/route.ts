@@ -70,16 +70,20 @@ async function _POST(
     }
 
     // Connection successful - save to plan
+    // Use the resolved URL (auto-detected www vs non-www, correct format)
+    const resolvedUrl = testResult.resolvedSiteUrl || siteUrl;
     const connectedAt = new Date().toISOString();
     const wpConnectionData = {
-      siteUrl,
+      siteUrl: resolvedUrl,
       username,
       applicationPassword,
       connectedAt,
       siteName: testResult.siteName || 'WordPress Site',
       yoastInstalled: testResult.yoastInstalled || false,
       pagesCount: testResult.pagesCount || 0,
+      useAltApiFormat: testResult.useAltApiFormat || false,
     };
+    console.log(`[WP-CONNECT] Saving resolved URL: ${resolvedUrl} (original: ${siteUrl}, alt=${testResult.useAltApiFormat})`);
 
     const updated = await updatePlanSafe(planId, {
       wpConnection: wpConnectionData as any,
@@ -100,7 +104,7 @@ async function _POST(
     if (plan.clientId) {
       try {
         await updateClientById(plan.clientId, {
-          wpSiteUrl: siteUrl,
+          wpSiteUrl: resolvedUrl,
           wpUsername: username,
           wpApplicationPassword: applicationPassword,
           wpConnectionStatus: 'connected',
