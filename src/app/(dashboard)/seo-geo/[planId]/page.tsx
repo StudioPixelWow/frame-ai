@@ -3371,23 +3371,35 @@ export default function SeoPlanDetail() {
           }
           const uniqueQueries = Array.from(uniqueQueryMap.values());
 
-          // AI Overview cross-reference: for each unique query, get organic + AIO + AI mention data
+          // AI Overview cross-reference: show ONLY keywords from manual + AI-generated lists
+          // (not generic scan queries from H1/H2 headings)
           const keywordCrossRef = (() => {
-            const qMap = new Map<string, { query: string; organic: number | null; aioFound: boolean; aiFound: boolean; aiVisibility: number; status?: string }>();
+            const qMap = new Map<string, { query: string; organic: number | null; aioFound: boolean; aiFound: boolean; aiVisibility: number; status?: string; source?: string }>();
 
-            // First: add client keywords from plan (highest priority — always shown)
+            // 1. Add client keywords from plan (highest priority — always shown)
             const planClientKws: any[] = Array.isArray((safePlan as any)?.clientKeywords) ? (safePlan as any).clientKeywords : [];
             for (const ck of planClientKws) {
               const keyword = typeof ck === 'string' ? ck : ck?.keyword;
               if (!keyword) continue;
-              const key = keyword.toLowerCase();
-              if (!qMap.has(key)) qMap.set(key, { query: keyword, organic: null, aioFound: false, aiFound: false, aiVisibility: 0, status: 'טרם נבדק' });
+              const key = keyword.toLowerCase().trim();
+              if (!qMap.has(key)) qMap.set(key, { query: keyword, organic: null, aioFound: false, aiFound: false, aiVisibility: 0, status: 'טרם נבדק', source: 'ידני' });
             }
 
-            // Then: overlay with real scan data
+            // 2. Add AI-generated keywords (second priority)
+            const planAiKws: any[] = Array.isArray((safePlan as any)?.aiKeywords) ? (safePlan as any).aiKeywords : [];
+            for (const ak of planAiKws) {
+              const keyword = typeof ak === 'string' ? ak : ak?.keyword;
+              if (!keyword) continue;
+              const key = keyword.toLowerCase().trim();
+              if (!qMap.has(key)) qMap.set(key, { query: keyword, organic: null, aioFound: false, aiFound: false, aiVisibility: 0, status: 'טרם נבדק', source: 'AI' });
+            }
+
+            // 3. Overlay with real scan data — ONLY for keywords already in our map
+            // This prevents generic scan queries (from H1/H2 tags) from appearing
             for (const q of realQueries) {
-              const key = q.query.toLowerCase();
-              if (!qMap.has(key)) qMap.set(key, { query: q.query, organic: null, aioFound: false, aiFound: false, aiVisibility: 0 });
+              const key = q.query.toLowerCase().trim();
+              // Only overlay if this keyword is already in our curated list
+              if (!qMap.has(key)) continue;
               const entry = qMap.get(key)!;
               // Clear "not yet checked" status once we have real data
               if (entry.status === 'טרם נבדק') delete entry.status;
@@ -3397,7 +3409,7 @@ export default function SeoPlanDetail() {
             }
             // Compute AI visibility per keyword
             for (const [key, entry] of qMap) {
-              const aiQ = realQueries.filter(q => q.query.toLowerCase() === key && !['google_seo'].includes(q.platform));
+              const aiQ = realQueries.filter(q => q.query.toLowerCase().trim() === key && !['google_seo'].includes(q.platform));
               const found = aiQ.filter(q => q.found).length;
               entry.aiVisibility = aiQ.length > 0 ? Math.round((found / aiQ.length) * 100) : 0;
             }
@@ -3697,9 +3709,19 @@ export default function SeoPlanDetail() {
                         <tbody>
                           {keywordCrossRef.map((kw, i) => {
                             const decoded = (kw.query || '').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+                            const kwSource = (kw as any).source;
                             return (
                               <tr key={i} style={{ borderBottom: `1px solid ${C.borderLight}` }}>
-                                <td style={{ ...tdStyle, fontWeight: 500, fontSize: 13 }}>{decoded}</td>
+                                <td style={{ ...tdStyle, fontWeight: 500, fontSize: 13 }}>
+                                  {decoded}
+                                  {kwSource && (
+                                    <span style={{
+                                      fontSize: 9, fontWeight: 600, padding: "1px 5px", borderRadius: 4, marginRight: 6,
+                                      background: kwSource === 'ידני' ? `${C.primary}12` : `#10A37F12`,
+                                      color: kwSource === 'ידני' ? C.primary : '#10A37F',
+                                    }}>{kwSource}</span>
+                                  )}
+                                </td>
                                 <td style={{ ...tdStyle, textAlign: "center" }}>
                                   {kw.organic ? (
                                     <span style={{

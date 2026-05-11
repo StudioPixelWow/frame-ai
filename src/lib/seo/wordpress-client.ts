@@ -104,7 +104,7 @@ function buildApiUrlAlt(siteUrl: string, endpoint: string): string {
 
 // Smart API URL builder — picks format based on connection's useAltApiFormat flag
 export function buildSmartApiUrl(conn: { siteUrl: string; useAltApiFormat?: boolean }, endpoint: string): string {
-  return (conn as any).useAltApiFormat ? buildApiUrlAlt(conn.siteUrl, endpoint) : buildSmartApiUrl(conn, endpoint);
+  return (conn as any).useAltApiFormat ? buildApiUrlAlt(conn.siteUrl, endpoint) : buildApiUrl(conn.siteUrl, endpoint);
 }
 
 // עזר: מחזיר את כל הווריאציות האפשריות של URL (www / no-www × pretty / query-string)
