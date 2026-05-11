@@ -323,6 +323,8 @@ export default function SeoPlanDetail() {
   const [editingRanks, setEditingRanks] = useState<Record<number, string>>({});
   const [savingRanks, setSavingRanks] = useState(false);
   const [checkingKeyword, setCheckingKeyword] = useState<number | null>(null);
+  const [checkingAll, setCheckingAll] = useState(false);
+  const [checkAllProgress, setCheckAllProgress] = useState<{ current: number; total: number } | null>(null);
   const [enrichingAI, setEnrichingAI] = useState(false);
   const [generatingArticle, setGeneratingArticle] = useState<string | null>(null); // task.id of article being generated
   const [generatedArticles, setGeneratedArticles] = useState<Record<string, string>>({}); // taskId -> full article HTML
@@ -509,6 +511,47 @@ export default function SeoPlanDetail() {
       setCheckingKeyword(null);
     }
   }, [plan, checkingKeyword]);
+
+  // ── Check ALL keywords handler ──
+  const handleCheckAllKeywords = useCallback(async () => {
+    if (!plan || checkingAll) return;
+    const keywords = ((plan as any).clientKeywords || []).map((kw: any, idx: number) => ({
+      keyword: typeof kw === 'string' ? kw : kw?.keyword || '',
+      idx,
+    })).filter((k: any) => k.keyword);
+    if (keywords.length === 0) return;
+
+    setCheckingAll(true);
+    setCheckAllProgress({ current: 0, total: keywords.length });
+
+    for (let i = 0; i < keywords.length; i++) {
+      const { keyword, idx } = keywords[i];
+      setCheckAllProgress({ current: i + 1, total: keywords.length });
+      setCheckingKeyword(idx);
+      try {
+        const res = await fetch(`/api/seo-geo-plans/${plan.id}/check-keyword`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyword, keywordIndex: idx }),
+        });
+        const data = await res.json();
+        if (data.error) console.error(`Check keyword ${idx} error:`, data.error);
+      } catch (e) {
+        console.error(`Check keyword ${idx} failed:`, e);
+      }
+    }
+
+    // Refresh plan data once after all checks
+    try {
+      const refreshRes = await fetch(`/api/data/seo-plans/${plan.id}`);
+      const refreshData = await refreshRes.json();
+      if (refreshData) setPlan(refreshData);
+    } catch {}
+
+    setCheckingKeyword(null);
+    setCheckingAll(false);
+    setCheckAllProgress(null);
+  }, [plan, checkingAll]);
 
   // ── Rescan handler ──
   const handleRescan = useCallback(async () => {
@@ -4477,7 +4520,7 @@ export default function SeoPlanDetail() {
                     padding: "20px 24px",
                   }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
                         <div style={{
                           width: 40, height: 40, borderRadius: 12,
                           background: `linear-gradient(135deg, ${C.primary}, ${C.info})`,
@@ -4491,6 +4534,27 @@ export default function SeoPlanDetail() {
                           </p>
                         </div>
                       </div>
+                      {/* Check All button */}
+                      <button
+                        onClick={handleCheckAllKeywords}
+                        disabled={checkingAll || checkingKeyword !== null}
+                        style={{
+                          padding: "10px 20px", borderRadius: 10, border: "none",
+                          background: checkingAll
+                            ? `linear-gradient(135deg, ${C.warning}, ${C.warning}cc)`
+                            : `linear-gradient(135deg, ${C.success}, ${C.primary})`,
+                          color: "#fff",
+                          fontSize: 13, fontWeight: 700, cursor: checkingAll ? "wait" : "pointer",
+                          opacity: (checkingAll || checkingKeyword !== null) ? 0.8 : 1,
+                          whiteSpace: "nowrap",
+                          boxShadow: `0 2px 8px ${C.success}40`,
+                          transition: "all 0.2s",
+                        }}
+                      >
+                        {checkingAll && checkAllProgress
+                          ? `בודק ${checkAllProgress.current}/${checkAllProgress.total}...`
+                          : '🔍 בדוק הכל'}
+                      </button>
                     </div>
 
                     {/* Summary cards */}
