@@ -47,6 +47,79 @@ export interface PlanInput {
     known_competitors: string[];
     confirmed: boolean;
   };
+  // Intelligence layers (from new engines)
+  semanticAnalysis?: {
+    topicalMap: Array<{
+      topic: string;
+      coverage: number;
+      authority: number;
+      hasPillar: boolean;
+      pillarUrl: string | null;
+      gaps: string[];
+      aiOpportunity: number;
+      intent: string;
+    }>;
+    pillarPages: Array<{
+      url: string;
+      title: string;
+      score: number;
+      recommendations: string[];
+    }>;
+    orphanPages: string[];
+    linkGraph: {
+      orphanPages: string[];
+      deadEndPages: string[];
+      authorityDistribution: string;
+      recommendations: Array<{
+        type: string;
+        fromUrl: string;
+        toUrl: string;
+        reason: string;
+        impact: string;
+        anchorSuggestion: string;
+      }>;
+    };
+    semanticScore: number;
+  };
+  competitorAnalysis?: {
+    competitors: Array<{
+      domain: string;
+      threatLevel: string;
+      keywordsTheyOwn: string[];
+      overlapScore: number;
+    }>;
+    authorityGaps: Array<{
+      keyword: string;
+      ourPosition: number | null;
+      competitorDomain: string;
+      competitorPosition: number;
+      opportunity: string;
+      suggestedAction: string;
+    }>;
+    contentOpportunities: Array<{
+      topic: string;
+      type: string;
+      recommendation: string;
+      impact: string;
+    }>;
+    strategicInsights: Array<{
+      title: string;
+      description: string;
+      priority: string;
+      action: string;
+    }>;
+  };
+  strategicScore?: {
+    overall: number;
+    grade: string;
+    priorities: Array<{
+      signal: string;
+      currentScore: number;
+      potentialGain: number;
+      effort: string;
+      description: string;
+    }>;
+  };
 }
 
 export interface WebsiteScanInput {
@@ -259,6 +332,29 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
   const mediumPriorityGaps = gaps.filter(g => g.importance === "medium");
   const opportunities = insights.filter(i => i.category === "opportunity");
   const threats = insights.filter(i => i.category === "threat");
+
+  // ── Intelligence-driven analytics (from new engines) ──
+  const semantic = input.semanticAnalysis;
+  const compAnalysis = input.competitorAnalysis;
+  const stratScore = input.strategicScore;
+
+  // Semantic intelligence data
+  const weakClusters = semantic?.topicalMap?.filter(c => c.coverage < 50) || [];
+  const strongClusters = semantic?.topicalMap?.filter(c => c.coverage >= 70) || [];
+  const clustersNeedingPillar = semantic?.topicalMap?.filter(c => !c.hasPillar) || [];
+  const orphanPages = semantic?.orphanPages || [];
+  const deadEndPages = semantic?.linkGraph?.deadEndPages || [];
+  const linkRecommendations = semantic?.linkGraph?.recommendations || [];
+  const pillarCandidates = semantic?.pillarPages || [];
+
+  // Competitor intelligence data
+  const topCompetitors = compAnalysis?.competitors?.filter(c => c.threatLevel === 'critical' || c.threatLevel === 'high') || [];
+  const quickWinGaps = compAnalysis?.authorityGaps?.filter(g => g.opportunity === 'quick_win') || [];
+  const contentOps = compAnalysis?.contentOpportunities?.filter(o => o.impact === 'high') || [];
+  const competitorInsights = compAnalysis?.strategicInsights || [];
+
+  // Strategic priorities (highest impact improvements)
+  const topPriorities = stratScore?.priorities?.slice(0, 5) || [];
 
   // Has-flags from scan
   const needsSSL = scan && !scan.hasSSL;
@@ -492,24 +588,64 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
   // PHASE 2: Days 8-20 — Content Gap Closure
   // ═══════════════════════════════════════════════════════════════════
 
-  // Day 8: Keyword research based on actual gaps
+  // Day 8: Keyword research + intelligence-driven tasks
   const topGaps = [...highPriorityGaps, ...mediumPriorityGaps].slice(0, 15);
-  days.push(mkDay(8, "מחקר מילות-מפתח מעמיק בהתבסס על פערי תוכן", [
-    mkTask("content", "high", "high",
-      `מפה ${topGaps.length > 0 ? topGaps.length : keywords.length} מילות-מפתח ליבה`,
-      `בהתבסס על ${gaps.length} פערי תוכן שזוהו ו-${keywords.length} מילות-מפתח יעד: חקור search volume (Google Keyword Planner / Ahrefs), קושי דירוג, intent. עדיפות לפי: volume × relevance × difficulty. מילות-מפתח: ${keywords.slice(0, 5).join(", ")}${keywords.length > 5 ? "..." : ""}`,
-      4, null,
-      "מפת מילות-מפתח עדיפות עם volume, difficulty, וintent",
-      "מחקר בהתבסס על פערים בפועל (מסריקת AI) לא ניחושים — כל מילת-מפתח מייצגת הזדמנות שזוהתה",
-    ),
-    mkTask("content", "medium", "medium",
-      "ניתוח Search Intent ומיפוי לעמודים קיימים",
-      `סווג כל מילת-מפתח: informational (מדריכים), commercial (השוואות), transactional (קניה). מיפוי לעמוד קיים או סימן 'צריך עמוד חדש'. ${topGaps.slice(0, 3).map(g => `"${g.query}" → ${g.intent}`).join("; ")}`,
-      2.5, null,
-      "כל מילת-מפתח ממופה לעמוד קיים או עמוד חדש מתוכנן",
-      "תוכן שלא תואם search intent לא יגדל — informational ≠ transactional",
-    ),
-  ]));
+
+  // Build Day 8 tasks — start with intelligence tasks if available, then keyword research
+  const day8Tasks: DayTask[] = [];
+
+  // Intelligence-driven tasks from semantic + competitor analysis (prepended to Day 8)
+  if (orphanPages.length > 0) {
+    day8Tasks.push(mkTask("onpage", "high", "critical",
+      `תקן ${Math.min(orphanPages.length, 5)} דפים יתומים — ללא קישורים פנימיים`,
+      `${orphanPages.length} דפים נמצאו ללא אף קישור פנימי מצביע אליהם — Google לא יכול לגלות אותם. דפים: ${orphanPages.slice(0, 3).join(', ')}. הוסף קישורים פנימיים מדפים רלוונטיים.`,
+      2, orphanPages[0] || null,
+      "כל הדפים היתומים מקושרים — Google יכול לזחול אותם",
+      "דפים ללא קישורים פנימיים בלתי נראים למנועי חיפוש — השפעה ישירה על אינדקס",
+    ));
+  }
+  if (weakClusters.length > 0) {
+    const cluster = weakClusters[0];
+    day8Tasks.push(mkTask("content", "high", "high",
+      `חזק אשכול נושאי: "${cluster.topic}" (כיסוי ${cluster.coverage}%)`,
+      `אשכול "${cluster.topic}" מכסה רק ${cluster.coverage}% מהנושא. ${cluster.gaps.slice(0, 3).join('. ')}. ${!cluster.hasPillar ? 'חסר דף עמוד — צור דף מקיף.' : ''} הוסף 2-3 מאמרים תומכים.`,
+      4, cluster.pillarUrl || null,
+      `אשכול "${cluster.topic}" מגיע ל-70%+ כיסוי`,
+      "סמכות נושאית היא גורם הדירוג #1 — Google מעדיף אתרים שמכסים נושא לעומק",
+    ));
+  }
+  if (quickWinGaps.length > 0) {
+    const qw = quickWinGaps.slice(0, 3);
+    day8Tasks.push(mkTask("content", "high", "high",
+      `${qw.length} הזדמנויות מהירות מול מתחרים`,
+      `ביטויים שאנחנו כבר בעמוד 1 אבל מאחור: ${qw.map(g => `"${g.keyword}" (עמדה ${g.ourPosition || '?'} vs ${g.competitorDomain} #${g.competitorPosition})`).join('; ')}. שפר meta, תוכן, וקישורים פנימיים.`,
+      3, null,
+      `שיפור דירוג ב-${qw.length} ביטויים — כל עלייה = יותר תנועה`,
+      "ביטויים בעמוד 1 עם פער קטן מול מתחרים = ROI הגבוה ביותר לזמן השקעה",
+    ));
+  }
+
+  // Always add keyword research to Day 8
+  day8Tasks.push(mkTask("content", "high", "high",
+    `מפה ${topGaps.length > 0 ? topGaps.length : keywords.length} מילות-מפתח ליבה`,
+    `בהתבסס על ${gaps.length} פערי תוכן שזוהו ו-${keywords.length} מילות-מפתח יעד: חקור search volume (Google Keyword Planner / Ahrefs), קושי דירוג, intent. עדיפות לפי: volume × relevance × difficulty. מילות-מפתח: ${keywords.slice(0, 5).join(", ")}${keywords.length > 5 ? "..." : ""}`,
+    4, null,
+    "מפת מילות-מפתח עדיפות עם volume, difficulty, וintent",
+    "מחקר בהתבסס על פערים בפועל (מסריקת AI) לא ניחושים — כל מילת-מפתח מייצגת הזדמנות שזוהתה",
+  ));
+  day8Tasks.push(mkTask("content", "medium", "medium",
+    "ניתוח Search Intent ומיפוי לעמודים קיימים",
+    `סווג כל מילת-מפתח: informational (מדריכים), commercial (השוואות), transactional (קניה). מיפוי לעמוד קיים או סימן 'צריך עמוד חדש'. ${topGaps.slice(0, 3).map(g => `"${g.query}" → ${g.intent}`).join("; ")}`,
+    2.5, null,
+    "כל מילת-מפתח ממופה לעמוד קיים או עמוד חדש מתוכנן",
+    "תוכן שלא תואם search intent לא יגדל — informational ≠ transactional",
+  ));
+
+  // Push Day 8 with all intelligence + keyword research tasks combined
+  const day8Title = day8Tasks.length > 2
+    ? "אינטליגנציה אסטרטגית + מחקר מילות-מפתח מעמיק"
+    : "מחקר מילות-מפתח מעמיק בהתבסס על פערי תוכן";
+  days.push(mkDay(8, day8Title, day8Tasks));
 
   // Days 9-11: Writing content for top gaps (AI-powered article topics)
   const contentDays = [9, 10, 11];
@@ -594,7 +730,7 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
     ),
   ]));
 
-  // Days 16-18: More content articles (AI-powered)
+  // Days 16-18: More content articles (AI-powered) — no offset to avoid Phase 2 overflow
   [16, 17, 18].forEach((d, idx) => {
     const artIdx = 5 + idx;
     const gap = topGaps[artIdx];

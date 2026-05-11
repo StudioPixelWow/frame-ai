@@ -17,6 +17,9 @@ import { validateScanData, type ValidationResult } from './validation-gate';
 import { ScanLogger, type ScanLog } from './scan-logs';
 import { isPlatformAvailable, queryPlatform } from './platform-apis';
 import { PLATFORMS, type PlatformId, type PlatformStatus, type ScanType, getScanConfig } from './scan-pipeline';
+import { analyzeSemantics, type SemanticAnalysis } from './semantic-intelligence';
+import { analyzeCompetitors, type CompetitorAnalysis } from './competitor-engine';
+import { calculateStrategicScore, type StrategicScore } from './strategic-scoring';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -48,6 +51,11 @@ export interface OrchestratorResult {
   // Platform visibility
   platformStatuses: PlatformStatus[];
   aiVisibilityResults: AIVisibilityResult[];
+
+  // Intelligence layers
+  semanticAnalysis: SemanticAnalysis | null;
+  competitorAnalysis: CompetitorAnalysis | null;
+  strategicScore: StrategicScore | null;
 
   // Validation
   validation: ValidationResult;
@@ -273,7 +281,63 @@ export async function runFullScan(input: OrchestratorInput): Promise<Orchestrato
     totalMentions: aiVisibilityResults.filter(r => r.found).length,
   });
 
-  // ── Stage 6: Gap Analysis ──
+  // ── Stage 6: Semantic Intelligence ──
+  let semanticAnalysis: SemanticAnalysis | null = null;
+  if (crawlResult && crawlResult.pages.length > 0) {
+    try {
+      logger.logAction('semantic', 'Running semantic intelligence analysis');
+      const businessName = websiteFacts?.business_name?.value || domain;
+      const products = (websiteFacts?.main_products_or_services as any)?.value || [];
+      semanticAnalysis = analyzeSemantics(crawlResult.pages, businessName, products);
+      logger.logAction('semantic', 'Semantic analysis completed', {
+        clusters: semanticAnalysis.topicalMap.length,
+        entities: semanticAnalysis.entities.length,
+        pillarPages: semanticAnalysis.pillarPages.length,
+        semanticScore: semanticAnalysis.semanticScore,
+      });
+    } catch (err: any) {
+      logger.logAction('semantic', 'Semantic analysis failed', { error: err.message }, 0, false, err.message);
+    }
+  }
+
+  // ── Stage 7: Competitor Discovery ──
+  let competitorAnalysis: CompetitorAnalysis | null = null;
+  if (domainRankings || aiVisibilityResults.length > 0) {
+    try {
+      logger.logAction('competitors', 'Running competitor analysis');
+      competitorAnalysis = analyzeCompetitors({
+        domain,
+        serpRankings: domainRankings || null,
+        aiScanResults: aiVisibilityResults.map(r => ({
+          platform: r.platform,
+          query: r.query,
+          found: r.found,
+          snippet: r.snippet,
+        })),
+        crawlPages: crawlResult?.pages.map(p => ({
+          url: p.url,
+          title: p.title || '',
+          h1Tags: p.h1Tags,
+          h2Tags: p.h2Tags,
+          wordCount: p.wordCount,
+          hasSchema: !!(p.schemaMarkup && p.schemaMarkup.length > 0),
+        })) || null,
+        targetKeywords: websiteFacts?.main_products_or_services
+          ? ((websiteFacts.main_products_or_services as any).value || [])
+          : [],
+      });
+      logger.logAction('competitors', 'Competitor analysis completed', {
+        competitors: competitorAnalysis.competitors.length,
+        authorityGaps: competitorAnalysis.authorityGaps.length,
+        contentOpportunities: competitorAnalysis.contentOpportunities.length,
+        insights: competitorAnalysis.strategicInsights.length,
+      });
+    } catch (err: any) {
+      logger.logAction('competitors', 'Competitor analysis failed', { error: err.message }, 0, false, err.message);
+    }
+  }
+
+  // ── Stage 8: Gap Analysis ──
   let gapAnalysis: GapAnalysisResult | null = null;
   if (crawlResult || gscData || domainRankings) {
     try {
@@ -294,6 +358,45 @@ export async function runFullScan(input: OrchestratorInput): Promise<Orchestrato
     } catch (err: any) {
       logger.logAction('gaps', 'Gap analysis failed', { error: err.message }, 0, false, err.message);
     }
+  }
+
+  // ── Stage 9: Strategic Scoring ──
+  let strategicScore: StrategicScore | null = null;
+  try {
+    logger.logAction('scoring', 'Calculating strategic score');
+    const totalMentions = aiVisibilityResults.filter(r => r.found).length;
+    const totalAIQueries = aiVisibilityResults.filter(r => r.scanMode === 'real').length;
+    const aiVisScore = totalAIQueries > 0 ? Math.round((totalMentions / totalAIQueries) * 100) : null;
+
+    strategicScore = calculateStrategicScore({
+      websiteFacts: websiteFacts || null,
+      semanticAnalysis: semanticAnalysis || null,
+      competitorAnalysis: competitorAnalysis || null,
+      gapAnalysis: gapAnalysis || null,
+      aiVisibilityScore: aiVisScore,
+      crawlData: crawlResult ? {
+        totalPages: crawlResult.pagesScanned,
+        avgWordCount: crawlResult.pages.length > 0
+          ? Math.round(crawlResult.pages.reduce((s, p) => s + (p.wordCount || 0), 0) / crawlResult.pages.length)
+          : 0,
+        pagesWithSchema: crawlResult.pages.filter(p => p.schemaMarkup && p.schemaMarkup.length > 0).length,
+        pagesWithH1: crawlResult.pages.filter(p => p.h1Tags && p.h1Tags.length > 0).length,
+        pagesWithMeta: crawlResult.pages.filter(p => p.metaDescription && p.metaDescription.length > 0).length,
+        brokenLinks: crawlResult.technicalIssues?.filter(i => i.type === 'broken_link').length || 0,
+        hasSSL: crawlResult.pages[0]?.url?.startsWith('https') || false,
+        hasSitemap: !!(crawlResult as any).hasSitemap,
+        hasRobotsTxt: !!(crawlResult as any).hasRobotsTxt,
+        mobileOptimized: !!(crawlResult as any).mobileOptimized,
+        avgLoadTimeMs: (crawlResult as any).avgLoadTimeMs || 2000,
+      } : null,
+    });
+    logger.logAction('scoring', 'Strategic score calculated', {
+      overall: strategicScore.overall,
+      grade: strategicScore.grade,
+      confidence: strategicScore.confidence,
+    });
+  } catch (err: any) {
+    logger.logAction('scoring', 'Strategic scoring failed', { error: err.message }, 0, false, err.message);
   }
 
   // ── Final Validation ──
@@ -327,6 +430,9 @@ export async function runFullScan(input: OrchestratorInput): Promise<Orchestrato
     domainRankings,
     websiteFacts,
     gapAnalysis,
+    semanticAnalysis,
+    competitorAnalysis,
+    strategicScore,
     platformStatuses,
     aiVisibilityResults,
     validation,

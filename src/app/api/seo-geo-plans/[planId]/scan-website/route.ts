@@ -8,6 +8,8 @@ import {
   logActivity,
   withErrorBoundary,
 } from '@/lib/seo/api-helpers';
+import { analyzeSemantics } from '@/lib/seo/semantic-intelligence';
+import { calculateStrategicScore } from '@/lib/seo/strategic-scoring';
 
 const TIMEOUT_MS = 10000;
 const MAX_PAGES_TO_SCAN = 5;
@@ -417,12 +419,65 @@ async function _POST(
       });
     }
 
-    // Update plan with real scan results
-    const updated = await updatePlanSafe(planId, {
+    // Run semantic intelligence on crawl data
+    let semanticAnalysis = null;
+    let strategicScoreResult = null;
+    try {
+      if (scanResult.pages && scanResult.pages.length > 0) {
+        const businessName = (plan as any).businessProfile?.business_name || (plan as any).clientName || '';
+        const products = (plan as any).businessProfile?.main_products_or_services || [];
+        semanticAnalysis = analyzeSemantics(
+          scanResult.pages.map((p: any) => ({
+            url: p.url,
+            title: p.title || '',
+            metaDescription: p.metaDescription || '',
+            h1Tags: p.h1Tags || [],
+            h2Tags: p.h2Tags || [],
+            paragraphs: p.paragraphs || [],
+            internalLinks: p.internalLinks || [],
+            wordCount: p.wordCount || 0,
+            schemaMarkup: p.schemaMarkup || [],
+          })),
+          businessName,
+          products
+        );
+        console.log(`[SEO-SCAN] Semantic analysis: ${semanticAnalysis.topicalMap.length} clusters, ${semanticAnalysis.entities.length} entities, score ${semanticAnalysis.semanticScore}`);
+
+        // Calculate strategic score
+        strategicScoreResult = calculateStrategicScore({
+          semanticAnalysis,
+          crawlData: {
+            totalPages: scanResult.pages.length,
+            avgWordCount: scanResult.pages.length > 0
+              ? Math.round(scanResult.pages.reduce((s: number, p: any) => s + (p.wordCount || 0), 0) / scanResult.pages.length)
+              : 0,
+            pagesWithSchema: scanResult.pages.filter((p: any) => p.schemaMarkup && p.schemaMarkup.length > 0).length,
+            pagesWithH1: scanResult.pages.filter((p: any) => p.h1Tags && p.h1Tags.length > 0).length,
+            pagesWithMeta: scanResult.pages.filter((p: any) => p.metaDescription && p.metaDescription.length > 0).length,
+            brokenLinks: scanResult.scan.brokenLinks || 0,
+            hasSSL: scanResult.scan.hasSSL || false,
+            hasSitemap: scanResult.scan.hasSitemap || false,
+            hasRobotsTxt: scanResult.scan.hasRobotsTxt || false,
+            mobileOptimized: scanResult.scan.mobileOptimized || false,
+            avgLoadTimeMs: scanResult.scan.loadTimeMs || 2000,
+          },
+        });
+        console.log(`[SEO-SCAN] Strategic score: ${strategicScoreResult.overall} (${strategicScoreResult.grade})`);
+      }
+    } catch (semErr: any) {
+      console.error('[SEO-SCAN] Semantic analysis error (non-blocking):', semErr.message);
+    }
+
+    // Update plan with real scan results + intelligence
+    const updatePayload: any = {
       websiteScan: scanResult.scan,
       scannedPages: scanResult.pages,
       status: 'scanning',
-    });
+    };
+    if (semanticAnalysis) updatePayload.semanticAnalysis = semanticAnalysis;
+    if (strategicScoreResult) updatePayload.strategicScore = strategicScoreResult;
+
+    const updated = await updatePlanSafe(planId, updatePayload);
 
     if (!updated) {
       return err('Failed to save scan results', 500);
@@ -434,11 +489,25 @@ async function _POST(
       scannedPages: scanResult.pages.length,
       loadTimeMs: scanResult.scan.loadTimeMs,
       hasSSL: scanResult.scan.hasSSL,
+      semanticScore: semanticAnalysis?.semanticScore || null,
+      strategicGrade: strategicScoreResult?.grade || null,
     });
 
     return ok({
       scan: scanResult.scan,
       scannedPages: scanResult.pages,
+      semanticAnalysis: semanticAnalysis ? {
+        semanticScore: semanticAnalysis.semanticScore,
+        clusters: semanticAnalysis.topicalMap.length,
+        entities: semanticAnalysis.entities.length,
+        pillarPages: semanticAnalysis.pillarPages.length,
+        orphanPages: semanticAnalysis.orphanPages.length,
+      } : null,
+      strategicScore: strategicScoreResult ? {
+        overall: strategicScoreResult.overall,
+        grade: strategicScoreResult.grade,
+        categories: strategicScoreResult.categories.map(c => ({ id: c.id, nameHe: c.nameHe, score: c.score })),
+      } : null,
       status: 'success',
     });
   } catch (error) {

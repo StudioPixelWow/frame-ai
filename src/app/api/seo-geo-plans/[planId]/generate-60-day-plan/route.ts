@@ -394,6 +394,10 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
       impact: insight.impact,
       action: insight.suggestedAction,
     })),
+    // Intelligence layers (from scan orchestrator)
+    semanticAnalysis: plan.semanticAnalysis || undefined,
+    competitorAnalysis: plan.competitorAnalysis || undefined,
+    strategicScore: plan.strategicScore || undefined,
   };
 
   // Call plan engine
