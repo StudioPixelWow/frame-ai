@@ -553,6 +553,29 @@ export default function SeoPlanDetail() {
     setCheckAllProgress(null);
   }, [plan, checkingAll]);
 
+  // ── Auto-check all keywords on page load (if not checked recently) ──
+  const autoCheckTriggered = useMemo(() => ({ current: false }), []);
+  useEffect(() => {
+    if (!plan || loading || checkingAll || autoCheckTriggered.current) return;
+    const clientKws = ((plan as any).clientKeywords || []);
+    if (clientKws.length === 0) return;
+
+    // Check if keywords were recently checked (within last 4 hours)
+    const hasRecentCheck = clientKws.some((kw: any) => {
+      const checked = kw?.lastCheckedAt;
+      if (!checked) return false;
+      const diff = Date.now() - new Date(checked).getTime();
+      return diff < 4 * 60 * 60 * 1000; // 4 hours
+    });
+    if (hasRecentCheck) return;
+
+    // Trigger auto-check
+    autoCheckTriggered.current = true;
+    setTimeout(() => {
+      handleCheckAllKeywords();
+    }, 1500); // Small delay to let page render first
+  }, [plan, loading, checkingAll, handleCheckAllKeywords, autoCheckTriggered]);
+
   // ── Rescan handler ──
   const handleRescan = useCallback(async () => {
     if (!plan || rescanning) return;
