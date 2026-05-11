@@ -5,7 +5,8 @@
  * Each platform checks its env var — if missing, returns null (unavailable).
  *
  * Env vars:
- *   GOOGLE_SEARCH_API_KEY + GOOGLE_SEARCH_CX  — Google Custom Search (SEO + AI Overview)
+ *   SERPER_API_KEY                               — Serper.dev (real Google SERP results)
+ *   GOOGLE_SEARCH_API_KEY + GOOGLE_SEARCH_CX  — Google Custom Search (fallback)
  *   OPENAI_API_KEY                              — ChatGPT
  *   ANTHROPIC_API_KEY                           — Claude
  *   PERPLEXITY_API_KEY                          — Perplexity
@@ -81,21 +82,38 @@ function isBusinessMentioned(answer: string, businessName: string, targetDomain?
   const cleanName = businessName.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/"/g, '"');
   const nameLower = cleanName.toLowerCase();
 
-  // ANTI-FAKE: If the query itself contains the business name, the AI is just echoing.
-  // We need the AI to show it KNOWS the business (URL, phone, address, recommendation context).
+  // Check if query contains the business name — but DON'T auto-reject.
+  // Only use this as a signal to require slightly stronger evidence.
   const queryHasName = queryText ? queryContainsBusinessName(queryText, businessName, targetDomain) : false;
+
+  // Domain match — strongest signal, always counts
+  if (targetDomain) {
+    const domain = targetDomain.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
+    const domainNoWww = domain.replace(/^www\./, '');
+    if (answerLower.includes(domain) || answerLower.includes(domainNoWww)) {
+      console.log(`[AI-MATCH] Domain found in response: ${domainNoWww}`);
+      return { found: true, confidence: 90 };
+    }
+    // Check just the domain name part (e.g., "alram" from "alram.co.il")
+    const domainName = domainNoWww.split('.')[0];
+    if (domainName.length > 3 && answerLower.includes(domainName)) {
+      console.log(`[AI-MATCH] Domain name "${domainName}" found in response`);
+      return { found: true, confidence: 75 };
+    }
+  }
 
   // Exact name match
   if (answerLower.includes(nameLower)) {
+    console.log(`[AI-MATCH] Exact business name found: "${nameLower}"`);
     if (queryHasName) {
-      // Query contained the name — AI is just echoing. Check for REAL knowledge signals.
+      // Query contained the name — check for knowledge signals to raise confidence
       const hasUrl = targetDomain && answerLower.includes(targetDomain.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase());
       const hasContact = /\d{2,3}[-\s]?\d{7}/.test(answer) || /phone|טלפון|כתובת|address/.test(answerLower);
       const hasRecommendation = /recommend|ממליץ|מומלץ|מובי[לל]|מוביל|quality|איכות|professional|מקצועי/.test(answerLower);
-      if (hasUrl || hasContact) return { found: true, confidence: 70 };
-      if (hasRecommendation) return { found: true, confidence: 50 };
-      // Just echoing the name — NOT real visibility
-      return { found: false, confidence: 15 };
+      if (hasUrl || hasContact) return { found: true, confidence: 85 };
+      if (hasRecommendation) return { found: true, confidence: 70 };
+      // Name mentioned but query had it — still count but lower confidence
+      return { found: true, confidence: 45 };
     }
     return { found: true, confidence: 90 };
   }
@@ -104,35 +122,21 @@ function isBusinessMentioned(answer: string, businessName: string, targetDomain?
   const nameNoQuotes = nameLower.replace(/["""''׳״]/g, '');
   const answerNoQuotes = answerLower.replace(/["""''׳״]/g, '');
   if (nameNoQuotes.length > 3 && answerNoQuotes.includes(nameNoQuotes)) {
-    if (queryHasName) return { found: false, confidence: 15 }; // echo
-    return { found: true, confidence: 85 };
+    console.log(`[AI-MATCH] Name without quotes found: "${nameNoQuotes}"`);
+    return { found: true, confidence: queryHasName ? 50 : 85 };
   }
 
-  // Domain match — only counts if query didn't contain the domain
-  if (targetDomain) {
-    const domain = targetDomain.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
-    const domainName = domain.replace(/^www\./, '').split('.')[0]; // e.g., "alram" from "www.alram.co.il"
-    if (domainName.length > 3 && answerLower.includes(domainName)) {
-      if (queryHasName) return { found: false, confidence: 15 };
-      return { found: true, confidence: 70 };
-    }
-    if (answerLower.includes(domain)) {
-      // Full domain in answer is strong signal even if query had name
-      return { found: true, confidence: queryHasName ? 60 : 80 };
-    }
-  }
-
-  // Partial match — try each word of the business name (skip short words)
+  // Partial match — try each word of the business name (skip short/common words)
   const nameWords = nameLower.split(/[\s\-_]+/).filter(w => w.length > 2);
   if (nameWords.length >= 2) {
     const matchedWords = nameWords.filter(w => answerLower.includes(w));
     if (matchedWords.length >= Math.ceil(nameWords.length * 0.6)) {
-      // Partial word match with brand in query = almost certainly echoing
-      if (queryHasName) return { found: false, confidence: 10 };
-      return { found: true, confidence: 60 };
+      console.log(`[AI-MATCH] Partial match: ${matchedWords.length}/${nameWords.length} words`);
+      return { found: true, confidence: queryHasName ? 35 : 60 };
     }
   }
 
+  console.log(`[AI-MATCH] NOT found. Business: "${nameLower}", Domain: ${targetDomain || 'none'}`);
   return { found: false, confidence: 0 };
 }
 
@@ -201,10 +205,80 @@ function determineMentionType(
   return 'none';
 }
 
-// ── Google Custom Search (SEO + AI Overview) ──────────────────────────────────
+// ── Google Search (SEO + AI Overview) ──────────────────────────────────────────
 
 export function isGoogleAvailable(): boolean {
-  return hasEnv('GOOGLE_SEARCH_API_KEY') && hasEnv('GOOGLE_SEARCH_CX');
+  return hasEnv('SERPER_API_KEY') || (hasEnv('GOOGLE_SEARCH_API_KEY') && hasEnv('GOOGLE_SEARCH_CX'));
+}
+
+/**
+ * Serper.dev — returns REAL Google organic search results as JSON.
+ * Unlike Custom Search API (different index) or SERP scraping (blocked by Google from cloud IPs),
+ * Serper gives actual organic rankings.
+ */
+async function querySerper(query: string, targetDomain: string): Promise<PlatformQueryResult> {
+  if (!hasEnv('SERPER_API_KEY')) return { found: false, confidence: 0, scanMode: 'unavailable' };
+
+  try {
+    const res = await fetchWithTimeout('https://google.serper.dev/search', {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': process.env.SERPER_API_KEY!,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        q: query,
+        gl: 'il',
+        hl: 'he',
+        num: 20,
+      }),
+    }, 12000);
+
+    if (!res.ok) {
+      console.error(`[SERPER] HTTP ${res.status} for "${query}"`);
+      return { found: false, confidence: 0, scanMode: 'real' };
+    }
+
+    const data = await res.json();
+    const organic = data.organic || [];
+
+    const domain = targetDomain.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
+    const domainNoWww = domain.replace(/^www\./, '');
+
+    console.log(`[SERPER] Query: "${query}" — ${organic.length} organic results, looking for domain: ${domainNoWww}`);
+
+    for (let i = 0; i < organic.length; i++) {
+      const link = (organic[i].link || '').toLowerCase();
+      const resultDomain = (organic[i].domain || '').toLowerCase();
+      if (link.includes(domainNoWww) || resultDomain.includes(domainNoWww)) {
+        const position = organic[i].position || (i + 1);
+        console.log(`[SERPER] FOUND at position ${position}: ${link}`);
+        return {
+          found: true,
+          position,
+          snippet: organic[i].snippet || organic[i].title || '',
+          confidence: Math.max(100 - (position - 1) * 5, 30),
+          scanMode: 'real',
+        };
+      }
+    }
+
+    // Also check knowledge graph and answer box
+    const knowledgeGraph = data.knowledgeGraph;
+    if (knowledgeGraph) {
+      const kgStr = JSON.stringify(knowledgeGraph).toLowerCase();
+      if (kgStr.includes(domainNoWww)) {
+        console.log(`[SERPER] Found in Knowledge Graph for "${query}"`);
+        return { found: true, position: 1, snippet: 'Knowledge Graph', confidence: 95, scanMode: 'real' };
+      }
+    }
+
+    console.log(`[SERPER] NOT found for "${query}" in ${organic.length} results`);
+    return { found: false, confidence: 0, scanMode: 'real' };
+  } catch (err) {
+    console.error('[SERPER] Error:', err);
+    return { found: false, confidence: 0, scanMode: 'real' };
+  }
 }
 
 /**
@@ -340,8 +414,19 @@ async function scrapeGoogleSerp(query: string, targetDomain: string): Promise<Pl
 }
 
 export async function queryGoogle(query: string, targetDomain: string): Promise<PlatformQueryResult> {
-  // First try Google Custom Search API if configured
-  if (isGoogleAvailable()) {
+  console.log(`[GOOGLE-CHECK] Starting for "${query}" | domain: ${targetDomain}`);
+
+  // Priority 1: Serper.dev — real Google organic results
+  if (hasEnv('SERPER_API_KEY')) {
+    const serperResult = await querySerper(query, targetDomain);
+    if (serperResult.scanMode !== 'unavailable') {
+      console.log(`[GOOGLE-CHECK] Serper result: found=${serperResult.found}, pos=${serperResult.position}`);
+      return serperResult;
+    }
+  }
+
+  // Priority 2: Google Custom Search API (different index, less accurate)
+  if (hasEnv('GOOGLE_SEARCH_API_KEY') && hasEnv('GOOGLE_SEARCH_CX')) {
     try {
       const apiKey = process.env.GOOGLE_SEARCH_API_KEY!;
       const cx = process.env.GOOGLE_SEARCH_CX!;
@@ -366,6 +451,7 @@ export async function queryGoogle(query: string, targetDomain: string): Promise<
         }
 
         if (position > 0) {
+          console.log(`[GOOGLE-CHECK] CSE found at position ${position}`);
           return {
             found: true,
             position,
@@ -376,11 +462,12 @@ export async function queryGoogle(query: string, targetDomain: string): Promise<
         }
       }
     } catch (e) {
-      console.log('[GOOGLE-API] Custom Search failed, falling back to SERP scrape');
+      console.log('[GOOGLE-CHECK] Custom Search failed, trying SERP scrape');
     }
   }
 
-  // Fallback: Always try direct SERP scraping
+  // Priority 3: Direct SERP scraping (often blocked from cloud IPs)
+  console.log('[GOOGLE-CHECK] Falling back to SERP scraping (may fail from cloud)');
   return scrapeGoogleSerp(query, targetDomain);
 }
 
@@ -393,6 +480,7 @@ export function isChatGPTAvailable(): boolean {
 export async function queryChatGPT(query: string, businessName: string, targetDomain?: string, _queryText?: string): Promise<PlatformQueryResult> {
   if (!isChatGPTAvailable()) return { found: false, confidence: 0, scanMode: 'unavailable' };
 
+  console.log(`[CHATGPT] Querying: "${query}" | business: "${businessName}" | domain: ${targetDomain}`);
   try {
     const apiKey = process.env.OPENAI_API_KEY!;
     const res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
@@ -416,9 +504,11 @@ export async function queryChatGPT(query: string, businessName: string, targetDo
 
     const data = await res.json();
     const answer = data.choices?.[0]?.message?.content || '';
+    console.log(`[CHATGPT] Response (${answer.length} chars): ${answer.slice(0, 150)}...`);
     const match = isBusinessMentioned(answer, businessName, targetDomain, query);
     const sources = extractSourceUrls(answer);
     const mentionType = determineMentionType(answer, sources, businessName, targetDomain);
+    console.log(`[CHATGPT] Result: found=${match.found}, confidence=${match.confidence}, mentionType=${mentionType}`);
 
     return {
       found: match.found,
@@ -429,7 +519,8 @@ export async function queryChatGPT(query: string, businessName: string, targetDo
       confidence: match.confidence,
       scanMode: 'real',
     };
-  } catch {
+  } catch (e) {
+    console.error('[CHATGPT] Error:', e);
     return { found: false, confidence: 0, scanMode: 'real' };
   }
 }
@@ -443,6 +534,7 @@ export function isClaudeAvailable(): boolean {
 export async function queryClaude(query: string, businessName: string, targetDomain?: string): Promise<PlatformQueryResult> {
   if (!isClaudeAvailable()) return { found: false, confidence: 0, scanMode: 'unavailable' };
 
+  console.log(`[CLAUDE] Querying: "${query}" | business: "${businessName}"`);
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY!;
     const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
@@ -463,9 +555,11 @@ export async function queryClaude(query: string, businessName: string, targetDom
 
     const data = await res.json();
     const answer = data.content?.[0]?.text || '';
+    console.log(`[CLAUDE] Response (${answer.length} chars): ${answer.slice(0, 150)}...`);
     const match = isBusinessMentioned(answer, businessName, targetDomain, query);
     const sources = extractSourceUrls(answer);
     const mentionType = determineMentionType(answer, sources, businessName, targetDomain);
+    console.log(`[CLAUDE] Result: found=${match.found}, confidence=${match.confidence}`);
 
     return {
       found: match.found,
@@ -476,7 +570,8 @@ export async function queryClaude(query: string, businessName: string, targetDom
       confidence: match.confidence,
       scanMode: 'real',
     };
-  } catch {
+  } catch (e) {
+    console.error('[CLAUDE] Error:', e);
     return { found: false, confidence: 0, scanMode: 'real' };
   }
 }

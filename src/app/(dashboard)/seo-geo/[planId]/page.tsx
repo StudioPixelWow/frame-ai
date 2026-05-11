@@ -495,11 +495,13 @@ export default function SeoPlanDetail() {
         body: JSON.stringify({ keyword, keywordIndex }),
       });
       const data = await res.json();
-      if (data.data) {
+      if (!data.error) {
         // Refresh plan data
         const refreshRes = await fetch(`/api/data/seo-plans/${plan.id}`);
         const refreshData = await refreshRes.json();
         if (refreshData) setPlan(refreshData);
+      } else {
+        console.error('Keyword check error:', data.error);
       }
     } catch (e) {
       console.error('Keyword check failed:', e);
@@ -516,8 +518,8 @@ export default function SeoPlanDetail() {
     try {
       const res = await fetch(`/api/seo-geo-plans/${plan.id}/rescan`, { method: 'POST' });
       const data = await res.json();
-      if (data.success !== false && data.data) {
-        setRescanResult(data.data);
+      if (!data.error && data.status !== 'unavailable') {
+        setRescanResult(data);
         // Refresh plan data
         const refreshRes = await fetch(`/api/data/seo-plans/${plan.id}`);
         const refreshData = await refreshRes.json();
@@ -525,7 +527,7 @@ export default function SeoPlanDetail() {
         // Auto-switch to progress tab
         setActiveTab("progress");
       } else {
-        alert(data.error || 'שגיאה בסריקה חוזרת');
+        alert(data.error || data.message || 'שגיאה בסריקה חוזרת');
       }
     } catch (e) {
       console.error('Rescan failed:', e);
