@@ -39,40 +39,56 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
     : '';
 
   try {
+    const websiteUrl = (plan as any).websiteUrl || '';
+    const location = facts.detected_location?.value || facts.location || (plan as any).businessProfile?.location || 'ישראל';
+    const isLocal = location !== 'ישראל' && location.length > 0;
+    const currentYear = new Date().getFullYear();
+
     const result = await generateWithAI(
-      `אתה כותב תוכן SEO מקצועי בעברית. כתוב מאמרים איכותיים שמדרגים גבוה בגוגל.
+      `אתה כותב תוכן מומחה SEO ברמה הגבוהה ביותר בעברית. אתה מפיק מאמרים מעמיקים של 1500-2000 מילים שמדרגים בעמוד הראשון של גוגל. כל מאמר שלך כולל קישורים, נתונים, דוגמאות מעשיות, וטון של מומחה בכיר בתחום. החזר JSON בלבד.`,
+      `כתוב מאמר מומחה SEO מעמיק בעברית.
 
-כללים:
-- עברית מקצועית וטבעית
-- אורך: 600-800 מילים
-- שלב ביטוי מפתח 3-4 פעמים
-- כותרות H2 ברורות
-- דוגמאות מעשיות
-- FAQ קצר (2 שאלות)
-- CTA לעסק`,
-      `כתוב מאמר SEO בעברית.
-
+═══ פרטי העסק ═══
 עסק: ${businessName} (${businessType})${productsStr}
-השנה הנוכחית: ${new Date().getFullYear()}
+מיקום: ${location}
+אתר: ${websiteUrl}
+השנה הנוכחית: ${currentYear}
+
+═══ פרטי המאמר ═══
 כותרת: "${title}"
 ביטוי מפתח: "${targetKeyword || title}"${outlineSection}
-חשוב: כל אזכור שנה חייב להיות ${new Date().getFullYear()} בלבד.
 
-כתוב מאמר (600-800 מילים):
-1. פתיחה (80 מילים)
-2. 3-4 סעיפים עם H2 (כל אחד 150 מילים)
-3. FAQ — 2 שאלות ותשובות
-4. סיכום + CTA ל-${businessName}
+═══ הנחיות כתיבה — רמת מומחה ═══
+
+📏 אורך: 1500-2000 מילים (לא פחות מ-1500!)
+
+🔗 קישורים (חובה):
+- 2-3 קישורים פנימיים (href="${websiteUrl}/..." עם anchor text רלוונטי)
+- 2-3 קישורים חיצוניים למקורות סמכותיים (target="_blank" rel="noopener")
+
+${isLocal ? `📍 Local SEO: ציין "${location}" לפחות 4 פעמים, כלול ביטויים לוקאליים כמו "ב${location}", "${targetKeyword || title} ב${location}", הזכר אזורים סמוכים` : ''}
+
+👨‍🏫 טון: מומחה בכיר עם 15+ שנות ניסיון, כלול נתונים ומספרים, טיפים מעשיים, דוגמאות מהשטח
+
+📋 מבנה:
+1. פתיחה מושכת (120-150 מילים) — הביטוי ב-100 מילים הראשונות
+2. 5-7 סעיפי H2 מעמיקים (כל אחד 200+ מילים עם H3 פנימי)
+3. בכל סעיף: רשימה (ul/ol) או דוגמה מעשית
+4. FAQ — 3 שאלות ותשובות מעמיקות
+5. סיכום + CTA ל-${businessName} (100 מילים)
+
+🖋️ HTML: h2, h3, p, ul, ol, li, strong, a, blockquote
+⚠️ כל שנה = ${currentYear} בלבד
 
 החזר JSON:
 {
-  "article": "HTML עם h2, h3, p, ul, li",
-  "wordCount": 700,
-  "metaTitle": "כותרת Meta (60 תווים)",
-  "metaDescription": "תיאור Meta (155 תווים)",
-  "faq": [{"question": "שאלה", "answer": "תשובה"}]
+  "article": "HTML מלא עם h2, h3, p, ul, li, a, strong",
+  "wordCount": 1700,
+  "metaTitle": "כותרת Meta (עד 60 תווים, כולל ביטוי + ${currentYear})",
+  "metaDescription": "תיאור Meta (עד 155 תווים, עם CTA)",
+  "faq": [{"question": "שאלה", "answer": "תשובה מפורטת"}]
 }`,
-      { temperature: 0.7, maxTokens: 3000 }
+      { temperature: 0.75, maxTokens: 8000 }
     );
 
     if (result.success && result.data) {
