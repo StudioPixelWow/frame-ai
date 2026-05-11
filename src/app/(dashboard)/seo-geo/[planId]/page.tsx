@@ -5059,6 +5059,7 @@ export default function SeoPlanDetail() {
           const baseline = planAny?.baselineScan;
           const currentScan = plan?.websiteScan;
           const history = planAny?.scanHistory || [];
+          const dailySnapshots: any[] = planAny?.dailySnapshots || [];
           const baselineAi = planAny?.baselineAiQueries || [];
           const currentAi = (currentScan as any)?.aiQueries || [];
           const baselineDate = planAny?.baselineCapturedAt;
@@ -5097,7 +5098,20 @@ export default function SeoPlanDetail() {
           });
 
           const hasBaseline = !!baseline;
-          const lastScanEntry = history.length > 0 ? history[history.length - 1] : null;
+          const hasSnapshots = dailySnapshots.length > 0;
+
+          // Calculate day number in 60-day plan
+          const genDate = planAny?.generatedAt ? new Date(planAny.generatedAt) : null;
+          const dayNumber = genDate ? Math.floor((Date.now() - genDate.getTime()) / (1000 * 60 * 60 * 24)) + 1 : 0;
+
+          // SVG chart data from daily snapshots
+          const chartWidth = 760;
+          const chartHeight = 200;
+          const chartPadding = { top: 20, right: 20, bottom: 30, left: 40 };
+          const innerW = chartWidth - chartPadding.left - chartPadding.right;
+          const innerH = chartHeight - chartPadding.top - chartPadding.bottom;
+          const lastN = dailySnapshots.slice(-30); // last 30 days
+          const maxScore = 100;
 
           return (
             <div style={{ direction: "rtl" }}>
@@ -5107,182 +5121,306 @@ export default function SeoPlanDetail() {
                   <h2 style={{ fontSize: 22, fontWeight: 800, color: C.text, margin: 0 }}>📈 התקדמות והצלחה</h2>
                   <p style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
                     {hasBaseline
-                      ? `נקודת התחלה: ${new Date(baselineDate).toLocaleDateString('he-IL')} | סריקה אחרונה: ${lastRescan ? new Date(lastRescan).toLocaleDateString('he-IL') : '—'}`
-                      : 'טרם בוצעה סריקה חוזרת — לחץ על הכפתור לביצוע סריקה ראשונה'}
+                      ? `יום ${Math.min(dayNumber, 60)} מתוך 60 | נקודת התחלה: ${new Date(baselineDate).toLocaleDateString('he-IL')} | סריקה אחרונה: ${lastRescan ? new Date(lastRescan).toLocaleDateString('he-IL') : '—'}`
+                      : hasSnapshots
+                        ? `סריקה יומית אוטומטית פעילה — ${dailySnapshots.length} סריקות בוצעו`
+                        : 'הסריקה היומית האוטומטית תתחיל לפעול בקרוב'}
                   </p>
                 </div>
                 <button
                   onClick={handleRescan}
                   disabled={rescanning}
                   style={{
-                    padding: "10px 24px",
-                    borderRadius: 10,
-                    border: "none",
+                    padding: "10px 24px", borderRadius: 10, border: "none",
                     background: rescanning ? C.border : "linear-gradient(135deg, #10b981, #059669)",
-                    color: "#fff",
-                    fontWeight: 700,
-                    fontSize: 14,
+                    color: "#fff", fontWeight: 700, fontSize: 14,
                     cursor: rescanning ? "not-allowed" : "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
+                    display: "flex", alignItems: "center", gap: 8,
                   }}
                 >
-                  {rescanning ? <><span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⏳</span> סורק...</> : <>🔄 סרוק לתוצאות מעודכנות</>}
+                  {rescanning ? <><span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⏳</span> סורק...</> : <>🔄 סרוק עכשיו</>}
                 </button>
               </div>
 
-              {!hasBaseline ? (
-                <div style={{ background: C.cardBg, borderRadius: 16, padding: 48, textAlign: "center", border: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: 48, marginBottom: 16 }}>📊</div>
-                  <h3 style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>טרם בוצעה סריקה חוזרת</h3>
-                  <p style={{ fontSize: 14, color: C.textMuted, marginBottom: 24 }}>
-                    לחץ על "סרוק לתוצאות מעודכנות" כדי ליצור נקודת בסיס ולהתחיל לעקוב אחר ההתקדמות שלך
-                  </p>
+              {/* Summary cards — always show */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+                {[
+                  { label: "יום בתוכנית", value: `${Math.min(dayNumber, 60)}/60`, icon: "📅", sub: dayNumber > 0 ? `${Math.round((dayNumber/60)*100)}% הושלמו` : 'טרם החל', color: '#6366f1' },
+                  { label: "סריקות יומיות", value: dailySnapshots.length, icon: "🔍", sub: hasBaseline ? `+ ${history.length} ידניות` : 'אוטומטי כל 24 שעות', color: '#3b82f6' },
+                  { label: "נראות AI", value: currentTotal > 0 ? `${Math.round((currentFound / currentTotal) * 100)}%` : '—', icon: "🤖", sub: baselineTotal > 0 ? `היה: ${Math.round((baselineFound / Math.max(baselineTotal, 1)) * 100)}%` : '—', color: currentFound > baselineFound ? '#10b981' : '#f59e0b' },
+                  { label: "ביטויים שעלו", value: keywordChanges.filter((k: any) => k.improved).length, icon: "🚀", sub: `מתוך ${currentKw.length} ביטויים`, color: '#10b981' },
+                ].map((card, i) => (
+                  <div key={i} style={{ background: C.cardBg, borderRadius: 14, padding: 20, border: `1px solid ${C.border}`, textAlign: "center", position: "relative", overflow: "hidden" }}>
+                    <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: card.color }} />
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>{card.icon}</div>
+                    <div style={{ fontSize: 24, fontWeight: 800, color: C.text }}>{card.value}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.textSecondary, marginBottom: 4 }}>{card.label}</div>
+                    <div style={{ fontSize: 11, color: C.textMuted }}>{card.sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Daily Progress Chart — SVG */}
+              {hasSnapshots && (
+                <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>📊 גרף התקדמות יומי</h3>
+                  <svg width="100%" viewBox={`0 0 ${chartWidth} ${chartHeight}`} style={{ overflow: "visible" }}>
+                    {/* Grid lines */}
+                    {[0, 25, 50, 75, 100].map(v => {
+                      const y = chartPadding.top + innerH - (v / maxScore) * innerH;
+                      return (
+                        <g key={v}>
+                          <line x1={chartPadding.left} y1={y} x2={chartWidth - chartPadding.right} y2={y} stroke={C.border} strokeWidth={0.5} />
+                          <text x={chartPadding.left - 8} y={y + 4} textAnchor="end" fontSize={10} fill={C.textMuted}>{v}</text>
+                        </g>
+                      );
+                    })}
+                    {/* Overall score line */}
+                    {lastN.length > 1 && (
+                      <polyline
+                        fill="none"
+                        stroke="#10b981"
+                        strokeWidth={2.5}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        points={lastN.map((s: any, i: number) => {
+                          const x = chartPadding.left + (i / Math.max(lastN.length - 1, 1)) * innerW;
+                          const y = chartPadding.top + innerH - ((s.overallScore || 0) / maxScore) * innerH;
+                          return `${x},${y}`;
+                        }).join(' ')}
+                      />
+                    )}
+                    {/* AI visibility line */}
+                    {lastN.length > 1 && (
+                      <polyline
+                        fill="none"
+                        stroke="#6366f1"
+                        strokeWidth={2}
+                        strokeDasharray="6,3"
+                        strokeLinecap="round"
+                        points={lastN.map((s: any, i: number) => {
+                          const x = chartPadding.left + (i / Math.max(lastN.length - 1, 1)) * innerW;
+                          const visPct = s.aiVisibility?.totalQueries > 0 ? Math.round((s.aiVisibility.totalFound / s.aiVisibility.totalQueries) * 100) : 0;
+                          const y = chartPadding.top + innerH - (visPct / maxScore) * innerH;
+                          return `${x},${y}`;
+                        }).join(' ')}
+                      />
+                    )}
+                    {/* Data points */}
+                    {lastN.map((s: any, i: number) => {
+                      const x = chartPadding.left + (i / Math.max(lastN.length - 1, 1)) * innerW;
+                      const y = chartPadding.top + innerH - ((s.overallScore || 0) / maxScore) * innerH;
+                      return <circle key={i} cx={x} cy={y} r={3} fill="#10b981" />;
+                    })}
+                    {/* X-axis labels (every 5th) */}
+                    {lastN.map((s: any, i: number) => {
+                      if (i % 5 !== 0 && i !== lastN.length - 1) return null;
+                      const x = chartPadding.left + (i / Math.max(lastN.length - 1, 1)) * innerW;
+                      const dateStr = new Date(s.timestamp || s.date).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' });
+                      return <text key={i} x={x} y={chartHeight - 5} textAnchor="middle" fontSize={9} fill={C.textMuted}>{dateStr}</text>;
+                    })}
+                  </svg>
+                  <div style={{ display: "flex", gap: 24, justifyContent: "center", marginTop: 12, fontSize: 12 }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ width: 16, height: 3, background: "#10b981", borderRadius: 2, display: "inline-block" }} /> ציון כולל
+                    </span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ width: 16, height: 3, background: "#6366f1", borderRadius: 2, display: "inline-block", borderTop: "2px dashed #6366f1" }} /> נראות AI
+                    </span>
+                  </div>
                 </div>
-              ) : (
-                <>
-                  {/* Summary cards */}
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
-                    {[
-                      { label: "סריקות", value: history.length, icon: "🔍", sub: `מאז ${new Date(baselineDate).toLocaleDateString('he-IL')}` },
-                      { label: "אזכורי AI", value: `${currentFound}/${currentTotal}`, icon: "🤖", sub: baselineTotal > 0 ? `היה: ${baselineFound}/${baselineTotal}` : '—', improved: currentFound > baselineFound },
-                      { label: "שיפורים טכניים", value: technicalChanges.filter(c => c.improved).length, icon: "✅", sub: `מתוך ${technicalChanges.length} שינויים` },
-                      { label: "ביטויים שעלו", value: keywordChanges.filter((k: any) => k.improved).length, icon: "🔑", sub: `מתוך ${keywordChanges.length} ביטויים` },
-                    ].map((card, i) => (
-                      <div key={i} style={{ background: C.cardBg, borderRadius: 14, padding: 20, border: `1px solid ${C.border}`, textAlign: "center" }}>
-                        <div style={{ fontSize: 28, marginBottom: 8 }}>{card.icon}</div>
-                        <div style={{ fontSize: 24, fontWeight: 800, color: C.text }}>{card.value}</div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: C.textSecondary, marginBottom: 4 }}>{card.label}</div>
-                        <div style={{ fontSize: 11, color: (card as any).improved ? '#10b981' : C.textMuted }}>{card.sub}</div>
+              )}
+
+              {/* Daily Snapshots Timeline */}
+              {hasSnapshots && (
+                <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>📅 סריקות יומיות — {dailySnapshots.length} ימים</h3>
+                  <div style={{ maxHeight: 400, overflowY: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                      <thead style={{ position: "sticky", top: 0, background: C.cardBg, zIndex: 1 }}>
+                        <tr style={{ borderBottom: `2px solid ${C.border}` }}>
+                          <th style={{ padding: "8px 12px", textAlign: "right", fontWeight: 700, color: C.textSecondary }}>תאריך</th>
+                          <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>ציון כולל</th>
+                          <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>נראות AI</th>
+                          <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>ביטויים בגוגל</th>
+                          <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>שינוי</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dailySnapshots.slice().reverse().map((snap: any, i: number) => {
+                          const prev = i < dailySnapshots.length - 1 ? dailySnapshots[dailySnapshots.length - 2 - i] : null;
+                          const scoreDelta = prev ? (snap.overallScore || 0) - (prev.overallScore || 0) : 0;
+                          const aiPct = snap.aiVisibility?.totalQueries > 0 ? Math.round((snap.aiVisibility.totalFound / snap.aiVisibility.totalQueries) * 100) : 0;
+                          const rankedKw = (snap.keywordRanks || []).filter((k: any) => k.googleRank !== null && k.googleRank > 0).length;
+                          const totalKw = (snap.keywordRanks || []).length;
+                          const improvedKw = (snap.keywordRanks || []).filter((k: any) => k.change > 0).length;
+
+                          return (
+                            <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i === 0 ? 'rgba(16,185,129,0.04)' : 'transparent' }}>
+                              <td style={{ padding: "10px 12px", fontWeight: 600 }}>
+                                {new Date(snap.timestamp || snap.date).toLocaleDateString('he-IL')}
+                                {i === 0 && <span style={{ fontSize: 10, color: '#10b981', marginRight: 6 }}>אחרון</span>}
+                              </td>
+                              <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                                <span style={{ fontWeight: 700, color: (snap.overallScore || 0) >= 50 ? '#10b981' : '#f59e0b' }}>
+                                  {snap.overallScore || 0}%
+                                </span>
+                              </td>
+                              <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                                {aiPct}% ({snap.aiVisibility?.totalFound || 0}/{snap.aiVisibility?.totalQueries || 0})
+                              </td>
+                              <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                                {rankedKw}/{totalKw}
+                                {improvedKw > 0 && <span style={{ color: '#10b981', fontSize: 11, marginRight: 4 }}>({improvedKw} ↑)</span>}
+                              </td>
+                              <td style={{ padding: "10px 12px", textAlign: "center", fontWeight: 700, color: scoreDelta > 0 ? '#10b981' : scoreDelta < 0 ? '#ef4444' : C.textMuted }}>
+                                {scoreDelta > 0 ? `↑ +${scoreDelta}` : scoreDelta < 0 ? `↓ ${scoreDelta}` : '—'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* AI Visibility comparison */}
+              {baselineAi.length > 0 && (
+                <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>🤖 השוואת נראות AI — בסיס מול עכשיו</h3>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ borderBottom: `2px solid ${C.border}` }}>
+                        <th style={{ padding: "8px 12px", textAlign: "right", fontWeight: 700, color: C.textSecondary }}>פלטפורמה</th>
+                        <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>נקודת התחלה</th>
+                        <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>מצב נוכחי</th>
+                        <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>שינוי</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const platforms = [...new Set([...baselineAi.map((q: any) => q.platform), ...currentAi.map((q: any) => q.platform)])];
+                        return platforms.map((p: string) => {
+                          const bFound = baselineAi.filter((q: any) => q.platform === p && q.found).length;
+                          const bTotal = baselineAi.filter((q: any) => q.platform === p).length;
+                          const cFound = currentAi.filter((q: any) => q.platform === p && q.found).length;
+                          const cTotal = currentAi.filter((q: any) => q.platform === p).length;
+                          const delta = cFound - bFound;
+                          return (
+                            <tr key={p} style={{ borderBottom: `1px solid ${C.border}` }}>
+                              <td style={{ padding: "10px 12px", fontWeight: 600 }}>{p}</td>
+                              <td style={{ padding: "10px 12px", textAlign: "center" }}>{bFound}/{bTotal}</td>
+                              <td style={{ padding: "10px 12px", textAlign: "center" }}>{cFound}/{cTotal}</td>
+                              <td style={{ padding: "10px 12px", textAlign: "center", color: delta > 0 ? '#10b981' : delta < 0 ? '#ef4444' : C.textMuted, fontWeight: 700 }}>
+                                {delta > 0 ? `↑ +${delta}` : delta < 0 ? `↓ ${delta}` : '—'}
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Keyword ranking changes */}
+              {keywordChanges.length > 0 && (
+                <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>🔑 התקדמות ביטויים — בסיס מול עכשיו</h3>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ borderBottom: `2px solid ${C.border}` }}>
+                        <th style={{ padding: "8px 12px", textAlign: "right", fontWeight: 700, color: C.textSecondary }}>ביטוי</th>
+                        <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>דירוג התחלתי</th>
+                        <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>דירוג נוכחי</th>
+                        <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>שינוי</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {keywordChanges.map((kw: any, i: number) => {
+                        const delta = kw.before !== null && kw.after !== null ? kw.before - kw.after : null;
+                        return (
+                          <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                            <td style={{ padding: "10px 12px", fontWeight: 600 }}>{kw.keyword}</td>
+                            <td style={{ padding: "10px 12px", textAlign: "center" }}>{kw.before ?? '—'}</td>
+                            <td style={{ padding: "10px 12px", textAlign: "center" }}>{kw.after ?? '—'}</td>
+                            <td style={{ padding: "10px 12px", textAlign: "center", color: kw.improved ? '#10b981' : kw.declined ? '#ef4444' : C.textMuted, fontWeight: 700 }}>
+                              {delta !== null && delta !== 0 ? (delta > 0 ? `↑ +${delta}` : `↓ ${delta}`) : '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Technical comparison */}
+              {technicalChanges.length > 0 && (
+                <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>🔧 שינויים טכניים</h3>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ borderBottom: `2px solid ${C.border}` }}>
+                        <th style={{ padding: "8px 12px", textAlign: "right", fontWeight: 700, color: C.textSecondary }}>מדד</th>
+                        <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>נקודת התחלה</th>
+                        <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>מצב נוכחי</th>
+                        <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>סטטוס</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {technicalChanges.map((change, i) => (
+                        <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                          <td style={{ padding: "10px 12px", fontWeight: 600 }}>{change.metric}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "center" }}>{String(change.before)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "center" }}>{String(change.after)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "center", color: change.improved ? '#10b981' : '#ef4444', fontWeight: 700 }}>
+                            {change.improved ? '✅ שופר' : '⚠️ דורש טיפול'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Scan history timeline */}
+              {history.length > 0 && (
+                <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}` }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>🕐 היסטוריית סריקות ידניות</h3>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {history.slice().reverse().map((entry: any, i: number) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, padding: 12, background: i === 0 ? 'rgba(16,185,129,0.06)' : 'transparent', borderRadius: 10, border: `1px solid ${i === 0 ? 'rgba(16,185,129,0.2)' : C.border}` }}>
+                        <div style={{ width: 10, height: 10, borderRadius: "50%", background: i === 0 ? '#10b981' : C.border, flexShrink: 0 }} />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+                            {new Date(entry.scannedAt).toLocaleDateString('he-IL')} {new Date(entry.scannedAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                          {entry.summary && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4, whiteSpace: "pre-line" }}>{entry.summary}</div>}
+                        </div>
+                        <div style={{ display: "flex", gap: 12, fontSize: 12, color: C.textSecondary }}>
+                          {entry.overallScore !== undefined && <span style={{ fontWeight: 700, color: '#10b981' }}>{entry.overallScore}%</span>}
+                          <span>⚡ {entry.websiteScan?.loadTimeMs || 0}ms</span>
+                        </div>
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
 
-                  {/* AI Visibility comparison */}
-                  {baselineAi.length > 0 && (
-                    <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
-                      <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>🤖 השוואת נראות AI</h3>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                        <thead>
-                          <tr style={{ borderBottom: `2px solid ${C.border}` }}>
-                            <th style={{ padding: "8px 12px", textAlign: "right", fontWeight: 700, color: C.textSecondary }}>פלטפורמה</th>
-                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>נקודת התחלה</th>
-                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>מצב נוכחי</th>
-                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>שינוי</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(() => {
-                            const platforms = [...new Set([...baselineAi.map((q: any) => q.platform), ...currentAi.map((q: any) => q.platform)])];
-                            return platforms.map((p: string) => {
-                              const bFound = baselineAi.filter((q: any) => q.platform === p && q.found).length;
-                              const bTotal = baselineAi.filter((q: any) => q.platform === p).length;
-                              const cFound = currentAi.filter((q: any) => q.platform === p && q.found).length;
-                              const cTotal = currentAi.filter((q: any) => q.platform === p).length;
-                              const delta = cFound - bFound;
-                              return (
-                                <tr key={p} style={{ borderBottom: `1px solid ${C.border}` }}>
-                                  <td style={{ padding: "10px 12px", fontWeight: 600 }}>{p}</td>
-                                  <td style={{ padding: "10px 12px", textAlign: "center" }}>{bFound}/{bTotal}</td>
-                                  <td style={{ padding: "10px 12px", textAlign: "center" }}>{cFound}/{cTotal}</td>
-                                  <td style={{ padding: "10px 12px", textAlign: "center", color: delta > 0 ? '#10b981' : delta < 0 ? '#ef4444' : C.textMuted, fontWeight: 700 }}>
-                                    {delta > 0 ? `↑ +${delta}` : delta < 0 ? `↓ ${delta}` : '—'}
-                                  </td>
-                                </tr>
-                              );
-                            });
-                          })()}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {/* Technical comparison */}
-                  {technicalChanges.length > 0 && (
-                    <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
-                      <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>🔧 שינויים טכניים</h3>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                        <thead>
-                          <tr style={{ borderBottom: `2px solid ${C.border}` }}>
-                            <th style={{ padding: "8px 12px", textAlign: "right", fontWeight: 700, color: C.textSecondary }}>מדד</th>
-                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>נקודת התחלה</th>
-                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>מצב נוכחי</th>
-                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>סטטוס</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {technicalChanges.map((change, i) => (
-                            <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                              <td style={{ padding: "10px 12px", fontWeight: 600 }}>{change.metric}</td>
-                              <td style={{ padding: "10px 12px", textAlign: "center" }}>{String(change.before)}</td>
-                              <td style={{ padding: "10px 12px", textAlign: "center" }}>{String(change.after)}</td>
-                              <td style={{ padding: "10px 12px", textAlign: "center", color: change.improved ? '#10b981' : '#ef4444', fontWeight: 700 }}>
-                                {change.improved ? '✅ שופר' : '⚠️ דורש טיפול'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {/* Keyword ranking changes */}
-                  {keywordChanges.length > 0 && (
-                    <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
-                      <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>🔑 התקדמות ביטויים</h3>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                        <thead>
-                          <tr style={{ borderBottom: `2px solid ${C.border}` }}>
-                            <th style={{ padding: "8px 12px", textAlign: "right", fontWeight: 700, color: C.textSecondary }}>ביטוי</th>
-                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>דירוג התחלתי</th>
-                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>דירוג נוכחי</th>
-                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>שינוי</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {keywordChanges.map((kw: any, i: number) => {
-                            const delta = kw.before !== null && kw.after !== null ? kw.before - kw.after : null;
-                            return (
-                              <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                                <td style={{ padding: "10px 12px", fontWeight: 600 }}>{kw.keyword}</td>
-                                <td style={{ padding: "10px 12px", textAlign: "center" }}>{kw.before ?? '—'}</td>
-                                <td style={{ padding: "10px 12px", textAlign: "center" }}>{kw.after ?? '—'}</td>
-                                <td style={{ padding: "10px 12px", textAlign: "center", color: kw.improved ? '#10b981' : kw.declined ? '#ef4444' : C.textMuted, fontWeight: 700 }}>
-                                  {delta !== null && delta !== 0 ? (delta > 0 ? `↑ +${delta}` : `↓ ${delta}`) : '—'}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {/* Scan history timeline */}
-                  {history.length > 0 && (
-                    <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}` }}>
-                      <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>📅 היסטוריית סריקות</h3>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                        {history.slice().reverse().map((entry: any, i: number) => (
-                          <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, padding: 12, background: i === 0 ? 'rgba(16,185,129,0.06)' : 'transparent', borderRadius: 10, border: `1px solid ${i === 0 ? 'rgba(16,185,129,0.2)' : C.border}` }}>
-                            <div style={{ width: 10, height: 10, borderRadius: "50%", background: i === 0 ? '#10b981' : C.border, flexShrink: 0 }} />
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
-                                {new Date(entry.scannedAt).toLocaleDateString('he-IL')} {new Date(entry.scannedAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
-                              </div>
-                              {entry.summary && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4, whiteSpace: "pre-line" }}>{entry.summary}</div>}
-                            </div>
-                            <div style={{ display: "flex", gap: 12, fontSize: 12, color: C.textSecondary }}>
-                              <span>⚡ {entry.websiteScan?.loadTimeMs || 0}ms</span>
-                              <span>⚠️ {entry.websiteScan?.issues?.length || 0} בעיות</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
+              {/* Empty state — no snapshots and no baseline */}
+              {!hasBaseline && !hasSnapshots && (
+                <div style={{ background: C.cardBg, borderRadius: 16, padding: 48, textAlign: "center", border: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>📊</div>
+                  <h3 style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>הסריקה היומית תתחיל בקרוב</h3>
+                  <p style={{ fontSize: 14, color: C.textMuted, marginBottom: 8 }}>
+                    כל 24 שעות המערכת תבדוק אוטומטית את כל הביטויים שלך בגוגל ובמנועי AI
+                  </p>
+                  <p style={{ fontSize: 13, color: C.textMuted, marginBottom: 24 }}>
+                    או לחץ על "סרוק עכשיו" לסריקה מיידית
+                  </p>
+                </div>
               )}
             </div>
           );

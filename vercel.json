@@ -3,6 +3,10 @@
     {
       "path": "/api/seo-geo-plans/cron/daily-runner",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/seo-geo-plans/cron/daily-progress-scan",
+      "schedule": "0 3 * * *"
     }
   ]
 }
