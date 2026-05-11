@@ -19,6 +19,11 @@ interface SeoPlan {
   totalTasks: number;
   createdAt: string;
   updatedAt: string;
+  generatedAt?: string;
+  activatedAt?: string;
+  days?: any[];
+  automationLog?: any[];
+  wpConnection?: any;
 }
 
 // ==================== COLORS & STYLES ====================
@@ -438,6 +443,104 @@ export default function SeoGeoDashboard() {
           );
         })}
       </div>
+
+      {/* ══════════ ACTIVE PLANS COMMAND CENTER ══════════ */}
+      {(() => {
+        const activePlans = plans.filter(p => p.status === 'active' || (p.status === 'plan_generated' && p.days && p.days.length > 0 && p.wpConnection));
+        if (activePlans.length === 0) return null;
+        return (
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <span style={{ fontSize: 22 }}>⚡</span>
+              <h2 style={{ fontSize: 20, fontWeight: 700, color: COLORS.text, margin: 0 }}>תוכניות פעילות — פיילוט אוטומטי</h2>
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '3px 12px', borderRadius: 20,
+                background: 'linear-gradient(135deg, #10b981, #059e74)', color: '#fff',
+                letterSpacing: 0.5,
+              }}>{activePlans.length} פעילות</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
+              {activePlans.map(plan => {
+                const genAt = plan.generatedAt ? new Date(plan.generatedAt) : null;
+                const dayNum = genAt ? Math.floor((new Date().getTime() - genAt.getTime()) / (1000 * 60 * 60 * 24)) + 1 : 0;
+                const progress = dayNum > 0 ? Math.min(Math.round((dayNum / 60) * 100), 100) : 0;
+                const allTasks = (plan.days || []).flatMap((d: any) => d.tasks || []);
+                const doneTasks = allTasks.filter((t: any) => t.status === 'done').length;
+                const totalT = allTasks.length;
+                const todayTasks = (plan.days || []).find((d: any) => d.day === dayNum)?.tasks || [];
+                const doneToday = todayTasks.filter((t: any) => t.status === 'done').length;
+                const pendToday = todayTasks.length - doneToday;
+                const log = plan.automationLog || [];
+                const lastRun = log.length > 0 ? log[log.length - 1] : null;
+                const lastRunStr = lastRun ? new Date(lastRun.date).toLocaleDateString('he-IL') : null;
+                const isCompleted = dayNum > 60;
+
+                return (
+                  <Link key={plan.id} href={`/seo-geo/${plan.id}`} style={{ textDecoration: 'none' }}>
+                    <div className="plan-card" style={{
+                      border: isCompleted ? `2px solid ${COLORS.emerald}60` : `2px solid #10b98140`,
+                      background: isCompleted
+                        ? `linear-gradient(135deg, ${COLORS.emerald}08, ${COLORS.emerald}04)`
+                        : 'linear-gradient(135deg, #10b98108, #059e7404)',
+                      cursor: 'pointer',
+                    }}>
+                      {/* Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                        <div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.text }}>{plan.clientName}</div>
+                          <div style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 2 }}>{plan.websiteUrl}</div>
+                        </div>
+                        <div style={{
+                          fontSize: 10, fontWeight: 700, padding: '4px 12px', borderRadius: 20,
+                          background: isCompleted ? `${COLORS.emerald}20` : '#10b98120',
+                          color: isCompleted ? COLORS.emerald : '#10b981',
+                        }}>
+                          {isCompleted ? '✅ הושלם' : `⚡ יום ${dayNum}/60`}
+                        </div>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div style={{ marginBottom: 14 }}>
+                        <div style={{ width: '100%', height: 8, borderRadius: 4, background: '#e5e7eb', overflow: 'hidden' }}>
+                          <div style={{
+                            width: `${progress}%`, height: '100%', borderRadius: 4,
+                            background: isCompleted
+                              ? `linear-gradient(90deg, ${COLORS.emerald}, #047857)`
+                              : 'linear-gradient(90deg, #10b981, #059e74)',
+                            transition: 'width 0.6s ease',
+                          }} />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                          <span style={{ fontSize: 11, color: COLORS.textMuted }}>{progress}% הושלם</span>
+                          <span style={{ fontSize: 11, color: COLORS.textMuted }}>{doneTasks}/{totalT} משימות</span>
+                        </div>
+                      </div>
+
+                      {/* Stats row */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                        <div style={{ textAlign: 'center', padding: '8px 4px', borderRadius: 10, background: '#f9fafb' }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: pendToday > 0 ? COLORS.orange : COLORS.green }}>
+                            {pendToday > 0 ? pendToday : '✓'}
+                          </div>
+                          <div style={{ fontSize: 10, color: COLORS.textMuted }}>ממתינות היום</div>
+                        </div>
+                        <div style={{ textAlign: 'center', padding: '8px 4px', borderRadius: 10, background: '#f9fafb' }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.primary }}>{log.length}</div>
+                          <div style={{ fontSize: 10, color: COLORS.textMuted }}>ריצות cron</div>
+                        </div>
+                        <div style={{ textAlign: 'center', padding: '8px 4px', borderRadius: 10, background: '#f9fafb' }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.text }}>{lastRunStr || '—'}</div>
+                          <div style={{ fontSize: 10, color: COLORS.textMuted }}>ריצה אחרונה</div>
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ══════════ SEARCH & PLANS LIST ══════════ */}
       {loading ? (

@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
   try {
     const allPlans = await seoPlans.getAllAsync();
     const activePlans = allPlans.filter((p: any) => {
-      const hasActiveStatus = p.status === 'plan_generated' || p.status === 'visibility_done';
+      const hasActiveStatus = p.status === 'active' || p.status === 'plan_generated' || p.status === 'visibility_done';
       const hasKeywords = Array.isArray(p.clientKeywords) && p.clientKeywords.length > 0;
       return hasActiveStatus && hasKeywords;
     });

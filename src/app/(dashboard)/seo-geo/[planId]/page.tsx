@@ -1741,7 +1741,8 @@ export default function SeoPlanDetail() {
             {/* === START AUTOMATION BUTTON === */}
             {Array.isArray(p.days) && p.days.length > 0 && (p as any)?.wpConnection && (() => {
               const automLog = (p as any)?.automationLog || [];
-              const isActive = p.status === 'plan_generated';
+              const isActive = p.status === 'active' || p.status === 'plan_generated';
+              const isAutopilot = p.status === 'active';
               const lastRun = automLog.length > 0 ? automLog[automLog.length - 1] : null;
               const lastRunDate = lastRun ? new Date(lastRun.date).toLocaleDateString("he-IL") : null;
               const generatedAt = p.generatedAt ? new Date(p.generatedAt) : null;
@@ -1757,14 +1758,16 @@ export default function SeoPlanDetail() {
               return (
                 <div style={{
                   marginBottom: 16, padding: "20px 24px", borderRadius: 16,
-                  background: isActive
+                  background: isAutopilot
+                    ? "linear-gradient(135deg, #10b98112, #059e7412)"
+                    : isActive
                     ? "linear-gradient(135deg, #10b98115, #059e7415)"
                     : "#f1f5f915",
-                  border: isActive ? "2px solid #10b98140" : `2px solid ${C.border}`,
+                  border: isAutopilot ? "2px solid #10b98160" : isActive ? "2px solid #10b98140" : `2px solid ${C.border}`,
                   position: "relative", overflow: "hidden",
                 }}>
                   {/* Subtle animated pulse for active state */}
-                  {isActive && automLog.length > 0 && (
+                  {isAutopilot && (
                     <div style={{
                       position: "absolute", top: 16, left: 16,
                       width: 10, height: 10, borderRadius: "50%",
@@ -1773,10 +1776,39 @@ export default function SeoPlanDetail() {
                     }} />
                   )}
 
+                  {/* Progress bar for active plans */}
+                  {isAutopilot && currentDay > 0 && currentDay <= 60 && (
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#10b981" }}>התקדמות תוכנית 60 יום</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{Math.round((currentDay / 60) * 100)}%</span>
+                      </div>
+                      <div style={{ width: "100%", height: 8, borderRadius: 4, background: "#e5e7eb", overflow: "hidden" }}>
+                        <div style={{
+                          width: `${Math.round((currentDay / 60) * 100)}%`,
+                          height: "100%",
+                          borderRadius: 4,
+                          background: "linear-gradient(90deg, #10b981, #059e74)",
+                          transition: "width 0.6s ease",
+                        }} />
+                      </div>
+                    </div>
+                  )}
+
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
-                        {automLog.length > 0 ? (
+                        {isAutopilot ? (
+                          <>
+                            <span style={{ fontSize: 20 }}>⚡</span>
+                            פיילוט אוטומטי פעיל
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 20,
+                              background: "linear-gradient(135deg, #10b981, #059e74)", color: "#fff",
+                              letterSpacing: 0.5, textTransform: "uppercase",
+                            }}>AUTOPILOT</span>
+                          </>
+                        ) : automLog.length > 0 ? (
                           <>
                             <span style={{ fontSize: 20 }}>🤖</span>
                             אוטומציה פעילה
@@ -1789,7 +1821,18 @@ export default function SeoPlanDetail() {
                         )}
                       </div>
                       <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.6 }}>
-                        {automLog.length > 0 ? (
+                        {isAutopilot ? (
+                          <>
+                            <span style={{ color: "#10b981", fontWeight: 700 }}>יום {currentDay}/60</span> — המערכת רצה אוטומטית כל יום ב-08:00.
+                            {lastRunDate && <> ריצה אחרונה: <b>{lastRunDate}</b>.</>}
+                            {` `}{automLog.length} ריצות עד כה.
+                            {pendingToday > 0 ? (
+                              <> | היום: <b>{autoCountToday} אוטומטיות</b>{manualCountToday > 0 && <>, {manualCountToday} ידניות</>}</>
+                            ) : (
+                              <> | <span style={{ color: "#10b981" }}>משימות היום הושלמו</span></>
+                            )}
+                          </>
+                        ) : automLog.length > 0 ? (
                           <>
                             המערכת רצה אוטומטית כל יום על המשימות שלך.
                             {lastRunDate && <> ריצה אחרונה: <b>{lastRunDate}</b>.</>}
@@ -1866,6 +1909,16 @@ export default function SeoPlanDetail() {
                             }
                             const skipNote = skippedCount > 0 ? ` | ${skippedCount} ידניות` : "";
                             setAutomationStatus(`הושלם! ${successCount} הצליחו${failCount > 0 ? `, ${failCount} נכשלו` : ""}${skipNote}`);
+                            // Activate plan — mark as 'active' so cron takes over daily
+                            if (p.status === 'plan_generated') {
+                              try {
+                                await fetch(`/api/data/seo-plans/${planId}`, {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ status: 'active', activatedAt: new Date().toISOString() }),
+                                });
+                              } catch {}
+                            }
                             // Refresh plan
                             const res = await fetch(`/api/data/seo-plans/${planId}`);
                             if (res.ok) { const data = await res.json(); setPlan(data); }
@@ -1891,7 +1944,7 @@ export default function SeoPlanDetail() {
                           minWidth: 200,
                         }}
                       >
-                        {runningAutomation ? "⏳ מריץ..." : automLog.length > 0 ? "▶️ הרץ משימות היום" : "🚀 התחל עבודה"}
+                        {runningAutomation ? "⏳ מריץ..." : isAutopilot ? (pendingToday > 0 ? "▶️ הרץ עכשיו (אוטומטי ב-08:00)" : "✅ משימות היום הושלמו") : automLog.length > 0 ? "▶️ הרץ משימות היום" : "🚀 התחל עבודה"}
                       </button>
                       {automationStatus && (
                         <div style={{

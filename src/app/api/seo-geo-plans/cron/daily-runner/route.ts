@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   try {
     const allPlans = await seoPlans.getAllAsync();
     const activePlans = allPlans.filter((p: any) =>
-      p.status === 'plan_generated' &&
+      (p.status === 'active' || p.status === 'plan_generated') &&
       p.wpConnection?.siteUrl &&
       p.days && Array.isArray(p.days) && p.days.length > 0
     );
@@ -61,8 +61,22 @@ async function processPlanDailyTasks(plan: any) {
 
   const now = new Date();
   const dayNumber = Math.floor((now.getTime() - generatedAt.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  if (dayNumber < 1 || dayNumber > 60) {
+  if (dayNumber < 1) {
     return { planId, clientName: plan.clientName, success: true, dayNumber, skipped: true };
+  }
+  if (dayNumber > 60) {
+    // Plan completed — mark as 'completed' if not already
+    if (plan.status !== 'completed') {
+      await updatePlanSafe(planId, { status: 'completed', completedAt: new Date().toISOString() } as any);
+      console.log(`[SEO-CRON] Plan ${planId} completed (day ${dayNumber} > 60)`);
+    }
+    return { planId, clientName: plan.clientName, success: true, dayNumber, skipped: true, completed: true };
+  }
+
+  // Auto-activate plan on first cron run
+  if (plan.status === 'plan_generated') {
+    await updatePlanSafe(planId, { status: 'active', activatedAt: new Date().toISOString() } as any);
+    console.log(`[SEO-CRON] Plan ${planId} auto-activated (first cron run, day ${dayNumber})`);
   }
 
   const todayDay = plan.days.find((d: any) => d.day === dayNumber);
