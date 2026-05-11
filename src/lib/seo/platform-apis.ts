@@ -230,7 +230,7 @@ async function querySerper(query: string, targetDomain: string): Promise<Platfor
         q: query,
         gl: 'il',
         hl: 'he',
-        num: 20,
+        num: 30,
       }),
     }, 12000);
 
@@ -299,7 +299,7 @@ function extractDomainFromUrl(url: string): string {
  */
 async function scrapeGoogleSerp(query: string, targetDomain: string): Promise<PlatformQueryResult> {
   try {
-    const searchUrl = `https://www.google.co.il/search?q=${encodeURIComponent(query)}&num=20&hl=he&gl=il`;
+    const searchUrl = `https://www.google.co.il/search?q=${encodeURIComponent(query)}&num=30&hl=he&gl=il`;
     const res = await fetchWithTimeout(searchUrl, {
       method: 'GET',
       headers: {
@@ -471,6 +471,122 @@ export async function queryGoogle(query: string, targetDomain: string): Promise<
   return scrapeGoogleSerp(query, targetDomain);
 }
 
+// ── Google AI Overview (separate from organic SEO) ──────────────────────────
+
+/**
+ * Checks if business appears in Google's AI Overview / Answer Box / Featured Snippet.
+ * Uses Serper.dev's answerBox, aiOverview, and knowledgeGraph fields.
+ * This is a SEPARATE check from organic Google SEO — AI Overview is the
+ * AI-generated summary at the top of Google results.
+ */
+async function queryGoogleAIOverview(query: string, businessName: string, targetDomain: string): Promise<PlatformQueryResult> {
+  if (!hasEnv('SERPER_API_KEY')) return { found: false, confidence: 0, scanMode: 'unavailable' };
+
+  try {
+    const res = await fetchWithTimeout('https://google.serper.dev/search', {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': process.env.SERPER_API_KEY!,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        q: query,
+        gl: 'il',
+        hl: 'he',
+        num: 10,
+      }),
+    }, 12000);
+
+    if (!res.ok) {
+      console.error(`[GOOGLE-AI-OVERVIEW] HTTP ${res.status} for "${query}"`);
+      return { found: false, confidence: 0, scanMode: 'real' };
+    }
+
+    const data = await res.json();
+    const domain = targetDomain.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
+    const domainNoWww = domain.replace(/^www\./, '');
+    const nameLower = businessName.toLowerCase();
+
+    // 1. Check AI Overview / AI-generated snippet
+    const aiOverview = data.aiOverview || data.ai_overview;
+    if (aiOverview) {
+      const overviewText = typeof aiOverview === 'string' ? aiOverview : JSON.stringify(aiOverview);
+      const overviewLower = overviewText.toLowerCase();
+      if (overviewLower.includes(domainNoWww) || overviewLower.includes(nameLower)) {
+        console.log(`[GOOGLE-AI-OVERVIEW] Found in AI Overview for "${query}"`);
+        return {
+          found: true,
+          position: 0,
+          snippet: typeof aiOverview === 'string' ? aiOverview.slice(0, 300) : 'AI Overview',
+          responseText: typeof aiOverview === 'string' ? aiOverview : JSON.stringify(aiOverview),
+          confidence: 95,
+          scanMode: 'real',
+          mentionType: 'in_text',
+        };
+      }
+    }
+
+    // 2. Check Answer Box (featured snippet)
+    const answerBox = data.answerBox;
+    if (answerBox) {
+      const abText = JSON.stringify(answerBox).toLowerCase();
+      if (abText.includes(domainNoWww) || abText.includes(nameLower)) {
+        console.log(`[GOOGLE-AI-OVERVIEW] Found in Answer Box for "${query}"`);
+        return {
+          found: true,
+          position: 0,
+          snippet: answerBox.snippet || answerBox.answer || answerBox.title || 'Featured Snippet',
+          responseText: answerBox.snippet || answerBox.answer || '',
+          confidence: 90,
+          scanMode: 'real',
+          mentionType: 'in_text',
+        };
+      }
+    }
+
+    // 3. Check Knowledge Graph
+    const knowledgeGraph = data.knowledgeGraph;
+    if (knowledgeGraph) {
+      const kgStr = JSON.stringify(knowledgeGraph).toLowerCase();
+      if (kgStr.includes(domainNoWww) || kgStr.includes(nameLower)) {
+        console.log(`[GOOGLE-AI-OVERVIEW] Found in Knowledge Graph for "${query}"`);
+        return {
+          found: true,
+          position: 0,
+          snippet: knowledgeGraph.description || knowledgeGraph.title || 'Knowledge Graph',
+          responseText: knowledgeGraph.description || '',
+          confidence: 92,
+          scanMode: 'real',
+          mentionType: 'in_text',
+        };
+      }
+    }
+
+    // 4. Check People Also Ask
+    const peopleAlsoAsk = data.peopleAlsoAsk || [];
+    for (const paa of peopleAlsoAsk) {
+      const paaText = (paa.snippet || paa.answer || '').toLowerCase();
+      if (paaText.includes(domainNoWww) || paaText.includes(nameLower)) {
+        console.log(`[GOOGLE-AI-OVERVIEW] Found in People Also Ask for "${query}"`);
+        return {
+          found: true,
+          snippet: paa.snippet || paa.answer || 'People Also Ask',
+          responseText: paa.snippet || paa.answer || '',
+          confidence: 70,
+          scanMode: 'real',
+          mentionType: 'in_text',
+        };
+      }
+    }
+
+    console.log(`[GOOGLE-AI-OVERVIEW] NOT found in AI features for "${query}"`);
+    return { found: false, confidence: 0, scanMode: 'real' };
+  } catch (err) {
+    console.error('[GOOGLE-AI-OVERVIEW] Error:', err);
+    return { found: false, confidence: 0, scanMode: 'real' };
+  }
+}
+
 // ── OpenAI / ChatGPT ──────────────────────────────────────────────────────────
 
 export function isChatGPTAvailable(): boolean {
@@ -492,13 +608,13 @@ export async function queryChatGPT(query: string, businessName: string, targetDo
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You are a helpful assistant. Answer concisely. When recommending businesses or services, mention specific names.' },
+          { role: 'system', content: 'אתה יועץ מומחה שעוזר למצוא ספקי שירות ועסקים מובילים בישראל. כשאתה ממליץ, ציין שמות ספציפיים של עסקים, כתובות אתרים, ומיקומים. תן תשובה מפורטת עם לפחות 3-5 המלצות ספציפיות כשרלוונטי. ענה בשפת השאלה.' },
           { role: 'user', content: query },
         ],
-        max_tokens: 400,
-        temperature: 0.3,
+        max_tokens: 1000,
+        temperature: 0.4,
       }),
-    }, 15000);
+    }, 20000);
 
     if (!res.ok) return { found: false, confidence: 0, scanMode: 'real' };
 
@@ -546,10 +662,11 @@ export async function queryClaude(query: string, businessName: string, targetDom
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 400,
+        max_tokens: 1000,
+        system: 'אתה יועץ מומחה שעוזר למצוא ספקי שירות ועסקים מובילים בישראל. כשאתה ממליץ, ציין שמות ספציפיים של עסקים, כתובות אתרים, ומיקומים. תן תשובה מפורטת עם לפחות 3-5 המלצות ספציפיות כשרלוונטי. ענה בשפת השאלה.',
         messages: [{ role: 'user', content: query }],
       }),
-    }, 15000);
+    }, 20000);
 
     if (!res.ok) return { found: false, confidence: 0, scanMode: 'real' };
 
@@ -594,11 +711,14 @@ export async function queryPerplexity(query: string, businessName: string, targe
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'sonar',
-        messages: [{ role: 'user', content: query }],
-        max_tokens: 400,
+        model: 'sonar-pro',
+        messages: [
+          { role: 'system', content: 'אתה מנוע חיפוש מומחה שעוזר למצוא ספקי שירות ועסקים מובילים בישראל. ציין שמות ספציפיים של עסקים, כתובות אתרים, ומיקומים. תן תשובה מפורטת עם מקורות ולפחות 3-5 תוצאות כשרלוונטי. ענה בשפת השאלה.' },
+          { role: 'user', content: query },
+        ],
+        max_tokens: 1000,
       }),
-    }, 15000);
+    }, 20000);
 
     if (!res.ok) return { found: false, confidence: 0, scanMode: 'real' };
 
@@ -650,10 +770,11 @@ export async function queryGemini(query: string, businessName: string, targetDom
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        systemInstruction: { parts: [{ text: 'אתה יועץ מומחה שעוזר למצוא ספקי שירות ועסקים מובילים בישראל. כשאתה ממליץ, ציין שמות ספציפיים של עסקים, כתובות אתרים, ומיקומים. תן תשובה מפורטת עם לפחות 3-5 המלצות ספציפיות כשרלוונטי. ענה בשפת השאלה.' }] },
         contents: [{ parts: [{ text: query }] }],
-        generationConfig: { maxOutputTokens: 400, temperature: 0.3 },
+        generationConfig: { maxOutputTokens: 1000, temperature: 0.4 },
       }),
-    }, 15000);
+    }, 20000);
 
     if (!res.ok) return { found: false, confidence: 0, scanMode: 'real' };
 
@@ -701,7 +822,7 @@ export async function queryPlatform(
 ): Promise<PlatformQueryResult> {
   switch (platformId) {
     case 'google_seo': return queryGoogle(query, targetDomain);
-    case 'google_ai_overview': return queryGoogle(query, targetDomain); // same API, different intent
+    case 'google_ai_overview': return queryGoogleAIOverview(query, businessName, targetDomain);
     case 'gemini': return queryGemini(query, businessName, targetDomain);
     case 'chatgpt': return queryChatGPT(query, businessName, targetDomain);
     case 'claude': return queryClaude(query, businessName, targetDomain);

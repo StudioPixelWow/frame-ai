@@ -67,7 +67,11 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
   const now = new Date().toISOString();
 
   // Determine target domain and business name from plan
-  const targetDomain = (plan as any).url || (plan as any).domain || '';
+  let targetDomain = (plan as any).websiteUrl || (plan as any).url || (plan as any).domain || '';
+  if (targetDomain && !targetDomain.startsWith('http://') && !targetDomain.startsWith('https://')) {
+    targetDomain = `https://${targetDomain}`;
+  }
+  targetDomain = targetDomain.replace(/\/+$/, '');
   const businessName = (plan as any).businessName || (plan as any).clientName || targetDomain;
 
   // Get visibility queries from plan — these are the queries to check across platforms
