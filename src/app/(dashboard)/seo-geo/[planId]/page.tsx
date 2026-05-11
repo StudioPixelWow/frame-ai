@@ -193,7 +193,7 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   completed: { label: "הושלם", color: C.primary },
 };
 
-type TabId = "overview" | "plan" | "calendar" | "tasks" | "articles" | "ai" | "results" | "competitors" | "gaps" | "keywords" | "reports";
+type TabId = "overview" | "plan" | "calendar" | "tasks" | "articles" | "ai" | "results" | "competitors" | "gaps" | "keywords" | "reports" | "progress";
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "overview", label: "סקירה", icon: "📊" },
@@ -207,6 +207,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "gaps", label: "פערי תוכן", icon: "📝" },
   { id: "keywords", label: "ביטויי SEO", icon: "🔑" },
   { id: "reports", label: "דוחות", icon: "📄" },
+  { id: "progress", label: "התקדמות והצלחה", icon: "📈" },
 ];
 
 const KANBAN_COLS: { id: PlanTask["status"]; label: string; color: string; icon: string }[] = [
@@ -321,6 +322,7 @@ export default function SeoPlanDetail() {
   const [expandedKeyword, setExpandedKeyword] = useState<string | null>(null);
   const [editingRanks, setEditingRanks] = useState<Record<number, string>>({});
   const [savingRanks, setSavingRanks] = useState(false);
+  const [checkingKeyword, setCheckingKeyword] = useState<number | null>(null);
   const [enrichingAI, setEnrichingAI] = useState(false);
   const [generatingArticle, setGeneratingArticle] = useState<string | null>(null); // task.id of article being generated
   const [generatedArticles, setGeneratedArticles] = useState<Record<string, string>>({}); // taskId -> full article HTML
@@ -338,6 +340,8 @@ export default function SeoPlanDetail() {
   const [selectedCalendarDay, setSelectedCalendarDay] = useState<any | null>(null);
   const [runningAutomation, setRunningAutomation] = useState(false);
   const [automationStatus, setAutomationStatus] = useState<string | null>(null);
+  const [rescanning, setRescanning] = useState(false);
+  const [rescanResult, setRescanResult] = useState<any>(null);
 
   // Load previously generated articles from plan's aiArticles on plan load
   useEffect(() => {
@@ -479,6 +483,57 @@ export default function SeoPlanDetail() {
 
     return [];
   }, [plan?.days, plan?.weeks]);
+
+  // ── Live keyword check handler ──
+  const handleCheckKeyword = useCallback(async (keyword: string, keywordIndex: number) => {
+    if (!plan || checkingKeyword !== null) return;
+    setCheckingKeyword(keywordIndex);
+    try {
+      const res = await fetch(`/api/seo-geo-plans/${plan.id}/check-keyword`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword, keywordIndex }),
+      });
+      const data = await res.json();
+      if (data.data) {
+        // Refresh plan data
+        const refreshRes = await fetch(`/api/data/seo-plans/${plan.id}`);
+        const refreshData = await refreshRes.json();
+        if (refreshData) setPlan(refreshData);
+      }
+    } catch (e) {
+      console.error('Keyword check failed:', e);
+    } finally {
+      setCheckingKeyword(null);
+    }
+  }, [plan, checkingKeyword]);
+
+  // ── Rescan handler ──
+  const handleRescan = useCallback(async () => {
+    if (!plan || rescanning) return;
+    setRescanning(true);
+    setRescanResult(null);
+    try {
+      const res = await fetch(`/api/seo-geo-plans/${plan.id}/rescan`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success !== false && data.data) {
+        setRescanResult(data.data);
+        // Refresh plan data
+        const refreshRes = await fetch(`/api/data/seo-plans/${plan.id}`);
+        const refreshData = await refreshRes.json();
+        if (refreshData) setPlan(refreshData);
+        // Auto-switch to progress tab
+        setActiveTab("progress");
+      } else {
+        alert(data.error || 'שגיאה בסריקה חוזרת');
+      }
+    } catch (e) {
+      console.error('Rescan failed:', e);
+      alert('שגיאה בסריקה חוזרת');
+    } finally {
+      setRescanning(false);
+    }
+  }, [plan, rescanning]);
 
   // Update task status — handles both weeks[] and days[] structures
   const updateTaskStatus = useCallback(async (taskId: string, newStatus: PlanTask["status"]) => {
@@ -1322,6 +1377,36 @@ export default function SeoPlanDetail() {
         </div>
 
         {/* ═══ TAB CONTENT ═══ */}
+
+        {/* Rescan button — shown in relevant tabs */}
+        {(activeTab === "overview" || activeTab === "ai" || activeTab === "keywords" || activeTab === "results") && plan?.websiteScan && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+            <button
+              onClick={handleRescan}
+              disabled={rescanning}
+              style={{
+                padding: "10px 24px",
+                borderRadius: 10,
+                border: "none",
+                background: rescanning ? C.border : "linear-gradient(135deg, #10b981, #059669)",
+                color: "#fff",
+                fontWeight: 700,
+                fontSize: 14,
+                cursor: rescanning ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                direction: "rtl",
+              }}
+            >
+              {rescanning ? (
+                <><span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⏳</span> סורק...</>
+              ) : (
+                <>🔄 סרוק לתוצאות מעודכנות</>
+              )}
+            </button>
+          </div>
+        )}
 
         {/* ── OVERVIEW ── */}
         {activeTab === "overview" && (
@@ -4465,7 +4550,7 @@ export default function SeoPlanDetail() {
                       </div>
                     ))}
                     <div>מקור / אתר</div>
-                    <div style={{ textAlign: "center" }}>עדכון דירוג</div>
+                    <div style={{ textAlign: "center" }}>בדיקה / עדכון</div>
                   </div>
 
                   {/* Rows */}
@@ -4527,19 +4612,23 @@ export default function SeoPlanDetail() {
                         {["chatgpt", "gemini", "perplexity", "claude", "google_ai_overview"].map(platId => {
                           const platData = kw.aiPlatforms[platId];
                           const found = platData?.found;
+                          const isUnavailable = platData?.scanMode === 'unavailable' || (!platData && !found);
                           return (
                             <div key={platId} style={{ textAlign: "center" }} title={
-                              found
+                              isUnavailable && !found
+                                ? `${PLATFORM_DISPLAY[platId]?.nameHe || platId} — לא מוגדר (API חסר)`
+                                : found
                                 ? `מופיע ב-${PLATFORM_DISPLAY[platId]?.nameHe || platId}${platData?.sources?.length ? ` — ${platData.sources.join(', ')}` : ''}`
                                 : `לא נמצא ב-${PLATFORM_DISPLAY[platId]?.nameHe || platId}`
                             }>
                               <div style={{
                                 width: 28, height: 28, borderRadius: 8,
                                 display: "inline-flex", alignItems: "center", justifyContent: "center",
-                                background: found ? `${PLATFORM_DISPLAY[platId]?.color || C.success}15` : `${C.textMuted}08`,
-                                border: `1.5px solid ${found ? (PLATFORM_DISPLAY[platId]?.color || C.success) + '40' : C.borderLight}`,
+                                background: found ? `${PLATFORM_DISPLAY[platId]?.color || C.success}15` : isUnavailable && !found ? `${C.textMuted}05` : `${C.textMuted}08`,
+                                border: `1.5px solid ${found ? (PLATFORM_DISPLAY[platId]?.color || C.success) + '40' : isUnavailable && !found ? `${C.textMuted}20` : C.borderLight}`,
+                                opacity: isUnavailable && !found ? 0.4 : 1,
                               }}>
-                                <span style={{ fontSize: 14 }}>{found ? '✓' : '✗'}</span>
+                                <span style={{ fontSize: 14 }}>{found ? '✓' : isUnavailable && !found ? '—' : '✗'}</span>
                               </div>
                             </div>
                           );
@@ -4566,55 +4655,71 @@ export default function SeoPlanDetail() {
                           )}
                         </div>
 
-                        {/* Rank update */}
-                        <div style={{ display: "flex", gap: 4, alignItems: "center", justifyContent: "center" }}>
-                          <input
-                            type="number"
-                            min={1}
-                            max={100}
-                            placeholder="#"
-                            value={editingRanks[kw.idx] ?? ''}
-                            onChange={e => setEditingRanks(prev => ({ ...prev, [kw.idx]: e.target.value }))}
-                            style={{
-                              width: 44, padding: "5px 4px",
-                              border: `1px solid ${C.border}`, borderRadius: 6,
-                              fontSize: 12, outline: "none", background: C.card,
-                              textAlign: "center",
-                            }}
-                          />
+                        {/* Rank update + Live check */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center", justifyContent: "center" }}>
                           <button
-                            onClick={async () => {
-                              const rank = Number(editingRanks[kw.idx]);
-                              if (!rank || rank < 1 || rank > 100) return;
-                              setSavingRanks(true);
-                              try {
-                                const res = await fetch(`/api/seo-geo-plans/${safePlan?.id}/keywords`, {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ keywordIndex: kw.idx, newRank: rank }),
-                                });
-                                if (res.ok) {
-                                  const updated = await res.json();
-                                  if (updated.clientKeywords) {
-                                    setPlan((prev: any) => prev ? { ...prev, clientKeywords: updated.clientKeywords } : prev);
-                                  }
-                                  setEditingRanks(prev => { const copy = { ...prev }; delete copy[kw.idx]; return copy; });
-                                }
-                              } catch (e) {
-                                console.error('Failed to update rank:', e);
-                              }
-                              setSavingRanks(false);
-                            }}
-                            disabled={savingRanks || !editingRanks[kw.idx]}
+                            onClick={() => handleCheckKeyword(kw.keyword, kw.idx)}
+                            disabled={checkingKeyword !== null}
                             style={{
-                              padding: "5px 8px", borderRadius: 6, border: "none",
-                              background: editingRanks[kw.idx] ? C.primary : C.border,
-                              color: editingRanks[kw.idx] ? "#fff" : C.textMuted,
-                              fontSize: 11, fontWeight: 600, cursor: "pointer",
+                              padding: "5px 10px", borderRadius: 6, border: "none",
+                              background: checkingKeyword === kw.idx ? C.warning : C.success,
+                              color: "#fff",
+                              fontSize: 11, fontWeight: 600, cursor: checkingKeyword !== null ? "wait" : "pointer",
+                              opacity: checkingKeyword !== null && checkingKeyword !== kw.idx ? 0.5 : 1,
+                              width: "100%",
                             }}
                           >
-                            עדכן
+                            {checkingKeyword === kw.idx ? '...בודק' : 'בדוק'}
                           </button>
+                          <div style={{ display: "flex", gap: 3, alignItems: "center" }}>
+                            <input
+                              type="number"
+                              min={1}
+                              max={100}
+                              placeholder="#"
+                              value={editingRanks[kw.idx] ?? ''}
+                              onChange={e => setEditingRanks(prev => ({ ...prev, [kw.idx]: e.target.value }))}
+                              style={{
+                                width: 38, padding: "4px 3px",
+                                border: `1px solid ${C.border}`, borderRadius: 6,
+                                fontSize: 11, outline: "none", background: C.card,
+                                textAlign: "center",
+                              }}
+                            />
+                            <button
+                              onClick={async () => {
+                                const rank = Number(editingRanks[kw.idx]);
+                                if (!rank || rank < 1 || rank > 100) return;
+                                setSavingRanks(true);
+                                try {
+                                  const res = await fetch(`/api/seo-geo-plans/${safePlan?.id}/keywords`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ keywordIndex: kw.idx, newRank: rank }),
+                                  });
+                                  if (res.ok) {
+                                    const updated = await res.json();
+                                    if (updated.clientKeywords) {
+                                      setPlan((prev: any) => prev ? { ...prev, clientKeywords: updated.clientKeywords } : prev);
+                                    }
+                                    setEditingRanks(prev => { const copy = { ...prev }; delete copy[kw.idx]; return copy; });
+                                  }
+                                } catch (e) {
+                                  console.error('Failed to update rank:', e);
+                                }
+                                setSavingRanks(false);
+                              }}
+                              disabled={savingRanks || !editingRanks[kw.idx]}
+                              style={{
+                                padding: "4px 6px", borderRadius: 6, border: "none",
+                                background: editingRanks[kw.idx] ? C.primary : C.border,
+                                color: editingRanks[kw.idx] ? "#fff" : C.textMuted,
+                                fontSize: 10, fontWeight: 600, cursor: "pointer",
+                              }}
+                            >
+                              עדכן
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -4948,6 +5053,240 @@ export default function SeoPlanDetail() {
             </div>
           </div>
         )}
+
+        {activeTab === "progress" && (() => {
+          const planAny = plan as any;
+          const baseline = planAny?.baselineScan;
+          const currentScan = plan?.websiteScan;
+          const history = planAny?.scanHistory || [];
+          const baselineAi = planAny?.baselineAiQueries || [];
+          const currentAi = (currentScan as any)?.aiQueries || [];
+          const baselineDate = planAny?.baselineCapturedAt;
+          const lastRescan = planAny?.lastRescanAt;
+
+          // Calculate visibility scores
+          const baselineFound = baselineAi.filter((q: any) => q.found).length;
+          const baselineTotal = baselineAi.length;
+          const currentFound = currentAi.filter((q: any) => q.found).length;
+          const currentTotal = currentAi.length;
+
+          // Technical comparison
+          const technicalChanges: { metric: string; before: any; after: any; improved: boolean }[] = [];
+          if (baseline && currentScan) {
+            if (baseline.hasSSL !== currentScan.hasSSL) technicalChanges.push({ metric: 'SSL', before: baseline.hasSSL ? '✅' : '❌', after: currentScan.hasSSL ? '✅' : '❌', improved: !!currentScan.hasSSL });
+            if (baseline.hasSitemap !== currentScan.hasSitemap) technicalChanges.push({ metric: 'Sitemap', before: baseline.hasSitemap ? '✅' : '❌', after: currentScan.hasSitemap ? '✅' : '❌', improved: !!currentScan.hasSitemap });
+            if (baseline.hasRobotsTxt !== currentScan.hasRobotsTxt) technicalChanges.push({ metric: 'Robots.txt', before: baseline.hasRobotsTxt ? '✅' : '❌', after: currentScan.hasRobotsTxt ? '✅' : '❌', improved: !!currentScan.hasRobotsTxt });
+            if (baseline.structuredData !== currentScan.structuredData) technicalChanges.push({ metric: 'Schema Markup', before: baseline.structuredData ? '✅' : '❌', after: currentScan.structuredData ? '✅' : '❌', improved: !!currentScan.structuredData });
+            if (baseline.openGraph !== currentScan.openGraph) technicalChanges.push({ metric: 'Open Graph', before: baseline.openGraph ? '✅' : '❌', after: currentScan.openGraph ? '✅' : '❌', improved: !!currentScan.openGraph });
+            const loadDiff = (currentScan.loadTimeMs || 0) - (baseline.loadTimeMs || 0);
+            if (Math.abs(loadDiff) > 100) technicalChanges.push({ metric: 'זמן טעינה', before: `${baseline.loadTimeMs}ms`, after: `${currentScan.loadTimeMs}ms`, improved: loadDiff < 0 });
+            const issueDiff = (currentScan.issues?.length || 0) - (baseline.issues?.length || 0);
+            if (issueDiff !== 0) technicalChanges.push({ metric: 'מספר בעיות', before: baseline.issues?.length || 0, after: currentScan.issues?.length || 0, improved: issueDiff < 0 });
+          }
+
+          // Keyword comparison
+          const baselineKw = planAny?.baselineKeywordRanks || [];
+          const currentKw = planAny?.clientKeywords || [];
+          const keywordChanges = baselineKw.map((bkw: any) => {
+            const ckw = currentKw.find((k: any) => k.keyword === bkw.keyword);
+            const currentRank = ckw?.currentRank ?? null;
+            const baselineRank = bkw.rank;
+            const improved = currentRank !== null && baselineRank !== null ? currentRank < baselineRank : false;
+            const declined = currentRank !== null && baselineRank !== null ? currentRank > baselineRank : false;
+            return { keyword: bkw.keyword, before: baselineRank, after: currentRank, improved, declined };
+          });
+
+          const hasBaseline = !!baseline;
+          const lastScanEntry = history.length > 0 ? history[history.length - 1] : null;
+
+          return (
+            <div style={{ direction: "rtl" }}>
+              {/* Header */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                <div>
+                  <h2 style={{ fontSize: 22, fontWeight: 800, color: C.text, margin: 0 }}>📈 התקדמות והצלחה</h2>
+                  <p style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
+                    {hasBaseline
+                      ? `נקודת התחלה: ${new Date(baselineDate).toLocaleDateString('he-IL')} | סריקה אחרונה: ${lastRescan ? new Date(lastRescan).toLocaleDateString('he-IL') : '—'}`
+                      : 'טרם בוצעה סריקה חוזרת — לחץ על הכפתור לביצוע סריקה ראשונה'}
+                  </p>
+                </div>
+                <button
+                  onClick={handleRescan}
+                  disabled={rescanning}
+                  style={{
+                    padding: "10px 24px",
+                    borderRadius: 10,
+                    border: "none",
+                    background: rescanning ? C.border : "linear-gradient(135deg, #10b981, #059669)",
+                    color: "#fff",
+                    fontWeight: 700,
+                    fontSize: 14,
+                    cursor: rescanning ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  {rescanning ? <><span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⏳</span> סורק...</> : <>🔄 סרוק לתוצאות מעודכנות</>}
+                </button>
+              </div>
+
+              {!hasBaseline ? (
+                <div style={{ background: C.cardBg, borderRadius: 16, padding: 48, textAlign: "center", border: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>📊</div>
+                  <h3 style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>טרם בוצעה סריקה חוזרת</h3>
+                  <p style={{ fontSize: 14, color: C.textMuted, marginBottom: 24 }}>
+                    לחץ על "סרוק לתוצאות מעודכנות" כדי ליצור נקודת בסיס ולהתחיל לעקוב אחר ההתקדמות שלך
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Summary cards */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+                    {[
+                      { label: "סריקות", value: history.length, icon: "🔍", sub: `מאז ${new Date(baselineDate).toLocaleDateString('he-IL')}` },
+                      { label: "אזכורי AI", value: `${currentFound}/${currentTotal}`, icon: "🤖", sub: baselineTotal > 0 ? `היה: ${baselineFound}/${baselineTotal}` : '—', improved: currentFound > baselineFound },
+                      { label: "שיפורים טכניים", value: technicalChanges.filter(c => c.improved).length, icon: "✅", sub: `מתוך ${technicalChanges.length} שינויים` },
+                      { label: "ביטויים שעלו", value: keywordChanges.filter((k: any) => k.improved).length, icon: "🔑", sub: `מתוך ${keywordChanges.length} ביטויים` },
+                    ].map((card, i) => (
+                      <div key={i} style={{ background: C.cardBg, borderRadius: 14, padding: 20, border: `1px solid ${C.border}`, textAlign: "center" }}>
+                        <div style={{ fontSize: 28, marginBottom: 8 }}>{card.icon}</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: C.text }}>{card.value}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: C.textSecondary, marginBottom: 4 }}>{card.label}</div>
+                        <div style={{ fontSize: 11, color: (card as any).improved ? '#10b981' : C.textMuted }}>{card.sub}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* AI Visibility comparison */}
+                  {baselineAi.length > 0 && (
+                    <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>🤖 השוואת נראות AI</h3>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ borderBottom: `2px solid ${C.border}` }}>
+                            <th style={{ padding: "8px 12px", textAlign: "right", fontWeight: 700, color: C.textSecondary }}>פלטפורמה</th>
+                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>נקודת התחלה</th>
+                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>מצב נוכחי</th>
+                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>שינוי</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(() => {
+                            const platforms = [...new Set([...baselineAi.map((q: any) => q.platform), ...currentAi.map((q: any) => q.platform)])];
+                            return platforms.map((p: string) => {
+                              const bFound = baselineAi.filter((q: any) => q.platform === p && q.found).length;
+                              const bTotal = baselineAi.filter((q: any) => q.platform === p).length;
+                              const cFound = currentAi.filter((q: any) => q.platform === p && q.found).length;
+                              const cTotal = currentAi.filter((q: any) => q.platform === p).length;
+                              const delta = cFound - bFound;
+                              return (
+                                <tr key={p} style={{ borderBottom: `1px solid ${C.border}` }}>
+                                  <td style={{ padding: "10px 12px", fontWeight: 600 }}>{p}</td>
+                                  <td style={{ padding: "10px 12px", textAlign: "center" }}>{bFound}/{bTotal}</td>
+                                  <td style={{ padding: "10px 12px", textAlign: "center" }}>{cFound}/{cTotal}</td>
+                                  <td style={{ padding: "10px 12px", textAlign: "center", color: delta > 0 ? '#10b981' : delta < 0 ? '#ef4444' : C.textMuted, fontWeight: 700 }}>
+                                    {delta > 0 ? `↑ +${delta}` : delta < 0 ? `↓ ${delta}` : '—'}
+                                  </td>
+                                </tr>
+                              );
+                            });
+                          })()}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Technical comparison */}
+                  {technicalChanges.length > 0 && (
+                    <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>🔧 שינויים טכניים</h3>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ borderBottom: `2px solid ${C.border}` }}>
+                            <th style={{ padding: "8px 12px", textAlign: "right", fontWeight: 700, color: C.textSecondary }}>מדד</th>
+                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>נקודת התחלה</th>
+                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>מצב נוכחי</th>
+                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>סטטוס</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {technicalChanges.map((change, i) => (
+                            <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                              <td style={{ padding: "10px 12px", fontWeight: 600 }}>{change.metric}</td>
+                              <td style={{ padding: "10px 12px", textAlign: "center" }}>{String(change.before)}</td>
+                              <td style={{ padding: "10px 12px", textAlign: "center" }}>{String(change.after)}</td>
+                              <td style={{ padding: "10px 12px", textAlign: "center", color: change.improved ? '#10b981' : '#ef4444', fontWeight: 700 }}>
+                                {change.improved ? '✅ שופר' : '⚠️ דורש טיפול'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Keyword ranking changes */}
+                  {keywordChanges.length > 0 && (
+                    <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>🔑 התקדמות ביטויים</h3>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ borderBottom: `2px solid ${C.border}` }}>
+                            <th style={{ padding: "8px 12px", textAlign: "right", fontWeight: 700, color: C.textSecondary }}>ביטוי</th>
+                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>דירוג התחלתי</th>
+                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>דירוג נוכחי</th>
+                            <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>שינוי</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {keywordChanges.map((kw: any, i: number) => {
+                            const delta = kw.before !== null && kw.after !== null ? kw.before - kw.after : null;
+                            return (
+                              <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                                <td style={{ padding: "10px 12px", fontWeight: 600 }}>{kw.keyword}</td>
+                                <td style={{ padding: "10px 12px", textAlign: "center" }}>{kw.before ?? '—'}</td>
+                                <td style={{ padding: "10px 12px", textAlign: "center" }}>{kw.after ?? '—'}</td>
+                                <td style={{ padding: "10px 12px", textAlign: "center", color: kw.improved ? '#10b981' : kw.declined ? '#ef4444' : C.textMuted, fontWeight: 700 }}>
+                                  {delta !== null && delta !== 0 ? (delta > 0 ? `↑ +${delta}` : `↓ ${delta}`) : '—'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Scan history timeline */}
+                  {history.length > 0 && (
+                    <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}` }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>📅 היסטוריית סריקות</h3>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                        {history.slice().reverse().map((entry: any, i: number) => (
+                          <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, padding: 12, background: i === 0 ? 'rgba(16,185,129,0.06)' : 'transparent', borderRadius: 10, border: `1px solid ${i === 0 ? 'rgba(16,185,129,0.2)' : C.border}` }}>
+                            <div style={{ width: 10, height: 10, borderRadius: "50%", background: i === 0 ? '#10b981' : C.border, flexShrink: 0 }} />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+                                {new Date(entry.scannedAt).toLocaleDateString('he-IL')} {new Date(entry.scannedAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+                              </div>
+                              {entry.summary && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4, whiteSpace: "pre-line" }}>{entry.summary}</div>}
+                            </div>
+                            <div style={{ display: "flex", gap: 12, fontSize: 12, color: C.textSecondary }}>
+                              <span>⚡ {entry.websiteScan?.loadTimeMs || 0}ms</span>
+                              <span>⚠️ {entry.websiteScan?.issues?.length || 0} בעיות</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })()}
 
       </div>
     </div>

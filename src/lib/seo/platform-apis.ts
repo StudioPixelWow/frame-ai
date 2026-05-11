@@ -219,58 +219,169 @@ function extractDomainFromUrl(url: string): string {
   }
 }
 
-export async function queryGoogle(query: string, targetDomain: string): Promise<PlatformQueryResult> {
-  if (!isGoogleAvailable()) return { found: false, confidence: 0, scanMode: 'unavailable' };
-
+/**
+ * Direct Google SERP scraping — fetches google.co.il and parses HTML results
+ * This gives REAL organic rankings, unlike Custom Search API which is a different engine.
+ */
+async function scrapeGoogleSerp(query: string, targetDomain: string): Promise<PlatformQueryResult> {
   try {
-    const apiKey = process.env.GOOGLE_SEARCH_API_KEY!;
-    const cx = process.env.GOOGLE_SEARCH_CX!;
-    const url = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodeURIComponent(query)}&num=10`;
+    const searchUrl = `https://www.google.co.il/search?q=${encodeURIComponent(query)}&num=20&hl=he&gl=il`;
+    const res = await fetchWithTimeout(searchUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7',
+      },
+    }, 10000);
 
-    const res = await fetchWithTimeout(url, { method: 'GET' });
-    if (!res.ok) return { found: false, confidence: 0, scanMode: 'real' };
+    if (!res.ok) {
+      console.log(`[GOOGLE-SERP] HTTP ${res.status} for query: ${query}`);
+      return { found: false, confidence: 0, scanMode: 'real' };
+    }
 
-    const data = await res.json();
-    const items = data.items || [];
+    const html = await res.text();
 
+    // Clean the target domain for matching
     const domain = targetDomain.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
+    const domainNoWww = domain.replace(/^www\./, '');
+
+    // Extract all result links from Google SERP HTML
+    // Google results are in <a href="..."> tags, we look for ones containing our domain
+    const linkRegex = /href="(https?:\/\/[^"]+)"/gi;
+    const allLinks: string[] = [];
+    let match;
+    while ((match = linkRegex.exec(html)) !== null) {
+      const link = match[1].toLowerCase();
+      // Skip Google's own links
+      if (link.includes('google.') || link.includes('gstatic.') || link.includes('youtube.com/results') || link.includes('accounts.google')) continue;
+      // Skip duplicate tracking URLs
+      if (link.startsWith('https://www.google.co.il/url?') || link.startsWith('/url?')) continue;
+      allLinks.push(link);
+    }
+
+    // Also check <cite> tags which contain displayed URLs
+    const citeRegex = /<cite[^>]*>([^<]+)<\/cite>/gi;
+    const citeUrls: string[] = [];
+    while ((match = citeRegex.exec(html)) !== null) {
+      citeUrls.push(match[1].toLowerCase().replace(/<[^>]+>/g, '').trim());
+    }
+
+    // Find position of our domain
     let position = -1;
     let snippet = '';
+    let posCounter = 0;
 
-    for (let i = 0; i < items.length; i++) {
-      const link = (items[i].link || '').toLowerCase();
-      if (link.includes(domain)) {
-        position = i + 1;
-        snippet = items[i].snippet || items[i].title || '';
+    // Method 1: Check organic result divs - look for data-header-feature="0" or class="g"
+    const resultDivRegex = /<div class="[^"]*\bg\b[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/gi;
+    const resultBlocks = html.match(resultDivRegex) || [];
+
+    for (const block of resultBlocks) {
+      posCounter++;
+      const blockLower = block.toLowerCase();
+      if (blockLower.includes(domain) || blockLower.includes(domainNoWww)) {
+        position = posCounter;
+        // Try to extract snippet
+        const snippetMatch = block.match(/<span[^>]*class="[^"]*"[^>]*>([^<]{20,})/i);
+        snippet = snippetMatch ? snippetMatch[1].replace(/<[^>]+>/g, '').trim().slice(0, 200) : '';
         break;
       }
     }
 
-    // Collect competitor domains from search results
-    const competitors = items
-      .filter((item: any) => !item.link.toLowerCase().includes(domain))
-      .slice(0, 5)
-      .map((item: any) => ({
-        domain: extractDomainFromUrl(item.link),
-        title: item.title || '',
-        snippet: item.snippet || '',
-      }));
+    // Method 2: If method 1 didn't find it, check all links
+    if (position === -1) {
+      const uniqueLinks = [...new Set(allLinks)];
+      for (let i = 0; i < uniqueLinks.length; i++) {
+        if (uniqueLinks[i].includes(domain) || uniqueLinks[i].includes(domainNoWww)) {
+          position = i + 1; // approximate position
+          break;
+        }
+      }
+    }
 
-    return {
-      found: position > 0,
-      position: position > 0 ? position : undefined,
-      snippet: snippet || undefined,
-      confidence: position > 0 ? Math.max(100 - (position - 1) * 10, 30) : 0,
-      scanMode: 'real',
-      raw: {
-        totalResults: data.searchInformation?.totalResults,
-        itemCount: items.length,
-        competitors: competitors,
-      },
-    };
-  } catch {
+    // Method 3: Check cite tags
+    if (position === -1) {
+      for (let i = 0; i < citeUrls.length; i++) {
+        if (citeUrls[i].includes(domainNoWww)) {
+          position = i + 1;
+          break;
+        }
+      }
+    }
+
+    // Method 4: Simple text check — does the domain appear anywhere in the SERP?
+    const htmlLower = html.toLowerCase();
+    const domainInSerp = htmlLower.includes(domainNoWww);
+
+    if (position > 0) {
+      return {
+        found: true,
+        position,
+        snippet: snippet || undefined,
+        confidence: Math.max(100 - (position - 1) * 5, 30),
+        scanMode: 'real',
+      };
+    } else if (domainInSerp) {
+      // Domain appears somewhere but we couldn't determine exact position
+      return {
+        found: true,
+        position: undefined,
+        snippet: `הדומיין ${domainNoWww} מופיע בתוצאות`,
+        confidence: 50,
+        scanMode: 'real',
+      };
+    }
+
+    return { found: false, confidence: 0, scanMode: 'real' };
+  } catch (err) {
+    console.error('[GOOGLE-SERP] Scrape error:', err);
     return { found: false, confidence: 0, scanMode: 'real' };
   }
+}
+
+export async function queryGoogle(query: string, targetDomain: string): Promise<PlatformQueryResult> {
+  // First try Google Custom Search API if configured
+  if (isGoogleAvailable()) {
+    try {
+      const apiKey = process.env.GOOGLE_SEARCH_API_KEY!;
+      const cx = process.env.GOOGLE_SEARCH_CX!;
+      const url = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodeURIComponent(query)}&num=10&gl=il&hl=he`;
+
+      const res = await fetchWithTimeout(url, { method: 'GET' });
+      if (res.ok) {
+        const data = await res.json();
+        const items = data.items || [];
+
+        const domain = targetDomain.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
+        let position = -1;
+        let snippet = '';
+
+        for (let i = 0; i < items.length; i++) {
+          const link = (items[i].link || '').toLowerCase();
+          if (link.includes(domain) || link.includes(domain.replace(/^www\./, ''))) {
+            position = i + 1;
+            snippet = items[i].snippet || items[i].title || '';
+            break;
+          }
+        }
+
+        if (position > 0) {
+          return {
+            found: true,
+            position,
+            snippet: snippet || undefined,
+            confidence: Math.max(100 - (position - 1) * 10, 30),
+            scanMode: 'real',
+          };
+        }
+      }
+    } catch (e) {
+      console.log('[GOOGLE-API] Custom Search failed, falling back to SERP scrape');
+    }
+  }
+
+  // Fallback: Always try direct SERP scraping
+  return scrapeGoogleSerp(query, targetDomain);
 }
 
 // ── OpenAI / ChatGPT ──────────────────────────────────────────────────────────

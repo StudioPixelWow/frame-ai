@@ -1884,6 +1884,36 @@ export interface SeoPlan {
     executedTasks: number;
     successfulTasks: number;
   }>;
+  // Scan history & baseline tracking for progress reports
+  baselineScan?: SeoWebsiteScan | null;
+  baselineAiQueries?: Array<{
+    platform: string;
+    query: string;
+    queryId: string;
+    found: boolean;
+    position?: number;
+    snippet?: string;
+    confidence: number;
+    scanMode: string;
+    checkedAt: string;
+    responseText?: string;
+    sources?: {url: string; domain: string; title?: string}[];
+    mentionType?: string;
+  }> | null;
+  baselineKeywordRanks?: Array<{ keyword: string; rank: number | null; checkedAt: string }> | null;
+  baselineCapturedAt?: string | null;
+  scanHistory?: Array<{
+    scanId: string;
+    scannedAt: string;
+    websiteScan: SeoWebsiteScan;
+    aiQueries?: any[];
+    keywordRanks?: Array<{ keyword: string; rank: number | null }>;
+    visibilityScore?: number;
+    technicalScore?: number;
+    overallScore?: number;
+    summary?: string;
+  }> | null;
+  lastRescanAt?: string | null;
 }
 
 // ─── SEO/GEO Extended Types ─────────────────────────────────────────────────
