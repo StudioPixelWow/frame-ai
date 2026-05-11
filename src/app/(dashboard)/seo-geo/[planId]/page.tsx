@@ -515,29 +515,41 @@ export default function SeoPlanDetail() {
   // ── Check ALL keywords handler ──
   const handleCheckAllKeywords = useCallback(async () => {
     if (!plan || checkingAll) return;
-    const keywords = ((plan as any).clientKeywords || []).map((kw: any, idx: number) => ({
+
+    // Collect client keywords
+    const clientKws = ((plan as any).clientKeywords || []).map((kw: any, idx: number) => ({
       keyword: typeof kw === 'string' ? kw : kw?.keyword || '',
       idx,
+      isAiKeyword: false,
     })).filter((k: any) => k.keyword);
-    if (keywords.length === 0) return;
+
+    // Collect AI-generated keywords
+    const aiKws = ((plan as any).aiKeywords || []).map((kw: any, idx: number) => ({
+      keyword: typeof kw === 'string' ? kw : kw?.keyword || '',
+      idx,
+      isAiKeyword: true,
+    })).filter((k: any) => k.keyword);
+
+    const allKeywords = [...clientKws, ...aiKws];
+    if (allKeywords.length === 0) return;
 
     setCheckingAll(true);
-    setCheckAllProgress({ current: 0, total: keywords.length });
+    setCheckAllProgress({ current: 0, total: allKeywords.length });
 
-    for (let i = 0; i < keywords.length; i++) {
-      const { keyword, idx } = keywords[i];
-      setCheckAllProgress({ current: i + 1, total: keywords.length });
-      setCheckingKeyword(idx);
+    for (let i = 0; i < allKeywords.length; i++) {
+      const { keyword, idx, isAiKeyword } = allKeywords[i];
+      setCheckAllProgress({ current: i + 1, total: allKeywords.length });
+      setCheckingKeyword(isAiKeyword ? idx + 10000 : idx); // offset to distinguish AI vs client
       try {
         const res = await fetch(`/api/seo-geo-plans/${plan.id}/check-keyword`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ keyword, keywordIndex: idx }),
+          body: JSON.stringify({ keyword, keywordIndex: idx, isAiKeyword }),
         });
         const data = await res.json();
-        if (data.error) console.error(`Check keyword ${idx} error:`, data.error);
+        if (data.error) console.error(`Check keyword ${idx} (ai=${isAiKeyword}) error:`, data.error);
       } catch (e) {
-        console.error(`Check keyword ${idx} failed:`, e);
+        console.error(`Check keyword ${idx} (ai=${isAiKeyword}) failed:`, e);
       }
     }
 
@@ -558,10 +570,12 @@ export default function SeoPlanDetail() {
   useEffect(() => {
     if (!plan || loading || checkingAll || autoCheckTriggered.current) return;
     const clientKws = ((plan as any).clientKeywords || []);
-    if (clientKws.length === 0) return;
+    const aiKws = ((plan as any).aiKeywords || []);
+    if (clientKws.length === 0 && aiKws.length === 0) return;
 
-    // Check if keywords were recently checked (within last 4 hours)
-    const hasRecentCheck = clientKws.some((kw: any) => {
+    // Check if any keywords were recently checked (within last 4 hours)
+    const allKws = [...clientKws, ...aiKws];
+    const hasRecentCheck = allKws.some((kw: any) => {
       const checked = kw?.lastCheckedAt;
       if (!checked) return false;
       const diff = Date.now() - new Date(checked).getTime();
@@ -4847,203 +4861,310 @@ export default function SeoPlanDetail() {
                 </div>
               )}
 
-              {totalKeywords === 0 ? (
-                <div style={{ textAlign: "center", padding: "40px 20px" }}>
-                  <div style={{ fontSize: 48, marginBottom: 16 }}>🔑</div>
-                  <p style={{ color: C.textMuted, fontSize: 15, marginBottom: 20 }}>
-                    אין ביטויי SEO זמינים. ניתן להפעיל העשרת AI לגילוי ביטויים חכמים.
-                  </p>
-                  <button
-                    onClick={handleAIEnrich}
-                    disabled={enrichingAI}
-                    style={{
-                      background: enrichingAI ? C.border : `linear-gradient(135deg, ${C.primary}, ${C.info})`,
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: 12,
-                      padding: "12px 28px",
-                      fontSize: 15,
-                      fontWeight: 700,
-                      cursor: enrichingAI ? "not-allowed" : "pointer",
-                      opacity: enrichingAI ? 0.7 : 1,
-                    }}
-                  >
-                    {enrichingAI ? "⏳ מעשיר עם AI..." : "🤖 העשרת AI — ביטויים, מתחרים ומאמרים"}
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {/* AI re-enrich button */}
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
-                    <button
-                      onClick={handleAIEnrich}
-                      disabled={enrichingAI}
-                      style={{
-                        background: enrichingAI ? C.border : `${C.primary}15`,
-                        color: enrichingAI ? C.textMuted : C.primary,
-                        border: `1px solid ${enrichingAI ? C.border : C.primary}30`,
-                        borderRadius: 8,
-                        padding: "6px 16px",
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: enrichingAI ? "not-allowed" : "pointer",
-                      }}
-                    >
-                      {enrichingAI ? "⏳ מעשיר..." : "🤖 רענן עם AI"}
-                    </button>
-                  </div>
+              {/* ── AI-Generated Keywords — Premium Table (same as manual) ── */}
+              {(() => {
+                const rawAiKws: any[] = Array.isArray((safePlan as any)?.aiKeywords) ? (safePlan as any).aiKeywords : [];
+                if (rawAiKws.length === 0) {
+                  return (
+                    <div style={{ textAlign: "center", padding: "40px 20px" }}>
+                      <div style={{ fontSize: 48, marginBottom: 16 }}>🤖</div>
+                      <p style={{ color: C.textMuted, fontSize: 15, marginBottom: 20 }}>
+                        אין ביטויי AI. ניתן להפעיל העשרת AI לגילוי ביטויים חכמים.
+                      </p>
+                      <button
+                        onClick={handleAIEnrich}
+                        disabled={enrichingAI}
+                        style={{
+                          background: enrichingAI ? C.border : `linear-gradient(135deg, ${C.primary}, ${C.info})`,
+                          color: "#fff", border: "none", borderRadius: 12,
+                          padding: "12px 28px", fontSize: 15, fontWeight: 700,
+                          cursor: enrichingAI ? "not-allowed" : "pointer",
+                          opacity: enrichingAI ? 0.7 : 1,
+                        }}
+                      >
+                        {enrichingAI ? "⏳ מעשיר עם AI..." : "🤖 העשרת AI — ביטויים, מתחרים ומאמרים"}
+                      </button>
+                    </div>
+                  );
+                }
 
-                  {/* Summary stats */}
-                  <div style={{
-                    display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20,
-                  }}>
-                    {[
-                      { label: "ביטויים כלל", value: totalKeywords, color: C.text, icon: "🔑" },
-                      { label: "בעמוד 1 בגוגל", value: foundInGoogle, color: C.success, icon: "🏆" },
-                      { label: "נמצאים ב-AI", value: foundInAI, color: C.primary, icon: "🤖" },
-                      { label: "דירוג ממוצע", value: avgPosition > 0 ? Math.round(avgPosition) : "—", color: foundInGoogle > 0 ? C.success : C.warning, icon: "📊" },
-                    ].map((stat, i) => (
-                      <div key={i} style={{
-                        background: C.card,
-                        borderRadius: 14,
-                        border: `1px solid ${C.border}`,
-                        padding: "14px 16px",
-                        textAlign: "center",
-                      }}>
-                        <div style={{ fontSize: 18, marginBottom: 6 }}>{stat.icon}</div>
-                        <div style={{ fontSize: 22, fontWeight: 800, color: stat.color, marginBottom: 4 }}>
-                          {s(stat.value)}
+                // Enrich AI keywords same way as client keywords
+                const aiKwEnriched = rawAiKws.map((kw: any, idx: number) => {
+                  const kwText = (typeof kw === 'string' ? kw : kw?.keyword || '').toLowerCase().trim();
+                  const matchingQueries = scanAiQueries.filter((aq: any) => {
+                    const aqQuery = (aq.query || '').toLowerCase().trim();
+                    return aqQuery.includes(kwText) || kwText.includes(aqQuery);
+                  });
+                  const platformMap: Record<string, { found: boolean; sources: string[]; snippet: string; position?: number }> = {};
+                  for (const mq of matchingQueries) {
+                    const plat = mq.platform || 'unknown';
+                    if (!platformMap[plat]) platformMap[plat] = { found: false, sources: [], snippet: '', position: undefined };
+                    if (mq.found) platformMap[plat].found = true;
+                    if (mq.snippet) platformMap[plat].snippet = mq.snippet;
+                    if (mq.position) platformMap[plat].position = mq.position;
+                    if (Array.isArray(mq.sources)) {
+                      for (const src of mq.sources) {
+                        const srcName = typeof src === 'string' ? src : (src?.name || src?.url || src?.title || '');
+                        if (srcName && !platformMap[plat].sources.includes(srcName)) platformMap[plat].sources.push(srcName);
+                      }
+                    }
+                    if (mq.source && !platformMap[plat].sources.includes(mq.source)) platformMap[plat].sources.push(mq.source);
+                  }
+                  const googleQ = matchingQueries.find((q: any) => q.platform === 'google_seo' && q.position);
+                  const googlePos = googleQ?.position || kw.currentRank || null;
+                  const aiPlatformsFound = Object.entries(platformMap).filter(([p, d]) => d.found && p !== 'google_seo');
+                  // Trend from history
+                  const history = kw.history || [];
+                  let trend = 'new';
+                  if (history.length >= 2) {
+                    const last = history[history.length - 1]?.rank;
+                    const prev = history[history.length - 2]?.rank;
+                    if (last && prev) trend = last < prev ? 'up' : last > prev ? 'down' : 'stable';
+                  }
+                  return {
+                    ...kw,
+                    keyword: typeof kw === 'string' ? kw : kw?.keyword || '',
+                    idx,
+                    googlePosition: googlePos,
+                    aiPlatforms: platformMap,
+                    aiPlatformsFound,
+                    totalAiEngines: aiPlatformsFound.length,
+                    trend,
+                    category: kw.category || 'core',
+                  };
+                });
+
+                const aiWithGoogle = aiKwEnriched.filter((k: any) => k.googlePosition !== null);
+                const aiInAI = aiKwEnriched.filter((k: any) => k.totalAiEngines > 0);
+
+                return (
+                  <div style={{ marginBottom: 32 }}>
+                    {/* Header */}
+                    <div style={{
+                      ...cardStyle,
+                      marginBottom: 0,
+                      borderRadius: "16px 16px 0 0",
+                      background: `linear-gradient(135deg, #10A37F08, ${C.info}05)`,
+                      border: `2px solid #10A37F25`,
+                      borderBottom: "none",
+                      padding: "20px 24px",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
+                          <div style={{
+                            width: 40, height: 40, borderRadius: 12,
+                            background: `linear-gradient(135deg, #10A37F, ${C.info})`,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 20,
+                          }}>🤖</div>
+                          <div>
+                            <h3 style={{ ...sectionTitle, margin: 0 }}>ביטויי SEO מ-AI</h3>
+                            <p style={{ fontSize: 12, color: C.textMuted, margin: "2px 0 0" }}>
+                              {aiKwEnriched.length} ביטויים שנוצרו ע״י בינה מלאכותית — מעקב מיקום גוגל ונוכחות במנועי AI
+                            </p>
+                          </div>
                         </div>
-                        <div style={{ fontSize: 11, color: C.textMuted }}>{stat.label}</div>
+                        <button
+                          onClick={handleAIEnrich}
+                          disabled={enrichingAI}
+                          style={{
+                            padding: "8px 16px", borderRadius: 8, border: "none",
+                            background: enrichingAI ? C.border : `#10A37F15`,
+                            color: enrichingAI ? C.textMuted : "#10A37F",
+                            fontSize: 12, fontWeight: 600,
+                            cursor: enrichingAI ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {enrichingAI ? "⏳ מעשיר..." : "🤖 רענן עם AI"}
+                        </button>
                       </div>
-                    ))}
-                  </div>
 
-                  {/* Category sections */}
-                  {Array.from(groupedByCategory.entries()).map(([catKey, keywords]) => {
-                    const config = categoryConfig[catKey as string] || { label: catKey, color: C.text, icon: "📌" };
-                    return (
-                      <div key={catKey} style={{
-                        marginBottom: 24,
-                        ...cardStyle,
-                      }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-                          <span style={{ fontSize: 18 }}>{config.icon}</span>
-                          <h3 style={{ ...sectionTitle, margin: 0 }}>{config.label}</h3>
-                          <span style={{
-                            ...tagStyle,
-                            background: `${config.color}15`,
-                            color: config.color,
-                            marginLeft: "auto",
-                          }}>
-                            {keywords.length} ביטויים
-                          </span>
+                      {/* Summary cards */}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginTop: 16 }}>
+                        <div style={{ background: C.card, borderRadius: 12, padding: "12px 16px", border: `1px solid ${C.borderLight}`, textAlign: "center" }}>
+                          <div style={{ fontSize: 22, fontWeight: 800, color: "#10A37F" }}>{aiKwEnriched.length}</div>
+                          <div style={{ fontSize: 11, color: C.textMuted }}>ביטויים</div>
                         </div>
+                        <div style={{ background: C.card, borderRadius: 12, padding: "12px 16px", border: `1px solid ${C.borderLight}`, textAlign: "center" }}>
+                          <div style={{ fontSize: 22, fontWeight: 800, color: C.success }}>{aiWithGoogle.length}</div>
+                          <div style={{ fontSize: 11, color: C.textMuted }}>מדורגים בגוגל</div>
+                        </div>
+                        <div style={{ background: C.card, borderRadius: 12, padding: "12px 16px", border: `1px solid ${C.borderLight}`, textAlign: "center" }}>
+                          <div style={{ fontSize: 22, fontWeight: 800, color: C.primary }}>{aiInAI.length}</div>
+                          <div style={{ fontSize: 11, color: C.textMuted }}>מופיעים ב-AI</div>
+                        </div>
+                        <div style={{ background: C.card, borderRadius: 12, padding: "12px 16px", border: `1px solid ${C.borderLight}`, textAlign: "center" }}>
+                          <div style={{ fontSize: 22, fontWeight: 800, color: C.danger }}>
+                            {aiKwEnriched.filter((k: any) => k.googlePosition === null && k.totalAiEngines === 0).length}
+                          </div>
+                          <div style={{ fontSize: 11, color: C.textMuted }}>לא מופיעים בכלל</div>
+                        </div>
+                      </div>
+                    </div>
 
-                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                          {keywords.map(kw => {
-                            const isExpanded = expandedKeyword === kw.id;
-                            const statusColor = !kw.googlePosition
-                              ? C.warning
-                              : kw.googlePosition <= 5
-                                ? C.success
-                                : kw.googlePosition <= 10
-                                  ? C.info
-                                  : C.warning;
+                    {/* Table header */}
+                    <div style={{
+                      display: "grid",
+                      gridTemplateColumns: "minmax(140px, 2fr) 70px 80px 60px repeat(5, 44px) minmax(120px, 1.5fr) 60px",
+                      gap: 4,
+                      fontSize: 10,
+                      color: C.textMuted,
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.5,
+                      padding: "10px 16px",
+                      background: C.bg,
+                      border: `2px solid #10A37F25`,
+                      borderTop: "none",
+                    }}>
+                      <div>ביטוי</div>
+                      <div style={{ textAlign: "center" }}>קטגוריה</div>
+                      <div style={{ textAlign: "center" }}>גוגל</div>
+                      <div style={{ textAlign: "center" }}>מגמה</div>
+                      {["chatgpt", "gemini", "perplexity", "claude", "google_ai_overview"].map(p => (
+                        <div key={p} style={{ textAlign: "center", display: "flex", justifyContent: "center" }}>
+                          <PlatformIconComponent platform={p} size={16} />
+                        </div>
+                      ))}
+                      <div>מקור / אתר</div>
+                      <div style={{ textAlign: "center" }}>בדיקה</div>
+                    </div>
 
+                    {/* Rows */}
+                    {aiKwEnriched.map((kw: any, idx: number) => {
+                      const trendIcon = kw.trend === 'up' ? '📈' : kw.trend === 'down' ? '📉' : kw.trend === 'stable' ? '➡️' : '🆕';
+                      const allSources: string[] = [];
+                      for (const [, data] of kw.aiPlatformsFound) {
+                        for (const src of (data as any).sources || []) {
+                          if (!allSources.includes(src)) allSources.push(src);
+                        }
+                      }
+                      const isLast = idx === aiKwEnriched.length - 1;
+                      const catLabel = categoryConfig[kw.category as string]?.label?.split('—')[0]?.trim() || kw.category;
+                      const catColor = categoryConfig[kw.category as string]?.color || C.textMuted;
+                      return (
+                        <div key={idx} style={{
+                          display: "grid",
+                          gridTemplateColumns: "minmax(140px, 2fr) 70px 80px 60px repeat(5, 44px) minmax(120px, 1.5fr) 60px",
+                          gap: 4,
+                          alignItems: "center",
+                          padding: "12px 16px",
+                          background: idx % 2 === 0 ? C.card : C.bg,
+                          border: `2px solid #10A37F25`,
+                          borderTop: "none",
+                          borderRadius: isLast ? "0 0 16px 16px" : undefined,
+                          transition: "background 0.15s",
+                        }}>
+                          {/* Keyword */}
+                          <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+                            {s(kw.keyword)}
+                          </div>
+
+                          {/* Category */}
+                          <div style={{ textAlign: "center" }}>
+                            <span style={{
+                              fontSize: 9, fontWeight: 600, padding: "2px 6px",
+                              borderRadius: 6, background: `${catColor}12`, color: catColor,
+                            }}>{catLabel}</span>
+                          </div>
+
+                          {/* Google Position */}
+                          <div style={{ textAlign: "center" }}>
+                            {kw.googlePosition ? (
+                              <span style={{
+                                display: "inline-block", padding: "3px 10px", borderRadius: 8,
+                                fontSize: 13, fontWeight: 700,
+                                background: kw.googlePosition <= 3 ? `${C.success}15` : kw.googlePosition <= 10 ? `${C.primary}15` : kw.googlePosition <= 20 ? `${C.warning}15` : `${C.danger}15`,
+                                color: kw.googlePosition <= 3 ? C.success : kw.googlePosition <= 10 ? C.primary : kw.googlePosition <= 20 ? C.warning : C.danger,
+                              }}>
+                                #{kw.googlePosition}
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: 12, color: C.textMuted }}>—</span>
+                            )}
+                          </div>
+
+                          {/* Trend */}
+                          <div style={{ textAlign: "center", fontSize: 16 }}>
+                            {trendIcon}
+                          </div>
+
+                          {/* AI Platforms */}
+                          {["chatgpt", "gemini", "perplexity", "claude", "google_ai_overview"].map(platId => {
+                            const platData = kw.aiPlatforms[platId];
+                            const found = platData?.found;
+                            const isUnavailable = platData?.scanMode === 'unavailable' || (!platData && !found);
                             return (
-                              <div
-                                key={kw.id}
-                                style={{
-                                  padding: "14px 16px",
-                                  borderRadius: 12,
-                                  background: C.bg,
-                                  border: `1px solid ${C.borderLight}`,
-                                  cursor: "pointer",
-                                  transition: "all 0.2s",
-                                }}
-                                onClick={() => setExpandedKeyword(isExpanded ? null : kw.id)}
-                              >
+                              <div key={platId} style={{ textAlign: "center" }} title={
+                                isUnavailable && !found
+                                  ? `${PLATFORM_DISPLAY[platId]?.nameHe || platId} — לא מוגדר`
+                                  : found
+                                  ? `מופיע ב-${PLATFORM_DISPLAY[platId]?.nameHe || platId}`
+                                  : `לא נמצא ב-${PLATFORM_DISPLAY[platId]?.nameHe || platId}`
+                              }>
                                 <div style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  alignItems: "center",
-                                  gap: 12,
+                                  width: 28, height: 28, borderRadius: 8,
+                                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                  background: found ? `${PLATFORM_DISPLAY[platId]?.color || C.success}15` : isUnavailable && !found ? `${C.textMuted}05` : `${C.textMuted}08`,
+                                  border: `1.5px solid ${found ? (PLATFORM_DISPLAY[platId]?.color || C.success) + '40' : isUnavailable && !found ? `${C.textMuted}20` : C.borderLight}`,
+                                  opacity: isUnavailable && !found ? 0.4 : 1,
                                 }}>
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{
-                                      fontSize: 13,
-                                      fontWeight: 600,
-                                      color: C.text,
-                                      wordBreak: "break-word",
-                                    }}>
-                                      {s(kw.keyword)}
-                                    </div>
-                                  </div>
-
-                                  <div style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 8,
-                                    flexShrink: 0,
-                                  }}>
-                                    {/* Google position badge */}
-                                    <span style={{
-                                      ...tagStyle,
-                                      background: `${statusColor}15`,
-                                      color: statusColor,
-                                      minWidth: 70,
-                                      textAlign: "center",
-                                    }}>
-                                      {kw.googlePosition !== null ? `#${kw.googlePosition}` : "לא נמצא"}
-                                    </span>
-
-                                    {/* AI status badge */}
-                                    <span style={{
-                                      ...tagStyle,
-                                      background: kw.aiMentioned ? `${C.success}15` : `${C.danger}15`,
-                                      color: kw.aiMentioned ? C.success : C.danger,
-                                    }}>
-                                      {kw.aiMentioned ? "✓ AI" : "✗ AI"}
-                                    </span>
-
-                                    {/* Expand toggle */}
-                                    <span style={{
-                                      fontSize: 12,
-                                      color: C.textMuted,
-                                    }}>
-                                      {isExpanded ? "▼" : "▶"}
-                                    </span>
-                                  </div>
+                                  <span style={{ fontSize: 14 }}>{found ? '✓' : isUnavailable && !found ? '—' : '✗'}</span>
                                 </div>
-
-                                {/* Expandable action plan */}
-                                {isExpanded && (
-                                  <div style={{
-                                    marginTop: 12,
-                                    paddingTop: 12,
-                                    borderTop: `1px solid ${C.border}`,
-                                  }}>
-                                    <div style={{
-                                      fontSize: 12,
-                                      color: C.textSecondary,
-                                      lineHeight: "1.5",
-                                    }}>
-                                      <span style={{ fontWeight: 600, color: C.text }}>תוכנית פעולה:</span>
-                                      <br />
-                                      {s(kw.actionPlan)}
-                                    </div>
-                                  </div>
-                                )}
                               </div>
                             );
                           })}
+
+                          {/* Sources */}
+                          <div style={{ fontSize: 11, color: C.textSecondary, lineHeight: 1.4 }}>
+                            {allSources.length > 0 ? (
+                              allSources.slice(0, 2).map((src, si) => (
+                                <div key={si} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 160 }} title={src}>
+                                  {src}
+                                </div>
+                              ))
+                            ) : kw.totalAiEngines > 0 ? (
+                              <span style={{ color: C.textMuted, fontStyle: "italic" }}>בלי פירוט</span>
+                            ) : (
+                              <span style={{ color: C.textMuted }}>—</span>
+                            )}
+                          </div>
+
+                          {/* Check button */}
+                          <div style={{ textAlign: "center" }}>
+                            <button
+                              onClick={() => {
+                                const kwText = typeof kw.keyword === 'string' ? kw.keyword : '';
+                                if (!kwText || !safePlan?.id) return;
+                                setCheckingKeyword(kw.idx + 10000);
+                                fetch(`/api/seo-geo-plans/${safePlan.id}/check-keyword`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ keyword: kwText, keywordIndex: kw.idx, isAiKeyword: true }),
+                                }).then(r => r.json()).then(() => {
+                                  return fetch(`/api/data/seo-plans/${safePlan.id}`);
+                                }).then(r => r.json()).then(data => {
+                                  if (data) setPlan(data);
+                                }).catch(console.error).finally(() => setCheckingKeyword(null));
+                              }}
+                              disabled={checkingKeyword !== null}
+                              style={{
+                                padding: "5px 10px", borderRadius: 6, border: "none",
+                                background: checkingKeyword === kw.idx + 10000 ? C.warning : C.success,
+                                color: "#fff", fontSize: 11, fontWeight: 600,
+                                cursor: checkingKeyword !== null ? "wait" : "pointer",
+                                opacity: checkingKeyword !== null && checkingKeyword !== kw.idx + 10000 ? 0.5 : 1,
+                              }}
+                            >
+                              {checkingKeyword === kw.idx + 10000 ? '...בודק' : 'בדוק'}
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </>
-              )}
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}

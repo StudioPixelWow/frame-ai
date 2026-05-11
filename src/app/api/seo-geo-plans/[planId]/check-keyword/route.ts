@@ -40,11 +40,11 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
   if (error) return error;
   if (!plan) return err('תוכנית לא נמצאה', 404);
 
-  const { body, error: parseErr } = await parseBody<{ keyword: string; keywordIndex: number }>(req);
+  const { body, error: parseErr } = await parseBody<{ keyword: string; keywordIndex: number; isAiKeyword?: boolean }>(req);
   if (parseErr) return parseErr;
   if (!body) return err('גוף הבקשה חסר', 400);
 
-  const { keyword, keywordIndex } = body;
+  const { keyword, keywordIndex, isAiKeyword } = body;
   if (!keyword || keywordIndex === undefined || keywordIndex === null) {
     return err('חסר keyword או keywordIndex', 400);
   }
@@ -107,10 +107,15 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
     }
   }
 
-  // Update clientKeywords with Google position
+  // Update keywords with Google position (either clientKeywords or aiKeywords)
   const clientKeywords = [...((plan as any).clientKeywords || [])];
-  if (keywordIndex >= 0 && keywordIndex < clientKeywords.length) {
-    const kw = { ...clientKeywords[keywordIndex] };
+  const aiKeywords = [...((plan as any).aiKeywords || [])];
+
+  const targetArray = isAiKeyword ? aiKeywords : clientKeywords;
+  const queryIdPrefix = isAiKeyword ? 'aikw' : 'kw';
+
+  if (keywordIndex >= 0 && keywordIndex < targetArray.length) {
+    const kw = { ...targetArray[keywordIndex] };
     const googleResult = platformResults['google_seo'];
     if (googleResult?.available && googleResult.found) {
       const oldRank = kw.currentRank;
@@ -126,27 +131,36 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
     } else if (googleResult?.available) {
       kw.lastCheckedAt = now;
     }
-    clientKeywords[keywordIndex] = kw;
+    targetArray[keywordIndex] = kw;
   }
 
   // Merge new AI queries into existing websiteScan.aiQueries
   const websiteScan = (plan as any).websiteScan || {};
   const existingAiQueries: any[] = websiteScan.aiQueries || [];
 
+  // Tag queries with correct prefix for client vs AI keywords
+  const taggedQueries = newAiQueries.map(q => ({ ...q, queryId: `${queryIdPrefix}-${keywordIndex}` }));
+
   // Remove old entries for this keyword, add new ones
   const filteredQueries = existingAiQueries.filter(
-    (q: any) => q.queryId !== `kw-${keywordIndex}` && q.query !== keyword
+    (q: any) => q.queryId !== `${queryIdPrefix}-${keywordIndex}` && q.query !== keyword
   );
-  const mergedQueries = [...filteredQueries, ...newAiQueries];
+  const mergedQueries = [...filteredQueries, ...taggedQueries];
 
   // Save to DB
-  const updated = await updatePlanSafe(planId, {
-    clientKeywords,
+  const saveData: any = {
     websiteScan: {
       ...websiteScan,
       aiQueries: mergedQueries,
     },
-  } as any);
+  };
+  if (isAiKeyword) {
+    saveData.aiKeywords = aiKeywords;
+  } else {
+    saveData.clientKeywords = clientKeywords;
+  }
+
+  const updated = await updatePlanSafe(planId, saveData);
 
   if (!updated) return err('שגיאה בשמירת תוצאות הבדיקה', 500);
 
