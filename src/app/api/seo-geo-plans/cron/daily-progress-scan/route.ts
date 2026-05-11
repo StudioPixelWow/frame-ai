@@ -132,7 +132,12 @@ function calculateTechnicalScore(plan: any): number {
 
 async function processDailySnapshot(plan: any) {
   const planId = plan.id;
-  const targetDomain = (plan as any).websiteUrl || (plan as any).url || (plan as any).domain || '';
+  let targetDomain = (plan as any).websiteUrl || (plan as any).url || (plan as any).domain || '';
+  // Normalize — add protocol if missing so URL parsing works downstream
+  if (targetDomain && !targetDomain.startsWith('http://') && !targetDomain.startsWith('https://')) {
+    targetDomain = `https://${targetDomain}`;
+  }
+  targetDomain = targetDomain.replace(/\/+$/, '');
   const businessName = (plan as any).businessName || (plan as any).clientName || targetDomain;
   const clientKeywords: any[] = [...((plan as any).clientKeywords || [])];
 

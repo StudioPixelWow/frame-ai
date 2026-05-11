@@ -97,7 +97,14 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
 
   const now = new Date().toISOString();
   const planAny = plan as any;
-  const websiteUrl = planAny.websiteUrl || planAny.url || planAny.domain || '';
+  let websiteUrl = planAny.websiteUrl || planAny.url || planAny.domain || '';
+
+  // Normalize URL — add protocol if missing
+  if (websiteUrl && !websiteUrl.startsWith('http://') && !websiteUrl.startsWith('https://')) {
+    websiteUrl = `https://${websiteUrl}`;
+  }
+  // Remove trailing slash for consistency
+  websiteUrl = websiteUrl.replace(/\/+$/, '');
 
   console.log(`[RESCAN] Plan loaded. URL: ${websiteUrl}, clientName: ${planAny.clientName || planAny.businessName}`);
   if (!websiteUrl) return err('כתובת אתר חסרה בתוכנית', 400);
