@@ -32,6 +32,45 @@ export default function PaymentsPage() {
   const [filterType, setFilterType] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"date" | "amount" | "status">("date");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map((p) => p.id)));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`למחוק ${selectedIds.size} תשלומים?`)) return;
+    for (const id of selectedIds) {
+      const payment = filtered.find((p) => p.id === id);
+      if (!payment) continue;
+      try {
+        if (payment.type === "project") {
+          await updateProjectPayment(payment.rawData.id, { ...payment.rawData, status: "cancelled" } as any);
+        } else if (payment.type === "hosting") {
+          await updateHostingRecord(payment.rawData.id, { ...payment.rawData, status: "cancelled" } as any);
+        } else if (payment.type === "retainer") {
+          await updateClient(payment.rawData.id, { ...payment.rawData, paymentStatus: "cancelled" } as any);
+        }
+      } catch (err) {
+        console.error("Error deleting payment", id, err);
+      }
+    }
+    setSelectedIds(new Set());
+    alert(`${selectedIds.size} תשלומים נמחקו`);
+  };
 
   const unifiedPayments = useMemo(() => {
     const combined: UnifiedPayment[] = [];
@@ -414,6 +453,27 @@ export default function PaymentsPage() {
         </div>
       </div>
 
+      {/* Bulk delete bar */}
+      {selectedIds.size > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "0.75rem 1rem", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "0.75rem", marginBottom: "1rem" }}>
+          <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#dc2626" }}>
+            {selectedIds.size} תשלומים נבחרו
+          </span>
+          <button
+            onClick={handleDeleteSelected}
+            style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem", background: "#dc2626", color: "#fff", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontWeight: 600 }}
+          >
+            מחק נבחרים
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem", background: "transparent", color: "var(--foreground-muted)", border: "1px solid var(--border)", borderRadius: "0.375rem", cursor: "pointer", fontWeight: 600 }}
+          >
+            בטל בחירה
+          </button>
+        </div>
+      )}
+
       {/* Payments Table */}
       <div style={{ overflowX: "auto" }}>
         <table
@@ -424,6 +484,9 @@ export default function PaymentsPage() {
         >
           <thead>
             <tr style={{ borderBottom: "2px solid var(--border)" }}>
+              <th style={{ padding: "1rem 0.5rem", width: 40, textAlign: "center" }}>
+                <input type="checkbox" checked={filtered.length > 0 && selectedIds.size === filtered.length} onChange={toggleSelectAll} style={{ cursor: "pointer", width: 16, height: 16 }} />
+              </th>
               <th style={{ padding: "1rem", textAlign: "right", fontWeight: "600", color: "var(--foreground-muted)", fontSize: "0.85rem" }}>
                 לקוח
               </th>
@@ -446,7 +509,10 @@ export default function PaymentsPage() {
           </thead>
           <tbody>
             {filtered.map((payment) => (
-              <tr key={payment.id} style={{ borderBottom: "1px solid var(--border)" }}>
+              <tr key={payment.id} style={{ borderBottom: "1px solid var(--border)", background: selectedIds.has(payment.id) ? "#eff6ff" : undefined }}>
+                <td style={{ padding: "1rem 0.5rem", textAlign: "center" }}>
+                  <input type="checkbox" checked={selectedIds.has(payment.id)} onChange={() => toggleSelect(payment.id)} style={{ cursor: "pointer", width: 16, height: 16 }} />
+                </td>
                 <td style={{ padding: "1rem", color: "var(--foreground)" }}>{payment.clientName}</td>
                 <td style={{ padding: "1rem", color: "var(--foreground)", fontWeight: "600" }}>
                   ₪{payment.amount.toLocaleString("he-IL")}
