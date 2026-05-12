@@ -185,6 +185,10 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
   const [ganttVersion, setGanttVersion] = useState(1);
   const [showRegenConfirmModal, setShowRegenConfirmModal] = useState(false);
 
+  // Drag & Drop state for calendar
+  const [dragItemId, setDragItemId] = useState<string | null>(null);
+  const [dragOverDay, setDragOverDay] = useState<number | null>(null);
+
   // Manual entry modal state
   const [showManualEntryModal, setShowManualEntryModal] = useState(false);
   const [manualTopic, setManualTopic] = useState("");
@@ -808,6 +812,22 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
       toast(err?.message || "שגיאה בהזרקת חגים", "error");
     } finally {
       setIsInjectingHolidays(false);
+    }
+  };
+
+  // Drag & Drop handler for calendar
+  const handleCalendarDrop = async (itemId: string, newDay: number) => {
+    try {
+      const newDate = new Date(selectedYear, selectedMonth, newDay);
+      const dateStr = newDate.toISOString().split("T")[0];
+      await updateGanttItem(itemId, { date: dateStr } as any);
+      toast.success("התאריך עודכן בהצלחה");
+    } catch (err) {
+      console.error("[Gantt] Failed to update date via drag:", err);
+      toast.error("שגיאה בעדכון התאריך");
+    } finally {
+      setDragItemId(null);
+      setDragOverDay(null);
     }
   };
 
@@ -2108,16 +2128,30 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
               return days.map((day, idx) => (
                 <div
                   key={idx}
+                  onDragOver={(e) => {
+                    if (day && dragItemId) {
+                      e.preventDefault();
+                      setDragOverDay(day);
+                    }
+                  }}
+                  onDragLeave={() => setDragOverDay(null)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (day && dragItemId) {
+                      handleCalendarDrop(dragItemId, day);
+                    }
+                  }}
                   style={{
                     padding: "0.5rem",
-                    border: "1px solid var(--border)",
+                    border: dragOverDay === day ? "2px dashed #3b82f6" : "1px solid var(--border)",
                     borderRadius: "0.5rem",
-                    background: day ? "transparent" : "var(--foreground-muted-opacity)",
+                    background: dragOverDay === day ? "rgba(59,130,246,0.08)" : day ? "transparent" : "var(--foreground-muted-opacity)",
                     minHeight: "60px",
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
                     justifyContent: "flex-start",
+                    transition: "border 0.15s, background 0.15s",
                   }}
                 >
                   {day && (
@@ -2135,6 +2169,15 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                             {dayItems.slice(0, 2).map((item) => (
                               <div
                                 key={item.id}
+                                draggable
+                                onDragStart={(e) => {
+                                  setDragItemId(item.id);
+                                  e.dataTransfer.effectAllowed = "move";
+                                }}
+                                onDragEnd={() => {
+                                  setDragItemId(null);
+                                  setDragOverDay(null);
+                                }}
                                 style={{
                                   fontSize: "0.55rem",
                                   padding: "0.15rem 0.3rem",
@@ -2146,10 +2189,11 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                                   overflow: "hidden",
                                   textOverflow: "ellipsis",
                                   whiteSpace: "nowrap",
-                                  cursor: "pointer",
+                                  cursor: "grab",
+                                  opacity: dragItemId === item.id ? 0.5 : 1,
                                 }}
                                 onClick={() => setEditingItemId(item.id)}
-                                title={item.title}
+                                title={`${item.title} (גרור לשינוי תאריך)`}
                               >
                                 {ITEM_TYPE_CONFIG[item.itemType]?.emoji} {item.title?.substring(0, 8)}
                               </div>

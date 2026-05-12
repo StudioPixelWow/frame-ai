@@ -32,6 +32,8 @@ interface FormData {
   keyMarketingMessages: string;
   retainerAmount: number;
   retainerDay: number;
+  weeklyPostsCount: number;
+  publishDays: number[];
   assignedManagerId: string | null;
   portalEnabled: boolean;
   logoUrl: string;
@@ -63,6 +65,8 @@ export default function NewClientPage() {
     keyMarketingMessages: '',
     retainerAmount: 0,
     retainerDay: 1,
+    weeklyPostsCount: 3,
+    publishDays: [0, 2, 4], // Sun, Tue, Thu
     assignedManagerId: null,
     portalEnabled: false,
     logoUrl: '',
@@ -548,6 +552,86 @@ export default function NewClientPage() {
               יוטיוב
             </label>
             <input type="text" className="form-input" value={form.youtubeUrl} onChange={(e) => setForm(prev => ({ ...prev, youtubeUrl: e.target.value }))} placeholder="https://youtube.com/..." />
+          </div>
+        </div>
+      </div>
+
+      {/* Section 5.5: Content Scheduling */}
+      <div
+        style={{
+          background: 'var(--surface-raised)',
+          border: '1px solid var(--border)',
+          borderRadius: '0.75rem',
+          padding: '1.5rem',
+          marginBottom: '1.25rem',
+        }}
+      >
+        <h2 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          📅 תזמון תוכן
+        </h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--foreground)' }}>
+              כמות פוסטים בשבוע
+            </label>
+            <input
+              type="number"
+              className="form-input"
+              value={form.weeklyPostsCount}
+              onChange={(e) => setForm(prev => ({ ...prev, weeklyPostsCount: Math.max(1, parseInt(e.target.value) || 1) }))}
+              placeholder="3"
+              min="1"
+              max="7"
+              dir="ltr"
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--foreground)' }}>
+              ימי פרסום
+            </label>
+            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+              {[
+                { day: 0, label: 'א׳' },
+                { day: 1, label: 'ב׳' },
+                { day: 2, label: 'ג׳' },
+                { day: 3, label: 'ד׳' },
+                { day: 4, label: 'ה׳' },
+                { day: 5, label: 'ו׳' },
+                { day: 6, label: 'ש׳' },
+              ].map(({ day, label }) => {
+                const selected = form.publishDays.includes(day);
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => {
+                      setForm(prev => ({
+                        ...prev,
+                        publishDays: selected
+                          ? prev.publishDays.filter(d => d !== day)
+                          : [...prev.publishDays, day].sort(),
+                      }));
+                    }}
+                    style={{
+                      padding: '0.35rem 0.6rem',
+                      borderRadius: '0.5rem',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      border: `1.5px solid ${selected ? 'var(--color-primary)' : 'var(--border)'}`,
+                      background: selected ? 'var(--color-primary)' : 'transparent',
+                      color: selected ? '#fff' : 'var(--foreground-muted)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: 'var(--foreground-muted)' }}>
+              ברירת מחדל: ראשון, שלישי, חמישי
+            </p>
           </div>
         </div>
       </div>

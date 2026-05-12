@@ -31,6 +31,9 @@ export interface Client {
   // Financial
   retainerAmount: number;
   retainerDay: number;
+  // Content scheduling
+  weeklyPostsCount: number;
+  publishDays: number[]; // 0=Sun, 1=Mon, ... 6=Sat — default [0,2,4] (Sun/Tue/Thu)
   paymentStatus: PaymentStatus;
   nextPaymentDate: string | null;
   // Status

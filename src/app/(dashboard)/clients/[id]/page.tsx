@@ -266,6 +266,8 @@ function ClientDetailContent() {
         keyMarketingMessages: client.keyMarketingMessages ?? '',
         retainerAmount: client.retainerAmount,
         retainerDay: client.retainerDay,
+        weeklyPostsCount: client.weeklyPostsCount ?? 3,
+        publishDays: client.publishDays ?? [0, 2, 4],
         status: client.status,
         notes: client.notes,
         websiteUrl: client.websiteUrl ?? '',
@@ -1637,6 +1639,69 @@ function ClientDetailContent() {
                     onChange={(e) => setEditForm({ ...editForm, retainerDay: Number(e.target.value) })}
                     placeholder="1-31"
                   />
+                </div>
+              </div>
+
+              {/* Row 7.5: Content Scheduling */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
+                    כמות פוסטים בשבוע
+                  </label>
+                  <input
+                    className="form-input"
+                    type="number"
+                    min="1"
+                    max="7"
+                    value={editForm.weeklyPostsCount || 3}
+                    onChange={(e) => setEditForm({ ...editForm, weeklyPostsCount: Math.max(1, Number(e.target.value) || 1) })}
+                    placeholder="3"
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
+                    ימי פרסום
+                  </label>
+                  <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
+                    {[
+                      { day: 0, label: "א׳" },
+                      { day: 1, label: "ב׳" },
+                      { day: 2, label: "ג׳" },
+                      { day: 3, label: "ד׳" },
+                      { day: 4, label: "ה׳" },
+                      { day: 5, label: "ו׳" },
+                      { day: 6, label: "ש׳" },
+                    ].map(({ day, label }) => {
+                      const days = editForm.publishDays || [0, 2, 4];
+                      const selected = days.includes(day);
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => {
+                            setEditForm({
+                              ...editForm,
+                              publishDays: selected
+                                ? days.filter((d: number) => d !== day)
+                                : [...days, day].sort(),
+                            });
+                          }}
+                          style={{
+                            padding: "0.3rem 0.55rem",
+                            borderRadius: "0.4rem",
+                            fontSize: "0.75rem",
+                            fontWeight: 600,
+                            border: `1.5px solid ${selected ? "var(--color-primary)" : "var(--border)"}`,
+                            background: selected ? "var(--color-primary)" : "transparent",
+                            color: selected ? "#fff" : "var(--foreground-muted)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 

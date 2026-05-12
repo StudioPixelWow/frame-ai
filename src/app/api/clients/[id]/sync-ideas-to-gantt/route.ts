@@ -22,7 +22,7 @@ async function fetchClientFromSupabase(clientId: string): Promise<Client | null>
   const { data, error } = await sb
     .from('clients')
     .select(
-      'id, name, company, contact_person, email, phone, notes, business_field, client_type, status, retainer_amount, retainer_day, color, converted_from_lead, created_at, updated_at'
+      'id, name, company, contact_person, email, phone, notes, business_field, client_type, status, retainer_amount, retainer_day, color, converted_from_lead, created_at, updated_at, weekly_posts_count, publish_days'
     )
     .eq('id', clientId)
     .maybeSingle();
@@ -48,6 +48,8 @@ async function fetchClientFromSupabase(clientId: string): Promise<Client | null>
     retainerDay: data.retainer_day ?? 1,
     color: data.color ?? '#00B5FE',
     convertedFromLead: data.converted_from_lead ?? null,
+    weeklyPostsCount: data.weekly_posts_count ?? 3,
+    publishDays: data.publish_days ?? [0, 2, 4],
     createdAt: data.created_at ?? '',
     updatedAt: data.updated_at ?? '',
   } as unknown as Client;
@@ -258,31 +260,46 @@ export async function POST(
     const newItems: ClientGanttItem[] = [];
     let skippedCount = 0;
 
-    // === Preferred days: Sunday (0), Monday (1), Thursday (4) ===
-    // Build list of preferred dates starting from today (for current month) or day 1
+    // === Use client's publishDays and weeklyPostsCount for distribution ===
     const now = new Date();
     const isCurrentMonth = body.year === now.getFullYear() && body.month === (now.getMonth() + 1);
     const startDay = isCurrentMonth ? now.getDate() : 1;
 
-    // Collect all preferred-day dates in the month from startDay onward
-    const preferredDays = [0, 1, 4]; // Sunday, Monday, Thursday
+    // Read client scheduling preferences (defaults: 3 posts/week on Sun/Tue/Thu)
+    const clientPublishDays: number[] = (client as any).publishDays ?? [0, 2, 4];
+    const weeklyPostsCount: number = (client as any).weeklyPostsCount ?? 3;
+
+    // Collect all publish-day dates in the month from startDay onward
     const preferredDates: number[] = [];
     for (let d = startDay; d <= totalDays; d++) {
       const dow = new Date(body.year, body.month - 1, d).getDay();
-      if (preferredDays.includes(dow)) {
+      if (clientPublishDays.includes(dow)) {
         preferredDates.push(d);
       }
     }
-    // Fallback: if not enough preferred dates, fill with remaining days from startDay
-    if (preferredDates.length < body.ideas.length) {
+
+    // Weekly distribution: group preferred dates by week, take weeklyPostsCount per week
+    const weeklyDistributed: number[] = [];
+    const weekBuckets: Map<number, number[]> = new Map();
+    for (const d of preferredDates) {
+      const weekNum = Math.ceil(d / 7);
+      if (!weekBuckets.has(weekNum)) weekBuckets.set(weekNum, []);
+      weekBuckets.get(weekNum)!.push(d);
+    }
+    for (const [, dates] of Array.from(weekBuckets.entries()).sort((a, b) => a[0] - b[0])) {
+      weeklyDistributed.push(...dates.slice(0, weeklyPostsCount));
+    }
+
+    // Fallback: if not enough distributed dates, fill with remaining days from startDay
+    const datePool = [...weeklyDistributed];
+    if (datePool.length < body.ideas.length) {
       for (let d = startDay; d <= totalDays; d++) {
-        if (!preferredDates.includes(d)) {
-          preferredDates.push(d);
+        if (!datePool.includes(d)) {
+          datePool.push(d);
         }
+        if (datePool.length >= body.ideas.length) break;
       }
     }
-    // Spread ideas evenly across available preferred dates
-    const datePool = preferredDates.slice(0, Math.max(preferredDates.length, body.ideas.length));
 
     let dateIndex = 0;
 
@@ -310,10 +327,9 @@ export async function POST(
         latestResearch
       );
 
-      // Pick date from preferred pool, spread evenly
-      const step = Math.max(1, Math.floor(datePool.length / body.ideas.length));
+      // Pick next date from the distributed pool sequentially
       const dayInMonth = datePool[Math.min(dateIndex, datePool.length - 1)] || startDay;
-      dateIndex += step;
+      dateIndex++;
       const itemDate = new Date(body.year, body.month - 1, dayInMonth).toISOString().split('T')[0];
 
       const ganttItem = createGanttItem(
