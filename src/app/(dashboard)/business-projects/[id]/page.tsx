@@ -3,7 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   useBusinessProjects,
   useProjectMilestones,
@@ -18,6 +18,7 @@ import {
 import { BusinessProject, ProjectMilestone, ProjectPayment, Client, Employee, ClientFile, MilestoneFile, ProjectTimelineEvent } from '@/lib/db/schema';
 import { ProjectNotificationBell } from '@/components/project-notification-bell';
 import { useAuth } from '@/lib/auth/auth-context';
+import { useToast } from '@/components/ui/toast';
 
 type Tab = 'overview' | 'milestones' | 'files' | 'payments' | 'activity';
 type MilestoneStatus = 'pending' | 'in_progress' | 'submitted' | 'approved' | 'returned';
@@ -131,7 +132,9 @@ export default function BusinessProjectPage() {
   const projectId = params.id as string;
   const { canEdit, canDelete, isClient } = useAuth();
 
-  const { data: projectsData = [], loading: projectsLoading, update: updateProject } = useBusinessProjects();
+  const router = useRouter();
+  const toast = useToast();
+  const { data: projectsData = [], loading: projectsLoading, update: updateProject, remove: removeProject } = useBusinessProjects();
   const { data: milestonesData = [], create: createMilestone, update: updateMilestone } = useProjectMilestones();
   const { data: paymentsData = [], create: createPayment, update: updatePayment, refetch: refetchPayments } = useProjectPayments();
   const { data: clientsData = [] } = useClients();
@@ -1108,6 +1111,28 @@ export default function BusinessProjectPage() {
                 {canEdit && (
                   <button className="prj-btn prj-btn-success" onClick={handleMarkComplete} disabled={loading}>
                     סימון כהושלם
+                  </button>
+                )}
+                {canDelete && (
+                  <button
+                    className="prj-btn"
+                    style={{
+                      color: '#ef4444',
+                      borderColor: 'rgba(239,68,68,0.3)',
+                      background: 'rgba(239,68,68,0.06)',
+                    }}
+                    onClick={async () => {
+                      if (!confirm(`האם אתה בטוח שברצונך למחוק את הפרויקט "${project?.projectName}"?\n\nפעולה זו תמחק את הפרויקט לצמיתות מהמערכת ולא ניתן לשחזר.`)) return;
+                      try {
+                        await removeProject(projectId);
+                        toast({ title: `הפרויקט נמחק בהצלחה`, variant: 'success' });
+                        router.push('/business-projects');
+                      } catch (e) {
+                        toast({ title: 'שגיאה במחיקת הפרויקט', variant: 'error' });
+                      }
+                    }}
+                  >
+                    מחק פרויקט
                   </button>
                 )}
               </>

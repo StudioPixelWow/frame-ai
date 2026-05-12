@@ -143,7 +143,7 @@ function ClientDetailContent() {
   const router = useRouter();
   const clientId = (params?.id as string) || "";
 
-  const { data: clients, loading: clientsLoading, update: updateClient } = useClients();
+  const { data: clients, loading: clientsLoading, update: updateClient, remove: removeClient } = useClients();
   const { data: employees, loading: employeesLoading } = useEmployees();
   const { data: allSocialPosts } = useSocialPosts();
   const { data: overviewPayments } = usePayments();
@@ -1053,6 +1053,31 @@ function ClientDetailContent() {
                   onClick={() => handleGenerateClientReport('internal_manager')}
                 >
                   {reportGenerating ? '⏳ מפיק...' : '🔒 דוח מנהל'}
+                </button>
+                <button
+                  className="mod-btn-ghost"
+                  style={{
+                    fontSize: "0.875rem",
+                    padding: "0.5rem 1.125rem",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    color: "#ef4444",
+                    borderColor: "rgba(239,68,68,0.3)",
+                    background: "rgba(239,68,68,0.06)",
+                  }}
+                  onClick={async () => {
+                    if (!confirm(`האם אתה בטוח שברצונך למחוק את הלקוח "${client.name}"?\n\nפעולה זו תמחק את הלקוח לצמיתות מהמערכת ולא ניתן לשחזר.`)) return;
+                    try {
+                      await removeClient(client.id);
+                      toast({ title: `הלקוח "${client.name}" נמחק בהצלחה`, variant: "success" });
+                      router.push("/clients");
+                    } catch (e) {
+                      toast({ title: "שגיאה במחיקת הלקוח", variant: "error" });
+                    }
+                  }}
+                >
+                  🗑️ מחק לקוח
                 </button>
               </div>
             </div>

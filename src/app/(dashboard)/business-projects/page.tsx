@@ -85,7 +85,7 @@ type ProjectFormData = {
 export default function BusinessProjectsPage() {
   const router = useRouter();
   const toast = useToast();
-  const { data: rawProjects, loading: projectsLoading, create: createProject, refetch: refetchProjects } = useBusinessProjects();
+  const { data: rawProjects, loading: projectsLoading, create: createProject, refetch: refetchProjects, remove: removeProject } = useBusinessProjects();
   const { data: rawMilestones } = useProjectMilestones();
   const { data: rawPayments } = useProjectPayments();
   const { data: rawClients, create: createClientHook, refetch: refetchClients } = useClients();
@@ -725,6 +725,36 @@ export default function BusinessProjectsPage() {
                     <div style={{ fontSize: "0.75rem" }}>מנהל מוקצה</div>
                   )}
                 </div>
+
+                {/* Delete button */}
+                <div style={{ marginTop: "0.75rem", borderTop: "1px solid var(--border)", paddingTop: "0.75rem", textAlign: "left" }}>
+                  <button
+                    style={{
+                      fontSize: "0.75rem",
+                      padding: "0.375rem 0.75rem",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.25rem",
+                      color: "#ef4444",
+                      background: "rgba(239,68,68,0.06)",
+                      border: "1px solid rgba(239,68,68,0.2)",
+                      borderRadius: "0.375rem",
+                      cursor: "pointer",
+                    }}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!confirm(`האם אתה בטוח שברצונך למחוק את הפרויקט "${project.projectName}"?\n\nפעולה זו תמחק את הפרויקט לצמיתות מהמערכת ולא ניתן לשחזר.`)) return;
+                      try {
+                        await removeProject(project.id);
+                        toast({ title: `הפרויקט "${project.projectName}" נמחק בהצלחה`, variant: "success" });
+                      } catch (err) {
+                        toast({ title: "שגיאה במחיקת הפרויקט", variant: "error" });
+                      }
+                    }}
+                  >
+                    מחק פרויקט
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -819,11 +849,36 @@ export default function BusinessProjectsPage() {
                     </div>
                   )}
                 </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: "0.8rem", fontWeight: "600", color: "var(--foreground)" }}>
-                    {progress.total > 0 ? `${progress.approved}/${progress.total}` : "-"}
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: "0.8rem", fontWeight: "600", color: "var(--foreground)" }}>
+                      {progress.total > 0 ? `${progress.approved}/${progress.total}` : "-"}
+                    </div>
+                    <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>שלבים</div>
                   </div>
-                  <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>שלבים</div>
+                  <button
+                    style={{
+                      fontSize: "0.7rem",
+                      padding: "0.25rem 0.5rem",
+                      color: "#ef4444",
+                      background: "rgba(239,68,68,0.06)",
+                      border: "1px solid rgba(239,68,68,0.2)",
+                      borderRadius: "0.375rem",
+                      cursor: "pointer",
+                    }}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!confirm(`האם אתה בטוח שברצונך למחוק את הפרויקט "${project.projectName}"?\n\nפעולה זו תמחק את הפרויקט לצמיתות.`)) return;
+                      try {
+                        await removeProject(project.id);
+                        toast({ title: `הפרויקט "${project.projectName}" נמחק בהצלחה`, variant: "success" });
+                      } catch (err) {
+                        toast({ title: "שגיאה במחיקת הפרויקט", variant: "error" });
+                      }
+                    }}
+                  >
+                    מחק
+                  </button>
                 </div>
               </div>
             );

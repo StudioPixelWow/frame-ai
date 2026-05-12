@@ -1979,6 +1979,66 @@ export default function SeoPlanDetail() {
               );
             })()}
 
+            {/* === STOP / DELETE PLAN BUTTONS === */}
+            <div style={{
+              marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap",
+            }}>
+              {/* Stop/Pause button — only show for active plans */}
+              {(p.status === 'active') && (
+                <button
+                  onClick={async () => {
+                    if (!confirm("האם אתה בטוח שברצונך לעצור את התוכנית?\n\nהפעולה תעצור את הביצוע האוטומטי. ניתן להפעיל מחדש בכל עת.")) return;
+                    try {
+                      await fetch(`/api/data/seo-plans/${planId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'plan_generated', pausedAt: new Date().toISOString() }),
+                      });
+                      const res = await fetch(`/api/data/seo-plans/${planId}`);
+                      if (res.ok) { const data = await res.json(); setPlan(data); }
+                    } catch {}
+                  }}
+                  style={{
+                    padding: "10px 20px", borderRadius: 10,
+                    border: "1px solid #f59e0b40",
+                    background: "#f59e0b12", color: "#f59e0b",
+                    fontWeight: 700, fontSize: 13,
+                    cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
+                  }}
+                >
+                  ⏸️ עצור תוכנית
+                </button>
+              )}
+              {/* Delete plan button */}
+              <button
+                onClick={async () => {
+                  if (!confirm(`האם אתה בטוח שברצונך למחוק את התוכנית?\n\nפעולה זו תמחק את התוכנית לצמיתות מהמערכת ולא ניתן לשחזר.`)) return;
+                  try {
+                    const res = await fetch(`/api/data/seo-plans/${planId}`, {
+                      method: 'DELETE',
+                      headers: { 'Content-Type': 'application/json', 'x-user-role': 'admin' },
+                    });
+                    if (res.ok) {
+                      router.push('/seo-geo/dashboard');
+                    } else {
+                      alert('שגיאה במחיקת התוכנית');
+                    }
+                  } catch {
+                    alert('שגיאה במחיקת התוכנית');
+                  }
+                }}
+                style={{
+                  padding: "10px 20px", borderRadius: 10,
+                  border: "1px solid rgba(239,68,68,0.3)",
+                  background: "rgba(239,68,68,0.06)", color: "#ef4444",
+                  fontWeight: 700, fontSize: 13,
+                  cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
+                }}
+              >
+                מחק תוכנית
+              </button>
+            </div>
+
             {/* WordPress Connection Form */}
             {showWpPanel && (
               <div style={{
