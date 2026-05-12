@@ -150,8 +150,8 @@ function ClientDetailContent() {
   const { data: overviewProjectPayments } = useProjectPayments();
   const { data: overviewCampaigns } = useCampaigns();
   const { data: overviewLeads } = useLeads();
-  const { data: overviewTasks } = useTasks();
-  const { data: overviewGanttItems } = useClientGanttItems();
+  const { data: overviewTasks, remove: removeTask } = useTasks();
+  const { data: overviewGanttItems, remove: removeGanttItem } = useClientGanttItems();
   const toast = useToast();
 
   const searchParams = useSearchParams();
@@ -1067,10 +1067,22 @@ function ClientDetailContent() {
                     background: "rgba(239,68,68,0.06)",
                   }}
                   onClick={async () => {
-                    if (!confirm(`האם אתה בטוח שברצונך למחוק את הלקוח "${client.name}"?\n\nפעולה זו תמחק את הלקוח לצמיתות מהמערכת ולא ניתן לשחזר.`)) return;
+                    const clientTasksList = (overviewTasks || []).filter((t: any) => t.clientId === client.id);
+                    const clientGanttList = (overviewGanttItems || []).filter((g: any) => g.clientId === client.id);
+                    const relatedCount = clientTasksList.length + clientGanttList.length;
+                    const relatedMsg = relatedCount > 0
+                      ? `\n\nפעולה זו תמחק גם ${clientTasksList.length} משימות ו-${clientGanttList.length} פריטי גאנט הקשורים ללקוח.`
+                      : '';
+                    if (!confirm(`האם אתה בטוח שברצונך למחוק את הלקוח "${client.name}"?\n\nפעולה זו תמחק את הלקוח לצמיתות מהמערכת ולא ניתן לשחזר.${relatedMsg}`)) return;
                     try {
+                      for (const g of clientGanttList) {
+                        try { await removeGanttItem(g.id); } catch { /* continue */ }
+                      }
+                      for (const t of clientTasksList) {
+                        try { await removeTask(t.id); } catch { /* continue */ }
+                      }
                       await removeClient(client.id);
-                      toast({ title: `הלקוח "${client.name}" נמחק בהצלחה`, variant: "success" });
+                      toast({ title: `הלקוח "${client.name}" נמחק בהצלחה (כולל ${relatedCount} פריטים קשורים)`, variant: "success" });
                       router.push("/clients");
                     } catch (e) {
                       toast({ title: "שגיאה במחיקת הלקוח", variant: "error" });

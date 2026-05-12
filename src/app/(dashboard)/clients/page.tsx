@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { wow } from '@/lib/wow';
-import { useClients, useProjects, useTasks, useCampaigns } from "@/lib/api/use-entity";
+import { useClients, useProjects, useTasks, useCampaigns, useClientGanttItems } from "@/lib/api/use-entity";
 import { useEmployees } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
@@ -58,8 +58,9 @@ export default function ClientsPage() {
   const { data: clients, loading, create, update, remove } = useClients();
   const { data: employees } = useEmployees();
   const { data: projects } = useProjects();
-  const { data: tasks } = useTasks();
+  const { data: tasks, remove: removeTask } = useTasks();
   const { data: campaigns } = useCampaigns();
+  const { data: ganttItems, remove: removeGanttItem } = useClientGanttItems();
   const toast = useToast();
 
   // UI State
@@ -233,10 +234,26 @@ export default function ClientsPage() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`למחוק את ${name}?`)) return;
+    // Count related items for the confirmation message
+    const clientTasks = (tasks || []).filter((t: any) => t.clientId === id);
+    const clientGantt = (ganttItems || []).filter((g: any) => g.clientId === id);
+    const relatedCount = clientTasks.length + clientGantt.length;
+    const relatedMsg = relatedCount > 0
+      ? `\n\nפעולה זו תמחק גם ${clientTasks.length} משימות ו-${clientGantt.length} פריטי גאנט הקשורים ללקוח.`
+      : '';
+    if (!confirm(`האם אתה בטוח שברצונך למחוק את "${name}"?\n\nפעולה זו תמחק את הלקוח לצמיתות מהמערכת ולא ניתן לשחזר.${relatedMsg}`)) return;
     try {
+      // Delete related gantt items first
+      for (const g of clientGantt) {
+        try { await removeGanttItem(g.id); } catch { /* continue */ }
+      }
+      // Delete related tasks
+      for (const t of clientTasks) {
+        try { await removeTask(t.id); } catch { /* continue */ }
+      }
+      // Delete the client itself
       await remove(id);
-      toast(`${name} נמחק`, "info");
+      toast(`${name} נמחק בהצלחה (כולל ${relatedCount} פריטים קשורים)`, "info");
     } catch {
       toast("שגיאה במחיקת הלקוח", "error");
     }
@@ -771,6 +788,18 @@ export default function ClientsPage() {
                         onClick={(e) => { e.stopPropagation(); router.push(`/clients/${client.id}?tab=content`); }}
                       >
                         גאנט
+                      </button>
+                      <button
+                        className="mod-btn-ghost ux-btn"
+                        style={{
+                          fontSize: "0.72rem",
+                          padding: "0.35rem 0.6rem",
+                          color: "#ef4444",
+                          borderColor: "rgba(239,68,68,0.3)",
+                        }}
+                        onClick={(e) => { e.stopPropagation(); handleDelete(client.id, client.name); }}
+                      >
+                        מחק
                       </button>
                     </div>
                   </div>
