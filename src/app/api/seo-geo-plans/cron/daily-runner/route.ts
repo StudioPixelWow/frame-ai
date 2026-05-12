@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { seoPlans } from '@/lib/db';
-import { executeAutoTask, mapPlanTaskToAutoType, AutomationContext, AutoTaskResult } from '@/lib/seo/seo-automator';
+import { executeAutoTask, executeAutomationModule, mapPlanTaskToAutoType, AutomationContext, AutoTaskResult, AutoTaskType } from '@/lib/seo/seo-automator';
 import { updatePlanSafe, logActivity, mergeAllKeywords } from '@/lib/seo/api-helpers';
 import { sendSeoTaskEmail, sendSeoDailySummaryEmail } from '@/lib/seo/seo-email-service';
 
@@ -107,7 +107,19 @@ async function processPlanDailyTasks(plan: any) {
     const task = updatedTasks[i];
     if (task.status === 'done') continue;
 
-    const autoType = mapPlanTaskToAutoType(task.title);
+    // Check for automationModule (new 18-engine system) first, fall back to legacy title-based detection
+    const automationModule = task.automationModule || undefined;
+    let autoType: AutoTaskType | null = null;
+
+    if (automationModule) {
+      // Map plan's automationModule name to AutoTaskType
+      // Handle naming collision: plan uses 'internal_linking', AutoTaskType uses 'auto_internal_linking'
+      autoType = (automationModule === 'internal_linking' ? 'auto_internal_linking' : automationModule) as AutoTaskType;
+      console.log(`[SEO-CRON] Task "${task.title}" has automationModule="${automationModule}" → autoType="${autoType}"`);
+    } else {
+      autoType = mapPlanTaskToAutoType(task.title);
+    }
+
     if (!autoType) {
       executionResults.push({ taskId: task.id, taskTitle: task.title, autoType: null, executed: false, reason: 'Manual task' });
       continue;
@@ -127,7 +139,15 @@ async function processPlanDailyTasks(plan: any) {
         context.specificKeyword = undefined;
       }
 
-      const result: AutoTaskResult = await executeAutoTask(autoType, context);
+      // Dispatch: use automationModule dispatcher for new engines, legacy for old ones
+      let result: AutoTaskResult;
+      if (automationModule) {
+        console.log(`[SEO-CRON] Dispatching to executeAutomationModule("${autoType}")`);
+        result = await executeAutomationModule(autoType, context, task.automationConfig);
+      } else {
+        result = await executeAutoTask(autoType, context);
+      }
+
       updatedTasks[i] = { ...task, status: result.success ? 'done' : 'in_progress' };
       executionResults.push({
         taskId: task.id, taskTitle: task.title, autoType, executed: true,

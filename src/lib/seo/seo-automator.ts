@@ -19,7 +19,26 @@ export type AutoTaskType =
   | 'image_alt_text'
   | 'internal_linking'
   | 'content_optimization'
-  | 'daily_seo_article';
+  | 'daily_seo_article'
+  // Automation module types (from autonomous engines)
+  | 'technical_seo'
+  | 'auto_internal_linking'
+  | 'faq_schema'
+  | 'meta_optimization'
+  | 'content_refresh'
+  | 'topic_clusters'
+  | 'geo_visibility'
+  | 'image_seo'
+  | 'cta_optimization'
+  | 'local_seo'
+  | 'cannibalization'
+  | 'authority_reinforcement'
+  | 'humanization'
+  | 'entity_graph'
+  | 'gsc_intelligence'
+  | 'ga4_conversion'
+  | 'serp_monitoring'
+  | 'adaptive_strategy';
 
 export interface AutoTaskResult {
   taskType: AutoTaskType;
@@ -1174,6 +1193,269 @@ export async function executeAutoTask(
   }
 
   return executor(context);
+}
+
+/**
+ * Execute an automation module task (from the autonomous engines).
+ * Maps AutomationModuleType → the correct engine file.
+ */
+export async function executeAutomationModule(
+  moduleName: string,
+  context: AutomationContext,
+  config?: { maxPages?: number; dryRun?: boolean; approvalRequired?: boolean },
+): Promise<AutoTaskResult> {
+  const startTime = Date.now();
+  console.log(`[AUTO-MODULE] Executing module: ${moduleName}`);
+
+  try {
+    // Build a minimal WPConnection-compatible context for the engines
+    const wpConn = context.connection;
+    const autoCtx = {
+      planId: context.planId,
+      businessName: context.businessName,
+      businessType: context.businessType,
+      industry: context.industry,
+      products: context.products,
+      location: context.location,
+      targetKeywords: context.targetKeywords,
+      siteUrl: wpConn.siteUrl,
+    };
+
+    let result: any = null;
+    let pagesAffected = 0;
+    const changes: AutoTaskChange[] = [];
+
+    switch (moduleName) {
+      case 'technical_seo': {
+        const { executeTechnicalMonitor } = await import('./technical-seo-monitor');
+        result = await executeTechnicalMonitor(wpConn, autoCtx as any);
+        pagesAffected = result?.issues?.length || 0;
+        if (result?.issues) {
+          for (const issue of result.issues.slice(0, 10)) {
+            changes.push({ pageUrl: issue.url || wpConn.siteUrl, pageTitle: issue.type || 'Technical', pageId: 0, field: 'technical_seo', oldValue: issue.severity || 'issue', newValue: issue.fix || 'fixed' });
+          }
+        }
+        break;
+      }
+      case 'auto_internal_linking': {
+        const { executeInternalLinking } = await import('./internal-linking-engine');
+        result = await executeInternalLinking(wpConn, autoCtx as any);
+        pagesAffected = result?.linksAdded || 0;
+        if (result?.actions) {
+          for (const action of result.actions.slice(0, 10)) {
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'internal_link', oldValue: '', newValue: action.description || 'link added' });
+          }
+        }
+        break;
+      }
+      case 'faq_schema': {
+        const { executeFAQSchemaEngine } = await import('./faq-schema-engine');
+        result = await executeFAQSchemaEngine(wpConn, autoCtx as any);
+        pagesAffected = result?.pagesUpdated || 0;
+        if (result?.actions) {
+          for (const action of result.actions.slice(0, 10)) {
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'faq_schema', oldValue: '', newValue: action.description || 'FAQ added' });
+          }
+        }
+        break;
+      }
+      case 'meta_optimization': {
+        const { executeMetaOptimization } = await import('./meta-optimization-engine');
+        result = await executeMetaOptimization(wpConn, autoCtx as any);
+        pagesAffected = result?.pagesOptimized || 0;
+        if (result?.actions) {
+          for (const action of result.actions.slice(0, 10)) {
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'meta_tags', oldValue: action.oldValue || '', newValue: action.newValue || 'optimized' });
+          }
+        }
+        break;
+      }
+      case 'content_refresh': {
+        const { executeContentRefresh } = await import('./content-refresh-engine');
+        result = await executeContentRefresh(wpConn, autoCtx as any);
+        pagesAffected = result?.pagesRefreshed || 0;
+        if (result?.actions) {
+          for (const action of result.actions.slice(0, 10)) {
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'content_refresh', oldValue: '', newValue: action.description || 'refreshed' });
+          }
+        }
+        break;
+      }
+      case 'topic_clusters': {
+        const { executeClusterAnalysis } = await import('./topic-cluster-builder');
+        result = await executeClusterAnalysis(wpConn, autoCtx as any);
+        pagesAffected = result?.clustersBuilt || 0;
+        if (result?.actions) {
+          for (const action of result.actions.slice(0, 10)) {
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'topic_cluster', oldValue: '', newValue: action.description || 'cluster built' });
+          }
+        }
+        break;
+      }
+      case 'geo_visibility': {
+        const { executeGEOOptimizer } = await import('./geo-visibility-optimizer');
+        result = await executeGEOOptimizer(wpConn, autoCtx as any);
+        pagesAffected = result?.pagesOptimized || 0;
+        if (result?.actions) {
+          for (const action of result.actions.slice(0, 10)) {
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'geo_visibility', oldValue: '', newValue: action.description || 'geo optimized' });
+          }
+        }
+        break;
+      }
+      case 'image_seo': {
+        const { executeImageSEO } = await import('./image-seo-engine');
+        result = await executeImageSEO(wpConn, autoCtx as any);
+        pagesAffected = result?.imagesOptimized || 0;
+        if (result?.actions) {
+          for (const action of result.actions.slice(0, 10)) {
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'image_seo', oldValue: action.oldValue || '', newValue: action.newValue || 'alt added' });
+          }
+        }
+        break;
+      }
+      case 'cta_optimization': {
+        const { executeCTAOptimizer } = await import('./cta-optimizer');
+        result = await executeCTAOptimizer(wpConn, autoCtx as any);
+        pagesAffected = result?.ctasAdded || 0;
+        if (result?.actions) {
+          for (const action of result.actions.slice(0, 10)) {
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'cta', oldValue: '', newValue: action.description || 'CTA added' });
+          }
+        }
+        break;
+      }
+      case 'local_seo': {
+        const { executeLocalSEO } = await import('./local-seo-engine');
+        result = await executeLocalSEO(wpConn, autoCtx as any);
+        pagesAffected = result?.pagesOptimized || 0;
+        if (result?.actions) {
+          for (const action of result.actions.slice(0, 10)) {
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'local_seo', oldValue: '', newValue: action.description || 'local optimized' });
+          }
+        }
+        break;
+      }
+      case 'cannibalization': {
+        const { detectCannibalization } = await import('./cannibalization-detector');
+        result = await detectCannibalization(wpConn, autoCtx as any);
+        pagesAffected = result?.issuesFound || 0;
+        if (result?.actions) {
+          for (const action of result.actions.slice(0, 10)) {
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'cannibalization', oldValue: '', newValue: action.description || 'issue detected' });
+          }
+        }
+        break;
+      }
+      case 'authority_reinforcement': {
+        const { executeAuthorityReinforcement } = await import('./authority-reinforcement-engine');
+        result = await executeAuthorityReinforcement(wpConn, autoCtx as any);
+        pagesAffected = result?.pagesReinforced || 0;
+        if (result?.actions) {
+          for (const action of result.actions.slice(0, 10)) {
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'authority', oldValue: '', newValue: action.description || 'authority reinforced' });
+          }
+        }
+        break;
+      }
+      case 'humanization': {
+        const { executeHumanization } = await import('./humanization-engine');
+        result = await executeHumanization(wpConn, autoCtx as any);
+        pagesAffected = result?.pagesHumanized || 0;
+        if (result?.actions) {
+          for (const action of result.actions.slice(0, 10)) {
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'humanization', oldValue: '', newValue: action.description || 'humanized' });
+          }
+        }
+        break;
+      }
+      case 'entity_graph': {
+        const { executeEntityGraphAnalysis } = await import('./semantic-entity-graph');
+        result = await executeEntityGraphAnalysis(wpConn, autoCtx as any);
+        pagesAffected = result?.entitiesProcessed || 0;
+        if (result?.actions) {
+          for (const action of result.actions.slice(0, 10)) {
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'entity_graph', oldValue: '', newValue: action.description || 'entity linked' });
+          }
+        }
+        break;
+      }
+      case 'gsc_intelligence': {
+        const { executeGSCIntelligence } = await import('./gsc-intelligence-engine');
+        result = await executeGSCIntelligence(autoCtx as any);
+        pagesAffected = result?.opportunitiesFound || 0;
+        if (result?.actions) {
+          for (const action of result.actions.slice(0, 10)) {
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'gsc_intelligence', oldValue: '', newValue: action.description || 'opportunity found' });
+          }
+        }
+        break;
+      }
+      case 'ga4_conversion': {
+        const { executeGA4Intelligence } = await import('./ga4-conversion-engine');
+        result = await executeGA4Intelligence(autoCtx as any);
+        pagesAffected = result?.insightsGenerated || 0;
+        if (result?.actions) {
+          for (const action of result.actions.slice(0, 10)) {
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'ga4_conversion', oldValue: '', newValue: action.description || 'insight generated' });
+          }
+        }
+        break;
+      }
+      case 'serp_monitoring': {
+        const { analyzeSERPMovements } = await import('./serp-movement-monitor');
+        result = await analyzeSERPMovements(autoCtx as any);
+        pagesAffected = result?.keywordsTracked || 0;
+        if (result?.actions) {
+          for (const action of result.actions.slice(0, 10)) {
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'serp_monitoring', oldValue: '', newValue: action.description || 'ranking tracked' });
+          }
+        }
+        break;
+      }
+      case 'adaptive_strategy': {
+        const { executeAdaptiveStrategy } = await import('./adaptive-strategy-engine');
+        result = await executeAdaptiveStrategy(autoCtx as any);
+        pagesAffected = result?.recommendationsGenerated || 0;
+        if (result?.actions) {
+          for (const action of result.actions.slice(0, 10)) {
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'adaptive_strategy', oldValue: '', newValue: action.description || 'strategy updated' });
+          }
+        }
+        break;
+      }
+      default:
+        return {
+          taskType: moduleName as AutoTaskType,
+          success: false,
+          pagesAffected: 0,
+          changes: [],
+          error: `Unknown automation module: ${moduleName}`,
+          executedAt: new Date().toISOString(),
+        };
+    }
+
+    const elapsed = Date.now() - startTime;
+    console.log(`[AUTO-MODULE] Module ${moduleName} completed in ${elapsed}ms — ${pagesAffected} pages affected, ${changes.length} changes`);
+
+    return {
+      taskType: moduleName as AutoTaskType,
+      success: result?.success !== false,
+      pagesAffected,
+      changes,
+      executedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error(`[AUTO-MODULE] Module ${moduleName} failed:`, error);
+    return {
+      taskType: moduleName as AutoTaskType,
+      success: false,
+      pagesAffected: 0,
+      changes: [],
+      error: error instanceof Error ? error.message : 'Unknown error',
+      executedAt: new Date().toISOString(),
+    };
+  }
 }
 
 /**

@@ -12,6 +12,7 @@ import {
 } from '@/lib/seo/api-helpers';
 import {
   executeAutoTask,
+  executeAutomationModule,
   mapPlanTaskToAutoType,
   type AutoTaskType,
   type AutoTaskResult,
@@ -101,16 +102,33 @@ async function _POST(
       return err('WordPress לא מחובר — חבר את WordPress מחדש בדף התוכנית', 400);
     }
 
-    // Determine automation task type
+    // Look up the actual task object from the plan to check for automationModule
+    const planDays = (plan as any).days || [];
+    let planTask: any = null;
+    for (const day of planDays) {
+      if (!Array.isArray(day.tasks)) continue;
+      planTask = day.tasks.find((t: any) => t.id === taskId);
+      if (planTask) break;
+    }
+
+    // Check if this task has an automationModule (new 18-engine system)
+    const automationModule = planTask?.automationModule || undefined;
+
+    // Determine automation task type (legacy path)
     let autoTaskType: AutoTaskType | null = null;
 
-    if (providedTaskType) {
+    if (automationModule) {
+      // Map plan's automationModule name to AutoTaskType
+      // Handle naming collision: plan uses 'internal_linking', AutoTaskType uses 'auto_internal_linking'
+      autoTaskType = (automationModule === 'internal_linking' ? 'auto_internal_linking' : automationModule) as AutoTaskType;
+      console.log(`[EXECUTE-TASK] Using automationModule from plan task: "${automationModule}" → autoTaskType="${autoTaskType}"`);
+    } else if (providedTaskType) {
       autoTaskType = providedTaskType as AutoTaskType;
     } else {
       autoTaskType = mapPlanTaskToAutoType(taskTitle);
     }
 
-    console.log(`[EXECUTE-TASK] taskTitle="${taskTitle}" → autoTaskType=${autoTaskType}`);
+    console.log(`[EXECUTE-TASK] taskTitle="${taskTitle}" → autoTaskType=${autoTaskType}, automationModule=${automationModule || 'none'}`);
     if (!autoTaskType) {
       return err('לא ניתן לזהות סוג משימה', 400);
     }
@@ -144,8 +162,14 @@ async function _POST(
       specificKeyword,
     };
 
-    // Execute the automation task
-    const result = await executeAutoTask(autoTaskType, automationContext);
+    // Execute: use automationModule dispatcher for new engines, legacy executeAutoTask for old ones
+    let result: AutoTaskResult;
+    if (automationModule) {
+      console.log(`[EXECUTE-TASK] Dispatching to executeAutomationModule("${autoTaskType}")`);
+      result = await executeAutomationModule(autoTaskType, automationContext, planTask?.automationConfig);
+    } else {
+      result = await executeAutoTask(autoTaskType, automationContext);
+    }
 
     // Save result to plan's automation results
     const automationResults = (plan as any).automationResults || [];

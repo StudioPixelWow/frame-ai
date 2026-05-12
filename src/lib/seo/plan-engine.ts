@@ -208,6 +208,14 @@ export interface DayPlan {
   tasks: DayTask[];
 }
 
+/** מודולי אוטומציה — תואם את AutomationModule מה-orchestrator */
+export type AutomationModuleType =
+  | 'technical_seo' | 'internal_linking' | 'faq_schema' | 'meta_optimization'
+  | 'content_refresh' | 'topic_clusters' | 'geo_visibility' | 'image_seo'
+  | 'cta_optimization' | 'local_seo' | 'cannibalization' | 'authority_reinforcement'
+  | 'humanization' | 'entity_graph' | 'gsc_intelligence' | 'ga4_conversion'
+  | 'serp_monitoring' | 'adaptive_strategy';
+
 export interface DayTask {
   id: string;
   title: string;
@@ -219,6 +227,15 @@ export interface DayTask {
   expectedOutcome: string;
   reason: string;
   contentBrief: string | null;
+  // ── Automation engine fields ──
+  automationModule?: AutomationModuleType;
+  autoExecutable?: boolean;
+  automationConfig?: {
+    maxPages?: number;
+    dryRun?: boolean;
+    approvalRequired?: boolean;
+    targetSelector?: string;
+  };
 }
 
 export interface GeneratedPlan {
@@ -1382,6 +1399,219 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
     }
   }
 
+  // ─── Inject Automation-Engine Tasks ────────────────────────────────────────
+  // Each module is distributed across the phase(s) where it's most relevant,
+  // following the mapping from autonomous-seo-orchestrator.getModulesForPhase().
+  // Tasks carry automationModule so the daily-runner can dispatch to the real engine.
+
+  const addAutoToDay = (day: number, task: DayTask) => {
+    const existing = days.find(d => d.day === day);
+    if (existing) {
+      existing.tasks.push(task);
+    } else {
+      const ph = phaseFor(day);
+      days.push({
+        day,
+        date: dayDate(day),
+        phase: ph.name,
+        phaseNumber: ph.number,
+        focusTitle: task.title,
+        tasks: [task],
+      });
+    }
+  };
+
+  // ── Phase 1 (Days 1-7): Foundation ──
+  addAutoToDay(2, mkAutoTask('technical_seo', 'technical', 'high',
+    'סריקה טכנית אוטומטית — בעיות קריטיות',
+    'סריקת האתר לזיהוי שגיאות 404, הפניות שבורות, בעיות robots.txt, ותגי canonical חסרים. התיקון מתבצע אוטומטית.',
+    0.5, 'זיהוי ותיקון אוטומטי של כל הבעיות הטכניות הקריטיות', 'בעיות טכניות פוגעות בסמכות האתר ובדירוג'));
+
+  addAutoToDay(3, mkAutoTask('image_seo', 'technical', 'medium',
+    'אופטימיזציית תמונות אוטומטית — Alt Tags ודחיסה',
+    'סריקת כל התמונות באתר, הוספת Alt Tags חסרים מבוססי AI, ודחיסת תמונות כבדות.',
+    0.5, 'כל התמונות עם Alt tags ממוקדי SEO ומשקל מותאם', 'תמונות ללא Alt פוגעות בנגישות ובדירוג תמונות',
+    { maxPages: 20 }));
+
+  addAutoToDay(4, mkAutoTask('meta_optimization', 'content', 'high',
+    'אופטימיזציית Meta Tags אוטומטית',
+    'שכתוב אוטומטי של Title Tags ו-Meta Descriptions עבור עמודים עם CTR נמוך או תגיות חסרות. מבוסס ביטויי מפתח.',
+    0.5, 'Meta tags ממוקדי ביטויים בכל העמודים הקריטיים', 'Meta tags הם הרושם הראשון בתוצאות חיפוש',
+    { maxPages: 15 }));
+
+  addAutoToDay(5, mkAutoTask('entity_graph', 'content', 'medium',
+    'בניית גרף ישויות — Entity Recognition',
+    'זיהוי וחיבור ישויות (אנשים, מקומות, מוצרים, מושגים) בתוכן האתר ליצירת Knowledge Graph פנימי.',
+    0.5, 'גרף ישויות מקושר שמחזק את ההבנה הסמנטית של האתר', 'גרפי ישויות מחזקים ראות AI'));
+
+  addAutoToDay(6, mkAutoTask('gsc_intelligence', 'analytics', 'high',
+    'ניתוח GSC אוטומטי — הזדמנויות מהירות',
+    'שליפת נתוני Search Console, זיהוי ביטויים בעמדות 5-15 עם CTR נמוך, והמלצות שיפור מיידיות.',
+    0.5, 'רשימת הזדמנויות quick-win מבוססת נתוני GSC אמיתיים', 'ביטויים בעמדות 5-15 הם ההזדמנות הכי מהירה לתוצאות'));
+
+  // ── Phase 2 (Days 8-20): Content Gap Closure ──
+  addAutoToDay(8, mkAutoTask('internal_linking', 'content', 'high',
+    'קישורים פנימיים אוטומטיים — רשת קישורים חכמה',
+    'ניתוח מבנה קישורים פנימיים, זיהוי עמודים יתומים, והוספת קישורים פנימיים אוטומטית בהתבסס על רלוונטיות סמנטית.',
+    0.5, 'רשת קישורים פנימיים מלאה ללא עמודים יתומים', 'קישורים פנימיים מחלקים סמכות ומשפרים סריקה'));
+
+  addAutoToDay(10, mkAutoTask('faq_schema', 'content', 'high',
+    'הזרקת FAQ Schema אוטומטית',
+    'זיהוי שאלות נפוצות מתוכן קיים והוספת FAQ Schema markup אוטומטית לעמודים מתאימים.',
+    0.5, 'FAQ Schema בכל העמודים הרלוונטיים לתוצאות עשירות', 'FAQ Schema מגדיל שטח בתוצאות חיפוש ומשפר CTR'));
+
+  addAutoToDay(11, mkAutoTask('cta_optimization', 'content', 'medium',
+    'אופטימיזציית CTA אוטומטית',
+    'ניתוח קריאות לפעולה קיימות, הוספת CTAs חסרים, ושיפור ניסוח ומיקום CTA בעמודי המרה.',
+    0.5, 'CTAs ממוקדי המרה בכל העמודים העסקיים', 'CTAs חזקים מעלים שיעורי המרה'));
+
+  addAutoToDay(13, mkAutoTask('meta_optimization', 'content', 'medium',
+    'סבב שני — Meta Tags לעמודי תוכן חדשים',
+    'אופטימיזציה אוטומטית של Meta Tags עבור עמודי התוכן שנוצרו בשלב 2.',
+    0.3, 'Meta tags מותאמים לכל התוכן החדש', 'תוכן חדש צריך Meta tags ממוקדים מרגע הפרסום'));
+
+  addAutoToDay(14, mkAutoTask('image_seo', 'technical', 'medium',
+    'אופטימיזציית תמונות — סבב תוכן חדש',
+    'בדיקת תמונות בתוכן שנוצר בימים האחרונים: Alt tags, דחיסה, ו-lazy loading.',
+    0.3, 'תמונות מאופטימות בכל התוכן החדש', 'תוכן חדש עם תמונות לא מאופטימות מפסיד דירוגי תמונות'));
+
+  addAutoToDay(16, mkAutoTask('technical_seo', 'technical', 'medium',
+    'בדיקה טכנית שוטפת — שלב 2',
+    'סריקה מחדש של בעיות טכניות שנוצרו מתוכן חדש: קישורים שבורים, חסימות סריקה, ובעיות מהירות.',
+    0.3, 'אפס בעיות טכניות חדשות משלב התוכן', 'הוספת תוכן עלולה ליצור בעיות טכניות חדשות'));
+
+  addAutoToDay(18, mkAutoTask('internal_linking', 'content', 'medium',
+    'עדכון קישורים פנימיים — חיבור תוכן חדש',
+    'חיבור כל התוכן החדש מימים 8-17 לרשת הקישורים הפנימיים הקיימת.',
+    0.5, 'תוכן חדש משולב ברשת הקישורים הפנימיים', 'תוכן חדש ללא קישורים פנימיים נשאר "יתום"'));
+
+  // ── Phase 3 (Days 21-35): GEO & Schema ──
+  addAutoToDay(21, mkAutoTask('faq_schema', 'content', 'high',
+    'בניית FAQ Schema מתקדם — עם ניתוח שאילתות AI',
+    'יצירת שאלות ותשובות בהתבסס על שאילתות AI שהאתר מוזכר בהן, והזרקת Schema.',
+    0.5, 'FAQ Schema מותאם לשאילתות AI בכל העמודים', 'FAQ מותאם AI מגדיל סיכוי לציטוט במנועי AI'));
+
+  addAutoToDay(23, mkAutoTask('humanization', 'content', 'medium',
+    'הומניזציית תוכן אוטומטית',
+    'ניתוח ציון AI של תוכן האתר ושכתוב אוטומטי של קטעים שמזוהים כ-AI-generated לסגנון אנושי יותר.',
+    0.5, 'כל התוכן עובר סף הומניזציה — ציון AI מתחת ל-30%', 'Google מעניש תוכן AI גלוי — הומניזציה מגנה על הדירוג',
+    { approvalRequired: true }));
+
+  addAutoToDay(25, mkAutoTask('authority_reinforcement', 'content', 'high',
+    'חיזוק סמכות אוטומטי — E-E-A-T Signals',
+    'הוספת אותות E-E-A-T: ביוגרפיות מחברים, מקורות, תאריכי עדכון, ולינקים למקורות סמכותיים.',
+    0.5, 'אותות E-E-A-T בכל עמודי התוכן המרכזיים', 'Google מדגיש E-E-A-T בדירוגים — במיוחד YMYL'));
+
+  addAutoToDay(27, mkAutoTask('topic_clusters', 'content', 'high',
+    'בניית Topic Clusters אוטומטית',
+    'זיהוי נושאי ליבה, יצירת Pillar Pages, וחיבור מאמרי Cluster עם קישורים פנימיים מובנים.',
+    0.5, 'מבנה Topic Clusters מלא עם Pillar Pages מקושרות', 'Topic Clusters מראים ל-Google שיש לך סמכות מלאה בנושא'));
+
+  addAutoToDay(28, mkAutoTask('entity_graph', 'content', 'medium',
+    'עדכון גרף ישויות — חיבור תוכן חדש',
+    'עדכון גרף הישויות עם כל התוכן החדש שנוצר בשלבים 2-3 וחיזוק קשרים סמנטיים.',
+    0.5, 'גרף ישויות מעודכן שמכסה את כל התוכן', 'גרף ישויות עדכני מחזק הבנה סמנטית'));
+
+  addAutoToDay(30, mkAutoTask('internal_linking', 'content', 'medium',
+    'אופטימיזציית קישורים פנימיים — שלב 3',
+    'סריקה מחדש של כל הקישורים הפנימיים, תיקון Anchor Text, וחיזוק מסלולי משתמש קריטיים.',
+    0.5, 'רשת קישורים פנימיים מאופטימת עם Anchor Text ממוקד', 'Anchor Text בקישורים פנימיים מאותת לגוגל על רלוונטיות'));
+
+  addAutoToDay(33, mkAutoTask('technical_seo', 'technical', 'medium',
+    'סריקה טכנית שלב 3 — בדיקת Schema ומהירות',
+    'בדיקת תקינות Schema markup, Core Web Vitals, ובעיות טכניות שנצברו.',
+    0.3, 'אפס שגיאות Schema + Core Web Vitals תקינים', 'Schema לא תקין לא יציג תוצאות עשירות'));
+
+  // ── Phase 4 (Days 36-50): Competitor & Authority ──
+  addAutoToDay(36, mkAutoTask('adaptive_strategy', 'analytics', 'high',
+    'אסטרטגיה אדפטיבית — ניתוח ביצועים ועדכון תוכנית',
+    'ניתוח אוטומטי של כל הנתונים שנאספו עד כה, זיהוי מה עובד ומה לא, ועדכון אסטרטגיית SEO.',
+    0.5, 'תוכנית SEO מעודכנת מבוססת נתוני ביצועים אמיתיים', 'אסטרטגיה שלא מתעדכנת לפי נתונים מפסידה הזדמנויות'));
+
+  addAutoToDay(38, mkAutoTask('geo_visibility', 'content', 'high',
+    'אופטימיזציית ראות גיאוגרפית',
+    'אופטימיזציה של תוכן לחיפושים מקומיים: הוספת מיקום, שעות פעילות, ו-LocalBusiness Schema.',
+    0.5, 'ראות גיאוגרפית מוגברת באזור היעד', 'חיפושים מקומיים מהווים 46% מכלל החיפושים בגוגל'));
+
+  addAutoToDay(39, mkAutoTask('local_seo', 'content', 'medium',
+    'SEO מקומי — Google Business Profile ו-Citations',
+    'בדיקת עקביות NAP, אופטימיזציית Google Business Profile, ובניית Citations מקומיים.',
+    0.5, 'פרופיל מקומי אחיד ומאופטם בכל הפלטפורמות', 'חוסר עקביות NAP פוגע בדירוג מקומי'));
+
+  addAutoToDay(41, mkAutoTask('humanization', 'content', 'medium',
+    'הומניזציה — סבב שני לתוכן חדש',
+    'בדיקת ציון AI של כל התוכן שנוצר מיום 21 ואילך ושכתוב קטעים בעייתיים.',
+    0.5, 'כל התוכן החדש עובר סף הומניזציה', 'תוכן שנוצר בשלב 3 צריך בדיקת הומניזציה',
+    { approvalRequired: true }));
+
+  addAutoToDay(43, mkAutoTask('entity_graph', 'content', 'medium',
+    'עדכון גרף ישויות — שלב 4',
+    'הרחבת גרף הישויות עם ישויות של מתחרים, קשרים חדשים, ו-co-occurrence patterns.',
+    0.5, 'גרף ישויות מורחב שכולל ישויות מתחרים ותעשייה', 'גרף ישויות רחב יותר מחזק סמכות תעשייתית'));
+
+  addAutoToDay(44, mkAutoTask('faq_schema', 'content', 'medium',
+    'עדכון FAQ Schema — שאלות מתחרים',
+    'ניתוח שאלות שמתחרים עונים עליהן ואנחנו לא, והוספת FAQ Schema מתאים.',
+    0.5, 'כיסוי FAQ מלא ביחס למתחרים', 'שאלות שמתחרים עונים עליהן הן הזדמנויות שלנו'));
+
+  addAutoToDay(46, mkAutoTask('authority_reinforcement', 'content', 'medium',
+    'חיזוק סמכות — סבב שני',
+    'בדיקת אותות E-E-A-T בתוכן חדש, הוספת ציטוטים, מקורות, ועדכון ביוגרפיות.',
+    0.5, 'אותות E-E-A-T בכל התוכן — ישן וחדש', 'סמכות נבנית על ידי עקביות — לא רק תוכן ישן'));
+
+  addAutoToDay(48, mkAutoTask('technical_seo', 'technical', 'medium',
+    'סריקה טכנית שלב 4 — לפני שלב האופטימיזציה',
+    'סריקה טכנית מקיפה לפני כניסה לשלב הסופי — ניקוי כל הבעיות שנותרו.',
+    0.3, 'אתר נקי טכנית לפני שלב האופטימיזציה הסופי', 'כניסה לשלב 5 עם בעיות טכניות פוגעת ביעילות'));
+
+  // ── Phase 5 (Days 51-60): Optimization & Reporting ──
+  addAutoToDay(51, mkAutoTask('gsc_intelligence', 'analytics', 'high',
+    'ניתוח GSC מעמיק — מגמות 60 יום',
+    'ניתוח מלא של נתוני GSC על פני 60 יום: ביטויים שעלו, ביטויים שירדו, הזדמנויות חדשות.',
+    0.5, 'דוח מגמות GSC מלא עם המלצות פעולה', 'נתוני GSC על פני זמן חושפים מגמות שלא נראות ביום אחד'));
+
+  addAutoToDay(52, mkAutoTask('ga4_conversion', 'analytics', 'high',
+    'ניתוח GA4 — שיעורי המרה ומסלולי משתמש',
+    'ניתוח נתוני GA4: שיעורי המרה לפי עמוד, מסלולי משתמש, נקודות נטישה, ואירועי מפתח.',
+    0.5, 'דוח המרות מלא עם זיהוי צווארי בקבוק', 'שיפור שיעורי המרה שווה יותר מעלייה בתנועה'));
+
+  addAutoToDay(53, mkAutoTask('serp_monitoring', 'analytics', 'high',
+    'ניטור SERP אוטומטי — מעקב דירוגים',
+    'בדיקת דירוגים נוכחיים מול Baseline, זיהוי שינויים, ודיווח על עמדות לכל ביטוי מפתח.',
+    0.5, 'דוח דירוגים מלא — לפני לעומת אחרי', 'מעקב דירוגים מוכיח ROI ומזהה בעיות מוקדם'));
+
+  addAutoToDay(54, mkAutoTask('cannibalization', 'analytics', 'high',
+    'זיהוי קניבליזציה — מניעת תחרות פנימית',
+    'סריקת האתר לזיהוי עמודים שמתחרים על אותם ביטויים, והמלצות לאיחוד או בידול.',
+    0.5, 'אפס קניבליזציה — כל ביטוי ממופה לעמוד אחד', 'קניבליזציה פוגעת בדירוג של שני העמודים המתחרים',
+    { approvalRequired: true }));
+
+  addAutoToDay(55, mkAutoTask('content_refresh', 'content', 'high',
+    'רענון תוכן אוטומטי — עמודים שירדו',
+    'זיהוי עמודים שירדו בדירוג ב-60 יום ורענון אוטומטי: עדכון מידע, הוספת קטעים, ושיפור מבנה.',
+    0.5, 'כל העמודים שירדו מרועננים ומעודכנים', 'רענון תוכן הוא הדרך המהירה ביותר לשחזר דירוגים',
+    { approvalRequired: true }));
+
+  addAutoToDay(56, mkAutoTask('adaptive_strategy', 'analytics', 'high',
+    'אסטרטגיה אדפטיבית — סיכום והמלצות לחודשים הבאים',
+    'ניתוח סופי של כל הנתונים, חישוב ROI, והמלצות אסטרטגיות לתקופה הבאה.',
+    0.5, 'דוח אסטרטגי סופי עם תוכנית פעולה להמשך', 'אסטרטגיה ממשיכה אחרי 60 יום — זה לא סוף'));
+
+  addAutoToDay(57, mkAutoTask('meta_optimization', 'content', 'medium',
+    'סבב אופטימיזציה סופי — Meta Tags',
+    'סבב אופטימיזציה אחרון של Meta Tags בהתבסס על נתוני CTR מ-GSC.',
+    0.3, 'Meta tags מאופטמים סופית לפי נתוני ביצועים', 'Meta tags מבוססי נתונים טובים יותר מהשערות'));
+
+  addAutoToDay(58, mkAutoTask('internal_linking', 'content', 'medium',
+    'אופטימיזציית קישורים פנימיים — סופי',
+    'סריקה סופית של קישורים פנימיים, תיקון קישורים שבורים, ואופטימיזציית מבנה הניווט.',
+    0.3, 'רשת קישורים פנימיים מושלמת ומעודכנת', 'קישורים פנימיים שבורים פוגעים בחוויית משתמש ובסריקה'));
+
+  addAutoToDay(59, mkAutoTask('technical_seo', 'technical', 'medium',
+    'סריקה טכנית סופית — בדיקת תקינות',
+    'סריקה טכנית סופית לוודא שהכל תקין: Schema, robots.txt, sitemap, Core Web Vitals.',
+    0.3, 'אתר תקין טכנית ב-100% — מוכן להמשך', 'סריקה סופית מבטיחה שלא נשארו בעיות'));
+
   // Sort by day
   days.sort((a, b) => a.day - b.day);
 
@@ -1445,6 +1675,36 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
       expectedOutcome,
       reason,
       contentBrief: contentBrief || null,
+    };
+  }
+
+  // ─── Helper: make an automation task ──────────────────────────────
+  function mkAutoTask(
+    module: AutomationModuleType,
+    type: TaskCategory, impact: ImpactLevel,
+    title: string, description: string,
+    effortHours: number,
+    expectedOutcome: string, reason: string,
+    opts?: { approvalRequired?: boolean; maxPages?: number; relatedPageUrl?: string },
+  ): DayTask {
+    return {
+      id: mkId(),
+      title: `🤖 ${title}`,
+      type,
+      description,
+      impactLevel: impact,
+      effortHours,
+      relatedPageUrl: opts?.relatedPageUrl || null,
+      expectedOutcome,
+      reason,
+      contentBrief: null,
+      automationModule: module,
+      autoExecutable: true,
+      automationConfig: {
+        maxPages: opts?.maxPages || 10,
+        dryRun: false,
+        approvalRequired: opts?.approvalRequired ?? false,
+      },
     };
   }
 }
