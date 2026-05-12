@@ -432,6 +432,68 @@ async function checkUrl(url: string): Promise<boolean> {
   } catch { return false; }
 }
 
+/**
+ * Fetch and parse sitemap.xml to discover internal page URLs.
+ * Handles both regular sitemaps and sitemap index files.
+ */
+async function fetchSitemapUrls(sitemapUrl: string, maxUrls: number = 30): Promise<string[]> {
+  try {
+    const c = new AbortController();
+    const tid = setTimeout(() => c.abort(), 8000);
+    const res = await fetch(sitemapUrl, {
+      signal: c.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        'Accept': 'application/xml, text/xml, */*',
+      },
+    });
+    clearTimeout(tid);
+    if (!res.ok) return [];
+    const xml = await res.text();
+    if (!xml || xml.length < 50) return [];
+
+    const urls: string[] = [];
+
+    // Check if this is a sitemap index (contains <sitemap> and <loc>)
+    const isSitemapIndex = /<sitemapindex/i.test(xml);
+
+    if (isSitemapIndex) {
+      // Parse sitemap index — get the first sub-sitemap and parse it
+      const subSitemapRegex = /<sitemap>\s*<loc>([^<]+)<\/loc>/gi;
+      let match;
+      const subSitemaps: string[] = [];
+      while ((match = subSitemapRegex.exec(xml)) !== null && subSitemaps.length < 3) {
+        subSitemaps.push(match[1].trim());
+      }
+      // Fetch the first sub-sitemap for URLs
+      for (const subUrl of subSitemaps) {
+        if (urls.length >= maxUrls) break;
+        try {
+          const subUrls = await fetchSitemapUrls(subUrl, maxUrls - urls.length);
+          urls.push(...subUrls);
+        } catch { /* skip failed sub-sitemaps */ }
+      }
+    } else {
+      // Regular sitemap — extract <loc> URLs
+      const locRegex = /<url>\s*<loc>([^<]+)<\/loc>/gi;
+      let match;
+      while ((match = locRegex.exec(xml)) !== null && urls.length < maxUrls) {
+        const url = match[1].trim();
+        // Skip non-page URLs (images, PDFs, etc.)
+        if (!/\.(jpg|jpeg|png|gif|svg|pdf|zip|mp4|mp3|css|js)$/i.test(url)) {
+          urls.push(url);
+        }
+      }
+    }
+
+    console.log(`[SCAN-PIPELINE] Sitemap parsed: ${urls.length} URLs from ${sitemapUrl}`);
+    return urls;
+  } catch (err) {
+    console.warn(`[SCAN-PIPELINE] Failed to parse sitemap: ${err instanceof Error ? err.message : 'unknown'}`);
+    return [];
+  }
+}
+
 // ── Stage Definitions ───────────────────────────────────────────���──────────────
 
 function createStages(): StageProgress[] {
@@ -577,7 +639,7 @@ function validateScan(job: ScanJob, pages: ScannedPageInfo[], facts: WebsiteFact
 
   checks.push({
     id: 'duration',
-    label: 'זמן סריקה >= 5 שניות',
+    label: `זמן סריקה >= ${MIN_SCAN_DURATION_MS / 1000} שניות`,
     passed: duration >= MIN_SCAN_DURATION_MS,
     actual: `${(duration / 1000).toFixed(1)}s`,
     required: `>= ${MIN_SCAN_DURATION_MS / 1000}s`,
@@ -717,6 +779,7 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
 
     const sizeKb = (homepageHtml.length / 1024).toFixed(0);
     log(job, 'fetch_homepage', `עמוד הבית נטען בהצלחה (${httpStatus || 200} OK)`, 'success', `${(loadTimeMs / 1000).toFixed(1)}s, ${sizeKb}KB`);
+    console.log(`[SCAN-PIPELINE] Stage 2: Homepage fetched in ${loadTimeMs}ms, size=${sizeKb}KB`);
     completeStage(job, 'fetch_homepage');
     stageDurations.fetch_homepage = Date.now() - s2;
 
@@ -726,19 +789,57 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
 
     const homepageParsed = parseHtml(homepageHtml, normalizedUrl);
     const totalLinks = homepageParsed.internalLinks.length;
-    log(job, 'discover_pages', `נמצאו ${totalLinks} קישורים פנימיים`, 'success');
+    log(job, 'discover_pages', `נמצאו ${totalLinks} קישורים פנימיים בעמוד הבית`, 'success');
+    console.log(`[SCAN-PIPELINE] Stage 3: ${totalLinks} internal links found on homepage`);
 
     // Check robots.txt & sitemap
     log(job, 'discover_pages', 'בודק robots.txt ו-sitemap...', 'info');
+    const sitemapUrl = `${urlObj.protocol}//${urlObj.hostname}/sitemap.xml`;
     const [hasRobotsTxt, hasSitemap] = await Promise.all([
       checkUrl(`${urlObj.protocol}//${urlObj.hostname}/robots.txt`),
-      checkUrl(`${urlObj.protocol}//${urlObj.hostname}/sitemap.xml`),
+      checkUrl(sitemapUrl),
     ]);
     log(job, 'discover_pages', 'robots.txt', hasRobotsTxt ? 'success' : 'warning', hasRobotsTxt ? 'נמצא' : 'לא נמצא');
     log(job, 'discover_pages', 'sitemap.xml', hasSitemap ? 'success' : 'warning', hasSitemap ? 'נמצא' : 'לא נמצא');
 
-    const pagesToVisit = homepageParsed.internalLinks.slice(0, config.maxPages);
-    log(job, 'discover_pages', `${pagesToVisit.length} דפים בתור לסריקה`, 'info');
+    // Merge homepage links + sitemap URLs for a richer page list
+    let allDiscoveredUrls = [...homepageParsed.internalLinks];
+
+    // If sitemap exists, parse it for additional URLs (especially helpful for SPAs)
+    if (hasSitemap) {
+      log(job, 'discover_pages', 'מנתח sitemap.xml לגילוי דפים נוספים...', 'info');
+      const sitemapUrls = await fetchSitemapUrls(sitemapUrl, config.maxPages * 2);
+      if (sitemapUrls.length > 0) {
+        // Add sitemap URLs that aren't already in the list
+        const existingSet = new Set(allDiscoveredUrls.map(u => u.toLowerCase()));
+        let added = 0;
+        for (const sUrl of sitemapUrls) {
+          if (!existingSet.has(sUrl.toLowerCase())) {
+            allDiscoveredUrls.push(sUrl);
+            existingSet.add(sUrl.toLowerCase());
+            added++;
+          }
+        }
+        log(job, 'discover_pages', `${added} דפים נוספים מ-sitemap.xml`, added > 0 ? 'success' : 'info');
+        console.log(`[SCAN-PIPELINE] Sitemap added ${added} new URLs (total: ${allDiscoveredUrls.length})`);
+      }
+    }
+
+    // If still no internal links found (SPA/JS-rendered site), try common paths
+    if (allDiscoveredUrls.length === 0) {
+      log(job, 'discover_pages', 'לא נמצאו קישורים — מנסה נתיבים נפוצים', 'warning');
+      const commonPaths = ['/about', '/contact', '/services', '/products', '/blog', '/faq',
+        '/אודות', '/צור-קשר', '/שירותים'];
+      const baseUrl = `${urlObj.protocol}//${urlObj.hostname}`;
+      for (const path of commonPaths) {
+        allDiscoveredUrls.push(`${baseUrl}${path}`);
+      }
+      console.log(`[SCAN-PIPELINE] No links found, trying ${commonPaths.length} common paths`);
+    }
+
+    const pagesToVisit = allDiscoveredUrls.slice(0, config.maxPages);
+    log(job, 'discover_pages', `${pagesToVisit.length} דפים בתור לסריקה (מתוך ${allDiscoveredUrls.length} שנמצאו)`, 'info');
+    console.log(`[SCAN-PIPELINE] Stage 3: queued ${pagesToVisit.length} pages for scanning`);
 
     const stg3 = job.stages.find(s => s.stage === 'discover_pages');
     if (stg3) { stg3.itemsTotal = totalLinks; stg3.itemsProcessed = pagesToVisit.length; }
@@ -1380,6 +1481,9 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       jobId: job.id, type: job.scanType, pages: scannedPages.length,
       issues: issues.length, duration: job.totalDurationMs,
       confidence: websiteFacts.confidence_score, valid: validation.passed,
+      stageDurations,
+      platformsChecked, unavailableCount,
+      queriesGenerated: aiResults.length,
     });
 
   } catch (error) {
@@ -1417,7 +1521,7 @@ function finalizeUnreachable(job: ScanJob, url: string, start: number, durations
     issues: [{ type: 'critical', category: 'technical', title: 'לא ניתן להגיע לאתר',
       description: 'האתר לא נגיש. ודא שהכתובת נכונה ושהאתר פעיל.', impact: 'high' }],
     scannedPages: [], websiteFacts: null, scan_mode: 'unavailable',
-    aiQueries: [], platformStatuses: job.platformStatuses,
+    aiQueries: [], competitors: [], platformStatuses: job.platformStatuses,
     metrics: job.metrics,
     scanDuration: { startedAt: job.startedAt, completedAt: job.completedAt!, totalMs: job.totalDurationMs, perStage: durations },
   };
