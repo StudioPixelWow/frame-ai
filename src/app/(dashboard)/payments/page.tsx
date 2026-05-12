@@ -39,6 +39,34 @@ export default function PaymentsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map((p) => p.id)));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`למחוק ${selectedIds.size} תשלומים?`)) return;
+    for (const id of selectedIds) {
+      await remove(id);
+    }
+    setSelectedIds(new Set());
+    toast(`${selectedIds.size} תשלומים נמחקו`, "info");
+  };
+
   const [form, setForm] = useState({
     clientId: "", clientName: "", invoiceNo: "", type: "invoice" as Payment["type"],
     amount: 0, status: "pending" as Payment["status"], dueDate: "",
@@ -169,6 +197,21 @@ export default function PaymentsPage() {
           <input className="mod-search" placeholder="🔍 חיפוש..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ maxWidth: 220 }} />
         </div>
 
+        {/* Bulk delete bar */}
+        {selectedIds.size > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "0.75rem 1rem", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "0.75rem" }}>
+            <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "#dc2626" }}>
+              {selectedIds.size} תשלומים נבחרו
+            </span>
+            <button className="mod-btn-ghost ux-btn" style={{ fontSize: "0.78rem", padding: "0.3rem 0.75rem", color: "#fff", background: "#dc2626", borderRadius: "0.5rem" }} onClick={handleDeleteSelected}>
+              מחק נבחרים
+            </button>
+            <button className="mod-btn-ghost ux-btn" style={{ fontSize: "0.78rem", padding: "0.3rem 0.75rem" }} onClick={() => setSelectedIds(new Set())}>
+              בטל בחירה
+            </button>
+          </div>
+        )}
+
         {/* Table */}
         {loading ? (
           <div className="mod-empty"><div>טוען...</div></div>
@@ -182,6 +225,9 @@ export default function PaymentsPage() {
             <table style={{ width: "100%", fontSize: "0.82rem", borderCollapse: "collapse" }}>
               <thead>
                 <tr className="ux-table-header" style={{ borderBottom: "1px solid var(--border)", background: "var(--surface-raised)", textAlign: "right", color: "var(--foreground-muted)" }}>
+                  <th style={{ padding: "0.75rem 0.5rem", width: 40, textAlign: "center" }}>
+                    <input type="checkbox" checked={filtered.length > 0 && selectedIds.size === filtered.length} onChange={toggleSelectAll} style={{ cursor: "pointer", width: 16, height: 16 }} />
+                  </th>
                   <th style={{ padding: "0.75rem 1rem", fontWeight: 600 }}>מס׳ חשבונית</th>
                   <th style={{ padding: "0.75rem 1rem", fontWeight: 600 }}>לקוח</th>
                   <th style={{ padding: "0.75rem 1rem", fontWeight: 600 }}>תיאור</th>
@@ -196,7 +242,10 @@ export default function PaymentsPage() {
                 {filtered.map((payment) => {
                   const st = STATUS_MAP[payment.status] || STATUS_MAP.pending;
                   return (
-                    <tr key={payment.id} className="ux-table-row" style={{ borderBottom: "1px solid var(--border)" }}>
+                    <tr key={payment.id} className="ux-table-row" style={{ borderBottom: "1px solid var(--border)", background: selectedIds.has(payment.id) ? "#eff6ff" : undefined }}>
+                      <td style={{ padding: "0.75rem 0.5rem", textAlign: "center" }}>
+                        <input type="checkbox" checked={selectedIds.has(payment.id)} onChange={() => toggleSelect(payment.id)} style={{ cursor: "pointer", width: 16, height: 16 }} />
+                      </td>
                       <td style={{ padding: "0.75rem 1rem", fontWeight: 600 }}>{payment.invoiceNo}</td>
                       <td style={{ padding: "0.75rem 1rem", color: "var(--foreground-muted)" }}>{payment.clientName}</td>
                       <td style={{ padding: "0.75rem 1rem", color: "var(--foreground-muted)" }}>{payment.description}</td>
