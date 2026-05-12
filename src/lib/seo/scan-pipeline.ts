@@ -27,7 +27,7 @@ import { isPlatformAvailable, queryPlatform, type PlatformId as ApiPlatformId } 
 const FETCH_TIMEOUT_MS = 10_000;  // 10s for homepage (some sites are slow on first request)
 const INTERNAL_PAGE_TIMEOUT_MS = 4_000; // 4s for internal pages (server already connected)
 const PAGE_FETCH_BUDGET_MS = 25_000; // Max 25s total for page fetching stage
-const MIN_SCAN_DURATION_MS = 5_000;
+const MIN_SCAN_DURATION_MS = 3_000; // 3s minimum — real scan needs at least a few seconds of fetching
 const MIN_PAGES_SCANNED = 3;
 const MIN_EVIDENCE_COUNT = 5;
 const MIN_CONFIDENCE_THRESHOLD = 30;
@@ -621,9 +621,12 @@ function validateScan(job: ScanJob, pages: ScannedPageInfo[], facts: WebsiteFact
   const allPassed = checks.every(c => c.passed);
   let invalidReason: string | undefined;
 
-  if (duration < MIN_SCAN_DURATION_MS) {
-    invalidReason = 'הסריקה הסתיימה מהר מדי ולכן סומנה כלא אמינה. יש להריץ סריקה מחדש.';
-  } else if (!allPassed) {
+  // Duration check — only flag as unreliable if BOTH fast AND didn't scan enough pages
+  // A fast scan is fine if it actually found pages, extracted evidence, and has confidence
+  const otherChecksPassed = checks.filter(c => c.id !== 'duration').every(c => c.passed);
+  if (duration < MIN_SCAN_DURATION_MS && !otherChecksPassed) {
+    invalidReason = 'הסריקה הסתיימה מהר מדי ולא אספה מספיק נתונים. יש להריץ סריקה מחדש.';
+  } else if (!allPassed && !otherChecksPassed) {
     const failedChecks = checks.filter(c => !c.passed).map(c => c.label).join(', ');
     invalidReason = `בדיקות שנכשלו: ${failedChecks}`;
   }

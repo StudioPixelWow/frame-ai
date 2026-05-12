@@ -533,6 +533,59 @@ export default function SeoGeoDashboard() {
                           <div style={{ fontSize: 10, color: COLORS.textMuted }}>ריצה אחרונה</div>
                         </div>
                       </div>
+
+                      {/* Action buttons — stop / delete */}
+                      <div style={{ display: 'flex', gap: 8, marginTop: 12, borderTop: '1px solid #e5e7eb', paddingTop: 12 }}>
+                        {plan.status === 'active' && (
+                          <button
+                            onClick={async (e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (!confirm(`לעצור את התוכנית של "${plan.clientName}"? ניתן להפעיל מחדש בכל עת.`)) return;
+                              try {
+                                await fetch(`/api/data/seo-plans/${plan.id}`, {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json', 'x-user-role': 'admin' },
+                                  body: JSON.stringify({ status: 'plan_generated', pausedAt: new Date().toISOString() }),
+                                });
+                                setPlans(prev => prev.map(p => p.id === plan.id ? { ...p, status: 'plan_generated' as any } : p));
+                              } catch (err) {
+                                alert('שגיאה בעצירת התוכנית');
+                              }
+                            }}
+                            style={{
+                              flex: 1, padding: '6px 0', borderRadius: 8, border: `1px solid ${COLORS.orange}40`,
+                              background: `${COLORS.orange}10`, color: COLORS.orange,
+                              fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s',
+                            }}
+                          >
+                            ⏸️ עצור תוכנית
+                          </button>
+                        )}
+                        <button
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!confirm(`למחוק לצמיתות את התוכנית של "${plan.clientName}"? פעולה זו בלתי הפיכה.`)) return;
+                            try {
+                              await fetch(`/api/data/seo-plans/${plan.id}`, {
+                                method: 'DELETE',
+                                headers: { 'x-user-role': 'admin' },
+                              });
+                              setPlans(prev => prev.filter(p => p.id !== plan.id));
+                            } catch (err) {
+                              alert('שגיאה במחיקת התוכנית');
+                            }
+                          }}
+                          style={{
+                            flex: 1, padding: '6px 0', borderRadius: 8, border: `1px solid ${COLORS.red}40`,
+                            background: `${COLORS.red}08`, color: COLORS.red,
+                            fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s',
+                          }}
+                        >
+                          🗑️ מחק תוכנית
+                        </button>
+                      </div>
                     </div>
                   </Link>
                 );
