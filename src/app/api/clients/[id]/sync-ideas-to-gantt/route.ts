@@ -255,9 +255,36 @@ export async function POST(
     );
 
     const totalDays = daysInMonth(body.month, body.year);
-    const daysBetween = Math.max(1, Math.floor(totalDays / body.ideas.length));
     const newItems: ClientGanttItem[] = [];
     let skippedCount = 0;
+
+    // === Preferred days: Sunday (0), Monday (1), Thursday (4) ===
+    // Build list of preferred dates starting from today (for current month) or day 1
+    const now = new Date();
+    const isCurrentMonth = body.year === now.getFullYear() && body.month === (now.getMonth() + 1);
+    const startDay = isCurrentMonth ? now.getDate() : 1;
+
+    // Collect all preferred-day dates in the month from startDay onward
+    const preferredDays = [0, 1, 4]; // Sunday, Monday, Thursday
+    const preferredDates: number[] = [];
+    for (let d = startDay; d <= totalDays; d++) {
+      const dow = new Date(body.year, body.month - 1, d).getDay();
+      if (preferredDays.includes(dow)) {
+        preferredDates.push(d);
+      }
+    }
+    // Fallback: if not enough preferred dates, fill with remaining days from startDay
+    if (preferredDates.length < body.ideas.length) {
+      for (let d = startDay; d <= totalDays; d++) {
+        if (!preferredDates.includes(d)) {
+          preferredDates.push(d);
+        }
+      }
+    }
+    // Spread ideas evenly across available preferred dates
+    const datePool = preferredDates.slice(0, Math.max(preferredDates.length, body.ideas.length));
+
+    let dateIndex = 0;
 
     for (let i = 0; i < body.ideas.length; i++) {
       const idea = body.ideas[i];
@@ -283,7 +310,10 @@ export async function POST(
         latestResearch
       );
 
-      const dayInMonth = Math.min(1 + i * daysBetween, totalDays);
+      // Pick date from preferred pool, spread evenly
+      const step = Math.max(1, Math.floor(datePool.length / body.ideas.length));
+      const dayInMonth = datePool[Math.min(dateIndex, datePool.length - 1)] || startDay;
+      dateIndex += step;
       const itemDate = new Date(body.year, body.month - 1, dayInMonth).toISOString().split('T')[0];
 
       const ganttItem = createGanttItem(

@@ -9,6 +9,7 @@ import { ensureSeeded } from '@/lib/db/seed';
 import { getSupabase, ensureTable } from '@/lib/db/store';
 import { generateWithAI } from '@/lib/ai/openai-client';
 import { getClientById } from '@/lib/db/client-helpers';
+import { getHolidaysForMonth } from '@/lib/israeli-holidays';
 import type { ClientResearch } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
@@ -93,6 +94,42 @@ export async function POST(req: NextRequest) {
 
     const researchContext = contextParts.join('\n');
 
+    // === RTM: Build temporal context (current date, season, upcoming holidays) ===
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1; // 1-12
+    const currentDay = now.getDate();
+
+    const hebrewMonths = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+    const dateStr = `${currentDay} ב${hebrewMonths[currentMonth - 1]} ${currentYear}`;
+
+    // Determine Hebrew season
+    let season = 'חורף';
+    if (currentMonth >= 3 && currentMonth <= 5) season = 'אביב';
+    else if (currentMonth >= 6 && currentMonth <= 8) season = 'קיץ';
+    else if (currentMonth >= 9 && currentMonth <= 11) season = 'סתיו';
+
+    // Gather upcoming holidays for next 3 months
+    const upcomingHolidays: string[] = [];
+    for (let offset = 0; offset <= 2; offset++) {
+      const m = ((currentMonth - 1 + offset) % 12) + 1;
+      const y = currentMonth + offset > 12 ? currentYear + 1 : currentYear;
+      const holidays = getHolidaysForMonth(m, y);
+      for (const h of holidays) {
+        // Skip holidays that already passed this month
+        if (offset === 0 && h.approximateDay < currentDay) continue;
+        upcomingHolidays.push(`${h.hebrewName} (${h.approximateDay} ב${hebrewMonths[h.month - 1]} ${y})`);
+      }
+    }
+
+    const temporalContext = [
+      `תאריך נוכחי: ${dateStr}`,
+      `עונה: ${season}`,
+      upcomingHolidays.length > 0
+        ? `חגים וארועים קרובים (3 חודשים הבאים): ${upcomingHolidays.join(', ')}`
+        : 'אין חגים מיוחדים ב-3 החודשים הקרובים',
+    ].join('\n');
+
     const systemPrompt = `אתה אסטרטג תוכן ישראלי ברמה הגבוהה ביותר.
 אתה מקבל מידע על עסק וחקר לקוח שכבר בוצע, ואתה צריך לייצר בדיוק 25 רעיונות תוכן אסטרטגיים.
 
@@ -102,9 +139,14 @@ export async function POST(req: NextRequest) {
 3. כל רעיון חייב להיות ספציפי לעסק הזה — לא גנרי.
 4. מגוון קטגוריות: weakness, opportunity, audience, competitor, trend, seasonal, brand, engagement.
 5. עברית בלבד.
-6. החזר JSON תקין בלבד — בלי markdown, בלי backticks, בלי הסברים.`;
+6. החזר JSON תקין בלבד — בלי markdown, בלי backticks, בלי הסברים.
+7. כל רעיון בקטגוריות seasonal ו-trend חייב להתייחס לתקופה הנוכחית בלבד — ${hebrewMonths[currentMonth - 1]} ${currentYear} והחודשים הקרובים. אסור בשום אופן להתייחס לחגים שעברו, לעונות שלא רלוונטיות, או לשנים קודמות.
+8. השנה הנוכחית היא ${currentYear}. אל תזכיר שנים אחרות.`;
 
-    const userPrompt = `## נתוני העסק והחקר:
+    const userPrompt = `## הקשר זמני (RTM — Real-Time Marketing):
+${temporalContext}
+
+## נתוני העסק והחקר:
 ${researchContext}
 
 ## מטרות שיווקיות:
@@ -124,7 +166,8 @@ ${client.keyMarketingMessages || '(לא הוגדר)'}
 ]
 
 חובה: בדיוק 25 פריטים. id מ-idea_1 עד idea_25.
-קטגוריות אפשריות: weakness, opportunity, audience, competitor, trend, seasonal, brand, engagement.`;
+קטגוריות אפשריות: weakness, opportunity, audience, competitor, trend, seasonal, brand, engagement.
+חשוב: רעיונות עונתיים חייבים להתבסס על התקופה הנוכחית והחגים הקרובים שמפורטים למעלה. אסור להתייחס לפסח, ראש השנה, או כל חג שלא מופיע ברשימת החגים הקרובים.`;
 
     console.log(`[GenerateIdeas] Generating 25 ideas for client: ${client.name} (${clientId})`);
 

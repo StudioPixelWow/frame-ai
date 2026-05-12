@@ -1385,21 +1385,54 @@ ${hasResearch ? `חובה: researchSource ו-researchReason בכל פריט. פ�
 
     // Generate gantt items
     const newItems: ClientGanttItem[] = [];
-    let dayCounter = 1;
+
+    // === Preferred days: Sunday (0), Monday (1), Thursday (4) ===
+    // Start from current date if generating for the current month
+    const _now = new Date();
+    const _isCurrentMonth = body.year === _now.getFullYear() && body.month === (_now.getMonth() + 1);
+    const _startDay = _isCurrentMonth ? _now.getDate() : 1;
+
+    // Build pool of preferred dates (Sun/Mon/Thu) from startDay onward
+    const _preferredDays = [0, 1, 4]; // Sunday, Monday, Thursday
+    const _preferredDates: number[] = [];
+    for (let d = _startDay; d <= daysInTheMonth; d++) {
+      const dow = new Date(body.year, body.month - 1, d).getDay();
+      if (_preferredDays.includes(dow)) {
+        _preferredDates.push(d);
+      }
+    }
+    // Fill with remaining days if not enough preferred dates
+    if (_preferredDates.length < totalItems) {
+      for (let d = _startDay; d <= daysInTheMonth; d++) {
+        if (!_preferredDates.includes(d)) {
+          _preferredDates.push(d);
+        }
+      }
+      _preferredDates.sort((a, b) => a - b);
+    }
+
+    // Spread items evenly across date pool
+    const _dateStep = Math.max(1, Math.floor(_preferredDates.length / totalItems));
+    let _dateIdx = 0;
 
     for (let i = 0; i < totalItems; i++) {
-      // Skip dates occupied by protected items during selective regeneration
-      let dayInMonth = Math.min(dayCounter, daysInTheMonth);
+      // Pick date from preferred pool
+      let dayInMonth = _preferredDates[Math.min(_dateIdx, _preferredDates.length - 1)] || _startDay;
       let candidateDate = new Date(body.year, body.month - 1, dayInMonth).toISOString().split('T')[0];
+
+      // Skip dates occupied by protected items during selective regeneration
       if (protectedDates.size > 0) {
         let safety = 0;
         while (protectedDates.has(candidateDate) && safety < daysInTheMonth) {
-          dayCounter++;
-          dayInMonth = Math.min(dayCounter, daysInTheMonth);
+          _dateIdx++;
+          dayInMonth = _preferredDates[Math.min(_dateIdx, _preferredDates.length - 1)] || dayInMonth + 1;
+          if (dayInMonth > daysInTheMonth) dayInMonth = daysInTheMonth;
           candidateDate = new Date(body.year, body.month - 1, dayInMonth).toISOString().split('T')[0];
           safety++;
         }
       }
+      _dateIdx += _dateStep;
+
       const itemDate = new Date(body.year, body.month - 1, dayInMonth)
         .toISOString()
         .split('T')[0];
@@ -1522,8 +1555,6 @@ ${hasResearch ? `חובה: researchSource ו-researchReason בכל פריט. פ�
 
       const created = await clientGanttItems.createAsync(ganttItem as Omit<ClientGanttItem, 'id'>);
       newItems.push(created);
-
-      dayCounter += daysBetweenItems;
     }
 
     // Log research traceability stats
