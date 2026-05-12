@@ -944,6 +944,12 @@ ${isLocal ? `📍 קידום לוקאלי (Local SEO):
 - כל אזכור שנה = ${currentYear} בלבד
 - כתוב meta description (עד 155 תווים) עם הביטוי + CTA
 
+🚫 חובה — עברית בלבד:
+- כל המילים בגוף המאמר חייבות להיות בעברית. אין מילים באנגלית בתוך הטקסט.
+- שמות מקומות בעברית בלבד: "ישראל" (לא "Israel"), "תל אביב" (לא "Tel Aviv"), "ירושלים" (לא "Jerusalem") וכו׳.
+- מונחים מקצועיים: אם יש מונח שנהוג להשתמש בו באנגלית (כמו SEO) — מותר, אבל רק מונחים טכניים מקובלים. כל שאר הטקסט בעברית מלאה.
+- אל תכתוב "Israel", "Israeli", "service", "quality", "professional" או כל מילה אנגלית שיש לה מקבילה טבעית בעברית.
+
 החזר בפורמט JSON:
 {
   "title": "כותרת המאמר",
@@ -954,7 +960,7 @@ ${isLocal ? `📍 קידום לוקאלי (Local SEO):
 }`;
 
     const aiResult = await generateWithAI(
-      'אתה כותב תוכן SEO מומחה ברמה הגבוהה ביותר. אתה כותב מאמרים של 1500-2000 מילים עם קישורים, נתונים, ודוגמאות מעשיות. החזר JSON בלבד ללא markdown.',
+      'אתה כותב תוכן SEO מומחה ברמה הגבוהה ביותר בעברית בלבד. כל המאמר חייב להיות בעברית מלאה — כולל שמות מקומות (ישראל, לא Israel). מונחים טכניים מקובלים כמו SEO מותרים, אבל כל שאר הטקסט בעברית. אתה כותב מאמרים של 1500-2000 מילים עם קישורים, נתונים, ודוגמאות מעשיות. החזר JSON בלבד ללא markdown.',
       articlePrompt,
       { temperature: 0.75, maxTokens: 8000 }
     );
@@ -1225,6 +1231,34 @@ export async function executeAutomationModule(
     let pagesAffected = 0;
     const changes: AutoTaskChange[] = [];
 
+    // Build content inventory for engines that need it (topic_clusters, humanization, entity_graph, etc.)
+    // These engines expect a ContentInventory object, not a WPConnection.
+    const inventoryNeededModules = [
+      'topic_clusters', 'humanization', 'entity_graph', 'cannibalization',
+      'authority_reinforcement', 'adaptive_strategy',
+    ];
+    let inventory: any = null;
+    if (inventoryNeededModules.includes(moduleName)) {
+      try {
+        const { buildContentInventory } = await import('./wp-content-inventory');
+        inventory = await buildContentInventory(wpConn);
+        console.log(`[AUTO-MODULE] Built content inventory: ${inventory?.items?.length || 0} items, ${inventory?.pages?.length || 0} pages`);
+      } catch (invErr) {
+        console.warn(`[AUTO-MODULE] Failed to build content inventory:`, invErr instanceof Error ? invErr.message : invErr);
+        // Provide a safe empty inventory so engines don't crash on undefined
+        inventory = {
+          items: [], pages: [], posts: [],
+          totalWordCount: 0, averageWordCount: 0,
+          thinContentPages: [], pagesWithoutSchema: [], pagesWithoutFAQ: [],
+          pagesWithoutCTA: [], orphanPages: [], deadEndPages: [],
+          imagesWithoutAlt: [],
+          duplicateMetaTitles: new Map(), duplicateMetaDescriptions: new Map(),
+          internalLinkMap: new Map(),
+          siteUrl: wpConn.siteUrl, scannedAt: new Date().toISOString(),
+        };
+      }
+    }
+
     switch (moduleName) {
       case 'technical_seo': {
         const { executeTechnicalMonitor } = await import('./technical-seo-monitor');
@@ -1283,7 +1317,7 @@ export async function executeAutomationModule(
       }
       case 'topic_clusters': {
         const { executeClusterAnalysis } = await import('./topic-cluster-builder');
-        result = await executeClusterAnalysis(wpConn, autoCtx as any);
+        result = await executeClusterAnalysis(inventory, autoCtx as any);
         pagesAffected = result?.clustersBuilt || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
@@ -1338,7 +1372,7 @@ export async function executeAutomationModule(
       }
       case 'cannibalization': {
         const { detectCannibalization } = await import('./cannibalization-detector');
-        result = await detectCannibalization(wpConn, autoCtx as any);
+        result = await detectCannibalization(inventory, autoCtx as any);
         pagesAffected = result?.issuesFound || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
@@ -1349,7 +1383,7 @@ export async function executeAutomationModule(
       }
       case 'authority_reinforcement': {
         const { executeAuthorityReinforcement } = await import('./authority-reinforcement-engine');
-        result = await executeAuthorityReinforcement(wpConn, autoCtx as any);
+        result = await executeAuthorityReinforcement(inventory, wpConn, autoCtx as any);
         pagesAffected = result?.pagesReinforced || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
@@ -1360,7 +1394,7 @@ export async function executeAutomationModule(
       }
       case 'humanization': {
         const { executeHumanization } = await import('./humanization-engine');
-        result = await executeHumanization(wpConn, autoCtx as any);
+        result = await executeHumanization(inventory, wpConn, autoCtx as any);
         pagesAffected = result?.pagesHumanized || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
@@ -1371,7 +1405,7 @@ export async function executeAutomationModule(
       }
       case 'entity_graph': {
         const { executeEntityGraphAnalysis } = await import('./semantic-entity-graph');
-        result = await executeEntityGraphAnalysis(wpConn, autoCtx as any);
+        result = await executeEntityGraphAnalysis(inventory, autoCtx as any);
         pagesAffected = result?.entitiesProcessed || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
@@ -1415,7 +1449,7 @@ export async function executeAutomationModule(
       }
       case 'adaptive_strategy': {
         const { executeAdaptiveStrategy } = await import('./adaptive-strategy-engine');
-        result = await executeAdaptiveStrategy(autoCtx as any);
+        result = await executeAdaptiveStrategy([], inventory, autoCtx as any);
         pagesAffected = result?.recommendationsGenerated || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {

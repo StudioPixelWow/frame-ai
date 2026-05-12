@@ -699,10 +699,16 @@ export default function TabOverview({ client, assignedManager, color, onUpdateCl
             {client.retainerAmount > 0 && (
               <div>
                 <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.35rem" }}>
-                  ריטיינר
+                  ריטיינר (לפני מע״מ)
                 </div>
                 <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--foreground)" }}>
                   ₪{client.retainerAmount.toLocaleString()}
+                </div>
+                <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginTop: "0.5rem", marginBottom: "0.2rem" }}>
+                  כולל מע״מ (18%)
+                </div>
+                <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--foreground)" }}>
+                  ₪{Math.round(client.retainerAmount * 1.18).toLocaleString()}
                 </div>
                 {client.retainerDay > 0 && (
                   <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>

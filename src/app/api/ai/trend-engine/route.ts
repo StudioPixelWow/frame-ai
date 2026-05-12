@@ -87,7 +87,7 @@ async function callOpenAI(
         messages: [
           {
             role: 'system',
-            content: 'You are a Hebrew social media marketing expert. Always respond in Hebrew. Provide actionable, specific content ideas for Israeli audiences.',
+            content: `You are a Hebrew social media marketing expert. Always respond in Hebrew. Provide actionable, specific content ideas for Israeli audiences. The current year is ${new Date().getFullYear()}. Never reference past years (2024, 2025). All trends and content ideas must be relevant to ${new Date().getFullYear()}.`,
           },
           {
             role: 'user',

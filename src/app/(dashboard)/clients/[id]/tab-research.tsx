@@ -324,10 +324,12 @@ export default function TabResearch({ client }: TabResearchProps) {
   const handleGenerateIdeas = async () => {
     setIsGeneratingIdeas(true);
     try {
+      // If some ideas are selected (checked), keep them and only regenerate the rest
+      const keepIds = selectedIdeaIds.size > 0 ? Array.from(selectedIdeaIds) : [];
       const res = await fetch('/api/ai/generate-content-ideas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId: client.id }),
+        body: JSON.stringify({ clientId: client.id, keepIdeaIds: keepIds }),
       });
       const result = await res.json();
       if (!res.ok || !result.success) {
@@ -335,7 +337,9 @@ export default function TabResearch({ client }: TabResearchProps) {
       }
       // Update local research state with the new ideas
       setResearch(result.data);
-      console.log(`[Research UI] Generated ${result.ideasCount} ideas`);
+      // Clear selection after regeneration
+      setSelectedIdeaIds(new Set());
+      console.log(`[Research UI] Generated ${result.ideasCount} ideas (kept ${keepIds.length})`);
     } catch (err) {
       console.error('[Research UI] Generate ideas error:', err);
       alert(err instanceof Error ? err.message : 'שגיאה ביצירת רעיונות');
@@ -894,7 +898,7 @@ export default function TabResearch({ client }: TabResearchProps) {
                         cursor: isGeneratingIdeas ? 'not-allowed' : 'pointer',
                       }}
                     >
-                      {isGeneratingIdeas ? '⏳ מייצר...' : '🔄 ייצר מחדש'}
+                      {isGeneratingIdeas ? '⏳ מייצר...' : selectedIdeaIds.size > 0 ? `🔄 ייצר ${(research?.contentIdeas25?.length || 25) - selectedIdeaIds.size} מחדש (${selectedIdeaIds.size} נשמרים)` : '🔄 ייצר מחדש'}
                     </button>
                   </>
                 )}

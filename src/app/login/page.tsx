@@ -145,7 +145,7 @@ export default function LoginPage() {
         }
         .login-cta:active:not(:disabled) { transform: translateY(0px); }
         .login-cta:disabled { opacity: 0.6; cursor: not-allowed; }
-        @media (max-width: 768px) {
+        @media (max-width: 900px) {
           .login-statue { display: none !important; }
         }
       `}</style>
@@ -180,55 +180,15 @@ export default function LoginPage() {
           animation: 'pulse-ring 7s ease-in-out infinite 1s',
         }} />
 
-        {/* ── Main content: statue left + card right ── */}
+        {/* ── Main content: card left + statue right ── */}
         <div style={{
           position: 'relative', zIndex: 2,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          gap: '2rem', width: '100%', maxWidth: '850px',
-          padding: '0 1.5rem',
+          gap: '3rem', width: '100%', maxWidth: '1050px',
+          padding: '0 2rem',
         }}>
 
-          {/* Statue — left of card */}
-          <div className="login-statue" style={{
-            flex: '0 0 280px',
-            maxHeight: '480px',
-            pointerEvents: 'none',
-            animation: mounted ? 'statue-float 6s ease-in-out infinite' : 'none',
-            opacity: imgLoaded || imgError ? 1 : 0,
-            transition: 'opacity 1s ease',
-            filter: 'drop-shadow(0 12px 48px rgba(0,30,60,0.2))',
-          }}>
-            <img
-              src={STATUE_URL}
-              alt="Greek Statue"
-              onLoad={() => setImgLoaded(true)}
-              onError={() => setImgError(true)}
-              style={{
-                width: '100%', height: 'auto', display: imgError ? 'none' : 'block',
-                maxHeight: '480px', objectFit: 'contain',
-              }}
-            />
-            {imgError && (
-              <svg viewBox="0 0 300 450" width="100%" style={{ display: 'block', opacity: 0.4 }}>
-                <defs>
-                  <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#fff" stopOpacity="0.9" />
-                    <stop offset="100%" stopColor="#fff" stopOpacity="0.3" />
-                  </linearGradient>
-                </defs>
-                <rect x="70" y="400" width="160" height="50" rx="4" fill="url(#sg)" />
-                <rect x="85" y="385" width="130" height="18" rx="3" fill="url(#sg)" />
-                <path d="M150,385 Q130,340 125,300 Q120,260 130,230 Q122,200 125,180 L175,180 Q178,200 170,230 Q180,260 175,300 Q170,340 150,385 Z" fill="url(#sg)" />
-                <path d="M125,210 Q105,225 90,250 Q80,265 85,280 Q90,275 95,265 Q105,245 125,230" fill="url(#sg)" />
-                <path d="M175,210 Q195,220 210,235 Q220,245 215,260 Q210,255 205,248 Q195,235 175,225" fill="url(#sg)" />
-                <rect x="140" y="160" width="20" height="22" rx="4" fill="url(#sg)" />
-                <ellipse cx="150" cy="140" rx="28" ry="35" fill="url(#sg)" />
-                <path d="M122,130 Q130,100 150,95 Q170,100 178,130 Q170,115 150,112 Q130,115 122,130 Z" fill="url(#sg)" />
-              </svg>
-            )}
-          </div>
-
-          {/* Login card — right of statue */}
+          {/* Login card — left side */}
           <div style={{
             width: '100%',
             maxWidth: '400px',
@@ -347,6 +307,46 @@ export default function LoginPage() {
             ניהול חכם. תוצאות מדויקות.
           </p>
         </div>
+
+          {/* Statue — right of card */}
+          <div className="login-statue" style={{
+            flex: '0 0 380px',
+            maxHeight: '580px',
+            pointerEvents: 'none',
+            animation: mounted ? 'statue-float 6s ease-in-out infinite' : 'none',
+            opacity: imgLoaded || imgError ? 1 : 0,
+            transition: 'opacity 1s ease',
+            filter: 'drop-shadow(0 16px 56px rgba(0,30,60,0.25))',
+          }}>
+            <img
+              src={STATUE_URL}
+              alt="Greek Statue"
+              onLoad={() => setImgLoaded(true)}
+              onError={() => setImgError(true)}
+              style={{
+                width: '100%', height: 'auto', display: imgError ? 'none' : 'block',
+                maxHeight: '580px', objectFit: 'contain',
+              }}
+            />
+            {imgError && (
+              <svg viewBox="0 0 300 450" width="100%" style={{ display: 'block', opacity: 0.4 }}>
+                <defs>
+                  <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#fff" stopOpacity="0.9" />
+                    <stop offset="100%" stopColor="#fff" stopOpacity="0.3" />
+                  </linearGradient>
+                </defs>
+                <rect x="70" y="400" width="160" height="50" rx="4" fill="url(#sg)" />
+                <rect x="85" y="385" width="130" height="18" rx="3" fill="url(#sg)" />
+                <path d="M150,385 Q130,340 125,300 Q120,260 130,230 Q122,200 125,180 L175,180 Q178,200 170,230 Q180,260 175,300 Q170,340 150,385 Z" fill="url(#sg)" />
+                <path d="M125,210 Q105,225 90,250 Q80,265 85,280 Q90,275 95,265 Q105,245 125,230" fill="url(#sg)" />
+                <path d="M175,210 Q195,220 210,235 Q220,245 215,260 Q210,255 205,248 Q195,235 175,225" fill="url(#sg)" />
+                <rect x="140" y="160" width="20" height="22" rx="4" fill="url(#sg)" />
+                <ellipse cx="150" cy="140" rx="28" ry="35" fill="url(#sg)" />
+                <path d="M122,130 Q130,100 150,95 Q170,100 178,130 Q170,115 150,112 Q130,115 122,130 Z" fill="url(#sg)" />
+              </svg>
+            )}
+          </div>
 
         </div>{/* end flex container */}
 

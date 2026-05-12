@@ -2426,202 +2426,252 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
           loadReferencesForItem(selectedItem);
         }
         const refs = itemRefsMap[selectedItem.id] || [];
-        const isExpanded = expandedRefIds.has(selectedItem.id);
-        const visibleRefs = isExpanded ? refs : refs.slice(0, 3);
         const statusInfo = GANTT_STATUS_COLORS[selectedItem.status] || GANTT_STATUS_COLORS.draft;
         const typeInfo = ITEM_TYPE_CONFIG[selectedItem.itemType] || ITEM_TYPE_CONFIG.social_post;
+        const platformLabel = selectedItem.platform === 'facebook' ? 'Facebook' : selectedItem.platform === 'instagram' ? 'Instagram' : selectedItem.platform === 'tiktok' ? 'TikTok' : selectedItem.platform || '';
+        const formatLabel = FORMAT_CONFIG[selectedItem.format || ''] || selectedItem.format || '';
         return (
           <div
             style={{
-              background: "var(--surface-raised)",
-              border: "1px solid var(--border)",
-              borderRadius: "0.75rem",
-              padding: "1.25rem",
-              marginTop: "1rem",
-              direction: "rtl",
+              position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              zIndex: 1000,
             }}
+            onClick={(e) => { if (e.target === e.currentTarget) setEditingItemId(null); }}
           >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
-              <h4 style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--foreground)", margin: 0 }}>
-                {typeInfo.emoji} {selectedItem.title || "ללא כותרת"}
-              </h4>
-              <button
-                className="mod-btn-ghost"
-                onClick={() => setEditingItemId(null)}
-                style={{ fontSize: "0.75rem", padding: "0.3rem 0.6rem" }}
-              >
-                סגור
-              </button>
-            </div>
-
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
-              <span style={{
-                fontSize: "0.7rem", padding: "0.15rem 0.5rem", borderRadius: "0.25rem",
-                background: `${statusInfo.color}20`, color: statusInfo.color, fontWeight: 500,
-              }}>
-                {statusInfo.label}
-              </span>
-              <span style={{
-                fontSize: "0.7rem", padding: "0.15rem 0.5rem", borderRadius: "0.25rem",
-                background: `${typeInfo.color}20`, color: typeInfo.color, fontWeight: 500,
-              }}>
-                {typeInfo.label}
-              </span>
-              {selectedItem.date && (
-                <span style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>
-                  {formatDate(selectedItem.date)}
-                </span>
-              )}
-            </div>
-
-            {selectedItem.ideaSummary && (
-              <div style={{ fontSize: "0.8rem", color: "var(--foreground)", marginBottom: "0.75rem", lineHeight: 1.5 }}>
-                {selectedItem.ideaSummary}
-              </div>
-            )}
-
-            {selectedItem.caption && (
-              <div style={{
-                marginBottom: "0.75rem", padding: "0.5rem 0.75rem",
-                background: "var(--accent-muted)", borderRadius: "0.375rem",
-                borderRight: "3px solid var(--accent)", fontSize: "0.75rem",
-              }}>
-                <div style={{ fontWeight: 600, marginBottom: "0.25rem" }}>קופי:</div>
-                <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.4 }}>
-                  {selectedItem.caption}
-                </div>
-              </div>
-            )}
-
-            {selectedItem.visualConcept && (
-              <div style={{
-                marginBottom: "0.75rem", padding: "0.5rem 0.75rem",
-                background: "var(--accent-muted)", borderRadius: "0.375rem",
-                borderRight: "3px solid var(--accent)", fontSize: "0.75rem",
-              }}>
-                <div style={{ fontWeight: 600, marginBottom: "0.25rem" }}>קונספט ויזואלי:</div>
-                <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.4 }}>
-                  {selectedItem.visualConcept}
-                </div>
-              </div>
-            )}
-
-            {/* References (REAL DATA ONLY — no mock/fake) */}
-            <div style={{ marginTop: "0.5rem" }}>
-              {refs.length === 0 ? (
-                <div style={{
-                  padding: "0.75rem",
-                  background: "var(--surface)",
-                  borderRadius: "0.375rem",
-                  border: "1px dashed var(--border)",
-                  textAlign: "center",
-                }}>
-                  <p style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", margin: "0 0 0.5rem 0" }}>
-                    אין רפרנסים מספריית מודעות למשימה זו
-                  </p>
-                  <a
-                    href="/settings/references"
-                    style={{
-                      display: "inline-block",
-                      padding: "0.4rem 0.8rem",
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                      color: "var(--accent)",
-                      background: "var(--accent-muted)",
-                      borderRadius: "0.375rem",
-                      textDecoration: "none",
-                      transition: "opacity 150ms ease",
-                    }}
-                  >
-                    🔍 חפש רפרנסים בספריית המודעות
-                  </a>
-                </div>
-              ) : (
-                <>
-                  {/* No references message */}
-                  {refs.length === 0 && (
-                    <div style={{
-                      padding: "0.5rem 0.75rem", marginBottom: "0.5rem",
-                      background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.3)",
-                      borderRadius: "0.375rem", fontSize: "0.75rem", color: "#b45309",
-                      textAlign: "center",
+            <div
+              style={{
+                background: "var(--surface-raised)",
+                border: "1px solid var(--border)",
+                borderRadius: "0.75rem",
+                padding: "1.5rem",
+                direction: "rtl",
+                width: "95%",
+                maxWidth: "600px",
+                maxHeight: "85vh",
+                overflowY: "auto",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1rem" }}>
+                <div>
+                  <h4 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--foreground)", margin: "0 0 0.5rem 0" }}>
+                    {typeInfo.emoji} {selectedItem.title || "ללא כותרת"}
+                  </h4>
+                  <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+                    <span style={{
+                      fontSize: "0.68rem", padding: "0.15rem 0.5rem", borderRadius: "0.25rem",
+                      background: `${statusInfo.color}20`, color: statusInfo.color, fontWeight: 600,
                     }}>
-                      חבר Meta Ads Library בהגדרות כדי לראות מודעות אמיתיות
-                    </div>
-                  )}
-                  <div style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                    marginBottom: "0.4rem",
-                  }}>
-                    <span style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)" }}>
-                      {refs.length > 0 ? `🔍 רפרנסים (${refs.length})` : '🔍 רפרנסים'}
+                      {statusInfo.label}
                     </span>
-                    {refs.length > 3 && (
-                      <button
-                        className="mod-btn-ghost"
-                        onClick={() => {
-                          setExpandedRefIds(prev => {
-                            const next = new Set(prev);
-                            if (next.has(selectedItem.id)) next.delete(selectedItem.id); else next.add(selectedItem.id);
-                            return next;
-                          });
-                        }}
-                        style={{ fontSize: "0.65rem", padding: "0.15rem 0.4rem", color: "var(--accent)" }}
-                      >
-                        {isExpanded ? "הצג פחות" : `הצג הכל (${refs.length})`}
-                      </button>
+                    <span style={{
+                      fontSize: "0.68rem", padding: "0.15rem 0.5rem", borderRadius: "0.25rem",
+                      background: `${typeInfo.color}20`, color: typeInfo.color, fontWeight: 500,
+                    }}>
+                      {typeInfo.label}
+                    </span>
+                    {platformLabel && (
+                      <span style={{
+                        fontSize: "0.68rem", padding: "0.15rem 0.5rem", borderRadius: "0.25rem",
+                        background: `${PLATFORM_COLORS[selectedItem.platform || ''] || '#6b7280'}20`,
+                        color: PLATFORM_COLORS[selectedItem.platform || ''] || '#6b7280', fontWeight: 500,
+                      }}>
+                        {platformLabel}
+                      </span>
+                    )}
+                    {formatLabel && (
+                      <span style={{
+                        fontSize: "0.68rem", padding: "0.15rem 0.5rem", borderRadius: "0.25rem",
+                        background: "var(--accent-muted)", color: "var(--foreground-muted)", fontWeight: 500,
+                      }}>
+                        {formatLabel}
+                      </span>
+                    )}
+                    {selectedItem.date && (
+                      <span style={{ fontSize: "0.68rem", color: "var(--foreground-muted)", padding: "0.15rem 0" }}>
+                        📅 {formatDate(selectedItem.date)}
+                      </span>
                     )}
                   </div>
-                  <div style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))",
-                    gap: "0.4rem",
-                  }}>
-                    {visibleRefs.map((ref) => (
-                      <div
-                        key={ref.id}
-                        onClick={() => { setRefModalItem(ref); setRefModalOpen(true); }}
-                        className="gantt-ref-thumb"
-                        style={{
-                          position: "relative", borderRadius: "0.375rem", overflow: "hidden",
-                          border: "1px solid var(--border)", cursor: "pointer",
-                          aspectRatio: "5 / 4", background: "var(--surface)",
-                        }}
-                      >
-                        <img
-                          src={ref.imageUrl}
-                          alt={ref.description}
-                          style={{
-                            width: "100%", height: "100%", objectFit: "cover",
-                            display: "block", transition: "transform 200ms ease",
-                          }}
-                          loading="lazy"
-                        />
-                        <div style={{
-                          position: "absolute", bottom: 0, left: 0, right: 0,
-                          padding: "0.15rem 0.3rem",
-                          background: "linear-gradient(transparent, rgba(0,0,0,0.65))",
-                          fontSize: "0.55rem", fontWeight: 600,
-                          color: "#fff", lineHeight: 1.3, pointerEvents: "none",
-                        }}>
-                          {ref.advertiserName || getStyleLabel(ref.style)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+                </div>
+                <button
+                  onClick={() => setEditingItemId(null)}
+                  style={{
+                    background: "none", border: "none", fontSize: "1.2rem",
+                    color: "var(--foreground-muted)", cursor: "pointer", padding: "0.25rem",
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
 
-            {/* Switch to list for full editing */}
-            <div style={{ marginTop: "0.75rem", textAlign: "center" }}>
-              <button
-                className="mod-btn-ghost"
-                onClick={() => setActiveView("list")}
-                style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem", color: "var(--accent)" }}
-              >
-                עבור לתצוגת רשימה לעריכה מלאה
-              </button>
+              {/* Research origin — show which idea this came from */}
+              {selectedItem.researchReason && (
+                <div style={{
+                  marginBottom: "0.75rem", padding: "0.5rem 0.75rem",
+                  background: "rgba(59, 130, 246, 0.08)", borderRadius: "0.375rem",
+                  borderRight: "3px solid #3b82f6", fontSize: "0.75rem",
+                }}>
+                  <div style={{ fontWeight: 600, marginBottom: "0.15rem", color: "#3b82f6" }}>
+                    🎯 מקור הרעיון:
+                  </div>
+                  <div style={{ color: "var(--foreground)", lineHeight: 1.4 }}>
+                    {selectedItem.researchReason}
+                    {selectedItem.researchSource && (
+                      <span style={{ marginRight: "0.5rem", fontSize: "0.65rem", color: "var(--foreground-muted)" }}>
+                        ({RESEARCH_SOURCE_LABELS[selectedItem.researchSource]?.label || selectedItem.researchSource})
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Idea Summary */}
+              {selectedItem.ideaSummary && (
+                <div style={{
+                  marginBottom: "0.75rem", padding: "0.5rem 0.75rem",
+                  background: "var(--accent-muted)", borderRadius: "0.375rem",
+                  borderRight: "3px solid var(--accent)", fontSize: "0.78rem",
+                }}>
+                  <div style={{ fontWeight: 600, marginBottom: "0.15rem" }}>סיכום הרעיון:</div>
+                  <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.5, color: "var(--foreground)" }}>
+                    {selectedItem.ideaSummary}
+                  </div>
+                </div>
+              )}
+
+              {/* Graphic Text */}
+              {selectedItem.graphicText && (
+                <div style={{
+                  marginBottom: "0.75rem", padding: "0.5rem 0.75rem",
+                  background: "rgba(236, 72, 153, 0.08)", borderRadius: "0.375rem",
+                  borderRight: "3px solid #ec4899", fontSize: "0.78rem",
+                }}>
+                  <div style={{ fontWeight: 600, marginBottom: "0.15rem", color: "#ec4899" }}>טקסט לגרפיקה:</div>
+                  <div style={{ fontSize: "1rem", fontWeight: 700, color: "var(--foreground)" }}>
+                    {selectedItem.graphicText}
+                  </div>
+                </div>
+              )}
+
+              {/* Caption */}
+              {selectedItem.caption && (
+                <div style={{
+                  marginBottom: "0.75rem", padding: "0.5rem 0.75rem",
+                  background: "rgba(34, 197, 94, 0.08)", borderRadius: "0.375rem",
+                  borderRight: "3px solid #22c55e", fontSize: "0.78rem",
+                }}>
+                  <div style={{ fontWeight: 600, marginBottom: "0.15rem", color: "#22c55e" }}>קופי / כיתוב:</div>
+                  <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.5, color: "var(--foreground)" }}>
+                    {selectedItem.caption}
+                  </div>
+                </div>
+              )}
+
+              {/* Visual Concept */}
+              {selectedItem.visualConcept && (
+                <div style={{
+                  marginBottom: "0.75rem", padding: "0.5rem 0.75rem",
+                  background: "rgba(245, 158, 11, 0.08)", borderRadius: "0.375rem",
+                  borderRight: "3px solid #f59e0b", fontSize: "0.78rem",
+                }}>
+                  <div style={{ fontWeight: 600, marginBottom: "0.15rem", color: "#f59e0b" }}>קונספט ויזואלי:</div>
+                  <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.5, color: "var(--foreground)" }}>
+                    {selectedItem.visualConcept}
+                  </div>
+                </div>
+              )}
+
+              {/* CTA */}
+              {(selectedItem as any).cta && (
+                <div style={{
+                  marginBottom: "0.75rem", padding: "0.5rem 0.75rem",
+                  background: "rgba(6, 182, 212, 0.08)", borderRadius: "0.375rem",
+                  borderRight: "3px solid #06b6d4", fontSize: "0.78rem",
+                }}>
+                  <div style={{ fontWeight: 600, marginBottom: "0.15rem", color: "#06b6d4" }}>קריאה לפעולה (CTA):</div>
+                  <div style={{ color: "var(--foreground)", fontWeight: 600 }}>
+                    {(selectedItem as any).cta}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div style={{
+                display: "flex", gap: "0.5rem", flexWrap: "wrap",
+                marginTop: "1rem", paddingTop: "1rem",
+                borderTop: "1px solid var(--border)",
+              }}>
+                {/* Regenerate / Refresh */}
+                <button
+                  className="mod-btn-ghost"
+                  onClick={async () => {
+                    if (!confirm("לרענן את התוכן של פריט זה עם AI? הנתונים הנוכחיים יוחלפו.")) return;
+                    try {
+                      toast("מרענן תוכן...", "info");
+                      const res = await fetch(`/api/clients/${client.id}/sync-ideas-to-gantt`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          manualTopic: selectedItem.researchReason || selectedItem.title,
+                          manualDate: selectedItem.date,
+                          manualContentType: selectedItem.format === 'reel' ? 'reel' : selectedItem.format === 'story' ? 'story' : 'post',
+                          month: selectedItem.month,
+                          year: selectedItem.year,
+                        }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) throw new Error(data?.error || 'שגיאה');
+                      // Delete old item after new one is created
+                      await removeGanttItem(selectedItem.id);
+                      setEditingItemId(null);
+                      toast("התוכן רוענן בהצלחה", "success");
+                    } catch (err: any) {
+                      console.error('[RefreshItem]', err);
+                      toast(err?.message || "שגיאה ברענון", "error");
+                    }
+                  }}
+                  style={{
+                    fontSize: "0.78rem", padding: "0.5rem 1rem",
+                    background: "rgba(59, 130, 246, 0.1)", color: "#3b82f6",
+                    border: "1px solid rgba(59, 130, 246, 0.3)", borderRadius: "0.5rem",
+                    fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  🔄 רענן תוכן
+                </button>
+
+                {/* Delete */}
+                <button
+                  className="mod-btn-ghost"
+                  onClick={() => handleDeleteGanttItem(selectedItem.id)}
+                  style={{
+                    fontSize: "0.78rem", padding: "0.5rem 1rem",
+                    background: "rgba(239, 68, 68, 0.1)", color: "#ef4444",
+                    border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: "0.5rem",
+                    fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  🗑️ מחק
+                </button>
+
+                {/* Switch to list view for full editing */}
+                <button
+                  className="mod-btn-ghost"
+                  onClick={() => setActiveView("list")}
+                  style={{
+                    fontSize: "0.78rem", padding: "0.5rem 1rem",
+                    background: "var(--accent-muted)", color: "var(--accent)",
+                    border: "1px solid var(--border)", borderRadius: "0.5rem",
+                    fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  ✏️ ערוך בתצוגת רשימה
+                </button>
+              </div>
             </div>
           </div>
         );

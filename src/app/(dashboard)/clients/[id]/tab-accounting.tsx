@@ -76,7 +76,7 @@ function computePaymentStatus(
 }
 
 export default function TabAccounting({ client }: TabAccountingProps) {
-  const { data: allPayments, loading } = usePayments();
+  const { data: allPayments, loading, remove } = usePayments();
   const router = useRouter();
   const toast = useToast();
   const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
@@ -155,9 +155,14 @@ export default function TabAccounting({ client }: TabAccountingProps) {
               {client.retainerAmount > 0 ? `₪${client.retainerAmount.toLocaleString("he-IL")}` : "ללא ריטיינר"}
             </div>
             {client.retainerAmount > 0 && (
-              <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)" }}>
-                בעד {client.retainerDay} של החודש
-              </div>
+              <>
+                <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--accent)" }}>
+                  כולל מע״מ: ₪{Math.round(client.retainerAmount * 1.18).toLocaleString("he-IL")}
+                </div>
+                <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)" }}>
+                  בעד {client.retainerDay} של החודש
+                </div>
+              </>
             )}
           </div>
 
@@ -242,10 +247,13 @@ export default function TabAccounting({ client }: TabAccountingProps) {
             </div>
             <div>
               <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", marginBottom: "0.5rem", textTransform: "uppercase" }}>
-                עלות שנתית
+                עלות שנתית (לפני מע״מ)
               </div>
               <div style={{ fontSize: "1rem", fontWeight: 600, color: "#1e293b" }}>
                 ₪{(client.retainerAmount * 12).toLocaleString("he-IL")}
+              </div>
+              <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "0.25rem" }}>
+                כולל מע״מ: ₪{Math.round(client.retainerAmount * 12 * 1.18).toLocaleString("he-IL")}
               </div>
             </div>
           </div>
@@ -416,6 +424,26 @@ export default function TabAccounting({ client }: TabAccountingProps) {
                             ✅ שלום
                           </button>
                         ) : null}
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`למחוק את התשלום ${payment.invoiceNo || ""} (₪${payment.amount.toLocaleString()})?`)) return;
+                            try {
+                              await remove(payment.id);
+                              toast.success("התשלום נמחק");
+                            } catch {
+                              toast.error("שגיאה במחיקת התשלום");
+                            }
+                          }}
+                          className="mod-btn-ghost"
+                          style={{
+                            padding: "0.375rem 0.75rem",
+                            fontSize: "0.75rem",
+                            color: "var(--color-error, #e53e3e)",
+                          }}
+                          title="מחק תשלום"
+                        >
+                          🗑
+                        </button>
                       </div>
                     </td>
                   </tr>

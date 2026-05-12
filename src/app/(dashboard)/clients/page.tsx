@@ -742,6 +742,9 @@ export default function ClientsPage() {
                     {client.retainerAmount > 0 && (
                       <div style={{ color: "var(--accent)", fontWeight: 600 }}>
                         ₪{client.retainerAmount.toLocaleString()}
+                        <span style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", fontWeight: 400, marginRight: 6 }}>
+                          (כולל מע״מ: ₪{Math.round(client.retainerAmount * 1.18).toLocaleString()})
+                        </span>
                       </div>
                     )}
                   </div>
@@ -909,7 +912,14 @@ export default function ClientsPage() {
                         {managerName || "-"}
                       </td>
                       <td style={{ padding: "1rem", fontSize: "0.875rem", fontWeight: 600, color: "var(--accent)" }}>
-                        {client.retainerAmount > 0 ? `₪${client.retainerAmount.toLocaleString()}` : "-"}
+                        {client.retainerAmount > 0 ? (
+                          <>
+                            ₪{client.retainerAmount.toLocaleString()}
+                            <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", fontWeight: 400 }}>
+                              כולל מע״מ: ₪{Math.round(client.retainerAmount * 1.18).toLocaleString()}
+                            </div>
+                          </>
+                        ) : "-"}
                       </td>
                       <td style={{ padding: "1rem", display: "flex", gap: "0.4rem" }}>
                         {client.portalEnabled && <span title="פורטל">🟢</span>}

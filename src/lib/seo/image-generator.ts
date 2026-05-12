@@ -3,6 +3,8 @@
  * Uses OpenAI DALL-E API to generate ultra-realistic featured images
  */
 
+import { getApiKeys } from '@/lib/db/api-keys';
+
 export interface ImageGenerationResult {
   success: boolean;
   imageUrl?: string;       // DALL-E generated URL (temporary)
@@ -19,9 +21,12 @@ export async function generateArticleImage(
   businessType: string,
   options?: { size?: '1024x1024' | '1792x1024' | '1024x1792' }
 ): Promise<ImageGenerationResult> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  // Use same key resolution as the rest of the system: env var → settings UI → api-keys file
+  const apiKeys = getApiKeys();
+  const apiKey = apiKeys.openai;
   if (!apiKey) {
-    return { success: false, error: 'Missing OPENAI_API_KEY' };
+    console.error('[IMAGE-GEN] No OpenAI API key found (env, settings, or api-keys file)');
+    return { success: false, error: 'Missing OpenAI API key — הגדר מפתח API בהגדרות המערכת' };
   }
 
   // Build a detailed prompt for ultra-realistic image

@@ -369,6 +369,8 @@ export default function SeoPlanDetail() {
   const [rescanning, setRescanning] = useState(false);
   const [rescanResult, setRescanResult] = useState<any>(null);
   const [runningEngineId, setRunningEngineId] = useState<string | null>(null);
+  const [autoRunningEngines, setAutoRunningEngines] = useState(false);
+  const [autoRunProgress, setAutoRunProgress] = useState<{ succeeded: number; failed: number; total: number } | null>(null);
 
   // Load previously generated articles from plan's aiArticles on plan load
   useEffect(() => {
@@ -845,6 +847,32 @@ export default function SeoPlanDetail() {
       if (res.ok && data.success) {
         setPlan((prev: any) => prev ? { ...prev, wpConnection: data.connection || wpForm } : prev);
         setShowWpPanel(false);
+
+        // Auto-trigger all automation engines after successful WP connection
+        setAutoRunningEngines(true);
+        setAutoRunProgress(null);
+        try {
+          const enginesRes = await fetch(`/api/seo-geo-plans/${plan.id}/run-all-engines`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          const enginesData = await enginesRes.json();
+          if (enginesRes.ok && enginesData.data) {
+            setAutoRunProgress({
+              succeeded: enginesData.data.succeeded || 0,
+              failed: enginesData.data.failed || 0,
+              total: enginesData.data.total || 18,
+            });
+            // Refresh plan to get updated automation results
+            const refreshRes = await fetch(`/api/data/seo-plans/${plan.id}`);
+            const refreshData = await refreshRes.json();
+            if (refreshData) setPlan(refreshData);
+          }
+        } catch (engErr) {
+          console.warn('[WP-CONNECT] Auto-run engines failed:', engErr);
+        } finally {
+          setAutoRunningEngines(false);
+        }
       } else {
         alert(data.error || 'חיבור נכשל');
       }
@@ -4734,11 +4762,33 @@ export default function SeoPlanDetail() {
               return aqQuery.includes(kwText) || kwText.includes(aqQuery);
             });
             // Group by platform
+            // IMPORTANT: For AI platforms, ✓ means the client's OWN site is cited as a source.
+            // Other sites in sources are competitors — useful info but don't trigger ✓.
+            const clientDomain = (safePlan.websiteUrl || '').replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '').toLowerCase();
+            const clientDomainShort = clientDomain.split('.')[0]; // e.g. "alram" from "alram.co.il"
             const platformMap: Record<string, { found: boolean; sources: string[]; snippet: string; position?: number }> = {};
             for (const mq of matchingQueries) {
               const plat = mq.platform || 'unknown';
               if (!platformMap[plat]) platformMap[plat] = { found: false, sources: [], snippet: '', position: undefined };
-              if (mq.found) platformMap[plat].found = true;
+              // For Google SEO — found means appears in organic results (keep as-is)
+              // For AI platforms — found means client's site is IN THE SOURCES (not just name mentioned)
+              if (plat === 'google_seo') {
+                if (mq.found) platformMap[plat].found = true;
+              } else {
+                // Check mentionType first (most reliable)
+                if (mq.mentionType === 'in_sources' || mq.mentionType === 'both') {
+                  platformMap[plat].found = true;
+                }
+                // Fallback: if mentionType not available, check if client domain is in sources
+                else if (!mq.mentionType && mq.found) {
+                  const sources = Array.isArray(mq.sources) ? mq.sources : [];
+                  const hasClientInSources = sources.some((src: any) => {
+                    const srcStr = (typeof src === 'string' ? src : (src?.url || src?.domain || src?.name || '')).toLowerCase();
+                    return clientDomain && (srcStr.includes(clientDomain) || (clientDomainShort.length > 3 && srcStr.includes(clientDomainShort)));
+                  });
+                  if (hasClientInSources) platformMap[plat].found = true;
+                }
+              }
               if (mq.snippet) platformMap[plat].snippet = mq.snippet;
               if (mq.position) platformMap[plat].position = mq.position;
               if (Array.isArray(mq.sources)) {
@@ -4943,13 +4993,17 @@ export default function SeoPlanDetail() {
                           const platData = kw.aiPlatforms[platId];
                           const found = platData?.found;
                           const isUnavailable = platData?.scanMode === 'unavailable' || (!platData && !found);
+                          const platName = PLATFORM_DISPLAY[platId]?.nameHe || platId;
+                          const srcList = platData?.sources?.length ? platData.sources.join(', ') : '';
                           return (
                             <div key={platId} style={{ textAlign: "center" }} title={
                               isUnavailable && !found
-                                ? `${PLATFORM_DISPLAY[platId]?.nameHe || platId} — לא מוגדר (API חסר)`
+                                ? `${platName} — לא מוגדר (API חסר)`
                                 : found
-                                ? `מופיע ב-${PLATFORM_DISPLAY[platId]?.nameHe || platId}${platData?.sources?.length ? ` — ${platData.sources.join(', ')}` : ''}`
-                                : `לא נמצא ב-${PLATFORM_DISPLAY[platId]?.nameHe || platId}`
+                                ? `האתר שלך מופיע כמקור ב-${platName}${srcList ? ` — מקורות: ${srcList}` : ''}`
+                                : srcList
+                                ? `האתר שלך לא מופיע כמקור ב-${platName} — מתחרים שמופיעים: ${srcList}`
+                                : `לא נמצא ב-${platName}`
                             }>
                               <div style={{
                                 width: 28, height: 28, borderRadius: 8,
@@ -5122,11 +5176,27 @@ export default function SeoPlanDetail() {
                     const aqQuery = (aq.query || '').toLowerCase().trim();
                     return aqQuery.includes(kwText) || kwText.includes(aqQuery);
                   });
+                  // Same logic as client keywords: ✓ only when client's site is in AI sources
+                  const clientDomain2 = (safePlan.websiteUrl || '').replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '').toLowerCase();
+                  const clientDomainShort2 = clientDomain2.split('.')[0];
                   const platformMap: Record<string, { found: boolean; sources: string[]; snippet: string; position?: number }> = {};
                   for (const mq of matchingQueries) {
                     const plat = mq.platform || 'unknown';
                     if (!platformMap[plat]) platformMap[plat] = { found: false, sources: [], snippet: '', position: undefined };
-                    if (mq.found) platformMap[plat].found = true;
+                    if (plat === 'google_seo') {
+                      if (mq.found) platformMap[plat].found = true;
+                    } else {
+                      if (mq.mentionType === 'in_sources' || mq.mentionType === 'both') {
+                        platformMap[plat].found = true;
+                      } else if (!mq.mentionType && mq.found) {
+                        const sources = Array.isArray(mq.sources) ? mq.sources : [];
+                        const hasClientInSources = sources.some((src: any) => {
+                          const srcStr = (typeof src === 'string' ? src : (src?.url || src?.domain || src?.name || '')).toLowerCase();
+                          return clientDomain2 && (srcStr.includes(clientDomain2) || (clientDomainShort2.length > 3 && srcStr.includes(clientDomainShort2)));
+                        });
+                        if (hasClientInSources) platformMap[plat].found = true;
+                      }
+                    }
                     if (mq.snippet) platformMap[plat].snippet = mq.snippet;
                     if (mq.position) platformMap[plat].position = mq.position;
                     if (Array.isArray(mq.sources)) {
@@ -5513,6 +5583,91 @@ export default function SeoPlanDetail() {
                   </div>
                 </div>
               )}
+
+              {/* Auto-run progress banner */}
+              {autoRunningEngines && (
+                <div style={{
+                  ...cardStyle, padding: "16px 20px", marginBottom: 20,
+                  background: `${C.primary}08`, borderRight: `3px solid ${C.primary}`,
+                  display: "flex", alignItems: "center", gap: 12,
+                }}>
+                  <div style={{
+                    width: 24, height: 24, borderRadius: "50%",
+                    border: `3px solid ${C.primary}`, borderTopColor: "transparent",
+                    animation: "spin 1s linear infinite",
+                  }} />
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
+                      מפעיל את כל מנועי האוטומציה...
+                    </div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>
+                      התהליך עשוי לקחת מספר דקות — אפשר להמשיך לעבוד
+                    </div>
+                  </div>
+                </div>
+              )}
+              {autoRunProgress && !autoRunningEngines && (
+                <div style={{
+                  ...cardStyle, padding: "16px 20px", marginBottom: 20,
+                  background: autoRunProgress.failed === 0 ? `${C.success}08` : `${C.warning}08`,
+                  borderRight: `3px solid ${autoRunProgress.failed === 0 ? C.success : C.warning}`,
+                }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
+                    ✅ הופעלו {autoRunProgress.succeeded}/{autoRunProgress.total} מנועים בהצלחה
+                    {autoRunProgress.failed > 0 && ` | ${autoRunProgress.failed} נכשלו`}
+                  </div>
+                </div>
+              )}
+
+              {/* Run all engines button */}
+              <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+                <button
+                  onClick={async () => {
+                    if (!safePlan?.id) return;
+                    setAutoRunningEngines(true);
+                    setAutoRunProgress(null);
+                    try {
+                      const res = await fetch(`/api/seo-geo-plans/${safePlan.id}/run-all-engines`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                      });
+                      const data = await res.json();
+                      if (res.ok && data.data) {
+                        setAutoRunProgress({
+                          succeeded: data.data.succeeded || 0,
+                          failed: data.data.failed || 0,
+                          total: data.data.total || 18,
+                        });
+                        // Refresh plan
+                        const refreshRes = await fetch(`/api/data/seo-plans/${safePlan.id}`);
+                        const refreshData = await refreshRes.json();
+                        if (refreshData) setPlan(refreshData);
+                      } else {
+                        alert(data.error || 'שגיאה בהפעלת מנועים');
+                      }
+                    } catch (e) {
+                      alert('שגיאת רשת');
+                    } finally {
+                      setAutoRunningEngines(false);
+                    }
+                  }}
+                  disabled={autoRunningEngines || runningEngineId !== null || !(planAny?.wpConnection)}
+                  style={{
+                    padding: "10px 24px", borderRadius: 10, border: "none",
+                    background: autoRunningEngines ? C.textMuted : `linear-gradient(135deg, #7C3AED, #6D28D9)`,
+                    color: "#fff", fontSize: 14, fontWeight: 700,
+                    cursor: autoRunningEngines || runningEngineId !== null ? "wait" : "pointer",
+                    opacity: !(planAny?.wpConnection) ? 0.4 : 1,
+                  }}
+                >
+                  {autoRunningEngines ? '...מפעיל הכל' : '🚀 הפעל את כל המנועים'}
+                </button>
+                {!(planAny?.wpConnection) && (
+                  <span style={{ fontSize: 12, color: C.textMuted, alignSelf: "center" }}>
+                    יש לחבר WordPress קודם
+                  </span>
+                )}
+              </div>
 
               {/* Engines by phase */}
               {phases.map(phase => {

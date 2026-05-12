@@ -216,6 +216,12 @@ export default function PaymentsPage() {
                           {payment.status !== "paid" && (
                             <button className="mod-btn-ghost ux-btn" style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", color: "#22c55e" }} onClick={() => handleMarkPaid(payment)}>✓ שולם</button>
                           )}
+                          <button className="mod-btn-ghost ux-btn" style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", color: "#f87171" }} onClick={async () => {
+                            if (confirm(`למחוק את התשלום ${payment.invoiceNo || ''} (₪${payment.amount.toLocaleString()})?`)) {
+                              await remove(payment.id);
+                              toast("התשלום נמחק", "info");
+                            }
+                          }}>🗑</button>
                         </div>
                       </td>
                     </tr>

@@ -499,13 +499,17 @@ function createGanttItem(
   researchId?: string
 ): Omit<ClientGanttItem, 'id'> {
   const now = new Date().toISOString();
+  // For research-selection: use original idea title so user recognizes it in the Gantt
+  const displayTitle = (source === 'research-selection' && researchTitle)
+    ? researchTitle
+    : creative.title;
   return {
     clientId,
     ganttType: 'monthly',
     month,
     year,
     date,
-    title: creative.title,
+    title: displayTitle,
     ideaSummary: creative.ideaSummary,
     graphicText: creative.graphicText,
     caption: creative.caption,

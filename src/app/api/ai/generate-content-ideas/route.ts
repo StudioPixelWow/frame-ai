@@ -17,11 +17,14 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { clientId } = body;
+    const { clientId, keepIdeaIds } = body as { clientId?: string; keepIdeaIds?: string[] };
 
     if (!clientId) {
       return NextResponse.json({ error: 'Missing clientId' }, { status: 400 });
     }
+
+    // keepIdeaIds: array of idea IDs the user selected to keep
+    const idsToKeep = new Set(Array.isArray(keepIdeaIds) ? keepIdeaIds : []);
 
     const client = await getClientById(clientId);
     if (!client) {
@@ -130,11 +133,18 @@ export async function POST(req: NextRequest) {
         : 'אין חגים מיוחדים ב-3 החודשים הקרובים',
     ].join('\n');
 
+    // Preserve kept ideas from the existing research (must be before prompts)
+    const existingIdeas = research.contentIdeas25 || [];
+    const keptIdeas = idsToKeep.size > 0
+      ? existingIdeas.filter((i: any) => idsToKeep.has(i.id))
+      : [];
+    const neededCount = 25 - keptIdeas.length;
+
     const systemPrompt = `אתה אסטרטג תוכן ישראלי ברמה הגבוהה ביותר.
-אתה מקבל מידע על עסק וחקר לקוח שכבר בוצע, ואתה צריך לייצר בדיוק 25 רעיונות תוכן אסטרטגיים.
+אתה מקבל מידע על עסק וחקר לקוח שכבר בוצע, ואתה צריך לייצר בדיוק ${neededCount} רעיונות תוכן אסטרטגיים.
 
 כללים:
-1. בדיוק 25 רעיונות — לא 5, לא 10, לא 20. בדיוק 25.
+1. בדיוק ${neededCount} רעיונות — לא יותר ולא פחות.
 2. כל רעיון הוא כיוון אסטרטגי, לא פוסט מוגמר.
 3. כל רעיון חייב להיות ספציפי לעסק הזה — לא גנרי.
 4. מגוון קטגוריות: weakness, opportunity, audience, competitor, trend, seasonal, brand, engagement.
@@ -155,21 +165,21 @@ ${client.marketingGoals || '(לא הוגדר)'}
 ## מסרים שיווקיים:
 ${client.keyMarketingMessages || '(לא הוגדר)'}
 
-## השב בפורמט JSON בדיוק — מערך של 25 אובייקטים:
+## השב בפורמט JSON בדיוק — מערך של ${neededCount} אובייקטים:
 
 [
-  { "id": "idea_1", "title": "כותרת קצרה וחזקה", "explanation": "זווית אסטרטגית — משפט אחד", "category": "weakness" },
-  { "id": "idea_2", "title": "...", "explanation": "...", "category": "opportunity" },
-  { "id": "idea_3", "title": "...", "explanation": "...", "category": "audience" },
+  { "id": "new_1", "title": "כותרת קצרה וחזקה", "explanation": "זווית אסטרטגית — משפט אחד", "category": "weakness" },
+  { "id": "new_2", "title": "...", "explanation": "...", "category": "opportunity" },
   ...
-  { "id": "idea_25", "title": "...", "explanation": "...", "category": "brand" }
+  { "id": "new_${neededCount}", "title": "...", "explanation": "...", "category": "brand" }
 ]
 
-חובה: בדיוק 25 פריטים. id מ-idea_1 עד idea_25.
+חובה: בדיוק ${neededCount} פריטים. id מ-new_1 עד new_${neededCount}.
 קטגוריות אפשריות: weakness, opportunity, audience, competitor, trend, seasonal, brand, engagement.
-חשוב: רעיונות עונתיים חייבים להתבסס על התקופה הנוכחית והחגים הקרובים שמפורטים למעלה. אסור להתייחס לפסח, ראש השנה, או כל חג שלא מופיע ברשימת החגים הקרובים.`;
+חשוב: רעיונות עונתיים חייבים להתבסס על התקופה הנוכחית והחגים הקרובים שמפורטים למעלה. אסור להתייחס לפסח, ראש השנה, או כל חג שלא מופיע ברשימת החגים הקרובים.
+${keptIdeas.length > 0 ? `\nחשוב: הרעיונות הבאים כבר נבחרו ונשמרים — אל תייצר רעיונות דומים או זהים:\n${keptIdeas.map((i: any) => `- ${i.title}`).join('\n')}` : ''}`;
 
-    console.log(`[GenerateIdeas] Generating 25 ideas for client: ${client.name} (${clientId})`);
+    console.log(`[GenerateIdeas] Generating ${neededCount} ideas for client: ${client.name} (${clientId}), keeping ${keptIdeas.length}`);
 
     const MAX_ATTEMPTS = 3;
     let ideas: Array<{ id: string; title: string; explanation: string; category: string }> = [];
@@ -211,30 +221,38 @@ ${client.keyMarketingMessages || '(לא הוגדר)'}
         }
       }
 
-      if (parsed && parsed.length >= 20) {
-        ideas = parsed.map((item: any, idx: number) => ({
-          id: item.id || `idea_${idx + 1}`,
+      const minAcceptable = Math.max(Math.floor(neededCount * 0.8), 1);
+      if (parsed && parsed.length >= minAcceptable) {
+        ideas = parsed.slice(0, neededCount).map((item: any, idx: number) => ({
+          id: item.id || `new_${idx + 1}`,
           title: item.title || `רעיון ${idx + 1}`,
           explanation: item.explanation || '',
           category: item.category || 'brand',
         }));
-        console.log(`[GenerateIdeas] ✅ Attempt ${attempt + 1}: got ${ideas.length} ideas`);
+        console.log(`[GenerateIdeas] ✅ Attempt ${attempt + 1}: got ${ideas.length} new ideas (needed ${neededCount})`);
         break;
       } else {
-        console.warn(`[GenerateIdeas] Attempt ${attempt + 1}: only ${parsed?.length ?? 0} ideas (need 20+)`);
+        console.warn(`[GenerateIdeas] Attempt ${attempt + 1}: only ${parsed?.length ?? 0} ideas (need ${minAcceptable}+)`);
       }
     }
 
-    // Pad to 25 if we got close but not enough
-    while (ideas.length < 25 && ideas.length > 0) {
+    // Pad new ideas to neededCount if we got close but not enough
+    while (ideas.length < neededCount && ideas.length > 0) {
       const idx = ideas.length + 1;
       ideas.push({
-        id: `idea_${idx}`,
+        id: `new_${idx}`,
         title: `רעיון תוכן ${idx} — ${client.businessField}`,
         explanation: `זווית תוכן נוספת שמתמקדת בערך הייחודי של ${client.name}`,
         category: ['weakness', 'opportunity', 'audience', 'competitor', 'trend', 'seasonal', 'brand', 'engagement'][idx % 8],
       });
     }
+
+    // Merge kept ideas + new ideas, then re-index to idea_1..idea_25
+    const mergedIdeas = [...keptIdeas, ...ideas].map((idea: any, idx: number) => ({
+      ...idea,
+      id: `idea_${idx + 1}`,
+    }));
+    ideas = mergedIdeas;
 
     if (ideas.length === 0) {
       // Complete fallback — generate deterministic ideas
