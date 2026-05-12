@@ -1398,6 +1398,20 @@ export default function SeoPlanDetail() {
               </button>
               <button
                 onClick={() => {
+                  window.open(`/seo-geo/${p.id}/client-report`, "_blank");
+                }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, padding: "9px 18px",
+                  background: "linear-gradient(135deg, #3B82F6, #8B5CF6)", color: "#fff",
+                  border: "none", borderRadius: 10,
+                  fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all 0.2s",
+                  boxShadow: "0 2px 8px rgba(59,130,246,0.3)",
+                }}
+              >
+                <span style={{ fontSize: 13 }}>📥</span> הורד PDF ללקוח
+              </button>
+              <button
+                onClick={() => {
                   alert("בקרוב: שלח דוח ותוכנית ללקוח במייל וב-Dashboard");
                 }}
                 style={{
@@ -5770,6 +5784,37 @@ export default function SeoPlanDetail() {
               >
                 <span>{generatingReport ? "⏳" : "+"}</span>
                 {generatingReport ? "מייצר דוח..." : "הפק דוח חדש"}
+              </button>
+            </div>
+
+            {/* Client PDF download card */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: 16,
+              padding: "18px 22px", borderRadius: 16, marginBottom: 16,
+              background: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)",
+              border: "1px solid rgba(59,130,246,0.2)",
+            }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 14, flexShrink: 0,
+                background: "rgba(59,130,246,0.15)", display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 24,
+              }}>📄</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>דוח PDF ללקוח</div>
+                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                  תוכנית 60 יום + סריקת אתר + תוצאות AI — מותאם לשליחה ללקוח
+                </div>
+              </div>
+              <button
+                onClick={() => window.open(`/seo-geo/${p.id}/client-report`, "_blank")}
+                style={{
+                  padding: "10px 24px", background: "linear-gradient(135deg, #3B82F6, #8B5CF6)",
+                  color: "#fff", border: "none", borderRadius: 10,
+                  fontSize: 13, fontWeight: 700, cursor: "pointer",
+                  boxShadow: "0 2px 8px rgba(59,130,246,0.3)",
+                }}
+              >
+                📥 הורד PDF
               </button>
             </div>
 
