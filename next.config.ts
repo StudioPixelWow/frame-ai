@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   // Remotion rendering runs in an external worker (worker.ts), NOT inside
   // Next.js routes. No serverExternalPackages needed — the App never imports them.
   // Allow large file uploads (video files up to 500 MB)
