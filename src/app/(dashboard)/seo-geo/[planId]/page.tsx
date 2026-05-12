@@ -368,6 +368,7 @@ export default function SeoPlanDetail() {
   const [automationStatus, setAutomationStatus] = useState<string | null>(null);
   const [rescanning, setRescanning] = useState(false);
   const [rescanResult, setRescanResult] = useState<any>(null);
+  const [runningEngineId, setRunningEngineId] = useState<string | null>(null);
 
   // Load previously generated articles from plan's aiArticles on plan load
   useEffect(() => {
@@ -5448,8 +5449,6 @@ export default function SeoPlanDetail() {
           const executedEngines = Object.keys(engineExecMap).length;
           const successEngines = Object.values(engineExecMap).filter(e => e.success).length;
           const hasPlanTasks = Object.keys(engineTaskMap).length > 0;
-
-          const [runningEngineId, setRunningEngineId] = useState<string | null>(null);
 
           const handleRunEngine = async (engineId: string, engineName: string) => {
             if (!safePlan?.id) return;

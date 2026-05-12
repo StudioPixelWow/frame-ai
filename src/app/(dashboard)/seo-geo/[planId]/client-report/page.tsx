@@ -54,9 +54,9 @@ export default function ClientReportPage() {
   useEffect(() => {
     if (!planId) return;
     fetch(`/api/seo-geo-plans/${planId}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) { setError(data.error); }
+      .then(async r => {
+        const data = await r.json();
+        if (!r.ok || data.error) { setError(data.error || `שגיאה ${r.status}`); }
         else { setPlan(data); }
         setLoading(false);
       })
