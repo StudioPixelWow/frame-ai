@@ -57,7 +57,7 @@ async function _POST(
     return err('Request body is required', 400);
   }
 
-  const { taskId, taskTitle, taskType: providedTaskType, wpConnection: bodyWpConnection } = body;
+  const { taskId, taskTitle, taskType: providedTaskType, wpConnection: bodyWpConnection, automationModule: bodyAutomationModule } = body;
 
   // Validate required fields
   if (!taskId || !taskTitle) {
@@ -112,7 +112,8 @@ async function _POST(
     }
 
     // Check if this task has an automationModule (new 18-engine system)
-    const automationModule = planTask?.automationModule || undefined;
+    // Also allow automationModule to be passed directly in the request body (from engines tab)
+    const automationModule = planTask?.automationModule || bodyAutomationModule || undefined;
 
     // Determine automation task type (legacy path)
     let autoTaskType: AutoTaskType | null = null;

@@ -193,7 +193,29 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   completed: { label: "הושלם", color: C.primary },
 };
 
-type TabId = "overview" | "plan" | "calendar" | "tasks" | "articles" | "ai" | "results" | "competitors" | "gaps" | "keywords" | "reports" | "progress";
+type TabId = "overview" | "plan" | "calendar" | "tasks" | "articles" | "ai" | "results" | "competitors" | "gaps" | "keywords" | "reports" | "progress" | "actions" | "engines";
+
+// All 18 automation engines metadata
+const AUTOMATION_ENGINES: { id: string; name: string; nameHe: string; icon: string; phase: number; category: string }[] = [
+  { id: 'technical_seo', name: 'Technical SEO', nameHe: 'ניטור טכני', icon: '🔧', phase: 1, category: 'תשתית' },
+  { id: 'auto_internal_linking', name: 'Internal Linking', nameHe: 'קישורים פנימיים', icon: '🔗', phase: 1, category: 'תשתית' },
+  { id: 'meta_optimization', name: 'Meta Optimization', nameHe: 'אופטימיזציית מטא', icon: '🏷️', phase: 1, category: 'תשתית' },
+  { id: 'image_seo', name: 'Image SEO', nameHe: 'SEO תמונות', icon: '🖼️', phase: 1, category: 'תשתית' },
+  { id: 'faq_schema', name: 'FAQ Schema', nameHe: 'סכמת FAQ', icon: '❓', phase: 2, category: 'תוכן' },
+  { id: 'content_refresh', name: 'Content Refresh', nameHe: 'רענון תוכן', icon: '🔄', phase: 2, category: 'תוכן' },
+  { id: 'topic_clusters', name: 'Topic Clusters', nameHe: 'אשכולות נושאים', icon: '🌐', phase: 2, category: 'תוכן' },
+  { id: 'humanization', name: 'Humanization', nameHe: 'אנושיות תוכן', icon: '✍️', phase: 2, category: 'תוכן' },
+  { id: 'geo_visibility', name: 'GEO Visibility', nameHe: 'נראות GEO/AI', icon: '🌍', phase: 3, category: 'נראות' },
+  { id: 'authority_reinforcement', name: 'Authority', nameHe: 'חיזוק סמכות', icon: '🏅', phase: 3, category: 'נראות' },
+  { id: 'entity_graph', name: 'Entity Graph', nameHe: 'גרף ישויות', icon: '🧠', phase: 3, category: 'נראות' },
+  { id: 'local_seo', name: 'Local SEO', nameHe: 'SEO מקומי', icon: '📍', phase: 3, category: 'נראות' },
+  { id: 'cannibalization', name: 'Cannibalization', nameHe: 'זיהוי קניבליזציה', icon: '⚠️', phase: 4, category: 'מתקדם' },
+  { id: 'cta_optimization', name: 'CTA Optimization', nameHe: 'אופטימיזציית CTA', icon: '🎯', phase: 4, category: 'מתקדם' },
+  { id: 'gsc_intelligence', name: 'GSC Intelligence', nameHe: 'מודיעין Search Console', icon: '📈', phase: 4, category: 'מתקדם' },
+  { id: 'ga4_conversion', name: 'GA4 Conversion', nameHe: 'המרות GA4', icon: '💹', phase: 4, category: 'מתקדם' },
+  { id: 'serp_monitoring', name: 'SERP Monitor', nameHe: 'מעקב דירוגים', icon: '📊', phase: 5, category: 'ניטור' },
+  { id: 'adaptive_strategy', name: 'Adaptive Strategy', nameHe: 'אסטרטגיה אדפטיבית', icon: '🧬', phase: 5, category: 'ניטור' },
+];
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "overview", label: "סקירה", icon: "📊" },
@@ -206,6 +228,8 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "competitors", label: "מתחרים", icon: "🏆" },
   { id: "gaps", label: "פערי תוכן", icon: "📝" },
   { id: "keywords", label: "ביטויי SEO", icon: "🔑" },
+  { id: "engines", label: "מנועי אוטומציה", icon: "🤖" },
+  { id: "actions", label: "פעולות שבוצעו", icon: "⚡" },
   { id: "reports", label: "דוחות", icon: "📄" },
   { id: "progress", label: "התקדמות והצלחה", icon: "📈" },
 ];
@@ -1702,6 +1726,43 @@ export default function SeoPlanDetail() {
                 </button>
               </div>
             )}
+
+            {/* Automation engines banner — show when plan has no automation tasks */}
+            {Array.isArray(p.days) && p.days.length > 0 && (() => {
+              const hasAutoTasks = p.days?.some((d: any) => Array.isArray(d.tasks) && d.tasks.some((t: any) => t.automationModule));
+              if (hasAutoTasks) return null;
+              return (
+                <div style={{
+                  marginBottom: 16, padding: "16px 20px", borderRadius: 12,
+                  background: "linear-gradient(135deg, #7C3AED08, #6D28D908)",
+                  border: "1px solid #7C3AED30",
+                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontSize: 18 }}>🤖</span>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: "#7C3AED" }}>18 מנועי אוטומציה זמינים</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.6 }}>
+                      התוכנית הנוכחית נוצרה לפני שילוב מנועי האוטומציה. בנה מחדש כדי לשלב אוטומטית 36+ משימות אוטומציה חכמות לכל 60 הימים — כולל Technical SEO, קישורים פנימיים, Schema, הומניזציה, GEO ועוד.
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleGenerate60DayPlan}
+                    disabled={generatingPlan}
+                    style={{
+                      padding: "10px 24px", borderRadius: 10, border: "none",
+                      background: "linear-gradient(135deg, #7C3AED, #6D28D9)",
+                      color: "#fff", fontWeight: 700, fontSize: 13,
+                      cursor: generatingPlan ? "wait" : "pointer",
+                      opacity: generatingPlan ? 0.6 : 1, whiteSpace: "nowrap",
+                    }}
+                  >
+                    {generatingPlan ? "⏳ מייצר..." : "🚀 בנה מחדש עם אוטומציות"}
+                  </button>
+                </div>
+              );
+            })()}
 
             {/* WordPress Connection Panel */}
             {Array.isArray(p.days) && p.days.length > 0 && (
@@ -3796,7 +3857,23 @@ export default function SeoPlanDetail() {
                           <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>עדכון אחרון {timeAgo(scan.scannedAt as string)}</div>
                         )}
                       </div>
-                      <div style={{ display: "flex", gap: 8 }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <button
+                          onClick={handleCheckAllKeywords}
+                          disabled={checkingAll || checkingKeyword !== null}
+                          style={{
+                            padding: "6px 14px", borderRadius: 8, border: "none",
+                            background: checkingAll ? C.warning : "linear-gradient(135deg, #7C3AED, #6D28D9)",
+                            color: "#fff", fontSize: 12, fontWeight: 700,
+                            cursor: checkingAll ? "wait" : "pointer",
+                            opacity: (checkingAll || checkingKeyword !== null) ? 0.8 : 1,
+                            display: "flex", alignItems: "center", gap: 6,
+                          }}
+                        >
+                          {checkingAll && checkAllProgress
+                            ? `בודק ${checkAllProgress.current}/${checkAllProgress.total}...`
+                            : "🔍 בדוק את כל המילים"}
+                        </button>
                         <span style={{ ...tagStyle, background: `${C.success}12`, color: C.success }}>
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{ marginLeft: 4 }}><path d="M20 6L9 17l-5-5"/></svg>
                           מופיע
@@ -5300,6 +5377,377 @@ export default function SeoPlanDetail() {
                   </div>
                 );
               })()}
+            </div>
+          );
+        })()}
+
+        {/* ── ENGINES (מנועי אוטומציה) ── */}
+        {activeTab === "engines" && (() => {
+          const planAny = safePlan as any;
+          const allDays: any[] = Array.isArray(planAny?.days) ? planAny.days : [];
+          const automationResults: any[] = Array.isArray(planAny?.automationResults) ? planAny.automationResults : [];
+
+          // Build execution map: engineId → last execution info
+          const engineExecMap: Record<string, { executedAt: string; success: boolean; pagesAffected?: number; error?: string }> = {};
+          for (const r of automationResults) {
+            if (r.taskType && (!engineExecMap[r.taskType] || new Date(r.executedAt) > new Date(engineExecMap[r.taskType].executedAt))) {
+              engineExecMap[r.taskType] = { executedAt: r.executedAt, success: r.success, pagesAffected: r.pagesAffected, error: r.error };
+            }
+          }
+          // Also check completed tasks with automationModule
+          for (const day of allDays) {
+            if (!Array.isArray(day.tasks)) continue;
+            for (const task of day.tasks) {
+              if (task.automationModule && task.status === 'done' && task.completedAt) {
+                const mod = task.automationModule;
+                if (!engineExecMap[mod] || new Date(task.completedAt) > new Date(engineExecMap[mod].executedAt)) {
+                  engineExecMap[mod] = { executedAt: task.completedAt, success: true };
+                }
+              }
+            }
+          }
+
+          // Count scheduled tasks per engine from the plan
+          const engineTaskMap: Record<string, { total: number; done: number; nextDay?: number }> = {};
+          for (const day of allDays) {
+            if (!Array.isArray(day.tasks)) continue;
+            for (const task of day.tasks) {
+              if (task.automationModule) {
+                const mod = task.automationModule;
+                if (!engineTaskMap[mod]) engineTaskMap[mod] = { total: 0, done: 0 };
+                engineTaskMap[mod].total++;
+                if (task.status === 'done') engineTaskMap[mod].done++;
+                else if (!engineTaskMap[mod].nextDay) engineTaskMap[mod].nextDay = day.day;
+              }
+            }
+          }
+
+          const phases = [
+            { num: 1, name: 'תשתית', days: '1-7', color: '#3B82F6' },
+            { num: 2, name: 'תוכן', days: '8-20', color: '#8B5CF6' },
+            { num: 3, name: 'נראות', days: '21-35', color: '#10B981' },
+            { num: 4, name: 'מתקדם', days: '36-50', color: '#F59E0B' },
+            { num: 5, name: 'ניטור', days: '51-60', color: '#EF4444' },
+          ];
+
+          const totalEngines = AUTOMATION_ENGINES.length;
+          const executedEngines = Object.keys(engineExecMap).length;
+          const successEngines = Object.values(engineExecMap).filter(e => e.success).length;
+          const hasPlanTasks = Object.keys(engineTaskMap).length > 0;
+
+          const [runningEngineId, setRunningEngineId] = useState<string | null>(null);
+
+          const handleRunEngine = async (engineId: string, engineName: string) => {
+            if (!safePlan?.id) return;
+            setRunningEngineId(engineId);
+            try {
+              const res = await fetch(`/api/seo-geo-plans/${safePlan.id}/execute-task`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  taskId: `engine-${engineId}-${Date.now()}`,
+                  taskTitle: engineName,
+                  automationModule: engineId,
+                  wpConnection: planAny?.wpConnection || undefined,
+                }),
+              });
+              const data = await res.json();
+              if (res.ok && data.success !== false) {
+                // Refresh plan data
+                const refreshRes = await fetch(`/api/data/seo-plans/${safePlan.id}`);
+                const refreshData = await refreshRes.json();
+                if (refreshData) setPlan(refreshData);
+              } else {
+                alert(data.error || 'שגיאה בהפעלת המנוע');
+              }
+            } catch (e) {
+              alert('שגיאת רשת');
+            } finally {
+              setRunningEngineId(null);
+            }
+          };
+
+          return (
+            <div dir="rtl">
+              {/* Summary cards */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
+                {[
+                  { label: "סה\"כ מנועים", value: totalEngines, color: C.primary, icon: "🤖" },
+                  { label: "הופעלו", value: executedEngines, color: "#7C3AED", icon: "⚡" },
+                  { label: "הצליחו", value: successEngines, color: C.success, icon: "✅" },
+                  { label: "משימות בתוכנית", value: Object.values(engineTaskMap).reduce((s, e) => s + e.total, 0), color: C.warning, icon: "📋" },
+                ].map((card, i) => (
+                  <div key={i} style={{
+                    ...cardStyle, padding: "16px 20px", textAlign: "center",
+                    borderTop: `3px solid ${card.color}`,
+                  }}>
+                    <div style={{ fontSize: 24, marginBottom: 4 }}>{card.icon}</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: card.color }}>{card.value}</div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>{card.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Info banner if plan doesn't have automation tasks */}
+              {!hasPlanTasks && (
+                <div style={{
+                  ...cardStyle, padding: "16px 20px", marginBottom: 20,
+                  background: `${C.warning}08`, borderRight: `3px solid ${C.warning}`,
+                }}>
+                  <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>
+                    <strong>שים לב:</strong> התוכנית הנוכחית הופקה לפני שמנועי האוטומציה שולבו. כדי לשלב את כל 18 המנועים בתוכנית 60 היום, יש להפיק מחדש את התוכנית מלשונית "תוכנית 60 יום".
+                    בינתיים, אפשר להפעיל כל מנוע ידנית מהכפתורים למטה.
+                  </div>
+                </div>
+              )}
+
+              {/* Engines by phase */}
+              {phases.map(phase => {
+                const phaseEngines = AUTOMATION_ENGINES.filter(e => e.phase === phase.num);
+                if (phaseEngines.length === 0) return null;
+                return (
+                  <div key={phase.num} style={{ marginBottom: 24 }}>
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 10, marginBottom: 12,
+                      padding: "10px 16px", borderRadius: 10,
+                      background: `${phase.color}10`, borderRight: `3px solid ${phase.color}`,
+                    }}>
+                      <span style={{ fontSize: 16, fontWeight: 800, color: phase.color }}>
+                        שלב {phase.num}
+                      </span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+                        {phase.name}
+                      </span>
+                      <span style={{ fontSize: 12, color: C.textMuted }}>
+                        (ימים {phase.days})
+                      </span>
+                      <span style={{
+                        marginRight: "auto", fontSize: 11, padding: "2px 8px", borderRadius: 6,
+                        background: `${phase.color}15`, color: phase.color, fontWeight: 600,
+                      }}>
+                        {phaseEngines.filter(e => engineExecMap[e.id]).length}/{phaseEngines.length} הופעלו
+                      </span>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+                      {phaseEngines.map(engine => {
+                        const exec = engineExecMap[engine.id];
+                        const tasks = engineTaskMap[engine.id];
+                        const isRunning = runningEngineId === engine.id;
+                        const statusColor = exec ? (exec.success ? C.success : C.error) : C.textMuted;
+                        const statusLabel = exec ? (exec.success ? 'הושלם' : 'נכשל') : 'ממתין';
+                        const statusIcon = exec ? (exec.success ? '✅' : '❌') : '⏳';
+
+                        return (
+                          <div key={engine.id} style={{
+                            ...cardStyle, padding: "14px 18px",
+                            borderRight: `3px solid ${statusColor}`,
+                            opacity: isRunning ? 0.7 : 1,
+                            transition: "all 0.2s ease",
+                          }}>
+                            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                                  <span style={{ fontSize: 20 }}>{engine.icon}</span>
+                                  <div>
+                                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{engine.nameHe}</div>
+                                    <div style={{ fontSize: 11, color: C.textMuted }}>{engine.name}</div>
+                                  </div>
+                                </div>
+
+                                {/* Status line */}
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginTop: 4 }}>
+                                  <span style={{
+                                    padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 600,
+                                    background: exec ? (exec.success ? `${C.success}12` : `${C.error}12`) : `${C.textMuted}12`,
+                                    color: statusColor,
+                                  }}>
+                                    {statusIcon} {statusLabel}
+                                  </span>
+                                  {exec?.executedAt && (
+                                    <span style={{ color: C.textMuted, fontSize: 11 }}>
+                                      {new Date(exec.executedAt).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  )}
+                                  {exec?.pagesAffected ? (
+                                    <span style={{ color: C.textMuted, fontSize: 11 }}>
+                                      {exec.pagesAffected} עמודים
+                                    </span>
+                                  ) : null}
+                                </div>
+
+                                {/* Plan tasks info */}
+                                {tasks && (
+                                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>
+                                    {tasks.done}/{tasks.total} משימות בתוכנית
+                                    {tasks.nextDay ? ` | הבא: יום ${tasks.nextDay}` : ''}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Run button */}
+                              <button
+                                onClick={() => handleRunEngine(engine.id, engine.nameHe)}
+                                disabled={isRunning || runningEngineId !== null}
+                                style={{
+                                  padding: "6px 14px", borderRadius: 8, border: "none",
+                                  background: isRunning
+                                    ? C.warning
+                                    : exec?.success
+                                      ? `linear-gradient(135deg, ${C.success}, #059669)`
+                                      : `linear-gradient(135deg, #7C3AED, #6D28D9)`,
+                                  color: "#fff", fontSize: 12, fontWeight: 700,
+                                  cursor: isRunning || runningEngineId !== null ? "wait" : "pointer",
+                                  opacity: runningEngineId !== null && !isRunning ? 0.5 : 1,
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {isRunning ? '...מפעיל' : exec?.success ? 'הפעל שוב' : 'הפעל'}
+                              </button>
+                            </div>
+
+                            {/* Error message */}
+                            {exec?.error && (
+                              <div style={{
+                                marginTop: 8, padding: "6px 10px", borderRadius: 6,
+                                background: `${C.error}08`, fontSize: 11, color: C.error,
+                              }}>
+                                {exec.error}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+
+        {/* ── ACTIONS (פעולות שבוצעו) ── */}
+        {activeTab === "actions" && (() => {
+          const planAny = safePlan as any;
+          const automationResults: any[] = Array.isArray(planAny?.automationResults) ? planAny.automationResults : [];
+          const allDays: any[] = Array.isArray(planAny?.days) ? planAny.days : [];
+          // Collect completed tasks from days
+          const completedTasks: any[] = [];
+          for (const day of allDays) {
+            if (!Array.isArray(day.tasks)) continue;
+            for (const task of day.tasks) {
+              if (task.status === 'done' && task.completedAt) {
+                completedTasks.push({ ...task, dayNumber: day.day });
+              }
+            }
+          }
+          // Merge and sort by date (newest first)
+          const allActions: any[] = [
+            ...automationResults.map((r: any) => ({
+              type: 'automation' as const,
+              title: r.taskTitle || r.taskType || 'פעולה אוטומטית',
+              taskType: r.taskType,
+              success: r.success,
+              pagesAffected: r.pagesAffected || 0,
+              changes: r.changes || [],
+              executedAt: r.executedAt,
+              error: r.error,
+            })),
+            ...completedTasks.map((t: any) => ({
+              type: 'manual' as const,
+              title: t.title || t.name || 'משימה ידנית',
+              taskType: t.automationModule || null,
+              success: true,
+              pagesAffected: 0,
+              changes: [],
+              executedAt: t.completedAt,
+              error: null,
+            })),
+          ].sort((a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime());
+
+          const successCount = allActions.filter(a => a.success).length;
+          const autoCount = allActions.filter(a => a.type === 'automation').length;
+          const manualCount = allActions.filter(a => a.type === 'manual').length;
+
+          return (
+            <div>
+              {/* Summary cards */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
+                {[
+                  { label: "סה״כ פעולות", value: allActions.length, color: C.primary, icon: "⚡" },
+                  { label: "הצליחו", value: successCount, color: C.success, icon: "✅" },
+                  { label: "אוטומטיות", value: autoCount, color: "#7C3AED", icon: "🤖" },
+                  { label: "ידניות", value: manualCount, color: C.warning, icon: "👤" },
+                ].map((card, i) => (
+                  <div key={i} style={{
+                    ...cardStyle, padding: "16px 20px", textAlign: "center",
+                    borderTop: `3px solid ${card.color}`,
+                  }}>
+                    <div style={{ fontSize: 24, marginBottom: 4 }}>{card.icon}</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: card.color }}>{card.value}</div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>{card.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Actions list */}
+              {allActions.length === 0 ? (
+                <EmptyTab icon="⚡" text="עדיין לא בוצעו פעולות. הפעל את תוכנית 60 היום כדי להתחיל." />
+              ) : (
+                <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: C.bg }}>
+                        <th style={thStyle}>תאריך</th>
+                        <th style={thStyle}>פעולה</th>
+                        <th style={{ ...thStyle, textAlign: "center", width: 80 }}>סוג</th>
+                        <th style={{ ...thStyle, textAlign: "center", width: 80 }}>סטטוס</th>
+                        <th style={{ ...thStyle, textAlign: "center", width: 90 }}>עמודים</th>
+                        <th style={thStyle}>פרטים</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allActions.map((action, i) => (
+                        <tr key={i} style={{ borderBottom: `1px solid ${C.borderLight}` }}>
+                          <td style={{ ...tdStyle, fontSize: 12, color: C.textMuted, whiteSpace: "nowrap" }}>
+                            {action.executedAt ? new Date(action.executedAt).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </td>
+                          <td style={{ ...tdStyle, fontWeight: 600 }}>{action.title}</td>
+                          <td style={{ ...tdStyle, textAlign: "center" }}>
+                            <span style={{
+                              ...tagStyle, fontSize: 10,
+                              background: action.type === 'automation' ? '#7C3AED12' : `${C.warning}12`,
+                              color: action.type === 'automation' ? '#7C3AED' : C.warning,
+                            }}>
+                              {action.type === 'automation' ? '🤖 אוטו' : '👤 ידני'}
+                            </span>
+                          </td>
+                          <td style={{ ...tdStyle, textAlign: "center" }}>
+                            {action.success ? (
+                              <span style={{ ...tagStyle, background: `${C.success}12`, color: C.success, fontSize: 10 }}>
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{ marginLeft: 3 }}><path d="M20 6L9 17l-5-5"/></svg>
+                                הצליח
+                              </span>
+                            ) : (
+                              <span style={{ ...tagStyle, background: `${C.danger}12`, color: C.danger, fontSize: 10 }}>נכשל</span>
+                            )}
+                          </td>
+                          <td style={{ ...tdStyle, textAlign: "center", fontWeight: 600, color: action.pagesAffected > 0 ? C.text : C.textMuted }}>
+                            {action.pagesAffected > 0 ? action.pagesAffected : '—'}
+                          </td>
+                          <td style={{ ...tdStyle, fontSize: 12, color: C.textSecondary, maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {action.error ? (
+                              <span style={{ color: C.danger }}>{action.error}</span>
+                            ) : action.changes?.length > 0 ? (
+                              `${action.changes.length} שינויים: ${(action.changes[0] as any)?.field || ''}`
+                            ) : action.type === 'manual' ? 'הושלם ידנית' : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           );
         })()}
