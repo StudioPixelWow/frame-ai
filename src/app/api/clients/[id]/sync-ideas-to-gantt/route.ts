@@ -21,9 +21,7 @@ async function fetchClientFromSupabase(clientId: string): Promise<Client | null>
   const sb = getSupabase();
   const { data, error } = await sb
     .from('clients')
-    .select(
-      'id, name, company, contact_person, email, phone, notes, business_field, client_type, status, retainer_amount, retainer_day, color, converted_from_lead, created_at, updated_at, weekly_posts_count, publish_days'
-    )
+    .select('*')
     .eq('id', clientId)
     .maybeSingle();
 
