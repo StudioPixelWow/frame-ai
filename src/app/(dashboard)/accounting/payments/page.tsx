@@ -16,11 +16,11 @@ interface UnifiedPayment {
 }
 
 export default function PaymentsPage() {
-  const { data: rawClients, update: updateClient } = useClients();
-  const { data: rawPayments } = usePayments();
-  const { data: rawProjectPayments, update: updateProjectPayment } = useProjectPayments();
-  const { data: rawHostingRecords, update: updateHostingRecord } = useHostingRecords();
-  const { data: rawPodcastSessions } = usePodcastSessions();
+  const { data: rawClients, update: updateClient, remove: removeClient } = useClients();
+  const { data: rawPayments, remove: removePayment } = usePayments();
+  const { data: rawProjectPayments, update: updateProjectPayment, remove: removeProjectPayment } = useProjectPayments();
+  const { data: rawHostingRecords, update: updateHostingRecord, remove: removeHostingRecord } = useHostingRecords();
+  const { data: rawPodcastSessions, remove: removePodcastSession } = usePodcastSessions();
 
   // Safe fallbacks — never let undefined reach .filter/.map/.reduce/.length
   const clients = rawClients ?? [];
@@ -52,24 +52,25 @@ export default function PaymentsPage() {
 
   const handleDeleteSelected = async () => {
     if (selectedIds.size === 0) return;
-    if (!confirm(`למחוק ${selectedIds.size} תשלומים?`)) return;
+    const count = selectedIds.size;
+    if (!confirm(`למחוק ${count} תשלומים?`)) return;
     for (const id of selectedIds) {
       const payment = filtered.find((p) => p.id === id);
       if (!payment) continue;
       try {
         if (payment.type === "project") {
-          await updateProjectPayment(payment.rawData.id, { ...payment.rawData, status: "cancelled" } as any);
+          await removeProjectPayment(payment.rawData.id);
         } else if (payment.type === "hosting") {
-          await updateHostingRecord(payment.rawData.id, { ...payment.rawData, status: "cancelled" } as any);
-        } else if (payment.type === "retainer") {
-          await updateClient(payment.rawData.id, { ...payment.rawData, paymentStatus: "cancelled" } as any);
+          await removeHostingRecord(payment.rawData.id);
+        } else if (payment.type === "podcast") {
+          await removePodcastSession(payment.rawData.id);
         }
       } catch (err) {
         console.error("Error deleting payment", id, err);
       }
     }
     setSelectedIds(new Set());
-    alert(`${selectedIds.size} תשלומים נמחקו`);
+    alert(`${count} תשלומים נמחקו`);
   };
 
   const unifiedPayments = useMemo(() => {
