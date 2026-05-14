@@ -33,9 +33,12 @@ interface DailySnapshot {
  * סורק את כל מילות המפתח בכל הפלטפורמות ושומר snapshot יומי
  */
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Only enforce auth if CRON_SECRET is configured
+  if (process.env.CRON_SECRET) {
+    const authHeader = req.headers.get('authorization');
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
   }
 
   console.log('[SEO-DAILY-SCAN] סריקה יומית התחילה', new Date().toISOString());

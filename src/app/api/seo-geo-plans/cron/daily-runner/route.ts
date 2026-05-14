@@ -12,9 +12,12 @@ export const maxDuration = 300;
  * Daily SEO automation cron job
  */
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Only enforce auth if CRON_SECRET is configured
+  if (process.env.CRON_SECRET) {
+    const authHeader = req.headers.get('authorization');
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
   }
 
   console.log('[SEO-CRON] Daily runner started at', new Date().toISOString());
