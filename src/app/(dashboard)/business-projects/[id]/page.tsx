@@ -44,6 +44,7 @@ const statusColors: Record<MilestoneStatus, string> = {
   submitted: '#0092cc',
   approved: '#22c55e',
   returned: '#f97316',
+  completed: '#10b981',
 };
 
 const paymentStatusLabels: Record<ProjectPaymentStatus, string> = {
@@ -96,6 +97,7 @@ const milestoneStatusLabels: Record<MilestoneStatus, string> = {
   submitted: 'הוגש',
   approved: 'אישור',
   returned: 'החזר',
+  completed: 'הושלם',
 };
 
 // Project file upload constants
