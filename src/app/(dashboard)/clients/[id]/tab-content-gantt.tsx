@@ -821,10 +821,10 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
       const newDate = new Date(selectedYear, selectedMonth, newDay);
       const dateStr = newDate.toISOString().split("T")[0];
       await updateGanttItem(itemId, { date: dateStr } as any);
-      toast.success("התאריך עודכן בהצלחה");
+      toast("התאריך עודכן בהצלחה", 'success');
     } catch (err) {
       console.error("[Gantt] Failed to update date via drag:", err);
-      toast.error("שגיאה בעדכון התאריך");
+      toast("שגיאה בעדכון התאריך", 'error');
     } finally {
       setDragItemId(null);
       setDragOverDay(null);

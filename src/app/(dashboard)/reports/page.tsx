@@ -63,10 +63,10 @@ export default function ReportsPage() {
   const handleGenerate = useCallback(async () => {
     if (!formClientId || generating) return;
     const client = (clients || []).find(c => c.id === formClientId);
-    if (!client) { toast.error('יש לבחור לקוח'); return; }
+    if (!client) { toast('יש לבחור לקוח', 'error'); return; }
 
     if (formType === 'campaign' && !formCampaignId) {
-      toast.error('יש לבחור קמפיין');
+      toast('יש לבחור קמפיין', 'error');
       return;
     }
 
@@ -93,14 +93,14 @@ export default function ReportsPage() {
       });
       const data = await res.json();
       if (res.ok && data.report) {
-        toast.success('הדוח הופק בהצלחה!');
+        toast('הדוח הופק בהצלחה!', 'success');
         setShowForm(false);
         loadReports();
       } else {
-        toast.error(data.error || 'שגיאה בהפקת דוח');
+        toast(data.error || 'שגיאה בהפקת דוח', 'error');
       }
     } catch {
-      toast.error('שגיאה בחיבור לשרת');
+      toast('שגיאה בחיבור לשרת', 'error');
     }
     setGenerating(false);
   }, [formClientId, formCampaignId, formType, formMode, clients, campaigns, generating, toast, loadReports]);
@@ -117,14 +117,14 @@ export default function ReportsPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        toast.success(data.message || 'הדוח נשלח');
+        toast(data.message || 'הדוח נשלח', 'success');
         setSendEmail('');
         loadReports();
       } else {
-        toast.error(data.error || 'שגיאה בשליחה');
+        toast(data.error || 'שגיאה בשליחה', 'error');
       }
     } catch {
-      toast.error('שגיאה בחיבור לשרת');
+      toast('שגיאה בחיבור לשרת', 'error');
     }
     setSendingId(null);
   }, [sendEmail, sendingId, toast, loadReports]);

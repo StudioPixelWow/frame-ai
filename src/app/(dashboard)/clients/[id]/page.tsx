@@ -331,13 +331,13 @@ function ClientDetailContent() {
       });
       const data = await res.json();
       if (res.ok && data.report) {
-        toast.success('הדוח הופק בהצלחה!');
+        toast('הדוח הופק בהצלחה!', 'success');
         window.open(`/api/data/reports/${data.report.id}?format=html`, '_blank');
       } else {
-        toast.error(data.error || 'שגיאה בהפקת דוח');
+        toast(data.error || 'שגיאה בהפקת דוח', 'error');
       }
     } catch {
-      toast.error('שגיאה בחיבור לשרת');
+      toast('שגיאה בחיבור לשרת', 'error');
     }
     setReportGenerating(false);
   }, [client, reportGenerating, toast]);

@@ -194,14 +194,14 @@ export default function TabCampaigns({ client }: { client: Client }) {
     const newStatus: CampaignStatus = campaign.status === "active" ? "draft" : "active";
     try {
       await updateCampaign(campaign.id, { status: newStatus });
-      toast.success(newStatus === "active" ? "הקמפיין הופעל" : "הקמפיין הושהה");
+      toast(newStatus === "active" ? "הקמפיין הופעל" : "הקמפיין הושהה", 'success');
     } catch {
-      toast.error("שגיאה בעדכון סטטוס");
+      toast("שגיאה בעדכון סטטוס", 'error');
     }
   }
 
   async function duplicateCampaign(campaign: Campaign) {
-    toast.info("שכפול קמפיין — בקרוב...");
+    toast("שכפול קמפיין — בקרוב...", 'info');
   }
 
   // ── Breadcrumb ──

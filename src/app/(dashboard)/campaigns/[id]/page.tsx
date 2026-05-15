@@ -2018,7 +2018,7 @@ export default function CampaignDetailPage() {
   const handleRecAction = useCallback(async (rec: Recommendation, action: RecommendationAction) => {
     if (action === 'ignore') {
       setDismissedRecs(prev => new Set(prev).add(rec.id));
-      toast.info('ההמלצה הוסתרה');
+      toast('ההמלצה הוסתרה', 'info');
       return;
     }
 
@@ -2043,8 +2043,8 @@ export default function CampaignDetailPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(actionObj),
         });
-        toast.success('הפעולה נשלחה לתור האישורים');
-      } catch { toast.error('שגיאה בשליחה לאישור'); }
+        toast('הפעולה נשלחה לתור האישורים', 'success');
+      } catch { toast('שגיאה בשליחה לאישור', 'error'); }
       return;
     }
 
@@ -2081,8 +2081,8 @@ export default function CampaignDetailPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(actionObj),
         });
-        toast.info('סומן לבדיקה ונשלח לתור');
-      } catch { toast.error('שגיאה'); }
+        toast('סומן לבדיקה ונשלח לתור', 'info');
+      } catch { toast('שגיאה', 'error'); }
       return;
     }
   }, [toast, campaignAds, campaign]);
@@ -2116,11 +2116,11 @@ export default function CampaignDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(actionObj),
       });
-      toast.success(sendForApproval
+      toast(sendForApproval
         ? `וריאציה נשלחה לאישור — ${VARIATION_STRATEGY_META[variation.strategy]?.label || ''}`
-        : 'טיוטת וריאציה נשמרה');
+        : 'טיוטת וריאציה נשמרה', 'success');
       setVariationPreview({ show: false, variation: null, ad: null, rec: null });
-    } catch { toast.error('שגיאה ביצירת וריאציה'); }
+    } catch { toast('שגיאה ביצירת וריאציה', 'error'); }
   }, [variationPreview, campaign, toast]);
 
   const fieldStyle: React.CSSProperties = {

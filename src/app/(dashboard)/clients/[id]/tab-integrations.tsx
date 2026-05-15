@@ -231,11 +231,11 @@ export default function TabIntegrations({ client }: { client: Client }) {
       });
       const data = await res.json();
       setWpTestResult(data.success ? { success: true, siteName: data.siteName } : { success: false, error: data.error || 'החיבור נכשל' });
-      if (data.success) toast.success(`WordPress מחובר — ${data.siteName || 'אתר מזוהה'}`);
-      else toast.error(data.error || 'החיבור נכשל');
+      if (data.success) toast(`WordPress מחובר — ${data.siteName || 'אתר מזוהה'}`, 'success');
+      else toast(data.error || 'החיבור נכשל', 'error');
     } catch {
       setWpTestResult({ success: false, error: 'שגיאת רשת' });
-      toast.error('שגיאת רשת');
+      toast('שגיאת רשת', 'error');
     } finally { setWpTesting(false); }
   }, [wpForm, toast]);
 
@@ -254,9 +254,9 @@ export default function TabIntegrations({ client }: { client: Client }) {
           wpConnectedAt: wpTestResult?.success ? new Date().toISOString() : null,
         }),
       });
-      if (res.ok) toast.success('פרטי WordPress נשמרו בכרטיסיית הלקוח');
-      else toast.error('שגיאה בשמירה');
-    } catch { toast.error('שגיאת רשת'); }
+      if (res.ok) toast('פרטי WordPress נשמרו בכרטיסיית הלקוח', 'success');
+      else toast('שגיאה בשמירה', 'error');
+    } catch { toast('שגיאת רשת', 'error'); }
     finally { setWpSaving(false); }
   }, [client.id, wpForm, wpTestResult, toast]);
 
@@ -348,13 +348,13 @@ export default function TabIntegrations({ client }: { client: Client }) {
       const data = await res.json();
       setTestResult(prev => ({ ...prev, [platform]: data }));
       if (data.valid) {
-        toast.success(`חיבור ${platform} תקין — ${data.accountName || "חשבון מזוהה"}`);
+        toast(`חיבור ${platform} תקין — ${data.accountName || "חשבון מזוהה"}`, 'success');
       } else {
-        toast.error(data.error || "החיבור נכשל");
+        toast(data.error || "החיבור נכשל", 'error');
       }
     } catch {
       setTestResult(prev => ({ ...prev, [platform]: { valid: false, error: "שגיאת רשת" } }));
-      toast.error("שגיאת רשת בבדיקת החיבור");
+      toast("שגיאת רשת בבדיקת החיבור", 'error');
     } finally {
       setTesting(null);
     }
@@ -381,7 +381,7 @@ export default function TabIntegrations({ client }: { client: Client }) {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(`פרטי חיבור ${platform} נשמרו`);
+        toast(`פרטי חיבור ${platform} נשמרו`, 'success');
         // Reload statuses
         const statusRes = await fetch(`/api/data/platform-sync?clientId=${client.id}`, { headers: getRoleHeaders() });
         if (statusRes.ok) {
@@ -391,10 +391,10 @@ export default function TabIntegrations({ client }: { client: Client }) {
           }
         }
       } else {
-        toast.error(data.error || "שגיאה בשמירה");
+        toast(data.error || "שגיאה בשמירה", 'error');
       }
     } catch {
-      toast.error("שגיאת רשת בשמירה");
+      toast("שגיאת רשת בשמירה", 'error');
     } finally {
       setSaving(null);
     }
@@ -414,7 +414,7 @@ export default function TabIntegrations({ client }: { client: Client }) {
       if (data.success && data.results?.[0]) {
         const result = data.results[0];
         setSyncResults(prev => ({ ...prev, [platform]: result }));
-        toast.success(result.message || "הסנכרון הושלם");
+        toast(result.message || "הסנכרון הושלם", 'success');
         // Reload statuses
         const statusRes = await fetch(`/api/data/platform-sync?clientId=${client.id}`, { headers: getRoleHeaders() });
         if (statusRes.ok) {
@@ -424,10 +424,10 @@ export default function TabIntegrations({ client }: { client: Client }) {
           }
         }
       } else {
-        toast.error(data.error || "שגיאת סנכרון");
+        toast(data.error || "שגיאת סנכרון", 'error');
       }
     } catch {
-      toast.error("שגיאת רשת בסנכרון");
+      toast("שגיאת רשת בסנכרון", 'error');
     } finally {
       setSyncing(null);
     }
@@ -444,7 +444,7 @@ export default function TabIntegrations({ client }: { client: Client }) {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(`סנכרון הושלם: ${data.summary.successful} הצליחו, ${data.summary.skipped} דולגו`);
+        toast(`סנכרון הושלם: ${data.summary.successful} הצליחו, ${data.summary.skipped} דולגו`, 'success');
         // Reload statuses
         const statusRes = await fetch(`/api/data/platform-sync?clientId=${client.id}`, { headers: getRoleHeaders() });
         if (statusRes.ok) {
@@ -454,10 +454,10 @@ export default function TabIntegrations({ client }: { client: Client }) {
           }
         }
       } else {
-        toast.error(data.error || "שגיאת סנכרון");
+        toast(data.error || "שגיאת סנכרון", 'error');
       }
     } catch {
-      toast.error("שגיאת רשת בסנכרון");
+      toast("שגיאת רשת בסנכרון", 'error');
     } finally {
       setSyncing(null);
     }

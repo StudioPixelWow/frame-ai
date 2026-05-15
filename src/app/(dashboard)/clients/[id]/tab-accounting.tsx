@@ -429,9 +429,9 @@ export default function TabAccounting({ client }: TabAccountingProps) {
                             if (!confirm(`למחוק את התשלום ${payment.invoiceNo || ""} (₪${payment.amount.toLocaleString()})?`)) return;
                             try {
                               await remove(payment.id);
-                              toast.success("התשלום נמחק");
+                              toast("התשלום נמחק", 'success');
                             } catch {
-                              toast.error("שגיאה במחיקת התשלום");
+                              toast("שגיאה במחיקת התשלום", 'error');
                             }
                           }}
                           className="mod-btn-ghost"
@@ -464,9 +464,9 @@ export default function TabAccounting({ client }: TabAccountingProps) {
             try {
               // Mock email send — structure ready for real email API
               await new Promise(resolve => setTimeout(resolve, 800));
-              toast.success(`תזכורת גבייה נשלחה ל${client.name} (${client.email || "ללא אימייל"})`);
+              toast(`תזכורת גבייה נשלחה ל${client.name} (${client.email || "ללא אימייל"})`, 'success');
             } catch {
-              toast.error("שגיאה בשליחת תזכורת");
+              toast("שגיאה בשליחת תזכורת", 'error');
             } finally {
               setSendingReminder(false);
             }
