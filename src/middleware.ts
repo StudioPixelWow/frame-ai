@@ -67,7 +67,8 @@ export function middleware(req: NextRequest) {
     pathname.includes('.') ||
     pathname.startsWith('/api/data') ||
     pathname.startsWith('/api/upload') ||
-    pathname.startsWith('/api/accounting')
+    pathname.startsWith('/api/accounting') ||
+    pathname.startsWith('/api/seo-geo-plans/cron')
   ) {
     return NextResponse.next();
   }
