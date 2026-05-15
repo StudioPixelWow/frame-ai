@@ -1,12 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/seo-geo-plans/cron/daily-runner",
+      "path": "/api/cron/daily-seo",
       "schedule": "0 5 * * *"
-    },
-    {
-      "path": "/api/seo-geo-plans/cron/daily-progress-scan",
-      "schedule": "0 3 * * *"
     }
   ]
 }

@@ -5,10 +5,13 @@ const nextConfig: NextConfig = {
   // This adds ~10% to build size but makes production debugging possible.
   productionBrowserSourceMaps: true,
   typescript: {
-    ignoreBuildErrors: true,
+    // PHASE 1 UPGRADE: TypeScript errors now block the build.
+    // This ensures type-safety in production. Fix errors before deploying.
+    ignoreBuildErrors: false,
   },
   eslint: {
-    ignoreDuringBuilds: true,
+    // PHASE 1 UPGRADE: ESLint errors now block the build.
+    ignoreDuringBuilds: false,
   },
   // Remotion rendering runs in an external worker (worker.ts), NOT inside
   // Next.js routes. No serverExternalPackages needed — the App never imports them.

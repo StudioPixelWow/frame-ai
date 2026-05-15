@@ -60,6 +60,15 @@ import type {
   SeoPlan,
   SeoWebsite,
   SeoGrowthTask,
+  Invoice,
+  GreenInvoiceSettings,
+  ScannedReceipt,
+  EmailSequence,
+  SequenceSubscriber,
+  ScheduledSocialPost,
+  LinkedInPost,
+  Survey,
+  SurveyResponse,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -131,3 +140,24 @@ export const industryPlaybooks = new SupabaseCrud<IndustryPlaybook>('industry_pl
 export const seoPlans = new SupabaseCrud<SeoPlan>('app_seo_plans', 'seo');
 export const seoWebsites = new SupabaseCrud<SeoWebsite>('app_seo_websites', 'swb');
 export const seoGrowthTasks = new SupabaseCrud<SeoGrowthTask>('app_seo_growth_tasks', 'sgt');
+
+// Green Invoice + Invoicing
+export const invoices = new SupabaseCrud<Invoice>('app_invoices', 'inv');
+export const greenInvoiceSettingsStore = new SupabaseCrud<GreenInvoiceSettings>('app_green_invoice_settings', 'gis');
+
+// Receipt Scanner
+export const scannedReceipts = new SupabaseCrud<ScannedReceipt>('app_scanned_receipts', 'rcpt');
+
+// Email Sequences
+export const emailSequences = new SupabaseCrud<EmailSequence>('app_email_sequences', 'esq');
+export const sequenceSubscribers = new SupabaseCrud<SequenceSubscriber>('app_sequence_subscribers', 'ssb');
+
+// Social Media / Postiz
+export const scheduledSocialPosts = new SupabaseCrud<ScheduledSocialPost>('app_scheduled_posts', 'ssp');
+
+// LinkedIn
+export const linkedInPosts = new SupabaseCrud<LinkedInPost>('app_linkedin_posts', 'lip');
+
+// Surveys
+export const surveys = new SupabaseCrud<Survey>('app_surveys', 'srv');
+export const surveyResponses = new SupabaseCrud<SurveyResponse>('app_survey_responses', 'srr');

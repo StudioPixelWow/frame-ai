@@ -2092,3 +2092,253 @@ export interface SeoGrowthTask {
   createdAt: string;
   updatedAt: string;
 }
+
+// ===== Green Invoice (חשבונית ירוקה) =====
+
+export type InvoiceDocType = 10 | 20 | 30 | 100 | 200 | 210 | 300 | 400 | 405;
+export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'cancelled' | 'overdue';
+export type InvoicePaymentMethod = 'cash' | 'cheque' | 'bank_transfer' | 'credit_card' | 'bit' | 'paybox' | 'other';
+
+export interface Invoice {
+  id: string;
+  clientId: string;
+  clientName: string;
+  greenInvoiceDocId: string | null;
+  greenInvoiceNumber: number | null;
+  greenInvoicePdfUrl: string | null;
+  docType: InvoiceDocType;
+  status: InvoiceStatus;
+  description: string;
+  remarks: string;
+  currency: 'ILS' | 'USD' | 'EUR';
+  subtotal: number;
+  vatAmount: number;
+  total: number;
+  vatRate: number;
+  items: InvoiceItem[];
+  paymentMethod: InvoicePaymentMethod | null;
+  paidAt: string | null;
+  dueDate: string | null;
+  isRecurring: boolean;
+  recurringFrequency: 'monthly' | 'quarterly' | 'annual' | null;
+  linkedPaymentId: string | null;
+  linkedPodcastSessionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InvoiceItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  vatType: 0 | 1;
+  total: number;
+}
+
+// ===== Receipt Scanner (סריקת קבלות) =====
+
+export type ExpenseCategory =
+  | 'office' | 'software' | 'advertising' | 'travel' | 'meals'
+  | 'professional_services' | 'equipment' | 'insurance' | 'taxes'
+  | 'supplies' | 'utilities' | 'rent' | 'salary' | 'other';
+
+export type ReceiptStatus = 'pending_review' | 'approved' | 'rejected' | 'sent_to_accountant';
+
+export interface ScannedReceipt {
+  id: string;
+  vendorName: string;
+  vendorTaxId: string;
+  receiptDate: string;
+  receiptNumber: string;
+  subtotal: number;
+  vatAmount: number;
+  total: number;
+  currency: 'ILS' | 'USD' | 'EUR';
+  category: ExpenseCategory;
+  categoryConfidence: number;
+  isDeductible: boolean;
+  deductionPercentage: number;
+  imageUrl: string;
+  ocrText: string;
+  status: ReceiptStatus;
+  notes: string;
+  approvedBy: string | null;
+  fiscalMonth: number;
+  fiscalYear: number;
+  linkedInvoiceId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ===== Email Sequences =====
+
+export type SequenceStatus = 'draft' | 'active' | 'paused' | 'completed';
+export type SequenceStepType = 'email' | 'wait' | 'condition' | 'whatsapp';
+export type SequenceTrigger = 'new_lead' | 'new_client' | 'payment_received' | 'invoice_sent' | 'manual' | 'form_submit';
+
+export interface EmailSequence {
+  id: string;
+  name: string;
+  description: string;
+  trigger: SequenceTrigger;
+  status: SequenceStatus;
+  tikun40Compliant: boolean;
+  unsubscribeUrl: string;
+  senderName: string;
+  senderEmail: string;
+  steps: EmailSequenceStep[];
+  totalSubscribers: number;
+  totalSent: number;
+  totalOpened: number;
+  totalClicked: number;
+  totalUnsubscribed: number;
+  clientId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmailSequenceStep {
+  id: string;
+  type: SequenceStepType;
+  order: number;
+  subject: string;
+  bodyHtml: string;
+  waitDays: number;
+  waitHours: number;
+  conditionField: string;
+  conditionOperator: 'equals' | 'contains' | 'gt' | 'lt';
+  conditionValue: string;
+  sent: number;
+  opened: number;
+  clicked: number;
+}
+
+export interface SequenceSubscriber {
+  id: string;
+  sequenceId: string;
+  email: string;
+  name: string;
+  currentStep: number;
+  status: 'active' | 'completed' | 'unsubscribed' | 'bounced';
+  subscribedAt: string;
+  lastEmailAt: string | null;
+  metadata: Record<string, any>;
+}
+
+// ===== Social Media / Postiz =====
+
+export type SocialPlatformType = 'facebook' | 'instagram' | 'tiktok' | 'linkedin' | 'twitter';
+export type ScheduledPostStatus = 'draft' | 'scheduled' | 'published' | 'failed' | 'pending_approval';
+
+export interface ScheduledSocialPost {
+  id: string;
+  clientId: string;
+  clientName: string;
+  platform: SocialPlatformType;
+  content: string;
+  mediaUrls: string[];
+  hashtags: string[];
+  scheduledAt: string;
+  publishedAt: string | null;
+  status: ScheduledPostStatus;
+  postizPostId: string | null;
+  postizError: string | null;
+  likes: number;
+  comments: number;
+  shares: number;
+  reach: number;
+  linkedGanttItemId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ===== LinkedIn Strategy =====
+
+export interface LinkedInPost {
+  id: string;
+  clientId: string;
+  contentHebrew: string;
+  contentEnglish: string;
+  language: 'he' | 'en' | 'bilingual';
+  postType: 'text' | 'article' | 'carousel' | 'video' | 'poll';
+  industry: string;
+  targetAudience: string;
+  impressions: number;
+  reactions: number;
+  comments: number;
+  shares: number;
+  profileViews: number;
+  scheduledAt: string | null;
+  publishedAt: string | null;
+  status: ScheduledPostStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ===== Survey Builder =====
+
+export type SurveyType = 'nps' | 'csat' | 'feedback' | 'research' | 'custom';
+export type SurveyStatus = 'draft' | 'active' | 'closed' | 'archived';
+export type SurveyQuestionType = 'rating' | 'nps' | 'text' | 'multiple_choice' | 'single_choice' | 'scale';
+export type SurveyDistribution = 'email' | 'whatsapp' | 'link' | 'embedded';
+
+export interface Survey {
+  id: string;
+  clientId: string | null;
+  title: string;
+  description: string;
+  type: SurveyType;
+  status: SurveyStatus;
+  questions: SurveyQuestion[];
+  distributionChannels: SurveyDistribution[];
+  shareUrl: string;
+  totalResponses: number;
+  avgScore: number | null;
+  npsScore: number | null;
+  isRtl: boolean;
+  language: 'he' | 'en';
+  brandColor: string;
+  thankYouMessage: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SurveyQuestion {
+  id: string;
+  type: SurveyQuestionType;
+  text: string;
+  required: boolean;
+  order: number;
+  options: string[];
+  minLabel?: string;
+  maxLabel?: string;
+}
+
+export interface SurveyResponse {
+  id: string;
+  surveyId: string;
+  respondentEmail: string | null;
+  respondentName: string | null;
+  answers: Record<string, any>;
+  npsScore: number | null;
+  completedAt: string;
+  source: SurveyDistribution;
+  createdAt: string;
+}
+
+// ===== Green Invoice Settings =====
+
+export interface GreenInvoiceSettings {
+  id: string;
+  apiId: string;
+  apiSecret: string;
+  sandbox: boolean;
+  businessName: string;
+  businessTaxId: string;
+  defaultDocType: InvoiceDocType;
+  autoIssueOnPayment: boolean;
+  connected: boolean;
+  lastSyncAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
