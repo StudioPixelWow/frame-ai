@@ -345,7 +345,7 @@ function EmployeeDashboard({ employeeId }: { employeeId: string }) {
                           fontSize: "0.65rem", fontWeight: 600, whiteSpace: "nowrap",
                           color: task.dueDate < today ? "#ef4444" : "var(--foreground-muted)",
                         }}>
-                          {new Date(task.dueDate).toLocaleDateString("he-IL", { day: "numeric", month: "short" })}
+                          {new Date(task.dueDate!).toLocaleDateString("he-IL", { day: "numeric", month: "short" })}
                         </div>
                       )}
                     </Link>
@@ -632,7 +632,7 @@ function AdminDashboard() {
 
           // Priority-ordered suggestions — first match wins
           const suggestion = analytics.overdueTasks > 3
-            ? { icon: "🔥", text: `${analytics.overdueTasks} משימות בפיגור — הכי ארוכה עברה ${Math.max(...tasks.filter(t => t.dueDate && t.dueDate < new Date().toISOString().split("T")[0] && t.status !== "completed").map(t => Math.floor((Date.now() - new Date(t.dueDate).getTime()) / 86400000)).concat([0]))} ימים. תעדף ופנה לאחראים.`, action: "טפל עכשיו", href: "/tasks" }
+            ? { icon: "🔥", text: `${analytics.overdueTasks} משימות בפיגור — הכי ארוכה עברה ${Math.max(...tasks.filter(t => t.dueDate && t.dueDate < new Date().toISOString().split("T")[0] && t.status !== "completed").map(t => Math.floor((Date.now() - new Date(t.dueDate!).getTime()) / 86400000)).concat([0]))} ימים. תעדף ופנה לאחראים.`, action: "טפל עכשיו", href: "/tasks" }
             : analytics.overduePaymentsCount > 0
             ? { icon: "💰", text: `${formatCurrency(analytics.overdueTotal)} בפיגור גבייה מ-${analytics.overduePaymentsCount} תשלומים — כל יום עיכוב פוגע בתזרים`, action: "שלח תזכורת", href: "/accounting" }
             : analytics.pendingApprovals > 3
