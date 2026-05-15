@@ -139,13 +139,13 @@ export async function GET(req: NextRequest) {
         const { data: rows2, error: err2 } = await sb.from(TABLE).select(SAFE_COLS);
         if (!err2 && rows2) {
           console.log(`[milestone-files] GET → ${rows2.length} files (no order)`);
-          return NextResponse.json(rows2.map((r: Record<string, unknown>) => rowToFile(r as Row)), { headers: NO_CACHE_HEADERS });
+          return NextResponse.json(rows2.map((r: Record<string, unknown>) => rowToFile(r as unknown as Row)), { headers: NO_CACHE_HEADERS });
         }
       }
       return NextResponse.json({ error: error.message }, { status: 500, headers: NO_CACHE_HEADERS });
     }
 
-    const mapped = (rows ?? []).map((r: Record<string, unknown>) => rowToFile(r as Row));
+    const mapped = (rows ?? []).map((r: Record<string, unknown>) => rowToFile(r as unknown as Row));
     console.log(`[milestone-files GET] → ${mapped.length} files`, mapped.length > 0 ? { firstId: mapped[0].id, firstMilestoneId: mapped[0].milestoneId } : '(empty)');
     return NextResponse.json(mapped, { headers: NO_CACHE_HEADERS });
   } catch (error) {

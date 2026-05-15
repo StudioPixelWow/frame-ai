@@ -177,7 +177,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json([], { status: 200 });
       }
     }
-    return NextResponse.json((rows ?? []).map((r) => rowToPayment(r as Row)));
+    return NextResponse.json((rows ?? []).map((r) => rowToPayment(r as unknown as Row)));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[project-payments] GET catch:', msg);

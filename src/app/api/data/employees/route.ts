@@ -130,7 +130,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json([]);
     }
     console.log(`[API] GET /api/data/employees returned ${(rows ?? []).length} rows`);
-    return NextResponse.json((rows ?? []).map((r) => rowToEmployee(r as Row)));
+    return NextResponse.json((rows ?? []).map((r) => rowToEmployee(r as unknown as Row)));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] GET /api/data/employees error:', msg);
@@ -190,7 +190,7 @@ export async function POST(req: NextRequest) {
     }
 
     console.log(`[API] POST /api/data/employees ✅ persisted id=${id}`);
-    return NextResponse.json(rowToEmployee(verify as Row), { status: 201 });
+    return NextResponse.json(rowToEmployee(verify as unknown as Row), { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] POST /api/data/employees fatal:', msg);

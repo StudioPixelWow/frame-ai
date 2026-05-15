@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json((rows ?? []).map((r: Record<string, unknown>) => rowToEvent(r as Row)));
+    return NextResponse.json((rows ?? []).map((r: Record<string, unknown>) => rowToEvent(r as unknown as Row)));
   } catch (err: any) {
     console.error('[project-timeline] GET fatal:', err?.message);
     return NextResponse.json({ error: err?.message }, { status: 500 });

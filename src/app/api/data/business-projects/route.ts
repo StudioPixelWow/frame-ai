@@ -126,7 +126,7 @@ export async function GET(req: NextRequest) {
       console.warn('[API] GET /api/data/business-projects supabase error (returning []):', error.message);
       return NextResponse.json([]);
     }
-    return NextResponse.json((rows ?? []).map((r) => rowToProject(r as Row)));
+    return NextResponse.json((rows ?? []).map((r) => rowToProject(r as unknown as Row)));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.warn('[API] GET /api/data/business-projects error (returning []):', msg);
@@ -437,7 +437,7 @@ export async function POST(req: NextRequest) {
     insertTimelineEvent(id, 'project_created', `פרויקט "${projectName}" נוצר`);
 
     // Auto-generate milestones from templates matching service_type.
-    const verifyRow = verify as Row;
+    const verifyRow = verify as unknown as Row;
     const svc = (verifyRow.service_type as string) || (verifyRow.project_type as string) || null;
     const seed = await seedMilestonesFromTemplates(sb, id, svc, now);
 

@@ -156,7 +156,7 @@ export async function GET(req: NextRequest) {
       console.error('[API] GET /api/data/tasks supabase error:', error);
       return NextResponse.json({ error: error.message, code: (error as any).code ?? null }, { status: 500 });
     }
-    return NextResponse.json((rows ?? []).map((r) => rowToTask(r as Row)));
+    return NextResponse.json((rows ?? []).map((r) => rowToTask(r as unknown as Row)));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: `Failed to fetch tasks: ${msg}` }, { status: 500 });
@@ -185,7 +185,7 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
       if (!existErr && existing) {
         console.log(`[API] POST /api/data/tasks dedup: existing task for milestone_id=${milestoneId}`);
-        return NextResponse.json({ ...rowToTask(existing as Row), _deduped: true }, { status: 200 });
+        return NextResponse.json({ ...rowToTask(existing as unknown as Row), _deduped: true }, { status: 200 });
       }
     }
 
@@ -206,7 +206,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Insert returned no data' }, { status: 500 });
     }
 
-    const mapped = rowToTask(inserted as Row);
+    const mapped = rowToTask(inserted as unknown as Row);
     console.log(
       `[API] POST /api/data/tasks ✅ persisted id=${mapped.id} title="${mapped.title}" assignee_id=${mapped.assigneeId ?? 'null'} project_id=${mapped.projectId ?? 'null'} business_project_id=${mapped.businessProjectId ?? 'null'} milestone_id=${mapped.milestoneId ?? 'null'} status=${mapped.status}`
     );

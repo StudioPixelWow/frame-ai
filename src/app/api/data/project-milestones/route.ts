@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message, code: (error as any).code ?? null }, { status: 500 });
     }
 
-    let milestones = (rows ?? []).map((r) => rowToMilestone(r as Row));
+    let milestones = (rows ?? []).map((r) => rowToMilestone(r as unknown as Row));
 
     // Employee: only see milestones assigned to them
     if (role === 'employee') {
