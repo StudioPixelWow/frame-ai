@@ -120,7 +120,7 @@ function ClientHealthRow({
   client: any;
   healthScore: ClientHealthScore;
 }) {
-  const statusLabel = STATUS_LABELS_EXTENDED[client.status as ClientStatusExtended];
+  const statusLabel = (STATUS_LABELS_EXTENDED as Record<string, StatusLabel>)[client.status as string] || { label: client.status, color: '#6b7280' };
 
   return (
     <div
