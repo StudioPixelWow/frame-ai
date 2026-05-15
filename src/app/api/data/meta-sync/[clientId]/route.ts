@@ -15,11 +15,11 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
 );
 
-export async function POST(req: NextRequest, { params }: { params: { clientId: string } }) {
+export async function POST(req: NextRequest, context: { params: Promise<{ clientId: string }> }) {
   const roleErr = requireRole(req, 'admin');
   if (roleErr) return roleErr;
 
-  const { clientId } = params;
+  const { clientId } = await context.params;
 
   try {
     // Get client's Meta connection details
@@ -95,11 +95,11 @@ export async function POST(req: NextRequest, { params }: { params: { clientId: s
   }
 }
 
-export async function GET(req: NextRequest, { params }: { params: { clientId: string } }) {
+export async function GET(req: NextRequest, context: { params: Promise<{ clientId: string }> }) {
   const roleErr = requireRole(req, 'admin');
   if (roleErr) return roleErr;
 
-  const { clientId } = params;
+  const { clientId } = await context.params;
 
   try {
     const { data: client, error } = await supabase
