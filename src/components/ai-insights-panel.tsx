@@ -35,12 +35,12 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 /** Generate smart, contextual insights from raw data — named clients, specific numbers, clear actions */
 export function generateInsights(data: {
-  tasks: Array<{ id: string; status?: string; title?: string; clientId?: string | null; clientName?: string; dueDate?: string | null; assigneeIds?: string[]; priority?: string }>;
-  clients: Array<{ id: string; name: string; status?: string; clientType?: string; monthlyGanttStatus?: string; assignedManagerId?: string }>;
-  approvals: Array<{ id: string; status: string; clientName?: string; title?: string; updatedAt: string }>;
-  payments: Array<{ id: string; status: string; amount: number; dueDate?: string | null; clientName?: string; paidAt?: string | null }>;
-  campaigns: Array<{ id: string; status: string; clientId?: string | null; campaignName?: string }>;
-  socialPosts: Array<{ id: string; clientId?: string | null; createdAt?: string | null }>;
+  tasks: Array<Record<string, unknown> & { id: string; status?: string; title?: string; clientName?: string; dueDate?: string | null; assigneeIds?: string[]; priority?: string }>;
+  clients: Array<Record<string, unknown> & { id: string; name: string; status?: string; clientType?: string; monthlyGanttStatus?: string | null; assignedManagerId?: string | null }>;
+  approvals: Array<Record<string, unknown> & { id: string; status: string; clientName?: string; title?: string; updatedAt: string }>;
+  payments: Array<Record<string, unknown> & { id: string; status: string; amount: number; dueDate?: string | null; clientName?: string; paidAt?: string | null }>;
+  campaigns: Array<Record<string, unknown> & { id: string; status: string; clientId?: string | null; campaignName?: string }>;
+  socialPosts: Array<Record<string, unknown> & { id: string; clientId?: string | null; createdAt?: string | null }>;
 }): AIInsight[] {
   const insights: AIInsight[] = [];
   const now = new Date();
