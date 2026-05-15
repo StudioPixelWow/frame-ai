@@ -9,10 +9,11 @@ import { adReferences } from '@/lib/db/collections';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const item = await adReferences.getByIdAsync(params.id);
+    const { id } = await context.params;
+    const item = await adReferences.getByIdAsync(id);
     if (!item) {
       return NextResponse.json(
         { error: 'Ad reference not found' },
@@ -31,12 +32,13 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await context.params;
     const body = await req.json();
     const now = new Date().toISOString();
-    const result = await adReferences.updateAsync(params.id, {
+    const result = await adReferences.updateAsync(id, {
       ...body,
       updatedAt: now,
     });
@@ -58,10 +60,11 @@ export async function PUT(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const success = await adReferences.deleteAsync(params.id);
+    const { id } = await context.params;
+    const success = await adReferences.deleteAsync(id);
     if (!success) {
       return NextResponse.json(
         { error: 'Ad reference not found' },

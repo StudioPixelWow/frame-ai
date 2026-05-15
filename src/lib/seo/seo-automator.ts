@@ -1091,7 +1091,8 @@ ${isLocal ? `📍 קידום לוקאלי (Local SEO):
       const { updatePlanSafe } = await import('./api-helpers');
       const planId = context.planId;
       if (planId) {
-        const { supabase } = await import('@/lib/supabase');
+        const { getSupabase } = await import('@/lib/db/store');
+        const supabase = getSupabase();
         const { data: planRow } = await supabase.from('app_seo_plans').select('data').eq('id', planId).single();
         const planData = planRow?.data || {};
         const existingArticles: any[] = Array.isArray(planData.aiArticles) ? planData.aiArticles : [];

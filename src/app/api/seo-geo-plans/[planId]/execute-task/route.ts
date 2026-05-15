@@ -194,7 +194,8 @@ async function _POST(
     // For article tasks: verify the article was actually saved to aiArticles
     if (autoTaskType === 'daily_seo_article' && result.success) {
       try {
-        const { supabase } = await import('@/lib/supabase');
+        const { getSupabase } = await import('@/lib/db/store');
+        const supabase = getSupabase();
         const { data: freshPlan } = await supabase.from('app_seo_plans').select('data').eq('id', planId).single();
         const freshArticles: any[] = Array.isArray(freshPlan?.data?.aiArticles) ? freshPlan.data.aiArticles : [];
         const savedArticle = freshArticles.find((a: any) => a?.status === 'written' && a?.wpPostUrl);
