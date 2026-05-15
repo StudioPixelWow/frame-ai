@@ -746,9 +746,9 @@ export default function BusinessProjectsPage() {
                       if (!confirm(`האם אתה בטוח שברצונך למחוק את הפרויקט "${project.projectName}"?\n\nפעולה זו תמחק את הפרויקט לצמיתות מהמערכת ולא ניתן לשחזר.`)) return;
                       try {
                         await removeProject(project.id);
-                        toast({ title: `הפרויקט "${project.projectName}" נמחק בהצלחה`, variant: "success" });
+                        toast(`הפרויקט "${project.projectName}" נמחק בהצלחה`);
                       } catch (err) {
-                        toast({ title: "שגיאה במחיקת הפרויקט", variant: "error" });
+                        toast('שגיאה במחיקת הפרויקט');
                       }
                     }}
                   >
@@ -871,9 +871,9 @@ export default function BusinessProjectsPage() {
                       if (!confirm(`האם אתה בטוח שברצונך למחוק את הפרויקט "${project.projectName}"?\n\nפעולה זו תמחק את הפרויקט לצמיתות.`)) return;
                       try {
                         await removeProject(project.id);
-                        toast({ title: `הפרויקט "${project.projectName}" נמחק בהצלחה`, variant: "success" });
+                        toast(`הפרויקט "${project.projectName}" נמחק בהצלחה`);
                       } catch (err) {
-                        toast({ title: "שגיאה במחיקת הפרויקט", variant: "error" });
+                        toast('שגיאה במחיקת הפרויקט');
                       }
                     }}
                   >

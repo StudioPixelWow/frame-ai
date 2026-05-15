@@ -1084,10 +1084,10 @@ function ClientDetailContent() {
                         try { await removeTask(t.id); } catch { /* continue */ }
                       }
                       await removeClient(client.id);
-                      toast({ title: `הלקוח "${client.name}" נמחק בהצלחה (כולל ${relatedCount} פריטים קשורים)`, variant: "success" });
+                      toast(`הלקוח "${client.name}" נמחק בהצלחה (כולל ${relatedCount} פריטים קשורים)`);
                       router.push("/clients");
                     } catch (e) {
-                      toast({ title: "שגיאה במחיקת הלקוח", variant: "error" });
+                      toast('שגיאה במחיקת הלקוח');
                     }
                   }}
                 >

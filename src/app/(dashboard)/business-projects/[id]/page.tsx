@@ -1125,10 +1125,10 @@ export default function BusinessProjectPage() {
                       if (!confirm(`האם אתה בטוח שברצונך למחוק את הפרויקט "${project?.projectName}"?\n\nפעולה זו תמחק את הפרויקט לצמיתות מהמערכת ולא ניתן לשחזר.`)) return;
                       try {
                         await removeProject(projectId);
-                        toast({ title: `הפרויקט נמחק בהצלחה`, variant: 'success' });
+                        toast(`הפרויקט נמחק בהצלחה`);
                         router.push('/business-projects');
                       } catch (e) {
-                        toast({ title: 'שגיאה במחיקת הפרויקט', variant: 'error' });
+                        toast('שגיאה במחיקת הפרויקט');
                       }
                     }}
                   >
