@@ -150,7 +150,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     let lastErr: { message: string; code?: string } | null = null;
     for (let attempt = 0; attempt < 12; attempt++) {
       const { data, error } = await sb.from(TABLE).update(updateRow).eq('id', id).select(selectList).maybeSingle();
-      if (!error) { updated = (data as Row) ?? null; break; }
+      if (!error) { updated = (data as unknown as Row) ?? null; break; }
       lastErr = error as any;
       const bad = parseBadColumn(error.message);
       if (!bad) break;

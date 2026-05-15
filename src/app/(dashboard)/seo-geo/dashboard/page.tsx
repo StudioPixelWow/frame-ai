@@ -141,7 +141,7 @@ export default function SeoGeoDashboard() {
     fetchPlans();
 
     // Fetch platform availability — convert API response format, fall back to scan data
-    fetch('/api/seo/platform-status').then(r => r.ok ? r.json() : {}).then(data => {
+    fetch('/api/seo/platform-status').then(r => r.ok ? r.json() : {}).then((data: any) => {
       if (data.platforms) {
         // API returns { platforms: { id: { available: bool, name: string } } }
         // Convert to { id: 'real' | 'unavailable' } for our state

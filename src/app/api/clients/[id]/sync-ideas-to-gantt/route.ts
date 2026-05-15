@@ -308,7 +308,7 @@ export async function POST(
       const alreadyExists = existingGanttItems.some(
         (item) =>
           (idea.id && (item as any).researchIdeaId === idea.id) ||
-          (item.researchReason === idea.title && item.researchSource === 'research-selection')
+          (item.researchReason === idea.title && (item.researchSource as string) === 'research-selection')
       );
       if (alreadyExists) {
         console.log(`[SyncToGantt] Idea "${idea.title}" already exists in gantt, skipping`);

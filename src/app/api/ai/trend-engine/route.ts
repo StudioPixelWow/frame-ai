@@ -120,9 +120,9 @@ function generateFallbackTrends(
   const trends: TrendSuggestion[] = [];
   const safeHolidays = Array.isArray(holidays) ? holidays : [];
   const bt = (businessType || '').toLowerCase();
-  const fallbackData = HEBREW_TRENDS_FALLBACK[bt] || HEBREW_TRENDS_FALLBACK['marketing'];
+  const fallbackData = (HEBREW_TRENDS_FALLBACK as Record<string, any>)[bt] || (HEBREW_TRENDS_FALLBACK as Record<string, any>)['marketing'];
 
-  (fallbackData || []).forEach((item, idx) => {
+  (fallbackData || []).forEach((item: any, idx: any) => {
     trends.push({
       trendName: item.trend,
       whyTrending: `טרנד פופולרי בחודש ${month} - ${item.message}`,

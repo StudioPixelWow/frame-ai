@@ -66,13 +66,15 @@ export async function POST(req: NextRequest) {
       console.error('[Auth/CreateUser] DB error:', error.message);
       // Try creating table if it doesn't exist
       if (error.message.includes('does not exist') || error.code === '42P01') {
-        await supabase.rpc('exec_sql', {
-          query: `CREATE TABLE IF NOT EXISTS app_users (
-            id TEXT PRIMARY KEY,
-            data JSONB NOT NULL DEFAULT '{}'::jsonb,
-            created_at TIMESTAMPTZ DEFAULT NOW()
-          );`
-        }).catch(() => {});
+        try {
+          await supabase.rpc('exec_sql', {
+            query: `CREATE TABLE IF NOT EXISTS app_users (
+              id TEXT PRIMARY KEY,
+              data JSONB NOT NULL DEFAULT '{}'::jsonb,
+              created_at TIMESTAMPTZ DEFAULT NOW()
+            );`
+          });
+        } catch (_) { /* ignore */ }
 
         // Retry insert
         const { error: retryError } = await supabase

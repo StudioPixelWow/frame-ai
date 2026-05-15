@@ -569,7 +569,7 @@ function AnalyticsDashboardInner() {
     // SECTION 7: Lead Funnel
     const allLeads = leads.length;
     const contactedLeads = leads.filter((l) => l.status === 'contacted').length;
-    const proposalLeads = leads.filter((l) => l.status === 'proposal').length;
+    const proposalLeads = leads.filter((l) => (l.status as string) === 'proposal' || l.status === 'proposal_sent').length;
     const wonLeads = leads.filter((l) => l.status === 'won').length;
 
     // Conversion rates

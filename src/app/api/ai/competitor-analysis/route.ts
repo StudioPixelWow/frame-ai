@@ -189,7 +189,7 @@ function generateFallbackAnalysis(
   competitors: Competitor[],
   businessType: string
 ): CompetitorAnalysisResponse {
-  const patterns = INDUSTRY_PATTERNS[businessType.toLowerCase()] || INDUSTRY_PATTERNS['default'];
+  const patterns = (INDUSTRY_PATTERNS as Record<string, any>)[businessType.toLowerCase()] || (INDUSTRY_PATTERNS as Record<string, any>)['default'];
 
   const competitorAnalyses: CompetitorAnalysis[] = (competitors || []).map((comp) => ({
     name: comp?.name ?? '(ללא שם)',
@@ -304,7 +304,7 @@ export async function POST(req: NextRequest) {
     const apiKeys = getApiKeys();
 
     // Generate fallback analysis first
-    const fallbackAnalysis = generateFallbackAnalysis(competitors, businessType);
+    const fallbackAnalysis = generateFallbackAnalysis(competitors, businessType as string);
 
     let response: CompetitorAnalysisResponse = fallbackAnalysis;
     let usedAI = false;

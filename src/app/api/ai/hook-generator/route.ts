@@ -259,7 +259,7 @@ function validateRequest(body: unknown): {
 
   return {
     valid: true,
-    data: req as HookGeneratorRequest,
+    data: req as unknown as HookGeneratorRequest,
   };
 }
 

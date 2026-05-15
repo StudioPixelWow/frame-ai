@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
         await clientFiles.updateAsync(doc.id, {
           sentToAccountant: true,
           sentAt,
-        });
+        } as any);
       } catch (e) {
         // Non-critical — continue even if marking fails
         console.warn(`[SendToAccountant] Failed to mark doc ${doc.id} as sent:`, e);

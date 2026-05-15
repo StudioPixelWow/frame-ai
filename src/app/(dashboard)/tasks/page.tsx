@@ -708,7 +708,7 @@ export default function TasksPage() {
                         const taskClientName = resolveClientName(task);
                         const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed" && task.status !== "approved";
                         const assigneeNames = (Array.isArray(task.assigneeIds) ? task.assigneeIds : [])
-                          .map(id => teamEmployees.find(e => e.id === id)?.name)
+                          .map((id: any) => teamEmployees.find(e => e.id === id)?.name)
                           .filter(Boolean);
                         return (
                           <div key={task.id} style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }} className="ux-stagger-item">

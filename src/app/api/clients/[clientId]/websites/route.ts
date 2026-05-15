@@ -122,7 +122,7 @@ async function handlePOST(
       JSON.stringify(newWebsite)
     );
 
-    const created_website = await seoWebsites.createAsync(newWebsite);
+    const created_website = await seoWebsites.createAsync(newWebsite as any);
 
     logActivity(id, 'website_created', {
       clientId,

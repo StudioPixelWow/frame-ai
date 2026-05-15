@@ -20,7 +20,7 @@ export async function GET(
         { status: 404 }
       );
     }
-    return NextResponse.json({ id: item.id, ...item });
+    return NextResponse.json(item);
   } catch (err) {
     console.error('[ad-references GET/:id] error:', err);
     return NextResponse.json(
@@ -48,7 +48,7 @@ export async function PUT(
         { status: 404 }
       );
     }
-    return NextResponse.json({ id: result.id, ...result });
+    return NextResponse.json(result);
   } catch (err) {
     console.error('[ad-references PUT/:id] error:', err);
     return NextResponse.json(

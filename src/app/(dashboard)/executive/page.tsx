@@ -525,7 +525,7 @@ export default function ExecutivePage() {
       if (p.status === "overdue") {
         const client = clients.find((c: any) => c.id === p.clientId);
         alertList.push({
-          message: `תשלום פרויקט באיחור: ${client?.name || client?.clientName || "לא ידוע"}`,
+          message: `תשלום פרויקט באיחור: ${client?.name || (client as any)?.clientName || "לא ידוע"}`,
           severity: "warning",
         });
       }

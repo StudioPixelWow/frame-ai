@@ -2567,8 +2567,8 @@ export default function SeoPlanDetail() {
                                                     {Array.isArray(guide.tips) && guide.tips.length > 0 && (
                                                       <div style={{ padding: "10px 12px", background: "#fef08a15", border: "1px solid #fef08a30", borderRadius: 6 }}>
                                                         <div style={{ fontSize: 11, fontWeight: 600, color: "#b45309", marginBottom: 6 }}>💡 טיפים</div>
-                                                        {guide.tips.map((tip: string, idx: number) => (
-                                                          <div key={idx} style={{ fontSize: 11, color: "#b45309", marginBottom: idx < guide.tips.length - 1 ? 4 : 0, lineHeight: 1.4 }}>
+                                                        {(guide.tips ?? []).map((tip: string, idx: number) => (
+                                                          <div key={idx} style={{ fontSize: 11, color: "#b45309", marginBottom: idx < (guide.tips?.length ?? 0) - 1 ? 4 : 0, lineHeight: 1.4 }}>
                                                             • {tip}
                                                           </div>
                                                         ))}
@@ -3815,7 +3815,7 @@ export default function SeoPlanDetail() {
                       {filteredResults.map((q, i) => {
                         const pd = PLATFORM_DISPLAY[q.platform] || { name: q.platform, nameHe: q.platform, color: C.text };
                         const decoded = (q.query || '').replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#39;/g, "'");
-                        const sources = extractSources(q.snippet, p.targetUrl, (q as any).sources);
+                        const sources = extractSources(q.snippet, (p as any).targetUrl ?? p.websiteUrl, (q as any).sources);
                         const ownSource = sources.find(s => s.isOwn);
                         return (
                           <div key={i} onClick={() => setAiQueryDetail(q)} style={{
@@ -4082,7 +4082,7 @@ export default function SeoPlanDetail() {
                 {/* ── Query Detail Popup Modal (upgraded) ── */}
                 {aiQueryDetail && (() => {
                   const detailPd = PLATFORM_DISPLAY[aiQueryDetail.platform] || { name: aiQueryDetail.platform, nameHe: aiQueryDetail.platform, color: C.text };
-                  const detailSources = extractSources(aiQueryDetail.snippet, p.targetUrl, aiQueryDetail.sources);
+                  const detailSources = extractSources(aiQueryDetail.snippet, (p as any).targetUrl ?? p.websiteUrl, aiQueryDetail.sources);
                   return (
                   <div onClick={() => setAiQueryDetail(null)} style={{
                     position: "fixed", inset: 0, zIndex: 9999,
@@ -5702,7 +5702,7 @@ export default function SeoPlanDetail() {
                         const exec = engineExecMap[engine.id];
                         const tasks = engineTaskMap[engine.id];
                         const isRunning = runningEngineId === engine.id;
-                        const statusColor = exec ? (exec.success ? C.success : C.error) : C.textMuted;
+                        const statusColor = exec ? (exec.success ? C.success : C.danger) : C.textMuted;
                         const statusLabel = exec ? (exec.success ? 'הושלם' : 'נכשל') : 'ממתין';
                         const statusIcon = exec ? (exec.success ? '✅' : '❌') : '⏳';
 
@@ -5727,7 +5727,7 @@ export default function SeoPlanDetail() {
                                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginTop: 4 }}>
                                   <span style={{
                                     padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 600,
-                                    background: exec ? (exec.success ? `${C.success}12` : `${C.error}12`) : `${C.textMuted}12`,
+                                    background: exec ? (exec.success ? `${C.success}12` : `${C.danger}12`) : `${C.textMuted}12`,
                                     color: statusColor,
                                   }}>
                                     {statusIcon} {statusLabel}
@@ -5778,7 +5778,7 @@ export default function SeoPlanDetail() {
                             {exec?.error && (
                               <div style={{
                                 marginTop: 8, padding: "6px 10px", borderRadius: 6,
-                                background: `${C.error}08`, fontSize: 11, color: C.error,
+                                background: `${C.danger}08`, fontSize: 11, color: C.danger,
                               }}>
                                 {exec.error}
                               </div>
@@ -6105,7 +6105,7 @@ export default function SeoPlanDetail() {
               if (currentScan.openGraph) s += 5;
               if ((currentScan.loadTimeMs || 5000) < 3000) s += 10;
               if (currentScan.metaDescription) s += 10;
-              if (currentScan.h1) s += 10;
+              if ((currentScan as any).h1) s += 10;
               const aiPct = currentTotal > 0 ? (currentFound / currentTotal) * 100 : 0;
               s += Math.round(aiPct * 0.2);
               return Math.min(s, 100);
@@ -6187,7 +6187,7 @@ export default function SeoPlanDetail() {
                   { label: "נראות AI", value: currentTotal > 0 ? `${Math.round((currentFound / currentTotal) * 100)}%` : '—', icon: "🤖", sub: baselineTotal > 0 ? `היה: ${Math.round((baselineFound / Math.max(baselineTotal, 1)) * 100)}%` : '—', color: currentFound > baselineFound ? '#10b981' : '#f59e0b' },
                   { label: "ביטויים שעלו", value: keywordChanges.filter((k: any) => k.improved).length, icon: "🚀", sub: `מתוך ${currentKw.length} ביטויים`, color: '#10b981' },
                 ].map((card, i) => (
-                  <div key={i} style={{ background: C.cardBg, borderRadius: 14, padding: 20, border: `1px solid ${C.border}`, textAlign: "center", position: "relative", overflow: "hidden" }}>
+                  <div key={i} style={{ background: C.card, borderRadius: 14, padding: 20, border: `1px solid ${C.border}`, textAlign: "center", position: "relative", overflow: "hidden" }}>
                     <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: card.color }} />
                     <div style={{ fontSize: 28, marginBottom: 8 }}>{card.icon}</div>
                     <div style={{ fontSize: 24, fontWeight: 800, color: C.text }}>{card.value}</div>
@@ -6199,7 +6199,7 @@ export default function SeoPlanDetail() {
 
               {/* Daily Progress Chart — SVG */}
               {hasSnapshots && (
-                <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
+                <div style={{ background: C.card, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
                   <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>📊 גרף התקדמות יומי</h3>
                   <svg width="100%" viewBox={`0 0 ${chartWidth} ${chartHeight}`} style={{ overflow: "visible" }}>
                     {/* Grid lines */}
@@ -6270,11 +6270,11 @@ export default function SeoPlanDetail() {
 
               {/* Daily Snapshots Timeline */}
               {hasSnapshots && (
-                <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
+                <div style={{ background: C.card, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
                   <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>📅 סריקות יומיות — {effectiveSnapshots.length} ימים</h3>
                   <div style={{ maxHeight: 400, overflowY: "auto" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                      <thead style={{ position: "sticky", top: 0, background: C.cardBg, zIndex: 1 }}>
+                      <thead style={{ position: "sticky", top: 0, background: C.card, zIndex: 1 }}>
                         <tr style={{ borderBottom: `2px solid ${C.border}` }}>
                           <th style={{ padding: "8px 12px", textAlign: "right", fontWeight: 700, color: C.textSecondary }}>תאריך</th>
                           <th style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: C.textSecondary }}>ציון כולל</th>
@@ -6329,7 +6329,7 @@ export default function SeoPlanDetail() {
 
               {/* AI Visibility comparison */}
               {baselineAi.length > 0 && (
-                <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
+                <div style={{ background: C.card, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
                   <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>🤖 השוואת נראות AI — בסיס מול עכשיו</h3>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
@@ -6368,7 +6368,7 @@ export default function SeoPlanDetail() {
 
               {/* Keyword ranking changes */}
               {keywordChanges.length > 0 && (
-                <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
+                <div style={{ background: C.card, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
                   <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>🔑 התקדמות ביטויים — בסיס מול עכשיו</h3>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
@@ -6400,7 +6400,7 @@ export default function SeoPlanDetail() {
 
               {/* Technical comparison */}
               {technicalChanges.length > 0 && (
-                <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
+                <div style={{ background: C.card, borderRadius: 16, padding: 24, border: `1px solid ${C.border}`, marginBottom: 24 }}>
                   <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>🔧 שינויים טכניים</h3>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
@@ -6429,7 +6429,7 @@ export default function SeoPlanDetail() {
 
               {/* Scan history timeline */}
               {history.length > 0 && (
-                <div style={{ background: C.cardBg, borderRadius: 16, padding: 24, border: `1px solid ${C.border}` }}>
+                <div style={{ background: C.card, borderRadius: 16, padding: 24, border: `1px solid ${C.border}` }}>
                   <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>🕐 היסטוריית סריקות ידניות</h3>
                   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     {history.slice().reverse().map((entry: any, i: number) => (
@@ -6453,7 +6453,7 @@ export default function SeoPlanDetail() {
 
               {/* Empty state — no scan data at all */}
               {!hasBaseline && !hasSnapshots && !currentScan && (
-                <div style={{ background: C.cardBg, borderRadius: 16, padding: 48, textAlign: "center", border: `1px solid ${C.border}` }}>
+                <div style={{ background: C.card, borderRadius: 16, padding: 48, textAlign: "center", border: `1px solid ${C.border}` }}>
                   <div style={{ fontSize: 48, marginBottom: 16 }}>📊</div>
                   <h3 style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>הסריקה היומית תתחיל בקרוב</h3>
                   <p style={{ fontSize: 14, color: C.textMuted, marginBottom: 8 }}>

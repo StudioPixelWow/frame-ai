@@ -460,17 +460,17 @@ function SeoGeoWizard() {
       'יצירת שאלות AI', 'בדיקת נראות במנועים', 'אימות ראיות', 'סיום סריקה',
     ];
     let simIdx = 0;
-    const simStages = stageDefs.map((label, i) => ({
+    const simStages: { stage: string; index: number; label: string; labelHe: string; status: string }[] = stageDefs.map((label, i) => ({
       stage: `stage_${i}`, index: i + 1, label, labelHe: label,
-      status: 'pending' as const,
+      status: 'pending',
     }));
 
     const advanceSim = () => {
       if (simIdx > 0 && simIdx <= simStages.length) {
-        simStages[simIdx - 1] = { ...simStages[simIdx - 1], status: 'completed' as const };
+        simStages[simIdx - 1] = { ...simStages[simIdx - 1], status: 'completed' };
       }
       if (simIdx < simStages.length) {
-        simStages[simIdx] = { ...simStages[simIdx], status: 'running' as const };
+        simStages[simIdx] = { ...simStages[simIdx], status: 'running' };
         setScanLogs(prev => [...prev, {
           timestamp: new Date().toISOString(), stage: `stage_${simIdx}`,
           action: `שלב ${simIdx + 1}: ${stageDefs[simIdx]}`, result: 'info',
@@ -1621,7 +1621,7 @@ function SeoGeoWizard() {
                           if (data.websiteUrl) params.set("url", data.websiteUrl);
                           if (data.clientName) params.set("client", data.clientName);
                           if (data.clientId) params.set("clientId", data.clientId);
-                          if (data.planId) params.set("planId", data.planId);
+                          if ((data as any).planId) params.set("planId", (data as any).planId);
                           // Pass wizard data to scan page via sessionStorage (too large for URL params)
                           try {
                             sessionStorage.setItem('seo-wizard-data', JSON.stringify({
@@ -1775,14 +1775,14 @@ function SeoGeoWizard() {
                           {scanValidation?.passed ? 'סריקה אמיתית — תוצאות מאומתות' : 'סריקה הושלמה עם אזהרות'}
                         </div>
                         <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                          {data.scanResult.scannedPages?.length || 0} דפים נסרקו
+                          {(data.scanResult as any).scannedPages?.length || 0} דפים נסרקו
                           {' '}|{' '}
                           {scanDuration ? `${(scanDuration / 1000).toFixed(1)}s` : '—'}
                           {' '}|{' '}
-                          ביטחון: {data.scanResult.websiteFacts?.confidence_score || 0}%
+                          ביטחון: {(data.scanResult as any).websiteFacts?.confidence_score || 0}%
                           {' '}|{' '}
-                          מצב: {data.scanResult.scan_mode === 'real' ? 'סריקה אמיתית' :
-                                data.scanResult.scan_mode === 'simulated' ? 'סימולציה' : 'לא זמין'}
+                          מצב: {(data.scanResult as any).scan_mode === 'real' ? 'סריקה אמיתית' :
+                                (data.scanResult as any).scan_mode === 'simulated' ? 'סימולציה' : 'לא זמין'}
                         </div>
                       </div>
                       {/* Rescan button */}
@@ -1819,9 +1819,9 @@ function SeoGeoWizard() {
                         },
                         {
                           label: "דפים שנסרקו",
-                          value: data.scanResult.scannedPages?.length || data.scanResult.totalPages || 0,
+                          value: (data.scanResult as any).scannedPages?.length || data.scanResult.totalPages || 0,
                           suffix: "",
-                          color: (data.scanResult.scannedPages?.length || 0) >= 3 ? (C.success || '#22c55e') : (C.warning || '#f59e0b'),
+                          color: ((data.scanResult as any).scannedPages?.length || 0) >= 3 ? (C.success || '#22c55e') : (C.warning || '#f59e0b'),
                         },
                         {
                           label: "בעיות שנמצאו",

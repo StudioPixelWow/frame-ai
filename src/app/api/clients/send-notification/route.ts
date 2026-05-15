@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     // Log the email
     const now = new Date().toISOString();
     try {
-      await clientEmailLogs.createAsync({
+      clientEmailLogs.create({
         clientId: clientId || 'system',
         emailType: emailType || 'general',
         subject,

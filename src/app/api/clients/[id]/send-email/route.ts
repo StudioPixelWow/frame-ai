@@ -32,7 +32,7 @@ export async function POST(
   });
 
   // Log the email
-  const log = await clientEmailLogs.createAsync({
+  const log = clientEmailLogs.create({
     clientId: client.id,
     emailType,
     subject,

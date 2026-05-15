@@ -123,7 +123,7 @@ export async function POST(req: NextRequest, context: Params) {
   const options: GenerateCtaOptions = {};
   if (businessType && typeof businessType === "string") options.businessType = businessType;
   if (preset        && typeof preset === "string")       options.preset       = preset;
-  if (tone          && typeof tone === "string")          options.tone         = tone as GenerateCtaOptions["tone"];
+  if (tone          && typeof tone === "string")          options.tone         = tone as unknown as GenerateCtaOptions["tone"];
   if (topic         && typeof topic === "string")         options.topic        = topic;
   if (benefit       && typeof benefit === "string")       options.benefit      = benefit;
   if (count === 2 || count === 3)                         options.count        = count;
