@@ -120,7 +120,7 @@ function ClientHealthRow({
   client: any;
   healthScore: ClientHealthScore;
 }) {
-  const statusLabel = STATUS_LABELS_EXTENDED[client.status];
+  const statusLabel = STATUS_LABELS_EXTENDED[client.status as ClientStatusExtended];
 
   return (
     <div
