@@ -259,10 +259,9 @@ function HealthTab({ health }: { health: HealthScore[] }) {
               {h.hasEnoughData && (
                 <PremiumRadialMetric
                   value={h.score}
-                  maxValue={100}
                   label="בריאות"
                   autoColor
-                  size="sm"
+                  size={80}
                 />
               )}
               {!h.hasEnoughData && (
