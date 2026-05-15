@@ -1346,8 +1346,8 @@ export default function CampaignDetailPage() {
 
   const leadInsights = useMemo(() => {
     if (!campaign || !allLeads) return null;
-    const map = buildCampaignLeadInsights(allLeads || [], [campaign]);
-    return map[campaign.id] || null;
+    const insights = buildCampaignLeadInsights(allLeads || [], [campaign]);
+    return insights.find(i => i.campaignId === campaign.id) || null;
   }, [campaign, allLeads]);
 
   // ── Attribution: leads linked to this campaign ──────────────────────
