@@ -15,14 +15,13 @@ import {
   useMilestoneFiles,
   useProjectTimeline,
 } from '@/lib/api/use-entity';
-import { BusinessProject, ProjectMilestone, ProjectPayment, Client, Employee, ClientFile, MilestoneFile, ProjectTimelineEvent } from '@/lib/db/schema';
+import { BusinessProject, ProjectMilestone, ProjectPayment, Client, Employee, ClientFile, MilestoneFile, ProjectTimelineEvent, MilestoneStatus, ProjectPaymentStatus } from '@/lib/db/schema';
 import { ProjectNotificationBell } from '@/components/project-notification-bell';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useToast } from '@/components/ui/toast';
 
 type Tab = 'overview' | 'milestones' | 'files' | 'payments' | 'activity';
-type MilestoneStatus = 'pending' | 'in_progress' | 'submitted' | 'approved' | 'returned';
-type ProjectPaymentStatus = 'pending' | 'collection_needed' | 'paid' | 'overdue';
+// MilestoneStatus and ProjectPaymentStatus imported from schema
 type FileCategory = 'agreements' | 'branding' | 'website' | 'general';
 
 interface MilestoneFormData {
