@@ -1346,7 +1346,7 @@ export default function CampaignDetailPage() {
 
   const leadInsights = useMemo(() => {
     if (!campaign || !allLeads) return null;
-    const map = buildCampaignLeadInsights([campaign], allLeads || []);
+    const map = buildCampaignLeadInsights(allLeads || [], [campaign]);
     return map[campaign.id] || null;
   }, [campaign, allLeads]);
 
