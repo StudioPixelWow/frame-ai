@@ -171,6 +171,7 @@ export default function VideoEditorPage() {
   } | null>(null);
   const [aiDraft, setAiDraft] = useState<AIEditDraft | null>(null);
   const [safetyReport, setSafetyReport] = useState<SafetyReport | null>(null);
+  const [currentTime, setCurrentTime] = useState<number>(0);
 
   /* ─────────────────────────────────────────────────────────────────────
      TRANSITION HANDLERS
@@ -571,9 +572,8 @@ export default function VideoEditorPage() {
         >
           {hasClips ? (
             <RenderPreviewPanel
-              editProject={editProject}
-              selectedClipId={selectedClipId}
-              onClipSelect={setSelectedClipId}
+              project={editProject}
+              currentTime={currentTime}
             />
           ) : (
             <div
