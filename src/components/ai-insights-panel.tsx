@@ -35,12 +35,12 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 /** Generate smart, contextual insights from raw data — named clients, specific numbers, clear actions */
 export function generateInsights(data: {
-  tasks: Array<{ id: string; status?: string; title?: string; clientId?: string; clientName?: string; dueDate?: string; assigneeIds?: string[]; priority?: string }>;
+  tasks: Array<{ id: string; status?: string; title?: string; clientId?: string | null; clientName?: string; dueDate?: string | null; assigneeIds?: string[]; priority?: string }>;
   clients: Array<{ id: string; name: string; status?: string; clientType?: string; monthlyGanttStatus?: string; assignedManagerId?: string }>;
   approvals: Array<{ id: string; status: string; clientName?: string; title?: string; updatedAt: string }>;
-  payments: Array<{ id: string; status: string; amount: number; dueDate?: string; clientName?: string; paidAt?: string }>;
-  campaigns: Array<{ id: string; status: string; clientId?: string; campaignName?: string }>;
-  socialPosts: Array<{ id: string; clientId?: string; createdAt?: string }>;
+  payments: Array<{ id: string; status: string; amount: number; dueDate?: string | null; clientName?: string; paidAt?: string | null }>;
+  campaigns: Array<{ id: string; status: string; clientId?: string | null; campaignName?: string }>;
+  socialPosts: Array<{ id: string; clientId?: string | null; createdAt?: string | null }>;
 }): AIInsight[] {
   const insights: AIInsight[] = [];
   const now = new Date();
