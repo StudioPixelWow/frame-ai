@@ -658,8 +658,10 @@ export default function VideoEditorPage() {
                   בחר מעבר
                 </h3>
                 <TransitionPicker
-                  onSelectTransition={handleSelectTransition}
-                  selectedClipId={selectedClipId}
+                  selectedType={null}
+                  recommendedTypes={[]}
+                  onSelect={(type) => handleSelectTransition(type, 500)}
+                  onClose={() => setShowTransitionPicker(false)}
                 />
                 {selectedClip && editProject.clips.length > 1 && (
                   <button
@@ -697,8 +699,11 @@ export default function VideoEditorPage() {
                 </h3>
                 {selectedClip ? (
                   <MotionEffectPicker
-                    onSelectMotion={handleSelectMotionEffect}
-                    currentMotion={selectedClip.motionEffect}
+                    selectedMotion={selectedClip.motionEffect?.type ?? null}
+                    selectedIntensity={selectedClip.motionEffect?.intensity ?? 'medium'}
+                    recommendedMotion={null}
+                    onSelect={(type, intensity) => handleSelectMotionEffect(type, intensity)}
+                    onClose={() => {}}
                   />
                 ) : (
                   <p style={{ color: "var(--foreground-muted)", fontSize: "0.9rem" }}>
@@ -713,7 +718,11 @@ export default function VideoEditorPage() {
                 <h3 style={{ margin: "0 0 1rem 0", fontSize: "0.95rem", fontWeight: 600 }}>
                   בחר חבילת סגנון
                 </h3>
-                <StylePackSelector onSelectStylePack={handleSelectStylePack} />
+                <StylePackSelector
+                  selectedPack={editProject.stylePack ?? null}
+                  recommendedPack={null}
+                  onSelect={handleSelectStylePack}
+                />
                 {editProject.stylePack && (
                   <div
                     style={{
@@ -736,7 +745,12 @@ export default function VideoEditorPage() {
                   אנימציות כתוביות
                 </h3>
                 {selectedClip && selectedClip.captions.length > 0 ? (
-                  <CaptionMotionSelector captions={selectedClip.captions} />
+                  <CaptionMotionSelector
+                    selectedAnimation={null}
+                    selectedStyle={null}
+                    onAnimationSelect={(anim) => { /* TODO: wire caption animation */ }}
+                    onStyleSelect={(style) => { /* TODO: wire caption style */ }}
+                  />
                 ) : (
                   <p style={{ color: "var(--foreground-muted)", fontSize: "0.9rem" }}>
                     אין כתוביות בקליפ הנבחר
@@ -751,7 +765,8 @@ export default function VideoEditorPage() {
             <AIEditDraftPanel
               draft={aiDraft}
               onAccept={handleAcceptDraft}
-              onReject={handleRejectDraft}
+              onRevert={handleRejectDraft}
+              safetyReport={safetyReport}
             />
           )}
         </div>
@@ -774,20 +789,32 @@ export default function VideoEditorPage() {
         {/* Auto Edit Button */}
         {hasClips && (
           <div style={{ padding: "0.75rem 1.5rem", borderBottom: "1px solid var(--border)" }}>
-            <AutoEditButton onAutoEdit={handleAutoEdit} />
+            <AutoEditButton
+              project={editProject}
+              onDraftGenerated={(draft) => setAiDraft(draft)}
+            />
           </div>
         )}
 
         {/* Timeline */}
         {hasClips ? (
           <SmartVideoTimeline
-            editProject={editProject}
-            selectedClipId={selectedClipId}
-            hoveredClipId={hoveredClipId}
+            project={editProject}
             onClipSelect={setSelectedClipId}
-            onClipHover={setHoveredClipId}
+            onClipMove={(id, newStart) => {
+              setEditProject(prev => {
+                if (!prev) return prev;
+                return { ...prev, clips: prev.clips.map(c => c.id === id ? { ...c, start: newStart } : c) };
+              });
+            }}
+            onClipTrim={(id, trimStart, trimEnd) => {
+              setEditProject(prev => {
+                if (!prev) return prev;
+                return { ...prev, clips: prev.clips.map(c => c.id === id ? { ...c, trimStart, trimEnd } : c) };
+              });
+            }}
             onTransitionClick={handleTransitionDiamondClick}
-            zoomLevel={editProject.zoomLevel}
+            onPlayheadChange={setCurrentTime}
           />
         ) : (
           <div
