@@ -513,7 +513,7 @@ export default function ExecutivePage() {
     const now = new Date();
     payments.forEach((p: any) => {
       if (p.status === "overdue") {
-        const client = clients.find((c: any) => c.id === p.clientId);
+        const client: any = clients.find((c: any) => c.id === p.clientId);
         alertList.push({
           message: `תשלום באיחור: ${client?.name || client?.clientName || "לא ידוע"}`,
           severity: "warning",
