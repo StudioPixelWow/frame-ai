@@ -30,7 +30,7 @@ function formatDate(dateStr: string): string {
 export default function ReportsPage() {
   const { data: clients } = useClients();
   const { data: campaigns } = useCampaigns();
-  const { toast } = useToast();
+  const toast = useToast();
 
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);

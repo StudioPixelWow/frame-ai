@@ -1310,7 +1310,7 @@ export default function CampaignDetailPage() {
   const { data: allAds, create: createAd, update: updateAd } = useAds();
   const { data: clients } = useClients();
   const { data: allLeads } = useLeads();
-  const { toast } = useToast();
+  const toast = useToast();
 
   const campaign = useMemo(() => {
     return (campaigns || []).find((c) => c.id === campaignId) || null;
