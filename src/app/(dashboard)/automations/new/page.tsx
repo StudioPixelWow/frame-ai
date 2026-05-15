@@ -711,7 +711,7 @@ function Step5Review({
   const getTriggerLabel = (): string => {
     for (const category of Object.values(TRIGGER_CATEGORIES)) {
       if (selectedTrigger && selectedTrigger in category.triggers) {
-        return category.triggers[selectedTrigger as keyof typeof category.triggers].title;
+        return (category.triggers as Record<string, { title: string }>)[selectedTrigger].title;
       }
     }
     return selectedTrigger || '';
