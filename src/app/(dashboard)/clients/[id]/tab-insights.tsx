@@ -311,7 +311,7 @@ function ClientBrainSection({ client, persisted }: { client: Client; persisted?:
         </h3>
         <button
           onClick={handleGenerate}
-          disabled={status === 'loading'}
+          disabled={false}
           style={{
             padding: "0.5rem 1rem",
             backgroundColor: "var(--accent)",

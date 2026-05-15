@@ -497,16 +497,16 @@ function DashboardContentInner() {
 
               let text = '', action = '', icon = '💡';
               if (cpl > 100 && cLeads > 0) {
-                text = `העלות לליד בקמפיין "${campaign.name}" גבוהה מהרגיל — עובדים על הורדה`;
+                text = `העלות לליד בקמפיין "${campaign.campaignName}" גבוהה מהרגיל — עובדים על הורדה`;
                 action = 'בדוק'; icon = '🔍';
               } else if (cLeads === 0 && spend > 50) {
-                text = `קמפיין "${campaign.name}" עדיין לא הביא לידים — נבדוק ונשפר`;
+                text = `קמפיין "${campaign.campaignName}" עדיין לא הביא לידים — נבדוק ונשפר`;
                 action = 'בדוק'; icon = '⚠️';
               } else if (cLeads > 5) {
-                text = `קמפיין "${campaign.name}" מביא תוצאות יפות — שווה לשקול להגדיל תקציב`;
+                text = `קמפיין "${campaign.campaignName}" מביא תוצאות יפות — שווה לשקול להגדיל תקציב`;
                 action = 'אשר שינוי'; icon = '🚀';
               } else {
-                text = `קמפיין "${campaign.name}" פעיל ועובד — ממשיכים לעקוב`;
+                text = `קמפיין "${campaign.campaignName}" פעיל ועובד — ממשיכים לעקוב`;
                 action = 'בסדר'; icon = '✅';
               }
 
