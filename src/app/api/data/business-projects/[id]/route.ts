@@ -128,7 +128,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       }
     }
 
-    return NextResponse.json(rowToProject(data as Row));
+    return NextResponse.json(rowToProject(data as unknown as Row));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] GET /api/data/business-projects/[id] error:', msg);
@@ -156,7 +156,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 
     for (let attempt = 0; attempt < 10; attempt++) {
       const { data, error } = await sb.from(TABLE).update(updateRow).eq('id', id).select('*').maybeSingle();
-      if (!error) { updated = (data as Row) ?? null; break; }
+      if (!error) { updated = (data as unknown as Row) ?? null; break; }
       lastErr = error as any;
       const bad = parseBadColumn(error.message);
       if (!bad) break;

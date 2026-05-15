@@ -216,7 +216,7 @@ export async function POST(req: NextRequest) {
     let lastErr: { message: string } | null = null;
     for (let attempt = 0; attempt < 6; attempt++) {
       const { data, error } = await sb.from(TABLE).insert(insertRow).select('*').single();
-      if (!error) { inserted = data as Row; break; }
+      if (!error) { inserted = data as unknown as Row; break; }
       lastErr = error;
 
       const code = (error as any)?.code ?? '';

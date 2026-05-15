@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
 
     for (let attempt = 0; attempt < 10; attempt++) {
       const { data, error } = await sb.from(TABLE).insert(insertRow).select(selectList).single();
-      if (!error) { inserted = data as Row; break; }
+      if (!error) { inserted = data as unknown as Row; break; }
       lastErr = error as any;
       const bad = parseBadColumn(error.message);
       if (!bad) break;

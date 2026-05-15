@@ -32,7 +32,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
     const { data, error } = await sb.from(TABLE).select(SAFE_COLS).eq('id', id).maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json(rowToFile(data as Row));
+    return NextResponse.json(rowToFile(data as unknown as Row));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: msg }, { status: 500 });

@@ -109,7 +109,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     const { data, error } = await sb.from(TABLE).select('*').eq('id', id).maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: 'Employee not found', employeeId: id }, { status: 404 });
-    return NextResponse.json(rowToEmployee(data as Row));
+    return NextResponse.json(rowToEmployee(data as unknown as Row));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: `Failed to fetch employee: ${msg}` }, { status: 500 });

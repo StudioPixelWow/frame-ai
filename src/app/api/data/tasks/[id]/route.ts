@@ -90,7 +90,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
     const { data, error } = await sb.from(TABLE).select('*').eq('id', id).maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: 'Not found', taskId: id }, { status: 404 });
-    return NextResponse.json(rowToTask(data as Row));
+    return NextResponse.json(rowToTask(data as unknown as Row));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: `Failed to fetch: ${msg}` }, { status: 500 });
@@ -128,7 +128,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     if (!data) return NextResponse.json({ error: 'Not found', taskId: id }, { status: 404 });
 
-    const result = rowToTask(data as Row);
+    const result = rowToTask(data as unknown as Row);
 
     // ── Cross-sync: approved/completed → gantt item + employee task ──
     const newStatus = result.status;

@@ -237,7 +237,7 @@ export async function POST(req: NextRequest) {
       const INSERT_RETURN_COLS = 'id, milestone_id, file_name, file_url, file_size, content_type, created_at, updated_at';
       const { data, error } = await sb.from(TABLE).insert(insertRow).select(INSERT_RETURN_COLS).single();
       if (!error) {
-        inserted = data as Row;
+        inserted = data as unknown as Row;
         log(`7/7 ✅ DB insert OK (attempt ${attempt + 1})`, { returnedColumns: Object.keys(data || {}) });
         break;
       }

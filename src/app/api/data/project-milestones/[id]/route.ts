@@ -97,7 +97,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
     const { data, error } = await sb.from(TABLE).select('*').eq('id', id).maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: 'Not found', milestoneId: id }, { status: 404 });
-    return NextResponse.json(rowToMilestone(data as Row));
+    return NextResponse.json(rowToMilestone(data as unknown as Row));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: `Failed to fetch: ${msg}` }, { status: 500 });
@@ -225,7 +225,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       );
       const { data, error } = await sb.from(TABLE).update(updateRow).eq('id', id).select('*').maybeSingle();
       if (!error) {
-        updated = (data as Row) ?? null;
+        updated = (data as unknown as Row) ?? null;
         console.log(
           `[API] PUT /api/data/project-milestones/${id} ✅ UPDATE succeeded on attempt=${attempt}`
         );

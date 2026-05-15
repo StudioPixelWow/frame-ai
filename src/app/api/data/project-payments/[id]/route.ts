@@ -64,7 +64,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
     const { data, error } = await sb.from(TABLE).select('*').eq('id', id).maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json(rowToPayment(data as Row));
+    return NextResponse.json(rowToPayment(data as unknown as Row));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -83,7 +83,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     let lastErr: { message: string } | null = null;
     for (let attempt = 0; attempt < 6; attempt++) {
       const { data, error } = await sb.from(TABLE).update(updates).eq('id', id).select('*').single();
-      if (!error) { updated = data as Row; break; }
+      if (!error) { updated = data as unknown as Row; break; }
       lastErr = error;
 
       const code = (error as any)?.code ?? '';
