@@ -794,7 +794,7 @@ export default function BusinessProjectPage() {
   function handleStartEditProject() {
     setEditForm({
       projectName: project?.projectName || '',
-      serviceType: project?.serviceType || project?.projectType || '',
+      serviceType: project?.projectType || '',
       description: project?.description || '',
       assignedManagerId: project?.assignedManagerId || '',
       startDate: project?.startDate ? (project.startDate as string).slice(0, 10) : '',
