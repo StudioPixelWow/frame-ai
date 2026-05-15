@@ -9,10 +9,7 @@ const nextConfig: NextConfig = {
     // This ensures type-safety in production. Fix errors before deploying.
     ignoreBuildErrors: false,
   },
-  eslint: {
-    // PHASE 1 UPGRADE: ESLint errors now block the build.
-    ignoreDuringBuilds: false,
-  },
+  // Note: eslint config moved to eslint.config.js in Next.js 16+
   // Remotion rendering runs in an external worker (worker.ts), NOT inside
   // Next.js routes. No serverExternalPackages needed — the App never imports them.
   // Allow large file uploads (video files up to 500 MB)
