@@ -786,7 +786,7 @@ export interface BusinessProject {
 }
 
 // Project Milestone
-export type MilestoneStatus = 'pending' | 'in_progress' | 'submitted' | 'approved' | 'returned';
+export type MilestoneStatus = 'pending' | 'in_progress' | 'submitted' | 'approved' | 'returned' | 'completed';
 
 export interface ProjectMilestone {
   id: string;
