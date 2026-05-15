@@ -302,7 +302,7 @@ export default function BusinessProjectPage() {
     }
     lastSyncedRef.current = fingerprint;
     // Fire-and-forget — no loading spinner, no blocking
-    updateProject(project.id, {
+    updateProject(project!.id, {
       projectStatus: derivedProjectStatus,
       progress: milestoneProgress,
     } as any).then(() => {
@@ -728,7 +728,7 @@ export default function BusinessProjectPage() {
     try {
       const fileName = fileFormData.url.split('/').pop() || 'קובץ';
       await createClientFile({
-        clientId: project.clientId,
+        clientId: project!.clientId,
         fileName,
         fileUrl: fileFormData.url,
         fileType: 'other' as const,
