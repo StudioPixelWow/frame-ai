@@ -17,6 +17,7 @@ import {
   computeClientHealth,
   STATUS_LABELS_EXTENDED,
   type ClientHealthScore,
+  type StatusLabel,
 } from "@/lib/business/client-health";
 
 // Access Denied Component
