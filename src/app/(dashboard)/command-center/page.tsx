@@ -47,6 +47,9 @@ const STATUS_LABELS: Record<CampaignStatus, string> = {
   scheduled: "מתוזמן",
   active: "פעיל",
   completed: "הושלם",
+  paused: "מושהה",
+  rejected: "נדחה",
+  archived: "ארכיון",
 };
 
 const STATUS_COLORS: Record<CampaignStatus, string> = {
@@ -57,6 +60,9 @@ const STATUS_COLORS: Record<CampaignStatus, string> = {
   scheduled: "#0092cc",
   active: "#22c55e",
   completed: "#00B5FE",
+  paused: "#f59e0b",
+  rejected: "#ef4444",
+  archived: "#6b7280",
 };
 
 /** Sort priority: active first, then in-progress, etc. Error/unknown pushed to end. */

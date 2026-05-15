@@ -17,6 +17,9 @@ const STATUS_COLORS: Record<CampaignStatus, { bg: string; text: string; label: s
   scheduled: { bg: "rgba(99,102,241,0.12)", text: "#6366f1", label: "מתוזמן" },
   active: { bg: "rgba(0,181,254,0.12)", text: "#00B5FE", label: "פעיל" },
   completed: { bg: "rgba(156,163,175,0.12)", text: "#9ca3af", label: "הושלם" },
+  paused: { bg: "rgba(245,158,11,0.12)", text: "#f59e0b", label: "מושהה" },
+  rejected: { bg: "rgba(239,68,68,0.12)", text: "#ef4444", label: "נדחה" },
+  archived: { bg: "rgba(107,114,128,0.12)", text: "#6b7280", label: "ארכיון" },
 };
 
 const OBJECTIVE_LABELS: Record<string, string> = {
