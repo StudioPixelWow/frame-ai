@@ -1752,8 +1752,8 @@ export default function CampaignDetailPage() {
         body: JSON.stringify({
           source: {
             type: 'manual',
-            title: campaign.name || campaign.campaignName || 'קמפיין',
-            description: (campaign as any).objective || campaign.name || '',
+            title: campaign.campaignName || 'קמפיין',
+            description: (campaign as any).objective || campaign.campaignName || '',
             businessField: clientObj?.businessField || '',
             clientName: clientObj?.name || '',
           },
