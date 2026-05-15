@@ -10,10 +10,10 @@ import type { Client, Task, Lead, Campaign } from '@/lib/db/schema';
 /* ── Interfaces ── */
 
 export interface BusinessOrderData {
-  clients: Client[];
-  tasks: Task[];
-  leads: Lead[];
-  campaigns: Campaign[];
+  clients: any[];
+  tasks: any[];
+  leads: any[];
+  campaigns: any[];
   payments?: any[];
 }
 

@@ -21,7 +21,7 @@ export interface LeadAnalysis {
   estimatedValue: number;
 }
 
-export function analyzeLeadQuality(lead: Lead): LeadAnalysis {
+export function analyzeLeadQuality(lead: any): LeadAnalysis {
   let score = 50; // baseline
   const factors: string[] = [];
 
@@ -126,9 +126,9 @@ export interface RepRecommendation {
 }
 
 export function selectBestRep(
-  lead: Lead,
-  employees: Employee[],
-  existingLeads: Lead[],
+  lead: any,
+  employees: any[],
+  existingLeads: any[],
 ): RepRecommendation | null {
   const activeReps = employees.filter(e =>
     (e.role === 'admin' || e.role === 'manager') && e.status !== 'offline'
@@ -189,7 +189,7 @@ export interface MessageSuggestion {
   tone: 'formal' | 'friendly' | 'urgent';
 }
 
-export function suggestMessage(lead: Lead): MessageSuggestion {
+export function suggestMessage(lead: any): MessageSuggestion {
   const name = lead.fullName || lead.name || 'לקוח/ה';
 
   if (lead.status === 'new') {
@@ -237,8 +237,8 @@ export interface CampaignOptimization {
 }
 
 export function suggestCampaignOptimization(
-  campaign: Campaign,
-  leads: Lead[],
+  campaign: any,
+  leads: any[],
 ): CampaignOptimization {
   const recommendations: string[] = [];
   let severity: CampaignOptimization['severity'] = 'info';
@@ -308,7 +308,7 @@ export interface ConversionMetrics {
   closeRatePerSource: Record<string, { total: number; won: number; rate: number }>;
 }
 
-export function computeConversionMetrics(leads: Lead[], campaigns: Campaign[]): ConversionMetrics {
+export function computeConversionMetrics(leads: any[], campaigns: any[]): ConversionMetrics {
   const wonLeads = leads.filter(l => l.status === 'won');
   const lostLeads = leads.filter(l => l.status === 'lost');
 

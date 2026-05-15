@@ -106,7 +106,7 @@ const CTA_LABELS: Record<string, string> = {
 
 // ── Core: pick best strategy based on performance ────────────────────
 
-export function pickStrategy(ad: Ad, signals: PerformanceSignals): VariationStrategy {
+export function pickStrategy(ad: any, signals: PerformanceSignals): VariationStrategy {
   // High frequency + low CTR → fatigue, try urgency or question hook
   if (signals.frequency > 3 && signals.ctr < 1.0) {
     return 'question_hook';
@@ -236,7 +236,7 @@ function applyEmotional(ad: Ad): { primaryText: string; headline: string; descri
 // ── Main: generate a variation suggestion ────────────────────────────
 
 export function generateVariation(
-  ad: Ad,
+  ad: any,
   signals?: PerformanceSignals | null,
   forceStrategy?: VariationStrategy,
 ): VariationSuggestion {

@@ -453,9 +453,9 @@ function analyzeAd(
 // ── Public API ──────────────────────────────────────────────────────────
 
 export interface AnalysisInput {
-  campaigns: Campaign[];
-  adSets: AdSet[];
-  ads: Ad[];
+  campaigns: any[];
+  adSets: any[];
+  ads: any[];
 }
 
 /**
@@ -518,9 +518,9 @@ export function analyzeCampaignFull(
  * Returns null if no recommendations exist or no performance data.
  */
 export function getCampaignSummaryRec(
-  campaign: Campaign,
-  adSets: AdSet[],
-  ads: Ad[],
+  campaign: any,
+  adSets: any[],
+  ads: any[],
 ): { text: string; severity: RecommendationSeverity; type: RecommendationType } | null {
   const cmpAds = ads.filter(a => a.campaignId === campaign.id);
   if (!hasPerformanceData(cmpAds)) return null;

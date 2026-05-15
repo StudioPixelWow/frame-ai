@@ -121,7 +121,7 @@ const SOURCE_QUALITY: Record<string, number> = {
 /**
  * Compute quality score for a single lead.
  */
-export function computeLeadQuality(lead: Lead): QualityResult {
+export function computeLeadQuality(lead: any): QualityResult {
   const breakdown: QualityBreakdown = { responseTime: 0, progression: 0, completeness: 0, engagement: 0 };
   const now = Date.now();
 
@@ -196,7 +196,7 @@ export interface ResponseTimeInfo {
   isOverdue: boolean;
 }
 
-export function getResponseTime(lead: Lead): ResponseTimeInfo {
+export function getResponseTime(lead: any): ResponseTimeInfo {
   const now = Date.now();
   const created = lead.createdAt ? new Date(lead.createdAt).getTime() : 0;
   if (!created) return { hours: 0, label: "-", color: "#6b7280", isOverdue: false };
@@ -239,8 +239,8 @@ export interface CampaignLeadInsight {
  * Build campaign → lead insights map.
  */
 export function buildCampaignLeadInsights(
-  leads: Lead[],
-  campaigns: Campaign[]
+  leads: any[],
+  campaigns: any[]
 ): CampaignLeadInsight[] {
   // Group leads by campaignId
   const byCampaign: Record<string, Lead[]> = {};
@@ -308,7 +308,7 @@ export interface LeadHighlight {
   severity: "high" | "medium" | "low";
 }
 
-export function generateLeadHighlights(leads: Lead[], campaigns: Campaign[]): LeadHighlight[] {
+export function generateLeadHighlights(leads: any[], campaigns: any[]): LeadHighlight[] {
   const highlights: LeadHighlight[] = [];
   const now = Date.now();
   const todayStart = new Date();

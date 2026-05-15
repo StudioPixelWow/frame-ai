@@ -48,7 +48,7 @@ export async function syncPlatformAccount(
 /**
  * Extract platform connections from a client record.
  */
-export function getClientConnections(client: Client): ClientPlatformConnections {
+export function getClientConnections(client: any): ClientPlatformConnections {
   return {
     meta: (client.metaAdAccountId && client.metaAccessToken) ? {
       platform: 'meta',
@@ -96,7 +96,7 @@ export function getClientConnections(client: Client): ClientPlatformConnections 
 /**
  * Get all connected platforms for a client.
  */
-export function getConnectedPlatforms(client: Client): AdPlatform[] {
+export function getConnectedPlatforms(client: any): AdPlatform[] {
   const connections = getClientConnections(client);
   const result: AdPlatform[] = [];
   if (connections.meta) result.push('meta');

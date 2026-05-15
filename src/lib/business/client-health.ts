@@ -130,10 +130,10 @@ const HEALTH_SCORE_COLORS = {
  * @returns Health score (0-100), status category, contributing factors, and color
  */
 export function computeClientHealth(
-  client: ClientData,
-  tasks: Task[] = [],
-  payments: Payment[] = [],
-  projectPayments: ProjectPayment[] = []
+  client: any,
+  tasks: any[] = [],
+  payments: any[] = [],
+  projectPayments: any[] = []
 ): ClientHealthScore {
   const factors: string[] = [];
   let totalScore = 0;
@@ -420,11 +420,11 @@ export interface SocialPost {
  */
 export function getClientSnapshotCounts(
   clientId: string,
-  campaigns: Campaign[] = [],
-  leads: Lead[] = [],
-  tasks: Task[] = [],
-  ganttItems: GanttItem[] = [],
-  socialPosts: SocialPost[] = []
+  campaigns: any[] = [],
+  leads: any[] = [],
+  tasks: any[] = [],
+  ganttItems: any[] = [],
+  socialPosts: any[] = []
 ): ClientSnapshot {
   // Active campaigns (active or in_progress)
   const activeCampaigns = campaigns.filter(

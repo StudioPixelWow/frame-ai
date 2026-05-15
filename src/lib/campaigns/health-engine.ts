@@ -89,7 +89,7 @@ const STATUS_ACTIVITY_BONUS: Partial<Record<CampaignStatus, number>> = {
  *   Targeting (20): geo targeting in objective, interests in objective
  *   Activity  (30): status bonus, recency, stale penalty
  */
-export function computeHealth(c: Campaign): HealthResult {
+export function computeHealth(c: any): HealthResult {
   const breakdown: HealthBreakdown = { structure: 0, creative: 0, targeting: 0, activity: 0 };
 
   // ── Structure (max 25) ──
@@ -173,7 +173,7 @@ function makeAlertId(campaignId: string, type: AlertType): string {
 /**
  * Generate alerts for a single campaign.
  */
-export function generateCampaignAlerts(c: Campaign): CampaignAlert[] {
+export function generateCampaignAlerts(c: any): CampaignAlert[] {
   const alerts: CampaignAlert[] = [];
   const now = Date.now();
   const name = c.campaignName || "ללא שם";
@@ -260,7 +260,7 @@ export function generateCampaignAlerts(c: Campaign): CampaignAlert[] {
 /**
  * Generate alerts for ALL campaigns. Returns flat list sorted by severity.
  */
-export function generateAllAlerts(campaigns: Campaign[]): CampaignAlert[] {
+export function generateAllAlerts(campaigns: any[]): CampaignAlert[] {
   const allAlerts: CampaignAlert[] = [];
   for (const c of (campaigns ?? [])) {
     allAlerts.push(...generateCampaignAlerts(c));

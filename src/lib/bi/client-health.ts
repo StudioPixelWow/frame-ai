@@ -47,10 +47,10 @@ export { STATUS_META as HEALTH_STATUS_META };
 // ── Core computation ──
 
 export function computeClientHealth(
-  client: Client,
-  campaigns: Campaign[],
-  ads: Ad[],
-  leads: Lead[],
+  client: any,
+  campaigns: any[],
+  ads: any[],
+  leads: any[],
 ): ClientHealthScore {
   const clientCampaigns = campaigns.filter(c => c.clientId === client.id);
   const clientAds = ads.filter(a => clientCampaigns.some(c => c.id === a.campaignId));
@@ -228,10 +228,10 @@ function scoreEngagement(ads: Ad[]): { score: number; label: string; detail: str
  * Compute health scores for all clients at once.
  */
 export function computeAllClientHealth(
-  clients: Client[],
-  campaigns: Campaign[],
-  ads: Ad[],
-  leads: Lead[],
+  clients: any[],
+  campaigns: any[],
+  ads: any[],
+  leads: any[],
 ): ClientHealthScore[] {
   return clients
     .filter(c => c.status === 'active')

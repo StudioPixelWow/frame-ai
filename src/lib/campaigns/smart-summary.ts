@@ -18,7 +18,7 @@ export interface SmartSummary {
 /**
  * Generate a 1-line smart summary for a campaign.
  */
-export function generateSmartSummary(campaign: Campaign): SmartSummary {
+export function generateSmartSummary(campaign: any): SmartSummary {
   const health = computeHealth(campaign);
   const alerts = generateCampaignAlerts(campaign);
   const highAlerts = alerts.filter((a) => a.severity === "high");
