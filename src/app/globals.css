@@ -1520,8 +1520,8 @@
 }
 .quick-action-btn:hover {
   transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-  border-color: var(--accent-border);
+  box-shadow: 0 4px 24px rgba(240,255,2,0.13), var(--neon-glow-md);
+  border-color: var(--neon-border-subtle);
 }
 .quick-action-btn:active {
   transform: translateY(-1px) scale(0.98);

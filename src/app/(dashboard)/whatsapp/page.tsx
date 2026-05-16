@@ -213,7 +213,7 @@ export default function WhatsAppPage() {
 
   /* ── Handle send message ─────────────────────────────────────────────── */
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!selectedClientId || !phone || !messageText.trim()) {
       toast('אנא מלא את כל השדות', 'error');
       return;
@@ -225,33 +225,52 @@ export default function WhatsAppPage() {
       return;
     }
 
-    // Create new message
-    const newMessage: WhatsAppMessage = {
-      id: Math.random().toString(36).slice(2),
-      clientId: selectedClientId,
-      clientName: selectedClient.name,
-      phone,
-      templateName: 'custom',
-      message: messageText,
-      status: 'sent',
-      direction: 'outgoing',
-      relatedEntityType: '',
-      relatedEntityId: '',
-      sentAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    try {
+      const res = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone,
+          message: messageText,
+          clientId: selectedClientId,
+          clientName: selectedClient.name,
+        }),
+      });
 
-    // Add to messages
-    setMessages([newMessage, ...messages]);
+      const data = await res.json();
 
-    // Reset form
-    setSelectedClientId('');
-    setPhone('');
-    setMessageText('');
+      const newMessage: WhatsAppMessage = {
+        id: data.id || Math.random().toString(36).slice(2),
+        clientId: selectedClientId,
+        clientName: selectedClient.name,
+        phone,
+        templateName: 'custom',
+        message: messageText,
+        status: data.status || (data.warning ? 'pending' : 'sent'),
+        direction: 'outgoing',
+        relatedEntityType: '',
+        relatedEntityId: '',
+        sentAt: data.sentAt || new Date().toISOString(),
+        createdAt: data.createdAt || new Date().toISOString(),
+        updatedAt: data.updatedAt || new Date().toISOString(),
+      };
 
-    // Show success toast
-    toast('ההודעה נשלחה בהצלחה', 'success');
+      setMessages([newMessage, ...messages]);
+
+      setSelectedClientId('');
+      setPhone('');
+      setMessageText('');
+
+      if (data.warning) {
+        toast(data.warning, 'warning');
+      } else if (data.error) {
+        toast(`שגיאה: ${data.error}`, 'error');
+      } else {
+        toast('ההודעה נשלחה בהצלחה', 'success');
+      }
+    } catch {
+      toast('שגיאה בשליחת ההודעה', 'error');
+    }
   };
 
   /* ── Render status badge ─────────────────────────────────────────────── */

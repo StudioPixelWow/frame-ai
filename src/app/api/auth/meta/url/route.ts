@@ -9,7 +9,9 @@ export async function GET(request: NextRequest) {
 
     const appId = process.env.META_APP_ID;
     if (!appId) {
-      return NextResponse.json({ error: 'חסר META_APP_ID בהגדרות השרת' }, { status: 500 });
+      return NextResponse.json({
+        error: 'חסר META_APP_ID בהגדרות השרת. הגדר את המשתנה META_APP_ID בהגדרות Vercel Environment Variables (ניתן למצוא את הערך בהגדרות האפליקציה ב-Meta for Developers). נדרש גם META_APP_SECRET עבור ה-callback.'
+      }, { status: 500 });
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';

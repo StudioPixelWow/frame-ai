@@ -9,7 +9,9 @@ export async function GET(request: NextRequest) {
 
     const googleClientId = process.env.GOOGLE_ADS_CLIENT_ID;
     if (!googleClientId) {
-      return NextResponse.json({ error: 'חסר GOOGLE_ADS_CLIENT_ID בהגדרות השרת' }, { status: 500 });
+      return NextResponse.json({
+        error: 'חסר GOOGLE_ADS_CLIENT_ID בהגדרות השרת. הגדר את המשתנה GOOGLE_ADS_CLIENT_ID בהגדרות Vercel Environment Variables (ניתן למצוא את הערך ב-Google Cloud Console → APIs & Services → Credentials). נדרש גם GOOGLE_ADS_CLIENT_SECRET עבור ה-callback.'
+      }, { status: 500 });
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';

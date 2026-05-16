@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/toast';
 import { useAISettings, useEmployees, useGmailSettings } from '@/lib/api/use-entity';
 import type { GmailConnectionStatus } from '@/lib/db/schema';
+import { WhatsAppConnect } from '@/components/whatsapp-connect';
 
 type Section = 'general' | 'ai' | 'email' | 'gmail' | 'whatsapp' | 'notifications' | 'appearance' | 'automation' | 'team' | 'integrations' | 'stockmedia';
 
@@ -1384,60 +1385,10 @@ export default function SettingsPage() {
     <div>
       <h2 style={sectionHeaderStyle}>וואטסאפ</h2>
       <div style={cardStyle}>
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={labelStyle}>שם הספק</label>
-          <input
-            type="text"
-            value={whatsapp.providerName}
-            onChange={(e) => setWhatsapp({ ...whatsapp, providerName: e.target.value })}
-            style={inputStyle}
-            placeholder="WhatsApp Business API"
-          />
-        </div>
+        <WhatsAppConnect />
 
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={labelStyle}>מספר השולח</label>
-          <input
-            type="text"
-            value={whatsapp.senderNumber}
-            onChange={(e) => setWhatsapp({ ...whatsapp, senderNumber: e.target.value })}
-            style={inputStyle}
-            placeholder="+972..."
-          />
-        </div>
-
-        <div style={{ marginBottom: '2rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <label style={{ fontSize: '0.875rem', color: 'var(--foreground)', fontWeight: 600 }}>
-              אפשר שימוש בוואטסאפ
-            </label>
-            <button
-              style={toggleStyle(whatsapp.isEnabled)}
-              onClick={() => setWhatsapp({ ...whatsapp, isEnabled: !whatsapp.isEnabled })}
-            >
-              <div style={toggleCircleStyle(whatsapp.isEnabled)} />
-            </button>
-          </div>
-        </div>
-
-        <div style={{ marginBottom: '2rem' }}>
-          <label style={labelStyle}>סטטוס חיבור</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem' }}>
-            <div
-              style={{
-                width: '12px',
-                height: '12px',
-                borderRadius: '50%',
-                backgroundColor: whatsapp.isConnected ? '#22c55e' : '#94a3b8',
-              }}
-            />
-            <span style={{ color: 'var(--foreground-muted)', fontSize: '0.875rem' }}>
-              {whatsapp.isConnected ? 'מחובר' : 'לא מחובר'}
-            </span>
-          </div>
-        </div>
-
-        <div style={{ marginBottom: '2rem' }}>
+        {/* Templates list */}
+        <div style={{ marginTop: '2rem', padding: '0 24px 24px' }}>
           <h3 style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--foreground)', marginBottom: '1rem' }}>
             תבניות זמינות
           </h3>
@@ -1461,15 +1412,6 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-          <button style={secondaryButtonStyle} onClick={() => toast('בדיקה בוואטסאפ', 'info')}>
-            בדוק חיבור
-          </button>
-          <button style={buttonStyle} onClick={saveWhatsappSettings}>
-            שמור
-          </button>
         </div>
       </div>
     </div>

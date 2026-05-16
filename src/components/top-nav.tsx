@@ -20,7 +20,7 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { href: "/dashboard",         label: "דשבורד",          id: "nav-dashboard" },
-  { href: "/content",           label: "PixelManageAI",    id: "nav-projects", allowedRoles: ['admin', 'employee'] },
+  { href: "/projects",           label: "PixelManageAI",    id: "nav-projects", allowedRoles: ['admin', 'employee'] },
   { href: "/clients",           label: "לקוחות",          id: "nav-clients", allowedRoles: ['admin', 'employee'] },
   { href: "/leads",             label: "לידים",           id: "nav-leads", allowedRoles: ['admin', 'employee'] },
   { href: "/campaigns",         label: "קמפיינים",        id: "nav-campaigns", allowedRoles: ['admin', 'employee'] },

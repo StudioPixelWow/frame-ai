@@ -199,7 +199,7 @@ const Icons = {
 
 const mainNavItems: NavItem[] = [
   { href: "/dashboard", label: "דשבורד", id: "nav-dashboard", icon: Icons.Dashboard, allowedRoles: ['admin', 'employee'] },
-  { href: "/content", label: "PixelManageAI", id: "nav-projects", icon: Icons.Projects, allowedRoles: ['admin', 'employee'] },
+  { href: "/projects", label: "PixelManageAI", id: "nav-projects", icon: Icons.Projects, allowedRoles: ['admin', 'employee'] },
   { href: "/clients", label: "לקוחות", id: "nav-clients", icon: Icons.Clients, allowedRoles: ['admin', 'employee'] },
   { href: "/leads", label: "לידים", id: "nav-leads", icon: Icons.Leads, allowedRoles: ['admin'] },
   { href: "/campaigns", label: "קמפיינים", id: "nav-campaigns", icon: Icons.Campaigns, allowedRoles: ['admin', 'employee'] },

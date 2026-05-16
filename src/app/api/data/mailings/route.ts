@@ -50,10 +50,19 @@ export async function POST(req: NextRequest) {
           }, { status: 201 });
         }
 
+        if (emailResult.mock) {
+          return NextResponse.json({
+            ...created,
+            emailSent: false,
+            emailMock: true,
+            emailError: 'לא הוגדרו פרטי Gmail — המייל לא נשלח בפועל. הגדר את GMAIL_USER ו-GMAIL_APP_PASSWORD בהגדרות Vercel Environment Variables, או הגדר בעמוד הגדרות Gmail במערכת.',
+          }, { status: 201 });
+        }
+
         return NextResponse.json({
           ...created,
-          emailSent: !emailResult.mock,
-          emailMock: emailResult.mock || false,
+          emailSent: true,
+          emailMock: false,
         }, { status: 201 });
       }
     }

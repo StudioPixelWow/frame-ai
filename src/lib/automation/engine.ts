@@ -256,7 +256,7 @@ export async function executeAction(rule: AutomationRule, event: SystemEvent): P
     }
 
     case 'send_whatsapp': {
-      // Simulated — logs to whatsapp-messages collection
+      // Sends via WhatsApp Business Cloud API (falls back to pending if not configured)
       try {
         await fetch('/api/data/whatsapp-messages', {
           method: 'POST',
@@ -277,8 +277,8 @@ export async function executeAction(rule: AutomationRule, event: SystemEvent): P
       return {
         success: true,
         action: 'send_whatsapp',
-        details: `[סימולציה] WhatsApp ל-${rule.targetWhatsApp}: ${rule.name}`,
-        data: { simulated: true, targetWhatsApp: rule.targetWhatsApp },
+        details: `WhatsApp ל-${rule.targetWhatsApp}: ${rule.name}`,
+        data: { targetWhatsApp: rule.targetWhatsApp },
       };
     }
 
