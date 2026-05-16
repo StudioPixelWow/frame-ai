@@ -477,7 +477,7 @@ export interface Meeting {
 export type CampaignType = 'paid_social' | 'organic_social' | 'lead_gen' | 'awareness' | 'remarketing' | 'podcast_promo' | 'custom';
 export type CampaignStatus = 'draft' | 'in_progress' | 'waiting_approval' | 'approved' | 'scheduled' | 'active' | 'completed' | 'paused' | 'rejected' | 'archived';
 export type CampaignMediaType = 'image' | 'video';
-export type CampaignPlatform = 'facebook' | 'instagram' | 'tiktok' | 'google' | 'multi_platform';
+export type CampaignPlatform = 'facebook' | 'instagram' | 'tiktok' | 'google' | 'linkedin' | 'multi_platform';
 
 export interface Campaign {
   id: string;

@@ -36,15 +36,38 @@ const PLATFORM_OPTIONS: Array<{ value: CampaignPlatform; label: string; icon: st
   { value: "facebook", label: "Facebook", icon: "📘" },
   { value: "instagram", label: "Instagram", icon: "📸" },
   { value: "tiktok", label: "TikTok", icon: "🎵" },
+  { value: "google", label: "Google Ads", icon: "🔍" },
+  { value: "linkedin", label: "LinkedIn", icon: "💼" },
   { value: "multi_platform", label: "מולטי-פלטפורמה", icon: "🌐" },
 ];
 
-const GOAL_OPTIONS: Array<{ value: CampaignType; label: string; description: string }> = [
+const SOCIAL_GOAL_OPTIONS: Array<{ value: CampaignType; label: string; description: string }> = [
   { value: "lead_gen", label: "לידים", description: "איסוף פרטי יצירת קשר מלקוחות פוטנציאליים" },
   { value: "paid_social", label: "תנועה", description: "הפניית תנועה לאתר או דף נחיתה" },
   { value: "awareness", label: "מודעות", description: "חשיפה מקסימלית למותג או למוצר" },
   { value: "remarketing", label: "מכירות", description: "המרת לקוחות קיימים לרכישה" },
 ];
+
+const GOOGLE_GOAL_OPTIONS: Array<{ value: CampaignType; label: string; description: string }> = [
+  { value: "paid_social", label: "חיפוש (Search)", description: "הופעה בתוצאות חיפוש Google לפי מילות מפתח" },
+  { value: "awareness", label: "רשת המדיה (Display)", description: "באנרים ויזואליים באתרים ואפליקציות ברשת Google" },
+  { value: "remarketing", label: "רימרקטינג", description: "פנייה חוזרת למבקרים שכבר היו באתר" },
+  { value: "lead_gen", label: "ליד פורם", description: "טופס לידים ישירות מתוך Google" },
+];
+
+const LINKEDIN_GOAL_OPTIONS: Array<{ value: CampaignType; label: string; description: string }> = [
+  { value: "lead_gen", label: "Lead Gen Form", description: "טפסי לידים מובנים בלינקדאין" },
+  { value: "paid_social", label: "תנועה לאתר", description: "הפניית תנועה מקצועית לאתר" },
+  { value: "awareness", label: "מודעות מותג", description: "חשיפה לקהל מקצועי ממוקד" },
+  { value: "custom", label: "Sponsored Content", description: "תוכן ממומן בפיד הלינקדאין" },
+];
+
+/** Get goal options based on selected platform */
+function getGoalOptionsForPlatform(platform: CampaignPlatform) {
+  if (platform === 'google') return GOOGLE_GOAL_OPTIONS;
+  if (platform === 'linkedin') return LINKEDIN_GOAL_OPTIONS;
+  return SOCIAL_GOAL_OPTIONS;
+}
 
 const AD_FORMAT_OPTIONS = [
   { value: "single", label: "מודעה בודדת", icon: "🖼️" },
@@ -136,6 +159,17 @@ interface WizardData {
   audienceNotes: string;
   budgetType: "daily" | "total";
   budget: number | "";
+  // Step 2 — Google Ads specific
+  keywords: Array<{ keyword: string; matchType: "broad" | "phrase" | "exact" }>;
+  negativeKeywords: string[];
+  maxCpc: number | "";
+  googleAdType: "search" | "display" | "shopping" | "video" | "performance_max";
+  // Step 2 — LinkedIn specific
+  linkedinCompanySize: string[];
+  linkedinJobTitles: string[];
+  linkedinIndustries: string[];
+  linkedinSeniority: string[];
+  linkedinSkills: string[];
   // Step 3 — Ads (multiple)
   ads: WizardAd[];
   // Step 4 — Review & Status
@@ -161,6 +195,15 @@ const INITIAL_DATA: WizardData = {
   audienceNotes: "",
   budgetType: "daily",
   budget: "",
+  keywords: [],
+  negativeKeywords: [],
+  maxCpc: "",
+  googleAdType: "search",
+  linkedinCompanySize: [],
+  linkedinJobTitles: [],
+  linkedinIndustries: [],
+  linkedinSeniority: [],
+  linkedinSkills: [],
   ads: [{ ...EMPTY_AD }],
   finalStatus: "draft",
 };
@@ -487,7 +530,7 @@ function Step1Basics({
                 gap: "0.5rem",
               }}
             >
-              {GOAL_OPTIONS.map((opt) => (
+              {getGoalOptionsForPlatform(data.platform).map((opt) => (
                 <button
                   key={opt.value}
                   type="button"
@@ -557,6 +600,342 @@ function Step1Basics({
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Google Ads Targeting Sub-component ──
+const GOOGLE_AD_TYPES = [
+  { value: "search" as const, label: "חיפוש (Search)", icon: "🔍" },
+  { value: "display" as const, label: "רשת מדיה (Display)", icon: "🖼️" },
+  { value: "shopping" as const, label: "שופינג (Shopping)", icon: "🛒" },
+  { value: "video" as const, label: "וידאו (YouTube)", icon: "🎬" },
+  { value: "performance_max" as const, label: "Performance Max", icon: "🚀" },
+];
+
+const MATCH_TYPES = [
+  { value: "broad" as const, label: "רחב (Broad)", desc: "הכי רחב — כולל מילים דומות" },
+  { value: "phrase" as const, label: "ביטוי (Phrase)", desc: "הביטוי המדויק בתוך חיפוש" },
+  { value: "exact" as const, label: "מדויק (Exact)", desc: "רק חיפוש זהה" },
+];
+
+function GoogleAdsTargeting({ data, onChange }: { data: WizardData; onChange: (partial: Partial<WizardData>) => void }) {
+  const [kwInput, setKwInput] = useState("");
+  const [kwMatchType, setKwMatchType] = useState<"broad" | "phrase" | "exact">("broad");
+  const [negKwInput, setNegKwInput] = useState("");
+
+  const addKeyword = () => {
+    const trimmed = kwInput.trim();
+    if (!trimmed) return;
+    if (data.keywords.some(k => k.keyword === trimmed && k.matchType === kwMatchType)) return;
+    onChange({ keywords: [...data.keywords, { keyword: trimmed, matchType: kwMatchType }] });
+    setKwInput("");
+  };
+
+  const removeKeyword = (index: number) => {
+    onChange({ keywords: data.keywords.filter((_, i) => i !== index) });
+  };
+
+  const addNegativeKeyword = () => {
+    const trimmed = negKwInput.trim();
+    if (!trimmed || data.negativeKeywords.includes(trimmed)) return;
+    onChange({ negativeKeywords: [...data.negativeKeywords, trimmed] });
+    setNegKwInput("");
+  };
+
+  const removeNegativeKeyword = (index: number) => {
+    onChange({ negativeKeywords: data.negativeKeywords.filter((_, i) => i !== index) });
+  };
+
+  const chipStyle: React.CSSProperties = {
+    display: "inline-flex", alignItems: "center", gap: "0.3rem",
+    padding: "0.3rem 0.6rem", fontSize: "0.72rem", fontWeight: 600,
+    borderRadius: "1rem", border: "1px solid var(--border)",
+    background: "var(--surface-raised)", color: "var(--foreground)",
+  };
+
+  return (
+    <>
+      {/* Google Ad Type */}
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
+          <span style={{ fontSize: "1.1rem" }}>🔍</span>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>סוג קמפיין גוגל</div>
+        </div>
+        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+          {GOOGLE_AD_TYPES.map((t) => (
+            <button key={t.value} type="button" onClick={() => onChange({ googleAdType: t.value })}
+              className={data.googleAdType === t.value ? "mod-btn-primary" : "mod-btn-ghost"}
+              style={{ padding: "0.5rem 0.75rem", fontSize: "0.72rem", fontWeight: 600, borderRadius: "0.375rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+              {t.icon} {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Keywords */}
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
+          <span style={{ fontSize: "1.1rem" }}>🎯</span>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>מילות מפתח</div>
+        </div>
+
+        {/* Match type selector */}
+        <div style={{ marginBottom: "0.75rem" }}>
+          <div style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.35rem" }}>סוג התאמה:</div>
+          <div style={{ display: "flex", gap: "0.4rem" }}>
+            {MATCH_TYPES.map((mt) => (
+              <button key={mt.value} type="button" onClick={() => setKwMatchType(mt.value)}
+                className={kwMatchType === mt.value ? "mod-btn-primary" : "mod-btn-ghost"}
+                style={{ padding: "0.35rem 0.6rem", fontSize: "0.68rem", fontWeight: 600, borderRadius: "0.375rem", cursor: "pointer" }}>
+                {mt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Keyword input */}
+        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
+          <input type="text" value={kwInput} onChange={(e) => setKwInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addKeyword(); } }}
+            placeholder="הקלד מילת מפתח ולחץ Enter..."
+            style={{ ...inputStyle, flex: 1 }} />
+          <button type="button" onClick={addKeyword} disabled={!kwInput.trim()} className="mod-btn-ghost"
+            style={{ padding: "0.4rem 0.75rem", fontSize: "0.75rem", fontWeight: 600, borderRadius: "0.375rem", cursor: "pointer", opacity: !kwInput.trim() ? 0.5 : 1 }}>
+            + הוסף
+          </button>
+        </div>
+
+        {/* Keyword chips */}
+        {data.keywords.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginBottom: "0.5rem" }}>
+            {data.keywords.map((kw, i) => (
+              <span key={i} style={{ ...chipStyle, background: kw.matchType === "exact" ? "rgba(34,197,94,0.08)" : kw.matchType === "phrase" ? "rgba(59,130,246,0.08)" : "rgba(0,181,254,0.08)", borderColor: kw.matchType === "exact" ? "rgba(34,197,94,0.25)" : kw.matchType === "phrase" ? "rgba(59,130,246,0.25)" : "rgba(0,181,254,0.25)" }}>
+                <span style={{ fontSize: "0.6rem", opacity: 0.7 }}>{kw.matchType === "exact" ? "[מדויק]" : kw.matchType === "phrase" ? "[ביטוי]" : "[רחב]"}</span>
+                {kw.keyword}
+                <button type="button" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.8rem", color: "var(--foreground-muted)", padding: 0, lineHeight: 1 }} onClick={() => removeKeyword(i)}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div style={{ fontSize: "0.65rem", color: "var(--foreground-muted)" }}>
+          טיפ: השתמש במילות מפתח ספציפיות ורלוונטיות. הוסף וריאציות שונות.
+        </div>
+      </div>
+
+      {/* Negative Keywords */}
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+          <span style={{ fontSize: "1.1rem" }}>🚫</span>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>מילות מפתח שליליות</div>
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+          <input type="text" value={negKwInput} onChange={(e) => setNegKwInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addNegativeKeyword(); } }}
+            placeholder="מילות מפתח לא לכלול..."
+            style={{ ...inputStyle, flex: 1 }} />
+          <button type="button" onClick={addNegativeKeyword} disabled={!negKwInput.trim()} className="mod-btn-ghost"
+            style={{ padding: "0.4rem 0.75rem", fontSize: "0.75rem", fontWeight: 600, borderRadius: "0.375rem", cursor: "pointer", opacity: !negKwInput.trim() ? 0.5 : 1 }}>
+            + הוסף
+          </button>
+        </div>
+        {data.negativeKeywords.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
+            {data.negativeKeywords.map((nk, i) => (
+              <span key={i} style={{ ...chipStyle, background: "rgba(239,68,68,0.06)", borderColor: "rgba(239,68,68,0.2)", color: "#ef4444" }}>
+                🚫 {nk}
+                <button type="button" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.8rem", color: "#ef4444", padding: 0, lineHeight: 1 }} onClick={() => removeNegativeKeyword(i)}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div style={{ fontSize: "0.65rem", color: "var(--foreground-muted)", marginTop: "0.35rem" }}>
+          מילות מפתח שליליות מונעות הצגת המודעה בחיפושים לא רלוונטיים
+        </div>
+      </div>
+
+      {/* Max CPC Bid */}
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+          <span style={{ fontSize: "1.1rem" }}>💰</span>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>הצעת מחיר לקליק (Max CPC)</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <input type="number" min={0.1} step={0.1} value={data.maxCpc}
+            onChange={(e) => onChange({ maxCpc: e.target.value ? Number(e.target.value) : "" })}
+            placeholder="לדוגמה: 5.00"
+            style={{ ...inputStyle, width: "140px" }} />
+          <span style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>₪ לקליק</span>
+        </div>
+        <div style={{ fontSize: "0.65rem", color: "var(--foreground-muted)", marginTop: "0.35rem" }}>
+          המחיר המקסימלי שתשלם עבור קליק. אם ריק — Google יקבע אוטומטית.
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── LinkedIn Targeting Sub-component ──
+const LINKEDIN_COMPANY_SIZES = ["1-10", "11-50", "51-200", "201-500", "501-1000", "1001-5000", "5000+"];
+const LINKEDIN_SENIORITY_LEVELS = ["מתחיל (Entry)", "בכיר (Senior)", "מנהל (Manager)", "סמנכ״ל (Director)", "VP", "C-Level", "בעלים (Owner)"];
+const LINKEDIN_INDUSTRIES = [
+  "טכנולוגיה", "פיננסים ובנקאות", "שיווק ופרסום", "בריאות", "חינוך",
+  "נדל״ן", "ייצור", "קמעונאות", "תחבורה ולוגיסטיקה", "אנרגיה",
+  "מזון ומשקאות", "תקשורת ומדיה", "משפטים", "ייעוץ", "ממשלה ומגזר ציבורי",
+];
+
+function LinkedInTargeting({ data, onChange }: { data: WizardData; onChange: (partial: Partial<WizardData>) => void }) {
+  const [jobTitleInput, setJobTitleInput] = useState("");
+  const [skillInput, setSkillInput] = useState("");
+
+  const addJobTitle = () => {
+    const trimmed = jobTitleInput.trim();
+    if (!trimmed || data.linkedinJobTitles.includes(trimmed)) return;
+    onChange({ linkedinJobTitles: [...data.linkedinJobTitles, trimmed] });
+    setJobTitleInput("");
+  };
+
+  const addSkill = () => {
+    const trimmed = skillInput.trim();
+    if (!trimmed || data.linkedinSkills.includes(trimmed)) return;
+    onChange({ linkedinSkills: [...data.linkedinSkills, trimmed] });
+    setSkillInput("");
+  };
+
+  const toggleArray = (field: "linkedinCompanySize" | "linkedinSeniority" | "linkedinIndustries", value: string) => {
+    const current = data[field];
+    const next = current.includes(value) ? current.filter(v => v !== value) : [...current, value];
+    onChange({ [field]: next });
+  };
+
+  const chipStyle: React.CSSProperties = {
+    display: "inline-flex", alignItems: "center", gap: "0.3rem",
+    padding: "0.3rem 0.6rem", fontSize: "0.72rem", fontWeight: 600,
+    borderRadius: "1rem", border: "1px solid var(--border)",
+    background: "var(--surface-raised)", color: "var(--foreground)",
+  };
+
+  const toggleBtnStyle = (active: boolean): React.CSSProperties => ({
+    padding: "0.35rem 0.6rem", fontSize: "0.68rem", fontWeight: 600,
+    borderRadius: "0.375rem", cursor: "pointer", border: "1px solid",
+    borderColor: active ? "rgba(59,130,246,0.4)" : "var(--border)",
+    background: active ? "rgba(59,130,246,0.08)" : "var(--surface-raised)",
+    color: active ? "#3b82f6" : "var(--foreground)",
+    transition: "all 150ms",
+  });
+
+  return (
+    <>
+      {/* Company Size */}
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
+          <span style={{ fontSize: "1.1rem" }}>🏢</span>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>גודל חברה</div>
+        </div>
+        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+          {LINKEDIN_COMPANY_SIZES.map((size) => (
+            <button key={size} type="button" onClick={() => toggleArray("linkedinCompanySize", size)}
+              style={toggleBtnStyle(data.linkedinCompanySize.includes(size))}>
+              {size} עובדים
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize: "0.65rem", color: "var(--foreground-muted)", marginTop: "0.5rem" }}>
+          ניתן לבחור מספר גדלים. המודעה תוצג לעובדים בחברות בגדלים אלו.
+        </div>
+      </div>
+
+      {/* Job Titles */}
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+          <span style={{ fontSize: "1.1rem" }}>👔</span>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>תפקידים</div>
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+          <input type="text" value={jobTitleInput} onChange={(e) => setJobTitleInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addJobTitle(); } }}
+            placeholder="לדוגמה: Marketing Manager, CTO..."
+            style={{ ...inputStyle, flex: 1 }} />
+          <button type="button" onClick={addJobTitle} disabled={!jobTitleInput.trim()} className="mod-btn-ghost"
+            style={{ padding: "0.4rem 0.75rem", fontSize: "0.75rem", fontWeight: 600, borderRadius: "0.375rem", cursor: "pointer", opacity: !jobTitleInput.trim() ? 0.5 : 1 }}>
+            + הוסף
+          </button>
+        </div>
+        {data.linkedinJobTitles.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
+            {data.linkedinJobTitles.map((title, i) => (
+              <span key={i} style={{ ...chipStyle, background: "rgba(59,130,246,0.08)", borderColor: "rgba(59,130,246,0.25)" }}>
+                👔 {title}
+                <button type="button" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.8rem", color: "var(--foreground-muted)", padding: 0, lineHeight: 1 }} onClick={() => onChange({ linkedinJobTitles: data.linkedinJobTitles.filter((_, idx) => idx !== i) })}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Seniority */}
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
+          <span style={{ fontSize: "1.1rem" }}>📊</span>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>דרגת בכירות</div>
+        </div>
+        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+          {LINKEDIN_SENIORITY_LEVELS.map((level) => (
+            <button key={level} type="button" onClick={() => toggleArray("linkedinSeniority", level)}
+              style={toggleBtnStyle(data.linkedinSeniority.includes(level))}>
+              {level}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Industries */}
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
+          <span style={{ fontSize: "1.1rem" }}>🏭</span>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>תעשיות</div>
+        </div>
+        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+          {LINKEDIN_INDUSTRIES.map((ind) => (
+            <button key={ind} type="button" onClick={() => toggleArray("linkedinIndustries", ind)}
+              style={toggleBtnStyle(data.linkedinIndustries.includes(ind))}>
+              {ind}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Skills */}
+      <div className="premium-card" style={{ padding: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+          <span style={{ fontSize: "1.1rem" }}>🛠️</span>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>כישורים (Skills)</div>
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+          <input type="text" value={skillInput} onChange={(e) => setSkillInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSkill(); } }}
+            placeholder="לדוגמה: React, Project Management, Sales..."
+            style={{ ...inputStyle, flex: 1 }} />
+          <button type="button" onClick={addSkill} disabled={!skillInput.trim()} className="mod-btn-ghost"
+            style={{ padding: "0.4rem 0.75rem", fontSize: "0.75rem", fontWeight: 600, borderRadius: "0.375rem", cursor: "pointer", opacity: !skillInput.trim() ? 0.5 : 1 }}>
+            + הוסף
+          </button>
+        </div>
+        {data.linkedinSkills.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
+            {data.linkedinSkills.map((skill, i) => (
+              <span key={i} style={{ ...chipStyle, background: "rgba(139,92,246,0.08)", borderColor: "rgba(139,92,246,0.25)" }}>
+                🛠️ {skill}
+                <button type="button" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.8rem", color: "var(--foreground-muted)", padding: 0, lineHeight: 1 }} onClick={() => onChange({ linkedinSkills: data.linkedinSkills.filter((_, idx) => idx !== i) })}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div style={{ fontSize: "0.65rem", color: "var(--foreground-muted)", marginTop: "0.35rem" }}>
+          טרגט משתמשים על בסיס כישורים שציינו בפרופיל הלינקדאין שלהם
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -915,7 +1294,18 @@ function Step2AdSet({
         </div>
       </div>
 
-      {/* ── Demographics ── */}
+      {/* ── Google Ads Targeting (Keywords + Bidding) ── */}
+      {data.platform === "google" && (
+        <GoogleAdsTargeting data={data} onChange={onChange} />
+      )}
+
+      {/* ── LinkedIn Targeting (Professional) ── */}
+      {data.platform === "linkedin" && (
+        <LinkedInTargeting data={data} onChange={onChange} />
+      )}
+
+      {/* ── Demographics (social platforms only) ── */}
+      {data.platform !== "google" && data.platform !== "linkedin" && (
       <div className="premium-card" style={{ padding: "1.25rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
           <span style={{ fontSize: "1.1rem" }}>👥</span>
@@ -976,8 +1366,10 @@ function Step2AdSet({
           </div>
         </div>
       </div>
+      )}
 
-      {/* ── Interests (with AI) ── */}
+      {/* ── Interests (with AI) — social platforms only ── */}
+      {data.platform !== "google" && data.platform !== "linkedin" && (
       <div className="premium-card" style={{ padding: "1.25rem" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -1106,10 +1498,11 @@ function Step2AdSet({
 
         {!data.clientId && (
           <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>
-            בחר לקוח בשלב 1 כדי לקבל הצעות AI מותאמות
+            בחר לקוח בש��ב 1 כדי לקבל הצעות AI מותאמות
           </div>
         )}
       </div>
+      )}
 
       {/* ── Audience notes ── */}
       <div className="premium-card" style={{ padding: "1.25rem" }}>
@@ -1902,7 +2295,7 @@ function Step4Review({
         {reviewRow("שם קמפיין", data.campaignName)}
         {reviewRow("לקוח", selectedClient?.name || "—")}
         {reviewRow("פלטפורמה", PLATFORM_OPTIONS.find(p => p.value === data.platform)?.label || data.platform)}
-        {reviewRow("סוג", GOAL_OPTIONS.find(g => g.value === data.campaignType)?.label || data.campaignType)}
+        {reviewRow("סוג", getGoalOptionsForPlatform(data.platform).find(g => g.value === data.campaignType)?.label || data.campaignType)}
         {reviewRow("תאריכים", `${data.startDate || "—"} → ${data.endDate || "—"}`)}
       </div>
 
@@ -1913,9 +2306,30 @@ function Step4Review({
         </div>
         {reviewRow("שם", data.adSetName || `${data.campaignName} — קבוצה ראשית`)}
         {reviewRow("מיקומים", data.locations.map(l => `${l.city}(+${l.radius}km)`).join(", ") || "—")}
-        {reviewRow("גילאים", `${data.ageMin}–${data.ageMax}`)}
-        {reviewRow("מגדר", GENDER_OPTIONS.find(g => g.value === data.gender)?.label || data.gender)}
-        {reviewRow("תחומי עניין", data.interests.join(", ") || "—")}
+        {data.platform === "google" && (
+          <>
+            {reviewRow("סוג קמפיין", GOOGLE_AD_TYPES.find(t => t.value === data.googleAdType)?.label || data.googleAdType)}
+            {reviewRow("מילות מפתח", data.keywords.length > 0 ? data.keywords.map(k => `${k.keyword} (${k.matchType})`).join(", ") : "—")}
+            {reviewRow("מילות מפתח שליליות", data.negativeKeywords.join(", ") || "—")}
+            {reviewRow("Max CPC", data.maxCpc ? `₪${data.maxCpc}` : "אוטומטי")}
+          </>
+        )}
+        {data.platform === "linkedin" && (
+          <>
+            {reviewRow("גודל חברה", data.linkedinCompanySize.join(", ") || "—")}
+            {reviewRow("תפקידים", data.linkedinJobTitles.join(", ") || "—")}
+            {reviewRow("בכירות", data.linkedinSeniority.join(", ") || "—")}
+            {reviewRow("תעשיות", data.linkedinIndustries.join(", ") || "—")}
+            {reviewRow("כישורים", data.linkedinSkills.join(", ") || "—")}
+          </>
+        )}
+        {data.platform !== "google" && data.platform !== "linkedin" && (
+          <>
+            {reviewRow("גילאים", `${data.ageMin}–${data.ageMax}`)}
+            {reviewRow("מגדר", GENDER_OPTIONS.find(g => g.value === data.gender)?.label || data.gender)}
+            {reviewRow("תחומי עניין", data.interests.join(", ") || "—")}
+          </>
+        )}
         {reviewRow("תקציב", budgetNum > 0 ? `₪${budgetNum.toLocaleString()} (${data.budgetType === "daily" ? "יומי" : "כולל"})` : "—")}
       </div>
 
@@ -2073,7 +2487,7 @@ export default function CampaignBuilderPage() {
   // Campaign holds ONLY campaign-level data. AdSet/Ad data stays in their own records.
   const buildRecords = useCallback((status: CampaignStatus) => {
     const clientName = selectedClient?.name || "";
-    const goalLabel = GOAL_OPTIONS.find(g => g.value === data.campaignType)?.label || data.campaignType;
+    const goalLabel = getGoalOptionsForPlatform(data.platform).find(g => g.value === data.campaignType)?.label || data.campaignType;
 
     const campaignPayload = {
       campaignName: data.campaignName || "טיוטה חדשה",
