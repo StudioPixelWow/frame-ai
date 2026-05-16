@@ -10,7 +10,7 @@ const supabase = createClient(
 interface ScanRequestBody {
   planId: string;
   url: string;
-  scanType?: 'quick' | 'standard' | 'deep';
+  scanType?: 'quick' | 'deep';
 }
 
 interface ScanResponse {
