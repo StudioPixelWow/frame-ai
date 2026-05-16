@@ -1429,7 +1429,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                         const bodyLines = lines.slice(1).filter((l: string) => !l.trim().startsWith("#"));
                         const ctaLine = bodyLines.find((l: string) => l.includes("←") || l.includes("→") || l.includes("קישור") || l.includes("לינק") || l.includes("ביו") || l.includes("וואטסאפ") || l.includes("WhatsApp") || l.includes("שלחו"));
                         const contentLines = bodyLines.filter((l: string) => l !== ctaLine);
-                        const platformIcon = item.platform === "instagram" ? "📸" : item.platform === "facebook" ? "📘" : item.platform === "tiktok" ? "🎵" : item.platform === "linkedin" ? "💼" : "📱";
+                        const platformIcon = (item.platform as string) === "instagram" ? "📸" : (item.platform as string) === "facebook" ? "📘" : (item.platform as string) === "tiktok" ? "🎵" : (item.platform as string) === "linkedin" ? "💼" : "📱";
 
                         return (
                           <div style={{
@@ -2733,7 +2733,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                 const bodyLines = lines.slice(1).filter((l: string) => !l.trim().startsWith("#"));
                 const ctaLine = bodyLines.find((l: string) => l.includes("←") || l.includes("→") || l.includes("קישור") || l.includes("לינק") || l.includes("ביו") || l.includes("וואטסאפ") || l.includes("WhatsApp") || l.includes("שלחו"));
                 const contentLines = bodyLines.filter((l: string) => l !== ctaLine);
-                const platformIcon = selectedItem.platform === "instagram" ? "📸" : selectedItem.platform === "facebook" ? "📘" : selectedItem.platform === "tiktok" ? "🎵" : selectedItem.platform === "linkedin" ? "💼" : "📱";
+                const platformIcon = (selectedItem.platform as string) === "instagram" ? "📸" : (selectedItem.platform as string) === "facebook" ? "📘" : (selectedItem.platform as string) === "tiktok" ? "🎵" : (selectedItem.platform as string) === "linkedin" ? "💼" : "📱";
                 const charCount = selectedItem.caption.length;
 
                 return (
