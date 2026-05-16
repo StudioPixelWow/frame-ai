@@ -11,12 +11,29 @@
  */
 import React from "react";
 import { useCurrentFrame, useVideoConfig, interpolate, Easing, spring } from "remotion";
-import { loadFont } from "@remotion/google-fonts/Heebo";
+/**
+ * Hebrew font loaded via CSS link injection.
+ * Works in both Next.js (Player preview) and Remotion render.
+ */
+const FONT_CSS_URL = "https://fonts.googleapis.com/css2?family=Heebo:wght@400;700;900&display=swap&subset=hebrew";
 
-const { fontFamily } = loadFont("normal", {
-  weights: ["400", "700", "900"],
-  subsets: ["hebrew"],
-});
+let fontsLoaded = false;
+function ensureHebrewFont() {
+  if (fontsLoaded) return;
+  if (typeof document !== "undefined") {
+    const existing = document.querySelector(`link[href="${FONT_CSS_URL}"]`);
+    if (!existing) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = FONT_CSS_URL;
+      document.head.appendChild(link);
+    }
+    fontsLoaded = true;
+  }
+}
+ensureHebrewFont();
+
+const fontFamily = "Heebo";
 
 export interface CaptionWord {
   text: string;

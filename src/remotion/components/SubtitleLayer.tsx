@@ -2,22 +2,32 @@ import React from "react";
 import { useCurrentFrame, useVideoConfig, interpolate, spring } from "remotion";
 import type { SubtitleSegmentProps, SubtitleStyleProps } from "../types";
 import { FPS } from "../types";
-import { loadFont } from "@remotion/google-fonts/Heebo";
-import { loadFont as loadRubik } from "@remotion/google-fonts/Rubik";
-import { loadFont as loadAssistant } from "@remotion/google-fonts/Assistant";
 
-const { fontFamily: heeboFamily } = loadFont("normal", {
-  weights: ["400", "600", "700", "900"],
-  subsets: ["hebrew"],
-});
-const { fontFamily: rubikFamily } = loadRubik("normal", {
-  weights: ["400", "600", "700"],
-  subsets: ["hebrew"],
-});
-const { fontFamily: assistantFamily } = loadAssistant("normal", {
-  weights: ["400", "600", "700"],
-  subsets: ["hebrew"],
-});
+/**
+ * Load Hebrew Google Fonts via CSS @import.
+ * Works in both Next.js (Player preview) and Remotion render (Railway worker).
+ */
+const FONT_CSS_URL = "https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;700;900&family=Rubik:wght@400;600;700&family=Assistant:wght@400;600;700&display=swap&subset=hebrew";
+
+let fontsLoaded = false;
+function ensureFontsLoaded() {
+  if (fontsLoaded) return;
+  if (typeof document !== "undefined") {
+    const existing = document.querySelector(`link[href="${FONT_CSS_URL}"]`);
+    if (!existing) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = FONT_CSS_URL;
+      document.head.appendChild(link);
+    }
+    fontsLoaded = true;
+  }
+}
+ensureFontsLoaded();
+
+const heeboFamily = "Heebo";
+const rubikFamily = "Rubik";
+const assistantFamily = "Assistant";
 
 function resolveHebrewFont(fontName: string): string {
   const map: Record<string, string> = {
