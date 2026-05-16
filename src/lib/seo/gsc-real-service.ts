@@ -182,7 +182,7 @@ export async function getSearchAnalytics(
       position: row.position,
     };
     dimensions.forEach((dim, idx) => {
-      (mapped as Record<string, unknown>)[dim] = row.keys[idx];
+      (mapped as unknown as Record<string, unknown>)[dim] = row.keys[idx];
     });
     return mapped;
   });
