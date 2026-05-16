@@ -43,6 +43,9 @@ const TABLES = [
   'autopilot_actions',
   'autopilot_activity_log',
   // app_accountant_documents — REMOVED. Accountant docs use app_client_files (category='accountant').
+  // Backlink Intelligence
+  'app_backlink_campaigns',
+  'app_backlink_targets',
 ];
 
 export async function GET() {

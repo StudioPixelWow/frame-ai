@@ -209,6 +209,7 @@ const mainNavItems: NavItem[] = [
   { href: "/business-projects", label: "פרויקטים", id: "nav-otp", icon: Icons.BusinessProjects, allowedRoles: ['admin', 'employee'] },
   { href: "/business-projects/dashboard", label: "דשבורד פרויקטים", id: "nav-biz-dash", icon: Icons.BarChart, allowedRoles: ['admin'] },
   { href: "/seo-geo/dashboard", label: "PIXEL SEO/GEO", id: "nav-seo-geo", icon: Icons.SeoGeo, allowedRoles: ['admin'] },
+  { href: "/seo-geo/results", label: "תוצאות SEO", id: "nav-seo-results", icon: Icons.TrendingUp, allowedRoles: ['admin'] },
   { href: "/accounting", label: "חשבונות", id: "nav-payments", icon: Icons.CreditCard, allowedRoles: ['admin'] },
   { href: "/accounting/timeline", label: "גבייה חכמה", id: "nav-timeline", icon: Icons.BarChart, allowedRoles: ['admin'] },
   { href: "/accounting/podcast", label: "פודקאסט", id: "nav-podcast", icon: Icons.Mic, allowedRoles: ['admin', 'employee'] },

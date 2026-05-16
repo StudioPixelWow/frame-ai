@@ -87,6 +87,10 @@ export interface Client {
   wpConnectionStatus: MetaConnectionStatus;
   wpSiteName: string;
   wpConnectedAt: string | null;
+  // Google Search Console Connection
+  gscRefreshToken: string;
+  gscSiteUrl: string;
+  gscConnectionStatus: 'connected' | 'not_connected' | 'token_expired' | 'error';
 }
 
 // AI Settings
@@ -2329,6 +2333,46 @@ export interface SurveyResponse {
   completedAt: string;
   source: SurveyDistribution;
   createdAt: string;
+}
+
+// ===== Backlink Intelligence =====
+
+export type BacklinkOutreachType = 'guest_post' | 'resource_link' | 'broken_link' | 'pr' | 'directory' | 'partnership';
+export type BacklinkTargetStatus = 'prospect' | 'contacted' | 'responded' | 'secured' | 'rejected' | 'lost';
+export type BacklinkCampaignType = 'guest_post' | 'pr' | 'broken_link' | 'resource' | 'directory';
+export type BacklinkCampaignStatus = 'active' | 'paused' | 'completed';
+
+export interface BacklinkTarget {
+  id: string;
+  campaignId: string;
+  clientId: string;
+  targetDomain: string;
+  targetUrl?: string;
+  contactEmail?: string;
+  domainAuthority: number;
+  relevanceScore: number;
+  outreachType: BacklinkOutreachType;
+  status: BacklinkTargetStatus;
+  pitchTemplate?: string;
+  notes?: string;
+  createdAt: string;
+  lastContactedAt?: string;
+}
+
+export interface BacklinkCampaign {
+  id: string;
+  clientId: string;
+  name: string;
+  type: BacklinkCampaignType;
+  targets: string[];
+  totalProspects: number;
+  contacted: number;
+  secured: number;
+  status: BacklinkCampaignStatus;
+  niche: string;
+  keywords: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ===== Green Invoice Settings =====

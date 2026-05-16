@@ -69,6 +69,8 @@ import type {
   LinkedInPost,
   Survey,
   SurveyResponse,
+  BacklinkCampaign,
+  BacklinkTarget,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -161,3 +163,7 @@ export const linkedInPosts = new SupabaseCrud<LinkedInPost>('app_linkedin_posts'
 // Surveys
 export const surveys = new SupabaseCrud<Survey>('app_surveys', 'srv');
 export const surveyResponses = new SupabaseCrud<SurveyResponse>('app_survey_responses', 'srr');
+
+// Backlink Intelligence & Outreach
+export const backlinkCampaigns = new SupabaseCrud<BacklinkCampaign>('app_backlink_campaigns', 'blc');
+export const backlinkTargets = new SupabaseCrud<BacklinkTarget>('app_backlink_targets', 'blt');
