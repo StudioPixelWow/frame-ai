@@ -279,7 +279,7 @@ export default function ClientPortalHeader({
             onMouseEnter={(e) => {
               e.currentTarget.style.background = 'rgba(0, 0, 0, 0.06)';
               e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.12)';
-              e.currentTarget.style.boxShadow = '0 1px 4px rgba(0, 0, 0, 0.04)';
+              e.currentTarget.style.boxShadow = '0 0 16px rgba(240, 255, 2, 0.35), 0 0 4px rgba(240, 255, 2, 0.25)';
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = 'rgba(0, 0, 0, 0.03)';

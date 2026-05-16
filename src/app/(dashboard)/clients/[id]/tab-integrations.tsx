@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import type { Client, MetaConnectionStatus } from "@/lib/db/schema";
 import { useToast } from "@/components/ui/toast";
 
@@ -184,9 +185,20 @@ const PLATFORM_CONFIGS: PlatformConfig[] = [
 
 export default function TabIntegrations({ client }: { client: Client }) {
   const toast = useToast();
+  const searchParams = useSearchParams();
   const integrations = getClientIntegrations(client);
   const connectedCount = integrations.filter(i => i.connected).length;
   const totalCount = integrations.length;
+
+  // Show success toast if OAuth redirect has 'connected' param
+  useEffect(() => {
+    const connected = searchParams.get('connected');
+    if (connected === 'meta') {
+      toast('חשבון Meta חובר בהצלחה דרך OAuth', 'success');
+    } else if (connected === 'google') {
+      toast('חשבון Google Ads חובר בהצלחה דרך OAuth', 'success');
+    }
+  }, [searchParams, toast]);
 
   // ── Platform connection states ──
   const [expandedPlatform, setExpandedPlatform] = useState<AdPlatform | null>(null);
@@ -637,6 +649,41 @@ export default function TabIntegrations({ client }: { client: Client }) {
                         {sr.errors.length} שגיאות — {sr.errors[0]}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* OAuth Connect Button */}
+                {(config.key === "meta" || config.key === "google") && (
+                  <div style={{ marginBottom: "0.75rem" }}>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const endpoint = config.key === "meta"
+                          ? `/api/auth/meta/url?clientId=${client.id}`
+                          : `/api/auth/google-ads/url?clientId=${client.id}`;
+                        try {
+                          const res = await fetch(endpoint, { headers: getRoleHeaders() });
+                          const json = await res.json();
+                          if (json.url) {
+                            window.location.href = json.url;
+                          } else {
+                            toast(json.error || "שגיאה ביצירת קישור ההתחברות", 'error');
+                          }
+                        } catch {
+                          toast("שגיאת רשת", 'error');
+                        }
+                      }}
+                      style={{
+                        padding: "0.5rem 1rem", fontSize: "0.8rem", fontWeight: 600, borderRadius: "0.375rem",
+                        border: `1px solid ${config.color}`, background: `${config.color}15`, color: config.color,
+                        cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: "0.4rem",
+                      }}
+                    >
+                      🔗 התחבר דרך OAuth
+                    </button>
+                    <span style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", marginRight: "0.75rem" }}>
+                      (מומלץ — ללא צורך בהזנת טוקן ידנית)
+                    </span>
                   </div>
                 )}
 

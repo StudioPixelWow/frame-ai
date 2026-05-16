@@ -272,7 +272,7 @@ export default function SmartWeeklyCalendar() {
               }}
               onMouseEnter={(e) => {
                 (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)";
-                (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 25px rgba(0,0,0,0.15)";
+                (e.currentTarget as HTMLElement).style.boxShadow = "0 0 16px rgba(240, 255, 2, 0.35), 0 0 4px rgba(240, 255, 2, 0.25)";
               }}
               onMouseLeave={(e) => {
                 (e.currentTarget as HTMLElement).style.transform = "translateY(0)";

@@ -67,7 +67,7 @@ export default function AdPreviewCard({ variation: v, onApprove, onReject, onEdi
       overflow: 'hidden',
       transition: 'transform 0.25s ease, box-shadow 0.25s ease',
     }}
-    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 25px rgba(0,0,0,0.06)'; }}
+    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 0 16px rgba(240, 255, 2, 0.35), 0 0 4px rgba(240, 255, 2, 0.25)'; }}
     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'none'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
     >
       {/* ── Header strip ── */}

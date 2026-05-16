@@ -378,8 +378,8 @@ export default function WhatsAppPage() {
               transition: 'all 150ms ease',
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)';
-              (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+              (e.currentTarget as HTMLElement).style.borderColor = 'rgba(240, 255, 2, 0.2)';
+              (e.currentTarget as HTMLElement).style.boxShadow = '0 0 16px rgba(240, 255, 2, 0.35), 0 0 4px rgba(240, 255, 2, 0.25)';
             }}
             onMouseLeave={(e) => {
               (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)';

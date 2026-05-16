@@ -1080,11 +1080,11 @@ const AICopilotToggle: React.FC<AICopilotToggleProps> = ({ onClick, isOpen }) =>
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.transform = "scale(1.1)";
-          e.currentTarget.style.boxShadow = "0 6px 16px rgba(0, 0, 0, 0.2)";
+          e.currentTarget.style.boxShadow = "0 0 16px rgba(240, 255, 2, 0.35), 0 0 4px rgba(240, 255, 2, 0.25)";
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.transform = "scale(1)";
-          e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.15)";
+          e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.04)";
         }}
       >
         {isOpen ? "✕" : "🧠"}

@@ -504,7 +504,7 @@ function AutomationCard({ automation, onToggle }: AutomationCardProps) {
 
   return (
     <div
-      className="premium-card auto-card rounded-lg p-5 border transition-all hover:shadow-lg"
+      className="premium-card auto-card rounded-lg p-5 border transition-all"
       style={{
         backgroundColor: 'var(--surface)',
         borderColor: 'var(--border)',

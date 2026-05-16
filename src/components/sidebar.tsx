@@ -94,7 +94,6 @@ const sections = [
   { href: "/content",         icon: <ContentIcon />,         label: "Content" },
   { href: "/bi-dashboard",    icon: <BIIcon />,              label: "BI Dashboard" },
   { href: "/seo-geo/dashboard", icon: <SeoGeoIcon />,        label: "PIXEL SEO/GEO" },
-  { href: "/seo-activity-center", icon: <BIIcon />,          label: "מרכז פעילות SEO" },
   { href: "/growth",           icon: <AutomationsIcon />,    label: "Growth Engine" },
   { href: "/autopilot",        icon: <CommandCenterIcon />,  label: "Autopilot" },
   { href: "/system-health",    icon: <SettingsIcon />,       label: "System Health" },

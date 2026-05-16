@@ -163,11 +163,11 @@ export default function PodcastClientsPage() {
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = "var(--border-muted)"
-                e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.2)"
+                e.currentTarget.style.boxShadow = "0 0 16px rgba(240, 255, 2, 0.35), 0 0 4px rgba(240, 255, 2, 0.25)"
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.borderColor = "var(--border)"
-                e.currentTarget.style.boxShadow = "none"
+                e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.04)"
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>

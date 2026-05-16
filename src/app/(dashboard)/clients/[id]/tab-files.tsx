@@ -275,7 +275,7 @@ export default function TabFiles({ client, onOpenUgcModal }: TabFilesProps) {
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.borderColor = isVideo ? "rgba(0,181,254,0.4)" : "var(--accent)";
-                    e.currentTarget.style.boxShadow = isVideo ? "0 0 16px rgba(0,181,254,0.08)" : "0 0 12px rgba(0,0,0,0.06)";
+                    e.currentTarget.style.boxShadow = isVideo ? "0 0 16px rgba(0,181,254,0.08)" : "0 0 16px rgba(240, 255, 2, 0.35), 0 0 4px rgba(240, 255, 2, 0.25)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.borderColor = "var(--border)";

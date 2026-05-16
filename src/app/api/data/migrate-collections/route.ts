@@ -38,6 +38,10 @@ const TABLES = [
   'app_podcast_strategies',
   'app_system_events',
   'app_audit_log',
+  'autopilot_settings',
+  'autopilot_runs',
+  'autopilot_actions',
+  'autopilot_activity_log',
   // app_accountant_documents — REMOVED. Accountant docs use app_client_files (category='accountant').
 ];
 

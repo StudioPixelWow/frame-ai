@@ -55,8 +55,8 @@ export default function VideoEditorLandingPage() {
                 transition: "box-shadow 200ms ease, border-color 200ms ease",
               }}
               onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)";
-                (e.currentTarget as HTMLElement).style.borderColor = "#8b5cf6";
+                (e.currentTarget as HTMLElement).style.boxShadow = "0 0 16px rgba(240, 255, 2, 0.35), 0 0 4px rgba(240, 255, 2, 0.25)";
+                (e.currentTarget as HTMLElement).style.borderColor = "rgba(240, 255, 2, 0.2)";
               }}
               onMouseLeave={(e) => {
                 (e.currentTarget as HTMLElement).style.boxShadow = "none";

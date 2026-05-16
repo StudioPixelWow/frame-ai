@@ -379,28 +379,33 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
     healthColor = "#ef4444";
   }
 
-  // Edit item initialization
+  // Edit item initialization — useEffect keyed on editingItemId
   const editingItem = editingItemId ? ganttItems.find((i) => i.id === editingItemId) : null;
-  if (editingItem && editTitle === "") {
-    setEditTitle(editingItem.title);
-    setEditDate(editingItem.date);
-    setEditIdea(editingItem.ideaSummary);
-    setEditGraphicText(editingItem.graphicText);
-    setEditCaption(editingItem.caption);
-    setEditVisualConcept(editingItem.visualConcept || "");
-    setEditItemType(editingItem.itemType);
-    setEditPlatform(editingItem.platform);
-    setEditFormat(editingItem.format);
-    setEditAssignee(editingItem.assigneeId || "");
-    setEditStatus(editingItem.status);
-    setEditInternalNotes(editingItem.internalNotes);
-    setEditClientNotes(editingItem.clientNotes);
-    setEditHolidayTag(editingItem.holidayTag);
-    setEditCampaignTag(editingItem.campaignTag);
-    setEditAttachedFiles(editingItem.attachedFiles || []);
-    setEditImageUrls(editingItem.imageUrls || []);
-    setEditRelatedVideoId(editingItem.relatedVideoId || "");
-  }
+  useEffect(() => {
+    if (editingItemId) {
+      const item = ganttItems.find((i) => i.id === editingItemId);
+      if (item) {
+        setEditTitle(item.title);
+        setEditDate(item.date);
+        setEditIdea(item.ideaSummary);
+        setEditGraphicText(item.graphicText);
+        setEditCaption(item.caption);
+        setEditVisualConcept(item.visualConcept || "");
+        setEditItemType(item.itemType);
+        setEditPlatform(item.platform);
+        setEditFormat(item.format);
+        setEditAssignee(item.assigneeId || "");
+        setEditStatus(item.status);
+        setEditInternalNotes(item.internalNotes);
+        setEditClientNotes(item.clientNotes);
+        setEditHolidayTag(item.holidayTag);
+        setEditCampaignTag(item.campaignTag);
+        setEditAttachedFiles(item.attachedFiles || []);
+        setEditImageUrls(item.imageUrls || []);
+        setEditRelatedVideoId(item.relatedVideoId || "");
+      }
+    }
+  }, [editingItemId]);
 
   const handleSaveGanttItem = async () => {
     if (!editingItem) return;
@@ -2368,7 +2373,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                             borderLeft: `3px solid ${ITEM_TYPE_CONFIG[item.itemType]?.color || "#6b7280"}`,
                           }}
                           onMouseEnter={(e) => {
-                            (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 8px rgba(0,0,0,0.1)";
+                            (e.currentTarget as HTMLElement).style.boxShadow = "0 0 16px rgba(240, 255, 2, 0.35), 0 0 4px rgba(240, 255, 2, 0.25)";
                           }}
                           onMouseLeave={(e) => {
                             (e.currentTarget as HTMLElement).style.boxShadow = "none";
@@ -2534,11 +2539,33 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                         {formatLabel}
                       </span>
                     )}
-                    {selectedItem.date && (
-                      <span style={{ fontSize: "0.68rem", color: "var(--foreground-muted)", padding: "0.15rem 0" }}>
-                        📅 {formatDate(selectedItem.date)}
-                      </span>
-                    )}
+                    <span style={{ fontSize: "0.68rem", color: "var(--foreground-muted)", padding: "0.15rem 0", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                      📅
+                      <input
+                        type="date"
+                        value={selectedItem.date || ""}
+                        onChange={async (e) => {
+                          const newDate = e.target.value;
+                          try {
+                            await updateGanttItem(selectedItem.id, { date: newDate } as any);
+                            toast("התאריך עודכן בהצלחה", "success");
+                          } catch (err) {
+                            console.error(err);
+                            toast("שגיאה בעדכון התאריך", "error");
+                          }
+                        }}
+                        style={{
+                          fontSize: "0.68rem",
+                          border: "1px solid var(--border)",
+                          borderRadius: "0.25rem",
+                          padding: "0.15rem 0.35rem",
+                          background: "var(--surface-raised)",
+                          color: "var(--foreground)",
+                          direction: "rtl",
+                          cursor: "pointer",
+                        }}
+                      />
+                    </span>
                   </div>
                 </div>
                 <button

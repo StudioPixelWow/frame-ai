@@ -2440,6 +2440,8 @@ export default function CampaignBuilderPage() {
   const [data, setData] = useState<WizardData>(INITIAL_DATA);
   const [errors, setErrors] = useState<StepErrors>({});
   const [submitting, setSubmitting] = useState(false);
+  const [showConnectionModal, setShowConnectionModal] = useState(false);
+  const [connectionModalPlatform, setConnectionModalPlatform] = useState("");
 
   // Derived
   const selectedClient = useMemo(
@@ -2474,9 +2476,44 @@ export default function CampaignBuilderPage() {
       setErrors(stepErrors);
       return;
     }
+
+    // Connection gate: check if ad account is connected for selected platform (Step 1 → Step 2)
+    if (step === 1 && selectedClient) {
+      const c = selectedClient as any;
+      const platform = data.platform;
+      let needsConnection = false;
+      let platformLabel = "";
+
+      if (platform === "facebook" || platform === "instagram") {
+        const status = c.metaConnectionStatus || c.meta_connection_status;
+        if (status !== "connected") {
+          needsConnection = true;
+          platformLabel = platform === "facebook" ? "Facebook" : "Instagram";
+        }
+      } else if (platform === "google") {
+        const status = c.googleConnectionStatus || c.google_connection_status;
+        if (status !== "connected") {
+          needsConnection = true;
+          platformLabel = "Google Ads";
+        }
+      } else if (platform === "tiktok") {
+        const status = c.tiktokConnectionStatus || c.tiktok_connection_status;
+        if (status !== "connected") {
+          needsConnection = true;
+          platformLabel = "TikTok";
+        }
+      }
+
+      if (needsConnection) {
+        setConnectionModalPlatform(platformLabel);
+        setShowConnectionModal(true);
+        return;
+      }
+    }
+
     setErrors({});
     setStep((s) => Math.min(s + 1, 4));
-  }, [step, data]);
+  }, [step, data, selectedClient]);
 
   const handleBack = useCallback(() => {
     setErrors({});
@@ -2843,6 +2880,99 @@ export default function CampaignBuilderPage() {
           )}
         </div>
       </div>
+      {/* Connection Required Modal */}
+      {showConnectionModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(0,0,0,0.5)",
+          }}
+          onClick={() => setShowConnectionModal(false)}
+        >
+          <div
+            style={{
+              background: "var(--surface-raised, #fff)",
+              borderRadius: "1rem",
+              padding: "2rem",
+              maxWidth: "420px",
+              width: "90%",
+              direction: "rtl",
+              textAlign: "center",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: "2.5rem", marginBottom: "1rem" }}>🔗</div>
+            <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem", fontWeight: 700, color: "var(--foreground)" }}>
+              חיבור חשבון מנהל מודעות נדרש
+            </h3>
+            <p style={{ margin: "0 0 1.5rem 0", fontSize: "0.85rem", color: "var(--foreground-muted)", lineHeight: 1.6 }}>
+              כדי לבנות קמפיין ב-{connectionModalPlatform} יש לחבר חשבון מנהל מודעות
+            </p>
+            <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center" }}>
+              <button
+                type="button"
+                onClick={() => setShowConnectionModal(false)}
+                style={{
+                  padding: "0.6rem 1.25rem",
+                  fontSize: "0.82rem",
+                  fontWeight: 600,
+                  borderRadius: "0.5rem",
+                  border: "1px solid var(--border)",
+                  background: "var(--surface)",
+                  color: "var(--foreground)",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const platform = data.platform;
+                  let authEndpoint = "";
+                  if (platform === "facebook" || platform === "instagram") {
+                    authEndpoint = `/api/auth/meta/url?clientId=${data.clientId}`;
+                  } else if (platform === "google") {
+                    authEndpoint = `/api/auth/google-ads/url?clientId=${data.clientId}`;
+                  } else if (platform === "tiktok") {
+                    toast("חיבור TikTok עדיין לא נתמך דרך OAuth", "error");
+                    return;
+                  }
+                  try {
+                    const res = await fetch(authEndpoint);
+                    const json = await res.json();
+                    if (json.url) {
+                      window.location.href = json.url;
+                    } else {
+                      toast(json.error || "שגיאה ביצירת קישור ההתחברות", "error");
+                    }
+                  } catch {
+                    toast("שגיאת רשת", "error");
+                  }
+                }}
+                className="mod-btn-primary"
+                style={{
+                  padding: "0.6rem 1.25rem",
+                  fontSize: "0.82rem",
+                  fontWeight: 600,
+                  borderRadius: "0.5rem",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                התחבר עכשיו
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

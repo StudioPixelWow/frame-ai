@@ -1551,7 +1551,7 @@ function LeadsPageInner() {
                             draggable
                             onDragStart={(e) => handleDragStart(lead, e)}
                             onMouseEnter={(el) => {
-                              (el.currentTarget as HTMLElement).style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.1)";
+                              (el.currentTarget as HTMLElement).style.boxShadow = "0 0 16px rgba(240, 255, 2, 0.35), 0 0 4px rgba(240, 255, 2, 0.25)";
                               (el.currentTarget as HTMLElement).style.transform = "translateY(-2px)";
                             }}
                             onMouseLeave={(el) => {

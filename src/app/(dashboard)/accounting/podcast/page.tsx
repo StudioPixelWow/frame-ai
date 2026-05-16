@@ -196,12 +196,12 @@ export default function PodcastPage() {
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = "var(--border-muted)"
-              e.currentTarget.style.boxShadow = "0 6px 20px rgba(0,0,0,0.2)"
+              e.currentTarget.style.boxShadow = "0 0 16px rgba(240, 255, 2, 0.35), 0 0 4px rgba(240, 255, 2, 0.25)"
               e.currentTarget.style.transform = "translateY(-2px)"
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.borderColor = "var(--border)"
-              e.currentTarget.style.boxShadow = "none"
+              e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.04)"
               e.currentTarget.style.transform = "translateY(0)"
             }}
           >
@@ -248,13 +248,13 @@ export default function PodcastPage() {
               onMouseEnter={(e) => {
                 const el = e.currentTarget as HTMLDivElement
                 el.style.borderColor = "var(--border-muted)"
-                el.style.boxShadow = "0 6px 20px rgba(0,0,0,0.2)"
+                el.style.boxShadow = "0 0 16px rgba(240, 255, 2, 0.35), 0 0 4px rgba(240, 255, 2, 0.25)"
                 el.style.transform = "translateY(-3px)"
               }}
               onMouseLeave={(e) => {
                 const el = e.currentTarget as HTMLDivElement
                 el.style.borderColor = "var(--border)"
-                el.style.boxShadow = "none"
+                el.style.boxShadow = "0 1px 3px rgba(0,0,0,0.04)"
                 el.style.transform = "translateY(0)"
               }}
             >
@@ -345,11 +345,11 @@ export default function PodcastPage() {
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.borderColor = "var(--border-muted)"
-                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.2)"
+                    e.currentTarget.style.boxShadow = "0 0 16px rgba(240, 255, 2, 0.35), 0 0 4px rgba(240, 255, 2, 0.25)"
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.borderColor = "var(--border)"
-                    e.currentTarget.style.boxShadow = "none"
+                    e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.04)"
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", marginBottom: "1rem", flexWrap: "wrap" }}>

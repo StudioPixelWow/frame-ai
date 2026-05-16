@@ -199,7 +199,7 @@ const Icons = {
 
 const mainNavItems: NavItem[] = [
   { href: "/dashboard", label: "דשבורד", id: "nav-dashboard", icon: Icons.Dashboard, allowedRoles: ['admin', 'employee'] },
-  { href: "/projects", label: "PixelManageAI", id: "nav-projects", icon: Icons.Projects, allowedRoles: ['admin', 'employee'] },
+  { href: "/content", label: "PixelManageAI", id: "nav-projects", icon: Icons.Projects, allowedRoles: ['admin', 'employee'] },
   { href: "/clients", label: "לקוחות", id: "nav-clients", icon: Icons.Clients, allowedRoles: ['admin', 'employee'] },
   { href: "/leads", label: "לידים", id: "nav-leads", icon: Icons.Leads, allowedRoles: ['admin'] },
   { href: "/campaigns", label: "קמפיינים", id: "nav-campaigns", icon: Icons.Campaigns, allowedRoles: ['admin', 'employee'] },
@@ -208,9 +208,7 @@ const mainNavItems: NavItem[] = [
   { href: "/employees", label: "צוות", id: "nav-employees", icon: Icons.Team, allowedRoles: ['admin'] },
   { href: "/business-projects", label: "פרויקטים", id: "nav-otp", icon: Icons.BusinessProjects, allowedRoles: ['admin', 'employee'] },
   { href: "/business-projects/dashboard", label: "דשבורד פרויקטים", id: "nav-biz-dash", icon: Icons.BarChart, allowedRoles: ['admin'] },
-  { href: "/editor", label: "PixelFrameAI", id: "nav-editor", icon: Icons.Video, allowedRoles: ['admin', 'employee'] },
   { href: "/seo-geo/dashboard", label: "PIXEL SEO/GEO", id: "nav-seo-geo", icon: Icons.SeoGeo, allowedRoles: ['admin'] },
-  { href: "/seo-activity-center", label: "מרכז פעילות SEO", id: "nav-seo-activity", icon: Icons.BarChart, allowedRoles: ['admin'] },
   { href: "/accounting", label: "חשבונות", id: "nav-payments", icon: Icons.CreditCard, allowedRoles: ['admin'] },
   { href: "/accounting/timeline", label: "גבייה חכמה", id: "nav-timeline", icon: Icons.BarChart, allowedRoles: ['admin'] },
   { href: "/accounting/podcast", label: "פודקאסט", id: "nav-podcast", icon: Icons.Mic, allowedRoles: ['admin', 'employee'] },

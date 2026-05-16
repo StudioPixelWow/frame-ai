@@ -208,8 +208,8 @@ export default function BusinessProjectsDashboard() {
           to { opacity: 1; transform: translateY(0); }
         }
         .dash-card {
-          background: #1a1a2e;
-          border: 1px solid rgba(255,255,255,0.06);
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
           border-radius: 14px;
           padding: 22px;
           transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
@@ -217,19 +217,19 @@ export default function BusinessProjectsDashboard() {
         }
         .dash-card:hover {
           transform: translateY(-2px);
-          box-shadow: 0 8px 28px rgba(0,0,0,0.35);
-          border-color: rgba(255,255,255,0.12);
+          box-shadow: 0 8px 28px rgba(240,255,2,0.13);
+          border-color: #cbd5e1;
         }
         .dash-kpi {
-          background: #1a1a2e;
-          border: 1px solid rgba(255,255,255,0.06);
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
           border-radius: 14px;
           padding: 24px;
           display: flex; flex-direction: column; gap: 8px;
           transition: transform 0.2s ease, box-shadow 0.2s ease;
           animation: dash-fade-in 0.3s ease both;
         }
-        .dash-kpi:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+        .dash-kpi:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(240,255,2,0.13); }
         .dash-kpi-value { font-size: 36px; font-weight: 800; letter-spacing: -1px; }
         .dash-kpi-label { font-size: 13px; color: #64748b; font-weight: 500; }
         .dash-project-row {
@@ -237,22 +237,22 @@ export default function BusinessProjectsDashboard() {
           align-items: center; gap: 16px;
           padding: 14px 18px;
           border-radius: 10px;
-          background: rgba(255,255,255,0.02);
-          border: 1px solid rgba(255,255,255,0.04);
+          background: #f8fafc;
+          border: 1px solid #f1f5f9;
           transition: all 0.2s ease;
           text-decoration: none; color: inherit;
         }
         .dash-project-row:hover {
-          background: rgba(99,102,241,0.06);
+          background: rgba(99,102,241,0.04);
           border-color: rgba(99,102,241,0.15);
           transform: translateX(-4px);
         }
         .dash-project-row.delayed {
           border-right: 3px solid #ef4444;
-          background: rgba(239,68,68,0.04);
+          background: rgba(239,68,68,0.03);
         }
         .dash-project-row.delayed:hover {
-          background: rgba(239,68,68,0.08);
+          background: rgba(239,68,68,0.06);
           border-color: rgba(239,68,68,0.2);
         }
         .dash-badge {
@@ -267,17 +267,17 @@ export default function BusinessProjectsDashboard() {
         .dash-timeline-item {
           display: flex; gap: 14px; align-items: flex-start;
           padding: 12px 16px; border-radius: 10px;
-          background: rgba(255,255,255,0.02);
-          border: 1px solid rgba(255,255,255,0.03);
+          background: #f8fafc;
+          border: 1px solid #f1f5f9;
           transition: all 0.15s ease;
           animation: dash-fade-in 0.3s ease both;
         }
         .dash-timeline-item:hover {
-          background: rgba(255,255,255,0.04);
-          border-color: rgba(255,255,255,0.08);
+          background: #f1f5f9;
+          border-color: #e2e8f0;
         }
         .dash-section-title {
-          font-size: 15px; font-weight: 600; color: #94a3b8;
+          font-size: 15px; font-weight: 600; color: #475569;
           text-transform: uppercase; letter-spacing: 0.6px;
           margin: 0 0 16px 0;
         }
@@ -286,7 +286,7 @@ export default function BusinessProjectsDashboard() {
       {/* ══════════ HEADER ══════════ */}
       <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ fontSize: '26px', fontWeight: '700', color: '#f1f5f9', margin: '0 0 4px 0', letterSpacing: '-0.3px' }}>
+          <h1 style={{ fontSize: '26px', fontWeight: '700', color: '#1e293b', margin: '0 0 4px 0', letterSpacing: '-0.3px' }}>
             דשבורד פרויקטים עסקיים
           </h1>
           <p style={{ fontSize: '14px', color: '#475569', margin: 0 }}>
@@ -311,7 +311,7 @@ export default function BusinessProjectsDashboard() {
           <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(99,102,241,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
             📊
           </div>
-          <div className="dash-kpi-value" style={{ color: '#e2e8f0' }}>{kpis.total}</div>
+          <div className="dash-kpi-value" style={{ color: '#1e293b' }}>{kpis.total}</div>
           <div className="dash-kpi-label">סה&quot;כ פרויקטים</div>
         </div>
         <div className="dash-kpi" style={{ animationDelay: '0.05s' }}>
@@ -374,7 +374,7 @@ export default function BusinessProjectsDashboard() {
 
         {/* ── LEFT: Projects List ── */}
         <div className="dash-card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '20px 22px 14px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+          <div style={{ padding: '20px 22px 14px', borderBottom: '1px solid #e2e8f0' }}>
             <h2 className="dash-section-title" style={{ margin: 0 }}>רשימת פרויקטים</h2>
           </div>
 
@@ -383,7 +383,7 @@ export default function BusinessProjectsDashboard() {
             display: 'grid', gridTemplateColumns: '2fr 1fr 120px 1fr 80px',
             gap: '16px', padding: '10px 18px',
             fontSize: '11px', color: '#475569', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px',
-            borderBottom: '1px solid rgba(255,255,255,0.04)',
+            borderBottom: '1px solid #e2e8f0',
           }}>
             <span>פרויקט</span>
             <span>לקוח</span>
@@ -410,7 +410,7 @@ export default function BusinessProjectsDashboard() {
                   const pColor = progressColor(stats.progress);
 
                   const statusConfig: Record<string, { bg: string; color: string }> = {
-                    not_started: { bg: 'rgba(100,116,139,0.12)', color: '#94a3b8' },
+                    not_started: { bg: 'rgba(100,116,139,0.12)', color: '#64748b' },
                     in_progress: { bg: 'rgba(245,158,11,0.12)', color: '#fbbf24' },
                     awaiting_approval: { bg: 'rgba(139,92,246,0.12)', color: '#a78bfa' },
                     waiting_for_client: { bg: 'rgba(249,115,22,0.12)', color: '#fb923c' },
@@ -427,7 +427,7 @@ export default function BusinessProjectsDashboard() {
                     >
                       {/* Name + type */}
                       <div>
-                        <div style={{ fontSize: '14px', fontWeight: '600', color: '#e2e8f0', marginBottom: '2px' }}>
+                        <div style={{ fontSize: '14px', fontWeight: '600', color: '#1e293b', marginBottom: '2px' }}>
                           {project.projectName}
                         </div>
                         <div style={{ fontSize: '11px', color: '#475569' }}>
@@ -441,13 +441,13 @@ export default function BusinessProjectsDashboard() {
                       </div>
 
                       {/* Client */}
-                      <div style={{ fontSize: '13px', color: '#94a3b8' }}>
+                      <div style={{ fontSize: '13px', color: '#64748b' }}>
                         {client?.name || '—'}
                       </div>
 
                       {/* Progress bar */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ flex: 1, height: '6px', background: 'rgba(255,255,255,0.06)', borderRadius: '3px', overflow: 'hidden' }}>
+                        <div style={{ flex: 1, height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
                           <div style={{
                             height: '100%', width: `${stats.progress}%`,
                             background: pColor, borderRadius: '3px',
@@ -498,12 +498,12 @@ export default function BusinessProjectsDashboard() {
                   return (
                     <div key={ew.empId}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <span style={{ fontSize: '13px', color: '#cbd5e1', fontWeight: '500' }}>{ew.name}</span>
+                        <span style={{ fontSize: '13px', color: '#334155', fontWeight: '500' }}>{ew.name}</span>
                         <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>
                           {ew.count} משימות
                         </span>
                       </div>
-                      <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.04)', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div style={{ width: '100%', height: '8px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
                         <div className="dash-emp-bar" style={{ width: `${pct}%`, background: barColor }} />
                       </div>
                     </div>
@@ -552,7 +552,7 @@ export default function BusinessProjectsDashboard() {
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{
-                          fontSize: '13px', color: '#cbd5e1', fontWeight: '500',
+                          fontSize: '13px', color: '#334155', fontWeight: '500',
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>
                           {event.description}
@@ -561,7 +561,7 @@ export default function BusinessProjectsDashboard() {
                           <span>{formatDateFull(event.createdAt)}</span>
                           {proj && (
                             <>
-                              <span style={{ color: 'rgba(255,255,255,0.1)' }}>|</span>
+                              <span style={{ color: '#e2e8f0' }}>|</span>
                               <span style={{ color: '#818cf8' }}>{proj.projectName}</span>
                             </>
                           )}

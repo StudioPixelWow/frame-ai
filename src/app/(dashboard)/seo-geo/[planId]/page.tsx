@@ -4051,7 +4051,7 @@ export default function SeoPlanDetail() {
                             padding: "16px 18px", cursor: "pointer", transition: "all 0.15s",
                             boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
                           }}
-                            onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.08)"; e.currentTarget.style.borderColor = "#7C3AED40"; }}
+                            onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 0 16px rgba(240, 255, 2, 0.35), 0 0 4px rgba(240, 255, 2, 0.25)"; e.currentTarget.style.borderColor = "#7C3AED40"; }}
                             onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.03)"; e.currentTarget.style.borderColor = C.border; }}
                           >
                             <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 12 }}>
