@@ -61,7 +61,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ clientI
     }
 
     // Map DB snake_case to camelCase (matching schema interfaces)
-    const mappedCampaigns: Campaign[] = (campaigns || []).map((c: Record<string, unknown>) => ({
+    const mappedCampaigns = (campaigns || []).map((c: Record<string, unknown>) => ({
       id: c.id as string,
       clientId: c.client_id as string,
       clientName: (c.client_name as string) || '',
@@ -86,9 +86,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ clientI
       lastSyncedAt: (c.last_synced_at as string) || null,
       createdAt: (c.created_at as string) || '',
       updatedAt: (c.updated_at as string) || '',
-    }));
+    })) as unknown as Campaign[];
 
-    const mappedAdSets: AdSet[] = (adSets || []).map((as: Record<string, unknown>) => ({
+    const mappedAdSets = (adSets || []).map((as: Record<string, unknown>) => ({
       id: as.id as string,
       campaignId: as.campaign_id as string,
       name: (as.name as string) || '',
@@ -109,9 +109,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ clientI
       lastSyncedAt: (as.last_synced_at as string) || null,
       createdAt: (as.created_at as string) || '',
       updatedAt: (as.updated_at as string) || '',
-    }));
+    })) as unknown as AdSet[];
 
-    const mappedAds: Ad[] = (ads || []).map((a: Record<string, unknown>) => ({
+    const mappedAds = (ads || []).map((a: Record<string, unknown>) => ({
       id: a.id as string,
       adSetId: (a.ad_set_id as string) || '',
       campaignId: (a.campaign_id as string) || '',
@@ -144,7 +144,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ clientI
       notes: (a.notes as string) || '',
       createdAt: (a.created_at as string) || '',
       updatedAt: (a.updated_at as string) || '',
-    }));
+    })) as unknown as Ad[];
 
     const recommendations = analyzeClient({
       campaigns: mappedCampaigns,
