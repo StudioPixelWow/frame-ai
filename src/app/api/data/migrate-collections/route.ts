@@ -46,6 +46,9 @@ const TABLES = [
   // Backlink Intelligence
   'app_backlink_campaigns',
   'app_backlink_targets',
+  // Gmail / WhatsApp settings
+  'app_gmail_settings',
+  'app_whatsapp_settings',
 ];
 
 export async function GET() {
