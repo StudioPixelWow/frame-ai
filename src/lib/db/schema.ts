@@ -1735,6 +1735,9 @@ export interface SeoWebsiteScan {
   openGraph: boolean;
   canonicalTags: boolean;
   issues: SeoIssue[];
+  // Extended scan data
+  websiteFacts?: Record<string, any>;
+  aiQueries?: any[];
 }
 
 export interface SeoIssue {
@@ -1930,6 +1933,8 @@ export interface SeoPlan {
     technicalScore: number;
     overallScore: number;
   }>;
+  // AI-generated articles
+  aiArticles?: any[];
 }
 
 // ─── SEO/GEO Extended Types ─────────────────────────────────────────────────

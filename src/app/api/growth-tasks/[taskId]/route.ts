@@ -20,7 +20,8 @@ interface TaskUpdateBody {
 export const PATCH = withErrorBoundary(async (request: NextRequest, context: { params: Promise<{ taskId: string }> }) => {
   const { taskId } = await context.params;
 
-  const body = await parseBody(request);
+  const { body, error } = await parseBody(request);
+  if (error) return error;
   const { status, assignedTo, completedAt } = body as TaskUpdateBody;
 
   // Load all plans and search for the task

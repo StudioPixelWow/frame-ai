@@ -114,13 +114,15 @@ export function scopePlansForClient(req: NextRequest, plans: SeoPlan[]): SeoPlan
 
 // ── Activity logging ────────────────────────────────────────────────────────
 
-export function logActivity(planId: string, action: string, details?: Record<string, unknown>) {
-  const entry = {
-    ts: new Date().toISOString(),
-    planId,
-    action,
-    ...(details || {}),
-  };
+export function logActivity(messageOrPlanId: string, actionOrDetails?: string | Record<string, unknown>, details?: Record<string, unknown>) {
+  let entry: Record<string, unknown>;
+  if (typeof actionOrDetails === 'string') {
+    // 3-arg form: logActivity(planId, action, details?)
+    entry = { ts: new Date().toISOString(), planId: messageOrPlanId, action: actionOrDetails, ...(details || {}) };
+  } else {
+    // 2-arg form: logActivity(message, details?)
+    entry = { ts: new Date().toISOString(), message: messageOrPlanId, ...(actionOrDetails || {}) };
+  }
   console.log('[SEO-ACTIVITY]', JSON.stringify(entry).slice(0, 500));
   // TODO: persist to activity_log table when available
 }
