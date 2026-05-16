@@ -2,6 +2,31 @@ import React from "react";
 import { useCurrentFrame, useVideoConfig, interpolate, spring } from "remotion";
 import type { SubtitleSegmentProps, SubtitleStyleProps } from "../types";
 import { FPS } from "../types";
+import { loadFont } from "@remotion/google-fonts/Heebo";
+import { loadFont as loadRubik } from "@remotion/google-fonts/Rubik";
+import { loadFont as loadAssistant } from "@remotion/google-fonts/Assistant";
+
+const { fontFamily: heeboFamily } = loadFont("normal", {
+  weights: ["400", "600", "700", "900"],
+  subsets: ["hebrew"],
+});
+const { fontFamily: rubikFamily } = loadRubik("normal", {
+  weights: ["400", "600", "700"],
+  subsets: ["hebrew"],
+});
+const { fontFamily: assistantFamily } = loadAssistant("normal", {
+  weights: ["400", "600", "700"],
+  subsets: ["hebrew"],
+});
+
+function resolveHebrewFont(fontName: string): string {
+  const map: Record<string, string> = {
+    'Heebo': heeboFamily,
+    'Rubik': rubikFamily,
+    'Assistant': assistantFamily,
+  };
+  return map[fontName] || `"${fontName}", ${heeboFamily}, sans-serif`;
+}
 
 interface Props {
   segments: SubtitleSegmentProps[];
@@ -19,12 +44,18 @@ function adjustTime(timeSec: number, cuts: { startSec: number; endSec: number }[
   return Math.max(0, timeSec - adj);
 }
 
+function bidiIsolate(text: string): string {
+  return text.replace(/(\d[\d,.]*%?)/g, '⁦$1⁩')
+             .replace(/([A-Za-z][\w.-]*)/g, '⁦$1⁩');
+}
+
 /**
  * Short-form subtitle formatter: max 3 words per line, max 2 lines per frame.
  * Keeps Hebrew RTL word order intact (splits by spaces, never reverses).
  */
 function formatText(text: string, maxWordsPerLine: number = 3): string[] {
-  const words = text.split(/\s+/).filter(Boolean);
+  const isolated = bidiIsolate(text);
+  const words = isolated.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   for (let i = 0; i < words.length; i += maxWordsPerLine) {
     lines.push(words.slice(i, i + maxWordsPerLine).join(" "));
@@ -126,7 +157,7 @@ export const SubtitleLayer: React.FC<Props> = ({ segments, style, cleanupCuts })
     >
       <div
         style={{
-          fontFamily: `"${style.font}", sans-serif`,
+          fontFamily: resolveHebrewFont(style.font),
           fontWeight: style.fontWeight,
           fontSize: style.fontSize,
           color: style.color,
@@ -208,7 +239,6 @@ function renderHighlightedTokens(
   const tokenBase: React.CSSProperties = {
     display: "inline-block",
     transformOrigin: "center",
-    transition: "transform 0.15s ease, color 0.15s ease",
     willChange: "transform",
   };
 

@@ -22,13 +22,17 @@ const OUTPUT_DIR = path.join(PROJECT_ROOT, "public/renders");
 const BUCKET = "project-files";
 
 const POLL_INTERVAL_MS = Number(process.env.RENDER_POLL_INTERVAL_MS ?? 3000);
-const REMOTION_CONCURRENCY = Number(process.env.REMOTION_CONCURRENCY ?? 1);
+const REMOTION_CONCURRENCY = Number(process.env.REMOTION_CONCURRENCY ?? 2);
 const RENDER_TIMEOUT_MS = Number(process.env.REMOTION_TIMEOUT_MS ?? 1000 * 60 * 30);
+const RENDER_SCALE = Number(process.env.REMOTION_SCALE ?? 1);
 
 // Cap Remotion's offthread video cache to 128 MB (default is unbounded)
 const VIDEO_CACHE_SIZE_BYTES = Number(
   process.env.REMOTION_VIDEO_CACHE_MB ?? 128
 ) * 1024 * 1024;
+
+// Performance: Set offthread video cache limit
+process.env.REMOTION_OFFTHREAD_VIDEO_CACHE_SIZE_IN_BYTES = String(VIDEO_CACHE_SIZE_BYTES);
 
 // Ensure output dir exists
 if (!fs.existsSync(OUTPUT_DIR)) {
@@ -343,7 +347,8 @@ async function renderJob(jobId: string): Promise<void> {
 
     // ── Stage: renderMedia ──
     const memBefore = process.memoryUsage();
-    console.log(`${tag} [STEP] renderMedia starting (scale=0.35, jpeg=60, concurrency=1, gl=swiftshader) RSS=${Math.round(memBefore.rss / 1024 / 1024)}MB`);
+    console.log(`${tag} [STEP] renderMedia starting (scale=${RENDER_SCALE}, jpeg=60, concurrency=${REMOTION_CONCURRENCY}, gl=swiftshader) RSS=${Math.round(memBefore.rss / 1024 / 1024)}MB`);
+    console.log(`${tag} Render config: scale=${RENDER_SCALE}, concurrency=${REMOTION_CONCURRENCY}, codec=h264, cache=${VIDEO_CACHE_SIZE_BYTES}bytes`);
 
     try {
       await renderMedia({
@@ -352,9 +357,9 @@ async function renderJob(jobId: string): Promise<void> {
         codec: "h264",
         outputLocation: outputPath,
         inputProps,
-        // ── Ultra-light Railway config ──
-        concurrency: 1,
-        scale: 0.35,
+        // ── Production quality render config ──
+        concurrency: REMOTION_CONCURRENCY,
+        scale: RENDER_SCALE,
         imageFormat: "jpeg",
         jpegQuality: 60,
         offthreadVideoCacheSizeInBytes: VIDEO_CACHE_SIZE_BYTES,
@@ -640,7 +645,7 @@ async function main(): Promise<void> {
   console.log(`${tag} Remotion entry:    ${REMOTION_ENTRY}`);
   console.log(`${tag} CWD:               ${PROJECT_ROOT}`);
   console.log(`${tag} Concurrency:       ${REMOTION_CONCURRENCY}`);
-  console.log(`${tag} Render scale:      0.35`);
+  console.log(`${tag} Render scale:      ${RENDER_SCALE}`);
   console.log(`${tag} JPEG quality:      60`);
   console.log(`${tag} Video cache MB:    ${VIDEO_CACHE_SIZE_BYTES / 1024 / 1024}`);
   const mem = process.memoryUsage();

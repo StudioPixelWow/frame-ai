@@ -1421,6 +1421,66 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                         )}
                       </div>
 
+                      {/* Caption / Social Copy — Structured Preview */}
+                      {item.caption && (() => {
+                        const lines = item.caption.split("\n").filter((l: string) => l.trim());
+                        const hookLine = lines[0] || "";
+                        const hashtagLines = lines.filter((l: string) => l.trim().startsWith("#"));
+                        const bodyLines = lines.slice(1).filter((l: string) => !l.trim().startsWith("#"));
+                        const ctaLine = bodyLines.find((l: string) => l.includes("←") || l.includes("→") || l.includes("קישור") || l.includes("לינק") || l.includes("ביו") || l.includes("וואטסאפ") || l.includes("WhatsApp") || l.includes("שלחו"));
+                        const contentLines = bodyLines.filter((l: string) => l !== ctaLine);
+                        const platformIcon = item.platform === "instagram" ? "📸" : item.platform === "facebook" ? "📘" : item.platform === "tiktok" ? "🎵" : item.platform === "linkedin" ? "💼" : "📱";
+
+                        return (
+                          <div style={{
+                            marginTop: "0.75rem",
+                            padding: "0.75rem",
+                            background: "var(--surface-raised, #fff)",
+                            borderRadius: "0.6rem",
+                            border: "1px solid var(--border)",
+                            boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+                            direction: "rtl",
+                          }}>
+                            {/* Mini header */}
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginBottom: "0.5rem", paddingBottom: "0.4rem", borderBottom: "1px solid var(--border)" }}>
+                              <span style={{ fontSize: "0.85rem" }}>{platformIcon}</span>
+                              <span style={{ fontWeight: 600, fontSize: "0.7rem", color: "var(--foreground-muted)" }}>תצוגה מקדימה</span>
+                              <span style={{ marginRight: "auto", fontSize: "0.65rem", color: "var(--foreground-muted)", background: "var(--surface)", padding: "0.1rem 0.4rem", borderRadius: "1rem" }}>
+                                {item.caption.length} תווים
+                              </span>
+                            </div>
+
+                            {/* Hook */}
+                            {hookLine && (
+                              <div style={{ fontWeight: 700, fontSize: "0.85rem", lineHeight: 1.5, color: "var(--foreground)", marginBottom: "0.4rem" }}>
+                                {hookLine}
+                              </div>
+                            )}
+
+                            {/* Body */}
+                            {contentLines.length > 0 && (
+                              <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.6, color: "var(--foreground)", fontSize: "0.78rem", fontFamily: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif", marginBottom: ctaLine || hashtagLines.length > 0 ? "0.4rem" : 0 }}>
+                                {contentLines.join("\n")}
+                              </div>
+                            )}
+
+                            {/* CTA */}
+                            {ctaLine && (
+                              <div style={{ padding: "0.3rem 0.5rem", background: "rgba(34, 197, 94, 0.08)", borderRadius: "0.3rem", fontSize: "0.78rem", fontWeight: 600, color: "#16a34a", marginBottom: hashtagLines.length > 0 ? "0.4rem" : 0 }}>
+                                {ctaLine}
+                              </div>
+                            )}
+
+                            {/* Hashtags */}
+                            {hashtagLines.length > 0 && (
+                              <div style={{ fontSize: "0.72rem", color: "#3b82f6", lineHeight: 1.5, wordBreak: "break-word" }}>
+                                {hashtagLines.join(" ")}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
                       {item.visualConcept && (
                         <div style={{
                           marginTop: "0.75rem",
@@ -2200,7 +2260,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                                 onClick={() => setEditingItemId(item.id)}
                                 title={`${item.title} (גרור לשינוי תאריך)`}
                               >
-                                {ITEM_TYPE_CONFIG[item.itemType]?.emoji} {item.title?.substring(0, 8)}
+                                {ITEM_TYPE_CONFIG[item.itemType]?.emoji} {item.title}
                               </div>
                             ))}
                             {dayItems.length > 2 && (
@@ -2407,6 +2467,43 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                           <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
                             {renderStatusBadge(item.status)}
                           </div>
+
+                          {/* Caption / Social Copy Preview — Compact Structured */}
+                          {item.caption && (() => {
+                            const lines = item.caption.split("\n").filter((l: string) => l.trim());
+                            const hookLine = lines[0] || "";
+                            const hashtagLines = lines.filter((l: string) => l.trim().startsWith("#"));
+                            const hasHashtags = hashtagLines.length > 0;
+                            const hasCta = lines.some((l: string) => l.includes("←") || l.includes("→") || l.includes("קישור") || l.includes("לינק") || l.includes("ביו") || l.includes("וואטסאפ") || l.includes("WhatsApp") || l.includes("שלחו"));
+
+                            return (
+                              <div style={{
+                                marginTop: "0.5rem",
+                                padding: "0.5rem 0.6rem",
+                                background: "var(--surface-raised, #fff)",
+                                borderRadius: "0.375rem",
+                                border: "1px solid var(--border)",
+                                direction: "rtl",
+                                maxHeight: "5rem",
+                                overflow: "hidden",
+                              }}>
+                                {/* Hook — bold */}
+                                <div style={{ fontWeight: 700, fontSize: "0.73rem", lineHeight: 1.4, color: "var(--foreground)", marginBottom: "0.25rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {hookLine}
+                                </div>
+                                {/* Structure indicators */}
+                                <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap", fontSize: "0.62rem" }}>
+                                  {hasCta && (
+                                    <span style={{ background: "rgba(34, 197, 94, 0.1)", color: "#16a34a", padding: "0.1rem 0.35rem", borderRadius: "0.2rem", fontWeight: 500 }}>CTA ✓</span>
+                                  )}
+                                  {hasHashtags && (
+                                    <span style={{ background: "rgba(59, 130, 246, 0.1)", color: "#3b82f6", padding: "0.1rem 0.35rem", borderRadius: "0.2rem", fontWeight: 500 }}>#{hashtagLines.length}</span>
+                                  )}
+                                  <span style={{ color: "var(--foreground-muted)" }}>{item.caption.length} תווים</span>
+                                </div>
+                              </div>
+                            );
+                          })()}
 
                           {/* Move Buttons */}
                           <div style={{ display: "flex", gap: "0.35rem", marginTop: "0.5rem" }}>
@@ -2628,19 +2725,66 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                 </div>
               )}
 
-              {/* Caption */}
-              {selectedItem.caption && (
-                <div style={{
-                  marginBottom: "0.75rem", padding: "0.5rem 0.75rem",
-                  background: "rgba(34, 197, 94, 0.08)", borderRadius: "0.375rem",
-                  borderRight: "3px solid #22c55e", fontSize: "0.78rem",
-                }}>
-                  <div style={{ fontWeight: 600, marginBottom: "0.15rem", color: "#22c55e" }}>קופי / כיתוב:</div>
-                  <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.5, color: "var(--foreground)" }}>
-                    {selectedItem.caption}
+              {/* Caption — Social Post Preview */}
+              {selectedItem.caption && (() => {
+                const lines = selectedItem.caption.split("\n").filter((l: string) => l.trim());
+                const hookLine = lines[0] || "";
+                const hashtagLines = lines.filter((l: string) => l.trim().startsWith("#"));
+                const bodyLines = lines.slice(1).filter((l: string) => !l.trim().startsWith("#"));
+                const ctaLine = bodyLines.find((l: string) => l.includes("←") || l.includes("→") || l.includes("קישור") || l.includes("לינק") || l.includes("ביו") || l.includes("וואטסאפ") || l.includes("WhatsApp") || l.includes("שלחו"));
+                const contentLines = bodyLines.filter((l: string) => l !== ctaLine);
+                const platformIcon = selectedItem.platform === "instagram" ? "📸" : selectedItem.platform === "facebook" ? "📘" : selectedItem.platform === "tiktok" ? "🎵" : selectedItem.platform === "linkedin" ? "💼" : "📱";
+                const charCount = selectedItem.caption.length;
+
+                return (
+                  <div style={{
+                    marginBottom: "0.75rem", padding: "0.85rem",
+                    background: "var(--surface-raised, #fff)", borderRadius: "0.75rem",
+                    border: "1px solid var(--border)",
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+                    direction: "rtl",
+                  }}>
+                    {/* Header — like a social post */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem", paddingBottom: "0.5rem", borderBottom: "1px solid var(--border)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                        <span style={{ fontSize: "1rem" }}>{platformIcon}</span>
+                        <span style={{ fontWeight: 600, fontSize: "0.75rem", color: "var(--foreground-muted)" }}>תצוגה מקדימה — {selectedItem.platform || "סושיאל"}</span>
+                      </div>
+                      <span style={{ fontSize: "0.68rem", color: "var(--foreground-muted)", background: "var(--surface)", padding: "0.15rem 0.5rem", borderRadius: "1rem" }}>
+                        {charCount} תווים
+                      </span>
+                    </div>
+
+                    {/* Hook line — bold, larger */}
+                    {hookLine && (
+                      <div style={{ fontWeight: 700, fontSize: "0.9rem", lineHeight: 1.5, color: "var(--foreground)", marginBottom: "0.5rem" }}>
+                        {hookLine}
+                      </div>
+                    )}
+
+                    {/* Body content */}
+                    {contentLines.length > 0 && (
+                      <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.7, color: "var(--foreground)", fontSize: "0.83rem", fontFamily: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif", letterSpacing: "0.01em", marginBottom: ctaLine || hashtagLines.length > 0 ? "0.5rem" : 0 }}>
+                        {contentLines.join("\n")}
+                      </div>
+                    )}
+
+                    {/* CTA line — highlighted */}
+                    {ctaLine && (
+                      <div style={{ padding: "0.4rem 0.6rem", background: "rgba(34, 197, 94, 0.08)", borderRadius: "0.375rem", fontSize: "0.82rem", fontWeight: 600, color: "#16a34a", marginBottom: hashtagLines.length > 0 ? "0.5rem" : 0 }}>
+                        {ctaLine}
+                      </div>
+                    )}
+
+                    {/* Hashtags — styled */}
+                    {hashtagLines.length > 0 && (
+                      <div style={{ fontSize: "0.75rem", color: "#3b82f6", lineHeight: 1.6, wordBreak: "break-word" }}>
+                        {hashtagLines.join(" ")}
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Visual Concept */}
               {selectedItem.visualConcept && (

@@ -249,7 +249,7 @@ export const PixelManageEdit: React.FC<CompositionProps> = (props) => {
   }
 
   return (
-    <AbsoluteFill style={{ backgroundColor: "black" }}>
+    <AbsoluteFill style={{ backgroundColor: "black", direction: "rtl" }}>
       {/* Layer 0: Main Video Track — ALWAYS the original video file */}
       {safeVideoUrl ? (
         videoClips.map((clip, i) => {

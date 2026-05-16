@@ -58,6 +58,99 @@ const PLATFORM_META: Record<PlatformId, { name: string; icon: string }> = {
 
 const AI_PLATFORMS: PlatformId[] = ['chatgpt', 'gemini', 'perplexity', 'claude', 'google_ai_overview'];
 
+// ============================================================================
+// GEO Query Formulation — Hebrew SEO/GEO Toolkit guidelines
+// Transforms raw visibility queries into GEO-optimized variants that better
+// match how Israeli users ask AI platforms (conversational Hebrew patterns).
+// ============================================================================
+
+/**
+ * Build GEO-optimized query variants per Hebrew SEO/GEO Toolkit guidelines:
+ * 1. Conversational Hebrew phrasing ("מה זה", "איך", "למה", "מי הכי טוב")
+ * 2. Local-intent signals (city, "באזור", "ליד")
+ * 3. Comparison/recommendation patterns ("מומלץ", "השוואה", "עדיף")
+ * 4. Platform-specific phrasing adjustments
+ */
+function buildGEOQuery(
+  rawQuery: string,
+  platformId: PlatformId,
+  businessName: string,
+  location?: string
+): string {
+  // For Google SEO — keep raw query (traditional keyword matching)
+  if (platformId === 'google_seo') return rawQuery;
+
+  let geoQuery = rawQuery;
+
+  // Hebrew conversational framing for AI platforms
+  // If the query is already a question, keep it; otherwise wrap in natural Hebrew question form
+  const isQuestion =
+    geoQuery.includes('?') ||
+    geoQuery.startsWith('מה ') ||
+    geoQuery.startsWith('איך ') ||
+    geoQuery.startsWith('למה ') ||
+    geoQuery.startsWith('מי ') ||
+    geoQuery.startsWith('האם ') ||
+    geoQuery.startsWith('כמה ') ||
+    geoQuery.startsWith('איפה ') ||
+    geoQuery.startsWith('מתי ');
+
+  if (!isQuestion) {
+    // Apply GEO conversational patterns based on query intent signals
+    const hasLocalIntent = location && (
+      geoQuery.includes(location) ||
+      geoQuery.includes('באזור') ||
+      geoQuery.includes('ליד') ||
+      geoQuery.includes('בעיר')
+    );
+
+    const hasComparisonIntent =
+      geoQuery.includes('השוואה') ||
+      geoQuery.includes('מומלץ') ||
+      geoQuery.includes('הכי טוב') ||
+      geoQuery.includes('עדיף');
+
+    if (hasComparisonIntent) {
+      // Recommendation-style: "מי הכי טוב ל[QUERY]?"
+      geoQuery = `מי הכי טוב ל${geoQuery}?`;
+    } else if (hasLocalIntent) {
+      // Local-intent: "איפה אפשר למצוא [QUERY]?"
+      geoQuery = `איפה אפשר למצוא ${geoQuery}?`;
+    } else {
+      // Default informational: "מה זה [QUERY] ולמה זה חשוב?"
+      geoQuery = `מה זה ${geoQuery}?`;
+    }
+  }
+
+  // Platform-specific adjustments per GEO Toolkit
+  switch (platformId) {
+    case 'chatgpt':
+      // ChatGPT responds well to explicit "המלץ לי" or "תסביר"
+      if (!geoQuery.includes('המלץ') && !geoQuery.includes('תסביר')) {
+        geoQuery = geoQuery.replace(/\?$/, ' — תן המלצה?');
+      }
+      break;
+    case 'perplexity':
+      // Perplexity prefers source-seeking queries — add "עם מקורות"
+      if (!geoQuery.includes('מקורות') && !geoQuery.includes('לפי')) {
+        geoQuery = geoQuery.replace(/\?$/, ' עם מקורות?');
+      }
+      break;
+    case 'gemini':
+    case 'google_ai_overview':
+      // Google/Gemini: add location context if available
+      if (location && !geoQuery.includes(location)) {
+        geoQuery = geoQuery.replace(/\?$/, ` ב${location}?`);
+      }
+      break;
+    case 'claude':
+      // Claude responds well to detailed, structured questions
+      break;
+  }
+
+  return geoQuery;
+}
+
 export const POST = withErrorBoundary(async (req: NextRequest, context: { params: Promise<{ planId: string }> }) => {
   const { planId } = await context.params;
   const { plan, error } = await loadPlan(planId, req);
@@ -111,11 +204,17 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
     let scanned = 0;
     let hasError = false;
 
+    // Extract location from plan for GEO query formulation
+    const planLocation = (plan as any).location || (plan as any).city || '';
+
     for (const vq of visibilityQueries) {
       try {
+        // Apply GEO query formulation per Hebrew SEO/GEO Toolkit guidelines
+        const geoQuery = buildGEOQuery(vq.query, platformId, businessName, planLocation);
+
         const result: PlatformQueryResult = await queryPlatform(
           platformId,
-          vq.query,
+          geoQuery,
           businessName,
           targetDomain
         );
@@ -125,7 +224,7 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
 
         aiQueries.push({
           platform: platformId,
-          query: vq.query,
+          query: vq.query, // Store original query for UI display
           queryId: vq.id,
           found: result.found,
           position: result.position,

@@ -2430,7 +2430,7 @@ function Step4Review({
 export default function CampaignBuilderPage() {
   const router = useRouter();
   const toast = useToast();
-  const { data: clients, loading: clientsLoading, error: clientsError } = useClients();
+  const { data: clients, loading: clientsLoading, error: clientsError, refetch: refetchClients } = useClients();
   const { create: createCampaign } = useCampaigns();
   const { create: createAdSet } = useAdSets();
   const { create: createAd } = useAds();
@@ -2442,6 +2442,9 @@ export default function CampaignBuilderPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
   const [connectionModalPlatform, setConnectionModalPlatform] = useState("");
+  const [connectionFormAdAccountId, setConnectionFormAdAccountId] = useState("");
+  const [connectionFormAccessToken, setConnectionFormAccessToken] = useState("");
+  const [connectionSaving, setConnectionSaving] = useState(false);
 
   // Derived
   const selectedClient = useMemo(
@@ -2502,10 +2505,22 @@ export default function CampaignBuilderPage() {
           needsConnection = true;
           platformLabel = "TikTok";
         }
+      } else if (platform === "linkedin") {
+        // LinkedIn — no dedicated connection status field yet, allow through
+        // Future: add linkedinConnectionStatus to Client schema
+      } else if (platform === "multi_platform") {
+        // Multi-platform — check Meta as minimum requirement
+        const metaStatus = c.metaConnectionStatus || c.meta_connection_status;
+        if (metaStatus !== "connected") {
+          needsConnection = true;
+          platformLabel = "Meta (Facebook/Instagram)";
+        }
       }
 
       if (needsConnection) {
         setConnectionModalPlatform(platformLabel);
+        setConnectionFormAdAccountId("");
+        setConnectionFormAccessToken("");
         setShowConnectionModal(true);
         return;
       }
@@ -2899,25 +2914,95 @@ export default function CampaignBuilderPage() {
               background: "var(--surface-raised, #fff)",
               borderRadius: "1rem",
               padding: "2rem",
-              maxWidth: "420px",
+              maxWidth: "480px",
               width: "90%",
               direction: "rtl",
-              textAlign: "center",
               boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ fontSize: "2.5rem", marginBottom: "1rem" }}>🔗</div>
-            <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem", fontWeight: 700, color: "var(--foreground)" }}>
-              חיבור חשבון מנהל מודעות נדרש
-            </h3>
-            <p style={{ margin: "0 0 1.5rem 0", fontSize: "0.85rem", color: "var(--foreground-muted)", lineHeight: 1.6 }}>
-              כדי לבנות קמפיין ב-{connectionModalPlatform} יש לחבר חשבון מנהל מודעות
-            </p>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: "2.5rem", marginBottom: "1rem" }}>🔗</div>
+              <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem", fontWeight: 700, color: "var(--foreground)" }}>
+                חיבור חשבון מנהל מודעות נדרש
+              </h3>
+              <p style={{ margin: "0 0 1.5rem 0", fontSize: "0.85rem", color: "var(--foreground-muted)", lineHeight: 1.6 }}>
+                כדי לבנות קמפיין ב-{connectionModalPlatform} יש לחבר חשבון מנהל מודעות עבור <strong>{selectedClient?.name || "הלקוח"}</strong>
+              </p>
+            </div>
+
+            {/* Manual connection form */}
+            <div style={{ marginBottom: "1.25rem" }}>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.4rem" }}>
+                {(data.platform === "facebook" || data.platform === "instagram" || data.platform === "multi_platform")
+                  ? "מזהה חשבון מודעות Meta (Ad Account ID)"
+                  : data.platform === "google"
+                    ? "מזהה לקוח Google Ads (Customer ID)"
+                    : "מזהה מפרסם TikTok (Advertiser ID)"}
+              </label>
+              <input
+                type="text"
+                value={connectionFormAdAccountId}
+                onChange={(e) => setConnectionFormAdAccountId(e.target.value)}
+                placeholder={
+                  (data.platform === "facebook" || data.platform === "instagram" || data.platform === "multi_platform")
+                    ? "act_123456789"
+                    : data.platform === "google"
+                      ? "123-456-7890"
+                      : "1234567890"
+                }
+                style={{
+                  width: "100%",
+                  padding: "0.6rem 0.75rem",
+                  fontSize: "0.85rem",
+                  borderRadius: "0.5rem",
+                  border: "1px solid var(--border)",
+                  background: "var(--surface)",
+                  color: "var(--foreground)",
+                  fontFamily: "inherit",
+                  direction: "ltr",
+                  textAlign: "left",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.4rem" }}>
+                {(data.platform === "facebook" || data.platform === "instagram" || data.platform === "multi_platform")
+                  ? "Access Token"
+                  : data.platform === "google"
+                    ? "Refresh Token"
+                    : "Access Token"}
+              </label>
+              <input
+                type="password"
+                value={connectionFormAccessToken}
+                onChange={(e) => setConnectionFormAccessToken(e.target.value)}
+                placeholder="הכנס טוקן גישה..."
+                style={{
+                  width: "100%",
+                  padding: "0.6rem 0.75rem",
+                  fontSize: "0.85rem",
+                  borderRadius: "0.5rem",
+                  border: "1px solid var(--border)",
+                  background: "var(--surface)",
+                  color: "var(--foreground)",
+                  fontFamily: "inherit",
+                  direction: "ltr",
+                  textAlign: "left",
+                  boxSizing: "border-box",
+                }}
+              />
+              <p style={{ margin: "0.35rem 0 0 0", fontSize: "0.72rem", color: "var(--foreground-muted)" }}>
+                ניתן לקבל מתוך מנהל המודעות של הפלטפורמה או מלוח הבקרה של ה-API
+              </p>
+            </div>
+
             <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center" }}>
               <button
                 type="button"
-                onClick={() => setShowConnectionModal(false)}
+                onClick={() => { setShowConnectionModal(false); setConnectionFormAdAccountId(""); setConnectionFormAccessToken(""); }}
                 style={{
                   padding: "0.6rem 1.25rem",
                   fontSize: "0.82rem",
@@ -2934,42 +3019,89 @@ export default function CampaignBuilderPage() {
               </button>
               <button
                 type="button"
+                disabled={connectionSaving || !connectionFormAdAccountId.trim() || !connectionFormAccessToken.trim()}
                 onClick={async () => {
-                  const platform = data.platform;
-                  let authEndpoint = "";
-                  if (platform === "facebook" || platform === "instagram") {
-                    authEndpoint = `/api/auth/meta/url?clientId=${data.clientId}`;
-                  } else if (platform === "google") {
-                    authEndpoint = `/api/auth/google-ads/url?clientId=${data.clientId}`;
-                  } else if (platform === "tiktok") {
-                    toast("חיבור TikTok עדיין לא נתמך דרך OAuth", "error");
-                    return;
-                  }
+                  setConnectionSaving(true);
                   try {
-                    const res = await fetch(authEndpoint);
-                    const json = await res.json();
-                    if (json.url) {
-                      window.location.href = json.url;
+                    const platform = data.platform;
+                    let savePlatform: string;
+                    let saveBody: Record<string, string> = { clientId: data.clientId };
+
+                    if (platform === "facebook" || platform === "instagram" || platform === "multi_platform") {
+                      savePlatform = "meta";
+                      saveBody.metaAdAccountId = connectionFormAdAccountId.trim();
+                      saveBody.metaAccessToken = connectionFormAccessToken.trim();
+                    } else if (platform === "google") {
+                      savePlatform = "google";
+                      saveBody.googleCustomerId = connectionFormAdAccountId.trim();
+                      saveBody.googleRefreshToken = connectionFormAccessToken.trim();
                     } else {
-                      toast(json.error || "שגיאה ביצירת קישור ההתחברות", "error");
+                      savePlatform = "tiktok";
+                      saveBody.tiktokAdvertiserId = connectionFormAdAccountId.trim();
+                      saveBody.tiktokAccessToken = connectionFormAccessToken.trim();
                     }
+
+                    saveBody.platform = savePlatform;
+
+                    const res = await fetch("/api/data/platform-sync/save-connection", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(saveBody),
+                    });
+
+                    const json = await res.json();
+                    if (!res.ok || json.error) {
+                      toast(json.error || "שגיאה בשמירת החיבור", "error");
+                      return;
+                    }
+
+                    toast(`חשבון מנהל מודעות ${connectionModalPlatform} חובר בהצלחה!`, "success");
+                    setShowConnectionModal(false);
+                    setConnectionFormAdAccountId("");
+                    setConnectionFormAccessToken("");
+
+                    // Refresh clients data so the gate passes on next attempt
+                    await refetchClients();
+
+                    // Auto-advance to next step after successful connection
+                    setErrors({});
+                    setStep((s) => Math.min(s + 1, 4));
                   } catch {
-                    toast("שגיאת רשת", "error");
+                    toast("שגיאת רשת — נסה שוב", "error");
+                  } finally {
+                    setConnectionSaving(false);
                   }
                 }}
                 className="mod-btn-primary"
                 style={{
-                  padding: "0.6rem 1.25rem",
+                  padding: "0.6rem 1.5rem",
                   fontSize: "0.82rem",
                   fontWeight: 600,
                   borderRadius: "0.5rem",
-                  cursor: "pointer",
+                  cursor: connectionSaving || !connectionFormAdAccountId.trim() || !connectionFormAccessToken.trim() ? "not-allowed" : "pointer",
                   fontFamily: "inherit",
+                  opacity: connectionSaving || !connectionFormAdAccountId.trim() || !connectionFormAccessToken.trim() ? 0.5 : 1,
                 }}
               >
-                התחבר עכשיו
+                {connectionSaving ? "שומר..." : "💾 שמור וחבר"}
               </button>
             </div>
+
+            {/* Link to client integrations tab as alternative */}
+            {selectedClient && (
+              <div style={{ textAlign: "center", marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
+                <p style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", margin: 0 }}>
+                  או{" "}
+                  <Link
+                    href={`/clients/${selectedClient.id}?tab=integrations`}
+                    style={{ color: "var(--primary)", fontWeight: 600 }}
+                  >
+                    עבור לכרטיס הלקוח ← חיבורים
+                  </Link>
+                  {" "}לחיבור מתקדם דרך OAuth
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}

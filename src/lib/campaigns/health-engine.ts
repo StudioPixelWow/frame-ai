@@ -12,6 +12,83 @@
 import type { Campaign, CampaignStatus } from "@/lib/db/schema";
 
 // ══════════════════════════════════════════════════════════════════════════════
+// ISRAELI MARKET BENCHMARKS (CPC/CPM in ₪)
+// ══════════════════════════════════════════════════════════════════════════════
+
+export const ISRAELI_CPC_BENCHMARKS: Record<string, { min: number; max: number; label: string }> = {
+  legal: { min: 35, max: 80, label: "משפטים" },
+  ecommerce: { min: 3, max: 8, label: "מסחר אלקטרוני" },
+  real_estate: { min: 15, max: 35, label: "נדל\"ן" },
+  health: { min: 8, max: 20, label: "בריאות" },
+  education: { min: 5, max: 15, label: "חינוך" },
+  finance: { min: 20, max: 50, label: "פיננסים" },
+  food: { min: 2, max: 6, label: "מזון" },
+  fashion: { min: 3, max: 10, label: "אופנה" },
+  tech: { min: 8, max: 25, label: "טכנולוגיה" },
+  fitness: { min: 4, max: 12, label: "כושר" },
+  beauty: { min: 3, max: 9, label: "יופי וטיפוח" },
+  automotive: { min: 10, max: 30, label: "רכב" },
+  general: { min: 5, max: 15, label: "כללי" },
+};
+
+export const ISRAELI_CPM_BENCHMARKS: Record<string, { min: number; max: number }> = {
+  facebook: { min: 15, max: 45 },
+  instagram: { min: 20, max: 55 },
+  tiktok: { min: 10, max: 35 },
+  google_search: { min: 25, max: 80 },
+  google_display: { min: 5, max: 20 },
+};
+
+export const ISRAELI_BUDGET_ALLOCATION_BY_STAGE: Record<string, { google: number; meta: number; tiktok: number; test: number; other: number; label: string }> = {
+  early: { google: 60, meta: 30, tiktok: 0, test: 10, other: 0, label: "שלב מוקדם" },
+  growth: { google: 45, meta: 35, tiktok: 10, test: 10, other: 0, label: "צמיחה" },
+  scale: { google: 35, meta: 30, tiktok: 15, test: 10, other: 10, label: "סקייל" },
+};
+
+export const ISRAELI_REGIONAL_CPC_MULTIPLIER: Record<string, number> = {
+  tel_aviv: 1.5,
+  center: 1.2,
+  haifa: 1.0,
+  south: 0.7,
+  north: 0.75,
+  jerusalem: 1.1,
+};
+
+export const ISRAELI_NEGATIVE_KEYWORDS = ["חינם", "קורס", "דרושים", "ויקיפדיה", "הורדה", "PDF"];
+
+export const ISRAELI_REGULATION_CHECKLIST = [
+  "חובה להציג מחיר כולל מע\"מ",
+  "חובה לציין #פרסום בשיתופי פעולה עם משפיענים",
+  "חובה לציין תנאי מבצע (תוקף, מלאי)",
+  "איסור פרסום מטעה לפי חוק הגנת הצרכן",
+];
+
+/**
+ * Get CPC benchmark for a given industry. Falls back to 'general'.
+ */
+export function getCPCBenchmark(industry?: string): { min: number; max: number; label: string } {
+  if (!industry) return ISRAELI_CPC_BENCHMARKS.general;
+  const key = industry.toLowerCase().replace(/[^a-z_]/g, "");
+  return ISRAELI_CPC_BENCHMARKS[key] || ISRAELI_CPC_BENCHMARKS.general;
+}
+
+/**
+ * Check if a campaign budget seems reasonable for the Israeli market.
+ * Returns null if OK, or a warning string.
+ */
+export function checkBudgetVsBenchmark(dailyBudget: number, industry?: string, region?: string): string | null {
+  const bench = getCPCBenchmark(industry);
+  const regionMultiplier = region ? (ISRAELI_REGIONAL_CPC_MULTIPLIER[region] || 1.0) : 1.0;
+  const effectiveMinCPC = bench.min * regionMultiplier;
+  // If daily budget can't buy at least 5 clicks, it's too low
+  const minReasonableBudget = effectiveMinCPC * 5;
+  if (dailyBudget < minReasonableBudget) {
+    return `תקציב יומי של ₪${dailyBudget} נמוך מדי לתחום ${bench.label} — מומלץ לפחות ₪${Math.ceil(minReasonableBudget)}/יום (CPC ממוצע: ₪${bench.min}-${bench.max})`;
+  }
+  return null;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // TYPES
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -27,7 +104,8 @@ export type AlertType =
   | "missing_budget"
   | "missing_headline"
   | "weak_structure"
-  | "incomplete_updated";
+  | "incomplete_updated"
+  | "budget_too_low_il";
 
 export interface HealthResult {
   score: number;
@@ -164,6 +242,7 @@ const ALERT_MESSAGES: Record<AlertType, (name: string) => string> = {
   missing_headline: (n) => `"${n}" ללא כותרת — כותרת חדה משפרת CTR משמעותית`,
   weak_structure: (n) => `"${n}" עם ציון מבנה נמוך — חסרים פרטי בסיס חיוניים`,
   incomplete_updated: (n) => `"${n}" עודכן לאחרונה אך עדיין לא מוכן — חסרים פרטים`,
+  budget_too_low_il: (n) => `"${n}" — התקציב נמוך מדי לשוק הישראלי, לא יספיק ליצור תנועה משמעותית`,
 };
 
 function makeAlertId(campaignId: string, type: AlertType): string {
@@ -231,6 +310,14 @@ export function generateCampaignAlerts(c: any): CampaignAlert[] {
   // 5. Missing budget
   if ((!c.budget || c.budget <= 0) && c.status !== "draft") {
     push("missing_budget", c.status === "active" || c.status === "scheduled" ? "high" : "medium");
+  }
+
+  // 5b. Budget too low for Israeli market (check daily budget against benchmarks)
+  if (c.budget && c.budget > 0 && c.status !== "draft" && c.status !== "completed") {
+    const budgetWarning = checkBudgetVsBenchmark(c.budget, c.industry || c.businessField);
+    if (budgetWarning) {
+      push("budget_too_low_il", c.status === "active" ? "high" : "medium");
+    }
   }
 
   // 6. Missing headline
@@ -321,6 +408,7 @@ export const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   missing_headline: "חסר כותרת",
   weak_structure: "מבנה חלש",
   incomplete_updated: "עודכן אך לא מוכן",
+  budget_too_low_il: "תקציב נמוך לשוק IL",
 };
 
 export const ALERT_TYPE_ICONS: Record<AlertType, string> = {
@@ -332,6 +420,7 @@ export const ALERT_TYPE_ICONS: Record<AlertType, string> = {
   missing_headline: "📰",
   weak_structure: "⚠️",
   incomplete_updated: "🔄",
+  budget_too_low_il: "📉",
 };
 
 export const SEVERITY_COLORS: Record<AlertSeverity, string> = {

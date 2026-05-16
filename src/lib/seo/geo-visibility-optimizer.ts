@@ -93,14 +93,21 @@ export function scoreGEOReadiness(
     }
   }
 
-  // --- הגדרות (definition blocks) --- (0-10)
+  // --- הגדרות (definition blocks) — critical for GEO AI citations --- (0-15)
   const hasDefinition =
     plainLower.includes('הגדרה') ||
     plainLower.includes('מהו ') ||
     plainLower.includes('מהי ') ||
     plainLower.includes('מה זה ') ||
+    plainLower.includes('מה הם ') ||
+    plainLower.includes('מה הן ') ||
+    plainLower.includes('כיצד עובד') ||
+    plainLower.includes('איך עובד') ||
     plainLower.includes('definition');
-  if (hasDefinition) score += 10;
+  if (hasDefinition) score += 12;
+  // Bonus: "מה זה [TOPIC]?" as H2 — triggers AI summary citations
+  const hasDefinitionH2 = item.content.match(/<h2[^>]*>.*?(מה זה|מהו|מהי|כיצד|איך).*?<\/h2>/i);
+  if (hasDefinitionH2) score += 3;
 
   // --- סקשנים מובנים (structured sections) --- (0-15)
   if (item.h2Count >= 2) score += 5;
@@ -124,11 +131,22 @@ export function scoreGEOReadiness(
   if (item.hasFAQ) score += 10;
 
   // --- אותות אמינות (trust signals) --- (0-15)
+  // אותות E-E-A-T ישראליים — Israeli trust signals per Hebrew SEO/GEO Toolkit
   const trustIndicators = [
+    // מומחיות (Expertise)
     'ניסיון', 'מומחה', 'מומחית', 'מוסמך', 'מוסמכת',
     'שנות ניסיון', 'מקצועי', 'מקצועית', 'הכשרה',
     'expert', 'certified', 'professional', 'experience',
-    'מקור', 'מחקר', 'לפי', 'על-פי', 'according',
+    // אמינות (Trustworthiness) — Israeli specific
+    'ח.פ.', 'ע.מ.', 'עוסק מורשה', 'חברה רשומה',
+    '052', '054', '058', '03-', '02-', '04-', '08-', '09-', // Israeli phone formats
+    'רישיון', 'תעודה', 'הסמכה',
+    // סמכות (Authority) — Israeli media citations
+    'TheMarker', 'דה מרקר', 'כלכליסט', 'Calcalist', 'גלובס', 'Globes',
+    'Ynet', 'וואלה', 'מאקו', 'מקור', 'מחקר', 'לפי', 'על-פי',
+    'אוניברסיטה', 'מכון', 'מכללה', 'פרופסור', 'דוקטור',
+    // ראיות מספריות
+    'לקוחות', 'פרויקטים', 'שנים בתחום', 'מעל',
   ];
   const trustCount = trustIndicators.filter((t) => plainLower.includes(t)).length;
   score += Math.min(trustCount * 3, 15);
@@ -162,20 +180,25 @@ export async function generateConciseAnswer(
   keyword: string,
   businessName: string
 ): Promise<string> {
-  const systemPrompt = `אתה כותב תשובות קצרות ומדויקות בעברית, מותאמות לציטוט על-ידי Google AI Overview.
-כללים:
-- 50-80 מילים בלבד
-- התחל עם תשובה ישירה (ללא "בוא נדבר על...")
-- כלול את מילת המפתח ואת שם העסק
-- שפה מקצועית וסמכותית
-- החזר HTML: פסקה אחת ב-<p>`;
+  const systemPrompt = `אתה כותב תשובות קצרות ומדויקות בעברית, מותאמות לציטוט על-ידי מנועי AI (Google AI Overview, ChatGPT, Perplexity, Gemini).
+
+כללי GEO (Generative Engine Optimization) לשוק הישראלי:
+- 50-80 מילים בלבד — זה אורך ציטוט אופטימלי עבור מנועי AI
+- התחל עם תשובה ישירה (ללא "בוא נדבר על..." / "זו שאלה מעניינת...")
+- כלול את מילת המפתח בצורה בסיסית + צורה מורפולוגית נוספת (סמיכות/רבים)
+- כלול את שם העסק + מיקום אם רלוונטי
+- שפה מקצועית וסמכותית — טון של מומחה עם 10+ שנות ניסיון
+- אות E-E-A-T: ציין נתון או עובדה ספציפית (מספר, אחוז, שנים)
+- החזר HTML: פסקה אחת ב-<p>
+
+מקורות אמינות מומלצים לציטוט: TheMarker, Calcalist, Globes, מחקרים ישראליים`;
 
   const userPrompt = `כותרת הדף: ${pageTitle}
 מילת מפתח: ${keyword}
 שם עסק: ${businessName}
 תוכן הדף (קיצור): ${content.substring(0, 600)}
 
-כתוב תשובה ישירה וקצרה. HTML בלבד.`;
+כתוב תשובה ישירה וקצרה (50-80 מילים) — מותאמת לציטוט על-ידי Google AI Overview ו-ChatGPT. HTML בלבד.`;
 
   const result = await generateWithAI(systemPrompt, userPrompt, {
     temperature: 0.5,
