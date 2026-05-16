@@ -132,9 +132,9 @@ export async function POST(
       status: 'won',
       convertedAt: now,
       convertedEntityType: entityType,
-      convertedEntityId: createdEntity.id,
+      convertedEntityId: createdEntity.id as string,
       // Legacy field for backwards compatibility
-      convertedClientId: entityType === 'client' ? createdEntity.id : null,
+      convertedClientId: entityType === 'client' ? (createdEntity.id as string) : null,
       updatedAt: now,
     });
 
