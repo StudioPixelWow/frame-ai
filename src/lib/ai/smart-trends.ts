@@ -96,20 +96,27 @@ const INDUSTRY_CONTENT_ANGLES: Record<string, string[]> = {
   'כללי': ['טיפ מקצועי מהתחום', 'מאחורי הקלעים של העסק', 'סיפור הצלחה של לקוח'],
 };
 
-const SEASONAL_THEMES: Record<number, string> = {
-  1: 'התחלות חדשות — יעדים, מוטיבציה, תוכנית פעולה',
-  2: 'ט״ו בשבט ואהבה — צמיחה, חידוש, גדילה',
-  3: 'פורים ואביב — יצירתיות, כיף, צבעוניות',
-  4: 'פסח וחירות — התחדשות, ניקיון, שינוי',
-  5: 'יום העצמאות — גאווה, קהילה, ישראליות',
-  6: 'שבועות וקיץ — התחלת עונת הקיץ',
-  7: 'שיא הקיץ — אווירת חופש, חוויות, שמש',
-  8: 'ט״ו באב וסוף קיץ — אהבה, רומנטיקה, נוסטלגיה',
-  9: 'חזרה לשגרה — ראש השנה, סדר, התחלה חדשה',
-  10: 'חגי תשרי — חשבון נפש, ערכים, משפחה',
-  11: 'בלאק פריידיי — מבצעים, הנחות, הזדמנויות',
-  12: 'חנוכה וסילבסטר — סיכום שנה, חגיגות, תוכן חם',
-};
+/**
+ * Seasonal themes — returns a contextual theme based on month and day.
+ * Uses dynamic lookup to avoid showing stale holidays (e.g., Independence Day in late May).
+ */
+function getSeasonalTheme(month: number, day: number): string {
+  switch (month) {
+    case 1: return 'התחלות חדשות — יעדים, מוטיבציה, תוכנית פעולה';
+    case 2: return 'ט״ו בשבט ואהבה — צמיחה, חידוש, גדילה';
+    case 3: return 'פורים ואביב — יצירתיות, כיף, צבעוניות';
+    case 4: return day <= 20 ? 'פסח וחירות — התחדשות, ניקיון, שינוי' : 'יום העצמאות — גאווה, קהילה, ישראליות';
+    case 5: return day <= 10 ? 'יום העצמאות — גאווה, קהילה, ישראליות' : 'שבועות וקיץ — חג מתן תורה, ידע, התחדשות';
+    case 6: return 'תחילת הקיץ — אנרגיה, חוויות חדשות, שמש';
+    case 7: return 'שיא הקיץ — אווירת חופש, חוויות, שמש';
+    case 8: return 'ט״ו באב וסוף קיץ — אהבה, רומנטיקה, נוסטלגיה';
+    case 9: return 'חזרה לשגרה — ראש השנה, סדר, התחלה חדשה';
+    case 10: return 'חגי תשרי — חשבון נפש, ערכים, משפחה';
+    case 11: return 'בלאק פריידיי — מבצעים, הנחות, הזדמנויות';
+    case 12: return 'חנוכה וסילבסטר — סיכום שנה, חגיגות, תוכן חם';
+    default: return 'תוכן שוטף — ערך, מקצועיות, חיבור לקהל';
+  }
+}
 
 // Platform rotation for weekly trends (4-week cycle)
 const PLATFORM_TRENDS = [
@@ -230,8 +237,8 @@ export function generateWeeklyTrends(params: {
     });
   }
 
-  // 2. Seasonal trend — based on current month
-  const seasonalMessage = SEASONAL_THEMES[currentMonth];
+  // 2. Seasonal trend — based on current month and day
+  const seasonalMessage = getSeasonalTheme(currentMonth, now.getDate());
   if (seasonalMessage) {
     trends.push({
       id: generateId('trend_seasonal'),

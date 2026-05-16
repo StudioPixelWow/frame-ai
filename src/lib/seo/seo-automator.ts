@@ -977,7 +977,7 @@ ${isLocal ? `📍 קידום לוקאלי (Local SEO):
     }
 
     // Parse AI response — data can be parsed JSON object or raw text string
-    let articleData: { title: string; content: string; metaDescription: string; metaTitle: string };
+    let articleData: { title: string; content: string; metaDescription: string; metaTitle: string; faq?: Array<{ question: string; answer: string }> };
     try {
       if (typeof aiResult.data === 'object' && aiResult.data !== null) {
         // Already parsed by generateWithAI
@@ -1006,6 +1006,24 @@ ${isLocal ? `📍 קידום לוקאלי (Local SEO):
         error: 'מאמר חסר כותרת או תוכן',
         executedAt: startTime,
       };
+    }
+
+    // --- Append FAQ section with Schema Markup if AI returned FAQ data ---
+    if (articleData.faq && Array.isArray(articleData.faq) && articleData.faq.length > 0) {
+      let faqHtml = '\n<section class="faq-section">\n<h2>שאלות נפוצות</h2>\n';
+      faqHtml += '<div itemscope itemtype="https://schema.org/FAQPage">\n';
+      for (const item of articleData.faq) {
+        if (item.question && item.answer) {
+          faqHtml += `<div itemscope itemprop="mainEntity" itemtype="https://schema.org/Question">\n`;
+          faqHtml += `<h3 itemprop="name">${item.question}</h3>\n`;
+          faqHtml += `<div itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer">\n`;
+          faqHtml += `<p itemprop="text">${item.answer}</p>\n`;
+          faqHtml += `</div>\n</div>\n`;
+        }
+      }
+      faqHtml += '</div>\n</section>';
+      articleData.content += faqHtml;
+      console.log(`[SEO-ARTICLE] Appended FAQ section with ${articleData.faq.length} questions`);
     }
 
     console.log(`[SEO-ARTICLE] Generated article: "${articleData.title}" for keyword "${keyword}"`);
@@ -1562,10 +1580,10 @@ export function mapPlanTaskToAutoType(planTaskTitle: string): AutoTaskType | nul
   // Heading Structure
   if (
     normalizedTitle.includes('תיקון מבנה כותרים') ||
+    normalizedTitle.includes('שיפור מבנה כותרים') ||
     normalizedTitle.includes('h1-h3') ||
     normalizedTitle.includes('heading structure') ||
-    normalizedTitle.includes('כותרים') ||
-    normalizedTitle.includes('headings')
+    normalizedTitle.includes('fix headings')
   ) {
     return 'heading_structure';
   }
@@ -1575,8 +1593,8 @@ export function mapPlanTaskToAutoType(planTaskTitle: string): AutoTaskType | nul
     normalizedTitle.includes('הוספת schema') ||
     normalizedTitle.includes('schema markup') ||
     normalizedTitle.includes('json-ld') ||
-    normalizedTitle.includes('schema') ||
-    normalizedTitle.includes('סכמה')
+    normalizedTitle.includes('הוספת סכמה') ||
+    normalizedTitle.includes('תיקון סכמה')
   ) {
     return 'schema_markup';
   }
@@ -1586,8 +1604,9 @@ export function mapPlanTaskToAutoType(planTaskTitle: string): AutoTaskType | nul
     normalizedTitle.includes('image alt') ||
     normalizedTitle.includes('alt text') ||
     normalizedTitle.includes('alt תמונה') ||
-    normalizedTitle.includes('תמונות') ||
-    normalizedTitle.includes('images')
+    normalizedTitle.includes('תיקון alt תמונות') ||
+    normalizedTitle.includes('הוספת alt לתמונות') ||
+    normalizedTitle.includes('אופטימיזציית תמונות')
   ) {
     return 'image_alt_text';
   }
@@ -1597,7 +1616,8 @@ export function mapPlanTaskToAutoType(planTaskTitle: string): AutoTaskType | nul
     normalizedTitle.includes('internal linking') ||
     normalizedTitle.includes('קישורים פנימיים') ||
     normalizedTitle.includes('internal links') ||
-    normalizedTitle.includes('linking')
+    normalizedTitle.includes('הוספת קישורים פנימיים') ||
+    normalizedTitle.includes('בניית קישורים פנימיים')
   ) {
     return 'internal_linking';
   }
@@ -1618,9 +1638,9 @@ export function mapPlanTaskToAutoType(planTaskTitle: string): AutoTaskType | nul
   if (
     normalizedTitle.includes('content optimization') ||
     normalizedTitle.includes('optimize content') ||
-    normalizedTitle.includes('תוכן') ||
-    normalizedTitle.includes('optimization') ||
-    normalizedTitle.includes('content')
+    normalizedTitle.includes('אופטימיזציית תוכן') ||
+    normalizedTitle.includes('שיפור תוכן קיים') ||
+    normalizedTitle.includes('עדכון תוכן דפים')
   ) {
     return 'content_optimization';
   }
