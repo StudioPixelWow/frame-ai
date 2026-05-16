@@ -180,7 +180,7 @@ async function _POST(
         subject: payload.subject,
         htmlLength: payload.html.length,
       });
-      sendResult = { success: true, error: undefined };
+      sendResult = { success: true, error: '' };
     }
 
     // Log the send attempt

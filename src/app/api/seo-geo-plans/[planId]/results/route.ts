@@ -5,7 +5,7 @@ import {
   buildPlatformResults,
   buildGlobalMetrics,
 } from '@/lib/seo/visibility-engine';
-import { VisibilityPlatformId } from '@/lib/schema';
+import { VisibilityPlatformId } from '@/lib/db/schema';
 
 export async function GET(
   req: NextRequest,
@@ -34,7 +34,7 @@ export async function GET(
 
     // If platform parameter is provided, fetch results for that platform
     let results: any[] | undefined;
-    if (platformParam === 'all') {
+    if (platformParam as string === 'all') {
       // Return combined results from all platforms
       const allPlatforms: VisibilityPlatformId[] = [
         'google_seo', 'google_ai_overview', 'gemini', 'chatgpt', 'claude', 'perplexity',

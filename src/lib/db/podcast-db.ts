@@ -81,7 +81,7 @@ async function _detect(): Promise<StorageMode> {
     const { error } = await sb.rpc('exec_sql', { query: DDL });
     if (!error) {
       // Refresh PostgREST cache
-      await sb.rpc('exec_sql', { query: "NOTIFY pgrst, 'reload schema';" }).catch(() => {});
+      await Promise.resolve(sb.rpc('exec_sql', { query: "NOTIFY pgrst, 'reload schema';" })).catch(() => {});
       await new Promise(r => setTimeout(r, 800));
 
       // Verify

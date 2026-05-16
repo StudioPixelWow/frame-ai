@@ -20,7 +20,7 @@ export const POST = withErrorBoundary(async (request: NextRequest, context: { pa
 
   const { body, error } = await parseBody(request);
   if (error) return error;
-  const { planId } = body as ExportPdfBody;
+  const { planId } = body as unknown as ExportPdfBody;
 
   if (!planId) {
     return err('planId is required', 400);
@@ -40,7 +40,7 @@ export const POST = withErrorBoundary(async (request: NextRequest, context: { pa
   }
 
   // Re-generate the report data
-  const report = await generateSeoReport(plan, reportMetadata.language || 'he');
+  const report = await generateSeoReport(plan, (reportMetadata.language || 'he') as 'he' | 'en');
 
   const exportUrl = `/seo-geo/${planId}/report?lang=${reportMetadata.language || 'he'}`;
 

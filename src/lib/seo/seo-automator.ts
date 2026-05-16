@@ -1162,7 +1162,7 @@ ${isLocal ? `📍 קידום לוקאלי (Local SEO):
 // מיפוי Executor Functions
 // ============================================================================
 
-const executors: Record<AutoTaskType, ExecutorFunction> = {
+const executors: Partial<Record<AutoTaskType, ExecutorFunction>> = {
   meta_titles: executeMetaTitles,
   meta_descriptions: executeMetaDescriptions,
   robots_txt: executeRobotsTxt,
@@ -1267,7 +1267,7 @@ export async function executeAutomationModule(
         pagesAffected = result?.issues?.length || 0;
         if (result?.issues) {
           for (const issue of result.issues.slice(0, 10)) {
-            changes.push({ pageUrl: issue.url || wpConn.siteUrl, pageTitle: issue.type || 'Technical', pageId: 0, field: 'technical_seo', oldValue: issue.severity || 'issue', newValue: issue.fix || 'fixed' });
+            changes.push({ pageUrl: issue.url || wpConn.siteUrl, pageTitle: issue.type || 'Technical', pageId: 0, field: 'technical_seo', oldValue: issue.severity || 'issue', newValue: issue.fix || 'fixed', applied: true });
           }
         }
         break;
@@ -1278,7 +1278,7 @@ export async function executeAutomationModule(
         pagesAffected = result?.linksAdded || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
-            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'internal_link', oldValue: '', newValue: action.description || 'link added' });
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'internal_link', oldValue: '', newValue: action.description || 'link added', applied: true });
           }
         }
         break;
@@ -1289,7 +1289,7 @@ export async function executeAutomationModule(
         pagesAffected = result?.pagesUpdated || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
-            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'faq_schema', oldValue: '', newValue: action.description || 'FAQ added' });
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'faq_schema', oldValue: '', newValue: action.description || 'FAQ added', applied: true });
           }
         }
         break;
@@ -1300,7 +1300,7 @@ export async function executeAutomationModule(
         pagesAffected = result?.pagesOptimized || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
-            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'meta_tags', oldValue: action.oldValue || '', newValue: action.newValue || 'optimized' });
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'meta_tags', oldValue: action.oldValue || '', newValue: action.newValue || 'optimized', applied: true });
           }
         }
         break;
@@ -1311,7 +1311,7 @@ export async function executeAutomationModule(
         pagesAffected = result?.pagesRefreshed || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
-            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'content_refresh', oldValue: '', newValue: action.description || 'refreshed' });
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'content_refresh', oldValue: '', newValue: action.description || 'refreshed', applied: true });
           }
         }
         break;
@@ -1322,7 +1322,7 @@ export async function executeAutomationModule(
         pagesAffected = result?.clustersBuilt || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
-            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'topic_cluster', oldValue: '', newValue: action.description || 'cluster built' });
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'topic_cluster', oldValue: '', newValue: action.description || 'cluster built', applied: true });
           }
         }
         break;
@@ -1333,7 +1333,7 @@ export async function executeAutomationModule(
         pagesAffected = result?.pagesOptimized || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
-            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'geo_visibility', oldValue: '', newValue: action.description || 'geo optimized' });
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'geo_visibility', oldValue: '', newValue: action.description || 'geo optimized', applied: true });
           }
         }
         break;
@@ -1344,7 +1344,7 @@ export async function executeAutomationModule(
         pagesAffected = result?.imagesOptimized || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
-            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'image_seo', oldValue: action.oldValue || '', newValue: action.newValue || 'alt added' });
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'image_seo', oldValue: action.oldValue || '', newValue: action.newValue || 'alt added', applied: true });
           }
         }
         break;
@@ -1355,7 +1355,7 @@ export async function executeAutomationModule(
         pagesAffected = result?.ctasAdded || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
-            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'cta', oldValue: '', newValue: action.description || 'CTA added' });
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'cta', oldValue: '', newValue: action.description || 'CTA added', applied: true });
           }
         }
         break;
@@ -1366,7 +1366,7 @@ export async function executeAutomationModule(
         pagesAffected = result?.pagesOptimized || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
-            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'local_seo', oldValue: '', newValue: action.description || 'local optimized' });
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'local_seo', oldValue: '', newValue: action.description || 'local optimized', applied: true });
           }
         }
         break;
@@ -1377,7 +1377,7 @@ export async function executeAutomationModule(
         pagesAffected = result?.issuesFound || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
-            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'cannibalization', oldValue: '', newValue: action.description || 'issue detected' });
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'cannibalization', oldValue: '', newValue: action.description || 'issue detected', applied: true });
           }
         }
         break;
@@ -1388,7 +1388,7 @@ export async function executeAutomationModule(
         pagesAffected = result?.pagesReinforced || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
-            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'authority', oldValue: '', newValue: action.description || 'authority reinforced' });
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'authority', oldValue: '', newValue: action.description || 'authority reinforced', applied: true });
           }
         }
         break;
@@ -1399,7 +1399,7 @@ export async function executeAutomationModule(
         pagesAffected = result?.pagesHumanized || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
-            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'humanization', oldValue: '', newValue: action.description || 'humanized' });
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'humanization', oldValue: '', newValue: action.description || 'humanized', applied: true });
           }
         }
         break;
@@ -1410,40 +1410,40 @@ export async function executeAutomationModule(
         pagesAffected = result?.entitiesProcessed || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
-            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'entity_graph', oldValue: '', newValue: action.description || 'entity linked' });
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'entity_graph', oldValue: '', newValue: action.description || 'entity linked', applied: true });
           }
         }
         break;
       }
       case 'gsc_intelligence': {
         const { executeGSCIntelligence } = await import('./gsc-intelligence-engine');
-        result = await executeGSCIntelligence(autoCtx as any);
+        result = await executeGSCIntelligence(null, inventory, wpConn as any, { planId: '', domain: '', scanType: 'quick' as const } as any);
         pagesAffected = result?.opportunitiesFound || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
-            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'gsc_intelligence', oldValue: '', newValue: action.description || 'opportunity found' });
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'gsc_intelligence', oldValue: '', newValue: action.description || 'opportunity found', applied: true });
           }
         }
         break;
       }
       case 'ga4_conversion': {
         const { executeGA4Intelligence } = await import('./ga4-conversion-engine');
-        result = await executeGA4Intelligence(autoCtx as any);
+        result = await executeGA4Intelligence(null, inventory, autoCtx as any);
         pagesAffected = result?.insightsGenerated || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
-            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'ga4_conversion', oldValue: '', newValue: action.description || 'insight generated' });
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'ga4_conversion', oldValue: '', newValue: action.description || 'insight generated', applied: true });
           }
         }
         break;
       }
       case 'serp_monitoring': {
         const { analyzeSERPMovements } = await import('./serp-movement-monitor');
-        result = await analyzeSERPMovements(autoCtx as any);
+        result = await analyzeSERPMovements(null, null, autoCtx as any);
         pagesAffected = result?.keywordsTracked || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
-            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'serp_monitoring', oldValue: '', newValue: action.description || 'ranking tracked' });
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'serp_monitoring', oldValue: '', newValue: action.description || 'ranking tracked', applied: true });
           }
         }
         break;
@@ -1454,7 +1454,7 @@ export async function executeAutomationModule(
         pagesAffected = result?.recommendationsGenerated || 0;
         if (result?.actions) {
           for (const action of result.actions.slice(0, 10)) {
-            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'adaptive_strategy', oldValue: '', newValue: action.description || 'strategy updated' });
+            changes.push({ pageUrl: action.pageUrl || wpConn.siteUrl, pageTitle: action.pageTitle || '', pageId: 0, field: 'adaptive_strategy', oldValue: '', newValue: action.description || 'strategy updated', applied: true });
           }
         }
         break;

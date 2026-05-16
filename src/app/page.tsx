@@ -113,7 +113,7 @@ export default function LandingPage() {
     });
 
     // 4. Pending approvals
-    approvals.forEach((approval) => {
+    approvals.forEach((approval: any) => {
       if (approval.status === 'pending_client' || approval.status === 'pending') {
         items.push({
           id: approval.id, type: 'approval', title: approval.title || 'אישור ממתין',
@@ -131,7 +131,7 @@ export default function LandingPage() {
     });
 
     // 5. Upcoming gantt deadlines
-    ganttItems.forEach((item) => {
+    ganttItems.forEach((item: any) => {
       if (item.endDate) {
         const endDate = new Date(item.endDate);
         endDate.setHours(0, 0, 0, 0);

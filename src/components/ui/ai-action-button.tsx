@@ -543,7 +543,7 @@ export function AIActionButton({
                 e.currentTarget.style.backgroundColor = 'var(--surface-hover, #f9fafb)';
               }}
               onMouseLeave={(e) => {
-                e.currentButton.style.backgroundColor = 'transparent';
+                e.currentTarget.style.backgroundColor = 'transparent';
               }}
             >
               נסה שוב

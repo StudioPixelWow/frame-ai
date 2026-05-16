@@ -82,7 +82,7 @@ export async function POST(req: NextRequest, context: Params) {
         { status: 400 }
       );
     }
-    validSegments.push(s as TranscriptSegment);
+    validSegments.push(s as unknown as TranscriptSegment);
   }
 
   // Build options

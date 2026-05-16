@@ -74,17 +74,17 @@ function generateVisibilityQuestions(
   // Generic industry queries
   const industryQueries = [
     {
-      query: `${goal?.label || 'services'} solutions`,
+      query: `${goals?.[0]?.label || 'services'} solutions`,
       category: 'industry',
       intent: 'informational' as const,
     },
     {
-      query: `top ${goal?.label || 'service'} providers`,
+      query: `top ${goals?.[0]?.label || 'service'} providers`,
       category: 'industry',
       intent: 'informational' as const,
     },
     {
-      query: `${goal?.label || 'service'} comparison`,
+      query: `${goals?.[0]?.label || 'service'} comparison`,
       category: 'industry',
       intent: 'commercial' as const,
     },

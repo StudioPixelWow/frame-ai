@@ -27,6 +27,7 @@ interface ExecuteTaskRequest {
   taskTitle: string;
   taskType?: string;
   wpConnection?: WPConnection;
+  automationModule?: string;
 }
 
 interface ExecuteTaskResponse {

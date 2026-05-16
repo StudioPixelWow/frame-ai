@@ -31,15 +31,16 @@ export const POST = withErrorBoundary(async (request: NextRequest, context: { pa
   const { language = 'he' } = body as GenerateReportBody;
 
   // Generate the SEO report
-  const report = await generateSeoReport(plan, language);
+  const report = await generateSeoReport(plan, language as 'he' | 'en');
 
   // Create report metadata and add to plan
   const reportMetadata = {
     id: report.id,
-    name: report.name,
+    name: (report as any).name,
     language,
     generatedAt: new Date().toISOString(),
-    summary: report.summary || '',
+    summary: (report as any).summary || '',
+    type: 'full',
   };
 
   if (!plan.reports) {

@@ -8,7 +8,7 @@ import {
   GoogleAiOverviewResult,
   AiPlatformResult,
   PlatformResult,
-} from '@/lib/schema';
+} from '@/lib/db/schema';
 
 /**
  * Platform configuration mapping

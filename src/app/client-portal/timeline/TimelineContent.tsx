@@ -88,7 +88,7 @@ function TimelineContentInner() {
       events.push({
         id: `cmp-${c.id}`,
         type: 'campaign_created',
-        title: `קמפיין "${c.name}" נוצר`,
+        title: `קמפיין "${(c as any).name || c.campaignName}" נוצר`,
         description: (c as any).objective ? `סוג: ${(c as any).objective}` : '',
         date: c.createdAt,
         icon: '🚀',

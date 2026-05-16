@@ -624,7 +624,7 @@ export async function runAutoMonitorScan(options: ScanOptions): Promise<ScanResu
                   failedReason: null,
                   createdAt: new Date().toISOString(),
                   updatedAt: new Date().toISOString(),
-                } as Record<string, unknown>);
+                } as any);
 
                 if (action?.id) {
                   finding.actionCreated = true;

@@ -193,7 +193,7 @@ export function extractSignals(
 // ─── Fallback signal builders ─────────────────────────────────────────────────
 
 function buildPainPhrase(keywords: string[], tone: TranscriptTone): string {
-  const PAIN_TONE_MAP: Partial<Record<TranscriptTone, string>> = {
+  const PAIN_TONE_MAP: Partial<Record<TranscriptTone["primary"], string>> = {
     energetic:     "slow progress",
     persuasive:    "missed opportunities",
     educational:   "confusion and guesswork",
@@ -201,7 +201,7 @@ function buildPainPhrase(keywords: string[], tone: TranscriptTone): string {
     professional:  "inefficiency",
     casual:        "doing it the hard way",
   };
-  return PAIN_TONE_MAP[tone] ?? `${keywords[0] ?? "this"} challenges`;
+  return PAIN_TONE_MAP[tone.primary] ?? `${keywords[0] ?? "this"} challenges`;
 }
 
 function buildCuriosityPhrase(topic: string, keywords: string[]): string {

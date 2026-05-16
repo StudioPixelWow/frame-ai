@@ -331,7 +331,7 @@ function generateMockQuestions(params: {
   return questionTemplates.map((template, i) => ({
     id: `q_${Date.now()}_${i}`,
     text: template.text,
-    type: template.type,
+    type: template.type as PodcastQuestionType,
     score: Math.floor(60 + Math.random() * 38),
     labels: template.labels,
     selected: false,

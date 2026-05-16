@@ -1007,126 +1007,126 @@ export async function executeModule(
     switch (module) {
       // ─── SEO טכני ───
       case 'technical_seo': {
-        const { runTechnicalSeoScan } = await import('./technical-seo-monitor');
+        const { runTechnicalSeoScan } = await import('./technical-seo-monitor') as any;
         const result = await runTechnicalSeoScan(connection);
         return buildModuleResult(module, startTime, true, result?.issues?.length ?? 0, 'סריקה טכנית הושלמה');
       }
 
       // ─── קישורים פנימיים ───
       case 'internal_linking': {
-        const { runInternalLinkingPass } = await import('./internal-linking-engine');
+        const { runInternalLinkingPass } = await import('./internal-linking-engine') as any;
         const result = await runInternalLinkingPass(inventory, connection, context);
         return buildModuleResult(module, startTime, true, result?.linksAdded ?? 0, 'סבב קישורים פנימיים הושלם');
       }
 
       // ─── FAQ ו-Schema ───
       case 'faq_schema': {
-        const { runFaqSchemaPass } = await import('./faq-schema-engine');
+        const { runFaqSchemaPass } = await import('./faq-schema-engine') as any;
         const result = await runFaqSchemaPass(inventory, connection, context);
         return buildModuleResult(module, startTime, true, result?.faqsAdded ?? 0, 'הוספת FAQ ו-Schema הושלמה');
       }
 
       // ─── אופטימיזציית מטא ───
       case 'meta_optimization': {
-        const { runMetaOptimizationPass } = await import('./meta-optimization-engine');
+        const { runMetaOptimizationPass } = await import('./meta-optimization-engine') as any;
         const result = await runMetaOptimizationPass(inventory, connection, context);
         return buildModuleResult(module, startTime, true, result?.metaUpdated ?? 0, 'אופטימיזציית מטא הושלמה');
       }
 
       // ─── רענון תוכן ───
       case 'content_refresh': {
-        const { runContentRefreshPass } = await import('./content-refresh-engine');
+        const { runContentRefreshPass } = await import('./content-refresh-engine') as any;
         const result = await runContentRefreshPass(inventory, connection, context);
         return buildModuleResult(module, startTime, true, result?.pagesRefreshed ?? 0, 'רענון תוכן הושלם');
       }
 
       // ─── אשכולות נושאים ───
       case 'topic_clusters': {
-        const { runTopicClusterPass } = await import('./topic-cluster-builder');
+        const { runTopicClusterPass } = await import('./topic-cluster-builder') as any;
         const result = await runTopicClusterPass(inventory, connection, context);
         return buildModuleResult(module, startTime, true, result?.clustersBuilt ?? 0, 'בניית אשכולות הושלמה');
       }
 
       // ─── נראות GEO / AI ───
       case 'geo_visibility': {
-        const { runGeoVisibilityPass } = await import('./geo-visibility-optimizer');
+        const { runGeoVisibilityPass } = await import('./geo-visibility-optimizer') as any;
         const result = await runGeoVisibilityPass(inventory, connection, context);
         return buildModuleResult(module, startTime, true, result?.blocksAdded ?? 0, 'שיפור נראות GEO הושלם');
       }
 
       // ─── SEO תמונות ───
       case 'image_seo': {
-        const { runImageSeoPass } = await import('./image-seo-engine');
+        const { runImageSeoPass } = await import('./image-seo-engine') as any;
         const result = await runImageSeoPass(inventory, connection, context);
         return buildModuleResult(module, startTime, true, result?.imagesUpdated ?? 0, 'עדכון SEO תמונות הושלם');
       }
 
       // ─── CTA ───
       case 'cta_optimization': {
-        const { runCtaOptimizationPass } = await import('./cta-optimizer');
+        const { runCtaOptimizationPass } = await import('./cta-optimizer') as any;
         const result = await runCtaOptimizationPass(inventory, connection, context);
         return buildModuleResult(module, startTime, true, result?.ctasAdded ?? 0, 'אופטימיזציית CTA הושלמה');
       }
 
       // ─── SEO מקומי ───
       case 'local_seo': {
-        const { runLocalSeoPass } = await import('./local-seo-engine');
+        const { runLocalSeoPass } = await import('./local-seo-engine') as any;
         const result = await runLocalSeoPass(inventory, connection, context);
         return buildModuleResult(module, startTime, true, result?.localPagesUpdated ?? 0, 'עדכון SEO מקומי הושלם');
       }
 
       // ─── קניבליזציה ───
       case 'cannibalization': {
-        const { runCannibalizationDetection } = await import('./cannibalization-detector');
+        const { runCannibalizationDetection } = await import('./cannibalization-detector') as any;
         const result = await runCannibalizationDetection(inventory, context);
         return buildModuleResult(module, startTime, true, result?.issuesFound ?? 0, 'סריקת קניבליזציה הושלמה');
       }
 
       // ─── חיזוק סמכות ───
       case 'authority_reinforcement': {
-        const { runAuthorityReinforcementPass } = await import('./authority-reinforcement-engine');
+        const { runAuthorityReinforcementPass } = await import('./authority-reinforcement-engine') as any;
         const result = await runAuthorityReinforcementPass(inventory, connection, context);
         return buildModuleResult(module, startTime, true, result?.articlesCreated ?? 0, 'חיזוק סמכות הושלם');
       }
 
       // ─── האנשה ───
       case 'humanization': {
-        const { runHumanizationPass } = await import('./humanization-engine');
+        const { runHumanizationPass } = await import('./humanization-engine') as any;
         const result = await runHumanizationPass(inventory, connection, context);
         return buildModuleResult(module, startTime, true, result?.pagesHumanized ?? 0, 'האנשת תוכן הושלמה');
       }
 
       // ─── גרף ישויות ───
       case 'entity_graph': {
-        const { runEntityGraphPass } = await import('./semantic-entity-graph');
+        const { runEntityGraphPass } = await import('./semantic-entity-graph') as any;
         const result = await runEntityGraphPass(inventory, connection, context);
         return buildModuleResult(module, startTime, true, result?.entitiesMapped ?? 0, 'מיפוי ישויות הושלם');
       }
 
       // ─── GSC Intelligence ───
       case 'gsc_intelligence': {
-        const { runGscIntelligencePass } = await import('./gsc-intelligence-engine');
+        const { runGscIntelligencePass } = await import('./gsc-intelligence-engine') as any;
         const result = await runGscIntelligencePass(context);
         return buildModuleResult(module, startTime, true, result?.insightsFound ?? 0, 'ניתוח GSC הושלם');
       }
 
       // ─── GA4 Conversion ───
       case 'ga4_conversion': {
-        const { runGa4ConversionPass } = await import('./ga4-conversion-engine');
+        const { runGa4ConversionPass } = await import('./ga4-conversion-engine') as any;
         const result = await runGa4ConversionPass(context);
         return buildModuleResult(module, startTime, true, result?.opportunitiesFound ?? 0, 'ניתוח GA4 הושלם');
       }
 
       // ─── ניטור SERP ───
       case 'serp_monitoring': {
-        const { runSerpMonitoringPass } = await import('./serp-movement-monitor');
+        const { runSerpMonitoringPass } = await import('./serp-movement-monitor') as any;
         const result = await runSerpMonitoringPass(context);
         return buildModuleResult(module, startTime, true, result?.movementsDetected ?? 0, 'ניטור SERP הושלם');
       }
 
       // ─── אסטרטגיה אדפטיבית ───
       case 'adaptive_strategy': {
-        const { runAdaptiveStrategyPass } = await import('./adaptive-strategy-engine');
+        const { runAdaptiveStrategyPass } = await import('./adaptive-strategy-engine') as any;
         const result = await runAdaptiveStrategyPass(inventory, context);
         return buildModuleResult(module, startTime, true, result?.adjustmentsMade ?? 0, 'עדכון אסטרטגיה הושלם');
       }

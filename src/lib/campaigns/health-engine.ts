@@ -113,7 +113,7 @@ export function computeHealth(c: any): HealthResult {
 
   // ── Activity (max 30) ──
   // Status bonus (0–12)
-  breakdown.activity += STATUS_ACTIVITY_BONUS[c.status] ?? 0;
+  breakdown.activity += (STATUS_ACTIVITY_BONUS as any)[c.status] ?? 0;
 
   // Recency bonus (0–12): how recently updated
   const now = Date.now();

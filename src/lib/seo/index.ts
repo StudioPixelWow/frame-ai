@@ -22,6 +22,8 @@ export * from './validation-gate';
 // Existing modules
 export * from './website-facts';
 export * from './platform-apis';
-export * from './scan-pipeline';
+// Note: scan-pipeline re-exports omit PlatformId and ScanLogEntry to avoid duplicates with platform-apis and scan-logs
+export { PLATFORMS, getScanConfig, getJob, getAllJobs, parseHtml, startScan } from './scan-pipeline';
+export type { ScanType, PlatformStatus, ScanStageId, StageProgress, ScanValidation, ScanMetrics, ScanJob, ParsedPage, ScannedPageInfo, ScanIssue, AIQueryResult, Competitor, ScanResult } from './scan-pipeline';
 export * from './visibility-engine';
 export * from './translations';

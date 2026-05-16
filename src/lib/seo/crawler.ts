@@ -297,37 +297,37 @@ export function extractPageData(
   const metaKeywordsStr = $('meta[name="keywords"]').attr('content') || '';
   const metaKeywords = metaKeywordsStr
     .split(',')
-    .map((k) => k.trim())
-    .filter((k) => k.length > 0);
+    .map((k: any) => k.trim())
+    .filter((k: any) => k.length > 0);
 
   // Extract headings
   const h1Tags = $('h1')
-    .map((_, el) => $(el).text().trim())
+    .map((_: any, el: any) => $(el).text().trim())
     .get()
-    .filter((t) => t.length > 0);
+    .filter((t: any) => t.length > 0);
 
   const h2Tags = $('h2')
-    .map((_, el) => $(el).text().trim())
+    .map((_: any, el: any) => $(el).text().trim())
     .get()
-    .filter((t) => t.length > 0);
+    .filter((t: any) => t.length > 0);
 
   const h3Tags = $('h3')
-    .map((_, el) => $(el).text().trim())
+    .map((_: any, el: any) => $(el).text().trim())
     .get()
-    .filter((t) => t.length > 0);
+    .filter((t: any) => t.length > 0);
 
   // Extract paragraphs (first 20)
   const paragraphs = $('p')
-    .map((_, el) => $(el).text().trim())
+    .map((_: any, el: any) => $(el).text().trim())
     .get()
-    .filter((t) => t.length > 0)
+    .filter((t: any) => t.length > 0)
     .slice(0, 20);
 
   // Extract links
   const internalLinks: string[] = [];
   const externalLinks: string[] = [];
 
-  $('a[href]').each((_, el) => {
+  $('a[href]').each((_: any, el: any) => {
     const href = $(el).attr('href') || '';
     if (!href) return;
 
@@ -351,12 +351,12 @@ export function extractPageData(
 
   // Extract images
   const images = $('img')
-    .map((_, el) => ({
+    .map((_: any, el: any) => ({
       src: $(el).attr('src') || '',
       alt: $(el).attr('alt') || '',
     }))
     .get()
-    .filter((img) => img.src.length > 0);
+    .filter((img: any) => img.src.length > 0);
 
   // Check SSL
   const hasSSL = pageUrl.protocol === 'https:';
@@ -369,7 +369,7 @@ export function extractPageData(
 
   // Extract OG tags
   const ogTags: Record<string, string> = {};
-  $('meta[property^="og:"]').each((_, el) => {
+  $('meta[property^="og:"]').each((_: any, el: any) => {
     const property = $(el).attr('property') || '';
     const content = $(el).attr('content') || '';
     if (property && content) {
@@ -380,7 +380,7 @@ export function extractPageData(
 
   // Extract JSON-LD schema markup
   const schemaMarkup: any[] = [];
-  $('script[type="application/ld+json"]').each((_, el) => {
+  $('script[type="application/ld+json"]').each((_: any, el: any) => {
     try {
       const json = JSON.parse($(el).html() || '{}');
       schemaMarkup.push(json);

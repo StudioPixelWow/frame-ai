@@ -369,7 +369,7 @@ export async function syncClientMetaAccount(
           leadFormIds: [],
           linkedVideoProjectId: null,
           linkedClientFileId: null,
-        } as Omit<Campaign, 'id' | 'createdAt' | 'updatedAt'>);
+        } as any);
         metaCampaignToLocal.set(mc.id, created.id);
         result.campaigns.created++;
       }
@@ -436,7 +436,7 @@ export async function syncClientMetaAccount(
             bidStrategy: null,
             bidAmount: null,
             notes: '',
-          } as Omit<AdSet, 'id' | 'createdAt' | 'updatedAt'>);
+          } as any);
           metaAdSetToLocal.set(mas.id, created.id);
           result.adSets.created++;
         }
@@ -512,7 +512,7 @@ export async function syncClientMetaAccount(
               frequency: 0,
               cpm: 0,
               notes: '',
-            } as Omit<Ad, 'id' | 'createdAt' | 'updatedAt'>);
+            } as any);
             result.ads.created++;
           }
           result.ads.synced++;

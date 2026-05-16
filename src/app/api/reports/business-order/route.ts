@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     const dateStr = new Date().toISOString().split('T')[0];
     const filename = `business-order-report-${dateStr}.pdf`;
 
-    return new NextResponse(pdfBytes, {
+    return new NextResponse(pdfBytes as unknown as BodyInit, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',

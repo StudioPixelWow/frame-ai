@@ -689,7 +689,7 @@ export async function uploadMedia(
         'Content-Type': mimeType,
         'Content-Disposition': `attachment; filename="${filename}"`,
       },
-      body: imageBuffer,
+      body: imageBuffer as unknown as BodyInit,
     });
 
     if (!response.ok) {

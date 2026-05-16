@@ -153,7 +153,7 @@ async function whisperTranscribe(
   console.log(`[whisper] Sending file: ${(dl.size / 1024).toFixed(0)}KB ${ext} type=${dl.contentType}`);
 
   const fd = new FormData();
-  fd.append("file", new Blob([dl.buffer], { type: dl.contentType || mime(urlPath) }), `audio${ext}`);
+  fd.append("file", new Blob([new Uint8Array(dl.buffer)], { type: dl.contentType || mime(urlPath) }), `audio${ext}`);
   fd.append("model", "whisper-1");
   fd.append("language", whisperLang(lang));
   fd.append("response_format", "verbose_json");

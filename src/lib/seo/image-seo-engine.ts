@@ -211,7 +211,7 @@ export async function generateImageAlt(
       temperature: 0.3,
       maxTokens: 100,
     });
-    return alt.trim().replace(/^["']|["']$/g, ''); // הסר גרשיים אם יש
+    return String(alt).trim().replace(/^["']|["']$/g, ''); // הסר גרשיים אם יש
   } catch (error) {
     // אם ה-AI נכשל, צור ALT בסיסי מהכותרת
     console.error('[IMAGE-SEO] שגיאה ביצירת ALT עם AI:', error);

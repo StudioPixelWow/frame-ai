@@ -429,7 +429,7 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he", busin
       ...(contentGaps.length > 0 ? [{
         type: "table" as const,
         headers: he ? ["שאילתה", "קטגוריה", "כוונה", "עדיפות"] : ["Query", "Category", "Intent", "Priority"],
-        rows: contentGaps.slice(0, 15).map(g => [
+        rows: contentGaps.slice(0, 15).map((g: any) => [
           g.query,
           g.category,
           g.intent,

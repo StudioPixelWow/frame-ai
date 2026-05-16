@@ -549,16 +549,16 @@ export function analyzeCompetitors(input: CompetitorAnalysisInput): CompetitorAn
     const ourPositions = serpData?.ourPositions || [];
 
     const avgPos = positions.length > 0
-      ? positions.reduce((s, p) => s + p, 0) / positions.length
+      ? positions.reduce((s: any, p: any) => s + p, 0) / positions.length
       : 0;
 
-    const validOurPositions = ourPositions.filter((p): p is number => p !== null);
+    const validOurPositions = ourPositions.filter((p: any): p is number => p !== null);
     const ourAvgPos = validOurPositions.length > 0
-      ? validOurPositions.reduce((s, p) => s + p, 0) / validOurPositions.length
+      ? validOurPositions.reduce((s: any, p: any) => s + p, 0) / validOurPositions.length
       : 0;
 
     // Keywords they own (rank top 3, we don't rank top 20)
-    const keywordsTheyOwn = keywordsShared.filter((_, idx) => {
+    const keywordsTheyOwn = keywordsShared.filter((_: any, idx: any) => {
       return positions[idx] <= 3 && (ourPositions[idx] === null || ourPositions[idx]! > 20);
     });
 

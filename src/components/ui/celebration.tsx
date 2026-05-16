@@ -170,7 +170,6 @@ export function InlineSuccess({ text, visible }: InlineSuccessProps) {
     >
       <span
         style={{
-          display: "inline-block",
           width: "1.25rem",
           height: "1.25rem",
           borderRadius: "50%",

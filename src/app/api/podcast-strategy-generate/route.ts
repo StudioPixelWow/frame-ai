@@ -124,7 +124,7 @@ function validateRequest(body: unknown): {
     }
   }
 
-  return { valid: true, data: req as PodcastStrategyRequest };
+  return { valid: true, data: req as unknown as PodcastStrategyRequest };
 }
 
 /**

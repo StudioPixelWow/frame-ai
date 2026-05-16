@@ -151,7 +151,7 @@ export function selectBestRep(
     }
 
     // Skill match
-    if (rep.skills?.some(s => s.toLowerCase().includes(lead.interestType))) {
+    if (rep.skills?.some((s: any) => s.toLowerCase().includes(lead.interestType))) {
       score += 15;
       reasons.push(`מומחיות ב-${lead.interestType}`);
     }

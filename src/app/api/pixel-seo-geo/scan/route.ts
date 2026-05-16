@@ -180,7 +180,7 @@ export async function GET(req: NextRequest): Promise<NextResponse<IntegrationSta
       integrations: {
         gsc: isGSCAvailable(),
         serp: isSerpAvailable(),
-        serpProvider: getSerpProvider(),
+        serpProvider: getSerpProvider() ?? undefined,
         chatgpt: isPlatformAvailable('chatgpt' as any),
         claude: isPlatformAvailable('claude' as any),
         gemini: isPlatformAvailable('gemini' as any),

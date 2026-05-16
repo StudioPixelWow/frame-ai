@@ -383,7 +383,7 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
     })),
     targetKeywords: mergeKeywords(plan.clientKeywords, aiKeywords.length > 0 ? aiKeywords : extractKeywordsFallback(plan)),
     aiArticles: finalArticles,
-    businessProfile: plan.businessProfile || undefined,
+    businessProfile: (plan.businessProfile || undefined) as any,
     targetLocation: plan.businessProfile?.location || 'Israel',
     targetLanguage: 'Hebrew',
     insights: (plan.insights || []).map((insight) => ({
@@ -395,9 +395,9 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
       action: insight.suggestedAction,
     })),
     // Intelligence layers (from scan orchestrator)
-    semanticAnalysis: plan.semanticAnalysis || undefined,
-    competitorAnalysis: plan.competitorAnalysis || undefined,
-    strategicScore: plan.strategicScore || undefined,
+    semanticAnalysis: (plan as any).semanticAnalysis || undefined,
+    competitorAnalysis: (plan as any).competitorAnalysis || undefined,
+    strategicScore: (plan as any).strategicScore || undefined,
   };
 
   // Call plan engine
@@ -419,7 +419,7 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
     aiArticles: mergedAiArticles,
     status: 'plan_generated',
     generatedAt: new Date().toISOString(),
-  });
+  } as any);
 
   if (!updated) return err('Failed to save generated plan', 500);
 
