@@ -104,6 +104,7 @@ const PLATFORM_LABELS: Record<CampaignPlatform, string> = {
   instagram: 'Instagram',
   tiktok: 'TikTok',
   google: 'Google Ads',
+  linkedin: 'LinkedIn',
   multi_platform: 'מולטי-פלטפורמה',
 };
 
@@ -112,6 +113,7 @@ const PLATFORM_ICONS: Record<CampaignPlatform, string> = {
   instagram: '📸',
   tiktok: '🎵',
   google: '🔍',
+  linkedin: '💼',
   multi_platform: '🌐',
 };
 
@@ -120,6 +122,7 @@ const PLATFORM_COLORS: Record<CampaignPlatform, string> = {
   instagram: '#e4405f',
   tiktok: '#000000',
   google: '#4285f4',
+  linkedin: '#0a66c2',
   multi_platform: '#6366f1',
 };
 

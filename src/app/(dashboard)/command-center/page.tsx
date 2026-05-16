@@ -81,6 +81,7 @@ const PLATFORM_LABELS: Record<CampaignPlatform, string> = {
   instagram: "Instagram",
   tiktok: "TikTok",
   google: "Google Ads",
+  linkedin: "LinkedIn",
   multi_platform: "מולטי-פלטפורמה",
 };
 
@@ -89,6 +90,7 @@ const PLATFORM_ICONS: Record<CampaignPlatform, string> = {
   instagram: "📸",
   tiktok: "🎵",
   google: "🔍",
+  linkedin: "💼",
   multi_platform: "🌐",
 };
 
