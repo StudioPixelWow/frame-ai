@@ -45,6 +45,10 @@ export async function POST() {
         // 1. Create default Ad Set
         const adSet = await adSets.createAsync({
           campaignId: c.id,
+          updatedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          lastSyncedAt: null,
+          metaAdSetId: null,
           name: `${c.campaignName} — קבוצת מודעות ראשית`,
           status: c.status === 'active' ? 'active' : c.status === 'completed' ? 'active' : 'draft',
 
@@ -73,6 +77,10 @@ export async function POST() {
         await ads.createAsync({
           adSetId: adSet.id,
           campaignId: c.id,
+          updatedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          lastSyncedAt: null,
+          metaAdId: null,
           name: `${c.campaignName} — מודעה ראשית`,
           status: c.status === 'active' ? 'active' : 'draft',
 
