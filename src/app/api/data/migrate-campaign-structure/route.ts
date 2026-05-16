@@ -48,7 +48,7 @@ export async function POST() {
           updatedAt: new Date().toISOString(),
           createdAt: new Date().toISOString(),
           lastSyncedAt: null,
-          metaAdSetId: null,
+          metaAdSetId: '',
           name: `${c.campaignName} — קבוצת מודעות ראשית`,
           status: c.status === 'active' ? 'active' : c.status === 'completed' ? 'active' : 'draft',
 
@@ -80,7 +80,7 @@ export async function POST() {
           updatedAt: new Date().toISOString(),
           createdAt: new Date().toISOString(),
           lastSyncedAt: null,
-          metaAdId: null,
+          metaAdId: '',
           name: `${c.campaignName} — מודעה ראשית`,
           status: c.status === 'active' ? 'active' : 'draft',
 
@@ -108,6 +108,9 @@ export async function POST() {
           cpl: 0,
           cpc: 0,
           roas: 0,
+          reach: 0,
+          frequency: 0,
+          cpm: 0,
 
           notes: c.notes || '',
         });
