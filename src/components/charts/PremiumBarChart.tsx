@@ -111,15 +111,15 @@ export function PremiumBarChart({
                     maxWidth: 48,
                     height: `${Math.max(pct, 3)}%`,
                     background: isMax
-                      ? `linear-gradient(180deg, ${BRAND.yellow} 0%, ${color} 100%)`
-                      : `linear-gradient(180deg, ${color} 0%, ${color}99 100%)`,
+                      ? `linear-gradient(180deg, ${BRAND.yellow} 0%, #C8FF00 100%)`
+                      : `linear-gradient(180deg, #05E2FF 0%, ${BRAND.cyan} 100%)`,
                     borderRadius: `${barRadius}px ${barRadius}px 2px 2px`,
                     transition: 'height 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.2s ease, box-shadow 0.2s ease',
                     transform: isHover ? 'scaleY(1.03)' : 'scaleY(1)',
                     transformOrigin: 'bottom',
                     boxShadow: isHover
-                      ? `0 0 16px ${color}40, 0 -4px 12px ${color}20`
-                      : isMax ? `0 0 12px ${BRAND.yellow}30` : 'none',
+                      ? isMax ? `0 0 20px ${BRAND.yellow}50, 0 -4px 16px ${BRAND.yellow}30` : `0 0 16px ${BRAND.cyan}40, 0 -4px 12px ${BRAND.cyan}20`
+                      : isMax ? `0 0 12px ${BRAND.yellow}40` : 'none',
                     animation: 'pgBarGrow 0.6s ease both',
                     animationDelay: `${i * 0.04}s`,
                   }} />
@@ -171,9 +171,9 @@ export function PremiumBarChart({
                       width: `${Math.max(pct, 2)}%`,
                       borderRadius: 4,
                       background: isMax
-                        ? `linear-gradient(90deg, ${color}, ${BRAND.yellow})`
-                        : `linear-gradient(90deg, ${color}, ${color}BB)`,
-                      boxShadow: isMax ? `0 0 10px ${BRAND.yellow}30` : `0 0 8px ${color}20`,
+                        ? `linear-gradient(90deg, ${BRAND.yellow}, #C8FF00)`
+                        : `linear-gradient(90deg, ${BRAND.cyan}, #05E2FF)`,
+                      boxShadow: isMax ? `0 0 12px ${BRAND.yellow}40` : `0 0 8px ${BRAND.cyan}20`,
                       transition: 'width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)',
                       animation: 'pgBarGrow 0.5s ease both',
                       animationDelay: `${i * 0.05}s`,

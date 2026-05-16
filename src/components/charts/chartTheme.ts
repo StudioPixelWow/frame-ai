@@ -23,18 +23,18 @@ export const BRAND = {
   purpleLight: '#A78BFA',
 } as const;
 
-// ── Chart Color Palette (ordered for multi-series) ──
+// ── Chart Color Palette (ordered for multi-series — neon yellow + cyan dominant) ──
 
 export const CHART_COLORS = [
+  '#F0FF02',  // neon yellow — lead color (first/max bar)
   '#02AFFE',  // primary cyan
   '#05E2FF',  // secondary cyan
-  '#7C3AED',  // purple
-  '#F0FF02',  // action yellow
-  '#3B82F6',  // blue
+  '#00D4FF',  // bright cyan
+  '#7DD3FC',  // soft cyan
+  '#38BDF8',  // sky blue
   '#10B981',  // emerald
   '#F59E0B',  // amber
-  '#EF4444',  // red
-  '#EC4899',  // pink
+  '#7C3AED',  // purple
   '#6366F1',  // indigo
 ] as const;
 
@@ -61,9 +61,12 @@ export const GRADIENTS = {
   purpleCyan: 'linear-gradient(135deg, #7C3AED 0%, #02AFFE 100%)',
   blue: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
   yellowAccent: 'linear-gradient(135deg, #F0FF02 0%, #FAFFA6 100%)',
+  yellowCyan: 'linear-gradient(180deg, #F0FF02 0%, #02AFFE 100%)',
+  cyanBar: 'linear-gradient(180deg, #05E2FF 0%, #02AFFE 100%)',
   glassLight: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.85) 100%)',
   glassDark: 'linear-gradient(135deg, rgba(11,22,40,0.97) 0%, rgba(19,32,64,0.95) 100%)',
-  areaFill: 'linear-gradient(180deg, rgba(2,175,254,0.25) 0%, rgba(2,175,254,0.02) 100%)',
+  areaFill: 'linear-gradient(180deg, rgba(2,175,254,0.35) 0%, rgba(2,175,254,0.03) 100%)',
+  areaFillCyan: 'linear-gradient(180deg, rgba(5,226,255,0.4) 0%, rgba(2,175,254,0.05) 100%)',
   areaFillPurple: 'linear-gradient(180deg, rgba(124,58,237,0.2) 0%, rgba(124,58,237,0.02) 100%)',
 } as const;
 
@@ -72,8 +75,8 @@ export const GRADIENTS = {
 export const SVG_GRADIENT_DEFS = `
   <defs>
     <linearGradient id="pg-cyan" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#02AFFE" stop-opacity="0.35"/>
-      <stop offset="100%" stop-color="#02AFFE" stop-opacity="0.03"/>
+      <stop offset="0%" stop-color="#05E2FF" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#02AFFE" stop-opacity="0.05"/>
     </linearGradient>
     <linearGradient id="pg-purple" x1="0%" y1="0%" x2="0%" y2="100%">
       <stop offset="0%" stop-color="#7C3AED" stop-opacity="0.25"/>

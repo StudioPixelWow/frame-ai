@@ -42,6 +42,18 @@ const config: Config = {
         accent2: "var(--accent2)",
         yellow:  "var(--yellow)",
 
+        // ── Neon brand colors ─────────────────────────────────────────────
+        neon: {
+          yellow:  "var(--neon-yellow)",
+          border:  "var(--neon-border)",
+          "border-subtle": "var(--neon-border-subtle)",
+        },
+        cyan: {
+          DEFAULT: "#02AFFE",
+          light:   "#05E2FF",
+          soft:    "#7DD3FC",
+        },
+
         // ── Semantic ──────────────────────────────────────────────────────
         success: "var(--success)",
         warning: "var(--warning)",
@@ -65,6 +77,16 @@ const config: Config = {
         md:      "0.5rem",
         lg:      "0.75rem",
         xl:      "1rem",
+      },
+
+      // ── Box shadows (neon glow) ────────────────────────────────────────
+      boxShadow: {
+        "neon-sm":  "var(--neon-glow-sm)",
+        "neon-md":  "var(--neon-glow-md)",
+        "neon-lg":  "var(--neon-glow-lg)",
+        card:       "var(--shadow-card)",
+        "card-hover": "var(--shadow-card-hover)",
+        elevated:   "var(--shadow-elevated)",
       },
 
       // ── Transitions ───────────────────────────────────────────────────

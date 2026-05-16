@@ -92,6 +92,30 @@ export const sound = {
     setTimeout(() => playTone(1320, 0.15, "sine", 0.05), 120);
   },
 
+  /** Send — message sent, email dispatched */
+  send() {
+    playTone(440, 0.08, "sine", 0.04, { freq: 880, time: 0.06 });
+    setTimeout(() => playTone(660, 0.1, "sine", 0.03), 60);
+  },
+
+  /** Delete — item removed */
+  remove() {
+    playTone(300, 0.12, "triangle", 0.04, { freq: 180, time: 0.1 });
+  },
+
+  /** Level up — milestone reached, achievement */
+  levelUp() {
+    playTone(523, 0.1, "sine", 0.05);
+    setTimeout(() => playTone(659, 0.1, "sine", 0.05), 80);
+    setTimeout(() => playTone(784, 0.1, "sine", 0.05), 160);
+    setTimeout(() => playTone(1047, 0.2, "sine", 0.06), 240);
+  },
+
+  /** Tab switch — subtle navigation */
+  tab() {
+    playTone(700, 0.04, "sine", 0.03);
+  },
+
   /** Toggle mute on/off */
   toggleMute() {
     muted = !muted;
