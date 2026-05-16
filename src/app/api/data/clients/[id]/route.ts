@@ -115,7 +115,7 @@ export async function GET(
 
     console.log(`[API] GET /api/data/clients/${id} DB keys: ${Object.keys(data).join(', ')}`);
 
-    const client = rowToClient(data as ClientRow);
+    const client = rowToClient(data as unknown as ClientRow);
     return NextResponse.json(client);
   } catch (error) {
     console.error('[API] GET /api/data/clients/[id] error:', error);
@@ -159,7 +159,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Client not found', clientId: id }, { status: 404 });
     }
 
-    const result = rowToClient(data as ClientRow);
+    const result = rowToClient(data as unknown as ClientRow);
     console.log(`[API] PUT /api/data/clients/${id} ✅ saved keys=${Object.keys(data as object).join(',')}`);
     return NextResponse.json(result);
   } catch (error) {

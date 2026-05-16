@@ -95,7 +95,7 @@ export async function readRenderJob(jobId: string): Promise<RenderJobRow | null>
   }
 
   console.log(`${tag} ✅ Job found: ${jobId} status=${data.status} progress=${data.progress}%`);
-  return data as RenderJobRow;
+  return data as unknown as RenderJobRow;
 }
 
 /* ── Update ─────────────────────────────────────────────────────────────── */
@@ -131,7 +131,7 @@ export async function updateRenderJob(
   }
 
   console.log(`${tag} ✅ Job updated: ${jobId} status=${data.status} progress=${data.progress}%`);
-  return data as RenderJobRow;
+  return data as unknown as RenderJobRow;
 }
 
 /* ── Delete ─────────────────────────────────────────────────────────────── */
@@ -161,5 +161,5 @@ export async function listRenderJobs(): Promise<RenderJobRow[]> {
     return [];
   }
 
-  return (data ?? []) as RenderJobRow[];
+  return (data ?? []) as unknown as RenderJobRow[];
 }

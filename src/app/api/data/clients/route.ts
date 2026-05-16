@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
       console.log(`[API] GET /api/data/clients DB columns: ${Object.keys(rows[0]).join(', ')}`);
     }
 
-    const clients = (rows ?? []).map((r: Record<string, unknown>) => rowToClient(r as ClientRow));
+    const clients = (rows ?? []).map((r: Record<string, unknown>) => rowToClient(r as unknown as ClientRow));
     console.log(`[API] GET /api/data/clients ✅ returning ${clients.length} clients`);
     return NextResponse.json(clients);
   } catch (error) {
@@ -177,8 +177,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`[API] POST /api/data/clients ✅ id=${(inserted as ClientRow).id} keys=${Object.keys(inserted as object).join(',')}`);
-    return NextResponse.json(rowToClient(inserted as ClientRow), { status: 201 });
+    console.log(`[API] POST /api/data/clients ✅ id=${(inserted as unknown as ClientRow).id} keys=${Object.keys(inserted as object).join(',')}`);
+    return NextResponse.json(rowToClient(inserted as unknown as ClientRow), { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] POST /api/data/clients error:', msg);

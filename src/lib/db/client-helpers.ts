@@ -55,7 +55,7 @@ export async function getClientById(id: string) {
     return null;
   }
   if (!data) return null;
-  return rowToClient(data as ClientRow);
+  return rowToClient(data as unknown as ClientRow);
 }
 
 /** Update a client in Supabase. Returns updated client or null. */
@@ -95,5 +95,5 @@ export async function updateClientById(id: string, updates: Record<string, unkno
     return null;
   }
   if (!data) return null;
-  return rowToClient(data as ClientRow);
+  return rowToClient(data as unknown as ClientRow);
 }

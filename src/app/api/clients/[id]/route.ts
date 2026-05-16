@@ -86,7 +86,7 @@ async function handleGET(
     const accessErr = requireClientAccess(req, id);
     if (accessErr) return accessErr;
 
-    const client = rowToClient(data as ClientRow);
+    const client = rowToClient(data as unknown as ClientRow);
     console.log(`[API] GET /api/clients/${id} ✅`);
     return ok(client);
   } catch (error) {
@@ -183,7 +183,7 @@ async function handlePATCH(
       fieldsChanged: Object.keys(body).length,
     });
 
-    const result = rowToClient(updated as ClientRow);
+    const result = rowToClient(updated as unknown as ClientRow);
     console.log(`[API] PATCH /api/clients/${id} ✅ saved`);
     return ok(result);
   } catch (error) {

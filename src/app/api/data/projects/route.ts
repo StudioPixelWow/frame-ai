@@ -163,7 +163,7 @@ export async function GET() {
             droppedCols,
           });
         }
-        const projects = (rows ?? []).map((r) => rowToProject(r as ProjectRow));
+        const projects = (rows ?? []).map((r) => rowToProject(r as unknown as ProjectRow));
         console.log(`[API] GET /api/data/projects ✅ returning ${projects.length} projects`);
         return NextResponse.json(projects);
       }
@@ -224,7 +224,7 @@ export async function POST(req: NextRequest) {
         .select(selectList)
         .single();
 
-      if (!error) { inserted = data as ProjectRow; break; }
+      if (!error) { inserted = data as unknown as ProjectRow; break; }
 
       lastErr = error as any;
       const m = error.message.match(/column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);
@@ -298,7 +298,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const project = rowToProject(verify as ProjectRow);
+    const project = rowToProject(verify as unknown as ProjectRow);
     console.log(`[API] POST /api/data/projects ✅ persisted id=${id} name="${project.name}" status=${project.status} segments=${Array.isArray(project.segments) ? project.segments.length : 0} cols=${Object.keys(verify).join(',')}`);
     return NextResponse.json(project, { status: 201 });
   } catch (error) {

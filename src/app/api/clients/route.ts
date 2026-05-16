@@ -92,7 +92,7 @@ async function handleGET(req: NextRequest) {
     }
 
     const clients = (rows ?? []).map((r: Record<string, unknown>) =>
-      rowToClient(r as ClientRow)
+      rowToClient(r as unknown as ClientRow)
     );
     console.log(
       `[API] GET /api/clients ✅ returning ${clients.length} clients`
@@ -185,7 +185,7 @@ async function handlePOST(req: NextRequest) {
       createdBy: getRequestRole(req),
     });
 
-    const result = rowToClient(inserted as ClientRow);
+    const result = rowToClient(inserted as unknown as ClientRow);
     console.log(
       `[API] POST /api/clients ✅ id=${result.id}`
     );

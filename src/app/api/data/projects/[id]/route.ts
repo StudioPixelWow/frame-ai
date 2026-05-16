@@ -135,7 +135,7 @@ export async function GET(
       const { data, error } = await sb.from('video_projects').select(selectList).eq('id', id).maybeSingle();
       if (!error) {
         if (!data) return NextResponse.json({ error: 'Project not found', projectId: id }, { status: 404 });
-        const raw = data as ProjectRow;
+        const raw = data as unknown as ProjectRow;
         console.log(`[API] GET /api/data/projects/${id} VIDEO FIELDS:`, {
           source_video_key: raw.source_video_key,
           render_output_key: raw.render_output_key,
@@ -186,7 +186,7 @@ export async function PUT(
         .eq('id', id)
         .select(selectList)
         .maybeSingle();
-      if (!error) { updated = (data as ProjectRow) ?? null; break; }
+      if (!error) { updated = (data as unknown as ProjectRow) ?? null; break; }
       lastErr = error as any;
       const bad = parseBadColumn(error.message);
       if (!bad) break;

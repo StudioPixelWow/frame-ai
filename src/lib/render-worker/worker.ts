@@ -150,7 +150,7 @@ async function fetchJob(jobId: string): Promise<RenderJobRow | null> {
     return null;
   }
 
-  return (data as RenderJobRow | null) ?? null;
+  return (data as unknown as RenderJobRow | null) ?? null;
 }
 
 async function claimNextQueuedJob(): Promise<RenderJobRow | null> {
@@ -170,7 +170,7 @@ async function claimNextQueuedJob(): Promise<RenderJobRow | null> {
 
   if (!data || data.length === 0) return null;
 
-  const job = data[0] as RenderJobRow;
+  const job = data[0] as unknown as RenderJobRow;
 
   const { data: claimedRow, error: claimError } = await sb
     .from("render_jobs")
@@ -196,7 +196,7 @@ async function claimNextQueuedJob(): Promise<RenderJobRow | null> {
   }
 
   console.log(`${tag} ══ CLAIMED JOB: ${job.job_id} (created ${job.created_at}) ══`);
-  return claimedRow as RenderJobRow;
+  return claimedRow as unknown as RenderJobRow;
 }
 
 // ── Bundle ────────────────────────────────────────────────────────────────
