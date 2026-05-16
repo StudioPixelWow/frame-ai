@@ -114,6 +114,46 @@ export default function MailingPage() {
     return filtered.length;
   }, [formState, activeClients]);
 
+  // Resolve recipient filter to actual email addresses
+  const resolveRecipientEmails = useCallback((): string[] => {
+    if (!activeClients.length) return [];
+
+    let filtered = activeClients;
+
+    switch (formState.recipientFilterType) {
+      case 'all':
+        break;
+      case 'by_client_type':
+        if (formState.selectedClientTypes.length > 0) {
+          filtered = filtered.filter(c => formState.selectedClientTypes.includes(c.clientType));
+        }
+        break;
+      case 'by_employee':
+        if (formState.selectedEmployeeId) {
+          filtered = filtered.filter(c => c.assignedManagerId === formState.selectedEmployeeId);
+        }
+        break;
+      case 'by_payment_status':
+        if (formState.selectedPaymentStatus) {
+          filtered = filtered.filter(c => c.paymentStatus === formState.selectedPaymentStatus);
+        }
+        break;
+      case 'by_portal':
+        filtered = filtered.filter(c => c.portalEnabled);
+        break;
+      case 'manual':
+        if (formState.selectedManualClientIds.length > 0) {
+          filtered = filtered.filter(c => formState.selectedManualClientIds.includes(c.id));
+        }
+        break;
+    }
+
+    // Extract emails, filter out empty/invalid
+    return filtered
+      .map(c => c.email)
+      .filter(email => email && email.includes('@'));
+  }, [activeClients, formState]);
+
   const handleCreateMailing = useCallback(async (sendNow: boolean) => {
     if (!formState.subject.trim()) {
       toast('נא הזן נושא', 'error');
@@ -127,6 +167,13 @@ export default function MailingPage() {
 
     if (recipientCount === 0) {
       toast('לא נבחרו מקבלים', 'error');
+      return;
+    }
+
+    // Resolve filter to actual email addresses
+    const recipientEmails = resolveRecipientEmails();
+    if (sendNow && recipientEmails.length === 0) {
+      toast('לא נמצאו כתובות מייל תקינות עבור הלקוחות שנבחרו', 'error');
       return;
     }
 
@@ -155,7 +202,7 @@ export default function MailingPage() {
         manualClientIds: formState.recipientFilterType === 'manual' ? formState.selectedManualClientIds : undefined,
       },
       recipientCount,
-      status: sendNow ? 'sent' : (formState.scheduleEnabled ? 'scheduled' : 'draft'),
+      status: sendNow ? 'sending' : (formState.scheduleEnabled ? 'scheduled' : 'draft'),
       scheduledAt: scheduledDateTime,
       sentAt: sendNow ? now.toISOString() : null,
       templateId: null,
@@ -164,19 +211,44 @@ export default function MailingPage() {
     };
 
     try {
-      await createMailing(newMailing as any);
+      // Include recipients + html in POST body so the API route actually sends the email
+      const postBody = {
+        ...newMailing,
+        recipients: sendNow ? recipientEmails : undefined,
+        html: formState.body,  // Body content as HTML for email
+      };
 
-      toast(
-        sendNow ? 'דיוור נשלח בהצלחה!' : (formState.scheduleEnabled ? 'דיוור תוזמן בהצלחה!' : 'דיוור שמור כטיוטה'),
-        'success'
-      );
+      const response = await fetch('/api/data/mailings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(postBody),
+      });
+
+      const result = await response.json();
+
+      if (sendNow) {
+        if (result.emailSent) {
+          toast(`דיוור נשלח בהצלחה ל-${recipientEmails.length} נמענים!`, 'success');
+        } else if (result.emailMock) {
+          toast('Gmail לא מוגדר — המייל לא נשלח. הגדר GMAIL_USER + GMAIL_APP_PASSWORD בהגדרות Vercel', 'error');
+        } else if (result.emailError) {
+          toast(`שגיאה בשליחת מייל: ${result.emailError}`, 'error');
+        } else {
+          toast('הדיוור נשמר אך לא נשלח — בדוק הגדרות Gmail', 'error');
+        }
+      } else {
+        toast(
+          formState.scheduleEnabled ? 'דיוור תוזמן בהצלחה!' : 'דיוור שמור כטיוטה',
+          'success'
+        );
+      }
 
       setFormState(EMPTY_FORM);
       refetchMailings();
     } catch (error) {
       toast('שגיאה ביצירת הדיוור', 'error');
     }
-  }, [formState, recipientCount, toast, refetchMailings, createMailing]);
+  }, [formState, recipientCount, resolveRecipientEmails, toast, refetchMailings]);
 
   const handleSaveTemplate = useCallback(async () => {
     if (!templateNameInput.trim()) {
