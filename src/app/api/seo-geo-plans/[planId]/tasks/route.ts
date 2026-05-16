@@ -12,7 +12,9 @@ interface EnrichedTask {
 export const GET = withErrorBoundary(async (request: NextRequest, context: { params: Promise<{ planId: string }> }) => {
   const { planId } = await context.params;
 
-  const plan = await loadPlan(planId, request);
+  const result = await loadPlan(planId, request);
+  if (result.error) return result.error;
+  const plan = result.plan;
   if (!plan) {
     return notFound('Plan not found');
   }
@@ -25,8 +27,8 @@ export const GET = withErrorBoundary(async (request: NextRequest, context: { par
 
   // Flatten days into tasks array with enrichment
   let tasks: EnrichedTask[] = [];
-  for (const day of plan.days) {
-    for (const task of day.tasks) {
+  for (const day of (plan.days || [])) {
+    for (const task of (day.tasks || [])) {
       tasks.push({
         ...task,
         day: day.dayNumber,

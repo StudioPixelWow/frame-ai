@@ -26,7 +26,9 @@ export const POST = withErrorBoundary(async (request: NextRequest, context: { pa
     return err('planId is required', 400);
   }
 
-  const plan = await loadPlan(planId, request);
+  const result = await loadPlan(planId, request);
+  if (result.error) return result.error;
+  const plan = result.plan;
   if (!plan) {
     return notFound('Plan not found');
   }

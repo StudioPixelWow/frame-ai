@@ -31,8 +31,10 @@ export const PATCH = withErrorBoundary(async (request: NextRequest, context: { p
   let foundTaskIndex = -1;
 
   for (const plan of plans) {
+    if (!plan.days) continue;
     for (let dayIdx = 0; dayIdx < plan.days.length; dayIdx++) {
       const day = plan.days[dayIdx];
+      if (!day.tasks) continue;
       for (let taskIdx = 0; taskIdx < day.tasks.length; taskIdx++) {
         const task = day.tasks[taskIdx];
         if (task.id === taskId) {

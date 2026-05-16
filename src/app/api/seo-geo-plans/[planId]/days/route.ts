@@ -5,7 +5,9 @@ import { ok, err, notFound, logActivity, loadPlan, withErrorBoundary } from '@/l
 export const GET = withErrorBoundary(async (request: NextRequest, context: { params: Promise<{ planId: string }> }) => {
   const { planId } = await context.params;
 
-  const plan = await loadPlan(planId, request);
+  const result = await loadPlan(planId, request);
+  if (result.error) return result.error;
+  const plan = result.plan;
   if (!plan) {
     return notFound('Plan not found');
   }
@@ -15,7 +17,7 @@ export const GET = withErrorBoundary(async (request: NextRequest, context: { par
   const fromDay = url.searchParams.get('from');
   const toDay = url.searchParams.get('to');
 
-  let filteredDays = [...plan.days];
+  let filteredDays = [...(plan.days || [])];
 
   // Filter by phase
   if (phaseFilter) {
@@ -26,7 +28,7 @@ export const GET = withErrorBoundary(async (request: NextRequest, context: { par
   // Filter by day range
   if (fromDay || toDay) {
     const from = fromDay ? parseInt(fromDay, 10) : 1;
-    const to = toDay ? parseInt(toDay, 10) : plan.days.length;
+    const to = toDay ? parseInt(toDay, 10) : (plan.days || []).length;
     filteredDays = filteredDays.filter((day) => day.dayNumber >= from && day.dayNumber <= to);
   }
 

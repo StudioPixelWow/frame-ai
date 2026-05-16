@@ -19,7 +19,9 @@ interface GenerateReportBody {
 export const POST = withErrorBoundary(async (request: NextRequest, context: { params: Promise<{ planId: string }> }) => {
   const { planId } = await context.params;
 
-  const plan = await loadPlan(planId, request);
+  const result = await loadPlan(planId, request);
+  if (result.error) return result.error;
+  const plan = result.plan;
   if (!plan) {
     return notFound('Plan not found');
   }
