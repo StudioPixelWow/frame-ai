@@ -191,6 +191,8 @@ export async function generateWithAI(
 
     const result = await response.json();
     const content = result.choices?.[0]?.message?.content;
+    const finishReason = result.choices?.[0]?.finish_reason;
+    const usageTokens = result.usage;
 
     if (!content) {
       return {
@@ -198,6 +200,16 @@ export async function generateWithAI(
         error: 'Empty response from OpenAI',
         errorType: 'provider_failure',
       };
+    }
+
+    // Log token usage for debugging truncation issues
+    if (usageTokens) {
+      console.log(`[AI] Token usage: prompt=${usageTokens.prompt_tokens}, completion=${usageTokens.completion_tokens}, total=${usageTokens.total_tokens}. Finish: ${finishReason}`);
+    }
+
+    // Detect truncation — if finish_reason is 'length', the output was cut off
+    if (finishReason === 'length') {
+      console.warn(`[AI] ⚠️ Output truncated (finish_reason=length). completion_tokens=${usageTokens?.completion_tokens}. Increase maxTokens.`);
     }
 
     // Try to parse as JSON — handle markdown code blocks wrapping
@@ -212,8 +224,17 @@ export async function generateWithAI(
       }
       const parsed = JSON.parse(jsonStr);
       return { success: true, data: parsed };
-    } catch {
-      // Return as raw text if not JSON
+    } catch (parseError) {
+      // If truncated, report as failure so caller can retry
+      if (finishReason === 'length') {
+        console.error(`[AI] JSON parse failed due to truncation. Content ends with: "${content.slice(-100)}"`);
+        return {
+          success: false,
+          error: `Output truncated at ${usageTokens?.completion_tokens || '?'} tokens — JSON incomplete. Increase maxTokens.`,
+          errorType: 'provider_failure',
+        };
+      }
+      // Return as raw text if not JSON (non-truncation case)
       return { success: true, data: content };
     }
   } catch (error) {
