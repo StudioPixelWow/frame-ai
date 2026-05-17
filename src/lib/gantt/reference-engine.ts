@@ -274,7 +274,9 @@ export async function fetchReferencesWithStatus(
       if (metaData.error) {
         lastError = metaData.error;
         console.warn(`${logPrefix} Meta query "${searchTerm}" error: ${metaData.error}`);
-        continue; // Try next query
+        // Stop retrying on server errors (502/503) — no point spamming a broken endpoint
+        if (!metaRes.ok && metaRes.status >= 500) break;
+        continue; // Try next query on 4xx errors
       }
 
       const results: ReferenceItem[] = (metaData.results || [])
