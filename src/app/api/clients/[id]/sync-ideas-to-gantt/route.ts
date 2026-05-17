@@ -5,6 +5,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // Vercel Hobby allows up to 60s — needed for OpenAI call + DB writes
+
 import { clientGanttItems } from '@/lib/db';
 // clientResearch removed — Supabase is the single source of truth
 import { ensureSeeded } from '@/lib/db/seed';

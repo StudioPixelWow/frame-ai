@@ -24,6 +24,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiKeys } from "@/lib/db/api-keys";
 import { JsonStore } from "@/lib/db/store";
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 interface ContentVariation {
   id: string;
   variationType: "hook" | "cta" | "visual" | "full";

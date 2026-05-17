@@ -3,6 +3,9 @@ import { clientKnowledge } from '@/lib/db/collections';
 import { getApiKeys } from '@/lib/db/api-keys';
 import type { ClientKnowledge as ClientKnowledgeType } from '@/lib/db/schema';
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 interface ClientBrainRequest {
   clientId: string;
   clientName: string;

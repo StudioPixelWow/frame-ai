@@ -27,6 +27,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateWithAI, getClientKnowledgeContext } from "@/lib/ai/openai-client";
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 export const runtime = "nodejs";
 
 const PLATFORM_NAMES: Record<string, string> = {

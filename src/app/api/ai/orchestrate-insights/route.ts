@@ -19,6 +19,9 @@ import { clientInsights, creativeDNA } from '@/lib/db/collections';
 import type { ClientInsight, InsightSection, CreativeDNA } from '@/lib/db/schema';
 import { generateWithAI, getClientKnowledgeContext } from '@/lib/ai/openai-client';
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 const ALL_SECTIONS: InsightSection[] = [
   'client_brain',
   'brand_weakness',

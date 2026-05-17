@@ -5,6 +5,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // Vercel Hobby allows up to 60s — needed for AI generation
+
 import { clientGanttItems } from '@/lib/db';
 import { creativeDNA as creativeDNAStore } from '@/lib/db/collections';
 import { ensureSeeded } from '@/lib/db/seed';

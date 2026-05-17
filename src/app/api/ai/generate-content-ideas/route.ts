@@ -12,6 +12,9 @@ import { getClientById } from '@/lib/db/client-helpers';
 import { getHolidaysForMonth } from '@/lib/israeli-holidays';
 import type { ClientResearch } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   await ensureSeeded();
 

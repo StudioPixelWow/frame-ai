@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server';
 import { ok, err, loadPlan, notFound, updatePlanSafe, logActivity, withErrorBoundary } from '@/lib/seo/api-helpers';
 import { generateWithAI } from '@/lib/ai/openai-client';
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 /**
  * AI SEO Enrichment Endpoint
  *

@@ -3,6 +3,9 @@ import { generateWithAI, getClientResearchContext } from '@/lib/ai/openai-client
 import { getApiKeys } from '@/lib/db/api-keys';
 import { getRelevantHolidays, getHolidaysForMonth } from '@/lib/israeli-holidays';
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 // ============================================================================
 // TYPE DEFINITIONS
 // ============================================================================

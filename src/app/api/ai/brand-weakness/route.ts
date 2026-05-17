@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getApiKeys } from '@/lib/db/api-keys';
 import type { ClientKnowledge } from '@/lib/db/schema';
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 interface BrandWeaknessRequest {
   clientId: string;
   clientBrain: ClientKnowledge;

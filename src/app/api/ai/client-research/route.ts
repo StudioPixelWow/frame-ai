@@ -17,6 +17,9 @@ import { getSupabase, ensureTable } from '@/lib/db/store';
 import { generateWithAI, getClientKnowledgeContext } from '@/lib/ai/openai-client';
 import type { ClientResearch, Client } from '@/lib/db/schema';
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 // DDL for auto-creating client_research table if missing
 const CLIENT_RESEARCH_DDL = `
   CREATE TABLE IF NOT EXISTS public.client_research (

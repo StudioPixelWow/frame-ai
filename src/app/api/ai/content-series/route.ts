@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getApiKeys } from '@/lib/db/api-keys';
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 interface ContentSeriesRequest {
   clientId: string;
   businessType: string;
