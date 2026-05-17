@@ -1113,7 +1113,7 @@ export default function NewProjectWizard() {
         let notFoundCount = 0;
         let lastProgress = -1;
         let stallCount = 0;
-        const MAX_STALL_POLLS = 50; // ~60s at 1200ms interval — if progress doesn't change, mark as failed
+        const MAX_STALL_POLLS = 100; // ~120s at 1200ms interval — allow time for encoding-heavy phases
         const pollInterval = setInterval(async () => {
           try {
             pollCount++;

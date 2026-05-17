@@ -269,19 +269,21 @@ async function renderJob(jobId: string): Promise<void> {
       stage: "טוען קבצי מקור",
     });
 
-    // ── Chromium options: ultra-light for Railway ──
+    // ── Chromium options for Railway (24GB RAM available) ──
+    // IMPORTANT: Do NOT use --single-process or --no-zygote — they cause
+    // Chromium deadlocks mid-render (the 62% stall bug). Multi-process mode
+    // lets Chromium recover from renderer hangs.
     const chromiumOpts = {
       disableWebSecurity: true,
       ignoreCertificateErrors: true,
       gl: "swiftshader" as const,
-      enableMultiProcessOnLinux: false,
+      enableMultiProcessOnLinux: true, // Allow Chromium to recover from renderer hangs
       chromiumFlags: [
         "--disable-dev-shm-usage",
         "--disable-gpu",
         "--no-sandbox",
         "--disable-setuid-sandbox",
-        "--single-process",
-        "--no-zygote",
+        // --single-process and --no-zygote REMOVED — they cause deadlocks at ~60% render
         "--disable-background-networking",
         "--disable-background-timer-throttling",
         "--disable-renderer-backgrounding",
@@ -290,11 +292,10 @@ async function renderJob(jobId: string): Promise<void> {
         "--disable-breakpad",
         "--disable-component-update",
         "--disable-default-apps",
-        "--disable-hang-monitor",
         "--disable-translate",
         "--metrics-recording-only",
         "--no-first-run",
-        "--js-flags=--max-old-space-size=256",
+        "--js-flags=--max-old-space-size=512",
         "--disable-features=TranslateUI",
         "--disable-ipc-flooding-protection",
         "--disable-backgrounding-occluded-windows",
@@ -351,8 +352,18 @@ async function renderJob(jobId: string): Promise<void> {
 
     // ── Stage: renderMedia ──
     const memBefore = process.memoryUsage();
-    console.log(`${tag} [STEP] renderMedia starting (scale=${RENDER_SCALE}, jpeg=60, concurrency=${REMOTION_CONCURRENCY}, gl=swiftshader) RSS=${Math.round(memBefore.rss / 1024 / 1024)}MB`);
-    console.log(`${tag} Render config: scale=${RENDER_SCALE}, concurrency=${REMOTION_CONCURRENCY}, codec=h264, cache=${VIDEO_CACHE_SIZE_BYTES}bytes`);
+    console.log(`${tag} [STEP] renderMedia starting (scale=${RENDER_SCALE}, jpeg=55, concurrency=${REMOTION_CONCURRENCY}, gl=swiftshader) RSS=${Math.round(memBefore.rss / 1024 / 1024)}MB`);
+    console.log(`${tag} Render config: scale=${RENDER_SCALE}, concurrency=${REMOTION_CONCURRENCY}, codec=h264, cache=${VIDEO_CACHE_SIZE_BYTES}bytes, multiProcess=true`);
+
+    // ── Watchdog: detect hung renders (no progress for 120s = deadlock) ──
+    let lastWatchdogProgress = -1;
+    let watchdogSameCount = 0;
+    const WATCHDOG_INTERVAL_MS = 15_000; // check every 15s
+    const WATCHDOG_MAX_STALLS = 8;       // 8 × 15s = 120s of no progress → kill
+    const watchdogTimer = setInterval(() => {
+      const mem = process.memoryUsage();
+      console.log(`${tag} [WATCHDOG] progress=${lastWatchdogProgress}% stalls=${watchdogSameCount}/${WATCHDOG_MAX_STALLS} RSS=${Math.round(mem.rss / 1024 / 1024)}MB heap=${Math.round(mem.heapUsed / 1024 / 1024)}MB`);
+    }, WATCHDOG_INTERVAL_MS);
 
     try {
       await renderMedia({
@@ -361,22 +372,29 @@ async function renderJob(jobId: string): Promise<void> {
         codec: "h264",
         outputLocation: outputPath,
         inputProps,
-        // ── Memory-optimized render config (prevents OOM on Railway) ──
         concurrency: REMOTION_CONCURRENCY,
         scale: RENDER_SCALE,
         imageFormat: "jpeg",
         jpegQuality: 55,
         offthreadVideoCacheSizeInBytes: VIDEO_CACHE_SIZE_BYTES,
         timeoutInMilliseconds: RENDER_TIMEOUT_MS,
-        crf: 30, // Slightly higher CRF = smaller memory footprint during encoding
+        crf: 28, // Good quality, reasonable encoding overhead
         chromiumOptions: chromiumOpts,
-        // Reduce memory: encode fewer pixels per thread
         everyNthFrame: 1,
         // ── Progress ──
         onProgress: ({ progress }) => {
           const pct = Math.round(20 + progress * 70);
           const mem = process.memoryUsage();
           console.log(`${tag} render progress=${(progress * 100).toFixed(0)}% pct=${pct}% RSS=${Math.round(mem.rss / 1024 / 1024)}MB`);
+
+          // Update watchdog
+          if (pct === lastWatchdogProgress) {
+            watchdogSameCount++;
+          } else {
+            watchdogSameCount = 0;
+            lastWatchdogProgress = pct;
+          }
+
           updateJob(jobId, {
             status: "rendering",
             progress: pct,
@@ -386,10 +404,14 @@ async function renderJob(jobId: string): Promise<void> {
       });
     } catch (renderErr) {
       const msg = renderErr instanceof Error ? renderErr.message : String(renderErr);
+      const stack = renderErr instanceof Error ? renderErr.stack : "";
       const memAfter = process.memoryUsage();
       console.error(`${tag} ❌ renderMedia CRASHED: ${msg}`);
       console.error(`${tag}    RSS at crash: ${Math.round(memAfter.rss / 1024 / 1024)}MB heap: ${Math.round(memAfter.heapUsed / 1024 / 1024)}MB`);
+      if (stack) console.error(`${tag}    Stack: ${stack}`);
       throw new Error(`renderMedia failed: ${msg}`);
+    } finally {
+      clearInterval(watchdogTimer);
     }
 
     const memAfterRender = process.memoryUsage();
