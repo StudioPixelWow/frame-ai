@@ -7,6 +7,10 @@
  * simply reads the latest status from Supabase and returns it.
  */
 import { NextRequest, NextResponse } from "next/server";
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 import {
   readRenderJob,
   updateRenderJob,

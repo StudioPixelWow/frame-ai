@@ -16,6 +16,9 @@ import { getSupabase } from "@/lib/db/store";
 import { invokeLambdaRender } from "@/lib/lambda-render/invoke-renderer";
 import { getSignedDownloadUrl } from "@/lib/storage/upload";
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 const tag = "[Render API]";
 
 export async function GET() {

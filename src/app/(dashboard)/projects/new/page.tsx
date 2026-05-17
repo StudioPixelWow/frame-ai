@@ -1111,6 +1111,9 @@ export default function NewProjectWizard() {
         // Poll render job for real progress
         let pollCount = 0;
         let notFoundCount = 0;
+        let lastProgress = -1;
+        let stallCount = 0;
+        const MAX_STALL_POLLS = 50; // ~60s at 1200ms interval — if progress doesn't change, mark as failed
         const pollInterval = setInterval(async () => {
           try {
             pollCount++;
@@ -1137,6 +1140,22 @@ export default function NewProjectWizard() {
 
             setRenderProgress(updatedJob.progress || 0);
             setRenderStageLabel(updatedJob.currentStage || "");
+
+            // Detect stalled render — if progress hasn't changed for ~60s, report failure
+            const currentProg = updatedJob.progress || 0;
+            if (currentProg === lastProgress && updatedJob.status !== "completed" && updatedJob.status !== "failed") {
+              stallCount++;
+              if (stallCount >= MAX_STALL_POLLS) {
+                clearInterval(pollInterval);
+                console.error(`[render-poll] ❌ Render stalled at ${currentProg}% for ${stallCount} polls (~${Math.round(stallCount * 1.2)}s). Marking as failed.`);
+                setRenderModalOpen(false);
+                toast(`הרינדור נתקע ב-${currentProg}%. נסה שוב.`, "error");
+                return;
+              }
+            } else {
+              stallCount = 0;
+              lastProgress = currentProg;
+            }
 
             // Map progress to stage index for the stage dots
             const prog = updatedJob.progress || 0;
