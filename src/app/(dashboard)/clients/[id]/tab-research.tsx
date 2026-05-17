@@ -376,6 +376,7 @@ export default function TabResearch({ client }: TabResearchProps) {
       const selectedIdeas = (research.contentIdeas25 || []).filter((i) => selectedIdeaIds.has(i.id));
       const allItems: any[] = [];
       let errorCount = 0;
+      let skippedCount = 0;
 
       // Send ONE idea at a time to avoid Vercel 10s function timeout
       for (let i = 0; i < selectedIdeas.length; i++) {
@@ -399,7 +400,11 @@ export default function TabResearch({ client }: TabResearchProps) {
             continue;
           }
           const data = await res.json();
-          if (data?.items) allItems.push(...data.items);
+          if (data?.items?.length > 0) {
+            allItems.push(...data.items);
+          } else if (data?.skipped > 0) {
+            skippedCount += data.skipped;
+          }
         } catch (err) {
           console.error(`[SyncToGantt] Idea ${i + 1} network error:`, err);
           errorCount++;
@@ -411,7 +416,12 @@ export default function TabResearch({ client }: TabResearchProps) {
       if (allItems.length > 0) {
         // Notify gantt tab to refetch — items were added server-side
         emitDataChange('client-gantt-items');
-        setSyncSuccess(`✔ ${allItems.length} רעיונות נוספו לגאנט${errorCount > 0 ? ` (${errorCount} נכשלו)` : ''}`);
+        const parts = [`✔ ${allItems.length} רעיונות נוספו לגאנט`];
+        if (skippedCount > 0) parts.push(`${skippedCount} כבר קיימים`);
+        if (errorCount > 0) parts.push(`${errorCount} נכשלו`);
+        setSyncSuccess(parts.join(' | '));
+      } else if (skippedCount > 0) {
+        setSyncSuccess(`⚠️ כל ${skippedCount} הרעיונות כבר קיימים בגאנט לחודש זה`);
       } else {
         setSyncSuccess(null);
         alert(`כל ${selectedIdeas.length} הרעיונות נכשלו בסנכרון`);

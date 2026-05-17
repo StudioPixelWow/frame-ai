@@ -101,7 +101,9 @@ export async function POST(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  ensureSeeded();
+  try { ensureSeeded(); } catch (seedErr) {
+    console.warn('[sync-ideas-to-gantt] ensureSeeded failed:', seedErr instanceof Error ? seedErr.message : seedErr);
+  }
 
   try {
     const { id } = await context.params;
