@@ -22,13 +22,13 @@ const OUTPUT_DIR = path.join(PROJECT_ROOT, "public/renders");
 const BUCKET = "project-files";
 
 const POLL_INTERVAL_MS = Number(process.env.RENDER_POLL_INTERVAL_MS ?? 3000);
-const REMOTION_CONCURRENCY = Number(process.env.REMOTION_CONCURRENCY ?? 2);
+const REMOTION_CONCURRENCY = Number(process.env.REMOTION_CONCURRENCY ?? 1); // Default 1 to prevent OOM
 const RENDER_TIMEOUT_MS = Number(process.env.REMOTION_TIMEOUT_MS ?? 1000 * 60 * 30);
 const RENDER_SCALE = Number(process.env.REMOTION_SCALE ?? 1);
 
-// Cap Remotion's offthread video cache to 128 MB (default is unbounded)
+// Cap Remotion's offthread video cache to 64 MB (default is unbounded — causes OOM)
 const VIDEO_CACHE_SIZE_BYTES = Number(
-  process.env.REMOTION_VIDEO_CACHE_MB ?? 128
+  process.env.REMOTION_VIDEO_CACHE_MB ?? 64
 ) * 1024 * 1024;
 
 // Performance: Set offthread video cache limit
@@ -294,7 +294,11 @@ async function renderJob(jobId: string): Promise<void> {
         "--disable-translate",
         "--metrics-recording-only",
         "--no-first-run",
-        "--js-flags=--max-old-space-size=384",
+        "--js-flags=--max-old-space-size=256",
+        "--disable-features=TranslateUI",
+        "--disable-ipc-flooding-protection",
+        "--disable-backgrounding-occluded-windows",
+        "--force-color-profile=srgb",
       ],
     };
 
@@ -357,15 +361,17 @@ async function renderJob(jobId: string): Promise<void> {
         codec: "h264",
         outputLocation: outputPath,
         inputProps,
-        // ── Production quality render config ──
+        // ── Memory-optimized render config (prevents OOM on Railway) ──
         concurrency: REMOTION_CONCURRENCY,
         scale: RENDER_SCALE,
         imageFormat: "jpeg",
-        jpegQuality: 60,
+        jpegQuality: 55,
         offthreadVideoCacheSizeInBytes: VIDEO_CACHE_SIZE_BYTES,
         timeoutInMilliseconds: RENDER_TIMEOUT_MS,
-        crf: 28,
+        crf: 30, // Slightly higher CRF = smaller memory footprint during encoding
         chromiumOptions: chromiumOpts,
+        // Reduce memory: encode fewer pixels per thread
+        everyNthFrame: 1,
         // ── Progress ──
         onProgress: ({ progress }) => {
           const pct = Math.round(20 + progress * 70);
