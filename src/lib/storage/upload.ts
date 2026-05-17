@@ -163,6 +163,12 @@ export async function getSignedUploadUrl(opts: {
       const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(storagePath);
       const publicUrl = urlData?.publicUrl || "";
 
+      // Guard: publicUrl MUST contain the file path, not just the bucket base URL
+      if (!publicUrl || publicUrl.endsWith("/") || !publicUrl.includes(storagePath)) {
+        console.error(`${attemptTag} ❌ getPublicUrl returned invalid URL: "${publicUrl}" (expected path: ${storagePath})`);
+        throw new Error(`Invalid public URL generated for "${storagePath}"`);
+      }
+
       console.log(`${attemptTag} ✅ Signed URL created: bucket="${BUCKET}" path=${storagePath} publicUrl=${publicUrl.slice(0, 80)}...`);
 
       return {

@@ -95,6 +95,26 @@ export async function POST(req: NextRequest) {
         error: "Video is only available locally (blob URL). Upload it to storage first.",
       }, { status: 400 });
     }
+    // Guard: reject Supabase bucket base URLs with no actual file path
+    // e.g. "https://xxx.supabase.co/storage/v1/object/public/project-files/" — missing filename
+    if (videoUrl.includes("/storage/v1/object/") && videoUrl.endsWith("/")) {
+      console.error(`${tag} ❌ Video URL is a bucket base URL without a filename: ${videoUrl}`);
+      return NextResponse.json({
+        error: "כתובת הוידאו שגויה — חסר שם קובץ. נסה להעלות מחדש.",
+      }, { status: 400 });
+    }
+    // Guard: Supabase URL must have a file path after the bucket name
+    const bucketMarker = "/object/public/project-files/";
+    const bucketIdx = videoUrl.indexOf(bucketMarker);
+    if (bucketIdx !== -1) {
+      const pathAfterBucket = videoUrl.slice(bucketIdx + bucketMarker.length);
+      if (!pathAfterBucket || pathAfterBucket.length < 3) {
+        console.error(`${tag} ❌ Video URL has empty/short path after bucket: ${videoUrl} → "${pathAfterBucket}"`);
+        return NextResponse.json({
+          error: "כתובת הוידאו שגויה — חסר נתיב לקובץ. נסה להעלות מחדש.",
+        }, { status: 400 });
+      }
+    }
 
     // ── Guard: only ONE render at a time (globally) to avoid AWS rate limits ──
     try {

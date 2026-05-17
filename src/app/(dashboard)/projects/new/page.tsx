@@ -859,37 +859,58 @@ export default function NewProjectWizard() {
             let errMsg = `status ${initRes.status}`;
             try { const b = await initRes.json(); if (b.error) errMsg = b.error; } catch {}
             console.error("[createProject] ❌ Failed to get upload URL:", errMsg);
-          } else {
-            const { uploadUrl, publicUrl } = await initRes.json();
-            // Step 2: PUT file directly to Supabase
-            if (uploadUrl) {
-              const putRes = await fetch(uploadUrl, {
-                method: "PUT",
-                headers: { "Content-Type": data.videoFile.type || "application/octet-stream" },
-                body: data.videoFile,
-              });
-              if (putRes.ok) {
-                patch({ uploadedVideoUrl: publicUrl });
-                data.uploadedVideoUrl = publicUrl;
-                console.log("[createProject] ✅ Video uploaded:", publicUrl);
-              } else {
-                console.error("[createProject] ❌ Direct upload failed:", putRes.status);
-              }
-            }
+            throw new Error(`שגיאה בהעלאת הוידאו: ${errMsg}`);
           }
+          const { uploadUrl, publicUrl } = await initRes.json();
+          if (!uploadUrl || !publicUrl) {
+            throw new Error("שרת לא החזיר כתובת העלאה תקינה");
+          }
+          // Validate publicUrl has an actual file path (not just bucket base URL)
+          if (publicUrl.endsWith("/") || !publicUrl.includes("/uploads/")) {
+            console.error("[createProject] ❌ publicUrl is invalid (no file path):", publicUrl);
+            throw new Error("כתובת הוידאו שהוחזרה שגויה — נסה שוב");
+          }
+          // Step 2: PUT file directly to Supabase
+          const putRes = await fetch(uploadUrl, {
+            method: "PUT",
+            headers: { "Content-Type": data.videoFile.type || "application/octet-stream" },
+            body: data.videoFile,
+          });
+          if (!putRes.ok) {
+            let errMsg = `status ${putRes.status}`;
+            try { const b = await putRes.json(); if (b.error || b.message) errMsg = b.error || b.message; } catch {}
+            console.error("[createProject] ❌ Direct upload failed:", errMsg);
+            throw new Error(`שגיאה בהעלאת הוידאו לאחסון: ${errMsg}`);
+          }
+          patch({ uploadedVideoUrl: publicUrl });
+          data.uploadedVideoUrl = publicUrl;
+          console.log("[createProject] ✅ Video uploaded:", publicUrl);
         } catch (e) {
-          console.error("[createProject] ❌ Video upload error:", e instanceof Error ? e.message : e);
+          const errMsg = e instanceof Error ? e.message : String(e);
+          console.error("[createProject] ❌ Video upload error:", errMsg);
+          setCreating(false);
+          alert(`שגיאה בהעלאת הוידאו: ${errMsg}`);
+          return; // Don't create project without a valid video URL
         }
       }
 
       // Build WizardSnapshot for the composition pipeline
+      // Validate video URL before proceeding — prevent broken bucket URLs
+      const resolvedVideoUrl = data.uploadedVideoUrl || (data.videoUrl && !data.videoUrl.startsWith("blob:") ? data.videoUrl : "");
+      if (!resolvedVideoUrl || resolvedVideoUrl.endsWith("/")) {
+        console.error("[createProject] ❌ No valid video URL available for render:", { uploadedVideoUrl: data.uploadedVideoUrl, videoUrl: data.videoUrl?.substring(0, 60) });
+        setCreating(false);
+        alert("שגיאה: לא נמצא קובץ וידאו תקין. נסה להעלות מחדש.");
+        return;
+      }
+
       const wizardSnapshot: WizardSnapshot = {
         projectId,
         title: data.title,
         clientId: data.clientId,
         clientName: client?.name || "",
         creativePrompt: data.creativePrompt,
-        videoUrl: data.uploadedVideoUrl || (data.videoUrl && !data.videoUrl.startsWith("blob:") ? data.videoUrl : ""),
+        videoUrl: resolvedVideoUrl,
         videoFileName: data.videoFile?.name || "",
         videoDurationSec: videoDurationSec || 30,
         trimMode: data.trimMode,
