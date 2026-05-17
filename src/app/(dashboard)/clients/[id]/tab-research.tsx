@@ -373,21 +373,46 @@ export default function TabResearch({ client }: TabResearchProps) {
     setSyncSuccess(null);
     try {
       const selectedIdeas = (research.contentIdeas25 || []).filter((i) => selectedIdeaIds.has(i.id));
-      const res = await fetch(`/api/clients/${client.id}/sync-ideas-to-gantt`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ideas: selectedIdeas,
-          month: syncMonth,
-          year: syncYear,
-          researchId: research.id,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'שגיאה בסנכרון');
+      const allItems: any[] = [];
+      let errorCount = 0;
+
+      // Send ONE idea at a time to avoid Vercel 10s function timeout
+      for (let i = 0; i < selectedIdeas.length; i++) {
+        const idea = selectedIdeas[i];
+        setSyncSuccess(`⏳ מעבד רעיון ${i + 1} מתוך ${selectedIdeas.length}...`);
+        try {
+          const res = await fetch(`/api/clients/${client.id}/sync-ideas-to-gantt`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ideas: [idea],
+              month: syncMonth,
+              year: syncYear,
+              researchId: research.id,
+            }),
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            console.error(`[SyncToGantt] Idea ${i + 1} failed:`, res.status, text.slice(0, 200));
+            errorCount++;
+            continue;
+          }
+          const data = await res.json();
+          if (data?.items) allItems.push(...data.items);
+        } catch (err) {
+          console.error(`[SyncToGantt] Idea ${i + 1} network error:`, err);
+          errorCount++;
+        }
+      }
+
       setShowMonthPicker(false);
       setSelectedIdeaIds(new Set());
-      setSyncSuccess(`✔ ${data?.items?.length ?? selectedIdeas.length} רעיונות נוספו לגאנט ונבנה עבורם תוכן`);
+      if (allItems.length > 0) {
+        setSyncSuccess(`✔ ${allItems.length} רעיונות נוספו לגאנט${errorCount > 0 ? ` (${errorCount} נכשלו)` : ''}`);
+      } else {
+        setSyncSuccess(null);
+        alert(`כל ${selectedIdeas.length} הרעיונות נכשלו בסנכרון`);
+      }
       setTimeout(() => setSyncSuccess(null), 6000);
     } catch (err: any) {
       console.error('[SyncToGantt]', err);
