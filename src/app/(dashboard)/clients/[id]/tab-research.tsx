@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Client, Employee } from '@/lib/db/schema';
+import { emitDataChange } from '@/lib/api/use-data';
 
 interface TabResearchProps {
   client: Client;
@@ -408,6 +409,8 @@ export default function TabResearch({ client }: TabResearchProps) {
       setShowMonthPicker(false);
       setSelectedIdeaIds(new Set());
       if (allItems.length > 0) {
+        // Notify gantt tab to refetch — items were added server-side
+        emitDataChange('client-gantt-items');
         setSyncSuccess(`✔ ${allItems.length} רעיונות נוספו לגאנט${errorCount > 0 ? ` (${errorCount} נכשלו)` : ''}`);
       } else {
         setSyncSuccess(null);
