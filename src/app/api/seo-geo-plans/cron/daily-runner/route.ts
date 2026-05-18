@@ -26,9 +26,10 @@ export async function GET(req: NextRequest) {
     const allPlans = await seoPlans.getAllAsync();
     const activePlans = allPlans.filter((p: any) =>
       (p.status === 'active' || p.status === 'plan_generated') &&
-      p.wpConnection?.siteUrl &&
       p.days && Array.isArray(p.days) && p.days.length > 0
     );
+    // NOTE: WordPress connection is now checked per-task, not per-plan.
+    // Non-WP tasks (technical_seo, meta_optimization, etc.) run without WP.
 
     if (activePlans.length === 0) {
       return NextResponse.json({ success: true, message: 'אין תוכניות פעילות', plansProcessed: 0 });
@@ -60,7 +61,11 @@ export async function GET(req: NextRequest) {
 async function processPlanDailyTasks(plan: any) {
   const planId = plan.id;
   const generatedAt = plan.generatedAt ? new Date(plan.generatedAt) : null;
-  if (!generatedAt) return { planId, clientName: plan.clientName, success: false, error: 'No generatedAt' };
+  console.log(`[SEO-CRON] Processing plan ${planId} (${plan.clientName}) — status=${plan.status}, generatedAt=${plan.generatedAt || 'MISSING'}, wpConnected=${!!plan.wpConnection?.siteUrl}, totalDays=${plan.days?.length || 0}`);
+  if (!generatedAt) {
+    console.error(`[SEO-CRON] ❌ Plan ${planId} has no generatedAt — cannot calculate day number. Fix: set generatedAt on the plan.`);
+    return { planId, clientName: plan.clientName, success: false, error: 'No generatedAt — set generatedAt timestamp on the plan' };
+  }
 
   const now = new Date();
   const dayNumber = Math.floor((now.getTime() - generatedAt.getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -87,10 +92,17 @@ async function processPlanDailyTasks(plan: any) {
     return { planId, clientName: plan.clientName, success: true, dayNumber, tasksFound: 0 };
   }
 
+  const hasWp = !!(plan.wpConnection?.siteUrl);
+  const WP_REQUIRED_MODULES = new Set([
+    'internal_linking', 'faq_schema', 'meta_optimization', 'content_refresh',
+    'image_seo', 'cta_optimization', 'cannibalization', 'humanization',
+  ]);
+  const WP_REQUIRED_TYPES = new Set(['daily_seo_article', 'auto_internal_linking', 'auto_faq_schema', 'auto_meta_optimization']);
+
   const facts = plan.websiteScan?.websiteFacts || {};
   const profile = plan.businessProfile || {};
   const context: AutomationContext = {
-    connection: plan.wpConnection,
+    connection: plan.wpConnection || { siteUrl: '', username: '', appPassword: '' },
     businessName: plan.clientName || facts.business_name?.value || facts.business_name || '',
     businessType: facts.business_type?.value || facts.business_type || profile.business_type || '',
     industry: facts.detected_industry?.value || facts.industry || profile.industry || '',
@@ -128,6 +140,14 @@ async function processPlanDailyTasks(plan: any) {
       continue;
     }
 
+    // Check if this specific task needs WordPress
+    const needsWp = WP_REQUIRED_MODULES.has(automationModule || '') || WP_REQUIRED_TYPES.has(autoType);
+    if (needsWp && !hasWp) {
+      console.log(`[SEO-CRON] Skipping "${task.title}" — requires WordPress connection`);
+      executionResults.push({ taskId: task.id, taskTitle: task.title, autoType, executed: false, reason: 'Requires WordPress — not connected' });
+      continue;
+    }
+
     try {
       // Extract specific keyword from task title for article tasks
       if (autoType === 'daily_seo_article') {
@@ -151,7 +171,14 @@ async function processPlanDailyTasks(plan: any) {
         result = await executeAutoTask(autoType, context);
       }
 
-      updatedTasks[i] = { ...task, status: result.success ? 'done' : 'in_progress' };
+      updatedTasks[i] = {
+        ...task,
+        status: result.success ? 'done' : 'failed',
+        completedAt: result.success ? new Date().toISOString() : undefined,
+        executionResult: result.success
+          ? `✅ ${result.pagesAffected || 0} עמודים עודכנו, ${result.changes.length} שינויים`
+          : `❌ ${result.error || 'Unknown error'}`,
+      };
       executionResults.push({
         taskId: task.id, taskTitle: task.title, autoType, executed: true,
         success: result.success, pagesAffected: result.pagesAffected, changesCount: result.changes.length,

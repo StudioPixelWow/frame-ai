@@ -902,14 +902,14 @@ const executeDailySeoArticle: ExecutorFunction = async (context) => {
 ═══ הוראות כתיבה — רמת מומחה ═══
 
 📏 אורך ומבנה:
-- כתוב מאמר של 1500-2000 מילים (לא פחות מ-1500)
-- מבנה: פתיחה חזקה → 5-7 סעיפים עם H2 → FAQ → סיכום עם CTA
-- כל סעיף צריך להיות לפחות 150-200 מילים עם ערך אמיתי
-- הוסף לפחות סעיף H3 אחד בתוך כל H2
+- כתוב מאמר של 3000-4000 מילים (לא פחות מ-3000!)
+- מבנה: פתיחה חזקה → 8-12 סעיפים עם H2 → FAQ → סיכום עם CTA
+- כל סעיף צריך להיות לפחות 250-350 מילים עם ערך אמיתי
+- הוסף לפחות 2 סעיפי H3 בתוך כל H2 עם תוכן מעמיק
 
 🎯 SEO On-Page:
 - כותרת ראשית (H1/title): עד 60 תווים, כולל "${keyword}" + שנת ${currentYear}
-- שלב את הביטוי "${keyword}" באופן טבעי 8-12 פעמים לאורך המאמר
+- שלב את הביטוי "${keyword}" באופן טבעי 15-20 פעמים לאורך המאמר
 - כלול וריאציות של הביטוי (מילים נרדפות, ביטויים קשורים)
 - השתמש ב-bold (<strong>) לביטויים חשובים
 - פסקת פתיחה: כלול את הביטוי ב-100 המילים הראשונות
@@ -933,11 +933,13 @@ ${isLocal ? `📍 קידום לוקאלי (Local SEO):
 - הימנע מכללות ומשפטים ריקים — כל פסקה צריכה להוסיף ערך
 
 📋 מבנה חובה:
-1. פתיחה מושכת (100-150 מילים) — הצגת הבעיה + הבטחת פתרון
-2. 5-7 סעיפי H2 עם תוכן מעמיק (כל אחד 200+ מילים)
-3. בכל סעיף: פסקאות + לפחות רשימה אחת (ul/ol) או דוגמה מעשית
-4. סעיף FAQ — 3 שאלות ותשובות (כ-Schema Markup מוכן)
-5. סיכום + CTA ברור ל-${context.businessName || 'העסק'} (100 מילים)
+1. פתיחה מושכת (200-300 מילים) — הצגת הבעיה + הבטחת פתרון + סטטיסטיקה רלוונטית
+2. 8-12 סעיפי H2 עם תוכן מעמיק (כל אחד 300+ מילים, עם 2 H3 בכל אחד)
+3. בכל סעיף: פסקאות + לפחות רשימה אחת (ul/ol) + דוגמה מעשית + טיפ ליישום מיידי
+4. סעיף "מדריך שלב אחר שלב" — הנחיות מעשיות שהקורא יכול ליישם מיד (300+ מילים)
+5. סעיף "טעויות נפוצות" — 3-5 טעויות שחשוב להימנע מהן (200+ מילים)
+6. סעיף FAQ — 5-7 שאלות ותשובות מפורטות (כ-Schema Markup מוכן)
+7. סיכום מקיף + CTA ברור ל-${context.businessName || 'העסק'} (200 מילים)
 
 🖋️ פורמט:
 - כתוב ב-HTML תקין: h2, h3, p, ul, ol, li, strong, a, blockquote
@@ -960,9 +962,9 @@ ${isLocal ? `📍 קידום לוקאלי (Local SEO):
 }`;
 
     const aiResult = await generateWithAI(
-      'אתה כותב תוכן SEO מומחה ברמה הגבוהה ביותר בעברית בלבד. כל המאמר חייב להיות בעברית מלאה — כולל שמות מקומות (ישראל, לא Israel). מונחים טכניים מקובלים כמו SEO מותרים, אבל כל שאר הטקסט בעברית. אתה כותב מאמרים של 1500-2000 מילים עם קישורים, נתונים, ודוגמאות מעשיות. החזר JSON בלבד ללא markdown.',
+      'אתה כותב תוכן SEO מומחה ברמה הגבוהה ביותר בעברית בלבד. כל המאמר חייב להיות בעברית מלאה — כולל שמות מקומות (ישראל, לא Israel). מונחים טכניים מקובלים כמו SEO מותרים, אבל כל שאר הטקסט בעברית. אתה כותב מאמרים של 3000-4000 מילים עם קישורים, נתונים, ודוגמאות מעשיות. החזר JSON בלבד ללא markdown.',
       articlePrompt,
-      { temperature: 0.75, maxTokens: 8000 }
+      { temperature: 0.75, maxTokens: 16000 }
     );
 
     if (!aiResult.success || !aiResult.data) {
@@ -1065,6 +1067,14 @@ ${isLocal ? `📍 קידום לוקאלי (Local SEO):
       }
     } else {
       console.warn(`[SEO-ARTICLE] Image generation failed: ${imageResult.error}`);
+    }
+
+    // Embed image inline at the top of the article content for maximum SEO impact
+    if (imageUrl) {
+      const altText = `${articleData.title} - ${keyword} - ${context.businessName || ''}`.trim();
+      const inlineImage = `<figure class="article-featured-image" style="margin:0 0 2em 0;text-align:center;"><img src="${imageUrl}" alt="${altText}" title="${altText}" style="max-width:100%;height:auto;border-radius:12px;" loading="eager" /><figcaption style="font-size:0.9em;color:#666;margin-top:0.5em;">${articleData.title}</figcaption></figure>\n`;
+      articleData.content = inlineImage + articleData.content;
+      console.log(`[SEO-ARTICLE] Embedded AI image inline at top of article`);
     }
 
     // --- Step 4: Get or create "מאמרים" category ---

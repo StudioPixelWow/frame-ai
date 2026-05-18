@@ -227,6 +227,11 @@ export interface DayTask {
   expectedOutcome: string;
   reason: string;
   contentBrief: string | null;
+  // ── Scheduling + status ──
+  scheduledDate?: string;          // ISO date string (YYYY-MM-DD) — when this task should run
+  status?: 'pending' | 'in_progress' | 'done' | 'failed' | 'skipped';
+  completedAt?: string;            // ISO timestamp when task was completed
+  executionResult?: string;        // Summary of what was done
   // ── Automation engine fields ──
   automationModule?: AutomationModuleType;
   autoExecutable?: boolean;
@@ -1646,13 +1651,20 @@ export function generate60DayPlan(input: PlanInput): GeneratedPlan {
   // ─── Helper: make a day ──────────────────────────────────────────
   function mkDay(day: number, focusTitle: string, tasks: DayTask[]): DayPlan {
     const ph = phaseFor(day);
+    const dateStr = dayDate(day);
+    // Stamp each task with the scheduled date and initial status
+    const stampedTasks = tasks.map(t => ({
+      ...t,
+      scheduledDate: t.scheduledDate || dateStr,
+      status: t.status || ('pending' as const),
+    }));
     return {
       day,
-      date: dayDate(day),
+      date: dateStr,
       phase: ph.name,
       phaseNumber: ph.number,
       focusTitle,
-      tasks,
+      tasks: stampedTasks,
     };
   }
 

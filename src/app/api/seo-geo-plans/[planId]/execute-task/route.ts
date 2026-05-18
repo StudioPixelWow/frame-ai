@@ -98,11 +98,6 @@ async function _POST(
       }
     }
 
-    if (!wpConnection) {
-      console.error(`[EXECUTE-TASK] No wpConnection found. Plan keys: ${Object.keys(plan as any).join(', ')}`);
-      return err('WordPress לא מחובר — חבר את WordPress מחדש בדף התוכנית', 400);
-    }
-
     // Look up the actual task object from the plan to check for automationModule
     const planDays = (plan as any).days || [];
     let planTask: any = null;
@@ -133,6 +128,25 @@ async function _POST(
     console.log(`[EXECUTE-TASK] taskTitle="${taskTitle}" → autoTaskType=${autoTaskType}, automationModule=${automationModule || 'none'}`);
     if (!autoTaskType) {
       return err('לא ניתן לזהות סוג משימה', 400);
+    }
+
+    // Per-task WordPress check — only require WP for modules/types that actually need it
+    const WP_REQUIRED_MODULES = new Set([
+      'internal_linking', 'faq_schema', 'meta_optimization', 'content_refresh',
+      'image_seo', 'cta_optimization', 'cannibalization', 'humanization',
+    ]);
+    const WP_REQUIRED_TYPES = new Set(['daily_seo_article', 'auto_internal_linking', 'auto_faq_schema', 'auto_meta_optimization']);
+    const needsWp = WP_REQUIRED_MODULES.has(automationModule || '') || WP_REQUIRED_TYPES.has(autoTaskType);
+
+    if (needsWp && !wpConnection) {
+      console.error(`[EXECUTE-TASK] Task "${taskTitle}" requires WordPress but no wpConnection found. Plan keys: ${Object.keys(plan as any).join(', ')}`);
+      return err('WordPress לא מחובר — משימה זו דורשת חיבור WordPress. חבר את WordPress מחדש בדף התוכנית', 400);
+    }
+
+    // For non-WP tasks, provide a dummy connection so context doesn't break
+    if (!wpConnection) {
+      console.log(`[EXECUTE-TASK] No wpConnection but task "${taskTitle}" doesn't require WordPress — proceeding`);
+      wpConnection = { siteUrl: '', username: '', applicationPassword: '' } as WPConnection;
     }
 
     // Extract specific keyword from task title if it's a daily article task

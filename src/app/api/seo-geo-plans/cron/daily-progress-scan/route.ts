@@ -47,7 +47,9 @@ export async function GET(req: NextRequest) {
     const allPlans = await seoPlans.getAllAsync();
     const activePlans = allPlans.filter((p: any) => {
       const hasActiveStatus = p.status === 'active' || p.status === 'plan_generated' || p.status === 'visibility_done';
-      const hasKeywords = Array.isArray(p.clientKeywords) && p.clientKeywords.length > 0;
+      // Accept plans with clientKeywords OR targetKeywords (some plans store keywords differently)
+      const hasKeywords = (Array.isArray(p.clientKeywords) && p.clientKeywords.length > 0)
+        || (Array.isArray(p.targetKeywords) && p.targetKeywords.length > 0);
       return hasActiveStatus && hasKeywords;
     });
 
@@ -142,7 +144,12 @@ async function processDailySnapshot(plan: any) {
   }
   targetDomain = targetDomain.replace(/\/+$/, '');
   const businessName = (plan as any).businessName || (plan as any).clientName || targetDomain;
-  const clientKeywords: any[] = [...((plan as any).clientKeywords || [])];
+  // Use clientKeywords (manual), fall back to targetKeywords (from scan)
+  let rawKeywords = (plan as any).clientKeywords;
+  if (!Array.isArray(rawKeywords) || rawKeywords.length === 0) {
+    rawKeywords = (plan as any).targetKeywords || [];
+  }
+  const clientKeywords: any[] = [...rawKeywords];
 
   const todayDate = new Date().toISOString().split('T')[0];
   console.log(`[SEO-DAILY-SCAN] מעבד תוכנית ${planId} — ${businessName} (${clientKeywords.length} מילות מפתח)`);
