@@ -32,6 +32,9 @@ import {
   createMetaCampaign,
   createMetaAdSet,
   createMetaAd,
+  uploadImageToMeta,
+  verifyPublishResults,
+  getMetaRateLimit,
   mapObjectiveToMeta,
   mapCtaToMeta,
   type MetaCredentials,
@@ -252,6 +255,21 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
+        // Upload image to Meta CDN if mediaUrl exists (get image_hash for reliability)
+        let imageHash: string | undefined;
+        if (ad.mediaUrl) {
+          const imgResult = await uploadImageToMeta(creds, {
+            imageUrl: ad.mediaUrl,
+            fileName: `${ad.name}_image`,
+          });
+          if (imgResult.success && imgResult.imageHash) {
+            imageHash = imgResult.imageHash;
+            console.log(`[meta-publish] ✅ Image uploaded for ad "${ad.name}": hash=${imageHash}`);
+          } else {
+            console.warn(`[meta-publish] ⚠️ Image upload failed for "${ad.name}": ${imgResult.error} — falling back to URL`);
+          }
+        }
+
         const adResult = await createMetaAd(creds, {
           adSetId: metaAdSetId,
           name: ad.name,
@@ -262,7 +280,8 @@ export async function POST(req: NextRequest) {
             headline: ad.headline || undefined,
             description: ad.description || undefined,
             linkUrl: ad.ctaLink || undefined,
-            imageUrl: ad.mediaUrl || undefined,
+            imageUrl: !imageHash ? (ad.mediaUrl || undefined) : undefined,
+            imageHash: imageHash || undefined,
             callToAction: mapCtaToMeta(ad.ctaType || 'LEARN_MORE'),
           },
         });
@@ -301,6 +320,40 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // ── Step 5: Post-creation verification ──
+    const entitiesToVerify = results
+      .filter(r => r.success && !r.skipped && r.metaId)
+      .map(r => ({
+        type: r.step as 'campaign' | 'adset' | 'ad',
+        metaId: r.metaId!,
+      }));
+
+    let verificationNote = '';
+    if (entitiesToVerify.length > 0) {
+      try {
+        const verification = await verifyPublishResults(creds, entitiesToVerify);
+        if (!verification.allVerified) {
+          verificationNote = ` (⚠️ ${verification.failedCount} entities failed verification on Meta)`;
+          console.warn(`[meta-publish] ⚠️ Verification: ${verification.failedCount}/${entitiesToVerify.length} entities NOT found on Meta`);
+          for (const v of verification.results) {
+            if (!v.exists) {
+              console.error(`[meta-publish] ❌ ${v.entityType} ${v.metaId} NOT verified: ${v.error}`);
+            }
+          }
+        } else {
+          console.log(`[meta-publish] ✅ All ${entitiesToVerify.length} entities verified on Meta`);
+        }
+      } catch (verifyErr) {
+        console.warn(`[meta-publish] ⚠️ Verification step failed (non-critical):`, verifyErr);
+      }
+    }
+
+    // ── Check rate limits ──
+    const rateLimit = getMetaRateLimit();
+    if (rateLimit?.isThrottled) {
+      console.warn(`[meta-publish] ⚠️ Rate limit warning after publish: call=${rateLimit.callCount}% cpu=${rateLimit.totalCputime}% time=${rateLimit.totalTime}%`);
+    }
+
     // ── Log activity ──
     await logCampaignActivity(
       campaignId,
@@ -316,8 +369,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: !hasErrors,
       message: hasErrors
-        ? `פרסום חלקי: ${successCount} הצליחו, ${failCount} נכשלו`
-        : `הקמפיין פורסם בהצלחה למטא!`,
+        ? `פרסום חלקי: ${successCount} הצליחו, ${failCount} נכשלו${verificationNote}`
+        : `הקמפיין פורסם בהצלחה למטא!${verificationNote}`,
       results,
       summary: {
         total: results.length,
@@ -325,6 +378,12 @@ export async function POST(req: NextRequest) {
         failed: failCount,
         skipped: skipCount,
       },
+      rateLimit: rateLimit ? {
+        callCount: rateLimit.callCount,
+        totalCputime: rateLimit.totalCputime,
+        totalTime: rateLimit.totalTime,
+        isThrottled: rateLimit.isThrottled,
+      } : null,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';

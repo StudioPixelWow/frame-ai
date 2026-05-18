@@ -60,7 +60,8 @@ const BUCKET = "project-files";
 /** Default max file size: 100 MB. */
 const MAX_SIZE = 100 * 1024 * 1024;
 
-const RETRY_DELAY_MS = 1500;
+const RETRY_DELAYS_MS = [2000, 4000, 6000]; // exponential backoff: 2s, 4s, 6s
+const MAX_ATTEMPTS = 3;
 
 /* ── Bucket verification (no creation) ──────────────────────────────────── */
 
@@ -150,51 +151,61 @@ export async function getSignedUploadUrl(opts: {
 
   const sb = getSupabase();
 
-  // Try up to 2 times
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    const attemptTag = `${tag} [attempt ${attempt}/2]`;
+  // Try up to MAX_ATTEMPTS times with exponential backoff
+  let lastErrMsg = "";
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const attemptTag = `${tag} [attempt ${attempt}/${MAX_ATTEMPTS}]`;
 
     console.log(`${attemptTag} Creating signed upload URL for bucket="${BUCKET}"...`);
-    const { data, error } = await sb.storage
-      .from(BUCKET)
-      .createSignedUploadUrl(storagePath);
 
-    if (!error && data?.signedUrl && data?.token) {
-      const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(storagePath);
-      const publicUrl = urlData?.publicUrl || "";
+    try {
+      const { data, error } = await sb.storage
+        .from(BUCKET)
+        .createSignedUploadUrl(storagePath);
 
-      // Guard: publicUrl MUST contain the file path, not just the bucket base URL
-      if (!publicUrl || publicUrl.endsWith("/") || !publicUrl.includes(storagePath)) {
-        console.error(`${attemptTag} ❌ getPublicUrl returned invalid URL: "${publicUrl}" (expected path: ${storagePath})`);
-        throw new Error(`Invalid public URL generated for "${storagePath}"`);
+      if (!error && data?.signedUrl && data?.token) {
+        const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(storagePath);
+        const publicUrl = urlData?.publicUrl || "";
+
+        // Guard: publicUrl MUST contain the file path, not just the bucket base URL
+        if (!publicUrl || publicUrl.endsWith("/") || !publicUrl.includes(storagePath)) {
+          console.error(`${attemptTag} ❌ getPublicUrl returned invalid URL: "${publicUrl}" (expected path: ${storagePath})`);
+          throw new Error(`Invalid public URL generated for "${storagePath}"`);
+        }
+
+        console.log(`${attemptTag} ✅ Signed URL created: bucket="${BUCKET}" path=${storagePath} publicUrl=${publicUrl.slice(0, 80)}...`);
+
+        return {
+          uploadUrl: data.signedUrl,
+          publicUrl,
+          storagePath,
+          bucket: BUCKET,
+          token: data.token,
+        };
       }
 
-      console.log(`${attemptTag} ✅ Signed URL created: bucket="${BUCKET}" path=${storagePath} publicUrl=${publicUrl.slice(0, 80)}...`);
-
-      return {
-        uploadUrl: data.signedUrl,
-        publicUrl,
-        storagePath,
-        bucket: BUCKET,
-        token: data.token,
-      };
+      lastErrMsg = error?.message || "Unknown error";
+      console.error(`${attemptTag} ❌ createSignedUploadUrl failed for bucket="${BUCKET}": ${lastErrMsg}`);
+    } catch (fetchErr) {
+      lastErrMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+      console.error(`${attemptTag} ❌ Exception during createSignedUploadUrl: ${lastErrMsg}`);
     }
 
-    // Failed
-    const errMsg = error?.message || "Unknown error";
-    console.error(`${attemptTag} ❌ createSignedUploadUrl failed for bucket="${BUCKET}": ${errMsg}`);
-
-    if (attempt < 2) {
-      console.log(`${attemptTag} Retrying in ${RETRY_DELAY_MS}ms...`);
+    if (attempt < MAX_ATTEMPTS) {
+      const delay = RETRY_DELAYS_MS[attempt - 1] || 4000;
+      console.log(`${attemptTag} Retrying in ${delay}ms...`);
       _bucketVerified = false; // re-verify on retry
-      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      await new Promise((r) => setTimeout(r, delay));
       await verifyBucket();
-    } else {
-      throw new Error(`Failed to create upload URL (bucket="${BUCKET}"): ${errMsg}`);
     }
   }
 
-  throw new Error("Failed to create upload URL after retries");
+  // All attempts failed — provide user-friendly message for common errors
+  const isTimeout = lastErrMsg.toLowerCase().includes("timed out") || lastErrMsg.toLowerCase().includes("timeout");
+  const userMsg = isTimeout
+    ? `שגיאת חיבור לשרת — נסה שוב בעוד כמה שניות (connection timeout after ${MAX_ATTEMPTS} attempts)`
+    : `Failed to create upload URL (bucket="${BUCKET}"): ${lastErrMsg}`;
+  throw new Error(userMsg);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -288,33 +299,44 @@ export async function uploadToStorage(opts: UploadOptions): Promise<UploadResult
   const sb = getSupabase();
   let lastError = "";
 
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    const attemptTag = `${tag} [attempt ${attempt}/2]`;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const attemptTag = `${tag} [attempt ${attempt}/${MAX_ATTEMPTS}]`;
     console.log(`${attemptTag} Uploading to bucket="${BUCKET}"...`);
 
     const t0 = Date.now();
-    const { error: uploadErr } = await sb.storage
-      .from(BUCKET)
-      .upload(storagePath, buffer, { contentType, upsert });
+    try {
+      const { error: uploadErr } = await sb.storage
+        .from(BUCKET)
+        .upload(storagePath, buffer, { contentType, upsert });
 
-    const ms = Date.now() - t0;
+      const ms = Date.now() - t0;
 
-    if (!uploadErr) {
-      const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(storagePath);
-      const publicUrl = urlData?.publicUrl || "";
-      console.log(`${attemptTag} ✅ Done (${ms}ms): bucket="${BUCKET}" url=${publicUrl.slice(0, 100)}`);
-      return { publicUrl, storagePath, size: buffer.length, bucket: BUCKET };
+      if (!uploadErr) {
+        const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(storagePath);
+        const publicUrl = urlData?.publicUrl || "";
+        console.log(`${attemptTag} ✅ Done (${ms}ms): bucket="${BUCKET}" url=${publicUrl.slice(0, 100)}`);
+        return { publicUrl, storagePath, size: buffer.length, bucket: BUCKET };
+      }
+
+      lastError = uploadErr.message || "Unknown error";
+      console.error(`${attemptTag} ❌ Failed (${ms}ms): bucket="${BUCKET}" error=${lastError}`);
+    } catch (fetchErr) {
+      const ms = Date.now() - t0;
+      lastError = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+      console.error(`${attemptTag} ❌ Exception (${ms}ms): ${lastError}`);
     }
 
-    lastError = uploadErr.message || "Unknown error";
-    console.error(`${attemptTag} ❌ Failed (${ms}ms): bucket="${BUCKET}" error=${lastError}`);
-
-    if (attempt < 2) {
+    if (attempt < MAX_ATTEMPTS) {
+      const delay = RETRY_DELAYS_MS[attempt - 1] || 4000;
       _bucketVerified = false;
-      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      await new Promise((r) => setTimeout(r, delay));
       await verifyBucket();
     }
   }
 
-  throw new Error(`Upload failed after retry (bucket="${BUCKET}"): ${lastError}`);
+  const isTimeout = lastError.toLowerCase().includes("timed out") || lastError.toLowerCase().includes("timeout");
+  const userMsg = isTimeout
+    ? `שגיאת חיבור לשרת — נסה שוב בעוד כמה שניות (connection timeout after ${MAX_ATTEMPTS} attempts)`
+    : `Upload failed after ${MAX_ATTEMPTS} attempts (bucket="${BUCKET}"): ${lastError}`;
+  throw new Error(userMsg);
 }
