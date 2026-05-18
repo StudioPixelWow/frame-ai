@@ -1344,7 +1344,7 @@ export default function NewProjectWizard() {
       case "broll":       return <StepBroll data={data} patch={patch} compositionData={liveCompositionData} videoSrc={originalVideoSource} />;
       case "transitions": return <StepTransitions data={data} patch={patch} videoSrc={originalVideoSource} />;
       case "music":       return <StepMusic data={data} patch={patch} videoSrc={originalVideoSource} />;
-      case "preview":     return <StepPreview data={data} videoSrc={originalVideoSource} />;
+      case "preview":     return <StepPreview data={data} patch={patch} videoSrc={originalVideoSource} />;
       case "approve":     return <StepApprove data={data} patch={patch} clients={clients} onApprove={handleCreate} onSaveDraft={handleSaveDraft} onBack={() => setStep(STEPS.findIndex(s => s.id === "preview"))} videoSrc={originalVideoSource} creating={creating} />;
       default: return null;
     }
@@ -5383,7 +5383,7 @@ function StepMusic({ data, patch, videoSrc: _parentVideoSrc }: { data: WizardDat
    STEP — Preview (FULL PIPELINE)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function StepPreview({ data, videoSrc: parentVideoSrc }: { data: WizardData; videoSrc?: string }) {
+function StepPreview({ data, patch, videoSrc: parentVideoSrc }: { data: WizardData; patch: (p: Partial<WizardData>) => void; videoSrc?: string }) {
   const [showDebugLayers, setShowDebugLayers] = useState(false);
   const [showCompositionDebug, setShowCompositionDebug] = useState(false);
 
@@ -5532,7 +5532,7 @@ function StepPreview({ data, videoSrc: parentVideoSrc }: { data: WizardData; vid
           </div>
         </div>
         <button className={`premium-toggle-switch ${data.premiumMode ? "active" : ""}`}
-          onClick={() => {/* patch is not available here, read-only preview */}} />
+          onClick={() => patch({ premiumMode: !data.premiumMode })} />
       </div>
 
       {/* ═══ Unified Edited Preview Player — full cumulative edit state ═══ */}
