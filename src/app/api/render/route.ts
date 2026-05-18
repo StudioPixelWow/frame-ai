@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createRenderJob, listRenderJobs, updateRenderJob } from "@/lib/render-worker/job-manager";
 import { getSupabase } from "@/lib/db/store";
 import { getSignedDownloadUrl } from "@/lib/storage/upload";
+import { compositionToProps } from "@/lib/video-engine/composition-to-props";
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -50,36 +51,52 @@ export async function POST(req: NextRequest) {
     }
 
     // Build Remotion input props from composition data
+    // CRITICAL: compositionData is a FinalCompositionData with nested structure
+    // (timeline.tracks, subtitles.style, etc.) — use compositionToProps() to
+    // properly extract segments, brollPlacements, subtitleStyle from nested paths.
     let inputProps = remotionProps;
     if (!inputProps && compositionData) {
-      const rawVideoUrl = compositionData.videoUrl
-        || compositionData.source?.videoUrl
-        || compositionData.sourceVideoUrl
-        || "";
-      inputProps = {
-        videoUrl: rawVideoUrl,
-        trimStart: compositionData.trimStart ?? compositionData.source?.trimStart ?? 0,
-        trimEnd: compositionData.trimEnd ?? compositionData.source?.trimEnd ?? 30,
-        format: compositionData.format ?? compositionData.output?.format ?? "9:16",
-        segments: compositionData.segments ?? [],
-        subtitleStyle: compositionData.subtitleStyle ?? {
-          font: "Heebo", fontWeight: 800, fontSize: 48, color: "#FFFFFF",
-          highlightColor: "#FFD700", outlineEnabled: true, outlineColor: "#000000",
-          outlineThickness: 3, shadow: true, bgEnabled: false, bgColor: "#000000",
-          bgOpacity: 0.5, align: "center", position: "bottom", animation: "fade",
-          lineBreak: "auto",
-        },
-        brollPlacements: compositionData.brollPlacements ?? [],
-        transition: compositionData.transition ?? { style: "fade", durationMs: 300 },
-        music: compositionData.music ?? { enabled: false, trackUrl: "", volume: 0.3, ducking: true, duckingLevel: 0.2, fadeInSec: 1, fadeOutSec: 2 },
-        cleanupCuts: compositionData.cleanupCuts ?? [],
-        visual: compositionData.visual ?? { colorGrading: "none", zoomEnabled: false, zoomOnSpeech: 1.15, zoomOnTransition: 1.3, cropForVertical: true },
-        premium: compositionData.premium ?? { enabled: false, level: "standard", motionEffects: false, colorCorrection: false },
-        durationSec: compositionData.durationSec ?? compositionData.timeline?.durationSec ?? 30,
-        presetId: compositionData.presetId ?? "viral",
-        zoomKeyframes: compositionData.zoomKeyframes ?? [],
-        hookBoost: compositionData.hookBoost ?? { active: false, hookEndSec: 0, zoomMultiplier: 1, subtitleFontMultiplier: 1 },
-      };
+      // Check if this is a FinalCompositionData (has nested structure) or flat props
+      const isFinalComposition = !!(compositionData.timeline?.tracks || compositionData.subtitles?.style || compositionData.source?.videoUrl);
+
+      if (isFinalComposition) {
+        try {
+          inputProps = compositionToProps(compositionData);
+          console.log(`${tag} ✅ compositionToProps succeeded — segments: ${inputProps.segments?.length}, broll: ${inputProps.brollPlacements?.length}, subtitleFont: ${inputProps.subtitleStyle?.font}`);
+        } catch (convErr) {
+          console.error(`${tag} ⚠️ compositionToProps failed, falling back to flat extraction:`, convErr instanceof Error ? convErr.message : convErr);
+          // Fallback: try flat keys (legacy path for older clients)
+          const rawVideoUrl = compositionData.videoUrl || compositionData.source?.videoUrl || "";
+          inputProps = {
+            videoUrl: rawVideoUrl,
+            trimStart: compositionData.trimStart ?? compositionData.source?.trimStart ?? 0,
+            trimEnd: compositionData.trimEnd ?? compositionData.source?.trimEnd ?? 30,
+            format: compositionData.format ?? compositionData.output?.format ?? "9:16",
+            segments: compositionData.segments ?? [],
+            subtitleStyle: compositionData.subtitleStyle ?? {
+              font: "Heebo", fontWeight: 800, fontSize: 48, color: "#FFFFFF",
+              highlightColor: "#FFD700", outlineEnabled: true, outlineColor: "#000000",
+              outlineThickness: 3, shadow: true, bgEnabled: false, bgColor: "#000000",
+              bgOpacity: 0.5, align: "center", position: "bottom", animation: "fade",
+              lineBreak: "auto",
+            },
+            brollPlacements: compositionData.brollPlacements ?? [],
+            transition: compositionData.transition ?? { style: "fade", durationMs: 300 },
+            music: compositionData.music ?? { enabled: false, trackUrl: "", volume: 0.3, ducking: true, duckingLevel: 0.2, fadeInSec: 1, fadeOutSec: 2 },
+            cleanupCuts: compositionData.cleanupCuts ?? [],
+            visual: compositionData.visual ?? { colorGrading: "none", zoomEnabled: false, zoomOnSpeech: 1.15, zoomOnTransition: 1.3, cropForVertical: true },
+            premium: compositionData.premium ?? { enabled: false, level: "standard", motionEffects: false, colorCorrection: false },
+            durationSec: compositionData.durationSec ?? compositionData.timeline?.durationSec ?? 30,
+            presetId: compositionData.presetId ?? "viral",
+            zoomKeyframes: compositionData.zoomKeyframes ?? [],
+            hookBoost: compositionData.hookBoost ?? { active: false, hookEndSec: 0, zoomMultiplier: 1, subtitleFontMultiplier: 1 },
+          };
+        }
+      } else {
+        // Already flat props (legacy or pre-converted)
+        inputProps = compositionData;
+        console.log(`${tag} Using flat compositionData as inputProps directly`);
+      }
     }
 
     // Validate video URL
