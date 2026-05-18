@@ -288,16 +288,21 @@ const FPS = 30;
 
 /**
  * Resolve B-roll media URL.
- * In production: hits stock API or AI image generation.
- * Currently: uses the source video itself as B-roll (different section).
- * The BrollLayer component will apply styling to distinguish it visually.
+ * Priority: stock download URL → stock preview URL → source video fallback.
  */
-function resolveBrollMediaUrl(keyword: string, source: string, videoUrl: string): string {
-  // Use the source video as B-roll media — the composition will handle
-  // the visual treatment (gradient overlay, keyword badge) to differentiate it.
-  // This ensures real media is always available for rendering.
+function resolveBrollMediaUrl(
+  keyword: string,
+  source: string,
+  videoUrl: string,
+  stockDownloadUrl?: string,
+  stockPreviewUrl?: string,
+): string {
+  // 1. Use Pexels / stock media URL if available (HD download preferred)
+  if (stockDownloadUrl) return stockDownloadUrl;
+  if (stockPreviewUrl) return stockPreviewUrl;
+  // 2. Fallback: use the source video itself (different section)
   if (videoUrl) return videoUrl;
-  // Fallback: empty string triggers gradient placeholder in BrollLayer
+  // 3. Empty string triggers gradient placeholder in BrollLayer
   return "";
 }
 
@@ -448,7 +453,7 @@ function buildTimeline(ws: WizardSnapshot): Timeline {
         metadata: {
           keyword: placement.keyword,
           source: placement.source,
-          mediaUrl: resolveBrollMediaUrl(placement.keyword, placement.source, ws.videoUrl),
+          mediaUrl: resolveBrollMediaUrl(placement.keyword, placement.source, ws.videoUrl, placement.stockDownloadUrl, placement.stockPreviewUrl),
           transitionIn: ws.transitionStyle,
           transitionOut: ws.transitionStyle,
           transitionDurationMs: getTransitionDuration(ws.transitionStyle),
