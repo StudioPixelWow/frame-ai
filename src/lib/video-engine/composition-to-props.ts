@@ -19,6 +19,7 @@ export interface RemotionInputProps {
     text: string;
     highlightWord: string;
     highlightStyle: string;
+    emphasisWords?: string[];
   }[];
   subtitleStyle: {
     font: string;
@@ -38,6 +39,8 @@ export interface RemotionInputProps {
     manualY?: number;
     animation: string;
     lineBreak: string;
+    highlightMode?: "sequential" | "ai";
+    highlightIntensity?: "subtle" | "strong";
   };
   brollPlacements: {
     id: string;
@@ -129,6 +132,7 @@ export function compositionToProps(data: FinalCompositionData): RemotionInputPro
         text: item.metadata?.text || "",
         highlightWord: item.metadata?.highlightWord || "",
         highlightStyle: item.metadata?.highlightStyle || "color",
+        emphasisWords: item.metadata?.emphasisWords || undefined,
       }))
     : [];
 
@@ -177,6 +181,8 @@ export function compositionToProps(data: FinalCompositionData): RemotionInputPro
       manualY: (data.subtitles.style as any).manualY,
       animation: data.subtitles.style.animation,
       lineBreak: data.subtitles.style.lineBreak,
+      highlightMode: data.subtitles.style.highlightMode,
+      highlightIntensity: data.subtitles.style.highlightIntensity,
     },
 
     brollPlacements,

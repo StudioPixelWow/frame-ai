@@ -483,6 +483,7 @@ function buildTimeline(ws: WizardSnapshot): Timeline {
         text: seg.text,
         highlightWord: seg.highlightWord || "",
         highlightStyle: seg.highlightStyle || "color",
+        emphasisWords: seg.emphasisWords || undefined,
         segmentIndex: i,
         isEdited: seg.edited,
         confidence: seg.confidence || 0.9,
