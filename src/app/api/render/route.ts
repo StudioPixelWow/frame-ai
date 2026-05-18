@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       if (isFinalComposition) {
         try {
           inputProps = compositionToProps(compositionData);
-          console.log(`${tag} ✅ compositionToProps succeeded — segments: ${inputProps.segments?.length}, broll: ${inputProps.brollPlacements?.length}, subtitleFont: ${inputProps.subtitleStyle?.font}`);
+          console.log(`${tag} ✅ compositionToProps succeeded — segments: ${inputProps.segments?.length}, broll: ${inputProps.brollPlacements?.length}, videoClips: ${inputProps.videoClips?.length}, subtitleFont: ${inputProps.subtitleStyle?.font}, musicUrl: ${inputProps.music?.trackUrl?.substring(0, 60) || "(none)"}`);
         } catch (convErr) {
           console.error(`${tag} ⚠️ compositionToProps failed, falling back to flat extraction:`, convErr instanceof Error ? convErr.message : convErr);
           // Fallback: try flat keys (legacy path for older clients)
@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
             premium: compositionData.premium ?? { enabled: false, level: "standard", motionEffects: false, colorCorrection: false },
             durationSec: compositionData.durationSec ?? compositionData.timeline?.durationSec ?? 30,
             presetId: compositionData.presetId ?? "viral",
+            videoClips: compositionData.videoClips ?? [],
             zoomKeyframes: compositionData.zoomKeyframes ?? [],
             hookBoost: compositionData.hookBoost ?? { active: false, hookEndSec: 0, zoomMultiplier: 1, subtitleFontMultiplier: 1 },
           };
@@ -162,6 +163,22 @@ export async function POST(req: NextRequest) {
       const signedUrl = await getSignedDownloadUrl(videoUrl, 3600);
       inputProps = { ...inputProps, videoUrl: signedUrl };
       console.log(`${tag} ✅ Signed URL ready`);
+    }
+
+    // ── Resolve relative music URL to absolute for Railway worker ──
+    // The /api/media/audio endpoint only works in the browser. For server-side
+    // rendering on Railway, we need an absolute URL the worker can fetch.
+    const musicTrackUrl = inputProps?.music?.trackUrl || "";
+    if (musicTrackUrl && musicTrackUrl.startsWith("/")) {
+      const appBaseUrl = process.env.NEXT_PUBLIC_SITE_URL
+        || process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`
+        || "https://frame-ai.vercel.app";
+      const absoluteMusicUrl = `${appBaseUrl}${musicTrackUrl}`;
+      inputProps = {
+        ...inputProps,
+        music: { ...inputProps.music, trackUrl: absoluteMusicUrl },
+      };
+      console.log(`${tag} ✅ Music URL resolved: ${musicTrackUrl} → ${absoluteMusicUrl.substring(0, 80)}`);
     }
 
     // ── Create job in Supabase ──

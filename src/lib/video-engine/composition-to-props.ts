@@ -84,6 +84,14 @@ export interface RemotionInputProps {
   durationSec: number;
   presetId: string;
 
+  // Pre-computed video clips from timeline main track
+  videoClips: {
+    sourceStart: number;
+    sourceEnd: number;
+    outputStart: number;
+    outputEnd: number;
+  }[];
+
   // Advanced editing engine data
   zoomKeyframes: {
     timeSec: number;
@@ -121,7 +129,8 @@ export function compositionToProps(data: FinalCompositionData): RemotionInputPro
 
   console.log("[compositionToProps] videoUrl:", data.source.videoUrl?.substring(0, 80) || "(empty)",
     "| tracks:", data.timeline.tracks?.map(t => t.type).join(",") || "(none)",
-    "| duration:", data.timeline.durationSec);
+    "| duration:", data.timeline.durationSec,
+    "| mainTrackItems:", data.timeline.tracks?.find(t => t.type === "main")?.items?.length || 0);
   // Extract subtitle segments from timeline
   const subtitleTrack = data.timeline.tracks.find(t => t.type === "subtitle");
   const segments = subtitleTrack
@@ -149,11 +158,24 @@ export function compositionToProps(data: FinalCompositionData): RemotionInputPro
       }))
     : [];
 
-  // Extract cleanup cuts from timeline (removed main video segments)
+  // Extract pre-computed video clips from main track
+  // The timeline already has cleanup cuts applied — main track items map
+  // source time ranges to output time ranges. Pass these directly to Remotion
+  // so it doesn't need to recompute from cleanupCuts.
   const mainTrack = data.timeline.tracks.find(t => t.type === "main");
+  const videoClips = mainTrack
+    ? mainTrack.items.map((item: any) => ({
+        sourceStart: item.metadata?.sourceStartSec ?? item.startSec,
+        sourceEnd: item.metadata?.sourceEndSec ?? item.endSec,
+        outputStart: item.startSec,
+        outputEnd: item.endSec,
+      }))
+    : [];
+
+  // Cleanup cuts are already baked into the timeline — segments/broll timings
+  // are pre-adjusted. Pass empty cleanupCuts so SubtitleLayer/BrollLayer
+  // don't double-adjust. The videoClips above handle the video splitting.
   const cleanupCuts: { startSec: number; endSec: number; type: string }[] = [];
-  // The cleanup is already applied to the timeline, but we pass the original cuts
-  // so the Remotion composition can handle them
 
   return {
     videoUrl: data.source.videoUrl,
@@ -221,6 +243,9 @@ export function compositionToProps(data: FinalCompositionData): RemotionInputPro
 
     durationSec: data.timeline.durationSec,
     presetId: data.visual.preset?.id || "viral",
+
+    // Pre-computed video clips from timeline
+    videoClips,
 
     // Advanced editing engine
     zoomKeyframes: data.editEngine?.zoomKeyframes || [],

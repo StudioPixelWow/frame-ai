@@ -125,6 +125,16 @@ export interface CompositionProps {
   durationSec: number;
   presetId: string;
 
+  // Pre-computed video clips (from timeline main track)
+  // When provided, these are used directly instead of computing from cleanupCuts.
+  // Each clip maps a source time range to an output time range.
+  videoClips?: {
+    sourceStart: number;
+    sourceEnd: number;
+    outputStart: number;
+    outputEnd: number;
+  }[];
+
   // Advanced editing engine
   zoomKeyframes?: {
     timeSec: number;

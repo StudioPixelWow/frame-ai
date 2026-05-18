@@ -44,53 +44,71 @@ export const PixelManageEdit: React.FC<CompositionProps> = (props) => {
     durationSec,
     zoomKeyframes = [],
     hookBoost,
+    videoClips: preComputedClips,
   } = props;
 
-  // Build effective video segments (splitting around cleanup cuts)
-  const sortedCuts = [...cleanupCuts].sort((a, b) => a.startSec - b.startSec);
-  const effectiveStart = trimStart;
-  const effectiveEnd = trimEnd > 0 ? trimEnd : durationSec + trimStart;
-
-  // Calculate video clips after cleanup
+  // Build effective video segments
+  // Priority: use pre-computed clips from timeline (already have cleanup applied),
+  // fall back to computing from cleanupCuts for backwards compatibility.
   type VideoClip = { sourceStart: number; sourceEnd: number; outputStart: number; outputEnd: number; index: number };
   const videoClips: VideoClip[] = [];
-  let cursor = effectiveStart;
-  let outputCursor = 0;
-  let clipIdx = 0;
 
-  if (sortedCuts.length === 0) {
-    videoClips.push({
-      sourceStart: effectiveStart,
-      sourceEnd: effectiveEnd,
-      outputStart: 0,
-      outputEnd: effectiveEnd - effectiveStart,
-      index: 0,
-    });
+  if (preComputedClips && preComputedClips.length > 0) {
+    // Use pre-computed clips from the timeline's main track.
+    // These already have cleanup cuts applied — source ranges map to output ranges.
+    for (let i = 0; i < preComputedClips.length; i++) {
+      const c = preComputedClips[i];
+      videoClips.push({
+        sourceStart: c.sourceStart,
+        sourceEnd: c.sourceEnd,
+        outputStart: c.outputStart,
+        outputEnd: c.outputEnd,
+        index: i,
+      });
+    }
   } else {
-    for (const cut of sortedCuts) {
-      if (cut.startSec > cursor) {
-        const dur = cut.startSec - cursor;
+    // Legacy fallback: compute from trimStart/trimEnd/cleanupCuts
+    const sortedCuts = [...cleanupCuts].sort((a, b) => a.startSec - b.startSec);
+    const effectiveStart = trimStart;
+    const effectiveEnd = trimEnd > 0 ? trimEnd : durationSec + trimStart;
+    let cursor = effectiveStart;
+    let outputCursor = 0;
+    let clipIdx = 0;
+
+    if (sortedCuts.length === 0) {
+      videoClips.push({
+        sourceStart: effectiveStart,
+        sourceEnd: effectiveEnd,
+        outputStart: 0,
+        outputEnd: effectiveEnd - effectiveStart,
+        index: 0,
+      });
+    } else {
+      for (const cut of sortedCuts) {
+        if (cut.startSec > cursor) {
+          const dur = cut.startSec - cursor;
+          videoClips.push({
+            sourceStart: cursor,
+            sourceEnd: cut.startSec,
+            outputStart: outputCursor,
+            outputEnd: outputCursor + dur,
+            index: clipIdx,
+          });
+          outputCursor += dur;
+          clipIdx++;
+        }
+        cursor = cut.endSec;
+      }
+      if (cursor < effectiveEnd) {
+        const dur = effectiveEnd - cursor;
         videoClips.push({
           sourceStart: cursor,
-          sourceEnd: cut.startSec,
+          sourceEnd: effectiveEnd,
           outputStart: outputCursor,
           outputEnd: outputCursor + dur,
           index: clipIdx,
         });
-        outputCursor += dur;
-        clipIdx++;
       }
-      cursor = cut.endSec;
-    }
-    if (cursor < effectiveEnd) {
-      const dur = effectiveEnd - cursor;
-      videoClips.push({
-        sourceStart: cursor,
-        sourceEnd: effectiveEnd,
-        outputStart: outputCursor,
-        outputEnd: outputCursor + dur,
-        index: clipIdx,
-      });
     }
   }
 
