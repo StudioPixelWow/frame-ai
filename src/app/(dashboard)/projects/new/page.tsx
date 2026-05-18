@@ -1205,8 +1205,21 @@ export default function NewProjectWizard() {
               setRenderStageLabel("הושלם");
               // Use Supabase public URL (set by server) or fall back to outputPath
               const renderUrl = updatedJob.publicUrl || updatedJob.outputPath;
+
+              // ── Validate: rendered output must differ from source video ──
+              const sourceUrl = data.uploadedVideoUrl || data.videoUrl || "";
+              if (renderUrl && sourceUrl && renderUrl === sourceUrl) {
+                console.error(`[render-poll] ❌ BUG: Rendered output URL is SAME as source video! render=${renderUrl.slice(0, 80)} source=${sourceUrl.slice(0, 80)}`);
+                // Still set it so user can at least access the video, but log the issue
+              }
+              if (renderUrl && renderUrl.includes("/outputs/")) {
+                console.log(`[render-poll] ✅ Rendered URL is in /outputs/ path — confirmed new file`);
+              } else if (renderUrl) {
+                console.warn(`[render-poll] ⚠️ Rendered URL not in /outputs/ path: ${renderUrl.slice(0, 100)}`);
+              }
+
               setRenderOutputUrl(renderUrl || null);
-              console.log(`[render-poll] ✅ Render complete: publicUrl=${updatedJob.publicUrl || "(none)"} outputPath=${updatedJob.outputPath || "(none)"}`);
+              console.log(`[render-poll] ✅ Render complete: publicUrl=${updatedJob.publicUrl || "(none)"} outputPath=${updatedJob.outputPath || "(none)"} source=${sourceUrl.slice(0, 60) || "(none)"}`);
               // Update project with render output URL and mark as complete
               // (server-side route also does this, but we do it client-side too as backup)
               if (savedProject?.id && renderUrl) {

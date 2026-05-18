@@ -140,6 +140,14 @@ export async function GET() {
     const sb = getSupabase();
     console.log('[API] GET /api/data/projects — Supabase client OK, querying video_projects...');
 
+    // Quick diagnostic: count rows first
+    try {
+      const { count, error: countErr } = await sb.from('video_projects').select('id', { count: 'exact', head: true });
+      console.log(`[API] GET /api/data/projects DIAGNOSTIC: row count=${count ?? 'null'} error=${countErr?.message || 'none'}`);
+    } catch (e) {
+      console.warn(`[API] GET /api/data/projects DIAGNOSTIC count failed:`, e instanceof Error ? e.message : e);
+    }
+
     // Try full select; on unknown-column error, progressively drop the column.
     const droppedCols: string[] = [];
     let selectList = SELECT_COLUMNS;

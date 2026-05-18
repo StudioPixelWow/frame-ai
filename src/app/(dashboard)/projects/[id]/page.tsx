@@ -91,7 +91,39 @@ export default function ProjectDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const playerRef = useRef<PlayerRef>(null);
 
-  const project = projects?.find((p) => p.id === id);
+  // ── Direct fetch fallback — if project not in full list, fetch by ID ──
+  const [directProject, setDirectProject] = useState<Project | null>(null);
+  const [directLoading, setDirectLoading] = useState(false);
+  const [directAttempted, setDirectAttempted] = useState(false);
+
+  const listProject = projects?.find((p) => p.id === id) || null;
+
+  useEffect(() => {
+    if (loading || listProject || directAttempted || !id) return;
+    // Full list loaded but project not found — try direct fetch
+    setDirectLoading(true);
+    setDirectAttempted(true);
+    console.log(`[project-detail] Project ${id} not in list (${projects?.length || 0} projects). Trying direct fetch...`);
+    fetch(`/api/data/projects/${id}`, { cache: "no-store" })
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then(data => {
+        if (data && !data.error && data.id) {
+          console.log(`[project-detail] ✅ Direct fetch found project: ${data.id} status=${data.status}`);
+          setDirectProject(data as Project);
+        } else {
+          console.warn(`[project-detail] ❌ Direct fetch returned no project for id=${id}`);
+        }
+      })
+      .catch(err => {
+        console.error(`[project-detail] ❌ Direct fetch failed for id=${id}:`, err);
+      })
+      .finally(() => setDirectLoading(false));
+  }, [loading, listProject, directAttempted, id, projects?.length]);
+
+  const project = listProject || directProject;
 
   // Extract saved composition data from wizardState
   const savedComposition = useMemo(() => {
@@ -226,8 +258,8 @@ export default function ProjectDetailPage() {
     }
   };
 
-  // Loading state
-  if (loading) {
+  // Loading state — wait for both list load AND direct fetch if needed
+  if (loading || directLoading) {
     return (
       <main style={{ maxWidth: "1400px", margin: "0 auto", padding: "2rem 1.5rem" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh" }}>
