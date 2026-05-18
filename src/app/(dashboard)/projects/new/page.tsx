@@ -1169,6 +1169,17 @@ export default function NewProjectWizard() {
               if (stallCount >= MAX_STALL_POLLS) {
                 clearInterval(pollInterval);
                 console.error(`[render-poll] ❌ Render stalled at ${currentProg}% for ${stallCount} polls (~${Math.round(stallCount * 1.2)}s). Marking as failed.`);
+                // Mark the job as failed in DB so the Worker doesn't stay stuck on it
+                try {
+                  await fetch(`/api/render/${jobId}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "cancel" }),
+                  });
+                  console.log(`[render-poll] ✅ Stalled job ${jobId} marked as failed in DB`);
+                } catch (cancelErr) {
+                  console.warn(`[render-poll] ⚠️ Failed to cancel stalled job in DB:`, cancelErr);
+                }
                 setRenderModalOpen(false);
                 toast(`הרינדור נתקע ב-${currentProg}%. נסה שוב.`, "error");
                 return;

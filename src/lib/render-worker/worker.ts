@@ -157,6 +157,57 @@ async function fetchJob(jobId: string): Promise<RenderJobRow | null> {
   return (data as unknown as RenderJobRow | null) ?? null;
 }
 
+// ── Stale job recovery ───────────────────────────────────────────────────
+// Jobs stuck in "rendering" or "preparing" for more than STALE_THRESHOLD_MS
+// are reset to "queued" so the worker picks them up again.
+
+const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+let lastStaleCheck = 0;
+const STALE_CHECK_INTERVAL_MS = 60_000; // check once per minute
+
+async function recoverStaleJobs(): Promise<void> {
+  const now = Date.now();
+  if (now - lastStaleCheck < STALE_CHECK_INTERVAL_MS) return;
+  lastStaleCheck = now;
+
+  const sb = getWorkerSupabase();
+  const cutoff = new Date(now - STALE_THRESHOLD_MS).toISOString();
+
+  const { data: staleJobs, error } = await sb
+    .from("render_jobs")
+    .select("job_id, status, updated_at, progress")
+    .in("status", ["rendering", "preparing"])
+    .lt("updated_at", cutoff)
+    .limit(10);
+
+  if (error) {
+    console.warn(`${tag} Stale job query failed: ${error.message}`);
+    return;
+  }
+
+  if (!staleJobs || staleJobs.length === 0) return;
+
+  for (const stale of staleJobs) {
+    console.log(`${tag} ♻️ Recovering stale job ${stale.job_id} (status=${stale.status}, progress=${stale.progress}%, updated_at=${stale.updated_at})`);
+    const { error: resetErr } = await sb
+      .from("render_jobs")
+      .update({
+        status: "queued",
+        progress: 0,
+        stage: "ממתין בתור (שוחזר אוטומטית)",
+        error: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("job_id", stale.job_id);
+
+    if (resetErr) {
+      console.warn(`${tag} Failed to reset stale job ${stale.job_id}: ${resetErr.message}`);
+    } else {
+      console.log(`${tag} ✅ Stale job ${stale.job_id} reset to "queued"`);
+    }
+  }
+}
+
 async function claimNextQueuedJob(): Promise<RenderJobRow | null> {
   const sb = getWorkerSupabase();
 
@@ -633,6 +684,9 @@ async function pollForJobs(): Promise<void> {
   isPolling = true;
 
   try {
+    // First, check for stale jobs that need recovery (runs at most once per minute)
+    await recoverStaleJobs();
+
     const job = await claimNextQueuedJob();
     if (!job) return;
 
