@@ -1980,11 +1980,26 @@ function StepUpload({ data, patch }: { data: WizardData; patch: (p: Partial<Wiza
       xhrRef.current = xhr;
 
       await new Promise<void>((resolve, reject) => {
+        let realProgress = 3;   // Track real XHR progress
+        let hasRealProgress = false; // Did XHR fire any progress events?
+
+        // Fallback: simulated progress timer for when XHR progress events don't fire
+        // (common with Supabase signed URLs due to redirects/CORS)
+        const estimatedSeconds = Math.max(3, (file.size / 1048576) * 1.5); // ~1.5s per MB, min 3s
+        let simPct = 3;
+        const simInterval = setInterval(() => {
+          if (hasRealProgress) { clearInterval(simInterval); return; } // XHR took over
+          simPct = Math.min(simPct + (90 / (estimatedSeconds * 4)), 92); // increment every 250ms up to 92%
+          setUploadProgress(Math.round(simPct));
+        }, 250);
+
         xhr.upload.addEventListener("progress", (e) => {
-          if (e.lengthComputable) {
+          if (e.lengthComputable && e.total > 0) {
+            hasRealProgress = true;
+            clearInterval(simInterval); // XHR is reporting — stop simulation
             // Map 0-100% of actual upload to 3-99% of display
-            const pct = Math.round(3 + (e.loaded / e.total) * 96);
-            setUploadProgress(pct);
+            realProgress = Math.round(3 + (e.loaded / e.total) * 96);
+            setUploadProgress(realProgress);
             if (Math.round((e.loaded / e.total) * 100) % 25 === 0) {
               console.log(`[StepUpload] Progress: ${Math.round((e.loaded / e.total) * 100)}% (${(e.loaded / 1048576).toFixed(1)}/${fileSizeMB}MB)`);
             }
@@ -1992,6 +2007,7 @@ function StepUpload({ data, patch }: { data: WizardData; patch: (p: Partial<Wiza
         });
 
         xhr.addEventListener("load", () => {
+          clearInterval(simInterval);
           xhrRef.current = null;
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve();
@@ -2001,9 +2017,9 @@ function StepUpload({ data, patch }: { data: WizardData; patch: (p: Partial<Wiza
             reject(new Error(msg));
           }
         });
-        xhr.addEventListener("error", () => { xhrRef.current = null; reject(new Error("שגיאת רשת — בדוק את החיבור לאינטרנט")); });
-        xhr.addEventListener("abort", () => { xhrRef.current = null; reject(new Error("__ABORT__")); });
-        xhr.addEventListener("timeout", () => { xhrRef.current = null; reject(new Error("העלאה נכשלה — זמן המתנה חרג")); });
+        xhr.addEventListener("error", () => { clearInterval(simInterval); xhrRef.current = null; reject(new Error("שגיאת רשת — בדוק את החיבור לאינטרנט")); });
+        xhr.addEventListener("abort", () => { clearInterval(simInterval); xhrRef.current = null; reject(new Error("__ABORT__")); });
+        xhr.addEventListener("timeout", () => { clearInterval(simInterval); xhrRef.current = null; reject(new Error("העלאה נכשלה — זמן המתנה חרג")); });
 
         xhr.open("PUT", uploadUrl);
         xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
