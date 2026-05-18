@@ -61,7 +61,7 @@ interface ClientFolder {
 }
 
 export default function ProjectsPage() {
-  const { data: projects, loading, remove } = useProjects();
+  const { data: projects, loading, error, remove } = useProjects();
   const { data: clients } = useClients();
   const toast = useToast();
 
@@ -208,6 +208,17 @@ export default function ProjectsPage() {
             style={{ paddingInlineStart: "2.25rem", width: "100%" }}
             autoComplete="off"
           />
+        </div>
+      )}
+
+      {/* ── Error state ── */}
+      {error && (
+        <div style={{
+          padding: "1rem 1.25rem", marginBottom: "1rem", borderRadius: "0.75rem",
+          background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.3)",
+          color: "#f87171", fontSize: "0.875rem", direction: "ltr", fontFamily: "monospace",
+        }}>
+          <strong>API Error:</strong> {error}
         </div>
       )}
 
