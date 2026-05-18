@@ -1,11 +1,11 @@
 /**
- * POST /api/render — Create a render job + invoke Remotion Lambda
+ * POST /api/render — Create a render job (queued for Railway worker)
  * GET  /api/render — List all render jobs
  *
- * Architecture (Serverless-compatible Remotion Lambda):
- *   1. POST: Client sends compositionData → creates job in DB → invokes Lambda → saves renderId/bucketName → returns immediately
- *   2. GET /api/render/[jobId]: Client polls → each poll checks Lambda progress via getRenderProgress → updates DB → returns status
- *   3. When Lambda is done, the GET handler finalizes (saves S3 output URL to DB)
+ * Architecture (Railway Worker):
+ *   1. POST: Client sends compositionData → creates job in DB (status=queued) → returns immediately
+ *   2. Railway worker polls render_jobs table, picks up queued jobs, renders via Remotion
+ *   3. GET /api/render/[jobId]: Client polls for status updates written by the worker
  *
  * This is fully stateless — no background tasks, no fire-and-forget.
  * Each HTTP request is short-lived and works within Vercel's function timeout.
@@ -13,7 +13,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createRenderJob, listRenderJobs, updateRenderJob } from "@/lib/render-worker/job-manager";
 import { getSupabase } from "@/lib/db/store";
-import { invokeLambdaRender } from "@/lib/lambda-render/invoke-renderer";
 import { getSignedDownloadUrl } from "@/lib/storage/upload";
 
 export const dynamic = 'force-dynamic';
@@ -180,63 +179,12 @@ export async function POST(req: NextRequest) {
       console.warn(`${tag} ⚠️ Could not link job to project:`, linkErr instanceof Error ? linkErr.message : linkErr);
     }
 
-    // ── Invoke Remotion Lambda (synchronous — just the invoke, no polling) ──
-    const lambdaEnabled = !!process.env.REMOTION_LAMBDA_FUNCTION_NAME;
+    // ── Render via Railway worker (Lambda is deprecated) ──
+    // Job is created with status=queued above.
+    // The Railway worker polls render_jobs table and picks up queued jobs.
+    // No Lambda invocation needed — the worker handles everything.
+    console.log(`${tag} ✅ Job ${jobId} queued for Railway worker pickup`);
 
-    if (lambdaEnabled) {
-      try {
-        const { renderId, bucketName } = await invokeLambdaRender({
-          jobId,
-          projectId,
-          compositionId: "PixelManageEdit",
-          inputProps: inputProps as Record<string, unknown>,
-          quality: quality || "premium",
-        });
-
-        // Save renderId + bucketName so the GET poll handler can check progress
-        await updateRenderJob(jobId, {
-          status: "rendering",
-          progress: 5,
-          stage: "Lambda הופעל",
-          metadata: {
-            projectName: projectName || "Untitled",
-            compositionId: "PixelManageEdit",
-            quality: quality || "premium",
-            videoUrl,
-            renderId,
-            bucketName,
-          },
-        });
-
-        console.log(`${tag} ✅ Lambda invoked: renderId=${renderId}, bucketName=${bucketName}`);
-
-        return NextResponse.json({
-          job: {
-            id: jobId,
-            status: "rendering",
-            progress: 5,
-            currentStage: "Lambda הופעל",
-            projectId,
-          },
-        });
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        console.error(`${tag} ❌ Lambda invoke failed: ${errMsg}`);
-
-        await updateRenderJob(jobId, {
-          status: "error",
-          error: errMsg,
-          stage: "שגיאת Lambda",
-        });
-
-        return NextResponse.json({
-          job: { id: jobId, status: "failed", progress: 0, currentStage: "שגיאה", projectId },
-          error: errMsg,
-        }, { status: 500 });
-      }
-    }
-
-    // Legacy fallback
     return NextResponse.json({
       job: { id: jobId, status: "queued", progress: 0, currentStage: "ממתין בתור", projectId },
     });
