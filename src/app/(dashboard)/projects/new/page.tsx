@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useClients, useProjects } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
@@ -554,7 +554,15 @@ function generateBrollSuggestions(segments: SubSegment[]): BrollSuggestion[] {
    Main Wizard
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export default function NewProjectWizard() {
+export default function NewProjectWizardPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#0a0a0f" }} />}>
+      <NewProjectWizard />
+    </Suspense>
+  );
+}
+
+function NewProjectWizard() {
   const searchParams = useSearchParams();
   const mode = searchParams.get("mode");
   const router = useRouter();
