@@ -167,7 +167,13 @@ export function generateZoomPlan(options: SmartZoomOptions): ZoomPlan {
       (options.style === "social") ||
       seededRand(i * 13 + 7) > 0.5;
 
-    if (shouldZoom && trigger !== "breathing") {
+    // Enforce minimum 4-second gap between zoom keyframes to prevent rapid-fire bumps
+    const MIN_ZOOM_GAP = 4;
+    const tooCloseToExisting = keyframes.some(
+      (kf) => kf.trigger !== "reset" && Math.abs(kf.timeSec - midpoint) < MIN_ZOOM_GAP
+    );
+
+    if (shouldZoom && trigger !== "breathing" && !tooCloseToExisting) {
       const baseScale = Math.min(params.maxScale, params.minScale + (params.maxScale - params.minScale) * 0.6);
       const scale = Math.min(params.maxScale, baseScale * scaleMultiplier);
       const duration = Math.min(seg.endSec - seg.startSec, 2);

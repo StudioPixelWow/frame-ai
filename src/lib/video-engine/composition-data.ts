@@ -223,6 +223,15 @@ export interface FinalCompositionData {
     language: string;
   };
 
+  // Logo credit overlay (shown in corner for first N seconds)
+  logoCredit?: {
+    url: string;
+    durationSec: number;
+    position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+    sizePx: number;
+    opacity: number;
+  };
+
   // ─── Advanced Editing Engine (optional — populated when unified edit is active) ───
   editEngine?: {
     /** Smart zoom keyframes for dynamic camera motion */
@@ -754,10 +763,10 @@ export function buildFinalCompositionData(ws: WizardSnapshot): FinalCompositionD
     visual: {
       preset: presetConfig,
       colorGrading: presetConfig?.colorGrading || (ws.premiumMode ? "warm" : "neutral"),
-      // Enable zoom when premium is on even without a preset — gives default subtle zoom
-      zoomEnabled: presetConfig?.zoomBehavior?.enabled ?? (ws.premiumMode && ws.premiumLevel !== "standard"),
-      zoomOnSpeech: presetConfig?.zoomBehavior?.onSpeech ?? (ws.premiumMode ? (ws.premiumLevel === "cinematic" ? 1.12 : 1.06) : 1.0),
-      zoomOnTransition: presetConfig?.zoomBehavior?.onTransition ?? (ws.premiumMode ? (ws.premiumLevel === "cinematic" ? 1.15 : 1.08) : 1.0),
+      // Zoom is OPT-IN only — never auto-enable. Users complained about unwanted zoom bump.
+      zoomEnabled: presetConfig?.zoomBehavior?.enabled ?? false,
+      zoomOnSpeech: presetConfig?.zoomBehavior?.onSpeech ?? 1.0,
+      zoomOnTransition: presetConfig?.zoomBehavior?.onTransition ?? 1.0,
       framingEnabled: true,
       cropForVertical: ws.format === "9:16",
     },
@@ -771,7 +780,8 @@ export function buildFinalCompositionData(ws: WizardSnapshot): FinalCompositionD
       brollEnhancement: ws.brollEnabled,
       subtitleEnhancement: true,
       // Motion effects: Ken Burns drift + clip transition pulse + breathing
-      motionEffects: ws.premiumMode !== false && ws.premiumLevel !== "standard",
+      // Disabled by default — causes unwanted zoom bump. User must opt in via preset.
+      motionEffects: presetConfig?.motionEffects ?? false,
       // Color correction: grading + vignette + film grain
       colorCorrection: ws.premiumMode !== false,
       autoFill: ws.premiumMode !== false,
@@ -795,6 +805,15 @@ export function buildFinalCompositionData(ws: WizardSnapshot): FinalCompositionD
       cleanupRemovedCount: ws.cleanupRemovedSegments.filter(s => s.removed).length,
       estimatedRenderDurationSec: timeline.durationSec,
       language: ws.language,
+    },
+
+    // Logo credit — PixelManage watermark in bottom-right corner for first 4 seconds
+    logoCredit: {
+      url: "/logo-credit.svg",
+      durationSec: 4,
+      position: "bottom-right",
+      sizePx: 120,
+      opacity: 0.85,
     },
 
     // Edit engine — defaults (populated by unified coordinator when active)

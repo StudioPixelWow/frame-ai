@@ -198,7 +198,7 @@ export function buildRenderPayload(projectId: string, ws: WizardState): RenderPa
       visualStructure: true,
       brollEnhancement: ws.brollEnabled,
       subtitleEnhancement: true,
-      motionEffects: true,
+      motionEffects: false, // Disabled by default — causes unwanted zoom bump
       colorCorrection: true,
       autoFill: ws.premiumMode !== false,
     },

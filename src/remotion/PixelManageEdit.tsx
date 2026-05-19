@@ -9,7 +9,7 @@
  *  - Color grading, vignette, film grain via VisualEffects
  */
 import React from "react";
-import { AbsoluteFill, OffthreadVideo, Sequence, useCurrentFrame, useVideoConfig, interpolate, Easing } from "remotion";
+import { AbsoluteFill, Img, OffthreadVideo, Sequence, useCurrentFrame, useVideoConfig, interpolate, Easing, spring } from "remotion";
 import type { CompositionProps } from "./types";
 import { FPS } from "./types";
 import { SubtitleLayer } from "./components/SubtitleLayer";
@@ -45,6 +45,7 @@ export const PixelManageEdit: React.FC<CompositionProps> = (props) => {
     zoomKeyframes = [],
     hookBoost,
     videoClips: preComputedClips,
+    logoCredit,
   } = props;
 
   // Build effective video segments
@@ -334,7 +335,48 @@ export const PixelManageEdit: React.FC<CompositionProps> = (props) => {
       {/* Layer 4: Subtitles */}
       <SubtitleLayer segments={segments} style={subtitleStyle} cleanupCuts={cleanupCuts} />
 
-      {/* Layer 5: Background Music */}
+      {/* Layer 5: Logo Credit Overlay (first N seconds) */}
+      {logoCredit?.url && (() => {
+        const logoDur = logoCredit.durationSec || 4;
+        const logoFrames = Math.round(logoDur * fps);
+        const logoSize = logoCredit.sizePx || 80;
+        const logoOpacity = logoCredit.opacity ?? 0.85;
+        const pos = logoCredit.position || "top-right";
+
+        // Position mapping
+        const posStyle: React.CSSProperties = {
+          position: "absolute",
+          ...(pos.includes("top") ? { top: 24 } : { bottom: 24 }),
+          ...(pos.includes("right") ? { right: 24 } : { left: 24 }),
+        };
+
+        return (
+          <Sequence from={0} durationInFrames={logoFrames}>
+            <AbsoluteFill style={{ pointerEvents: "none" }}>
+              <div style={posStyle}>
+                <Img
+                  src={logoCredit.url}
+                  style={{
+                    width: logoSize,
+                    height: "auto",
+                    objectFit: "contain",
+                    opacity: interpolate(
+                      frame,
+                      [0, 8, logoFrames - 10, logoFrames],
+                      [0, logoOpacity, logoOpacity, 0],
+                      { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+                    ),
+                    filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.5))",
+                    transform: `scale(${spring({ frame: Math.min(frame, 15), fps, from: 0.5, to: 1, durationInFrames: 15 })})`,
+                  }}
+                />
+              </div>
+            </AbsoluteFill>
+          </Sequence>
+        );
+      })()}
+
+      {/* Layer 6: Background Music */}
       <AudioLayer music={music} segments={segments} totalDurationSec={durationSec} />
     </AbsoluteFill>
   );

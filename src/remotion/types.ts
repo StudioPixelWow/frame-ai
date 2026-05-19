@@ -151,4 +151,13 @@ export interface CompositionProps {
     zoomMultiplier: number;
     subtitleFontMultiplier: number;
   };
+
+  // Logo credit overlay (shown in corner for first N seconds)
+  logoCredit?: {
+    url: string;           // URL to logo image (PNG/SVG)
+    durationSec: number;   // How long to show (default 4)
+    position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+    sizePx: number;        // Width in pixels (height auto)
+    opacity: number;       // 0-1
+  };
 }

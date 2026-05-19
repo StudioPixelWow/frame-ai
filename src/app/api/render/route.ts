@@ -91,6 +91,7 @@ export async function POST(req: NextRequest) {
             videoClips: compositionData.videoClips ?? [],
             zoomKeyframes: compositionData.zoomKeyframes ?? [],
             hookBoost: compositionData.hookBoost ?? { active: false, hookEndSec: 0, zoomMultiplier: 1, subtitleFontMultiplier: 1 },
+            logoCredit: compositionData.logoCredit ?? { url: "/logo-credit.svg", durationSec: 4, position: "bottom-right", sizePx: 120, opacity: 0.85 },
           };
         }
       } else {
@@ -179,6 +180,20 @@ export async function POST(req: NextRequest) {
         music: { ...inputProps.music, trackUrl: absoluteMusicUrl },
       };
       console.log(`${tag} ✅ Music URL resolved: ${musicTrackUrl} → ${absoluteMusicUrl.substring(0, 80)}`);
+    }
+
+    // ── Resolve relative logo credit URL to absolute for Railway worker ──
+    const logoCreditUrl = inputProps?.logoCredit?.url || "";
+    if (logoCreditUrl && logoCreditUrl.startsWith("/")) {
+      const appBaseUrl = process.env.NEXT_PUBLIC_SITE_URL
+        || process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`
+        || "https://frame-ai.vercel.app";
+      const absoluteLogoUrl = `${appBaseUrl}${logoCreditUrl}`;
+      inputProps = {
+        ...inputProps,
+        logoCredit: { ...inputProps.logoCredit, url: absoluteLogoUrl },
+      };
+      console.log(`${tag} ✅ Logo credit URL resolved: ${logoCreditUrl} → ${absoluteLogoUrl}`);
     }
 
     // ── Create job in Supabase ──

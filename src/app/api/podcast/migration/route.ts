@@ -197,11 +197,39 @@ export async function POST() {
     // Non-critical
   }
 
+  // ── Update bucket file_size_limit for large video uploads ──
+  let bucketUpdate: { success: boolean; error?: string; fileSizeLimit?: number } = { success: false };
+  try {
+    const FIVE_GB = 5 * 1024 * 1024 * 1024; // 5 GB
+    // Try to update existing bucket
+    const { error: updateErr } = await supabase.storage.updateBucket('project-files', {
+      fileSizeLimit: FIVE_GB,
+      public: true,
+    });
+    if (updateErr) {
+      // Bucket might not exist — try to create it
+      const { error: createErr } = await supabase.storage.createBucket('project-files', {
+        public: true,
+        fileSizeLimit: FIVE_GB,
+      });
+      if (createErr) {
+        bucketUpdate = { success: false, error: `update: ${updateErr.message}, create: ${createErr.message}` };
+      } else {
+        bucketUpdate = { success: true, fileSizeLimit: FIVE_GB };
+      }
+    } else {
+      bucketUpdate = { success: true, fileSizeLimit: FIVE_GB };
+    }
+  } catch (e) {
+    bucketUpdate = { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+
   if (allSucceeded) {
     return NextResponse.json({
       success: true,
       message: 'All podcast tables created successfully',
       results,
+      bucketUpdate,
     });
   }
 
@@ -211,6 +239,7 @@ export async function POST() {
       message: 'Some tables failed to create. Run the SQL manually in Supabase Dashboard.',
       results,
       manualSql: failedSql,
+      bucketUpdate,
     },
     { status: 207 }
   );

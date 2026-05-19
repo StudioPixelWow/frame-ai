@@ -108,6 +108,15 @@ export interface RemotionInputProps {
     zoomMultiplier: number;
     subtitleFontMultiplier: number;
   };
+
+  // Logo credit overlay
+  logoCredit?: {
+    url: string;
+    durationSec: number;
+    position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+    sizePx: number;
+    opacity: number;
+  };
 }
 
 /**
@@ -257,5 +266,8 @@ export function compositionToProps(data: FinalCompositionData): RemotionInputPro
           subtitleFontMultiplier: data.editEngine.hook.subtitleFontSizeMultiplier,
         }
       : { active: false, hookEndSec: 0, zoomMultiplier: 1, subtitleFontMultiplier: 1 },
+
+    // Logo credit overlay
+    logoCredit: data.logoCredit || undefined,
   };
 }

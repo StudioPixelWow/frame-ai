@@ -260,6 +260,11 @@ export function generateZoomKeyframes(
   keyframes.push({ time: 0, scale: 1.0, focusX: 0.5, focusY: 0.5 });
 
   // Find emphasis points from word-level data
+  // IMPORTANT: enforce minimum 4-second gap between zooms to prevent
+  // the "bump every second" effect that occurs with dense transcript words.
+  const MIN_GAP_SEC = 4;
+  let lastZoomTime = -MIN_GAP_SEC;
+
   for (const seg of transcript) {
     if (seg.end <= clipStart || seg.start >= clipEnd) continue;
     if (!seg.words || seg.words.length === 0) continue;
@@ -268,10 +273,14 @@ export function generateZoomKeyframes(
       if (word.end <= clipStart || word.start >= clipEnd) continue;
 
       const wordDuration = word.end - word.start;
-      // Longer words (spoken slowly) indicate emphasis
-      if (wordDuration > 0.4) {
+      // Longer words (spoken slowly) indicate emphasis — raised threshold to 0.6s
+      if (wordDuration > 0.6) {
         const relTime = word.start - clipStart;
-        const emphasisFactor = Math.min(1, (wordDuration - 0.4) / 0.6);
+
+        // Skip if too close to the last zoom
+        if (relTime - lastZoomTime < MIN_GAP_SEC) continue;
+
+        const emphasisFactor = Math.min(1, (wordDuration - 0.6) / 0.6);
         const scale = 1.0 + (maxScale - 1.0) * emphasisFactor;
 
         keyframes.push({
@@ -288,6 +297,8 @@ export function generateZoomKeyframes(
           focusX: 0.5,
           focusY: 0.5,
         });
+
+        lastZoomTime = relTime;
       }
     }
   }
