@@ -325,6 +325,13 @@ export default function PodcastClipEnginePage() {
   useEffect(() => {
     if (!episodeId || currentStage !== 2) return;
 
+    // Guard: only poll with valid UUIDs — temp IDs cause 400 errors
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(episodeId)) {
+      console.warn('[podcast-poll] Skipping poll — episodeId is not a valid UUID:', episodeId);
+      return;
+    }
+
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -422,6 +429,14 @@ export default function PodcastClipEnginePage() {
       } as Record<string, unknown> as Parameters<typeof createEpisode>[0]);
 
       const newEpisodeId = created.id;
+
+      // Validate the returned episode ID is a real UUID before proceeding
+      const uuidCheck = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidCheck.test(newEpisodeId)) {
+        console.error('[podcast] Episode created with non-UUID id:', newEpisodeId);
+        throw new Error('שגיאת מערכת — הפרק נוצר עם מזהה לא תקין. נסה שוב.');
+      }
+
       setEpisodeId(newEpisodeId);
 
       // Step 3: Trigger processing pipeline — reset timer NOW

@@ -8,6 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { getSupabase } from '@/lib/db/store';
 import { podcastEpisodes } from '@/lib/db';
 
@@ -31,7 +32,10 @@ async function detectMode(): Promise<StorageMode> {
         console.log('[podcast-episodes] Using relational table podcast_episodes');
         return 'relational';
       }
-    } catch {}
+      console.warn('[podcast-episodes] detectMode relational check failed:', error.message);
+    } catch (e) {
+      console.warn('[podcast-episodes] detectMode threw:', e);
+    }
 
     console.log('[podcast-episodes] Using JSONB fallback table app_podcast_episodes');
     return 'jsonb';
@@ -150,8 +154,45 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // JSONB mode
+    // JSONB mode — last resort fallback
+    // CRITICAL: Force a real UUID so downstream systems (polling, processing) work.
+    // SupabaseCrud.createAsync may return temp-XXXX IDs when the JSONB table
+    // doesn't exist, which breaks Supabase REST queries and the process route.
     const now = new Date().toISOString();
+    const forcedId = randomUUID();
+
+    // Try direct insert into the relational table one more time with our own UUID
+    try {
+      const sb = getSupabase();
+      const { data: retryData, error: retryError } = await sb
+        .from('podcast_episodes')
+        .insert({
+          id: forcedId,
+          title,
+          show_name: showName || null,
+          guest_names: guestNames || null,
+          language: language || 'he',
+          source_file_path: sourceFilePath,
+          source_file_size: sourceFileSize || null,
+          client_id: clientId || null,
+          status: 'uploaded',
+          processing_progress: {},
+          metadata: {},
+        })
+        .select()
+        .single();
+
+      if (!retryError && retryData) {
+        console.log('[podcast-episodes] JSONB fallback recovered — relational insert succeeded with forced UUID');
+        _mode = 'relational'; // Fix cached mode
+        return NextResponse.json(retryData, { status: 201 });
+      }
+      console.warn('[podcast-episodes] Retry relational insert also failed:', retryError?.message);
+    } catch (retryErr) {
+      console.warn('[podcast-episodes] Retry relational threw:', retryErr);
+    }
+
+    // True JSONB fallback — still use a real UUID
     const created = await podcastEpisodes.createAsync({
       title,
       showName: showName || null,
@@ -167,6 +208,12 @@ export async function POST(req: NextRequest) {
       createdAt: now,
       updatedAt: now,
     } as any);
+
+    // Override the temp ID if SupabaseCrud returned one
+    if (created && typeof created.id === 'string' && created.id.startsWith('temp-')) {
+      (created as any).id = forcedId;
+      console.warn(`[podcast-episodes] Replaced temp ID with forced UUID: ${forcedId}`);
+    }
 
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
