@@ -158,6 +158,7 @@ export default function PodcastClipEnginePage() {
 
   // ── Stage 2: Processing
   const [processingStages, setProcessingStages] = useState<ProcessingStage[]>([
+    { key: 'upload', label: 'העלאת קובץ', status: 'pending', progress: 0 },
     { key: 'validate', label: 'אימות קובץ', status: 'pending', progress: 0 },
     { key: 'audio', label: 'חילוץ אודיו', status: 'pending', progress: 0 },
     { key: 'transcribe', label: 'תמלול', status: 'pending', progress: 0 },
@@ -270,11 +271,17 @@ export default function PodcastClipEnginePage() {
           if (progress && typeof progress.stage === 'number') {
             setProcessingStages((prev) =>
               prev.map((s, idx) => {
-                const stageNum = idx + 1;
-                if (stageNum < progress.stage!) {
+                // Upload stage (idx 0) is managed locally, not by the server
+                if (s.key === 'upload') {
                   return { ...s, status: 'done', progress: 100 };
                 }
-                if (stageNum === progress.stage!) {
+                // Server stages start at 1, but our array has upload at 0
+                // so server stage 1 = idx 1, stage 2 = idx 2, etc.
+                const serverIdx = idx; // idx already matches since upload=0, validate=1, etc.
+                if (serverIdx < progress.stage!) {
+                  return { ...s, status: 'done', progress: 100 };
+                }
+                if (serverIdx === progress.stage!) {
                   return {
                     ...s,
                     status: progress.percent === 100 ? 'done' : 'running',
@@ -323,6 +330,12 @@ export default function PodcastClipEnginePage() {
     const storagePath = `uploads/${timestamp}-${episode.file.name}`;
 
     setCurrentStage(2);
+    // Mark upload stage as running
+    setProcessingStages((prev) =>
+      prev.map((s) =>
+        s.key === 'upload' ? { ...s, status: 'running' as const, progress: 0 } : s,
+      ),
+    );
     setUploadProgress({ percent: 0, speed: 0, eta: 0 });
 
     try {
@@ -334,12 +347,29 @@ export default function PodcastClipEnginePage() {
       await uploader.upload(episode.file, 'project-files', storagePath, {
         onProgress: (percent, speed, eta) => {
           setUploadProgress({ percent, speed, eta });
+          // Update upload stage progress
+          setProcessingStages((prev) =>
+            prev.map((s) =>
+              s.key === 'upload' ? { ...s, progress: percent } : s,
+            ),
+          );
         },
         onError: (err) => {
           setProcessingError(`Upload failed: ${err.message}`);
+          setProcessingStages((prev) =>
+            prev.map((s) =>
+              s.key === 'upload' ? { ...s, status: 'error' as const } : s,
+            ),
+          );
         },
       });
 
+      // Mark upload stage as done
+      setProcessingStages((prev) =>
+        prev.map((s) =>
+          s.key === 'upload' ? { ...s, status: 'done' as const, progress: 100 } : s,
+        ),
+      );
       setUploadProgress(null);
 
       // Step 2: Create the episode record via API
@@ -784,84 +814,504 @@ export default function PodcastClipEnginePage() {
   );
 
   /* ═══════════════════════════════════════════════════════════════════════
-     Render: Stage 2 — Processing
+     Render: Stage 2 — Processing (Premium Waiting Experience)
      ═══════════════════════════════════════════════════════════════════════ */
 
-  const statusIcon = (status: ProcessingStageStatus) => {
-    switch (status) {
-      case 'pending':
-        return '⏳';
-      case 'running':
-        return '⚡';
-      case 'done':
-        return '✅';
-      case 'error':
-        return '❌';
-    }
+  const WAITING_TIPS = [
+    { icon: '🎯', text: 'הקליפים ידורגו לפי פוטנציאל ויראלי, מעורבות צפויה ואיכות ההוק' },
+    { icon: '🎬', text: 'המערכת מזהה אוטומטית רגעים מעניינים, פאנצ׳ליינים וסיפורים שלמים' },
+    { icon: '📊', text: 'כל קליפ יקבל ציון ויראלי מ-0 עד 100 — התמקד בקליפים מעל 80' },
+    { icon: '✂️', text: 'תוכל לערוך את הקליפים — לשנות התחלה, סוף, כתוביות ותבנית' },
+    { icon: '🚀', text: 'הקליפים המוכנים יהיו מותאמים ישירות לפלטפורמות — TikTok, Reels, Shorts' },
+    { icon: '🎙️', text: 'זיהוי דוברים אוטומטי מאפשר כתוביות מדויקות עם שמות' },
+    { icon: '🧠', text: 'ניתוח AI מזהה נושאים, רגשות וטון שיחה לבחירת קליפים חכמה' },
+    { icon: '🎨', text: 'בסיום תוכל להוסיף אינטרו, אאוטרו, לוגו ובראנדינג לכל קליפ' },
+  ];
+
+  const [tipIndex, setTipIndex] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [processingStartTime] = useState(() => Date.now());
+
+  // Rotate tips every 5 seconds
+  useEffect(() => {
+    if (currentStage !== 2) return;
+    const interval = setInterval(() => {
+      setTipIndex((prev) => (prev + 1) % WAITING_TIPS.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [currentStage]);
+
+  // Elapsed time counter
+  useEffect(() => {
+    if (currentStage !== 2) return;
+    const interval = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - processingStartTime) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [currentStage, processingStartTime]);
+
+  const stageIcons: Record<string, string> = {
+    upload: '☁️',
+    validate: '🔍',
+    audio: '🎵',
+    transcribe: '📝',
+    segment: '🧩',
+    analyze: '🧠',
+    clips: '✂️',
   };
 
+  const overallPercent = (() => {
+    const doneCount = processingStages.filter((s) => s.status === 'done').length;
+    const runningStage = processingStages.find((s) => s.status === 'running');
+    const runningFraction = runningStage ? runningStage.progress / 100 : 0;
+    return Math.round(((doneCount + runningFraction) / processingStages.length) * 100);
+  })();
+
   const renderProcessingStage = () => (
-    <div style={{ maxWidth: 600, margin: '0 auto' }}>
-      <div style={cardStyle}>
-        <h3 style={{ fontSize: 20, fontWeight: 700, color: COLORS.text, margin: '0 0 24px', textAlign: 'center' }}>
-          מעבד את הפרק...
-        </h3>
-        <div style={{ display: 'grid', gap: 20 }}>
-          {processingStages.map((stage) => (
-            <div key={stage.key}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 18 }}>{statusIcon(stage.status)}</span>
-                  <span
-                    style={{
-                      fontSize: 15,
-                      fontWeight: stage.status === 'running' ? 700 : 500,
-                      color: stage.status === 'running' ? COLORS.primary : COLORS.text,
-                    }}
-                  >
-                    {stage.label}
-                  </span>
-                </div>
-                {stage.status === 'running' && (
-                  <span style={{ fontSize: 13, color: COLORS.primary, fontWeight: 600 }}>
-                    {Math.round(stage.progress)}%
-                  </span>
-                )}
-              </div>
-              {stage.status === 'running' && (
-                <div style={{ height: 6, borderRadius: 3, background: COLORS.border }}>
-                  <div
-                    style={{
-                      height: '100%',
-                      borderRadius: 3,
-                      background: COLORS.primary,
-                      width: `${stage.progress}%`,
-                      transition: 'width 0.3s',
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          ))}
+    <div style={{ maxWidth: 680, margin: '0 auto' }}>
+      {/* CSS Animations */}
+      <style>{`
+        @keyframes pulse-ring {
+          0% { transform: scale(0.95); opacity: 0.7; }
+          50% { transform: scale(1.05); opacity: 1; }
+          100% { transform: scale(0.95); opacity: 0.7; }
+        }
+        @keyframes spin-slow {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes fade-in-up {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes shimmer {
+          0% { background-position: -200% center; }
+          100% { background-position: 200% center; }
+        }
+        @keyframes glow-pulse {
+          0%, 100% { box-shadow: 0 0 20px rgba(0,181,254,0.15); }
+          50% { box-shadow: 0 0 40px rgba(0,181,254,0.3); }
+        }
+        .stage-item-enter { animation: fade-in-up 0.4s ease-out; }
+        .tip-fade { animation: fade-in-up 0.5s ease-out; }
+      `}</style>
+
+      {/* ── Hero Progress Circle ── */}
+      <div style={{
+        ...cardStyle,
+        background: 'linear-gradient(135deg, #FFFFFF 0%, #F0F7FF 100%)',
+        padding: '40px 32px 32px',
+        textAlign: 'center',
+        marginBottom: 20,
+        animation: 'glow-pulse 3s ease-in-out infinite',
+      }}>
+        {/* Circular progress */}
+        <div style={{ position: 'relative', width: 160, height: 160, margin: '0 auto 24px' }}>
+          {/* Background ring */}
+          <svg width="160" height="160" style={{ position: 'absolute', top: 0, left: 0 }}>
+            <circle cx="80" cy="80" r="70" fill="none" stroke={COLORS.border} strokeWidth="8" />
+            <circle
+              cx="80" cy="80" r="70"
+              fill="none"
+              stroke="url(#progressGradient)"
+              strokeWidth="8"
+              strokeLinecap="round"
+              strokeDasharray={`${2 * Math.PI * 70}`}
+              strokeDashoffset={`${2 * Math.PI * 70 * (1 - overallPercent / 100)}`}
+              transform="rotate(-90 80 80)"
+              style={{ transition: 'stroke-dashoffset 0.8s ease-out' }}
+            />
+            <defs>
+              <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor={COLORS.primary} />
+                <stop offset="100%" stopColor={COLORS.accent} />
+              </linearGradient>
+            </defs>
+          </svg>
+          {/* Spinning outer ring for active state */}
+          <div style={{
+            position: 'absolute',
+            top: -4,
+            left: -4,
+            width: 168,
+            height: 168,
+            borderRadius: '50%',
+            border: '2px dashed rgba(0,181,254,0.2)',
+            animation: 'spin-slow 12s linear infinite',
+          }} />
+          {/* Center content */}
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: 160,
+            height: 160,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <span style={{
+              fontSize: 40,
+              fontWeight: 800,
+              color: COLORS.primary,
+              lineHeight: 1,
+              background: `linear-gradient(135deg, ${COLORS.primary}, #0090CC)`,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}>
+              {overallPercent}%
+            </span>
+            <span style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 4 }}>
+              התקדמות כללית
+            </span>
+          </div>
         </div>
 
-        {processingError && (
-          <div
-            style={{
-              marginTop: 20,
-              padding: '12px 16px',
-              borderRadius: 10,
-              background: 'rgba(239,68,68,0.08)',
-              border: `1px solid ${COLORS.error}`,
-              color: COLORS.error,
-              fontSize: 14,
-              textAlign: 'center',
-            }}
-          >
-            {processingError}
+        {/* Dynamic title */}
+        <h3 style={{
+          fontSize: 22,
+          fontWeight: 700,
+          color: COLORS.text,
+          margin: '0 0 6px',
+        }}>
+          {uploadProgress ? 'מעלה את הקובץ לענן' : 'מעבד את הפרק'}
+        </h3>
+        <p style={{ fontSize: 14, color: COLORS.textSecondary, margin: 0 }}>
+          {formatDuration(elapsedSeconds)} עברו
+          {uploadProgress && uploadProgress.eta > 0 && (
+            <span> — עוד {formatEta(uploadProgress.eta)} בערך</span>
+          )}
+        </p>
+
+        {/* Upload speed badge */}
+        {uploadProgress && uploadProgress.speed > 0 && (
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            marginTop: 12,
+            padding: '6px 16px',
+            borderRadius: 20,
+            background: 'rgba(0,181,254,0.08)',
+            fontSize: 13,
+            fontWeight: 600,
+            color: COLORS.primary,
+          }}>
+            <span style={{ animation: 'pulse-ring 1.5s ease-in-out infinite' }}>⚡</span>
+            {formatBytes(uploadProgress.speed)}/s
           </div>
         )}
       </div>
+
+      {/* ── File Info Card ── */}
+      {episode.file && (
+        <div style={{
+          ...cardStyle,
+          padding: '16px 20px',
+          marginBottom: 20,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+        }}>
+          <div style={{
+            width: 44,
+            height: 44,
+            borderRadius: 12,
+            background: 'linear-gradient(135deg, rgba(0,181,254,0.1), rgba(232,244,1,0.1))',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 22,
+            flexShrink: 0,
+          }}>
+            {episode.file.type?.includes('video') ? '🎬' : '🎙️'}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: COLORS.text,
+              margin: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {episode.file.name}
+            </p>
+            <p style={{ fontSize: 12, color: COLORS.textSecondary, margin: '2px 0 0' }}>
+              {formatBytes(episode.file.size)}
+              {episode.title && ` — ${episode.title}`}
+            </p>
+          </div>
+          {uploadProgress && (
+            <div style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: COLORS.primary,
+              flexShrink: 0,
+            }}>
+              {uploadProgress.percent}%
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Stages Timeline ── */}
+      <div style={{
+        ...cardStyle,
+        padding: '24px 20px',
+        marginBottom: 20,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <h4 style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, margin: 0 }}>שלבי עיבוד</h4>
+          <span style={{ fontSize: 13, color: COLORS.textSecondary }}>
+            {processingStages.filter((s) => s.status === 'done').length}/{processingStages.length}
+          </span>
+        </div>
+
+        <div style={{ display: 'grid', gap: 4 }}>
+          {processingStages.map((stage, idx) => {
+            const isRunning = stage.status === 'running';
+            const isDone = stage.status === 'done';
+            const isError = stage.status === 'error';
+            const isPending = stage.status === 'pending';
+
+            return (
+              <div
+                key={stage.key}
+                className="stage-item-enter"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '12px 14px',
+                  borderRadius: 12,
+                  background: isRunning
+                    ? 'rgba(0,181,254,0.05)'
+                    : isDone
+                      ? 'rgba(16,185,129,0.04)'
+                      : 'transparent',
+                  border: isRunning
+                    ? '1px solid rgba(0,181,254,0.15)'
+                    : '1px solid transparent',
+                  transition: 'all 0.3s ease',
+                }}
+              >
+                {/* Icon */}
+                <div style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 18,
+                  background: isDone
+                    ? 'rgba(16,185,129,0.1)'
+                    : isRunning
+                      ? 'rgba(0,181,254,0.1)'
+                      : isError
+                        ? 'rgba(239,68,68,0.1)'
+                        : '#F3F4F6',
+                  flexShrink: 0,
+                  transition: 'all 0.3s',
+                  ...(isRunning ? { animation: 'pulse-ring 2s ease-in-out infinite' } : {}),
+                }}>
+                  {isDone ? '✓' : isError ? '✕' : stageIcons[stage.key] || '⏳'}
+                </div>
+
+                {/* Content */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{
+                      fontSize: 14,
+                      fontWeight: isRunning ? 700 : isDone ? 600 : 400,
+                      color: isRunning
+                        ? COLORS.primary
+                        : isDone
+                          ? COLORS.success
+                          : isError
+                            ? COLORS.error
+                            : isPending
+                              ? COLORS.textSecondary
+                              : COLORS.text,
+                      transition: 'color 0.3s',
+                    }}>
+                      {stage.label}
+                    </span>
+                    {isRunning && (
+                      <span style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: COLORS.primary,
+                        background: 'rgba(0,181,254,0.08)',
+                        padding: '2px 10px',
+                        borderRadius: 12,
+                      }}>
+                        {Math.round(stage.progress)}%
+                      </span>
+                    )}
+                    {isDone && (
+                      <span style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: COLORS.success,
+                        background: 'rgba(16,185,129,0.08)',
+                        padding: '2px 10px',
+                        borderRadius: 12,
+                      }}>
+                        הושלם
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Progress bar for running stage */}
+                  {isRunning && (
+                    <div style={{
+                      height: 4,
+                      borderRadius: 2,
+                      background: COLORS.border,
+                      marginTop: 8,
+                      overflow: 'hidden',
+                    }}>
+                      <div style={{
+                        height: '100%',
+                        borderRadius: 2,
+                        background: `linear-gradient(90deg, ${COLORS.primary}, ${COLORS.accent})`,
+                        backgroundSize: '200% 100%',
+                        width: `${stage.progress}%`,
+                        transition: 'width 0.4s ease-out',
+                        ...(stage.progress > 0 && stage.progress < 100
+                          ? { animation: 'shimmer 2s linear infinite' }
+                          : {}),
+                      }} />
+                    </div>
+                  )}
+
+                  {/* Upload speed & ETA */}
+                  {stage.key === 'upload' && isRunning && uploadProgress && (
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginTop: 6,
+                      fontSize: 12,
+                      color: COLORS.textSecondary,
+                    }}>
+                      <span>{formatBytes(uploadProgress.speed)}/s</span>
+                      <span>{formatEta(uploadProgress.eta)} נותרו</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Tips Carousel ── */}
+      <div style={{
+        ...cardStyle,
+        padding: '20px 24px',
+        marginBottom: 20,
+        background: 'linear-gradient(135deg, rgba(0,181,254,0.03), rgba(232,244,1,0.03))',
+        border: '1px solid rgba(0,181,254,0.1)',
+      }}>
+        <div className="tip-fade" key={tipIndex} style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 12,
+        }}>
+          <span style={{
+            fontSize: 24,
+            lineHeight: 1,
+            flexShrink: 0,
+            marginTop: 2,
+          }}>
+            {WAITING_TIPS[tipIndex].icon}
+          </span>
+          <div>
+            <span style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: COLORS.primary,
+              textTransform: 'uppercase' as const,
+              letterSpacing: 1,
+            }}>
+              ידעת ש...
+            </span>
+            <p style={{
+              fontSize: 14,
+              color: COLORS.text,
+              margin: '4px 0 0',
+              lineHeight: 1.5,
+            }}>
+              {WAITING_TIPS[tipIndex].text}
+            </p>
+          </div>
+        </div>
+        {/* Tip dots */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          gap: 6,
+          marginTop: 14,
+        }}>
+          {WAITING_TIPS.map((_, i) => (
+            <div
+              key={i}
+              style={{
+                width: i === tipIndex ? 20 : 6,
+                height: 6,
+                borderRadius: 3,
+                background: i === tipIndex ? COLORS.primary : COLORS.border,
+                transition: 'all 0.3s',
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* ── Safe to close notice ── */}
+      {uploadProgress && (
+        <div style={{
+          textAlign: 'center',
+          padding: '10px 16px',
+          borderRadius: 10,
+          background: 'rgba(16,185,129,0.06)',
+          border: '1px solid rgba(16,185,129,0.15)',
+          fontSize: 13,
+          color: COLORS.success,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+        }}>
+          <span style={{ animation: 'pulse-ring 2s ease-in-out infinite' }}>🟢</span>
+          בטוח לסגירה — ההעלאה תמשיך ברקע ותוכל לחזור מאוחר יותר
+        </div>
+      )}
+
+      {/* ── Error ── */}
+      {processingError && (
+        <div style={{
+          marginTop: 16,
+          padding: '14px 18px',
+          borderRadius: 12,
+          background: 'rgba(239,68,68,0.06)',
+          border: '1px solid rgba(239,68,68,0.2)',
+          color: COLORS.error,
+          fontSize: 14,
+          textAlign: 'center',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+        }}>
+          <span style={{ fontSize: 18 }}>⚠️</span>
+          {processingError}
+        </div>
+      )}
     </div>
   );
 
