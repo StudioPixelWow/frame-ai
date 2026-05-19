@@ -104,9 +104,9 @@ async function runPipeline(episodeId: string, sourceFilePath: string): Promise<v
     }
 
     // Get file metadata
-    const fileMetadata = fileData[0];
-    const fileSizeBytes = (fileMetadata as Record<string, unknown>).metadata
-      ? ((fileMetadata as Record<string, unknown>).metadata as Record<string, unknown>).size as number
+    const fileMetadata = fileData[0] as unknown as Record<string, unknown>;
+    const fileSizeBytes = fileMetadata.metadata
+      ? (fileMetadata.metadata as Record<string, unknown>).size as number
       : undefined;
 
     await updateProgress(episodeId, 0, 100);
