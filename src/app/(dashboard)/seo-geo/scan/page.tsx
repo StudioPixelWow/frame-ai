@@ -1048,7 +1048,28 @@ function ScanPageInner() {
               </div>
             )}
 
-            {/* ���─ CTAs (valid scan only) ─────────────────────── */}
+            {/* ── AI Visibility Disclaimer ────────────────── */}
+            {phase === 'done' && job.validation?.passed && (
+              <div style={{
+                backgroundColor: '#FFF8E1',
+                border: '1px solid #FFD54F',
+                borderRadius: 12,
+                padding: '12px 16px',
+                display: 'flex',
+                gap: 10,
+                alignItems: 'flex-start',
+                fontSize: 12,
+                color: '#5D4037',
+                lineHeight: 1.6,
+              }}>
+                <span style={{ fontSize: 16, flexShrink: 0, marginTop: 2 }}>⚠️</span>
+                <div>
+                  <strong>שימו לב:</strong> תוצאות נראות AI הן תמונת מצב נקודתית. תשובות מנועי AI משתנות בין שאילתות ומהדורות — אין ערובה לחזרה על התוצאות. פלטפורמות ללא מפתח API מסומנות כ-״לא זמין״ ולא נבדקו בפועל.
+                </div>
+              </div>
+            )}
+
+            {/* ──── CTAs (valid scan only) ─────────────────────── */}
             {phase === 'done' && job.validation?.passed && savedPlanId && !savedPlanId.startsWith('temp-') && (
               <div style={{
                 padding: '10px 16px', borderRadius: 10,

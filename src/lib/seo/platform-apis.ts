@@ -608,7 +608,7 @@ export async function queryChatGPT(query: string, businessName: string, targetDo
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'אתה יועץ מומחה שעוזר למצוא ספקי שירות ועסקים מובילים בישראל. כשאתה ממליץ, ציין שמות ספציפיים של עסקים, כתובות אתרים, ומיקומים. תן תשובה מפורטת עם לפחות 3-5 המלצות ספציפיות כשרלוונטי. ענה בשפת השאלה.' },
+          { role: 'system', content: 'אתה עוזר ידידותי שעונה על שאלות בצורה מפורטת ומדויקת. אם יש לך מידע על עסקים, אתרים, או ספקי שירות רלוונטיים — ציין אותם. אם אין לך מידע ספציפי, אמור זאת בכנות. ענה בשפת השאלה.' },
           { role: 'user', content: query },
         ],
         max_tokens: 1000,
@@ -663,7 +663,7 @@ export async function queryClaude(query: string, businessName: string, targetDom
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1000,
-        system: 'אתה יועץ מומחה שעוזר למצוא ספקי שירות ועסקים מובילים בישראל. כשאתה ממליץ, ציין שמות ספציפיים של עסקים, כתובות אתרים, ומיקומים. תן תשובה מפורטת עם לפחות 3-5 המלצות ספציפיות כשרלוונטי. ענה בשפת השאלה.',
+        system: 'אתה עוזר ידידותי שעונה על שאלות בצורה מפורטת ומדויקת. אם יש לך מידע על עסקים, אתרים, או ספקי שירות רלוונטיים — ציין אותם. אם אין לך מידע ספציפי, אמור זאת בכנות. ענה בשפת השאלה.',
         messages: [{ role: 'user', content: query }],
       }),
     }, 20000);
@@ -713,7 +713,7 @@ export async function queryPerplexity(query: string, businessName: string, targe
       body: JSON.stringify({
         model: 'sonar-pro',
         messages: [
-          { role: 'system', content: 'אתה מנוע חיפוש מומחה שעוזר למצוא ספקי שירות ועסקים מובילים בישראל. ציין שמות ספציפיים של עסקים, כתובות אתרים, ומיקומים. תן תשובה מפורטת עם מקורות ולפחות 3-5 תוצאות כשרלוונטי. ענה בשפת השאלה.' },
+          { role: 'system', content: 'אתה מנוע חיפוש שעונה על שאלות עם מקורות. אם יש לך מידע על עסקים או שירותים רלוונטיים — ציין אותם עם קישורים. אם אין — אמור זאת בכנות. ענה בשפת השאלה.' },
           { role: 'user', content: query },
         ],
         max_tokens: 1000,
@@ -770,7 +770,7 @@ export async function queryGemini(query: string, businessName: string, targetDom
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: 'אתה יועץ מומחה שעוזר למצוא ספקי שירות ועסקים מובילים בישראל. כשאתה ממליץ, ציין שמות ספציפיים של עסקים, כתובות אתרים, ומיקומים. תן תשובה מפורטת עם לפחות 3-5 המלצות ספציפיות כשרלוונטי. ענה בשפת השאלה.' }] },
+        systemInstruction: { parts: [{ text: 'אתה עוזר ידידותי שעונה על שאלות בצורה מפורטת ומדויקת. אם יש לך מידע על עסקים, אתרים, או ספקי שירות רלוונטיים — ציין אותם. אם אין לך מידע ספציפי, אמור זאת בכנות. ענה בשפת השאלה.' }] },
         contents: [{ parts: [{ text: query }] }],
         generationConfig: { maxOutputTokens: 1000, temperature: 0.4 },
       }),

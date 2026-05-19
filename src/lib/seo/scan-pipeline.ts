@@ -21,6 +21,7 @@
 
 import { extractWebsiteFacts, type WebsiteFacts } from './website-facts';
 import { isPlatformAvailable, queryPlatform, type PlatformId as ApiPlatformId } from './platform-apis';
+import { analyzeUrl as analyzePageSpeed } from './pagespeed-service';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -229,6 +230,8 @@ export interface ScanResult {
   competitors: Competitor[];
   platformStatuses: PlatformStatus[];
   metrics: ScanMetrics;
+  pageSpeed?: any;
+  eeat?: { hasAboutPage: boolean; hasAuthorBio: boolean; hasTestimonials: boolean; hasContactInfo: boolean; hasPrivacyPolicy: boolean; hasSocialProof: boolean; score: number };
   scanDuration: {
     startedAt: string;
     completedAt: string;
@@ -283,6 +286,150 @@ function decodeHtmlEntities(text: string): string {
     // Clean up any remaining whitespace
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+// ── CMS & Tech Stack Detection ────────────────────────────────────────────────
+
+function detectCMS(html: string): string {
+  // WordPress
+  if (/wp-content|wp-includes|wp-json/i.test(html)) return 'WordPress';
+  if (/<meta\s+[^>]*name=["']?generator["']?\s+[^>]*content=["'][^"']*WordPress[^"']*["']/i.test(html)) return 'WordPress';
+  // Wix
+  if (/wix\.com|X-Wix-/i.test(html) || /wixsite\.com/i.test(html)) return 'Wix';
+  if (/<meta\s+[^>]*name=["']?generator["']?\s+[^>]*content=["'][^"']*Wix[^"']*["']/i.test(html)) return 'Wix';
+  // Shopify
+  if (/cdn\.shopify\.com|Shopify\.theme/i.test(html)) return 'Shopify';
+  // Squarespace
+  if (/squarespace\.com|sqsp/i.test(html)) return 'Squarespace';
+  // Joomla
+  if (/<meta\s+[^>]*name=["']?generator["']?\s+[^>]*content=["'][^"']*Joomla[^"']*["']/i.test(html)) return 'Joomla';
+  if (/\/media\/jui\/|\/components\/com_/i.test(html)) return 'Joomla';
+  // Drupal
+  if (/Drupal\.settings|\/sites\/default\/files/i.test(html)) return 'Drupal';
+  if (/<meta\s+[^>]*name=["']?generator["']?\s+[^>]*content=["'][^"']*Drupal[^"']*["']/i.test(html)) return 'Drupal';
+  // Webflow
+  if (/webflow\.com/i.test(html)) return 'Webflow';
+  // Next.js
+  if (/__next|_next\/static/i.test(html)) return 'Next.js';
+  // Gatsby
+  if (/gatsby/i.test(html) && /___gatsby/i.test(html)) return 'Gatsby';
+  // Ghost
+  if (/ghost\.org|ghost-/i.test(html)) return 'Ghost';
+  // PrestaShop
+  if (/prestashop/i.test(html)) return 'PrestaShop';
+  // Magento
+  if (/Mage\.|magento/i.test(html)) return 'Magento';
+  // Generic meta generator check
+  const genMatch = html.match(/<meta\s+[^>]*name=["']?generator["']?\s+[^>]*content=["']([^"']+)["']/i);
+  if (genMatch) return genMatch[1].trim();
+  return 'לא זוהה';
+}
+
+function detectTechStack(html: string): string[] {
+  const stack: string[] = [];
+  // JS Frameworks
+  if (/__next|_next\/static/i.test(html)) stack.push('Next.js');
+  if (/react/i.test(html) && !stack.includes('Next.js')) stack.push('React');
+  if (/vue\.js|__vue|v-cloak/i.test(html)) stack.push('Vue.js');
+  if (/angular|ng-app|ng-controller/i.test(html)) stack.push('Angular');
+  if (/svelte/i.test(html)) stack.push('Svelte');
+  // CSS Frameworks
+  if (/bootstrap/i.test(html)) stack.push('Bootstrap');
+  if (/tailwind/i.test(html)) stack.push('Tailwind CSS');
+  if (/materialize/i.test(html)) stack.push('Materialize');
+  // JS Libraries
+  if (/jquery/i.test(html)) stack.push('jQuery');
+  if (/lodash/i.test(html)) stack.push('Lodash');
+  // Page Builders
+  if (/elementor/i.test(html)) stack.push('Elementor');
+  if (/divi/i.test(html)) stack.push('Divi');
+  if (/wpbakery|js_composer/i.test(html)) stack.push('WPBakery');
+  // Analytics
+  if (/gtag|google-analytics|googletagmanager/i.test(html)) stack.push('Google Analytics');
+  if (/facebook\.net\/.*fbevents|fbq\(/i.test(html)) stack.push('Facebook Pixel');
+  if (/hotjar/i.test(html)) stack.push('Hotjar');
+  // CDN / Infrastructure
+  if (/cloudflare/i.test(html)) stack.push('Cloudflare');
+  if (/cdn\.shopify/i.test(html)) stack.push('Shopify CDN');
+  if (/fonts\.googleapis/i.test(html)) stack.push('Google Fonts');
+  // Chat
+  if (/tawk\.to/i.test(html)) stack.push('Tawk.to');
+  if (/crisp\.chat/i.test(html)) stack.push('Crisp');
+  if (/intercom/i.test(html)) stack.push('Intercom');
+  return stack;
+}
+
+/** Basic E-E-A-T signal detection from HTML */
+function detectEEATSignals(html: string): {
+  hasAboutPage: boolean;
+  hasAuthorBio: boolean;
+  hasTestimonials: boolean;
+  hasContactInfo: boolean;
+  hasPrivacyPolicy: boolean;
+  hasSocialProof: boolean;
+  score: number;
+} {
+  const hasAboutPage = /href=["'][^"']*\/(about|אודות|about-us)/i.test(html);
+  const hasAuthorBio = /author|כותב|מחבר|בעלים|מייסד|founder|ceo/i.test(html);
+  const hasTestimonials = /testimonial|review|ביקורת|חוות דעת|ממליצ|עדות/i.test(html);
+  const hasContactInfo = /(tel:|mailto:|טלפון|phone|טל:)/i.test(html) ||
+    /\d{2,3}-?\d{7,8}/.test(html); // Israeli phone pattern
+  const hasPrivacyPolicy = /privacy|פרטיות|תנאי שימוש|terms/i.test(html);
+  const hasSocialProof = /facebook\.com|linkedin\.com|twitter\.com|instagram\.com|google\.com\/maps/i.test(html);
+
+  let score = 0;
+  if (hasAboutPage) score += 20;
+  if (hasAuthorBio) score += 15;
+  if (hasTestimonials) score += 20;
+  if (hasContactInfo) score += 15;
+  if (hasPrivacyPolicy) score += 15;
+  if (hasSocialProof) score += 15;
+
+  return { hasAboutPage, hasAuthorBio, hasTestimonials, hasContactInfo, hasPrivacyPolicy, hasSocialProof, score };
+}
+
+/** Count broken links found during internal page crawling */
+function countBrokenLinks(
+  pagesToVisit: string[],
+  fetchResults: Array<{ pageUrl: string; pageHtml: string | null; pageLoad: number; status?: number }>
+): number {
+  let broken = 0;
+  for (const result of fetchResults) {
+    if (!result.pageHtml) {
+      broken++;
+    }
+  }
+  return broken;
+}
+
+/** Estimate indexed pages using Serper site: query (if API key available) */
+async function estimateIndexedPages(domain: string): Promise<number | null> {
+  const serperKey = process.env.SERPER_API_KEY;
+  if (!serperKey) return null;
+  try {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch('https://google.serper.dev/search', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', 'X-API-KEY': serperKey },
+      body: JSON.stringify({ q: `site:${domain}`, num: 1 }),
+    });
+    clearTimeout(tid);
+    if (!res.ok) return null;
+    const data = await res.json();
+    // Serper returns searchInformation.totalResults for the total indexed count
+    const totalStr = data?.searchInformation?.totalResults;
+    if (totalStr) {
+      const total = parseInt(totalStr, 10);
+      if (!isNaN(total) && total > 0) return total;
+    }
+    // Fallback: count organic results
+    if (data?.organic?.length) return data.organic.length;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // ── HTML Parser ────────────────────────────────────────────────────────────────
@@ -852,6 +999,7 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
 
     const scannedPages: ScannedPageInfo[] = [];
     const allParsed: ParsedPage[] = [homepageParsed];
+    let brokenLinkCount = 0;
 
     // Homepage
     scannedPages.push({
@@ -904,7 +1052,8 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
           log(job, 'extract_content', `חולצו H1/H2 מ-${pageUrl.split('/').pop() || 'page'}`, 'success',
             `${parsed.wordCount} מילים | ${pageLoad}ms`);
         } else {
-          log(job, 'extract_content', `דף נכשל`, 'error', pageUrl);
+          brokenLinkCount++;
+          log(job, 'extract_content', `דף נכשל (קישור שבור)`, 'error', pageUrl);
         }
       }
       if (stg4) stg4.itemsProcessed = 1 + scannedPages.length;
@@ -1432,6 +1581,58 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       log(job, 'finalize', 'הסריקה אינה אמינה מספיק', 'warning', validation.invalidReason || '');
     }
 
+    // E-E-A-T signals from all crawled pages
+    const allHtml = homepageHtml; // Use homepage as primary source for E-E-A-T
+    const eeatSignals = detectEEATSignals(allHtml);
+    log(job, 'finalize', `E-E-A-T ציון: ${eeatSignals.score}/100`, eeatSignals.score >= 50 ? 'success' : 'warning',
+      [
+        eeatSignals.hasAboutPage ? 'עמוד אודות' : null,
+        eeatSignals.hasAuthorBio ? 'ביו מחבר' : null,
+        eeatSignals.hasTestimonials ? 'עדויות/ביקורות' : null,
+        eeatSignals.hasContactInfo ? 'פרטי קשר' : null,
+        eeatSignals.hasPrivacyPolicy ? 'מדיניות פרטיות' : null,
+        eeatSignals.hasSocialProof ? 'נוכחות חברתית' : null,
+      ].filter(Boolean).join(', ') || 'לא נמצאו איתותי E-E-A-T');
+
+    // Detect CMS, tech stack, and estimate indexed pages from real data
+    const detectedCms = detectCMS(allHtml);
+    const detectedTechStack = detectTechStack(homepageHtml);
+    log(job, 'finalize', `CMS: ${detectedCms}`, 'info');
+    if (detectedTechStack.length > 0) {
+      log(job, 'finalize', `טכנולוגיות: ${detectedTechStack.slice(0, 5).join(', ')}`, 'info');
+    }
+    if (brokenLinkCount > 0) {
+      log(job, 'finalize', `${brokenLinkCount} קישורים שבורים`, 'warning');
+    }
+
+    // Estimate indexed pages via Serper site: query (non-blocking)
+    let estimatedIndexedPages: number | null = null;
+    try {
+      const hostname = new URL(normalizedUrl).hostname;
+      estimatedIndexedPages = await estimateIndexedPages(hostname);
+      if (estimatedIndexedPages !== null) {
+        log(job, 'finalize', `עמודים מאונדקסים בגוגל: ~${estimatedIndexedPages}`, 'success');
+      }
+    } catch { /* skip — non-critical */ }
+
+    // PageSpeed Insights — Core Web Vitals (free Google API, non-blocking)
+    let pageSpeedData: { performanceScore: number; lcp?: number; cls?: number; fcp?: number } | null = null;
+    try {
+      log(job, 'finalize', 'בודק Core Web Vitals (PageSpeed Insights)...', 'info');
+      const psResult = await analyzePageSpeed(normalizedUrl, 'mobile');
+      pageSpeedData = {
+        performanceScore: psResult.performanceScore,
+        lcp: psResult.lcp?.value,
+        cls: psResult.cls?.value,
+        fcp: psResult.fcp?.value,
+      };
+      log(job, 'finalize', `PageSpeed: ${psResult.performanceScore}/100 | LCP: ${(psResult.lcp?.value / 1000).toFixed(1)}s`,
+        psResult.performanceScore >= 50 ? 'success' : 'warning');
+    } catch (psErr) {
+      log(job, 'finalize', 'PageSpeed Insights לא זמין', 'warning',
+        psErr instanceof Error ? psErr.message : '');
+    }
+
     // Build final result
     job.result = {
       url: normalizedUrl,
@@ -1445,13 +1646,15 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       h1Tags: homepageParsed.h1Tags,
       h2Tags: homepageParsed.h2Tags,
       totalPages: scannedPages.length,
-      indexedPages: scannedPages.length,
-      brokenLinks: 0,
+      indexedPages: estimatedIndexedPages ?? scannedPages.length,
+      brokenLinks: brokenLinkCount,
       hasRobotsTxt,
       hasSitemap,
-      domainAuthority: 0,
-      techStack: [],
-      cmsDetected: 'Unknown',
+      domainAuthority: 0, // DA requires paid API (Moz/Ahrefs) — documented as unavailable
+      techStack: detectedTechStack,
+      cmsDetected: detectedCms,
+      pageSpeed: pageSpeedData,
+      eeat: eeatSignals,
       structuredData: homepageParsed.hasSchema,
       schemaTypes: homepageParsed.schemaTypes,
       openGraph: homepageParsed.hasOG,

@@ -524,15 +524,15 @@ export function generateSeoReport(plan: any, language: "he" | "en" = "he", busin
     content: [
       { type: "paragraph", text: he ? `על בסיס המצב הנוכחי (ציון ${computedScores.overall}%) והפעולות המומלצות, אלו התוצאות הצפויות לאחר 60 יום:` : `Based on current status (score ${computedScores.overall}%) and recommended actions, here are expected results after 60 days:` },
       { type: "table",
-        headers: he ? ["מדד", "נוכחי", "יעד 60 יום", "שיפור צפוי"] : ["Metric", "Current", "60-Day Target", "Expected Improvement"],
+        headers: he ? ["מדד", "נוכחי", "יעד 60 יום", "הערה"] : ["Metric", "Current", "60-Day Target", "Note"],
         rows: [
-          [he ? "ציון טכני" : "Technical Score", `${computedScores.technical}%`, `${Math.min(100, computedScores.technical + 25)}%`, `+${Math.min(25, 100 - computedScores.technical)}%`],
-          [he ? "נראות AI" : "AI Visibility", `${computedScores.visibility}%`, `${Math.min(100, computedScores.visibility + 20)}%`, `+${Math.min(20, 100 - computedScores.visibility)}%`],
-          [he ? "ציון כללי" : "Overall Score", `${computedScores.overall}%`, `${Math.min(100, computedScores.overall + 20)}%`, `+${Math.min(20, 100 - computedScores.overall)}%`],
-          [he ? "אזכורים בשאילתות AI" : "AI Query Mentions", `${mentionedQueries.length}/${visResults.length}`, `${Math.min(visResults.length, mentionedQueries.length + Math.ceil(missedQueries.length * 0.4))}/${visResults.length}`, `+${Math.ceil(missedQueries.length * 0.4)}`],
+          [he ? "ציון טכני" : "Technical Score", `${computedScores.technical}%`, he ? "תלוי בביצוע" : "Depends on execution", he ? "אין הבטחת אחוזים — תלוי בביצוע הפעולות" : "No guaranteed % — depends on execution"],
+          [he ? "נראות AI" : "AI Visibility", `${computedScores.visibility}%`, he ? "תלוי בביצוע" : "Depends on execution", he ? "נראות AI משתנה ואינה בשליטה ישירה" : "AI visibility is variable and not directly controllable"],
+          [he ? "ציון כללי" : "Overall Score", `${computedScores.overall}%`, he ? "תלוי בביצוע" : "Depends on execution", he ? "שיפור מותנה בביצוע מלא של ההמלצות" : "Improvement contingent on full execution"],
+          [he ? "אזכורים בשאילתות AI" : "AI Query Mentions", `${mentionedQueries.length}/${visResults.length}`, he ? "תלוי בביצוע" : "Depends on execution", he ? "מספר האזכורים תלוי בתוכן שייבנה" : "Mentions depend on content created"],
         ],
       },
-      { type: "paragraph", text: he ? "* התוצאות מבוססות על ביצוע מלא של כל הפעולות המומלצות. תוצאות בפועל עשויות להשתנות בהתאם לקצב הביצוע ושינויים בשוק." : "* Results are based on full execution of all recommended actions. Actual results may vary depending on execution pace and market changes." },
+      { type: "paragraph", text: he ? "⚠️ הערה חשובה: אין הבטחת תוצאות מספריות. השיפור תלוי בביצוע מלא של ההמלצות, בתחרותיות בשוק, ובשינויים באלגוריתמים של מנועי חיפוש ו-AI. האחוזים שלעיל משקפים את המצב הנוכחי בלבד." : "⚠️ Important: No numerical guarantees are made. Improvement depends on full execution of recommendations, market competitiveness, and algorithm changes. Percentages above reflect current state only." },
     ],
   });
 

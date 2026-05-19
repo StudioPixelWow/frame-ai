@@ -265,6 +265,29 @@ export default function ResultsPage() {
           {/* ═══ OVERVIEW TAB ═══ */}
           {activeTab === 'overview' && (
             <>
+              {/* AI Visibility Disclaimer */}
+              <div style={{
+                backgroundColor: '#FFF8E1',
+                border: '1px solid #FFD54F',
+                borderRadius: 10,
+                padding: '14px 18px',
+                marginBottom: 20,
+                display: 'flex',
+                gap: 10,
+                alignItems: 'flex-start',
+                fontSize: 13,
+                color: '#5D4037',
+                lineHeight: 1.6,
+              }}>
+                <span style={{ fontSize: 18, flexShrink: 0, marginTop: 2 }}>⚠️</span>
+                <div>
+                  <strong>הערה חשובה:</strong> תוצאות נראות AI הן תמונת מצב נקודתית בלבד. תשובות מנועי AI (ChatGPT, Gemini, Claude, Perplexity) משתנות בין שאילתות, מהדורות ומשתמשים — אין ערובה שהתוצאה תחזור על עצמה.
+                  פלטפורמות המסומנות כ-<span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, backgroundColor: C.success + '18', padding: '1px 6px', borderRadius: 8, color: C.success, fontSize: 11, fontWeight: 500, verticalAlign: 'middle' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: C.success }} />אמיתי</span> הוחזרו מה-API בפועל;
+                  {' '}<span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, backgroundColor: C.warning + '18', padding: '1px 6px', borderRadius: 8, color: C.warning, fontSize: 11, fontWeight: 500, verticalAlign: 'middle' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: C.warning }} />סימולציה</span> הן הערכה בלבד;
+                  {' '}<span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, backgroundColor: C.textMuted + '18', padding: '1px 6px', borderRadius: 8, color: C.textMuted, fontSize: 11, fontWeight: 500, verticalAlign: 'middle' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: C.textMuted }} />לא זמין</span> לא נבדקו (חסר מפתח API).
+                </div>
+              </div>
+
               {/* Global Metrics */}
               {metrics && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
@@ -392,6 +415,26 @@ export default function ResultsPage() {
           {/* ═══ AI VISIBILITY TAB ═══ */}
           {activeTab === 'ai_visibility' && (
             <>
+              {/* AI Visibility Tab Disclaimer */}
+              <div style={{
+                backgroundColor: '#EDE7F6',
+                border: '1px solid #B39DDB',
+                borderRadius: 10,
+                padding: '14px 18px',
+                marginBottom: 20,
+                display: 'flex',
+                gap: 10,
+                alignItems: 'flex-start',
+                fontSize: 13,
+                color: '#4A148C',
+                lineHeight: 1.6,
+              }}>
+                <span style={{ fontSize: 18, flexShrink: 0, marginTop: 2 }}>🔮</span>
+                <div>
+                  <strong>על נראות AI:</strong> מנועי AI לא מחזירים תוצאות קבועות — אותה שאילתה יכולה להניב תשובות שונות בכל פעם. התוצאות כאן משקפות בדיקה חד-פעמית ולא מבטיחות נוכחות עתידית. שימו לב לעמודת <strong>״מצב״</strong> כדי להבחין בין תוצאות אמיתיות לסימולציה.
+                </div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
                 <MetricCard icon="🤖" label="שאילתות AI" value={String(aiResults.length)} />
                 <MetricCard icon="💬" label="אזכורים" value={String(aiResults.filter(r => r.mentioned).length)} accent />
@@ -602,8 +645,13 @@ function PlatformCard({ summary, onClick }: { summary: PlatformSummary; onClick:
 
 function ModeTag({ mode }: { mode: ScanMode }) {
   const color = scanModeColor(mode);
+  const tooltip: Record<ScanMode, string> = {
+    real: 'תוצאה אמיתית מ-API של הפלטפורמה',
+    simulated: 'הערכה בלבד — לא נבדק מול API אמיתי',
+    unavailable: 'חסר מפתח API — לא נבדק',
+  };
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, backgroundColor: color + '18', padding: '3px 8px', borderRadius: 10, color, fontSize: 11, fontWeight: 500 }}>
+    <span title={tooltip[mode]} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, backgroundColor: color + '18', padding: '3px 8px', borderRadius: 10, color, fontSize: 11, fontWeight: 500, cursor: 'help' }}>
       <span style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />
       {scanModeLabel(mode)}
     </span>
