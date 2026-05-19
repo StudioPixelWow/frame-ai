@@ -12,8 +12,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { extractAudio } from '@/lib/podcast-engine/ffmpeg-service';
+import { extractAudio, splitAudioIntoChunks } from '@/lib/podcast-engine/ffmpeg-service';
 import { transcribeChunkedAudio } from '@/lib/podcast-engine/whisper-transcription';
+import { writeFile, mkdir, readFile, unlink } from 'fs/promises';
+import { join } from 'path';
+import { tmpdir } from 'os';
 import { segmentTranscript, type TranscriptSegment } from '@/lib/podcast-engine/topic-segmentation';
 import { analyzeTranscriptForClips, type AIClipSuggestion } from '@/lib/podcast-engine/clip-analyzer';
 import { scoreClipCandidates, rankClips, type RawClipCandidate } from '@/lib/podcast-engine/clip-scorer';
@@ -126,15 +129,27 @@ async function runPipeline(episodeId: string, sourceFilePath: string): Promise<v
 
     await updateProgress(episodeId, 1, 30);
 
-    // Extract audio from video
-    const audioBuffer = await extractAudio(fileBlob);
+    // Write blob to temp file for ffmpeg processing
+    const tempDir = join(tmpdir(), `podcast-${episodeId}`);
+    await mkdir(tempDir, { recursive: true });
+    const ext = sourceFilePath.split('.').pop() || 'mp4';
+    const tempVideoPath = join(tempDir, `source.${ext}`);
+    const blobArrayBuffer = await fileBlob.arrayBuffer();
+    await writeFile(tempVideoPath, Buffer.from(blobArrayBuffer));
+
+    // Extract audio from video using ffmpeg
+    const extractedAudioPath = await extractAudio(tempVideoPath, tempDir);
+    const audioFileBuffer = await readFile(extractedAudioPath);
+
+    // Cleanup temp video file
+    await unlink(tempVideoPath).catch(() => {});
 
     // Save extracted audio path on the episode
     const audioFilePath = sourceFilePath.replace(/\.[^.]+$/, '.mp3');
     const { error: audioUploadError } = await supabase
       .storage
       .from('podcast-files')
-      .upload(audioFilePath, audioBuffer, {
+      .upload(audioFilePath, audioFileBuffer, {
         contentType: 'audio/mpeg',
         upsert: true,
       });
@@ -153,14 +168,12 @@ async function runPipeline(episodeId: string, sourceFilePath: string): Promise<v
     // ── Stage 3: תמלול — תמלול מקוטע עם Whisper ──────────────────────────
     await updateProgress(episodeId, 2, 0);
 
-    const transcriptionResult = await transcribeChunkedAudio(audioBuffer, {
-      language: 'he',
-      onProgress: async (percent: number) => {
-        await updateProgress(episodeId, 2, percent);
-      },
-    });
+    // Split extracted audio into chunks for Whisper API (max 25MB each)
+    const audioChunks = await splitAudioIntoChunks(extractedAudioPath, 600, tempDir);
 
-    const { fullText, segments: transcriptSegments } = transcriptionResult;
+    const transcriptionResult = await transcribeChunkedAudio(audioChunks, 'he');
+
+    const { text: fullText, segments: transcriptSegments } = transcriptionResult;
 
     await updateProgress(episodeId, 2, 100);
 
