@@ -180,7 +180,7 @@ async function runPipeline(episodeId: string, sourceFilePath: string): Promise<v
     // ── Stage 4: פילוח נושאים — זיהוי גבולות נושא בתמלול ────────────────
     await updateProgress(episodeId, 3, 0);
 
-    const topicSegments = segmentTranscript(transcriptSegments as TranscriptSegment[]);
+    const topicSegments = segmentTranscript(transcriptSegments as unknown as TranscriptSegment[]);
 
     await updateProgress(episodeId, 3, 100);
 
@@ -239,10 +239,10 @@ async function runPipeline(episodeId: string, sourceFilePath: string): Promise<v
     // Save clip candidates to podcast_clip_candidates
     const clipRows = rankedClips.map((clip) => {
       // Extract the matching transcript text for this clip's time range
-      const clipSegments = (transcriptSegments as TranscriptSegment[]).filter(
+      const clipSegments = (transcriptSegments as unknown as TranscriptSegment[]).filter(
         (seg) => seg.start >= clip.startTime && seg.end <= clip.endTime
       );
-      const transcriptExcerpt = clipSegments.map((s) => s.word).join(' ');
+      const transcriptExcerpt = clipSegments.map((s) => s.word || (s as unknown as { text: string }).text).join(' ');
 
       return {
         episode_id: episodeId,

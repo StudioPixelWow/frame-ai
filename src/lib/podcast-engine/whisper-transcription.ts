@@ -125,7 +125,7 @@ async function callWhisperApi(
   // Read file as blob for FormData
   const fileBuffer = await readFileAsBuffer(filePath);
   const fileName = path.basename(filePath);
-  const blob = new Blob([fileBuffer], { type: getMimeType(filePath) });
+  const blob = new Blob([new Uint8Array(fileBuffer)], { type: getMimeType(filePath) });
   formData.append("file", blob, fileName);
   formData.append("model", WHISPER_MODEL);
   formData.append("response_format", "verbose_json");
