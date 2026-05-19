@@ -1,87 +1,102 @@
 /**
  * GET  /api/podcast/episodes - List episodes (optional ?clientId filter)
  * POST /api/podcast/episodes - Create a new episode
+ *
+ * Two-tier persistence (same pattern as podcast-db.ts):
+ *   1. Relational table `podcast_episodes` — if it exists
+ *   2. Fallback: `app_podcast_episodes` (SupabaseCrud JSONB)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { getSupabase } from '@/lib/db/store';
+import { podcastEpisodes } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-// ── Auto-migration: create podcast tables if missing ─────────────────────
-let migrationAttempted = false;
+/* ── Mode detection (cached per process) ── */
 
-async function ensurePodcastTables(): Promise<void> {
-  if (migrationAttempted) return;
-  migrationAttempted = true;
+type StorageMode = 'relational' | 'jsonb';
+let _mode: StorageMode | null = null;
+let _modePromise: Promise<StorageMode> | null = null;
 
-  const ddl = `
-    CREATE TABLE IF NOT EXISTS public.podcast_episodes (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id UUID,
-      client_id UUID,
-      title TEXT NOT NULL,
-      show_name TEXT,
-      guest_names TEXT[],
-      language TEXT DEFAULT 'he',
-      source_file_path TEXT NOT NULL,
-      source_file_size BIGINT,
-      duration_seconds INTEGER,
-      audio_file_path TEXT,
-      status TEXT DEFAULT 'uploaded',
-      processing_progress JSONB DEFAULT '{}',
-      error_message TEXT,
-      metadata JSONB DEFAULT '{}',
-      created_at TIMESTAMPTZ DEFAULT now(),
-      updated_at TIMESTAMPTZ DEFAULT now()
-    );
-  `;
+async function detectMode(): Promise<StorageMode> {
+  if (_mode) return _mode;
+  if (_modePromise) return _modePromise;
 
-  try {
-    await supabase.rpc('exec_sql', { sql: ddl });
-  } catch {
-    // exec_sql not available — tables must exist already or be created via migration endpoint
-  }
+  _modePromise = (async (): Promise<StorageMode> => {
+    try {
+      const sb = getSupabase();
+      const { error } = await sb.from('podcast_episodes').select('id').limit(0);
+      if (!error) {
+        console.log('[podcast-episodes] Using relational table podcast_episodes');
+        return 'relational';
+      }
+    } catch {}
+
+    console.log('[podcast-episodes] Using JSONB fallback table app_podcast_episodes');
+    return 'jsonb';
+  })();
+
+  _mode = await _modePromise;
+  _modePromise = null;
+  return _mode;
 }
+
+/* ── GET ── */
 
 export async function GET(req: NextRequest) {
   try {
-    await ensurePodcastTables();
+    const mode = await detectMode();
     const { searchParams } = new URL(req.url);
     const clientId = searchParams.get('clientId');
 
-    let query = supabase
-      .from('podcast_episodes')
-      .select('*')
-      .order('created_at', { ascending: false });
+    if (mode === 'relational') {
+      const sb = getSupabase();
+      let query = sb
+        .from('podcast_episodes')
+        .select('*')
+        .order('created_at', { ascending: false });
 
+      if (clientId) {
+        query = query.eq('client_id', clientId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        // If relational suddenly fails, switch to JSONB
+        console.warn('[podcast-episodes] relational GET failed, falling back to JSONB:', error.message);
+        _mode = 'jsonb';
+      } else {
+        return NextResponse.json(data ?? []);
+      }
+    }
+
+    // JSONB mode
+    const items = await podcastEpisodes.getAllAsync();
+    let result = items as Record<string, any>[];
     if (clientId) {
-      query = query.eq('client_id', clientId);
+      result = result.filter(
+        (ep) => ep.clientId === clientId || ep.client_id === clientId
+      );
     }
-
-    const { data, error } = await query;
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json(data);
+    // Sort by creation date descending
+    result.sort((a, b) => {
+      const da = a.createdAt || a.created_at || '';
+      const db = b.createdAt || b.created_at || '';
+      return db.localeCompare(da);
+    });
+    return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch episodes' },
-      { status: 500 }
-    );
+    console.error('[podcast-episodes] GET error:', error);
+    return NextResponse.json([], { status: 200 });
   }
 }
 
+/* ── POST ── */
+
 export async function POST(req: NextRequest) {
   try {
-    await ensurePodcastTables();
     const body = await req.json();
 
     const {
@@ -101,29 +116,61 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data, error } = await supabase
-      .from('podcast_episodes')
-      .insert({
-        title,
-        show_name: showName || null,
-        guest_names: guestNames || null,
-        language: language || 'he',
-        source_file_path: sourceFilePath,
-        source_file_size: sourceFileSize || null,
-        client_id: clientId || null,
-        status: 'uploaded',
-        processing_progress: {},
-        metadata: {},
-      })
-      .select()
-      .single();
+    const mode = await detectMode();
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (mode === 'relational') {
+      try {
+        const sb = getSupabase();
+        const { data, error } = await sb
+          .from('podcast_episodes')
+          .insert({
+            title,
+            show_name: showName || null,
+            guest_names: guestNames || null,
+            language: language || 'he',
+            source_file_path: sourceFilePath,
+            source_file_size: sourceFileSize || null,
+            client_id: clientId || null,
+            status: 'uploaded',
+            processing_progress: {},
+            metadata: {},
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.warn('[podcast-episodes] relational POST failed, falling back to JSONB:', error.message);
+          _mode = 'jsonb';
+        } else {
+          return NextResponse.json(data, { status: 201 });
+        }
+      } catch (e) {
+        console.warn('[podcast-episodes] relational POST threw, falling back to JSONB:', e);
+        _mode = 'jsonb';
+      }
     }
 
-    return NextResponse.json(data, { status: 201 });
+    // JSONB mode
+    const now = new Date().toISOString();
+    const created = await podcastEpisodes.createAsync({
+      title,
+      showName: showName || null,
+      guestNames: guestNames || null,
+      language: language || 'he',
+      sourceFilePath,
+      sourceFileSize: sourceFileSize || null,
+      clientId: clientId || null,
+      status: 'uploaded',
+      processingProgress: { stage: '', percent: 0, stageLabel: '', startedAt: null, estimatedRemaining: null },
+      errorMessage: null,
+      metadata: {},
+      createdAt: now,
+      updatedAt: now,
+    } as any);
+
+    return NextResponse.json(created, { status: 201 });
   } catch (error) {
+    console.error('[podcast-episodes] POST error:', error);
     return NextResponse.json(
       { error: 'Failed to create episode' },
       { status: 400 }

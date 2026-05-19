@@ -71,6 +71,7 @@ import type {
   SurveyResponse,
   BacklinkCampaign,
   BacklinkTarget,
+  PodcastEpisode,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -167,3 +168,6 @@ export const surveyResponses = new SupabaseCrud<SurveyResponse>('app_survey_resp
 // Backlink Intelligence & Outreach
 export const backlinkCampaigns = new SupabaseCrud<BacklinkCampaign>('app_backlink_campaigns', 'blc');
 export const backlinkTargets = new SupabaseCrud<BacklinkTarget>('app_backlink_targets', 'blt');
+
+// Podcast Episodes (JSONB fallback)
+export const podcastEpisodes = new SupabaseCrud<PodcastEpisode>('app_podcast_episodes', 'pep');

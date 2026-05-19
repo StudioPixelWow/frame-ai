@@ -15,6 +15,7 @@ interface EpisodeData {
   guestNames: string;
   showName: string;
   language: 'he' | 'en';
+  clientId: string;
 }
 
 interface UploadProgress {
@@ -89,7 +90,7 @@ const PRESET_OPTIONS = [
   { value: 'full-highlight', label: 'Full Highlight' },
 ];
 
-const MAX_FILE_SIZE = 24 * 1024 * 1024 * 1024; // 24 GB
+const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5 GB
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Helpers
@@ -129,6 +130,18 @@ export default function PodcastClipEnginePage() {
   // ── API hooks
   const { episodes, loading: episodesLoading, createEpisode } = usePodcastEpisodes();
 
+  // ── Clients
+  const [clients, setClients] = useState<Array<{id: string; name: string}>>([]);
+  useEffect(() => {
+    fetch('/api/data/clients')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => {
+        const list = Array.isArray(data) ? data : data.clients || data.data || [];
+        setClients(list.map((c: any) => ({ id: c.id, name: c.name || c.business_name || 'ללא שם' })));
+      })
+      .catch(() => {});
+  }, []);
+
   // ── Stage 1: Upload
   const [episode, setEpisode] = useState<EpisodeData>({
     file: null,
@@ -136,6 +149,7 @@ export default function PodcastClipEnginePage() {
     guestNames: '',
     showName: '',
     language: 'he',
+    clientId: '',
   });
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -163,7 +177,7 @@ export default function PodcastClipEnginePage() {
   // ── File handling
   const handleFile = useCallback((file: File) => {
     if (file.size > MAX_FILE_SIZE) {
-      alert('הקובץ גדול מ-24GB. אנא בחר קובץ קטן יותר.');
+      alert('הקובץ גדול מ-5GB. אנא בחר קובץ קטן יותר.');
       return;
     }
     setEpisode((prev) => ({ ...prev, file }));
@@ -336,6 +350,7 @@ export default function PodcastClipEnginePage() {
         language: episode.language,
         sourceFilePath: storagePath,
         sourceFileSize: episode.file.size,
+        clientId: episode.clientId || undefined,
       } as Record<string, unknown> as Parameters<typeof createEpisode>[0]);
 
       const newEpisodeId = created.id;
@@ -657,7 +672,7 @@ export default function PodcastClipEnginePage() {
               גרור קובץ וידאו לכאן
             </p>
             <p style={{ fontSize: 14, color: COLORS.textSecondary, margin: '8px 0 0' }}>
-              או לחץ לבחירת קובץ — עד 24GB
+              או לחץ לבחירת קובץ — עד 5GB
             </p>
           </div>
         )}
@@ -695,6 +710,19 @@ export default function PodcastClipEnginePage() {
           פרטי הפרק
         </h3>
         <div style={{ display: 'grid', gap: 16 }}>
+          <div>
+            <label style={labelStyle}>לקוח</label>
+            <select
+              style={{ ...inputStyle, cursor: 'pointer' }}
+              value={episode.clientId}
+              onChange={(e) => setEpisode((prev) => ({ ...prev, clientId: e.target.value }))}
+            >
+              <option value="">בחר לקוח...</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
           <div>
             <label style={labelStyle}>שם הפרק</label>
             <input
