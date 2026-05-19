@@ -2391,3 +2391,200 @@ export interface GreenInvoiceSettings {
   createdAt: string;
   updatedAt: string;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AI Clip Engine (Podcast / Long-Form Processing)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export type PodcastEpisodeStatus = 'uploaded' | 'processing' | 'ready' | 'error';
+
+export interface PodcastEpisode {
+  id: string;
+  userId: string;
+  clientId: string | null;
+  title: string;
+  showName: string | null;
+  guestNames: string[] | null;
+  language: string; // default "he"
+  sourceFilePath: string;
+  sourceFileSize: number; // bytes
+  durationSeconds: number | null;
+  audioFilePath: string | null;
+  status: PodcastEpisodeStatus;
+  processingProgress: {
+    stage: string;
+    percent: number;
+    stageLabel: string;
+    startedAt: string | null;
+    estimatedRemaining: number | null; // seconds
+  };
+  errorMessage: string | null;
+  metadata: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PodcastTranscript {
+  id: string;
+  episodeId: string;
+  provider: 'whisper' | 'assemblyai';
+  language: string;
+  fullText: string;
+  segments: Array<{
+    word: string;
+    start: number;
+    end: number;
+    confidence: number;
+  }>;
+  speakerLabels: Array<{
+    speaker: string;
+    start: number;
+    end: number;
+  }> | null;
+  chunkIndex: number;
+  chunkStartTime: number;
+  createdAt: string;
+}
+
+export interface ClipHookPackage {
+  hookText: string;
+  titles: [string, string, string]; // descriptive, curiosity, bold
+  caption: string;
+  cta: string;
+  hashtags: string[];
+  generatedAt: string;
+}
+
+export interface PodcastClipCandidate {
+  id: string;
+  episodeId: string;
+  title: string;
+  startTime: number; // seconds
+  endTime: number; // seconds
+  transcriptExcerpt: string;
+  topicTags: string[];
+  viralScore: number; // 0-100
+  engagementScore: number; // 0-100
+  hookScore: number; // 0-100
+  reasoning: string;
+  isSelected: boolean;
+  userAdjustedStart: number | null;
+  userAdjustedEnd: number | null;
+  formatConfig: {
+    outputFormat: '16:9' | '9:16' | '1:1' | '4:5';
+    subtitleStyle: string;
+    brollPreferences: string;
+    preset: string | null; // "youtube_short" | "instagram_reel" | etc.
+  } | null;
+  hookPackage: ClipHookPackage | null;
+  brandPresetId: string | null;
+  viralStyle: string | null; // "hormozi" | "documentary" | "podcast_clean" | etc.
+  timelineEdits: {
+    trims: Array<{ type: 'start' | 'end'; delta: number }>;
+    subtitleOverrides: Array<{ index: number; text: string; start: number; end: number }>;
+    brollReplacements: Array<{ index: number; keyword: string; videoUrl: string }>;
+    operations: Array<{ type: string; data: any; timestamp: string }>;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ClipRenderStatus = 'queued' | 'rendering' | 'completed' | 'failed';
+
+export interface PodcastRenderedClip {
+  id: string;
+  clipCandidateId: string;
+  episodeId: string;
+  renderJobId: string | null;
+  outputFormat: '16:9' | '9:16' | '1:1' | '4:5';
+  outputFilePath: string | null;
+  outputFileSize: number | null;
+  durationSeconds: number | null;
+  status: ClipRenderStatus;
+  renderConfig: Record<string, any>;
+  socialPackage: {
+    platform: string;
+    title: string;
+    caption: string;
+    hashtags: string[];
+    cta: string;
+    thumbnailPath: string | null;
+    videoPath: string | null;
+    recommendedPostTime: string | null;
+    altText: string;
+    clipDuration: number;
+    sourceEpisode: string;
+  } | null;
+  thumbnailPaths: string[] | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BrandPreset {
+  id: string;
+  userId: string;
+  clientId: string | null;
+  name: string;
+  config: {
+    subtitleStyle: {
+      fontFamily: string;
+      fontSize: number;
+      color: string;
+      backgroundColor: string;
+      position: 'top' | 'center' | 'bottom';
+      animation: 'fade' | 'pop' | 'typewriter' | 'none';
+      textShadow: boolean;
+      outline: boolean;
+    };
+    colorPalette: {
+      primary: string;
+      secondary: string;
+      accent: string;
+    };
+    animations: {
+      intro: 'fade' | 'slide' | 'zoom' | 'glitch' | 'none';
+      outro: 'fade' | 'slide' | 'zoom' | 'none';
+      transition: 'cut' | 'fade' | 'dissolve' | 'slide';
+      textEntrance: 'fade' | 'pop' | 'typewriter' | 'slide';
+    };
+    fonts: {
+      heading: string;
+      body: string;
+      subtitle: string;
+    };
+    lowerThird: {
+      backgroundColor: string;
+      textColor: string;
+      position: 'bottom-left' | 'bottom-center' | 'bottom-right';
+      animation: 'slide' | 'fade' | 'pop';
+      displayDuration: number;
+    };
+    logoWatermark: {
+      position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+      opacity: number;
+      size: number;
+    } | null;
+  };
+  introPath: string | null;
+  outroPath: string | null;
+  logoPath: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ViralStyleId = 'hormozi' | 'documentary' | 'podcast_clean' | 'fast_tiktok' | 'linkedin_pro' | 'storyteller';
+
+export interface ViralStyleConfig {
+  id: ViralStyleId;
+  name: string;
+  nameHe: string;
+  description: string;
+  cutFrequency: number; // seconds between cuts
+  zoomBehavior: 'aggressive' | 'subtle' | 'none';
+  textStyle: 'bold_overlay' | 'clean_subtitle' | 'minimal' | 'impact';
+  transitionType: 'cut' | 'fade' | 'slide' | 'glitch';
+  brollFrequency: number; // seconds between B-roll
+  musicMood: 'energetic' | 'calm' | 'cinematic' | 'none';
+  colorGrade: 'vibrant' | 'cinematic' | 'neutral' | 'warm';
+  pacingCurve: 'fast' | 'medium' | 'slow' | 'dynamic';
+}

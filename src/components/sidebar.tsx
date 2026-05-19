@@ -65,6 +65,13 @@ const VideoEditorIcon = () => (
   </svg>
 );
 
+const ClipEngineIcon = () => (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.651a3.75 3.75 0 010-5.303m5.304 0a3.75 3.75 0 010 5.303" />
+  </svg>
+);
+
 const BIIcon = () => (
   <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v-5.5m3 5.5V8.25m3 3v-2" />
@@ -102,6 +109,7 @@ const sections = [
   { href: "/strategy",         icon: <ProjectsIcon />,       label: "Strategy" },
   { href: "/reports",         icon: <ReportsIcon />,         label: "Reports" },
   { href: "/editor",          icon: <VideoEditorIcon />,     label: "Video Editor" },
+  { href: "/projects/new/podcast", icon: <ClipEngineIcon />, label: "AI Clip Engine" },
   { href: "/settings",        icon: <SettingsIcon />,        label: "Settings" },
 ];
 
