@@ -1,6 +1,9 @@
 'use client';
 
-import { useState, useCallback, useRef, type ChangeEvent, type DragEvent } from 'react';
+import { useState, useCallback, useRef, useEffect, type ChangeEvent, type DragEvent } from 'react';
+import { usePodcastEpisodes } from '@/lib/api/use-podcast';
+import { TusUploader } from '@/lib/storage/tus-upload';
+import { createClient } from '@supabase/supabase-js';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Types
@@ -89,50 +92,6 @@ const PRESET_OPTIONS = [
 const MAX_FILE_SIZE = 24 * 1024 * 1024 * 1024; // 24 GB
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Mock Data
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-function generateMockClips(): Clip[] {
-  const topics = ['טכנולוגיה', 'עסקים', 'חדשנות', 'AI', 'שיווק', 'מנהיגות', 'יזמות', 'מוצר'];
-  const titles = [
-    'הסוד מאחורי הצמיחה המהירה',
-    'למה AI ישנה את הכל',
-    'הטעות הכי גדולה של יזמים',
-    'איך לבנות מותג חזק',
-    'העתיד של שיווק דיגיטלי',
-    'מה שלמדתי מכישלון',
-    'הנוסחה להצלחה בסטארטאפ',
-    'טיפים לגיוס משקיעים',
-  ];
-
-  return titles.map((title, i) => ({
-    id: `clip-${i + 1}`,
-    title,
-    duration: 30 + Math.floor(Math.random() * 90),
-    topicTags: [topics[i % topics.length], topics[(i + 3) % topics.length]],
-    viralScore: 50 + Math.floor(Math.random() * 50),
-    engagementScore: 40 + Math.floor(Math.random() * 60),
-    hookScore: 45 + Math.floor(Math.random() * 55),
-    selected: i < 5,
-    format: '9:16',
-    preset: 'youtube-short',
-    subtitles: true,
-    broll: false,
-  }));
-}
-
-function generateMockRenderItems(clips: Clip[]): RenderItem[] {
-  const selected = clips.filter((c) => c.selected);
-  return selected.map((clip, i) => ({
-    clipId: clip.id,
-    title: clip.title,
-    progress: i < 2 ? 100 : i === 2 ? 65 : 0,
-    status: i < 2 ? 'done' : i === 2 ? 'rendering' : 'queued',
-    downloadUrl: i < 2 ? `https://storage.example.com/renders/${clip.id}.mp4` : null,
-  }));
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
    Helpers
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -164,6 +123,12 @@ export default function PodcastClipEnginePage() {
   // ── Stage navigation
   const [currentStage, setCurrentStage] = useState<number>(1);
 
+  // ── Episode ID (set after createEpisode API call)
+  const [episodeId, setEpisodeId] = useState<string | null>(null);
+
+  // ── API hooks
+  const { episodes, loading: episodesLoading, createEpisode } = usePodcastEpisodes();
+
   // ── Stage 1: Upload
   const [episode, setEpisode] = useState<EpisodeData>({
     file: null,
@@ -175,6 +140,7 @@ export default function PodcastClipEnginePage() {
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [processingError, setProcessingError] = useState<string | null>(null);
 
   // ── Stage 2: Processing
   const [processingStages, setProcessingStages] = useState<ProcessingStage[]>([
@@ -187,10 +153,12 @@ export default function PodcastClipEnginePage() {
   ]);
 
   // ── Stage 3: Review Clips
-  const [clips, setClips] = useState<Clip[]>(() => generateMockClips());
+  const [clips, setClips] = useState<Clip[]>([]);
+  const [clipsLoading, setClipsLoading] = useState(false);
 
   // ── Stage 5: Render
   const [renderItems, setRenderItems] = useState<RenderItem[]>([]);
+  const renderPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── File handling
   const handleFile = useCallback((file: File) => {
@@ -229,42 +197,169 @@ export default function PodcastClipEnginePage() {
     [handleFile],
   );
 
-  // ── Stage transitions
-  const startProcessing = useCallback(() => {
-    if (!episode.file) return;
-    setCurrentStage(2);
+  // ── Fetch clips from API
+  const fetchClips = useCallback(async (epId: string) => {
+    setClipsLoading(true);
+    try {
+      const res = await fetch(`/api/podcast/clips?episodeId=${encodeURIComponent(epId)}`);
+      if (!res.ok) throw new Error('Failed to fetch clips');
+      const data = await res.json();
+      const mapped: Clip[] = (Array.isArray(data) ? data : []).map((c: Record<string, unknown>, i: number) => ({
+        id: c.id as string,
+        title: (c.title as string) || `Clip ${i + 1}`,
+        duration: ((c.end_time as number) || 0) - ((c.start_time as number) || 0),
+        topicTags: Array.isArray(c.topic_tags) ? c.topic_tags as string[] : [],
+        viralScore: (c.viral_score as number) || 0,
+        engagementScore: (c.engagement_score as number) || 0,
+        hookScore: (c.hook_score as number) || 0,
+        selected: i < 5,
+        format: '9:16' as const,
+        preset: 'youtube-short',
+        subtitles: true,
+        broll: false,
+      }));
+      setClips(mapped);
+    } catch (err) {
+      console.error('Error fetching clips:', err);
+    } finally {
+      setClipsLoading(false);
+    }
+  }, []);
 
-    // Simulate processing stages
-    const stages = [...processingStages];
-    let idx = 0;
+  // ── Supabase Realtime subscription for processing progress
+  useEffect(() => {
+    if (!episodeId || currentStage !== 2) return;
 
-    const runStage = () => {
-      if (idx >= stages.length) {
-        setCurrentStage(3);
-        return;
-      }
-      stages[idx] = { ...stages[idx], status: 'running', progress: 0 };
-      setProcessingStages([...stages]);
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
 
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += Math.random() * 15 + 5;
-        if (progress >= 100) {
-          progress = 100;
-          stages[idx] = { ...stages[idx], status: 'done', progress: 100 };
-          setProcessingStages([...stages]);
-          clearInterval(interval);
-          idx++;
-          setTimeout(runStage, 300);
-        } else {
-          stages[idx] = { ...stages[idx], progress };
-          setProcessingStages([...stages]);
-        }
-      }, 400);
+    const channel = supabase
+      .channel(`episode-${episodeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'podcast_episodes',
+          filter: `id=eq.${episodeId}`,
+        },
+        (payload) => {
+          const row = payload.new as Record<string, unknown>;
+          const progress = row.processing_progress as {
+            stage?: number;
+            stageName?: string;
+            percent?: number;
+          } | null;
+
+          if (progress && typeof progress.stage === 'number') {
+            setProcessingStages((prev) =>
+              prev.map((s, idx) => {
+                const stageNum = idx + 1;
+                if (stageNum < progress.stage!) {
+                  return { ...s, status: 'done', progress: 100 };
+                }
+                if (stageNum === progress.stage!) {
+                  return {
+                    ...s,
+                    status: progress.percent === 100 ? 'done' : 'running',
+                    progress: progress.percent ?? 0,
+                  };
+                }
+                return { ...s, status: 'pending', progress: 0 };
+              }),
+            );
+          }
+
+          if (row.status === 'processed') {
+            setCurrentStage(3);
+            fetchClips(episodeId);
+          }
+
+          if (row.status === 'error') {
+            setProcessingError((row.error_message as string) || 'Processing failed');
+            setProcessingStages((prev) =>
+              prev.map((s) =>
+                s.status === 'running' ? { ...s, status: 'error' } : s,
+              ),
+            );
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
     };
+  }, [episodeId, currentStage, fetchClips]);
 
-    runStage();
-  }, [episode.file, processingStages]);
+  // ── Stage transitions
+  const startProcessing = useCallback(async () => {
+    if (!episode.file) return;
+    setProcessingError(null);
+
+    // Reset processing stages
+    setProcessingStages((prev) =>
+      prev.map((s) => ({ ...s, status: 'pending' as const, progress: 0 })),
+    );
+
+    // Step 1: Upload the file via TUS to Supabase Storage
+    const timestamp = Date.now();
+    const storagePath = `uploads/${timestamp}-${episode.file.name}`;
+
+    setCurrentStage(2);
+    setUploadProgress({ percent: 0, speed: 0, eta: 0 });
+
+    try {
+      const uploader = new TusUploader(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      );
+
+      await uploader.upload(episode.file, 'podcast-files', storagePath, {
+        onProgress: (percent, speed, eta) => {
+          setUploadProgress({ percent, speed, eta });
+        },
+        onError: (err) => {
+          setProcessingError(`Upload failed: ${err.message}`);
+        },
+      });
+
+      setUploadProgress(null);
+
+      // Step 2: Create the episode record via API
+      const created = await createEpisode({
+        title: episode.title || episode.file.name,
+        showName: episode.showName || undefined,
+        guestNames: episode.guestNames || undefined,
+        language: episode.language,
+        sourceFilePath: storagePath,
+        sourceFileSize: episode.file.size,
+      } as Record<string, unknown> as Parameters<typeof createEpisode>[0]);
+
+      const newEpisodeId = created.id;
+      setEpisodeId(newEpisodeId);
+
+      // Step 3: Trigger processing pipeline
+      const processRes = await fetch('/api/podcast/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ episodeId: newEpisodeId }),
+      });
+
+      if (!processRes.ok) {
+        const errBody = await processRes.json().catch(() => ({}));
+        throw new Error((errBody as { error?: string }).error || 'Failed to start processing');
+      }
+
+      // Realtime subscription (in useEffect above) will handle progress updates
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setProcessingError(message);
+      console.error('startProcessing error:', message);
+    }
+  }, [episode, createEpisode]);
 
   const selectTop5 = useCallback(() => {
     setClips((prev) => {
@@ -295,11 +390,104 @@ export default function PodcastClipEnginePage() {
     [],
   );
 
-  const startRender = useCallback(() => {
-    const items = generateMockRenderItems(clips);
-    setRenderItems(items);
+  const startRender = useCallback(async () => {
+    if (!episodeId) return;
+
+    const selectedClips = clips.filter((c) => c.selected);
+    if (selectedClips.length === 0) return;
+
+    // Initialize render items as queued
+    setRenderItems(
+      selectedClips.map((clip) => ({
+        clipId: clip.id,
+        title: clip.title,
+        progress: 0,
+        status: 'queued',
+        downloadUrl: null,
+      })),
+    );
     setCurrentStage(5);
-  }, [clips]);
+
+    try {
+      // Submit render batch to API
+      const res = await fetch('/api/podcast/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          episodeId,
+          clipIds: selectedClips.map((c) => c.id),
+        }),
+      });
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error((errBody as { error?: string }).error || 'Failed to submit render');
+      }
+
+      // Start polling for render status
+      if (renderPollRef.current) clearInterval(renderPollRef.current);
+
+      renderPollRef.current = setInterval(async () => {
+        try {
+          const statusRes = await fetch(
+            `/api/podcast/render?episodeId=${encodeURIComponent(episodeId)}`,
+          );
+          if (!statusRes.ok) return;
+          const renders = await statusRes.json();
+          if (!Array.isArray(renders)) return;
+
+          setRenderItems((prev) =>
+            prev.map((item) => {
+              const match = renders.find(
+                (r: Record<string, unknown>) => r.clip_candidate_id === item.clipId,
+              );
+              if (!match) return item;
+              return {
+                ...item,
+                progress:
+                  (match as Record<string, unknown>).status === 'completed'
+                    ? 100
+                    : ((match as Record<string, unknown>).progress as number) || item.progress,
+                status:
+                  (match as Record<string, unknown>).status === 'completed'
+                    ? 'done'
+                    : (match as Record<string, unknown>).status === 'failed'
+                      ? 'error'
+                      : (match as Record<string, unknown>).status === 'rendering'
+                        ? 'rendering'
+                        : 'queued',
+                downloadUrl:
+                  ((match as Record<string, unknown>).output_url as string) || item.downloadUrl,
+              };
+            }),
+          );
+
+          // Stop polling when all renders are done or errored
+          const allFinished = renders.every(
+            (r: Record<string, unknown>) =>
+              r.status === 'completed' || r.status === 'failed',
+          );
+          if (allFinished && renderPollRef.current) {
+            clearInterval(renderPollRef.current);
+            renderPollRef.current = null;
+          }
+        } catch {
+          // Silently retry on next poll
+        }
+      }, 3000);
+    } catch (err) {
+      console.error('startRender error:', err);
+    }
+  }, [clips, episodeId]);
+
+  // Cleanup render polling on unmount
+  useEffect(() => {
+    return () => {
+      if (renderPollRef.current) {
+        clearInterval(renderPollRef.current);
+      }
+    };
+  }, []);
 
   // ── Shared styles
   const cardStyle: React.CSSProperties = {
@@ -628,6 +816,23 @@ export default function PodcastClipEnginePage() {
             </div>
           ))}
         </div>
+
+        {processingError && (
+          <div
+            style={{
+              marginTop: 20,
+              padding: '12px 16px',
+              borderRadius: 10,
+              background: 'rgba(239,68,68,0.08)',
+              border: `1px solid ${COLORS.error}`,
+              color: COLORS.error,
+              fontSize: 14,
+              textAlign: 'center',
+            }}
+          >
+            {processingError}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -652,6 +857,16 @@ export default function PodcastClipEnginePage() {
 
   const renderReviewStage = () => (
     <div style={{ maxWidth: 960, margin: '0 auto' }}>
+      {clipsLoading && (
+        <div style={{ textAlign: 'center', padding: 40 }}>
+          <p style={{ fontSize: 16, color: COLORS.textSecondary }}>טוען קליפים...</p>
+        </div>
+      )}
+      {!clipsLoading && clips.length === 0 && (
+        <div style={{ textAlign: 'center', padding: 40 }}>
+          <p style={{ fontSize: 16, color: COLORS.textSecondary }}>לא נמצאו קליפים עבור פרק זה.</p>
+        </div>
+      )}
       {/* Bulk actions */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
         <button style={buttonSecondary} onClick={selectTop5}>
@@ -1004,6 +1219,98 @@ export default function PodcastClipEnginePage() {
       {currentStage === 3 && renderReviewStage()}
       {currentStage === 4 && renderConfigureStage()}
       {currentStage === 5 && renderRenderStage()}
+
+      {/* ── Previously uploaded episodes ─────────────────────────────── */}
+      {currentStage === 1 && (
+        <div style={{ maxWidth: 680, margin: '40px auto 0' }}>
+          <div style={cardStyle}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: COLORS.text, margin: '0 0 16px' }}>
+              פרקים קודמים
+            </h3>
+            {episodesLoading ? (
+              <p style={{ fontSize: 14, color: COLORS.textSecondary }}>טוען...</p>
+            ) : episodes.length === 0 ? (
+              <p style={{ fontSize: 14, color: COLORS.textSecondary }}>עדיין לא הועלו פרקים.</p>
+            ) : (
+              <div style={{ display: 'grid', gap: 10 }}>
+                {episodes.map((ep) => (
+                  <div
+                    key={ep.id}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '10px 14px',
+                      borderRadius: 10,
+                      border: `1px solid ${COLORS.border}`,
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => {
+                      setEpisodeId(ep.id);
+                      if (ep.status === 'processed') {
+                        fetchClips(ep.id);
+                        setCurrentStage(3);
+                      } else if (ep.status === 'processing') {
+                        setCurrentStage(2);
+                      }
+                    }}
+                  >
+                    <div>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: COLORS.text }}>
+                        {ep.title}
+                      </span>
+                      <span
+                        style={{
+                          display: 'block',
+                          fontSize: 12,
+                          color: COLORS.textSecondary,
+                          marginTop: 2,
+                        }}
+                      >
+                        {new Date(ep.createdAt).toLocaleDateString('he-IL')}
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        padding: '4px 12px',
+                        borderRadius: 20,
+                        background:
+                          ep.status === 'processed'
+                            ? 'rgba(16,185,129,0.1)'
+                            : ep.status === 'processing'
+                              ? 'rgba(0,181,254,0.1)'
+                              : ep.status === 'error'
+                                ? 'rgba(239,68,68,0.1)'
+                                : '#F3F4F6',
+                        color:
+                          ep.status === 'processed'
+                            ? COLORS.success
+                            : ep.status === 'processing'
+                              ? COLORS.primary
+                              : ep.status === 'error'
+                                ? COLORS.error
+                                : COLORS.textSecondary,
+                      }}
+                    >
+                      {ep.status === 'processed'
+                        ? 'הושלם'
+                        : ep.status === 'processing'
+                          ? 'בעיבוד'
+                          : ep.status === 'error'
+                            ? 'שגיאה'
+                            : ep.status === 'uploaded'
+                              ? 'הועלה'
+                              : ep.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

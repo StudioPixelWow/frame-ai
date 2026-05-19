@@ -1,9 +1,22 @@
 /**
- * POST /api/podcast/process - Trigger processing for an episode
+ * POST /api/podcast/process — הפעלת pipeline עיבוד לפרק פודקאסט
+ *
+ * מקבל { episodeId }, מחזיר 202 מיד, ומריץ 6 שלבי עיבוד ברקע:
+ *   1. אימות — בדיקת קובץ ב-Supabase Storage
+ *   2. חילוץ אודיו — הורדת וידאו וחילוץ שמע
+ *   3. תמלול — תמלול מקוטע עם Whisper
+ *   4. פילוח נושאים — זיהוי גבולות נושא בתמלול
+ *   5. ניתוח AI — זיהוי קליפים מומלצים
+ *   6. דירוג קליפים — חישוב ציונים ושמירה ל-DB
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { extractAudio } from '@/lib/podcast-engine/ffmpeg-service';
+import { transcribeChunkedAudio } from '@/lib/podcast-engine/whisper-transcription';
+import { segmentTranscript, type TranscriptSegment } from '@/lib/podcast-engine/topic-segmentation';
+import { analyzeTranscriptForClips, type AIClipSuggestion } from '@/lib/podcast-engine/clip-analyzer';
+import { scoreClipCandidates, rankClips, type RawClipCandidate } from '@/lib/podcast-engine/clip-scorer';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,6 +25,250 @@ const supabase = createClient(
 
 export const dynamic = 'force-dynamic';
 
+// ── Stage definitions ─────────────────────────────────────────────────────────
+
+const STAGES = [
+  { stage: 1, stageName: 'אימות קובץ' },
+  { stage: 2, stageName: 'חילוץ אודיו' },
+  { stage: 3, stageName: 'תמלול' },
+  { stage: 4, stageName: 'פילוח נושאים' },
+  { stage: 5, stageName: 'ניתוח AI' },
+  { stage: 6, stageName: 'דירוג קליפים' },
+] as const;
+
+// ── Progress helper ─────────────────────────────────────────────────────────
+
+async function updateProgress(
+  episodeId: string,
+  stageIndex: number,
+  percent: number
+): Promise<void> {
+  const { stage, stageName } = STAGES[stageIndex];
+  await supabase
+    .from('podcast_episodes')
+    .update({
+      processing_progress: {
+        stage,
+        stageName,
+        percent: Math.round(percent),
+        startedAt: new Date().toISOString(),
+      },
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', episodeId);
+}
+
+async function markError(episodeId: string, errorMessage: string): Promise<void> {
+  await supabase
+    .from('podcast_episodes')
+    .update({
+      status: 'error',
+      error_message: errorMessage,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', episodeId);
+}
+
+async function markCompleted(episodeId: string): Promise<void> {
+  await supabase
+    .from('podcast_episodes')
+    .update({
+      status: 'processed',
+      processing_progress: {
+        stage: 6,
+        stageName: 'הושלם',
+        percent: 100,
+        startedAt: new Date().toISOString(),
+      },
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', episodeId);
+}
+
+// ── Pipeline ────────────────────────────────────────────────────────────────
+
+async function runPipeline(episodeId: string, sourceFilePath: string): Promise<void> {
+  try {
+    // ── Stage 1: אימות — בדיקת קובץ ב-Storage ────────────────────────────
+    await updateProgress(episodeId, 0, 0);
+
+    const { data: fileData, error: fileError } = await supabase
+      .storage
+      .from('podcast-files')
+      .list('', {
+        search: sourceFilePath.split('/').pop() ?? '',
+      });
+
+    if (fileError || !fileData || fileData.length === 0) {
+      throw new Error(`קובץ לא נמצא ב-Storage: ${sourceFilePath}`);
+    }
+
+    // Get file metadata
+    const fileMetadata = fileData[0];
+    const fileSizeBytes = (fileMetadata as Record<string, unknown>).metadata
+      ? ((fileMetadata as Record<string, unknown>).metadata as Record<string, unknown>).size as number
+      : undefined;
+
+    await updateProgress(episodeId, 0, 100);
+
+    // ── Stage 2: חילוץ אודיו — הורדת הוידאו וחילוץ שמע ───────────────────
+    await updateProgress(episodeId, 1, 0);
+
+    // Download the source file from Storage
+    const { data: fileBlob, error: downloadError } = await supabase
+      .storage
+      .from('podcast-files')
+      .download(sourceFilePath);
+
+    if (downloadError || !fileBlob) {
+      throw new Error(`שגיאה בהורדת הקובץ: ${downloadError?.message ?? 'לא התקבל קובץ'}`);
+    }
+
+    await updateProgress(episodeId, 1, 30);
+
+    // Extract audio from video
+    const audioBuffer = await extractAudio(fileBlob);
+
+    // Save extracted audio path on the episode
+    const audioFilePath = sourceFilePath.replace(/\.[^.]+$/, '.mp3');
+    const { error: audioUploadError } = await supabase
+      .storage
+      .from('podcast-files')
+      .upload(audioFilePath, audioBuffer, {
+        contentType: 'audio/mpeg',
+        upsert: true,
+      });
+
+    if (audioUploadError) {
+      throw new Error(`שגיאה בהעלאת קובץ אודיו: ${audioUploadError.message}`);
+    }
+
+    await supabase
+      .from('podcast_episodes')
+      .update({ audio_file_path: audioFilePath })
+      .eq('id', episodeId);
+
+    await updateProgress(episodeId, 1, 100);
+
+    // ── Stage 3: תמלול — תמלול מקוטע עם Whisper ──────────────────────────
+    await updateProgress(episodeId, 2, 0);
+
+    const transcriptionResult = await transcribeChunkedAudio(audioBuffer, {
+      language: 'he',
+      onProgress: async (percent: number) => {
+        await updateProgress(episodeId, 2, percent);
+      },
+    });
+
+    const { fullText, segments: transcriptSegments } = transcriptionResult;
+
+    await updateProgress(episodeId, 2, 100);
+
+    // ── Stage 4: פילוח נושאים — זיהוי גבולות נושא בתמלול ────────────────
+    await updateProgress(episodeId, 3, 0);
+
+    const topicSegments = segmentTranscript(transcriptSegments as TranscriptSegment[]);
+
+    await updateProgress(episodeId, 3, 100);
+
+    // ── Stage 5: ניתוח AI — זיהוי קליפים מומלצים ──────────────────────────
+    await updateProgress(episodeId, 4, 0);
+
+    const aiClips: AIClipSuggestion[] = await analyzeTranscriptForClips(
+      fullText,
+      topicSegments
+    );
+
+    await updateProgress(episodeId, 4, 100);
+
+    // ── Stage 6: דירוג קליפים — חישוב ציונים ושמירה ל-DB ─────────────────
+    await updateProgress(episodeId, 5, 0);
+
+    // Map AI suggestions to RawClipCandidate for scoring
+    const rawCandidates: RawClipCandidate[] = aiClips.map((clip, idx) => ({
+      id: `candidate_${String(idx + 1).padStart(3, '0')}`,
+      startTime: clip.startTime,
+      endTime: clip.endTime,
+      transcript: fullText.slice(0, 500), // excerpt for reference
+      title: clip.title,
+      topicTags: clip.topicTags,
+      hookStrengthEstimate: clip.hookStrengthEstimate,
+      emotionalArcEstimate: clip.engagementEstimate,
+      standaloneValueEstimate: clip.engagementEstimate,
+      viralEstimate: clip.viralEstimate,
+      topicRelevanceEstimate: 0.7,  // default — no separate estimate from AI
+      audioQualityEstimate: 0.8,    // default — not measured yet
+    }));
+
+    const scoredClips = scoreClipCandidates(rawCandidates);
+    const rankedClips = rankClips(scoredClips);
+
+    await updateProgress(episodeId, 5, 50);
+
+    // Save transcript to podcast_transcripts
+    const { error: transcriptInsertError } = await supabase
+      .from('podcast_transcripts')
+      .insert({
+        episode_id: episodeId,
+        provider: 'whisper',
+        language: 'he',
+        full_text: fullText,
+        segments: transcriptSegments,
+        speaker_labels: null,
+        chunk_index: 0,
+        chunk_start_time: 0,
+      });
+
+    if (transcriptInsertError) {
+      throw new Error(`שגיאה בשמירת התמלול: ${transcriptInsertError.message}`);
+    }
+
+    // Save clip candidates to podcast_clip_candidates
+    const clipRows = rankedClips.map((clip) => {
+      // Extract the matching transcript text for this clip's time range
+      const clipSegments = (transcriptSegments as TranscriptSegment[]).filter(
+        (seg) => seg.start >= clip.startTime && seg.end <= clip.endTime
+      );
+      const transcriptExcerpt = clipSegments.map((s) => s.word).join(' ');
+
+      return {
+        episode_id: episodeId,
+        title: clip.title,
+        start_time: clip.startTime,
+        end_time: clip.endTime,
+        transcript_excerpt: transcriptExcerpt || null,
+        topic_tags: clip.topicTags,
+        viral_score: Math.round(clip.viralScore * 100),
+        engagement_score: Math.round(clip.engagementScore * 100),
+        hook_score: Math.round(clip.hookScore * 100),
+        reasoning: (clip as unknown as AIClipSuggestion).reasoning ?? '',
+        is_selected: false,
+      };
+    });
+
+    if (clipRows.length > 0) {
+      const { error: clipsInsertError } = await supabase
+        .from('podcast_clip_candidates')
+        .insert(clipRows);
+
+      if (clipsInsertError) {
+        throw new Error(`שגיאה בשמירת קליפים: ${clipsInsertError.message}`);
+      }
+    }
+
+    await updateProgress(episodeId, 5, 100);
+
+    // ── Done ─────────────────────────────────────────────────────────────────
+    await markCompleted(episodeId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[process] שגיאה בעיבוד פרק ${episodeId}:`, message);
+    await markError(episodeId, message);
+  }
+}
+
+// ── POST handler ────────────────────────────────────────────────────────────
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -19,7 +276,7 @@ export async function POST(req: NextRequest) {
 
     if (!episodeId) {
       return NextResponse.json(
-        { error: 'episodeId is required' },
+        { error: 'חסר episodeId' },
         { status: 400 }
       );
     }
@@ -27,49 +284,56 @@ export async function POST(req: NextRequest) {
     // Verify episode exists
     const { data: episode, error: fetchError } = await supabase
       .from('podcast_episodes')
-      .select('id, status')
+      .select('id, status, source_file_path')
       .eq('id', episodeId)
       .single();
 
     if (fetchError || !episode) {
       return NextResponse.json(
-        { error: 'Episode not found' },
+        { error: 'הפרק לא נמצא' },
         { status: 404 }
       );
     }
 
-    // Update status to processing with stage 1
-    const { data, error } = await supabase
+    if (episode.status === 'processing') {
+      return NextResponse.json(
+        { error: 'הפרק כבר בתהליך עיבוד' },
+        { status: 409 }
+      );
+    }
+
+    // Mark as processing immediately
+    await supabase
       .from('podcast_episodes')
       .update({
         status: 'processing',
+        error_message: null,
         processing_progress: {
           stage: 1,
-          stageName: 'transcription',
+          stageName: 'אימות קובץ',
           percent: 0,
           startedAt: new Date().toISOString(),
         },
         updated_at: new Date().toISOString(),
       })
-      .eq('id', episodeId)
-      .select()
-      .single();
+      .eq('id', episodeId);
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    // Fire-and-forget: run the pipeline in the background
+    // Using void to explicitly mark as intentionally not awaited
+    void runPipeline(episodeId, episode.source_file_path);
 
-    // TODO: In production, trigger Railway worker here
-    // e.g. await fetch(RAILWAY_WORKER_URL, { method: 'POST', body: JSON.stringify({ episodeId }) })
-
-    return NextResponse.json({
-      success: true,
-      message: 'Processing started',
-      episode: data,
-    });
-  } catch (error) {
     return NextResponse.json(
-      { error: 'Failed to start processing' },
+      {
+        success: true,
+        message: 'העיבוד התחיל',
+        episodeId,
+      },
+      { status: 202 }
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      { error: `שגיאה בהפעלת העיבוד: ${message}` },
       { status: 500 }
     );
   }

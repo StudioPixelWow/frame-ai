@@ -3,7 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useClients, useProjects } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
@@ -555,7 +555,229 @@ function generateBrollSuggestions(segments: SubSegment[]): BrollSuggestion[] {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function NewProjectWizard() {
+  const searchParams = useSearchParams();
+  const mode = searchParams.get("mode");
   const router = useRouter();
+
+  /* ── Mode Selection Gate ── */
+  if (mode !== "video") {
+    return (
+      <div dir="rtl" style={{
+        minHeight: "100vh",
+        background: "linear-gradient(135deg, #0a0a0f 0%, #0d1117 40%, #0a0f1a 100%)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "2rem",
+        fontFamily: "system-ui, -apple-system, sans-serif",
+      }}>
+        {/* Header */}
+        <div style={{ textAlign: "center", marginBottom: "3rem" }}>
+          <h1 style={{
+            fontSize: "2.5rem",
+            fontWeight: 800,
+            color: "#fff",
+            margin: 0,
+            letterSpacing: "-0.02em",
+          }}>
+            פרויקט חדש
+          </h1>
+          <p style={{
+            fontSize: "1.15rem",
+            color: "rgba(255,255,255,0.5)",
+            marginTop: "0.75rem",
+          }}>
+            בחר את סוג התוכן שברצונך ליצור
+          </p>
+        </div>
+
+        {/* Cards Container */}
+        <div style={{
+          display: "flex",
+          gap: "2rem",
+          flexWrap: "wrap",
+          justifyContent: "center",
+          maxWidth: "860px",
+          width: "100%",
+        }}>
+          {/* Single Video Card */}
+          <a
+            href="?mode=video"
+            style={{
+              flex: "1 1 360px",
+              maxWidth: "400px",
+              minHeight: "320px",
+              background: "linear-gradient(160deg, rgba(0,181,254,0.08) 0%, rgba(0,181,254,0.02) 100%)",
+              border: "1px solid rgba(0,181,254,0.2)",
+              borderRadius: "1.25rem",
+              padding: "2.5rem 2rem",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              textAlign: "center",
+              textDecoration: "none",
+              cursor: "pointer",
+              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+              position: "relative",
+              overflow: "hidden",
+            }}
+            onMouseEnter={(e) => {
+              const el = e.currentTarget;
+              el.style.border = "1px solid rgba(0,181,254,0.5)";
+              el.style.background = "linear-gradient(160deg, rgba(0,181,254,0.14) 0%, rgba(0,181,254,0.04) 100%)";
+              el.style.transform = "translateY(-4px)";
+              el.style.boxShadow = "0 20px 60px rgba(0,181,254,0.15)";
+            }}
+            onMouseLeave={(e) => {
+              const el = e.currentTarget;
+              el.style.border = "1px solid rgba(0,181,254,0.2)";
+              el.style.background = "linear-gradient(160deg, rgba(0,181,254,0.08) 0%, rgba(0,181,254,0.02) 100%)";
+              el.style.transform = "translateY(0)";
+              el.style.boxShadow = "none";
+            }}
+          >
+            {/* Icon */}
+            <div style={{
+              width: "80px",
+              height: "80px",
+              borderRadius: "1.25rem",
+              background: "linear-gradient(135deg, rgba(0,181,254,0.15), rgba(0,181,254,0.05))",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: "1.5rem",
+            }}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#00B5FE" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="23 7 16 12 23 17 23 7" />
+                <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+              </svg>
+            </div>
+            <h2 style={{
+              fontSize: "1.5rem",
+              fontWeight: 700,
+              color: "#fff",
+              margin: "0 0 0.75rem 0",
+            }}>
+              סרטון בודד
+            </h2>
+            <p style={{
+              fontSize: "0.95rem",
+              color: "rgba(255,255,255,0.45)",
+              lineHeight: 1.6,
+              margin: 0,
+            }}>
+              צור סרטון קצר מעוצב עם כתוביות, B-Roll, ואפקטים — מושלם לרילס, TikTok ורשתות חברתיות
+            </p>
+            {/* Bottom accent */}
+            <div style={{
+              marginTop: "auto",
+              paddingTop: "1.5rem",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              color: "#00B5FE",
+              fontSize: "0.9rem",
+              fontWeight: 600,
+            }}>
+              <span>התחל עכשיו</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: "scaleX(-1)" }}>
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </div>
+          </a>
+
+          {/* Podcast / Long-Form Card */}
+          <a
+            href="/projects/new/podcast"
+            style={{
+              flex: "1 1 360px",
+              maxWidth: "400px",
+              minHeight: "320px",
+              background: "linear-gradient(160deg, rgba(232,244,1,0.06) 0%, rgba(232,244,1,0.01) 100%)",
+              border: "1px solid rgba(232,244,1,0.18)",
+              borderRadius: "1.25rem",
+              padding: "2.5rem 2rem",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              textAlign: "center",
+              textDecoration: "none",
+              cursor: "pointer",
+              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+              position: "relative",
+              overflow: "hidden",
+            }}
+            onMouseEnter={(e) => {
+              const el = e.currentTarget;
+              el.style.border = "1px solid rgba(232,244,1,0.45)";
+              el.style.background = "linear-gradient(160deg, rgba(232,244,1,0.12) 0%, rgba(232,244,1,0.03) 100%)";
+              el.style.transform = "translateY(-4px)";
+              el.style.boxShadow = "0 20px 60px rgba(232,244,1,0.1)";
+            }}
+            onMouseLeave={(e) => {
+              const el = e.currentTarget;
+              el.style.border = "1px solid rgba(232,244,1,0.18)";
+              el.style.background = "linear-gradient(160deg, rgba(232,244,1,0.06) 0%, rgba(232,244,1,0.01) 100%)";
+              el.style.transform = "translateY(0)";
+              el.style.boxShadow = "none";
+            }}
+          >
+            {/* Icon */}
+            <div style={{
+              width: "80px",
+              height: "80px",
+              borderRadius: "1.25rem",
+              background: "linear-gradient(135deg, rgba(232,244,1,0.12), rgba(232,244,1,0.04))",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: "1.5rem",
+            }}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#E8F401" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
+              </svg>
+            </div>
+            <h2 style={{
+              fontSize: "1.5rem",
+              fontWeight: 700,
+              color: "#fff",
+              margin: "0 0 0.75rem 0",
+            }}>
+              פודקאסט / תוכן ארוך
+            </h2>
+            <p style={{
+              fontSize: "0.95rem",
+              color: "rgba(255,255,255,0.45)",
+              lineHeight: 1.6,
+              margin: 0,
+            }}>
+              ייבא פרק פודקאסט או תוכן ארוך וחתוך אותו לקליפים קצרים ויראליים באופן אוטומטי
+            </p>
+            {/* Bottom accent */}
+            <div style={{
+              marginTop: "auto",
+              paddingTop: "1.5rem",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              color: "#E8F401",
+              fontSize: "0.9rem",
+              fontWeight: 600,
+            }}>
+              <span>התחל עכשיו</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: "scaleX(-1)" }}>
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </div>
+          </a>
+        </div>
+      </div>
+    );
+  }
   const toast = useToast();
   const { data: clients, create: createClient } = useClients();
   const { create: createProject, update: updateProject } = useProjects();

@@ -92,10 +92,13 @@ const TABLES: Record<string, string> = {
       output_file_path TEXT,
       output_file_size BIGINT,
       duration_seconds FLOAT,
+      priority INTEGER DEFAULT 2,
       status TEXT DEFAULT 'queued',
       render_config JSONB DEFAULT '{}',
       social_package JSONB,
       thumbnail_paths TEXT[],
+      completed_at TIMESTAMPTZ,
+      error_message TEXT,
       created_at TIMESTAMPTZ DEFAULT now(),
       updated_at TIMESTAMPTZ DEFAULT now()
     );

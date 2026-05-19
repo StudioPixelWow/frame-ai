@@ -6,6 +6,8 @@ import React from "react";
 import { Composition } from "remotion";
 import { PixelManageEdit } from "./PixelManageEdit";
 import { UGCBrandedVideo } from "./UGCBrandedVideo";
+import PodcastClipComposition from "./PodcastClipComposition";
+import type { PodcastClipProps } from "./PodcastClipComposition";
 import type { CompositionProps } from "./types";
 import { FPS, FORMAT_DIMENSIONS } from "./types";
 import { defaultUGCProps } from "./ugc-types";
@@ -143,6 +145,54 @@ export const RemotionRoot: React.FC = () => {
               height: 1920,
               fps: FPS,
               props: defaultUGCProps as unknown as Record<string, unknown>,
+            };
+          }
+        }}
+      />
+      <Composition
+        id="PodcastClipComposition"
+        component={PodcastClipComposition as unknown as React.FC<Record<string, unknown>>}
+        durationInFrames={FPS * 60}
+        fps={FPS}
+        width={1080}
+        height={1920}
+        defaultProps={{
+          sourceVideoUrl: "",
+          startTime: 0,
+          endTime: 60,
+          subtitles: [],
+          viralStyle: "bold-energy",
+          brandColors: null,
+          hookText: null,
+          logoUrl: null,
+          outputFormat: "9:16" as const,
+        } as unknown as Record<string, unknown>}
+        calculateMetadata={async ({ props }) => {
+          try {
+            const p = props as unknown as PodcastClipProps;
+            const ASPECT_DIMS: Record<string, { width: number; height: number }> = {
+              "16:9": { width: 1920, height: 1080 },
+              "9:16": { width: 1080, height: 1920 },
+              "1:1": { width: 1080, height: 1080 },
+              "4:5": { width: 1080, height: 1350 },
+            };
+            const dims = ASPECT_DIMS[p.outputFormat] || ASPECT_DIMS["9:16"];
+            const clipDur = Math.max(1, (p.endTime || 60) - (p.startTime || 0));
+            return {
+              durationInFrames: Math.max(1, Math.ceil(clipDur * FPS)),
+              width: dims.width,
+              height: dims.height,
+              fps: FPS,
+              props,
+            };
+          } catch (err) {
+            console.error("[PodcastClipComposition] calculateMetadata error:", err);
+            return {
+              durationInFrames: FPS * 60,
+              width: 1080,
+              height: 1920,
+              fps: FPS,
+              props,
             };
           }
         }}
