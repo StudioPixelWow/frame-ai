@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
     const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
     const zipFilename = sanitizeFilename(episode.title) + '_clips.zip';
 
-    return new NextResponse(zipBuffer, {
+    return new NextResponse(new Uint8Array(zipBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/zip',
