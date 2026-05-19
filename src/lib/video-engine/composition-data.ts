@@ -781,7 +781,7 @@ export function buildFinalCompositionData(ws: WizardSnapshot): FinalCompositionD
       subtitleEnhancement: true,
       // Motion effects: Ken Burns drift + clip transition pulse + breathing
       // Disabled by default — causes unwanted zoom bump. User must opt in via preset.
-      motionEffects: presetConfig?.motionEffects ?? false,
+      motionEffects: (presetConfig as any)?.motionEffects ?? false,
       // Color correction: grading + vignette + film grain
       colorCorrection: ws.premiumMode !== false,
       autoFill: ws.premiumMode !== false,
