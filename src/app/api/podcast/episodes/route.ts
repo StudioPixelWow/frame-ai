@@ -13,8 +13,45 @@ const supabase = createClient(
 
 export const dynamic = 'force-dynamic';
 
+// ── Auto-migration: create podcast tables if missing ─────────────────────
+let migrationAttempted = false;
+
+async function ensurePodcastTables(): Promise<void> {
+  if (migrationAttempted) return;
+  migrationAttempted = true;
+
+  const ddl = `
+    CREATE TABLE IF NOT EXISTS public.podcast_episodes (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID,
+      client_id UUID,
+      title TEXT NOT NULL,
+      show_name TEXT,
+      guest_names TEXT[],
+      language TEXT DEFAULT 'he',
+      source_file_path TEXT NOT NULL,
+      source_file_size BIGINT,
+      duration_seconds INTEGER,
+      audio_file_path TEXT,
+      status TEXT DEFAULT 'uploaded',
+      processing_progress JSONB DEFAULT '{}',
+      error_message TEXT,
+      metadata JSONB DEFAULT '{}',
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
+    );
+  `;
+
+  try {
+    await supabase.rpc('exec_sql', { sql: ddl });
+  } catch {
+    // exec_sql not available — tables must exist already or be created via migration endpoint
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
+    await ensurePodcastTables();
     const { searchParams } = new URL(req.url);
     const clientId = searchParams.get('clientId');
 
@@ -44,6 +81,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    await ensurePodcastTables();
     const body = await req.json();
 
     const {

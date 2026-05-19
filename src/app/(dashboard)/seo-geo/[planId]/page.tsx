@@ -366,6 +366,8 @@ export default function SeoPlanDetail() {
   const [selectedCalendarDay, setSelectedCalendarDay] = useState<any | null>(null);
   const [runningAutomation, setRunningAutomation] = useState(false);
   const [automationStatus, setAutomationStatus] = useState<string | null>(null);
+  const [closingGaps, setClosingGaps] = useState(false);
+  const [gapStatus, setGapStatus] = useState<string | null>(null);
   const [rescanning, setRescanning] = useState(false);
   const [rescanResult, setRescanResult] = useState<any>(null);
   const [runningEngineId, setRunningEngineId] = useState<string | null>(null);
@@ -2060,6 +2062,103 @@ export default function SeoPlanDetail() {
                       )}
                     </div>
                   </div>
+
+                  {/* === CLOSE GAPS BUTTON === */}
+                  {(() => {
+                    if (!p.generatedAt || !p.days?.length) return null;
+                    const genAt = new Date(p.generatedAt);
+                    const todayNum = Math.min(Math.floor((Date.now() - genAt.getTime()) / (1000 * 60 * 60 * 24)) + 1, 60);
+                    if (todayNum < 2) return null;
+                    const missedDays = (p.days as any[]).filter((d: any) =>
+                      d.day <= todayNum && d.tasks?.some((t: any) => t.status !== 'done')
+                    );
+                    const missedCount = missedDays.length;
+                    // Show if at least 2 days have pending tasks (today + at least 1 gap)
+                    if (missedCount < 2) return null;
+                    const gapClosing = (p as any).gapClosing;
+                    const isRunning = closingGaps || gapClosing?.active;
+
+                    return (
+                      <div style={{
+                        marginTop: 12, padding: "12px 16px", borderRadius: 12,
+                        background: "linear-gradient(135deg, #fef3c720, #f59e0b10)",
+                        border: `1px solid ${C.warning}30`,
+                        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+                      }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: C.warning, marginBottom: 2 }}>
+                            ⚠️ נמצאו {missedCount} ימים עם משימות ממתינות (יום 1 עד {todayNum})
+                          </div>
+                          <div style={{ fontSize: 11, color: C.textMuted }}>
+                            {isRunning && gapClosing?.currentDay
+                              ? `מעבד יום ${gapClosing.currentDay}... (${gapClosing.completedDays || 0}/${gapClosing.totalDays || missedCount})`
+                              : "לחץ לסגור פערים — המערכת תריץ את כל הימים שפוספסו ברצף"}
+                          </div>
+                          {gapStatus && (
+                            <div style={{ fontSize: 11, marginTop: 4, fontWeight: 600, color: gapStatus.includes("הושלם") ? "#10b981" : gapStatus.includes("שגיאה") ? "#ef4444" : C.primary }}>
+                              {gapStatus}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          disabled={isRunning}
+                          onClick={async () => {
+                            if (!confirm(`האם להריץ את כל ${missedCount} הימים שפוספסו? זה עלול לקחת מספר דקות.`)) return;
+                            setClosingGaps(true);
+                            setGapStatus("מתחיל סגירת פערים...");
+                            try {
+                              const res = await fetch(`/api/seo-geo-plans/${planId}/close-gaps`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                              });
+                              const data = await res.json().catch(() => ({}));
+                              if (res.ok) {
+                                setGapStatus(`התחיל! ${data.gapDaysCount} ימים בתהליך...`);
+                                // Poll for completion
+                                const pollInterval = setInterval(async () => {
+                                  try {
+                                    const pollRes = await fetch(`/api/data/seo-plans/${planId}`);
+                                    if (pollRes.ok) {
+                                      const updatedPlan = await pollRes.json();
+                                      setPlan(updatedPlan);
+                                      const gc = updatedPlan.gapClosing;
+                                      if (gc?.active) {
+                                        setGapStatus(`מעבד יום ${gc.currentDay}... (${gc.completedDays}/${gc.totalDays})`);
+                                      } else {
+                                        setGapStatus(`הושלם! ${gc?.completedDays || missedCount} ימים עובדו`);
+                                        setClosingGaps(false);
+                                        clearInterval(pollInterval);
+                                        setTimeout(() => setGapStatus(null), 8000);
+                                      }
+                                    }
+                                  } catch {}
+                                }, 5000);
+                                // Safety timeout — stop polling after 10 minutes
+                                setTimeout(() => { clearInterval(pollInterval); setClosingGaps(false); }, 600000);
+                              } else {
+                                setGapStatus(`שגיאה: ${data.error || "Unknown"}`);
+                                setClosingGaps(false);
+                                setTimeout(() => setGapStatus(null), 5000);
+                              }
+                            } catch (e) {
+                              setGapStatus("שגיאת רשת");
+                              setClosingGaps(false);
+                              setTimeout(() => setGapStatus(null), 5000);
+                            }
+                          }}
+                          style={{
+                            padding: "10px 24px", borderRadius: 10, border: "none",
+                            background: isRunning ? "#e5e7eb" : `linear-gradient(135deg, ${C.warning}, #d97706)`,
+                            color: isRunning ? "#9ca3af" : "#fff", fontWeight: 700, fontSize: 13,
+                            cursor: isRunning ? "wait" : "pointer", whiteSpace: "nowrap",
+                            transition: "all 0.3s",
+                          }}
+                        >
+                          {isRunning ? "⏳ סוגר פערים..." : "🔄 סגור פערים"}
+                        </button>
+                      </div>
+                    );
+                  })()}
 
                   {/* Mini stats row */}
                   {automLog.length > 0 && (

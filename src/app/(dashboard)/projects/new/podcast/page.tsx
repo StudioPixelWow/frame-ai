@@ -317,7 +317,7 @@ export default function PodcastClipEnginePage() {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       );
 
-      await uploader.upload(episode.file, 'podcast-files', storagePath, {
+      await uploader.upload(episode.file, 'project-files', storagePath, {
         onProgress: (percent, speed, eta) => {
           setUploadProgress({ percent, speed, eta });
         },

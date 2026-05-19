@@ -97,7 +97,7 @@ async function runPipeline(episodeId: string, sourceFilePath: string): Promise<v
 
     const { data: fileData, error: fileError } = await supabase
       .storage
-      .from('podcast-files')
+      .from('project-files')
       .list('', {
         search: sourceFilePath.split('/').pop() ?? '',
       });
@@ -120,7 +120,7 @@ async function runPipeline(episodeId: string, sourceFilePath: string): Promise<v
     // Download the source file from Storage
     const { data: fileBlob, error: downloadError } = await supabase
       .storage
-      .from('podcast-files')
+      .from('project-files')
       .download(sourceFilePath);
 
     if (downloadError || !fileBlob) {
@@ -148,7 +148,7 @@ async function runPipeline(episodeId: string, sourceFilePath: string): Promise<v
     const audioFilePath = sourceFilePath.replace(/\.[^.]+$/, '.mp3');
     const { error: audioUploadError } = await supabase
       .storage
-      .from('podcast-files')
+      .from('project-files')
       .upload(audioFilePath, audioFileBuffer, {
         contentType: 'audio/mpeg',
         upsert: true,
