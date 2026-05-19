@@ -92,7 +92,8 @@ const STAGES = [
 async function updateProgress(
   episodeId: string,
   stageIndex: number,
-  percent: number
+  percent: number,
+  statusText?: string
 ): Promise<void> {
   const { stage, stageName } = STAGES[stageIndex];
   await supabase
@@ -102,6 +103,7 @@ async function updateProgress(
         stage,
         stageName,
         percent: Math.round(percent),
+        statusText: statusText || stageName,
         startedAt: new Date().toISOString(),
       },
       updated_at: new Date().toISOString(),
@@ -141,7 +143,7 @@ async function markCompleted(episodeId: string): Promise<void> {
 async function runPipeline(episodeId: string, sourceFilePath: string): Promise<void> {
   try {
     // ── Stage 1: אימות — בדיקת קובץ ב-Storage ────────────────────────────
-    await updateProgress(episodeId, 0, 0);
+    await updateProgress(episodeId, 0, 0, 'מאתר את הקובץ בשרת...');
 
     const { data: fileData, error: fileError } = await supabase
       .storage
@@ -160,10 +162,10 @@ async function runPipeline(episodeId: string, sourceFilePath: string): Promise<v
       ? (fileMetadata.metadata as Record<string, unknown>).size as number
       : undefined;
 
-    await updateProgress(episodeId, 0, 100);
+    await updateProgress(episodeId, 0, 100, 'הקובץ אומת בהצלחה');
 
     // ── Stage 2: חילוץ אודיו — הורדת הוידאו וחילוץ שמע ───────────────────
-    await updateProgress(episodeId, 1, 0);
+    await updateProgress(episodeId, 1, 0, 'מוריד את הקובץ מהשרת...');
 
     // Download the source file from Storage
     const { data: fileBlob, error: downloadError } = await supabase
@@ -175,7 +177,7 @@ async function runPipeline(episodeId: string, sourceFilePath: string): Promise<v
       throw new Error(`שגיאה בהורדת הקובץ: ${downloadError?.message ?? 'לא התקבל קובץ'}`);
     }
 
-    await updateProgress(episodeId, 1, 30);
+    await updateProgress(episodeId, 1, 30, 'מחלץ אודיו מתוך הוידאו...');
 
     // Write blob to temp file for ffmpeg processing
     const tempDir = join(tmpdir(), `podcast-${episodeId}`);
@@ -211,39 +213,41 @@ async function runPipeline(episodeId: string, sourceFilePath: string): Promise<v
       .update({ audio_file_path: audioFilePath })
       .eq('id', episodeId);
 
-    await updateProgress(episodeId, 1, 100);
+    await updateProgress(episodeId, 1, 100, 'האודיו חולץ בהצלחה');
 
     // ── Stage 3: תמלול — תמלול מקוטע עם Whisper ──────────────────────────
-    await updateProgress(episodeId, 2, 0);
+    await updateProgress(episodeId, 2, 0, 'מחלק אודיו למקטעים לתמלול...');
 
     // Split extracted audio into chunks for Whisper API (max 25MB each)
     const audioChunks = await splitAudioIntoChunks(extractedAudioPath, 600, tempDir);
+
+    await updateProgress(episodeId, 2, 20, `מתמלל ${audioChunks.length} מקטעי אודיו עם Whisper AI...`);
 
     const transcriptionResult = await transcribeChunkedAudio(audioChunks, 'he');
 
     const { text: fullText, segments: transcriptSegments } = transcriptionResult;
 
-    await updateProgress(episodeId, 2, 100);
+    await updateProgress(episodeId, 2, 100, 'התמלול הושלם');
 
     // ── Stage 4: פילוח נושאים — זיהוי גבולות נושא בתמלול ────────────────
-    await updateProgress(episodeId, 3, 0);
+    await updateProgress(episodeId, 3, 0, 'מנתח נושאים ומזהה מעברים בשיחה...');
 
     const topicSegments = segmentTranscript(transcriptSegments as unknown as TranscriptSegment[]);
 
-    await updateProgress(episodeId, 3, 100);
+    await updateProgress(episodeId, 3, 100, `זוהו ${topicSegments.length} נושאים`);
 
     // ── Stage 5: ניתוח AI — זיהוי קליפים מומלצים ──────────────────────────
-    await updateProgress(episodeId, 4, 0);
+    await updateProgress(episodeId, 4, 0, 'AI מנתח את התמלול לזיהוי רגעים ויראליים...');
 
     const aiClips: AIClipSuggestion[] = await analyzeTranscriptForClips(
       fullText,
       topicSegments
     );
 
-    await updateProgress(episodeId, 4, 100);
+    await updateProgress(episodeId, 4, 100, `נמצאו ${aiClips.length} קליפים מומלצים`);
 
     // ── Stage 6: דירוג קליפים — חישוב ציונים ושמירה ל-DB ─────────────────
-    await updateProgress(episodeId, 5, 0);
+    await updateProgress(episodeId, 5, 0, 'מחשב ציוני ויראליות ומדרג קליפים...');
 
     // Map AI suggestions to RawClipCandidate for scoring
     const rawCandidates: RawClipCandidate[] = aiClips.map((clip, idx) => ({
@@ -264,7 +268,7 @@ async function runPipeline(episodeId: string, sourceFilePath: string): Promise<v
     const scoredClips = scoreClipCandidates(rawCandidates);
     const rankedClips = rankClips(scoredClips);
 
-    await updateProgress(episodeId, 5, 50);
+    await updateProgress(episodeId, 5, 50, 'שומר תמלול וקליפים ל-DB...');
 
     // Save transcript to podcast_transcripts
     const { error: transcriptInsertError } = await supabase
@@ -317,7 +321,7 @@ async function runPipeline(episodeId: string, sourceFilePath: string): Promise<v
       }
     }
 
-    await updateProgress(episodeId, 5, 100);
+    await updateProgress(episodeId, 5, 100, 'כל הקליפים נשמרו בהצלחה');
 
     // ── Done ─────────────────────────────────────────────────────────────────
     await markCompleted(episodeId);
@@ -370,6 +374,7 @@ export async function POST(req: NextRequest) {
           stage: 1,
           stageName: 'אימות קובץ',
           percent: 0,
+          statusText: 'מתחיל עיבוד...',
           startedAt: new Date().toISOString(),
         },
         updated_at: new Date().toISOString(),

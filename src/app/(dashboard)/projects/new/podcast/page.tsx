@@ -31,6 +31,8 @@ interface ProcessingStage {
   label: string;
   status: ProcessingStageStatus;
   progress: number;
+  statusText?: string;
+  startedAt?: number; // timestamp when this stage started running
 }
 
 interface Clip {
@@ -241,6 +243,53 @@ export default function PodcastClipEnginePage() {
     }
   }, []);
 
+  // ── Helper: apply progress from DB row to local state
+  const applyProgressFromRow = useCallback((row: Record<string, unknown>) => {
+    const progress = row.processing_progress as {
+      stage?: number;
+      stageName?: string;
+      percent?: number;
+      statusText?: string;
+    } | null;
+
+    if (progress && typeof progress.stage === 'number') {
+      setProcessingStages((prev) =>
+        prev.map((s, idx) => {
+          if (s.key === 'upload') {
+            return { ...s, status: 'done', progress: 100 };
+          }
+          if (idx < progress.stage!) {
+            return { ...s, status: 'done', progress: 100, statusText: undefined };
+          }
+          if (idx === progress.stage!) {
+            return {
+              ...s,
+              status: progress.percent === 100 ? 'done' : 'running',
+              progress: progress.percent ?? 0,
+              statusText: progress.statusText || progress.stageName,
+              startedAt: s.status !== 'running' ? Date.now() : s.startedAt,
+            };
+          }
+          return { ...s, status: 'pending', progress: 0, statusText: undefined };
+        }),
+      );
+    }
+
+    if (row.status === 'processed') {
+      setCurrentStage(3);
+      if (typeof row.id === 'string') fetchClips(row.id);
+    }
+
+    if (row.status === 'error') {
+      setProcessingError((row.error_message as string) || 'העיבוד נכשל');
+      setProcessingStages((prev) =>
+        prev.map((s) =>
+          s.status === 'running' ? { ...s, status: 'error' } : s,
+        ),
+      );
+    }
+  }, [fetchClips]);
+
   // ── Supabase Realtime subscription for processing progress
   useEffect(() => {
     if (!episodeId || currentStage !== 2) return;
@@ -261,51 +310,7 @@ export default function PodcastClipEnginePage() {
           filter: `id=eq.${episodeId}`,
         },
         (payload) => {
-          const row = payload.new as Record<string, unknown>;
-          const progress = row.processing_progress as {
-            stage?: number;
-            stageName?: string;
-            percent?: number;
-          } | null;
-
-          if (progress && typeof progress.stage === 'number') {
-            setProcessingStages((prev) =>
-              prev.map((s, idx) => {
-                // Upload stage (idx 0) is managed locally, not by the server
-                if (s.key === 'upload') {
-                  return { ...s, status: 'done', progress: 100 };
-                }
-                // Server stages start at 1, but our array has upload at 0
-                // so server stage 1 = idx 1, stage 2 = idx 2, etc.
-                const serverIdx = idx; // idx already matches since upload=0, validate=1, etc.
-                if (serverIdx < progress.stage!) {
-                  return { ...s, status: 'done', progress: 100 };
-                }
-                if (serverIdx === progress.stage!) {
-                  return {
-                    ...s,
-                    status: progress.percent === 100 ? 'done' : 'running',
-                    progress: progress.percent ?? 0,
-                  };
-                }
-                return { ...s, status: 'pending', progress: 0 };
-              }),
-            );
-          }
-
-          if (row.status === 'processed') {
-            setCurrentStage(3);
-            fetchClips(episodeId);
-          }
-
-          if (row.status === 'error') {
-            setProcessingError((row.error_message as string) || 'Processing failed');
-            setProcessingStages((prev) =>
-              prev.map((s) =>
-                s.status === 'running' ? { ...s, status: 'error' } : s,
-              ),
-            );
-          }
+          applyProgressFromRow(payload.new as Record<string, unknown>);
         },
       )
       .subscribe();
@@ -313,7 +318,40 @@ export default function PodcastClipEnginePage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [episodeId, currentStage, fetchClips]);
+  }, [episodeId, currentStage, applyProgressFromRow]);
+
+  // ── Polling fallback: fetch episode status every 5 seconds
+  //    Works even if Realtime is not enabled for the table
+  useEffect(() => {
+    if (!episodeId || currentStage !== 2) return;
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+
+    const poll = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('podcast_episodes')
+          .select('id, status, processing_progress, error_message')
+          .eq('id', episodeId)
+          .single();
+
+        if (!error && data) {
+          applyProgressFromRow(data as Record<string, unknown>);
+        }
+      } catch {
+        // Silently retry on next poll
+      }
+    };
+
+    // First poll immediately
+    poll();
+
+    const interval = setInterval(poll, 5000);
+    return () => clearInterval(interval);
+  }, [episodeId, currentStage, applyProgressFromRow]);
 
   // ── Stage transitions
   const startProcessing = useCallback(async () => {
@@ -386,7 +424,10 @@ export default function PodcastClipEnginePage() {
       const newEpisodeId = created.id;
       setEpisodeId(newEpisodeId);
 
-      // Step 3: Trigger processing pipeline
+      // Step 3: Trigger processing pipeline — reset timer NOW
+      setProcessingStartTime(Date.now());
+      setElapsedSeconds(0);
+
       const processRes = await fetch('/api/podcast/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -830,7 +871,7 @@ export default function PodcastClipEnginePage() {
 
   const [tipIndex, setTipIndex] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [processingStartTime] = useState(() => Date.now());
+  const [processingStartTime, setProcessingStartTime] = useState(() => Date.now());
 
   // Rotate tips every 5 seconds
   useEffect(() => {
@@ -975,12 +1016,18 @@ export default function PodcastClipEnginePage() {
           color: COLORS.text,
           margin: '0 0 6px',
         }}>
-          {uploadProgress ? 'מעלה את הקובץ לענן' : 'מעבד את הפרק'}
+          {uploadProgress ? 'מעלה את הקובץ לענן' : (() => {
+            const running = processingStages.find(s => s.status === 'running');
+            return running?.statusText || running?.label || 'מעבד את הפרק';
+          })()}
         </h3>
         <p style={{ fontSize: 14, color: COLORS.textSecondary, margin: 0 }}>
           {formatDuration(elapsedSeconds)} עברו
           {uploadProgress && uploadProgress.eta > 0 && (
             <span> — עוד {formatEta(uploadProgress.eta)} בערך</span>
+          )}
+          {!uploadProgress && overallPercent > 0 && overallPercent < 100 && (
+            <span> — {processingStages.filter(s => s.status === 'done').length} מתוך {processingStages.length} שלבים הושלמו</span>
           )}
         </p>
 
@@ -1200,6 +1247,27 @@ export default function PodcastClipEnginePage() {
                     }}>
                       <span>{formatBytes(uploadProgress.speed)}/s</span>
                       <span>{formatEta(uploadProgress.eta)} נותרו</span>
+                    </div>
+                  )}
+
+                  {/* Status text for running server stages */}
+                  {isRunning && stage.key !== 'upload' && stage.statusText && (
+                    <div style={{
+                      marginTop: 6,
+                      fontSize: 12,
+                      color: COLORS.primary,
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}>
+                      <span style={{
+                        display: 'inline-block',
+                        width: 6, height: 6, borderRadius: '50%',
+                        background: COLORS.primary,
+                        animation: 'pulse-ring 1.5s ease-in-out infinite',
+                      }} />
+                      {stage.statusText}
                     </div>
                   )}
                 </div>
