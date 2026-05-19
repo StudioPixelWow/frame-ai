@@ -20,11 +20,59 @@ import { tmpdir } from 'os';
 import { segmentTranscript, type TranscriptSegment } from '@/lib/podcast-engine/topic-segmentation';
 import { analyzeTranscriptForClips, type AIClipSuggestion } from '@/lib/podcast-engine/clip-analyzer';
 import { scoreClipCandidates, rankClips, type RawClipCandidate } from '@/lib/podcast-engine/clip-scorer';
+import { podcastEpisodes } from '@/lib/db';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
+// ── Detect storage mode (same logic as episodes route) ────────────────────
+type StorageMode = 'relational' | 'jsonb';
+let _processMode: StorageMode | null = null;
+
+async function detectProcessMode(): Promise<StorageMode> {
+  if (_processMode) return _processMode;
+  try {
+    const { error } = await supabase.from('podcast_episodes').select('id').limit(0);
+    if (!error) {
+      _processMode = 'relational';
+      return 'relational';
+    }
+  } catch {}
+  _processMode = 'jsonb';
+  return 'jsonb';
+}
+
+async function findEpisode(episodeId: string): Promise<{ id: string; status: string; source_file_path: string } | null> {
+  const mode = await detectProcessMode();
+
+  if (mode === 'relational') {
+    const { data, error } = await supabase
+      .from('podcast_episodes')
+      .select('id, status, source_file_path')
+      .eq('id', episodeId)
+      .single();
+    if (!error && data) return data;
+  }
+
+  // Try JSONB fallback
+  try {
+    const items = await podcastEpisodes.getAllAsync();
+    const found = (items as Record<string, any>[]).find(
+      (ep) => ep.id === episodeId
+    );
+    if (found) {
+      return {
+        id: found.id,
+        status: found.status || 'uploaded',
+        source_file_path: found.sourceFilePath || found.source_file_path || '',
+      };
+    }
+  } catch {}
+
+  return null;
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -294,14 +342,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify episode exists
-    const { data: episode, error: fetchError } = await supabase
-      .from('podcast_episodes')
-      .select('id, status, source_file_path')
-      .eq('id', episodeId)
-      .single();
+    // Verify episode exists (checks both relational and JSONB)
+    const episode = await findEpisode(episodeId);
 
-    if (fetchError || !episode) {
+    if (!episode) {
+      console.error(`[process] Episode not found: ${episodeId}`);
       return NextResponse.json(
         { error: 'הפרק לא נמצא' },
         { status: 404 }
