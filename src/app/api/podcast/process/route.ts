@@ -11,6 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { extractAudio, splitAudioIntoChunks } from '@/lib/podcast-engine/ffmpeg-service';
 import { transcribeChunkedAudio } from '@/lib/podcast-engine/whisper-transcription';
@@ -118,6 +119,7 @@ async function findEpisode(episodeId: string): Promise<{ id: string; status: str
 }
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300; // 5 minutes — pipeline needs time for download + ffmpeg + whisper + AI
 
 // ── Stage definitions ─────────────────────────────────────────────────────────
 
@@ -424,9 +426,11 @@ export async function POST(req: NextRequest) {
       })
       .eq('id', episodeId);
 
-    // Fire-and-forget: run the pipeline in the background
-    // Using void to explicitly mark as intentionally not awaited
-    void runPipeline(episodeId, episode.source_file_path);
+    // Use Next.js after() to keep the function alive after response is sent.
+    // This ensures the pipeline runs to completion on Vercel serverless.
+    after(async () => {
+      await runPipeline(episodeId, episode.source_file_path);
+    });
 
     return NextResponse.json(
       {
