@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/toast';
 import { useAISettings, useEmployees, useGmailSettings } from '@/lib/api/use-entity';
 import type { GmailConnectionStatus } from '@/lib/db/schema';
@@ -82,6 +83,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 export default function SettingsPage() {
   const toast = useToast();
+  const router = useRouter();
   const [activeSection, setActiveSection] = useState<Section>('general');
   const [theme, setTheme] = useState<'dark' | 'light' | 'auto'>('auto');
 
@@ -2013,15 +2015,15 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Facebook API */}
+        {/* Facebook / Meta Business Manager */}
         <div style={cardStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
             <div>
               <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--foreground)', margin: 0 }}>
-                Facebook
+                Meta Business Manager
               </h3>
               <p style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)', margin: '0.5rem 0 0 0' }}>
-                ניהול דפים עסקיים
+                ניהול קמפיינים ופרסום ממומן
               </p>
             </div>
             <div style={{ fontSize: '1.5rem' }}>f</div>
@@ -2044,7 +2046,7 @@ export default function SettingsPage() {
           </div>
 
           <button
-            onClick={() => toast('בקרוב', 'info')}
+            onClick={() => router.push('/settings/meta-business')}
             style={{ ...buttonStyle, width: '100%', padding: '8px 12px', fontSize: '0.75rem' }}
           >
             התחבר

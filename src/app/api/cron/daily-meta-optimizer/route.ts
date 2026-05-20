@@ -2,7 +2,7 @@
  * Daily Meta Ads Optimizer Cron
  *
  * Runs daily (06:00 UTC / 09:00 Israel) via Vercel cron.
- * Calls /api/meta-business/daily-optimize to:
+ * Directly calls the daily-optimize POST handler (no HTTP self-fetch):
  *   1. Sync latest data from Meta for all connected clients
  *   2. Analyze performance + CPL trends
  *   3. Pause underperformers, create new audiences, generate ad variations
@@ -10,6 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { POST as dailyOptimize } from '@/app/api/meta-business/daily-optimize/route';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -28,17 +29,16 @@ export async function GET(req: NextRequest) {
 
   console.log('[META-CRON] Starting daily Meta optimizer at', new Date().toISOString());
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-
   try {
-    const res = await fetch(`${baseUrl}/api/meta-business/daily-optimize`, {
+    // Create a fake POST request with empty body for the daily-optimize handler
+    const fakeReq = new NextRequest(new URL('/api/meta-business/daily-optimize', req.url), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}), // all clients
+      body: JSON.stringify({}),
     });
 
-    const data = await res.json();
+    const response = await dailyOptimize(fakeReq);
+    const data = await response.json();
     const elapsed = Date.now() - startTs;
 
     console.log(`[META-CRON] Completed in ${elapsed}ms — ${data.clientsProcessed || 0} clients processed`);

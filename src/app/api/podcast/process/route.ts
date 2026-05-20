@@ -27,6 +27,39 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// ── Auto-migration: create podcast_episodes table if missing ────────────
+const CREATE_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS public.podcast_episodes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID, client_id UUID, title TEXT NOT NULL, show_name TEXT,
+  guest_names TEXT[], language TEXT DEFAULT 'he', source_file_path TEXT NOT NULL,
+  source_file_size BIGINT, duration_seconds INTEGER, audio_file_path TEXT,
+  status TEXT DEFAULT 'uploaded', processing_progress JSONB DEFAULT '{}',
+  error_message TEXT, metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now()
+);`;
+
+let _tableCreationAttempted = false;
+
+async function ensureTable(): Promise<boolean> {
+  if (_tableCreationAttempted) return false;
+  _tableCreationAttempted = true;
+
+  for (const param of ['sql', 'query', 'sql_text']) {
+    try {
+      const { error } = await supabase.rpc('exec_sql', { [param]: CREATE_TABLE_SQL });
+      if (!error) {
+        console.log('[podcast-process] Auto-created podcast_episodes table');
+        await supabase.rpc('exec_sql', { [param]: "NOTIFY pgrst, 'reload schema';" }).catch(() => {});
+        return true;
+      }
+      if (error.message?.includes('already exists')) return true;
+      if (error.message?.includes('argument') || error.message?.includes('Could not find')) continue;
+    } catch { continue; }
+  }
+  return false;
+}
+
 // ── Detect storage mode (same logic as episodes route) ────────────────────
 type StorageMode = 'relational' | 'jsonb';
 let _processMode: StorageMode | null = null;
@@ -38,6 +71,16 @@ async function detectProcessMode(): Promise<StorageMode> {
     if (!error) {
       _processMode = 'relational';
       return 'relational';
+    }
+
+    // Table missing — try to create it
+    const created = await ensureTable();
+    if (created) {
+      const { error: retryError } = await supabase.from('podcast_episodes').select('id').limit(0);
+      if (!retryError) {
+        _processMode = 'relational';
+        return 'relational';
+      }
     }
   } catch {}
   _processMode = 'jsonb';

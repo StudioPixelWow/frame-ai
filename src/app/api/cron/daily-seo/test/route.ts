@@ -49,15 +49,15 @@ export async function GET(req: NextRequest) {
         todayTaskTitles: (todayDay?.tasks || []).map((t: any) => t.title),
         wouldBeProcessed:
           (p.status === 'active' || p.status === 'plan_generated') &&
-          !!p.wpConnection?.siteUrl &&
           Array.isArray(p.days) && p.days.length > 0,
         reasonSkipped: (() => {
           const reasons: string[] = [];
           if (p.status !== 'active' && p.status !== 'plan_generated') reasons.push(`status="${p.status}" (need active/plan_generated)`);
-          if (!p.wpConnection?.siteUrl) reasons.push('no wpConnection.siteUrl');
           if (!Array.isArray(p.days) || p.days.length === 0) reasons.push('days array empty/missing');
+          if (!p.generatedAt) reasons.push('no generatedAt — cannot calculate day number');
           if (dayNumber !== null && (dayNumber < 1 || dayNumber > 60)) reasons.push(`dayNumber=${dayNumber} (outside 1-60)`);
           if (!todayDay?.tasks?.length) reasons.push(`no tasks for day ${dayNumber}`);
+          if (!p.wpConnection?.siteUrl) reasons.push('no wpConnection (WP-only tasks will be skipped)');
           return reasons.length > 0 ? reasons : ['none — would be processed'];
         })(),
       };

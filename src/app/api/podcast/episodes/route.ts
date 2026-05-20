@@ -11,8 +11,80 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { getSupabase } from '@/lib/db/store';
 import { podcastEpisodes } from '@/lib/db';
+import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
+
+/* ── Auto-migration: create podcast_episodes table if missing ── */
+
+const CREATE_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS public.podcast_episodes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID,
+  client_id UUID,
+  title TEXT NOT NULL,
+  show_name TEXT,
+  guest_names TEXT[],
+  language TEXT DEFAULT 'he',
+  source_file_path TEXT NOT NULL,
+  source_file_size BIGINT,
+  duration_seconds INTEGER,
+  audio_file_path TEXT,
+  status TEXT DEFAULT 'uploaded',
+  processing_progress JSONB DEFAULT '{}',
+  error_message TEXT,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+`;
+
+let _tableCreationAttempted = false;
+
+async function ensureTable(): Promise<boolean> {
+  if (_tableCreationAttempted) return false;
+  _tableCreationAttempted = true;
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return false;
+
+  // Try exec_sql RPC
+  const sb = createClient(url, key);
+  for (const param of ['sql', 'query', 'sql_text']) {
+    try {
+      const { error } = await sb.rpc('exec_sql', { [param]: CREATE_TABLE_SQL });
+      if (!error) {
+        console.log('[podcast-episodes] Auto-created podcast_episodes table via exec_sql');
+        // Notify PostgREST to reload schema
+        await sb.rpc('exec_sql', { [param]: "NOTIFY pgrst, 'reload schema';" }).catch(() => {});
+        return true;
+      }
+      if (error.message?.includes('already exists')) return true;
+      if (error.message?.includes('argument') || error.message?.includes('Could not find')) continue;
+    } catch { continue; }
+  }
+
+  // Fallback: REST endpoint
+  try {
+    const res = await fetch(`${url}/rest/v1/rpc/exec_sql`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({ sql: CREATE_TABLE_SQL }),
+    });
+    if (res.ok) {
+      console.log('[podcast-episodes] Auto-created podcast_episodes table via REST');
+      return true;
+    }
+  } catch {}
+
+  console.warn('[podcast-episodes] Could not auto-create table — run migration manually');
+  return false;
+}
 
 /* ── Mode detection (cached per process) ── */
 
@@ -33,6 +105,17 @@ async function detectMode(): Promise<StorageMode> {
         return 'relational';
       }
       console.warn('[podcast-episodes] detectMode relational check failed:', error.message);
+
+      // Table doesn't exist — try to create it
+      const created = await ensureTable();
+      if (created) {
+        // Re-check after creation
+        const { error: retryError } = await sb.from('podcast_episodes').select('id').limit(0);
+        if (!retryError) {
+          console.log('[podcast-episodes] Table auto-created successfully, using relational mode');
+          return 'relational';
+        }
+      }
     } catch (e) {
       console.warn('[podcast-episodes] detectMode threw:', e);
     }
