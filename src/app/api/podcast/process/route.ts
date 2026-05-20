@@ -50,7 +50,7 @@ async function ensureTable(): Promise<boolean> {
       const { error } = await supabase.rpc('exec_sql', { [param]: CREATE_TABLE_SQL });
       if (!error) {
         console.log('[podcast-process] Auto-created podcast_episodes table');
-        await supabase.rpc('exec_sql', { [param]: "NOTIFY pgrst, 'reload schema';" }).catch(() => {});
+        try { await supabase.rpc('exec_sql', { [param]: "NOTIFY pgrst, 'reload schema';" }); } catch {}
         return true;
       }
       if (error.message?.includes('already exists')) return true;

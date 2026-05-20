@@ -57,7 +57,7 @@ async function ensureTable(): Promise<boolean> {
       if (!error) {
         console.log('[podcast-episodes] Auto-created podcast_episodes table via exec_sql');
         // Notify PostgREST to reload schema
-        await sb.rpc('exec_sql', { [param]: "NOTIFY pgrst, 'reload schema';" }).catch(() => {});
+        try { await sb.rpc('exec_sql', { [param]: "NOTIFY pgrst, 'reload schema';" }); } catch {}
         return true;
       }
       if (error.message?.includes('already exists')) return true;
