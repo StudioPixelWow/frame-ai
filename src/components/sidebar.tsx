@@ -84,6 +84,12 @@ const ReportsIcon = () => (
   </svg>
 );
 
+const MetaBusinessIcon = () => (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125v-3.75m16.5 3.75v3.75c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125v-3.75" />
+  </svg>
+);
+
 const SeoGeoIcon = () => (
   <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503-6.97l.75-.75a2.25 2.25 0 10-3.182-3.182l-.75.75m0 0l-.75-.75a2.25 2.25 0 10-3.182 3.182l.75.75m0 0l-.75.75m.75-.75l.75.75" />
@@ -110,6 +116,7 @@ const sections = [
   { href: "/reports",         icon: <ReportsIcon />,         label: "Reports" },
   { href: "/editor",          icon: <VideoEditorIcon />,     label: "Video Editor" },
   { href: "/projects/new/podcast", icon: <ClipEngineIcon />, label: "AI Clip Engine" },
+  { href: "/settings/meta-business", icon: <MetaBusinessIcon />, label: "Meta Business" },
   { href: "/settings",        icon: <SettingsIcon />,        label: "Settings" },
 ];
 

@@ -25,6 +25,7 @@ import { TabAutomations } from "@/components/client/tab-automations";
 import TabCampaigns from "./tab-campaigns";
 import TabGrowth from "./tab-growth";
 import TabSeoGeo from "./tab-seo-geo";
+import DailyReportTab from "@/components/meta/daily-report-tab";
 
 // ── BI Health Badge (inline component) ──
 
@@ -97,7 +98,7 @@ const GANTT_STATUS_COLORS: Record<string, { label: string; color: string }> = {
   none: { label: "לא יוצר", color: "#9ca3af" },
 };
 
-type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "campaigns" | "seo" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos" | "automations" | "integrations" | "growth";
+type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "campaigns" | "seo" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos" | "automations" | "integrations" | "growth" | "daily-report";
 
 const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "overview", label: "סקירה" },
@@ -116,6 +117,7 @@ const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "portal", label: "פורטל" },
   { id: "automations", label: "אוטומציות" },
   { id: "growth", label: "צמיחה" },
+  { id: "daily-report", label: "דוח יומי" },
   { id: "integrations", label: "חיבורים" },
   { id: "activity", label: "פעילות" },
 ];
@@ -1352,6 +1354,9 @@ function ClientDetailContent() {
         )}
         {activeTab === "campaigns" && (
           <TabCampaigns client={client} />
+        )}
+        {activeTab === "daily-report" && (
+          <DailyReportTab clientId={client.id} />
         )}
         {activeTab === "ads" && (() => {
           const PLATFORM_ICONS: Record<string, string> = { facebook: "📘", instagram: "📸", tiktok: "🎵" };

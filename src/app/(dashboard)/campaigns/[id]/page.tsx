@@ -31,6 +31,7 @@ import {
   ACTION_TYPE_META,
 } from '@/lib/optimization/actions';
 import { generateVariation, VARIATION_STRATEGY_META } from '@/lib/optimization/variations';
+import DailyReportTab from '@/components/meta/daily-report-tab';
 
 // ── Labels ─────────────────────────────────────────────────────────────
 
@@ -3165,6 +3166,9 @@ export default function CampaignDetailPage() {
           </div>
         )}
       </div>
+
+      {/* ── Daily Report Section ────────────────────────────────── */}
+      <DailyReportTab campaignId={campaignId} />
 
       {/* ── Variation Preview Modal ───────────────────────────────── */}
       {variationPreview.show && variationPreview.variation && variationPreview.ad && (

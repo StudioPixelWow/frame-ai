@@ -42,7 +42,10 @@ export async function GET(request: NextRequest) {
 
     if (!appId || !appSecret) {
       console.error('[meta/callback] Missing META_APP_ID or META_APP_SECRET');
-      return NextResponse.redirect(`${baseUrl}/clients/${clientId}?tab=integrations&error=meta_config`);
+      const errorRedirect = clientId === 'system'
+        ? `${baseUrl}/settings/meta-business?error=meta_config`
+        : `${baseUrl}/clients/${clientId}?tab=integrations&error=meta_config`;
+      return NextResponse.redirect(errorRedirect);
     }
 
     // Exchange code for short-lived token
@@ -60,7 +63,10 @@ export async function GET(request: NextRequest) {
 
     if (!tokenRes.ok || tokenData.error) {
       console.error('[meta/callback] Token exchange failed:', tokenData.error || tokenData);
-      return NextResponse.redirect(`${baseUrl}/clients/${clientId}?tab=integrations&error=meta_token_exchange`);
+      const errorRedirect = clientId === 'system'
+        ? `${baseUrl}/settings/meta-business?error=meta_token_exchange`
+        : `${baseUrl}/clients/${clientId}?tab=integrations&error=meta_token_exchange`;
+      return NextResponse.redirect(errorRedirect);
     }
 
     const shortLivedToken = tokenData.access_token;
@@ -79,6 +85,49 @@ export async function GET(request: NextRequest) {
     const longLivedData = await longLivedRes.json();
 
     const accessToken = longLivedData.access_token || shortLivedToken;
+
+    // ── System-level BM connection ──
+    if (clientId === 'system') {
+      // Fetch business info
+      const meRes = await fetch(
+        `https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${encodeURIComponent(accessToken)}`
+      );
+      const meData = await meRes.json();
+
+      const configValue = {
+        access_token: accessToken,
+        business_id: meData.id || '',
+        business_name: meData.name || '',
+        connected_at: new Date().toISOString(),
+        status: 'connected',
+      };
+
+      // Save to app_settings
+      const { error: upsertError } = await supabase
+        .from('app_settings')
+        .upsert(
+          { key: 'meta_business_token', value: configValue, updated_at: new Date().toISOString() },
+          { onConflict: 'key' },
+        );
+
+      if (upsertError) {
+        console.warn('[meta/callback] app_settings upsert failed, trying app_meta_business:', upsertError.message);
+        // Fallback: app_meta_business
+        await supabase.from('app_meta_business').delete().neq('id', '');
+        const { error: insertError } = await supabase
+          .from('app_meta_business')
+          .insert({ id: 'system', config: configValue });
+
+        if (insertError) {
+          console.error('[meta/callback] System token save failed:', insertError.message);
+          return NextResponse.redirect(`${baseUrl}/settings/meta-business?error=meta_save`);
+        }
+      }
+
+      return NextResponse.redirect(`${baseUrl}/settings/meta-business?connected=true`);
+    }
+
+    // ── Per-client flow (existing behavior) ──
 
     // Fetch ad accounts
     const adAccountsRes = await fetch(
