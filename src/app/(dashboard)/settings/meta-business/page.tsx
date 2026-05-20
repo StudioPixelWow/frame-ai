@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 /* ── Types ── */
@@ -97,7 +97,7 @@ function accountStatusLabel(status: number): string {
 
 /* ── Component ── */
 
-export default function MetaBusinessSettingsPage() {
+function MetaBusinessSettingsContent() {
   const searchParams = useSearchParams();
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
   const [accounts, setAccounts] = useState<AdAccount[]>([]);
@@ -577,5 +577,13 @@ function AccountCard({
         )}
       </div>
     </div>
+  );
+}
+
+export default function MetaBusinessSettingsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-gray-500">טוען...</div>}>
+      <MetaBusinessSettingsContent />
+    </Suspense>
   );
 }
