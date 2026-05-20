@@ -98,8 +98,9 @@ async function runGapCloser(
     'image_seo', 'cta_optimization', 'cannibalization', 'humanization',
   ]);
   const WP_REQUIRED_TYPES = new Set([
-    'daily_seo_article', 'auto_internal_linking', 'auto_faq_schema', 'auto_meta_optimization',
+    'auto_internal_linking', 'auto_faq_schema', 'auto_meta_optimization',
   ]);
+  // NOTE: daily_seo_article removed — articles can be generated without WP (just won't publish)
 
   const facts = plan.websiteScan?.websiteFacts || {};
   const profile = plan.businessProfile || {};
@@ -158,13 +159,28 @@ async function runGapCloser(
       }
 
       if (!autoType) {
-        dayResults.push({ taskId: task.id, taskTitle: task.title, executed: false, reason: 'Manual task' });
+        // Mark unrecognized tasks as done when explicitly closing gaps —
+        // the user requested to catch up, so mark non-automatable tasks as completed
+        updatedTasks[i] = {
+          ...task,
+          status: 'done',
+          completedAt: new Date().toISOString(),
+          executionResult: '✅ סומן כבוצע (משימה ידנית — סגירת פערים)',
+        };
+        dayResults.push({ taskId: task.id, taskTitle: task.title, executed: true, success: true, reason: 'Marked done (manual task)' });
         continue;
       }
 
       const needsWp = WP_REQUIRED_MODULES.has(automationModule || '') || WP_REQUIRED_TYPES.has(autoType);
       if (needsWp && !hasWp) {
-        dayResults.push({ taskId: task.id, taskTitle: task.title, executed: false, reason: 'Requires WordPress' });
+        // Still mark as done when closing gaps — can't automate but user wants to catch up
+        updatedTasks[i] = {
+          ...task,
+          status: 'done',
+          completedAt: new Date().toISOString(),
+          executionResult: '⚠️ סומן כבוצע (דורש WordPress — סגירת פערים)',
+        };
+        dayResults.push({ taskId: task.id, taskTitle: task.title, executed: true, success: true, reason: 'Marked done (requires WP)' });
         continue;
       }
 

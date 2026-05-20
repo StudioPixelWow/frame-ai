@@ -97,7 +97,8 @@ async function processPlanDailyTasks(plan: any) {
     'internal_linking', 'faq_schema', 'meta_optimization', 'content_refresh',
     'image_seo', 'cta_optimization', 'cannibalization', 'humanization',
   ]);
-  const WP_REQUIRED_TYPES = new Set(['daily_seo_article', 'auto_internal_linking', 'auto_faq_schema', 'auto_meta_optimization']);
+  // NOTE: daily_seo_article removed — articles can be generated without WP (just won't publish)
+  const WP_REQUIRED_TYPES = new Set(['auto_internal_linking', 'auto_faq_schema', 'auto_meta_optimization']);
 
   const facts = plan.websiteScan?.websiteFacts || {};
   const profile = plan.businessProfile || {};
