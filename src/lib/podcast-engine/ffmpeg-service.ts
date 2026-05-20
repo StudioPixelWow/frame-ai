@@ -4,6 +4,8 @@
  * Wraps ffmpeg commands for audio extraction, chunking, and segment cutting.
  * Uses child_process.execFile for safe, shell-injection-free execution.
  *
+ * Uses ffmpeg-static npm package for Vercel compatibility (no system ffmpeg needed).
+ *
  * All user-facing strings are in Hebrew.
  */
 
@@ -13,6 +15,28 @@ import { existsSync } from "fs";
 import path from "path";
 
 const execFileAsync = promisify(execFile);
+
+// ── FFmpeg binary resolution ───────────────────────────────────────────────
+// ffmpeg-static provides a pre-built binary that works on Vercel serverless.
+// Falls back to system "ffmpeg" / "ffprobe" if the package isn't installed.
+
+let _ffmpegPath: string = "ffmpeg";
+let _ffprobePath: string = "ffprobe";
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const ffmpegStatic = require("ffmpeg-static") as string;
+  if (ffmpegStatic) {
+    _ffmpegPath = ffmpegStatic;
+    // ffprobe-static isn't always available — derive path from ffmpeg binary
+    const ffprobeCandidate = ffmpegStatic.replace(/ffmpeg([^/\\]*)$/, "ffprobe$1");
+    if (existsSync(ffprobeCandidate)) {
+      _ffprobePath = ffprobeCandidate;
+    }
+  }
+} catch {
+  // ffmpeg-static not installed — keep system defaults
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -60,7 +84,7 @@ function assertFileExists(filePath: string, label: string): void {
  */
 async function runFfmpeg(args: string[]): Promise<{ stdout: string; stderr: string }> {
   try {
-    return await execFileAsync("ffmpeg", args, { timeout: EXEC_TIMEOUT_MS });
+    return await execFileAsync(_ffmpegPath, args, { timeout: EXEC_TIMEOUT_MS });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`שגיאת FFmpeg: ${msg}`);
@@ -72,7 +96,7 @@ async function runFfmpeg(args: string[]): Promise<{ stdout: string; stderr: stri
  */
 async function getMediaDuration(filePath: string): Promise<number> {
   try {
-    const { stdout } = await execFileAsync("ffprobe", [
+    const { stdout } = await execFileAsync(_ffprobePath, [
       "-v", "error",
       "-show_entries", "format=duration",
       "-of", "default=noprint_wrappers=1:nokey=1",

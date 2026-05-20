@@ -129,7 +129,7 @@ export async function PATCH(req: NextRequest) {
 
     const updatePayload: Record<string, unknown> = { status };
 
-    if (outputUrl) updatePayload.output_url = outputUrl;
+    if (outputUrl) updatePayload.output_file_path = outputUrl;
     if (renderError) updatePayload.error_message = renderError;
     if (status === 'completed' || status === 'failed') {
       updatePayload.completed_at = new Date().toISOString();
