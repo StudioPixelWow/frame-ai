@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
 
     while (url && pageCount < 20) {
       pageCount++;
-      const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
+      const res: Response = await fetch(url, { signal: AbortSignal.timeout(30000) });
       const body = await res.json();
 
       if (!res.ok || body.error) {
