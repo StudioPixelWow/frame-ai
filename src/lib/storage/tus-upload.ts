@@ -28,8 +28,8 @@ export interface TusUploadOptions {
 
 /* ── Constants ─────────────────────────────────────────────────────────── */
 
-const DEFAULT_CHUNK_SIZE = 6 * 1024 * 1024; // 6 MB
-const MAX_RETRIES = 3;
+const DEFAULT_CHUNK_SIZE = 2 * 1024 * 1024; // 2 MB — smaller chunks avoid Supabase 544 timeouts
+const MAX_RETRIES = 5;
 
 /* ── TusUploader ───────────────────────────────────────────────────────── */
 
@@ -223,11 +223,12 @@ export class TusUploader {
 
   /**
    * Build exponential backoff retry delays array for tus-js-client.
+   * Longer delays help when Supabase returns 544 (DB connection timeout).
    */
   private buildRetryDelays(maxRetries: number): number[] {
     const delays: number[] = [];
     for (let i = 0; i < maxRetries; i++) {
-      delays.push(Math.min(1000 * Math.pow(2, i), 8000));
+      delays.push(Math.min(2000 * Math.pow(2, i), 30000)); // 2s, 4s, 8s, 16s, 30s
     }
     return delays;
   }

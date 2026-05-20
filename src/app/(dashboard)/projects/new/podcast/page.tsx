@@ -400,7 +400,11 @@ export default function PodcastClipEnginePage() {
           );
         },
         onError: (err) => {
-          setProcessingError(`Upload failed: ${err.message}`);
+          const is544 = err.message?.includes('544') || err.message?.includes('timed out');
+          const msg = is544
+            ? 'שגיאת חיבור לשרת — הקובץ גדול מדי או השרת עמוס. נסה שוב בעוד כמה שניות.'
+            : `העלאה נכשלה: ${err.message}`;
+          setProcessingError(msg);
           setProcessingStages((prev) =>
             prev.map((s) =>
               s.key === 'upload' ? { ...s, status: 'error' as const } : s,
