@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 import { runDailyOptimization, generateDailyReport, type DailyOptimizerResult, type DailyReport } from '@/lib/meta-ads/daily-optimizer';
+import { syncClientMetaAccount } from '@/lib/meta-ads/sync-service';
 import type { Client, Campaign, AdSet, Ad } from '@/lib/db/schema';
 
 export const dynamic = 'force-dynamic';
@@ -90,7 +91,17 @@ export async function POST(req: NextRequest) {
 
         if (!accessToken || !adAccountId) continue;
 
-        // Load campaigns, adsets, ads for this client
+        // Sync latest data from Meta FIRST — imports campaigns/adsets/ads
+        // that exist on Meta but weren't created through our system
+        try {
+          console.log(`[daily-optimize] Syncing Meta data for "${client.name}"...`);
+          await syncClientMetaAccount(client.id, client.name || '', adAccountId, accessToken);
+          console.log(`[daily-optimize] Sync complete for "${client.name}"`);
+        } catch (syncErr) {
+          console.warn(`[daily-optimize] Sync failed for "${client.name}", continuing with local data:`, syncErr);
+        }
+
+        // Load campaigns, adsets, ads for this client (now includes synced external campaigns)
         const { data: campaigns } = await sb
           .from('campaigns')
           .select('*')
