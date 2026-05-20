@@ -352,7 +352,7 @@ export async function runDailyOptimization(
             campaignId: metaCampaignId,
             name: `${audience.name} — ${today} [אוטומטי]`,
             status: 'ACTIVE',
-            dailyBudget: Math.round((campaign.dailyBudget || 5000) * 0.2 * 100), // 20% of main budget, in cents
+            dailyBudget: Math.round((campaign.budget || 5000) * 0.2 * 100), // 20% of main budget, in cents
             billingEvent: 'IMPRESSIONS',
             optimizationGoal: 'LEAD_GENERATION',
             targeting: {
@@ -390,9 +390,9 @@ export async function runDailyOptimization(
                   message: variation.newPrimaryText,
                   headline: variation.newHeadline,
                   description: variation.newDescription,
-                  linkUrl: topAd.linkUrl || (topAd as any)?.creative?.linkUrl || '',
+                  linkUrl: topAd.ctaLink || (topAd as any)?.creative?.linkUrl || '',
                   imageHash: (topAd as any)?.imageHash || undefined,
-                  imageUrl: topAd.imageUrl || (topAd as any)?.creative?.imageUrl || '',
+                  imageUrl: topAd.mediaUrl || (topAd as any)?.creative?.imageUrl || '',
                   callToAction: variation.newCtaType || 'LEARN_MORE',
                 },
               };
@@ -441,7 +441,7 @@ export async function runDailyOptimization(
           actions.push({
             type: 'pause_adset',
             objectId: worst.id,
-            objectName: worst.adSetName,
+            objectName: worst.name,
             description: `השהיית אוטומטית — CPL עולה ב-${Math.round(cplTrend.cplDeltaPct)}%. סדרת מודעות זו הכי יקרה.`,
             success: true,
           });
@@ -572,7 +572,7 @@ export function generateDailyReport(
       // Top ad (lowest CPL with leads)
       const adsWithLeads = cAds.filter(a => a.leads > 0 && a.cpl > 0).sort((a, b) => a.cpl - b.cpl);
       const topAd = adsWithLeads.length > 0
-        ? { name: adsWithLeads[0].adName, cpl: adsWithLeads[0].cpl, leads: adsWithLeads[0].leads }
+        ? { name: adsWithLeads[0].name, cpl: adsWithLeads[0].cpl, leads: adsWithLeads[0].leads }
         : null;
 
       // Worst ad (highest spend with no/few leads)
@@ -582,7 +582,7 @@ export function generateDailyReport(
         return bCpl - aCpl;
       });
       const worstAd = worstAds.length > 0
-        ? { name: worstAds[0].adName, cpl: worstAds[0].leads > 0 ? worstAds[0].spend / worstAds[0].leads : 0, spend: worstAds[0].spend }
+        ? { name: worstAds[0].name, cpl: worstAds[0].leads > 0 ? worstAds[0].spend / worstAds[0].leads : 0, spend: worstAds[0].spend }
         : null;
 
       const actionsCount = result.actionsExecuted.filter(a =>
