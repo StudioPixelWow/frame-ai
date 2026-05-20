@@ -29,6 +29,18 @@ export async function POST(
       return NextResponse.json({ error: 'תוכנית ללא ימים או ללא תאריך התחלה' }, { status: 400 });
     }
 
+    // Auto-reset stuck gapClosing — if active for more than 15 minutes, consider it dead
+    const gc = (plan as any).gapClosing;
+    if (gc?.active && gc?.startedAt) {
+      const stuckMinutes = (Date.now() - new Date(gc.startedAt).getTime()) / 60000;
+      if (stuckMinutes > 15) {
+        console.log(`[CLOSE-GAPS] Auto-resetting stuck gapClosing (${Math.round(stuckMinutes)} minutes)`);
+        await updatePlanSafe(planId, {
+          gapClosing: { ...gc, active: false, completedAt: new Date().toISOString(), error: 'Timeout — auto-reset after 15 minutes' },
+        } as any);
+      }
+    }
+
     const generatedAt = new Date(plan.generatedAt);
     const now = new Date();
     const todayDayNumber = Math.min(
@@ -68,7 +80,27 @@ export async function POST(
 
     // Run in background after response is sent (Vercel-safe)
     after(async () => {
-      await runGapCloser(planId, plan, gapDays, todayDayNumber);
+      try {
+        await runGapCloser(planId, plan, gapDays, todayDayNumber);
+      } catch (err) {
+        console.error(`[CLOSE-GAPS] Fatal error in runGapCloser:`, err);
+        // Reset gapClosing so UI doesn't stay stuck forever
+        try {
+          await updatePlanSafe(planId, {
+            gapClosing: {
+              active: false,
+              startedAt: plan.gapClosing?.startedAt || new Date().toISOString(),
+              completedAt: new Date().toISOString(),
+              totalDays: gapDays.length,
+              completedDays: 0,
+              currentDay: null,
+              error: err instanceof Error ? err.message : 'Unknown error',
+            },
+          } as any);
+        } catch (resetErr) {
+          console.error(`[CLOSE-GAPS] Failed to reset gapClosing state:`, resetErr);
+        }
+      }
     });
 
     return NextResponse.json(
@@ -86,6 +118,17 @@ export async function POST(
   }
 }
 
+// ── Timeout wrapper ──────────────────────────────────────────────
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout: ${label} took more than ${ms / 1000}s`)), ms)
+    ),
+  ]);
+}
+
 // ── Background gap closer ─────────────────────────────────────────
 
 async function runGapCloser(
@@ -94,6 +137,7 @@ async function runGapCloser(
   gapDays: any[],
   todayDayNumber: number
 ): Promise<void> {
+  console.log(`[CLOSE-GAPS] Starting runGapCloser for plan ${planId} — ${gapDays.length} gap days, today=${todayDayNumber}`);
   const hasWp = !!(plan.wpConnection?.siteUrl);
   const WP_REQUIRED_MODULES = new Set([
     'internal_linking', 'faq_schema', 'meta_optimization', 'content_refresh',
@@ -196,10 +240,19 @@ async function runGapCloser(
         }
 
         let result: AutoTaskResult;
+        const TASK_TIMEOUT_MS = 60_000; // 60 seconds max per task
         if (automationModule) {
-          result = await executeAutomationModule(autoType, context, task.automationConfig);
+          result = await withTimeout(
+            executeAutomationModule(autoType, context, task.automationConfig),
+            TASK_TIMEOUT_MS,
+            `${automationModule} (day ${dayNumber})`
+          );
         } else {
-          result = await executeAutoTask(autoType, context);
+          result = await withTimeout(
+            executeAutoTask(autoType, context),
+            TASK_TIMEOUT_MS,
+            `${autoType} (day ${dayNumber})`
+          );
         }
 
         updatedTasks[i] = {

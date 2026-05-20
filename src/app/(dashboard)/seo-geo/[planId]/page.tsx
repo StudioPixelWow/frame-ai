@@ -2076,7 +2076,12 @@ export default function SeoPlanDetail() {
                     // Show if at least 2 days have pending tasks (today + at least 1 gap)
                     if (missedCount < 2) return null;
                     const gapClosing = (p as any).gapClosing;
-                    const isRunning = closingGaps || gapClosing?.active;
+                    // Detect stuck state — if active for more than 15 minutes, consider dead
+                    const gcStuckMinutes = gapClosing?.active && gapClosing?.startedAt
+                      ? (Date.now() - new Date(gapClosing.startedAt).getTime()) / 60000
+                      : 0;
+                    const isStuck = gcStuckMinutes > 15;
+                    const isRunning = (closingGaps || gapClosing?.active) && !isStuck;
 
                     const gcCompleted = gapClosing?.completedDays || 0;
                     const gcTotal = gapClosing?.totalDays || missedCount;
@@ -2093,13 +2098,17 @@ export default function SeoPlanDetail() {
                         {/* Header row */}
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: isRunning ? 12 : 0 }}>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: isRunning ? C.primary : C.warning, marginBottom: 2 }}>
-                              {isRunning ? "🔄 סגירת פערים פעילה" : `⚠️ נמצאו ${missedCount} ימים עם משימות ממתינות (יום 1 עד ${todayNum})`}
+                            <div style={{ fontSize: 13, fontWeight: 700, color: isStuck ? "#ef4444" : isRunning ? C.primary : C.warning, marginBottom: 2 }}>
+                              {isStuck
+                                ? "❌ סגירת פערים נתקעה — לחץ כדי לנסות שוב"
+                                : isRunning ? "🔄 סגירת פערים פעילה" : `⚠️ נמצאו ${missedCount} ימים עם משימות ממתינות (יום 1 עד ${todayNum})`}
                             </div>
                             <div style={{ fontSize: 11, color: C.textMuted }}>
-                              {isRunning && gapClosing?.currentDay
-                                ? `מעבד יום ${gapClosing.currentDay} מתוך ${gcTotal} ימים — ${gcCompleted} הושלמו`
-                                : "לחץ לסגור פערים — המערכת תריץ את כל הימים שפוספסו ברצף"}
+                              {isStuck
+                                ? `התחיל לפני ${Math.round(gcStuckMinutes)} דקות — ככל הנראה התהליך ברקע קרס`
+                                : isRunning && gapClosing?.currentDay
+                                  ? `מעבד יום ${gapClosing.currentDay} מתוך ${gcTotal} ימים — ${gcCompleted} הושלמו`
+                                  : "לחץ לסגור פערים — המערכת תריץ את כל הימים שפוספסו ברצף"}
                             </div>
                             {gapStatus && (
                               <div style={{ fontSize: 11, marginTop: 4, fontWeight: 600, color: gapStatus.includes("הושלם") ? "#10b981" : gapStatus.includes("שגיאה") ? "#ef4444" : C.primary }}>
