@@ -89,7 +89,7 @@ export async function POST(
           await updatePlanSafe(planId, {
             gapClosing: {
               active: false,
-              startedAt: plan.gapClosing?.startedAt || new Date().toISOString(),
+              startedAt: (plan as any).gapClosing?.startedAt || new Date().toISOString(),
               completedAt: new Date().toISOString(),
               totalDays: gapDays.length,
               completedDays: 0,
@@ -176,7 +176,7 @@ async function runGapCloser(
     await updatePlanSafe(planId, {
       gapClosing: {
         active: true,
-        startedAt: plan.gapClosing?.startedAt || new Date().toISOString(),
+        startedAt: (plan as any).gapClosing?.startedAt || new Date().toISOString(),
         totalDays: gapDays.length,
         completedDays: completedDaysCount,
         currentDay: dayNumber,
@@ -306,7 +306,7 @@ async function runGapCloser(
       automationLog,
       gapClosing: {
         active: true,
-        startedAt: plan.gapClosing?.startedAt || new Date().toISOString(),
+        startedAt: (plan as any).gapClosing?.startedAt || new Date().toISOString(),
         totalDays: gapDays.length,
         completedDays: completedDaysCount,
         currentDay: dayNumber,
@@ -327,7 +327,7 @@ async function runGapCloser(
   await updatePlanSafe(planId, {
     gapClosing: {
       active: false,
-      startedAt: plan.gapClosing?.startedAt || new Date().toISOString(),
+      startedAt: (plan as any).gapClosing?.startedAt || new Date().toISOString(),
       completedAt: new Date().toISOString(),
       totalDays: gapDays.length,
       completedDays: completedDaysCount,
