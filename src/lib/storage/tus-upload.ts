@@ -5,6 +5,10 @@
  * files (up to 24 GB).
  *
  * Supabase TUS endpoint: ${supabaseUrl}/storage/v1/upload/resumable
+ *
+ * 544 = Supabase DB connection pool exhausted.
+ * Mitigations: 1 MB chunks, long exponential backoff (5s → 60s),
+ * onShouldRetry always retries on 544, parallelUploads=1.
  */
 
 import * as tus from 'tus-js-client';
@@ -20,16 +24,17 @@ export interface TusUploadOptions {
   onSuccess?: (url: string) => void;
   /** Custom metadata key-value pairs sent via Upload-Metadata header. */
   metadata?: Record<string, string>;
-  /** Override default chunk size (bytes). Default 6 MB (Supabase default). */
+  /** Override default chunk size (bytes). Default 1 MB. */
   chunkSize?: number;
-  /** Max retry attempts per chunk. Default 3. */
+  /** Max retry attempts per chunk. Default 8. */
   maxRetries?: number;
 }
 
 /* ── Constants ─────────────────────────────────────────────────────────── */
 
-const DEFAULT_CHUNK_SIZE = 2 * 1024 * 1024; // 2 MB — smaller chunks avoid Supabase 544 timeouts
-const MAX_RETRIES = 5;
+// 1 MB chunks — keeps Supabase connection pool happy
+const DEFAULT_CHUNK_SIZE = 1 * 1024 * 1024;
+const MAX_RETRIES = 8;
 
 /* ── TusUploader ───────────────────────────────────────────────────────── */
 
@@ -82,7 +87,22 @@ export class TusUploader {
         },
         removeFingerprintOnSuccess: true,
 
+        // Always retry on 544 (DB connection timeout)
+        onShouldRetry: (err: any, retryAttempt: number, _options: any) => {
+          const status = err?.originalResponse?.getStatus?.() || 0;
+          const msg = err?.message || '';
+          const is544 = status === 544 || msg.includes('544');
+          const isNetwork = msg.includes('network') || msg.includes('fetch') || status === 0;
+          console.log(`[TUS] onShouldRetry: status=${status} attempt=${retryAttempt} is544=${is544} isNetwork=${isNetwork}`);
+          // Always retry on 544 and network errors
+          if (is544 || isNetwork) return true;
+          // Don't retry on 4xx client errors (except 408, 429)
+          if (status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
+          return true;
+        },
+
         onError: (err: Error) => {
+          console.error('[TUS] Upload failed after all retries:', err.message);
           options.onError?.(err);
           reject(err);
         },
@@ -101,13 +121,25 @@ export class TusUploader {
 
         onSuccess: () => {
           const publicUrl = `${this.supabaseUrl}/storage/v1/object/public/${bucket}/${path}`;
+          console.log('[TUS] Upload complete:', publicUrl);
           options.onSuccess?.(publicUrl);
           resolve(publicUrl);
         },
       });
 
       this.currentUpload = upload;
-      upload.start();
+
+      // Try to resume a previous upload for this file first
+      upload.findPreviousUploads().then((previousUploads) => {
+        if (previousUploads.length > 0) {
+          console.log('[TUS] Resuming previous upload');
+          upload.resumeFromPreviousUpload(previousUploads[0]);
+        }
+        upload.start();
+      }).catch(() => {
+        // No previous upload found, start fresh
+        upload.start();
+      });
     });
   }
 
@@ -142,6 +174,16 @@ export class TusUploader {
           ...(options.metadata ?? {}),
         },
         removeFingerprintOnSuccess: true,
+
+        onShouldRetry: (err: any, retryAttempt: number, _options: any) => {
+          const status = err?.originalResponse?.getStatus?.() || 0;
+          const msg = err?.message || '';
+          const is544 = status === 544 || msg.includes('544');
+          const isNetwork = msg.includes('network') || msg.includes('fetch') || status === 0;
+          if (is544 || isNetwork) return true;
+          if (status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
+          return true;
+        },
 
         onError: (err: Error) => {
           options.onError?.(err);
@@ -223,12 +265,14 @@ export class TusUploader {
 
   /**
    * Build exponential backoff retry delays array for tus-js-client.
-   * Longer delays help when Supabase returns 544 (DB connection timeout).
+   * Aggressive delays: 5s, 10s, 15s, 20s, 30s, 45s, 60s, 60s
+   * Supabase 544 = connection pool exhausted — needs long cooldown.
    */
   private buildRetryDelays(maxRetries: number): number[] {
     const delays: number[] = [];
     for (let i = 0; i < maxRetries; i++) {
-      delays.push(Math.min(2000 * Math.pow(2, i), 30000)); // 2s, 4s, 8s, 16s, 30s
+      // 5s, 10s, 15s, 20s, 30s, 45s, 60s, 60s...
+      delays.push(Math.min(5000 + (i * 5000) + (i > 3 ? i * 5000 : 0), 60000));
     }
     return delays;
   }
