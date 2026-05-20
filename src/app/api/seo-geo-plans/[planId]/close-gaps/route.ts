@@ -5,7 +5,7 @@
  * מחזיר 202 ומריץ ברקע. הפרונט יכול לפולל את הסטטוס מה-plan.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { seoPlans } from '@/lib/db';
 import { executeAutoTask, executeAutomationModule, mapPlanTaskToAutoType, AutomationContext, AutoTaskResult, AutoTaskType } from '@/lib/seo/seo-automator';
 import { updatePlanSafe, logActivity, mergeAllKeywords } from '@/lib/seo/api-helpers';
@@ -66,8 +66,10 @@ export async function POST(
       },
     } as any);
 
-    // Fire-and-forget
-    void runGapCloser(planId, plan, gapDays, todayDayNumber);
+    // Run in background after response is sent (Vercel-safe)
+    after(async () => {
+      await runGapCloser(planId, plan, gapDays, todayDayNumber);
+    });
 
     return NextResponse.json(
       {
