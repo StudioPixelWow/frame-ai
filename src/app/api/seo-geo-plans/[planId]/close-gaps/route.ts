@@ -5,7 +5,7 @@
  * מחזיר 202 ומריץ ברקע. הפרונט יכול לפולל את הסטטוס מה-plan.
  */
 
-import { NextRequest, NextResponse, after } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { seoPlans } from '@/lib/db';
 import { executeAutoTask, executeAutomationModule, mapPlanTaskToAutoType, AutomationContext, AutoTaskResult, AutoTaskType } from '@/lib/seo/seo-automator';
 import { updatePlanSafe, logActivity, mergeAllKeywords } from '@/lib/seo/api-helpers';
@@ -78,40 +78,38 @@ export async function POST(
       },
     } as any);
 
-    // Run in background after response is sent (Vercel-safe)
-    after(async () => {
-      try {
-        await runGapCloser(planId, plan, gapDays, todayDayNumber);
-      } catch (err) {
-        console.error(`[CLOSE-GAPS] Fatal error in runGapCloser:`, err);
-        // Reset gapClosing so UI doesn't stay stuck forever
-        try {
-          await updatePlanSafe(planId, {
-            gapClosing: {
-              active: false,
-              startedAt: (plan as any).gapClosing?.startedAt || new Date().toISOString(),
-              completedAt: new Date().toISOString(),
-              totalDays: gapDays.length,
-              completedDays: 0,
-              currentDay: null,
-              error: err instanceof Error ? err.message : 'Unknown error',
-            },
-          } as any);
-        } catch (resetErr) {
-          console.error(`[CLOSE-GAPS] Failed to reset gapClosing state:`, resetErr);
-        }
-      }
-    });
-
-    return NextResponse.json(
-      {
+    // Run synchronously (after() doesn't work reliably on Vercel)
+    try {
+      await runGapCloser(planId, plan, gapDays, todayDayNumber);
+      return NextResponse.json({
         success: true,
-        message: `סגירת פערים התחילה — ${gapDays.length} ימים עם משימות ממתינות`,
+        message: `סגירת פערים הושלמה — ${gapDays.length} ימים עובדו`,
         gapDaysCount: gapDays.length,
         dayNumbers: gapDays.map((d: any) => d.day),
-      },
-      { status: 202 }
-    );
+      });
+    } catch (err) {
+      console.error(`[CLOSE-GAPS] Fatal error in runGapCloser:`, err);
+      // Reset gapClosing so UI doesn't stay stuck forever
+      try {
+        await updatePlanSafe(planId, {
+          gapClosing: {
+            active: false,
+            startedAt: (plan as any).gapClosing?.startedAt || new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+            totalDays: gapDays.length,
+            completedDays: 0,
+            currentDay: null,
+            error: err instanceof Error ? err.message : 'Unknown error',
+          },
+        } as any);
+      } catch (resetErr) {
+        console.error(`[CLOSE-GAPS] Failed to reset gapClosing state:`, resetErr);
+      }
+      return NextResponse.json(
+        { error: `סגירת פערים נכשלה: ${err instanceof Error ? err.message : 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: `שגיאה: ${message}` }, { status: 500 });
