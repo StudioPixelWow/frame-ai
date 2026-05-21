@@ -2122,43 +2122,48 @@ export default function SeoPlanDetail() {
                               if (!confirm(`האם להריץ את כל ${missedCount} הימים שפוספסו? זה עלול לקחת מספר דקות.`)) return;
                               setClosingGaps(true);
                               setGapStatus("מתחיל סגירת פערים...");
-                              try {
-                                const res = await fetch(`/api/seo-geo-plans/${planId}/close-gaps`, {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                });
+
+                              // Fire-and-forget: API processes synchronously (may take minutes)
+                              // We start polling immediately without waiting for the response
+                              fetch(`/api/seo-geo-plans/${planId}/close-gaps`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                              }).then(async (res) => {
                                 const data = await res.json().catch(() => ({}));
-                                if (res.ok) {
-                                  setGapStatus(`התחיל! ${data.gapDaysCount} ימים בתהליך...`);
-                                  const pollInterval = setInterval(async () => {
-                                    try {
-                                      const pollRes = await fetch(`/api/data/seo-plans/${planId}`);
-                                      if (pollRes.ok) {
-                                        const updatedPlan = await pollRes.json();
-                                        setPlan(updatedPlan);
-                                        const gc = updatedPlan.gapClosing;
-                                        if (gc?.active) {
-                                          setGapStatus(`מעבד יום ${gc.currentDay}... (${gc.completedDays || 0}/${gc.totalDays})`);
-                                        } else {
-                                          setGapStatus(`✅ הושלם! ${gc?.completedDays || missedCount} ימים עובדו בהצלחה`);
-                                          setClosingGaps(false);
-                                          clearInterval(pollInterval);
-                                          setTimeout(() => setGapStatus(null), 10000);
-                                        }
-                                      }
-                                    } catch {}
-                                  }, 4000);
-                                  setTimeout(() => { clearInterval(pollInterval); setClosingGaps(false); }, 600000);
-                                } else {
+                                if (!res.ok) {
                                   setGapStatus(`שגיאה: ${data.error || "Unknown"}`);
                                   setClosingGaps(false);
-                                  setTimeout(() => setGapStatus(null), 5000);
+                                  setTimeout(() => setGapStatus(null), 8000);
                                 }
-                              } catch (e) {
-                                setGapStatus("שגיאת רשת");
-                                setClosingGaps(false);
-                                setTimeout(() => setGapStatus(null), 5000);
-                              }
+                                // On success the polling below will detect gapClosing.active=false
+                              }).catch(() => {
+                                // Network error — polling will still detect the final state
+                              });
+
+                              // Start polling immediately — picks up gapClosing progress from DB
+                              const pollInterval = setInterval(async () => {
+                                try {
+                                  const pollRes = await fetch(`/api/data/seo-plans/${planId}`);
+                                  if (pollRes.ok) {
+                                    const updatedPlan = await pollRes.json();
+                                    setPlan(updatedPlan);
+                                    const gc = updatedPlan.gapClosing;
+                                    if (gc?.active) {
+                                      setGapStatus(`מעבד יום ${gc.currentDay}... (${gc.completedDays || 0}/${gc.totalDays})`);
+                                    } else if (gc?.completedAt) {
+                                      const msg = gc.error
+                                        ? `❌ שגיאה: ${gc.error}`
+                                        : `✅ הושלם! ${gc.completedDays || missedCount} ימים עובדו בהצלחה`;
+                                      setGapStatus(msg);
+                                      setClosingGaps(false);
+                                      clearInterval(pollInterval);
+                                      setTimeout(() => setGapStatus(null), 10000);
+                                    }
+                                  }
+                                } catch {}
+                              }, 3000);
+                              // Safety timeout: 10 minutes max
+                              setTimeout(() => { clearInterval(pollInterval); setClosingGaps(false); }, 600000);
                             }}
                             style={{
                               padding: "10px 24px", borderRadius: 10, border: "none",
