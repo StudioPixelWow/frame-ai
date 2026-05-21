@@ -525,6 +525,6 @@ export class SupabaseCrud<T extends { id: string }> {
       throw new Error(`Failed to query ${this.tableName}: ${error.message}`);
     }
 
-    return (rows ?? []).map((r: { id: string; data: unknown }) => this.rowToEntity(r));
+    return ((rows ?? []) as Array<{ id: string; data: unknown }>).map((r) => this.rowToEntity(r));
   }
 }
