@@ -485,4 +485,46 @@ export class SupabaseCrud<T extends { id: string }> {
     const all = await this.getAllAsync();
     return all.length;
   }
+
+  /**
+   * Run a filtered query using Supabase's JSONB operators.
+   * Avoids loading ALL rows when you only need a subset.
+   *
+   * Example: queryFilteredAsync([{ column: 'data->status', op: 'in', value: '("active","plan_generated")' }])
+   */
+  async queryFilteredAsync(
+    filters: Array<{ column: string; op: 'eq' | 'in' | 'neq' | 'like' | 'is'; value: any }>,
+    options?: { select?: string; limit?: number; timeout?: number }
+  ): Promise<T[]> {
+    await this.ensureTableExists();
+    const sb = getSupabase();
+
+    let query = sb
+      .from(this.tableName)
+      .select(options?.select || 'id, data')
+      .order('created_at', { ascending: true });
+
+    for (const f of filters) {
+      switch (f.op) {
+        case 'eq': query = query.eq(f.column, f.value); break;
+        case 'neq': query = query.neq(f.column, f.value); break;
+        case 'in': query = query.in(f.column, f.value); break;
+        case 'like': query = query.like(f.column, f.value); break;
+        case 'is': query = query.is(f.column, f.value); break;
+      }
+    }
+
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+
+    const { data: rows, error } = await query;
+
+    if (error) {
+      console.error(`[SupabaseCrud][${this.tableName}] queryFilteredAsync error:`, error.message);
+      throw new Error(`Failed to query ${this.tableName}: ${error.message}`);
+    }
+
+    return (rows ?? []).map((r: { id: string; data: unknown }) => this.rowToEntity(r));
+  }
 }

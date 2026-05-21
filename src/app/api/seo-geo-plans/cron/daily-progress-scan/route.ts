@@ -44,13 +44,15 @@ export async function GET(req: NextRequest) {
   console.log('[SEO-DAILY-SCAN] סריקה יומית התחילה', new Date().toISOString());
 
   try {
-    const allPlans = await seoPlans.getAllAsync();
+    // Use filtered query to avoid statement timeout on 95+ plans
+    const allPlans = await seoPlans.queryFilteredAsync([
+      { column: 'data->>status', op: 'in', value: ['active', 'plan_generated', 'visibility_done'] },
+    ]);
     const activePlans = allPlans.filter((p: any) => {
-      const hasActiveStatus = p.status === 'active' || p.status === 'plan_generated' || p.status === 'visibility_done';
       // Accept plans with clientKeywords OR targetKeywords (some plans store keywords differently)
       const hasKeywords = (Array.isArray(p.clientKeywords) && p.clientKeywords.length > 0)
         || (Array.isArray(p.targetKeywords) && p.targetKeywords.length > 0);
-      return hasActiveStatus && hasKeywords;
+      return hasKeywords;
     });
 
     if (activePlans.length === 0) {

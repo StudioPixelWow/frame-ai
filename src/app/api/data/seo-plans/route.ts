@@ -9,15 +9,32 @@ function generateId(): string {
 
 export async function GET(req: NextRequest) {
   try {
-    const data = await seoPlans.getAllAsync();
-    // Optional: filter by clientId query param
     const clientId = req.nextUrl.searchParams.get('clientId');
-    const filtered = clientId ? data.filter((p: any) => p.clientId === clientId) : data;
+    const status = req.nextUrl.searchParams.get('status'); // e.g. "active,plan_generated"
+
+    // Build filters to avoid loading all 95+ plans (causes statement timeout)
+    const filters: Array<{ column: string; op: 'eq' | 'in' | 'neq' | 'like' | 'is'; value: any }> = [];
+
+    if (clientId) {
+      filters.push({ column: 'data->>clientId', op: 'eq', value: clientId });
+    }
+
+    if (status) {
+      const statuses = status.split(',').map(s => s.trim());
+      filters.push({ column: 'data->>status', op: 'in', value: statuses });
+    }
+
+    // If no filters, exclude old "scanned" plans to reduce payload
+    const data = filters.length > 0
+      ? await seoPlans.queryFilteredAsync(filters)
+      : await seoPlans.queryFilteredAsync([
+          { column: 'data->>status', op: 'in', value: ['draft', 'scanning', 'scanned', 'visibility_done', 'plan_generated', 'active', 'completed'] },
+        ]);
 
     return NextResponse.json({
       success: true,
-      plans: filtered,
-      count: filtered.length,
+      plans: data,
+      count: data.length,
     });
   } catch (error) {
     console.warn('[API] GET /api/data/seo-plans failed, returning empty:', error instanceof Error ? error.message : error);

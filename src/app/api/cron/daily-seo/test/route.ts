@@ -24,7 +24,10 @@ export async function GET(req: NextRequest) {
   // Check plans
   let planDiagnostics: any[] = [];
   try {
-    const allPlans = await seoPlans.getAllAsync();
+    // Only load active/plan_generated plans to avoid statement timeout on 95+ plans
+    const allPlans = await seoPlans.queryFilteredAsync([
+      { column: 'data->>status', op: 'in', value: ['active', 'plan_generated'] },
+    ]);
     planDiagnostics = allPlans.map((p: any) => {
       const generatedAt = p.generatedAt ? new Date(p.generatedAt) : null;
       const dayNumber = generatedAt

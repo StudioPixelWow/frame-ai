@@ -23,11 +23,10 @@ export async function GET(req: NextRequest) {
   console.log('[SEO-CRON] Daily runner started at', new Date().toISOString());
 
   try {
-    const allPlans = await seoPlans.getAllAsync();
-    const activePlans = allPlans.filter((p: any) =>
-      (p.status === 'active' || p.status === 'plan_generated') &&
-      p.days && Array.isArray(p.days) && p.days.length > 0
-    );
+    // Use filtered query — loading all 95+ plans causes statement timeout
+    const activePlans = (await seoPlans.queryFilteredAsync([
+      { column: 'data->>status', op: 'in', value: ['active', 'plan_generated'] },
+    ])).filter((p: any) => p.days && Array.isArray(p.days) && p.days.length > 0);
     // NOTE: WordPress connection is now checked per-task, not per-plan.
     // Non-WP tasks (technical_seo, meta_optimization, etc.) run without WP.
 
