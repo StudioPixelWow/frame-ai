@@ -3361,8 +3361,48 @@ function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
     setProcessingProgress("מוריד את הוידאו המקורי...");
 
     // Resolve the actual video URL — this is the real file in Supabase Storage.
-    const actualVideoUrl = data.uploadedVideoUrl
+    let actualVideoUrl = data.uploadedVideoUrl
       || (data.videoUrl && !data.videoUrl.startsWith("blob:") ? data.videoUrl : "");
+
+    // If no server URL yet but we have the raw file, upload it now
+    if (!actualVideoUrl && data.videoFile) {
+      try {
+        setProcessingProgress("מעלה את הוידאו לשרת...");
+        const initRes = await fetch("/api/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileName: data.videoFile.name, contentType: data.videoFile.type, fileSize: data.videoFile.size }),
+        });
+        if (!initRes.ok) {
+          let errMsg = `status ${initRes.status}`;
+          try { const b = await initRes.json(); if (b.error) errMsg = b.error; } catch {}
+          throw new Error(`שגיאה בהעלאת הוידאו: ${errMsg}`);
+        }
+        const { uploadUrl, publicUrl } = await initRes.json();
+        if (!uploadUrl || !publicUrl) throw new Error("שרת לא החזיר כתובת העלאה תקינה");
+
+        const putRes = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": data.videoFile.type || "application/octet-stream" },
+          body: data.videoFile,
+        });
+        if (!putRes.ok) {
+          let errMsg = `status ${putRes.status}`;
+          try { const b = await putRes.json(); if (b.error || b.message) errMsg = b.error || b.message; } catch {}
+          throw new Error(`שגיאה בהעלאת הוידאו לאחסון: ${errMsg}`);
+        }
+        patch({ uploadedVideoUrl: publicUrl });
+        data.uploadedVideoUrl = publicUrl;
+        actualVideoUrl = publicUrl;
+        console.log("[StepFinalize] Video uploaded on-demand:", publicUrl);
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.error("[StepFinalize] Upload error:", errMsg);
+        setProcessingError(errMsg);
+        setGenerating(false);
+        return;
+      }
+    }
 
     if (!actualVideoUrl) {
       alert("שגיאה: לא נמצא קובץ וידאו שהועלה. יש להעלות וידאו לפני אישור.");
@@ -3456,7 +3496,7 @@ function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
             display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.75rem 1rem",
             borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)",
           }}>
-            <span style={{ fontSize: "1.25rem" }}>{item.ok ? "&#9989;" : "&#9744;"}</span>
+            <span style={{ fontSize: "1.25rem" }}>{item.ok ? "✅" : "☐"}</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>{item.label}</div>
               <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>{item.value}</div>
@@ -3526,7 +3566,7 @@ function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
         <div style={{ textAlign: "center", marginTop: "1.5rem" }}>
           <button className="wiz-btn wiz-btn-primary" style={{ fontSize: "1rem", padding: "0.75rem 2rem" }}
             onClick={handleFinalize} disabled={!allPassed || generating}>
-            {generating ? "&#9881; מעבד ויוצר קובץ סופי..." : "&#128274; אשר ונעל קובץ לעריכה"}
+            {generating ? "⚙ מעבד ויוצר קובץ סופי..." : "🔒 אשר ונעל קובץ לעריכה"}
           </button>
           {!allPassed && (
             <div style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "#dc2626" }}>
