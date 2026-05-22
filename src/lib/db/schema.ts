@@ -2396,7 +2396,32 @@ export interface GreenInvoiceSettings {
 // AI Clip Engine (Podcast / Long-Form Processing)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export type PodcastEpisodeStatus = 'uploaded' | 'processing' | 'ready' | 'error';
+export type PodcastEpisodeStatus =
+  | 'uploaded'
+  | 'validating'
+  | 'validated'
+  | 'processing'
+  | 'analyzing'
+  | 'analysis_completed'
+  | 'candidates_ready'
+  | 'awaiting_user_approval'
+  | 'clips_approved'
+  | 'processing_clips'
+  | 'ready'
+  | 'completed'
+  | 'error'
+  | 'failed';
+
+export type ClipCandidateStatus = 'suggested' | 'edited_by_user' | 'approved' | 'rejected' | 'replaced';
+
+export type ApprovedClipStatus =
+  | 'approved_for_processing'
+  | 'queued'
+  | 'processing'
+  | 'ready_for_single_clip_flow'
+  | 'in_single_clip_flow'
+  | 'completed'
+  | 'failed';
 
 export interface PodcastEpisode {
   id: string;
@@ -2468,6 +2493,22 @@ export interface PodcastClipCandidate {
   hookScore: number; // 0-100
   reasoning: string;
   isSelected: boolean;
+  /** Candidate status — suggested by AI, edited by user, approved, rejected, or replaced */
+  candidateStatus: ClipCandidateStatus;
+  /** Clip index in the suggested order (1-based) */
+  clipIndex: number | null;
+  /** Description for UI */
+  description: string | null;
+  /** Hook sentence for the clip */
+  hookSentence: string | null;
+  /** Topic of the clip */
+  topic: string | null;
+  /** Confidence score from AI (0-100) */
+  confidenceScore: number | null;
+  /** Reason the AI selected this clip */
+  reasonForSelection: string | null;
+  /** Preview thumbnail URL */
+  previewThumbnail: string | null;
   userAdjustedStart: number | null;
   userAdjustedEnd: number | null;
   formatConfig: {
@@ -2516,6 +2557,74 @@ export interface PodcastRenderedClip {
     sourceEpisode: string;
   } | null;
   thumbnailPaths: string[] | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Episode Analysis — stores analysis results for the full episode ──
+export interface EpisodeAnalysis {
+  id: string;
+  episodeId: string;
+  transcriptId: string | null;
+  /** Full transcript text */
+  fullText: string;
+  /** Topic segments detected */
+  topicSegments: Array<{
+    id: string;
+    startTime: number;
+    endTime: number;
+    label: string;
+    keywords: string[];
+    wordCount: number;
+  }>;
+  /** Silence segments */
+  silences: Array<{ start: number; end: number; duration: number }>;
+  /** Dead moments */
+  deadMoments: Array<{ start: number; end: number; reason: string }>;
+  /** Speaker changes */
+  speakerChanges: Array<{ time: number; fromSpeaker: string; toSpeaker: string }>;
+  /** High engagement moments (predicted) */
+  highEngagementMoments: Array<{ start: number; end: number; score: number; reason: string }>;
+  /** Duration in seconds */
+  durationSeconds: number;
+  /** Analysis metadata */
+  analyzedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Approved Clip — created ONLY after user approval ──
+export interface ApprovedClip {
+  id: string;
+  episodeId: string;
+  projectId: string | null;
+  clipCandidateId: string;
+  sourceEpisodeVideoId: string;
+  /** Time range (may differ from candidate if user edited) */
+  startTime: number;
+  endTime: number;
+  duration: number;
+  /** Content */
+  title: string;
+  description: string;
+  transcriptSnippet: string;
+  /** Scores (copied from candidate at approval time) */
+  viralScore: number;
+  engagementScore: number;
+  confidenceScore: number;
+  /** Processing status */
+  status: ApprovedClipStatus;
+  /** Queue position (1-based) */
+  queuePosition: number | null;
+  /** Link to pipeline state if in single clip flow */
+  pipelineStateId: string | null;
+  /** Error info */
+  errorMessage: string | null;
+  retryCount: number;
+  /** Timestamps */
+  approvedAt: string;
+  processingStartedAt: string | null;
+  completedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

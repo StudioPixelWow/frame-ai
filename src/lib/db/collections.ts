@@ -72,6 +72,9 @@ import type {
   BacklinkCampaign,
   BacklinkTarget,
   PodcastEpisode,
+  EpisodeAnalysis,
+  ApprovedClip,
+  PodcastClipCandidate,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -171,6 +174,11 @@ export const backlinkTargets = new SupabaseCrud<BacklinkTarget>('app_backlink_ta
 
 // Podcast Episodes (JSONB fallback)
 export const podcastEpisodes = new SupabaseCrud<PodcastEpisode>('app_podcast_episodes', 'pep');
+
+// Episode Clip Extraction
+export const episodeAnalyses = new SupabaseCrud<EpisodeAnalysis>('app_episode_analyses', 'ean');
+export const approvedClips = new SupabaseCrud<ApprovedClip>('app_approved_clips', 'acl');
+export const podcastClipCandidates = new SupabaseCrud<PodcastClipCandidate>('app_podcast_clip_candidates', 'pcc');
 
 // Video Pipeline
 export const videoPipelineStates = new SupabaseCrud<any>('app_video_pipeline_states', 'vps');

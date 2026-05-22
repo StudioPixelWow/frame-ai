@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect, type ChangeEvent, type DragEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { usePodcastEpisodes } from '@/lib/api/use-podcast';
 import { TusUploader } from '@/lib/storage/tus-upload';
 import { createClient } from '@supabase/supabase-js';
@@ -123,6 +124,8 @@ function formatEta(seconds: number): string {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function PodcastClipEnginePage() {
+  const router = useRouter();
+
   // ── Stage navigation
   const [currentStage, setCurrentStage] = useState<number>(1);
 
@@ -278,6 +281,11 @@ export default function PodcastClipEnginePage() {
     if (row.status === 'processed') {
       setCurrentStage(3);
       if (typeof row.id === 'string') fetchClips(row.id);
+    }
+
+    // New flow: when analysis is done and candidates are ready, redirect to episode-clips page
+    if (row.status === 'candidates_ready' && typeof row.id === 'string') {
+      router.push(`/projects/new/podcast/episode-clips/${row.id}`);
     }
 
     if (row.status === 'error') {
@@ -458,7 +466,7 @@ export default function PodcastClipEnginePage() {
       setProcessingStartTime(Date.now());
       setElapsedSeconds(0);
 
-      const processRes = await fetch('/api/podcast/process', {
+      const processRes = await fetch('/api/podcast/episode-analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ episodeId: newEpisodeId }),
@@ -1823,10 +1831,12 @@ export default function PodcastClipEnginePage() {
                     }}
                     onClick={() => {
                       setEpisodeId(ep.id);
-                      if (ep.status === 'processed') {
+                      if (ep.status === 'candidates_ready' || ep.status === 'awaiting_user_approval' || ep.status === 'clips_approved' || ep.status === 'processing_clips') {
+                        router.push(`/projects/new/podcast/episode-clips/${ep.id}`);
+                      } else if (ep.status === 'processed') {
                         fetchClips(ep.id);
                         setCurrentStage(3);
-                      } else if (ep.status === 'processing') {
+                      } else if (ep.status === 'processing' || ep.status === 'analyzing') {
                         setCurrentStage(2);
                       }
                     }}
@@ -1855,30 +1865,42 @@ export default function PodcastClipEnginePage() {
                         background:
                           ep.status === 'processed'
                             ? 'rgba(16,185,129,0.1)'
-                            : ep.status === 'processing'
+                            : ep.status === 'processing' || ep.status === 'analyzing'
                               ? 'rgba(0,181,254,0.1)'
-                              : ep.status === 'error'
-                                ? 'rgba(239,68,68,0.1)'
-                                : '#F3F4F6',
+                              : ep.status === 'candidates_ready' || ep.status === 'awaiting_user_approval'
+                                ? 'rgba(245,158,11,0.1)'
+                                : ep.status === 'clips_approved' || ep.status === 'processing_clips'
+                                  ? 'rgba(139,92,246,0.1)'
+                                  : ep.status === 'error'
+                                    ? 'rgba(239,68,68,0.1)'
+                                    : '#F3F4F6',
                         color:
                           ep.status === 'processed'
                             ? COLORS.success
-                            : ep.status === 'processing'
+                            : ep.status === 'processing' || ep.status === 'analyzing'
                               ? COLORS.primary
-                              : ep.status === 'error'
-                                ? COLORS.error
-                                : COLORS.textSecondary,
+                              : ep.status === 'candidates_ready' || ep.status === 'awaiting_user_approval'
+                                ? COLORS.warning
+                                : ep.status === 'clips_approved' || ep.status === 'processing_clips'
+                                  ? '#8B5CF6'
+                                  : ep.status === 'error'
+                                    ? COLORS.error
+                                    : COLORS.textSecondary,
                       }}
                     >
                       {ep.status === 'processed'
                         ? 'הושלם'
-                        : ep.status === 'processing'
+                        : ep.status === 'processing' || ep.status === 'analyzing'
                           ? 'בעיבוד'
-                          : ep.status === 'error'
-                            ? 'שגיאה'
-                            : ep.status === 'uploaded'
-                              ? 'הועלה'
-                              : ep.status}
+                          : ep.status === 'candidates_ready' || ep.status === 'awaiting_user_approval'
+                            ? 'ממתין לאישור'
+                            : ep.status === 'clips_approved' || ep.status === 'processing_clips'
+                              ? 'מעבד קליפים'
+                              : ep.status === 'error'
+                                ? 'שגיאה'
+                                : ep.status === 'uploaded'
+                                  ? 'הועלה'
+                                  : ep.status}
                     </span>
                   </div>
                 ))}
