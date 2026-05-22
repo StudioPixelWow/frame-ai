@@ -31,7 +31,8 @@ let _ffprobePath = "ffprobe";
 
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const ffmpegStatic = require("ffmpeg-static") as string;
+  const mod = "ffmpeg-static";
+  const ffmpegStatic = require(mod) as string;
   if (ffmpegStatic) {
     _ffmpegPath = ffmpegStatic;
     const ffprobeCandidate = ffmpegStatic.replace(/ffmpeg([^/\\]*)$/, "ffprobe$1");
