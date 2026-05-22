@@ -3122,8 +3122,12 @@ function StepTrimCrop({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
                 display: "block",
                 ...(showFormatFrame ? {
                   // In crop mode: fill the format frame, centered based on crop position
+                  // Apply zoom: scale the video by 100/cropWidth so cropWidth=50 → scale(2), cropWidth=100 → scale(1)
                   width: "100%", height: "100%", objectFit: "cover",
                   objectPosition: `${data.cropX}% ${data.cropY}%`,
+                  transform: data.cropWidth < 100 ? `scale(${(100 / data.cropWidth).toFixed(3)})` : "none",
+                  transformOrigin: `${data.cropX}% ${data.cropY}%`,
+                  transition: "transform 0.2s ease, transform-origin 0.2s ease",
                 } : {
                   // In trim mode: natural aspect ratio
                   width: "100%",
