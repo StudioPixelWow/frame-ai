@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const candidateId = uuidv4();
+    const candidateId = randomUUID();
     const now = new Date().toISOString();
 
     const candidate = {
