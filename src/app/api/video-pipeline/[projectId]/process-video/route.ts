@@ -105,8 +105,7 @@ async function downloadFromSupabase(url: string): Promise<Buffer> {
 
 async function runFfmpeg(args: string[]): Promise<{ stdout: string; stderr: string }> {
   try {
-    const ffmpeg = await getFfmpegPath();
-    return await execFileAsync(ffmpeg, args, { timeout: EXEC_TIMEOUT_MS });
+    return await execFileAsync(FFMPEG_PATH, args, { timeout: EXEC_TIMEOUT_MS });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`שגיאת FFmpeg: ${msg}`);
@@ -114,8 +113,7 @@ async function runFfmpeg(args: string[]): Promise<{ stdout: string; stderr: stri
 }
 
 async function getVideoInfo(filePath: string): Promise<{ width: number; height: number; duration: number }> {
-  const ffprobe = await getFfprobePath();
-  const { stdout } = await execFileAsync(ffprobe, [
+  const { stdout } = await execFileAsync(FFPROBE_PATH, [
     "-v", "error",
     "-select_streams", "v:0",
     "-show_entries", "stream=width,height,duration",
