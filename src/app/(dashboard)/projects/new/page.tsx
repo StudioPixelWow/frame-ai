@@ -2952,13 +2952,82 @@ function StepHookSelect({ data, patch }: { data: WizardData; patch: (p: Partial<
         </div>
       )}
 
-      {/* Manual hook / Skip */}
+      {/* Manual hook / Skip buttons */}
       <div style={{ display: "flex", gap: "0.75rem", marginTop: "1.5rem", justifyContent: "center" }}>
+        <button className="wiz-btn wiz-btn-ghost" onClick={() => {
+          patch({ hookMode: "manual", hookSkipped: false, hookSelected: false });
+          setPreviewIdx(null);
+        }} style={{ opacity: data.hookMode === "manual" ? 1 : 0.7, border: data.hookMode === "manual" ? "2px solid var(--accent)" : undefined }}>
+          &#9998; בחירה ידנית
+        </button>
         <button className="wiz-btn wiz-btn-ghost" onClick={skipHook}
           style={{ opacity: data.hookSkipped ? 1 : 0.7 }}>
           {data.hookSkipped ? "&#10003; " : ""}דלג על Hook
         </button>
       </div>
+
+      {/* Manual hook selection */}
+      {data.hookMode === "manual" && !data.hookSkipped && (
+        <div style={{ marginTop: "1rem", padding: "1.25rem", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)" }}>
+          <div style={{ fontWeight: 600, marginBottom: "0.75rem", fontSize: "0.9rem" }}>&#9998; בחירה ידנית — הגדר את זמן ההתחלה והסיום</div>
+          <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: "0.8rem" }}>
+              <span>התחלה (שניות)</span>
+              <input type="number" min={0} max={videoDur || 999} step={0.1}
+                value={data.hookStartTime}
+                onChange={(e) => {
+                  const v = Math.max(0, parseFloat(e.target.value) || 0);
+                  patch({ hookStartTime: v, hookDuration: Math.max(0, data.hookEndTime - v) });
+                }}
+                style={{ width: 90, padding: "6px 8px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--background)", fontSize: "0.85rem", textAlign: "center" }}
+              />
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: "0.8rem" }}>
+              <span>סיום (שניות)</span>
+              <input type="number" min={0} max={videoDur || 999} step={0.1}
+                value={data.hookEndTime}
+                onChange={(e) => {
+                  const v = Math.max(0, parseFloat(e.target.value) || 0);
+                  patch({ hookEndTime: v, hookDuration: Math.max(0, v - data.hookStartTime) });
+                }}
+                style={{ width: 90, padding: "6px 8px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--background)", fontSize: "0.85rem", textAlign: "center" }}
+              />
+            </label>
+            <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", paddingTop: 18 }}>
+              משך: {(Math.max(0, data.hookEndTime - data.hookStartTime)).toFixed(1)}s
+            </div>
+            <button className="wiz-btn wiz-btn-ghost" style={{ marginTop: 14, fontSize: "0.75rem" }}
+              onClick={() => {
+                const v = videoRef.current;
+                if (!v) return;
+                v.currentTime = data.hookStartTime;
+                v.play();
+                setPlaying(true);
+                const stop = setInterval(() => {
+                  if (v.currentTime >= data.hookEndTime) { v.pause(); setPlaying(false); clearInterval(stop); }
+                }, 100);
+              }}>
+              &#9654; תצוגה מקדימה
+            </button>
+          </div>
+          {data.hookEndTime > data.hookStartTime && (data.hookEndTime - data.hookStartTime) >= 0.5 ? (
+            <button className="wiz-btn" style={{ marginTop: "1rem", width: "100%" }}
+              onClick={() => {
+                patch({
+                  hookSelected: true, hookSkipped: false, hookMode: "manual",
+                  hookDuration: data.hookEndTime - data.hookStartTime,
+                  hookScore: 0,
+                });
+              }}>
+              {data.hookSelected && data.hookMode === "manual" ? "&#10003; Hook ידני נבחר" : "&#10003; אשר Hook ידני"}
+            </button>
+          ) : (
+            <div style={{ marginTop: "0.75rem", fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
+              יש להגדיר טווח של לפחות 0.5 שניות
+            </div>
+          )}
+        </div>
+      )}
 
       {data.hookSkipped && (
         <div style={{ textAlign: "center", marginTop: "0.75rem", fontSize: "0.8rem", color: "var(--foreground-muted)" }}>
@@ -3030,52 +3099,83 @@ function StepTrimCrop({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
         </button>
       </div>
 
-      {/* Video preview with crop overlay */}
-      {videoSrc && (
-        <div style={{ maxWidth: 540, margin: "0 auto 1rem", position: "relative" }}>
-          <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)" }}>
-            <video ref={videoRef} src={videoSrc} style={{ width: "100%", display: "block" }}
-              onLoadedMetadata={(e) => {
-                const d = (e.target as HTMLVideoElement).duration;
-                setVideoDur(d);
-                if (!data.trimEnd) patch({ trimEnd: d });
+      {/* Video preview with crop overlay — adapts to selected format */}
+      {videoSrc && (() => {
+        // Calculate container dimensions based on selected format
+        const formatSizes: Record<string, { w: number; h: number }> = {
+          "9:16": { w: 270, h: 480 },
+          "1:1":  { w: 400, h: 400 },
+          "4:5":  { w: 360, h: 450 },
+          "16:9": { w: 540, h: 304 },
+        };
+        const containerSize = formatSizes[data.format] || formatSizes["9:16"];
+        // In trim tab, show video at natural aspect ratio (full landscape); in crop tab, show in format frame
+        const showFormatFrame = tab === "crop";
+
+        return (
+          <div style={{ maxWidth: showFormatFrame ? containerSize.w : 540, margin: "0 auto 1rem", position: "relative" }}>
+            <div style={{
+              position: "relative", borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)",
+              ...(showFormatFrame ? { width: containerSize.w, height: containerSize.h, margin: "0 auto" } : {}),
+            }}>
+              <video ref={videoRef} src={videoSrc} style={{
+                display: "block",
+                ...(showFormatFrame ? {
+                  // In crop mode: fill the format frame, centered based on crop position
+                  width: "100%", height: "100%", objectFit: "cover",
+                  objectPosition: `${data.cropX}% ${data.cropY}%`,
+                } : {
+                  // In trim mode: natural aspect ratio
+                  width: "100%",
+                }),
               }}
-              onClick={() => { const v = videoRef.current; if (!v) return; playing ? v.pause() : v.play(); setPlaying(!playing); }} />
+                onLoadedMetadata={(e) => {
+                  const d = (e.target as HTMLVideoElement).duration;
+                  setVideoDur(d);
+                  if (!data.trimEnd) patch({ trimEnd: d });
+                }}
+                onClick={() => { const v = videoRef.current; if (!v) return; playing ? v.pause() : v.play(); setPlaying(!playing); }} />
 
-            {/* Crop overlay — show frame border */}
-            {tab === "crop" && (
-              <div style={{
-                position: "absolute", inset: 0,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                pointerEvents: "none",
-              }}>
-                {/* Dimmed areas outside crop */}
-                <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)" }} />
-                {/* Crop window */}
+              {/* Crop overlay — show format boundary with zoom indicator */}
+              {tab === "crop" && (
                 <div style={{
-                  position: "relative", zIndex: 2,
-                  width: `${data.cropWidth}%`, height: `${data.cropHeight}%`,
-                  transform: `translate(${data.cropX - 50 + data.cropWidth/2}%, ${data.cropY - 50 + data.cropHeight/2}%)`,
-                  border: "2px solid var(--accent)", borderRadius: 4,
-                  boxShadow: "0 0 0 2000px rgba(0,0,0,0.5)",
-                  background: "transparent",
-                }} />
-              </div>
-            )}
-          </div>
+                  position: "absolute", inset: 0,
+                  pointerEvents: "none", zIndex: 3,
+                }}>
+                  {/* Format label badge */}
+                  <div style={{
+                    position: "absolute", top: 8, left: 8, zIndex: 4,
+                    background: "rgba(0,0,0,0.6)", color: "#fff", padding: "3px 8px",
+                    borderRadius: 4, fontSize: "0.7rem", fontWeight: 600,
+                  }}>
+                    {data.format}
+                  </div>
+                  {/* Safe area guides (rule of thirds) */}
+                  <div style={{ position: "absolute", inset: 0, opacity: 0.15 }}>
+                    <div style={{ position: "absolute", top: "33.3%", left: 0, right: 0, height: 1, background: "#fff" }} />
+                    <div style={{ position: "absolute", top: "66.6%", left: 0, right: 0, height: 1, background: "#fff" }} />
+                    <div style={{ position: "absolute", left: "33.3%", top: 0, bottom: 0, width: 1, background: "#fff" }} />
+                    <div style={{ position: "absolute", left: "66.6%", top: 0, bottom: 0, width: 1, background: "#fff" }} />
+                  </div>
+                  {/* Border highlight */}
+                  <div style={{ position: "absolute", inset: 0, border: "2px solid var(--accent)", borderRadius: 10 }} />
+                </div>
+              )}
+            </div>
 
-          {/* Play controls */}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem", justifyContent: "center" }}>
-            <button className="wiz-btn wiz-btn-ghost" style={{ padding: "4px 12px", fontSize: "0.8rem" }}
-              onClick={() => { const v = videoRef.current; if (!v) return; playing ? v.pause() : v.play(); setPlaying(!playing); }}>
-              {playing ? "&#10074;&#10074;" : "&#9654;"}
-            </button>
-            <span style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", fontFamily: "monospace" }}>
-              {fmtTime(currentTime)} / {fmtTime(videoDur)}
-            </span>
+            {/* Play controls */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem", justifyContent: "center" }}>
+              <button className="wiz-btn wiz-btn-ghost" style={{ padding: "4px 12px", fontSize: "0.8rem" }}
+                onClick={() => { const v = videoRef.current; if (!v) return; playing ? v.pause() : v.play(); setPlaying(!playing); }}>
+                {playing ? "&#10074;&#10074;" : "&#9654;"}
+              </button>
+              <span style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", fontFamily: "monospace" }}>
+                {fmtTime(currentTime)} / {fmtTime(videoDur)}
+              </span>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ─── TRIM Tab ─── */}
       {tab === "trim" && (
@@ -3142,33 +3242,40 @@ function StepTrimCrop({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
         <div style={{ padding: "1rem 0" }}>
           <div style={{ maxWidth: 480, margin: "0 auto" }}>
             <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", marginBottom: "1rem", textAlign: "center" }}>
-              מיקום הווידאו בתוך הפורמט <strong>{data.format}</strong>. גרור את נקודת המוקד.
+              המסגרת מציגה את הפורמט <strong>{data.format}</strong>. הזז את המוקד וקבע רמת זום — האזורים מחוץ למסגרת ייחתכו.
             </div>
 
-            {/* Crop position sliders */}
+            {/* Crop position + zoom sliders */}
             <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
               <label style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.8rem" }}>
-                <span style={{ minWidth: 80 }}>מיקום אופקי:</span>
+                <span style={{ minWidth: 100 }}>&#8596; מיקום אופקי:</span>
                 <input type="range" min="0" max="100" value={data.cropX}
                   onChange={(e) => patch({ cropX: Number(e.target.value) })}
                   style={{ flex: 1 }} />
                 <span style={{ minWidth: 35, textAlign: "center", fontFamily: "monospace" }}>{data.cropX}%</span>
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.8rem" }}>
-                <span style={{ minWidth: 80 }}>מיקום אנכי:</span>
+                <span style={{ minWidth: 100 }}>&#8597; מיקום אנכי:</span>
                 <input type="range" min="0" max="100" value={data.cropY}
                   onChange={(e) => patch({ cropY: Number(e.target.value) })}
                   style={{ flex: 1 }} />
                 <span style={{ minWidth: 35, textAlign: "center", fontFamily: "monospace" }}>{data.cropY}%</span>
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.8rem" }}>
-                <span style={{ minWidth: 80 }}>זום:</span>
-                <input type="range" min="50" max="100" value={data.cropWidth}
-                  onChange={(e) => { const v = Number(e.target.value); patch({ cropWidth: v, cropHeight: v }); }}
+                <span style={{ minWidth: 100 }}>&#128269; זום קבוע:</span>
+                <input type="range" min="100" max="200" value={200 - data.cropWidth}
+                  onChange={(e) => { const zoom = Number(e.target.value); const size = 200 - zoom; patch({ cropWidth: size, cropHeight: size }); }}
                   style={{ flex: 1 }} />
-                <span style={{ minWidth: 35, textAlign: "center", fontFamily: "monospace" }}>{data.cropWidth}%</span>
+                <span style={{ minWidth: 45, textAlign: "center", fontFamily: "monospace" }}>{Math.round(200 / data.cropWidth * 100)}%</span>
               </label>
             </div>
+
+            {/* Zoom explanation */}
+            {data.cropWidth < 100 && (
+              <div style={{ marginTop: "0.75rem", padding: "0.5rem 0.75rem", borderRadius: 8, background: "rgba(0,181,254,0.06)", border: "1px solid rgba(0,181,254,0.15)", fontSize: "0.75rem", color: "var(--foreground-muted)", textAlign: "center" }}>
+                &#128269; זום x{(100 / data.cropWidth).toFixed(1)} — הסרטון יוגדל והאזור שמחוץ למסגרת ייחתך
+              </div>
+            )}
 
             {/* Tracking toggles */}
             <div style={{ display: "flex", gap: "1.5rem", justifyContent: "center", marginTop: "1.25rem" }}>
@@ -3184,11 +3291,35 @@ function StepTrimCrop({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
               </label>
             </div>
 
+            {/* Quick position presets */}
+            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "center", marginTop: "1rem", flexWrap: "wrap" }}>
+              <button className="wiz-btn wiz-btn-ghost" style={{ fontSize: "0.7rem", padding: "4px 10px" }}
+                onClick={() => patch({ cropX: 50, cropY: 50 })}>
+                מרכז
+              </button>
+              <button className="wiz-btn wiz-btn-ghost" style={{ fontSize: "0.7rem", padding: "4px 10px" }}
+                onClick={() => patch({ cropX: 0, cropY: 50 })}>
+                שמאל
+              </button>
+              <button className="wiz-btn wiz-btn-ghost" style={{ fontSize: "0.7rem", padding: "4px 10px" }}
+                onClick={() => patch({ cropX: 100, cropY: 50 })}>
+                ימין
+              </button>
+              <button className="wiz-btn wiz-btn-ghost" style={{ fontSize: "0.7rem", padding: "4px 10px" }}
+                onClick={() => patch({ cropX: 50, cropY: 0 })}>
+                למעלה
+              </button>
+              <button className="wiz-btn wiz-btn-ghost" style={{ fontSize: "0.7rem", padding: "4px 10px" }}
+                onClick={() => patch({ cropX: 50, cropY: 100 })}>
+                למטה
+              </button>
+            </div>
+
             {/* Reset */}
-            <div style={{ textAlign: "center", marginTop: "1rem" }}>
+            <div style={{ textAlign: "center", marginTop: "0.75rem" }}>
               <button className="wiz-btn wiz-btn-ghost" style={{ fontSize: "0.75rem" }}
-                onClick={() => patch({ cropX: 0, cropY: 0, cropWidth: 100, cropHeight: 100 })}>
-                &#8634; איפוס למרכז
+                onClick={() => patch({ cropX: 50, cropY: 50, cropWidth: 100, cropHeight: 100 })}>
+                &#8634; איפוס
               </button>
             </div>
           </div>
