@@ -365,6 +365,32 @@ export default function ProjectDetailPage() {
             </Link>
           )}
           <Link
+            href={`/projects/${project.id}/pipeline`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              padding: "0.5rem 1.125rem",
+              background: "linear-gradient(135deg, #00f5ff, #0ea5e9)",
+              color: "#000",
+              borderRadius: "0.5rem",
+              textDecoration: "none",
+              fontSize: "0.875rem",
+              fontWeight: 700,
+              border: "none",
+              cursor: "pointer",
+              transition: "opacity 150ms ease",
+            }}
+            onMouseEnter={(e) => {
+              (e.target as HTMLElement).style.opacity = "0.9";
+            }}
+            onMouseLeave={(e) => {
+              (e.target as HTMLElement).style.opacity = "1";
+            }}
+          >
+            🔧 צינור עיבוד
+          </Link>
+          <Link
             href={`/editor/${project.id}`}
             style={{
               display: "inline-flex",

@@ -171,3 +171,10 @@ export const backlinkTargets = new SupabaseCrud<BacklinkTarget>('app_backlink_ta
 
 // Podcast Episodes (JSONB fallback)
 export const podcastEpisodes = new SupabaseCrud<PodcastEpisode>('app_podcast_episodes', 'pep');
+
+// Video Pipeline
+export const videoPipelineStates = new SupabaseCrud<any>('app_video_pipeline_states', 'vps');
+export const videoVersions = new SupabaseCrud<any>('app_video_versions', 'vvr');
+export const videoAuditLogs = new SupabaseCrud<any>('app_video_audit_logs', 'val');
+export const hookAnalyses = new SupabaseCrud<any>('app_hook_analyses', 'han');
+export const aiVideoAnalyses = new SupabaseCrud<any>('app_ai_video_analyses', 'ava');
