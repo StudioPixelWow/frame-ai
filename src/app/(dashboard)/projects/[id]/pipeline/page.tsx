@@ -408,7 +408,7 @@ export default function PipelinePage() {
       </div>
 
       <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>
-        צינור עיבוד וידאו {project?.title ? `— ${project.title}` : ""}
+        צינור עיבוד וידאו {project?.name ? `— ${project.name}` : ""}
       </h1>
       <p style={{ color: "#64748b", marginBottom: 32, fontSize: 14 }}>
         הצינור מנחה אותך בשלבים מ-העלאה ועד לעריכה. כל שלב מייצר גרסת וידאו חדשה.
