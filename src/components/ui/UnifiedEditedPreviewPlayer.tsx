@@ -523,9 +523,10 @@ export const UnifiedEditedPreviewPlayer = forwardRef<UnifiedPreviewHandle, Unifi
             if (transitionStyle === "motionBlur") {
               return <div style={{ position: "absolute", inset: 0, zIndex: 21, pointerEvents: "none", backdropFilter: `blur(${bell * 12}px)` }} />;
             }
-            if (transitionStyle === "premiumSlide") {
-              const tx = (p < 0.5 ? p * 2 - 1 : (1 - p) * 2 - 1) * 100;
-              return <div style={{ position: "absolute", inset: 0, zIndex: 21, pointerEvents: "none", backgroundColor: "#000", transform: `translateX(${tx}%)` }} />;
+            if (transitionStyle === "spectrumImpactFlash") {
+              const burst = Math.exp(-Math.pow((p - 0.2) * 5, 2));
+              const glowD = Math.exp(-p * 3);
+              return <div style={{ position: "absolute", inset: "-10%", zIndex: 21, pointerEvents: "none", background: `radial-gradient(ellipse 120% 120% at 50% 50%, rgba(255,255,255,${0.9 * burst}) 0%, rgba(0,255,255,${0.5 * bell}) 15%, rgba(80,120,255,${0.45 * bell}) 28%, rgba(180,60,255,${0.4 * bell}) 42%, rgba(255,60,200,${0.3 * bell}) 56%, transparent 85%)`, opacity: bell * 0.95, filter: `blur(${2 + glowD * 8}px) brightness(${1 + burst * 2})`, mixBlendMode: "screen" as const, transform: `scale(${0.8 + bell * 0.4})` }} />;
             }
             if (transitionStyle === "punchyCut") {
               return <div style={{ position: "absolute", inset: 0, zIndex: 21, pointerEvents: "none", backgroundColor: "#fff", opacity: bell > 0.8 ? (1 - bell) * 5 : 0 }} />;

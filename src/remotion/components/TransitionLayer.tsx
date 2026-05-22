@@ -38,12 +38,28 @@ export const TransitionLayer: React.FC<Props> = ({ style: transStyle, durationMs
     );
   }
 
-  if (transStyle === "premiumSlide") {
-    const translateX = at === "start"
-      ? interpolate(frame, [0, durationFrames], [-100, 0])
-      : interpolate(frame, [0, durationFrames], [0, 100]);
+  if (transStyle === "spectrumImpactFlash") {
+    const burst = Math.exp(-Math.pow((progress - 0.2) * 5, 2));
+    const bell = Math.sin(progress * Math.PI);
+    const glow = Math.exp(-progress * 3);
     return (
-      <AbsoluteFill style={{ backgroundColor: "black", transform: `translateX(${translateX}%)`, zIndex: 20 }} />
+      <AbsoluteFill
+        style={{
+          background: `radial-gradient(ellipse 120% 120% at 50% 50%,
+            rgba(255,255,255,${0.9 * burst}) 0%,
+            rgba(0,255,255,${0.5 * bell}) 15%,
+            rgba(80,120,255,${0.45 * bell}) 28%,
+            rgba(180,60,255,${0.4 * bell}) 42%,
+            rgba(255,60,200,${0.3 * bell}) 56%,
+            rgba(255,100,60,${0.15 * bell}) 70%,
+            transparent 85%)`,
+          opacity: bell * 0.95,
+          filter: `blur(${2 + glow * 8}px) brightness(${1 + burst * 2})`,
+          mixBlendMode: "screen",
+          transform: `scale(${0.8 + bell * 0.4})`,
+          zIndex: 20,
+        }}
+      />
     );
   }
 

@@ -44,7 +44,7 @@ export type MotionEffectType =
   | 'cinematic_pan'
   | 'social_punch_zoom'
   | 'floating_premium'
-  | 'smooth_slide'
+  | 'spectrum_impact_flash'
   | 'dramatic_reveal';
 
 export type EffectIntensity = 'subtle' | 'medium' | 'strong';

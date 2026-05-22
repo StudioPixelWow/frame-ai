@@ -118,17 +118,17 @@ export const MOTION_PRESETS: Record<MotionEffectType, MotionPreset> = {
     icon: '✨',
   },
 
-  smooth_slide: {
-    id: 'smooth_slide',
-    name: 'Smooth Slide',
-    nameHe: 'שקופית חלקה',
-    description: 'Linear horizontal pan for transitional movement.',
-    scale: [1.0, 1.0],
-    position: [20, 0],
-    easing: 'linear',
+  spectrum_impact_flash: {
+    id: 'spectrum_impact_flash',
+    name: 'Spectrum Impact Flash',
+    nameHe: 'פלאש ספקטרום',
+    description: 'Fullscreen cinematic RGB flash burst with chromatic aberration and energy pulse.',
+    scale: [1.0, 1.05],
+    position: [0, 0],
+    easing: 'ease_in_out',
     durationBehavior: 'full',
-    defaultIntensity: 'medium',
-    icon: '➡️',
+    defaultIntensity: 'strong',
+    icon: '💥',
   },
 
   dramatic_reveal: {

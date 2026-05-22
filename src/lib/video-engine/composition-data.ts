@@ -658,7 +658,7 @@ function getTransitionDuration(style: string): number {
     fade: 500,
     zoom: 400,
     motionBlur: 300,
-    premiumSlide: 600,
+    spectrumImpactFlash: 800,
     punchyCut: 150,
     prismaticFlashSweep: 900,
   };

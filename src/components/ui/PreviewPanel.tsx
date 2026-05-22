@@ -87,7 +87,7 @@ export interface PreviewWizardData {
     | "fade"
     | "zoom"
     | "motionBlur"
-    | "premiumSlide"
+    | "spectrumImpactFlash"
     | "punchyCut"
     | "prismaticFlashSweep";
 

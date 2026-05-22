@@ -200,7 +200,7 @@ interface WizardData {
   aiEditMode: "premium" | "viral" | "emotional" | "sales" | "";
   aiDirectionNotes: string;
 
-  transitionStyle: "cut" | "fade" | "zoom" | "motionBlur" | "premiumSlide" | "punchyCut" | "prismaticFlashSweep" | "lightLeak";
+  transitionStyle: "cut" | "fade" | "zoom" | "motionBlur" | "spectrumImpactFlash" | "punchyCut" | "prismaticFlashSweep" | "lightLeak";
   premiumMode: boolean;
   premiumLevel: "standard" | "premium" | "cinematic";
 
@@ -5475,7 +5475,7 @@ const TRANSITION_OPTIONS: { id: WizardData["transitionStyle"]; name: string; nam
   { id: "fade", name: "Smooth Fade", nameHe: "מעבר חלק", desc: "דהייה אלגנטית בין קליפים — הבחירה הפופולרית ביותר", category: "clean", speed: "500ms", demoClass: "trans2-demo-fade" },
   { id: "zoom", name: "Zoom Punch", nameHe: "מעבר זום", desc: "זום פנימה/החוצה בין קטעים — דינמי ואנרגטי", category: "dynamic", speed: "400ms", demoClass: "trans2-demo-zoom" },
   { id: "motionBlur", name: "Motion Blur", nameHe: "טשטוש תנועה", desc: "מעבר מהיר עם טשטוש — תחושת מהירות", category: "dynamic", speed: "300ms", demoClass: "trans2-demo-blur" },
-  { id: "premiumSlide", name: "Premium Slide", nameHe: "החלקה פרימיום", desc: "החלקה כיוונית חלקה ומלוטשת — מראה יוקרתי", category: "premium", speed: "600ms", demoClass: "trans2-demo-slide" },
+  { id: "spectrumImpactFlash", name: "Spectrum Impact Flash", nameHe: "פלאש ספקטרום", desc: "פלאש קולנועי מלא מסך — פיצוץ צבעוני כרומטי עם זוהר הולוגרפי", category: "cinematic", speed: "800ms", demoClass: "trans2-demo-spectrum" },
   { id: "punchyCut", name: "Punchy Social", nameHe: "חיתוך סושיאל", desc: "חיתוך אנרגטי וחד לרשתות חברתיות — TikTok / Reels", category: "social", speed: "150ms", demoClass: "trans2-demo-punchy" },
   { id: "prismaticFlashSweep", name: "Prismatic Flash Sweep", nameHe: "סוויפ פריזמטי", desc: "סוויפ אור פרימיום עם זוהר הולוגרפי פריזמטי — חתימת תנועה של המערכת", category: "cinematic", speed: "900ms", demoClass: "trans2-demo-prismatic" },
   { id: "lightLeak", name: "Light Leak", nameHe: "דליפת אור", desc: "דליפת אור קולנועית עם גוונים חמים — אפקט פילם פרימיום", category: "cinematic", speed: "900ms", demoClass: "trans2-demo-lightleak" },
@@ -5633,7 +5633,7 @@ function StepTransitions({ data, patch, videoSrc: parentVideoSrc }: { data: Wiza
         patch({ effects: newEffects });
         // Apply suggested transition if different
         if (result.transitionStyle && result.transitionStyle !== data.transitionStyle) {
-          const validTransitions = ["cut", "fade", "zoom", "motionBlur", "premiumSlide", "punchyCut", "prismaticFlashSweep"];
+          const validTransitions = ["cut", "fade", "zoom", "motionBlur", "spectrumImpactFlash", "punchyCut", "prismaticFlashSweep"];
           if (validTransitions.includes(result.transitionStyle)) {
             patch({ transitionStyle: result.transitionStyle });
           }
@@ -5681,7 +5681,7 @@ function StepTransitions({ data, patch, videoSrc: parentVideoSrc }: { data: Wiza
     }));
     patch({ effects: newEffects });
     if (aiSuggestedTransition && aiSuggestedTransition !== data.transitionStyle) {
-      const validTransitions = ["cut", "fade", "zoom", "motionBlur", "premiumSlide", "punchyCut", "prismaticFlashSweep"];
+      const validTransitions = ["cut", "fade", "zoom", "motionBlur", "spectrumImpactFlash", "punchyCut", "prismaticFlashSweep"];
       if (validTransitions.includes(aiSuggestedTransition)) {
         patch({ transitionStyle: aiSuggestedTransition as WizardData["transitionStyle"] });
       }
@@ -5944,7 +5944,7 @@ function StepTransitions({ data, patch, videoSrc: parentVideoSrc }: { data: Wiza
           <div className="trans2-summary">
             <div className="trans2-summary-header">
               <div className="trans2-summary-icon">
-                {data.transitionStyle === "cut" ? "✂️" : data.transitionStyle === "fade" ? "🌊" : data.transitionStyle === "zoom" ? "🔍" : data.transitionStyle === "motionBlur" ? "💨" : data.transitionStyle === "premiumSlide" ? "💎" : data.transitionStyle === "punchyCut" ? "⚡" : data.transitionStyle === "lightLeak" ? "🔆" : "🎬"}
+                {data.transitionStyle === "cut" ? "✂️" : data.transitionStyle === "fade" ? "🌊" : data.transitionStyle === "zoom" ? "🔍" : data.transitionStyle === "motionBlur" ? "💨" : data.transitionStyle === "spectrumImpactFlash" ? "💥" : data.transitionStyle === "punchyCut" ? "⚡" : data.transitionStyle === "lightLeak" ? "🔆" : "🎬"}
               </div>
               <div>
                 <div className="trans2-summary-title">{selected.nameHe}</div>
