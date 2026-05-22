@@ -2123,47 +2123,56 @@ export default function SeoPlanDetail() {
                               setClosingGaps(true);
                               setGapStatus("מתחיל סגירת פערים...");
 
-                              // Fire-and-forget: API processes synchronously (may take minutes)
-                              // We start polling immediately without waiting for the response
-                              fetch(`/api/seo-geo-plans/${planId}/close-gaps`, {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                              }).then(async (res) => {
-                                const data = await res.json().catch(() => ({}));
-                                if (!res.ok) {
-                                  setGapStatus(`שגיאה: ${data.error || "Unknown"}`);
-                                  setClosingGaps(false);
-                                  setTimeout(() => setGapStatus(null), 8000);
-                                }
-                                // On success the polling below will detect gapClosing.active=false
-                              }).catch(() => {
-                                // Network error — polling will still detect the final state
-                              });
+                              // Sequential loop: process one day per request
+                              let stopped = false;
+                              try {
+                                while (!stopped) {
+                                  const res = await fetch(`/api/seo-geo-plans/${planId}/close-gaps`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                  });
+                                  const data = await res.json().catch(() => ({} as any));
 
-                              // Start polling immediately — picks up gapClosing progress from DB
-                              const pollInterval = setInterval(async () => {
-                                try {
-                                  const pollRes = await fetch(`/api/data/seo-plans/${planId}`);
-                                  if (pollRes.ok) {
-                                    const updatedPlan = await pollRes.json();
-                                    setPlan(updatedPlan);
-                                    const gc = updatedPlan.gapClosing;
-                                    if (gc?.active) {
-                                      setGapStatus(`מעבד יום ${gc.currentDay}... (${gc.completedDays || 0}/${gc.totalDays})`);
-                                    } else if (gc?.completedAt) {
-                                      const msg = gc.error
-                                        ? `❌ שגיאה: ${gc.error}`
-                                        : `✅ הושלם! ${gc.completedDays || missedCount} ימים עובדו בהצלחה`;
-                                      setGapStatus(msg);
-                                      setClosingGaps(false);
-                                      clearInterval(pollInterval);
-                                      setTimeout(() => setGapStatus(null), 10000);
-                                    }
+                                  if (res.status === 409) {
+                                    // Another run active — wait and retry
+                                    setGapStatus("ממתין לסיום ריצה קודמת...");
+                                    await new Promise(r => setTimeout(r, data.retryAfterMs || 10000));
+                                    continue;
                                   }
-                                } catch {}
-                              }, 3000);
-                              // Safety timeout: 10 minutes max
-                              setTimeout(() => { clearInterval(pollInterval); setClosingGaps(false); }, 600000);
+
+                                  if (!res.ok) {
+                                    setGapStatus(`❌ שגיאה: ${data.error || "Unknown"}`);
+                                    stopped = true;
+                                    break;
+                                  }
+
+                                  // Refresh plan data for UI
+                                  try {
+                                    const pollRes = await fetch(`/api/data/seo-plans/${planId}`);
+                                    if (pollRes.ok) {
+                                      const updatedPlan = await pollRes.json();
+                                      setPlan(updatedPlan);
+                                    }
+                                  } catch {}
+
+                                  if (data.done) {
+                                    setGapStatus(`✅ הושלם! ${data.totalDaysProcessed || missedCount} ימים עובדו בהצלחה`);
+                                    stopped = true;
+                                    break;
+                                  }
+
+                                  // More days to go — update progress and continue
+                                  setGapStatus(`מעבד יום ${data.dayProcessed}... (${data.completedDays || 0}/${data.totalGapDays || missedCount})`);
+
+                                  // Brief pause before next iteration
+                                  await new Promise(r => setTimeout(r, 2000));
+                                }
+                              } catch (err) {
+                                setGapStatus(`❌ שגיאת רשת: ${err instanceof Error ? err.message : "Unknown"}`);
+                              } finally {
+                                setClosingGaps(false);
+                                setTimeout(() => setGapStatus(null), 10000);
+                              }
                             }}
                             style={{
                               padding: "10px 24px", borderRadius: 10, border: "none",

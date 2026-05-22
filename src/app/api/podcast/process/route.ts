@@ -3,19 +3,23 @@
  *
  * מקבל { episodeId }, מחזיר 202 מיד, ומריץ 6 שלבי עיבוד ברקע:
  *   1. אימות — בדיקת קובץ ב-Supabase Storage
- *   2. חילוץ אודיו — הורדת וידאו וחילוץ שמע
- *   3. תמלול — תמלול מקוטע עם Whisper
+ *   2. הכנת קובץ — הורדת הקובץ מ-Storage (ללא FFmpeg)
+ *   3. תמלול — שליחת הקובץ ישירות ל-Whisper API
  *   4. פילוח נושאים — זיהוי גבולות נושא בתמלול
  *   5. ניתוח AI — זיהוי קליפים מומלצים
  *   6. דירוג קליפים — חישוב ציונים ושמירה ל-DB
+ *
+ * NOTE: This pipeline runs WITHOUT FFmpeg for Vercel Serverless compatibility.
+ * Whisper API accepts video files directly (mp4, webm, etc.) up to 25MB.
+ * For files larger than 25MB, the pipeline skips transcription and marks
+ * the episode as "uploaded" with a message indicating external processing is needed.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { extractAudio, splitAudioIntoChunks } from '@/lib/podcast-engine/ffmpeg-service';
-import { transcribeChunkedAudio } from '@/lib/podcast-engine/whisper-transcription';
-import { writeFile, mkdir, readFile, unlink } from 'fs/promises';
+import { transcribeAudio } from '@/lib/podcast-engine/whisper-transcription';
+import { writeFile, mkdir, unlink } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { segmentTranscript, type TranscriptSegment } from '@/lib/podcast-engine/topic-segmentation';
@@ -125,12 +129,15 @@ export const maxDuration = 300; // 5 minutes — pipeline needs time for downloa
 
 const STAGES = [
   { stage: 1, stageName: 'אימות קובץ' },
-  { stage: 2, stageName: 'חילוץ אודיו' },
+  { stage: 2, stageName: 'הכנת קובץ' },
   { stage: 3, stageName: 'תמלול' },
   { stage: 4, stageName: 'פילוח נושאים' },
   { stage: 5, stageName: 'ניתוח AI' },
   { stage: 6, stageName: 'דירוג קליפים' },
 ] as const;
+
+/** Maximum file size Whisper API accepts (25MB). */
+const WHISPER_MAX_FILE_SIZE = 25 * 1024 * 1024;
 
 // ── Progress helper ─────────────────────────────────────────────────────────
 
@@ -186,6 +193,8 @@ async function markCompleted(episodeId: string): Promise<void> {
 // ── Pipeline ────────────────────────────────────────────────────────────────
 
 async function runPipeline(episodeId: string, sourceFilePath: string): Promise<void> {
+  let tempFilePath: string | null = null;
+
   try {
     // ── Stage 1: אימות — בדיקת קובץ ב-Storage ────────────────────────────
     await updateProgress(episodeId, 0, 0, 'מאתר את הקובץ בשרת...');
@@ -201,18 +210,12 @@ async function runPipeline(episodeId: string, sourceFilePath: string): Promise<v
       throw new Error(`קובץ לא נמצא ב-Storage: ${sourceFilePath}`);
     }
 
-    // Get file metadata
-    const fileMetadata = fileData[0] as unknown as Record<string, unknown>;
-    const fileSizeBytes = fileMetadata.metadata
-      ? (fileMetadata.metadata as Record<string, unknown>).size as number
-      : undefined;
-
     await updateProgress(episodeId, 0, 100, 'הקובץ אומת בהצלחה');
 
-    // ── Stage 2: חילוץ אודיו — הורדת הוידאו וחילוץ שמע ───────────────────
+    // ── Stage 2: הכנת קובץ — הורדת הקובץ מ-Storage ───────────────────────
+    // NOTE: No FFmpeg — Whisper API accepts video files directly.
     await updateProgress(episodeId, 1, 0, 'מוריד את הקובץ מהשרת...');
 
-    // Download the source file from Storage
     const { data: fileBlob, error: downloadError } = await supabase
       .storage
       .from('project-files')
@@ -222,57 +225,62 @@ async function runPipeline(episodeId: string, sourceFilePath: string): Promise<v
       throw new Error(`שגיאה בהורדת הקובץ: ${downloadError?.message ?? 'לא התקבל קובץ'}`);
     }
 
-    await updateProgress(episodeId, 1, 30, 'מחלץ אודיו מתוך הוידאו...');
+    const blobArrayBuffer = await fileBlob.arrayBuffer();
+    const fileSizeBytes = blobArrayBuffer.byteLength;
 
-    // Write blob to temp file for ffmpeg processing
+    // Write to temp for Whisper API (it needs a file path)
     const tempDir = join(tmpdir(), `podcast-${episodeId}`);
     await mkdir(tempDir, { recursive: true });
     const ext = sourceFilePath.split('.').pop() || 'mp4';
-    const tempVideoPath = join(tempDir, `source.${ext}`);
-    const blobArrayBuffer = await fileBlob.arrayBuffer();
-    await writeFile(tempVideoPath, Buffer.from(blobArrayBuffer));
+    tempFilePath = join(tempDir, `source.${ext}`);
+    await writeFile(tempFilePath, Buffer.from(blobArrayBuffer));
 
-    // Extract audio from video using ffmpeg
-    const extractedAudioPath = await extractAudio(tempVideoPath, tempDir);
-    const audioFileBuffer = await readFile(extractedAudioPath);
+    await updateProgress(episodeId, 1, 100, 'הקובץ הורד בהצלחה');
 
-    // Cleanup temp video file
-    await unlink(tempVideoPath).catch(() => {});
+    // ── Stage 3: תמלול — שליחת הקובץ ישירות ל-Whisper ────────────────────
+    await updateProgress(episodeId, 2, 0, 'מתמלל עם Whisper AI...');
 
-    // Save extracted audio path on the episode
-    const audioFilePath = sourceFilePath.replace(/\.[^.]+$/, '.mp3');
-    const { error: audioUploadError } = await supabase
-      .storage
-      .from('project-files')
-      .upload(audioFilePath, audioFileBuffer, {
-        contentType: 'audio/mpeg',
-        upsert: true,
-      });
+    // Check file size — Whisper API limit is 25MB
+    if (fileSizeBytes > WHISPER_MAX_FILE_SIZE) {
+      const sizeMB = Math.round(fileSizeBytes / 1024 / 1024);
+      console.warn(
+        `[process] File too large for Whisper API (${sizeMB}MB > 25MB). ` +
+        `Marking episode as requiring external processing.`
+      );
 
-    if (audioUploadError) {
-      throw new Error(`שגיאה בהעלאת קובץ אודיו: ${audioUploadError.message}`);
+      // Mark episode as uploaded (not error) with a clear message
+      await supabase
+        .from('podcast_episodes')
+        .update({
+          status: 'uploaded',
+          processing_progress: {
+            stage: 2,
+            stageName: 'תמלול',
+            percent: 0,
+            statusText: `הקובץ גדול מדי לתמלול אוטומטי (${sizeMB}MB). נדרש עיבוד חיצוני או קובץ קטן יותר (עד 25MB).`,
+            startedAt: new Date().toISOString(),
+          },
+          error_message: `הקובץ גדול מדי לעיבוד אוטומטי (${sizeMB}MB). הגבלת Whisper API היא 25MB. ניתן להעלות קובץ אודיו קטן יותר או להמתין לתמיכה בעיבוד חיצוני.`,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', episodeId);
+      return;
     }
 
-    await supabase
-      .from('podcast_episodes')
-      .update({ audio_file_path: audioFilePath })
-      .eq('id', episodeId);
+    await updateProgress(episodeId, 2, 20, 'שולח קובץ ל-Whisper AI לתמלול...');
 
-    await updateProgress(episodeId, 1, 100, 'האודיו חולץ בהצלחה');
-
-    // ── Stage 3: תמלול — תמלול מקוטע עם Whisper ──────────────────────────
-    await updateProgress(episodeId, 2, 0, 'מחלק אודיו למקטעים לתמלול...');
-
-    // Split extracted audio into chunks for Whisper API (max 25MB each)
-    const audioChunks = await splitAudioIntoChunks(extractedAudioPath, 600, tempDir);
-
-    await updateProgress(episodeId, 2, 20, `מתמלל ${audioChunks.length} מקטעי אודיו עם Whisper AI...`);
-
-    const transcriptionResult = await transcribeChunkedAudio(audioChunks, 'he');
+    // Send the file directly to Whisper — it accepts video formats (mp4, webm, etc.)
+    const transcriptionResult = await transcribeAudio(tempFilePath, 'he');
 
     const { text: fullText, segments: transcriptSegments } = transcriptionResult;
 
     await updateProgress(episodeId, 2, 100, 'התמלול הושלם');
+
+    // Cleanup temp file early — we have the transcription
+    if (tempFilePath) {
+      await unlink(tempFilePath).catch(() => {});
+      tempFilePath = null;
+    }
 
     // ── Stage 4: פילוח נושאים — זיהוי גבולות נושא בתמלול ────────────────
     await updateProgress(episodeId, 3, 0, 'מנתח נושאים ומזהה מעברים בשיחה...');
@@ -374,6 +382,11 @@ async function runPipeline(episodeId: string, sourceFilePath: string): Promise<v
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[process] שגיאה בעיבוד פרק ${episodeId}:`, message);
     await markError(episodeId, message);
+  } finally {
+    // Always clean up temp files
+    if (tempFilePath) {
+      await unlink(tempFilePath).catch(() => {});
+    }
   }
 }
 

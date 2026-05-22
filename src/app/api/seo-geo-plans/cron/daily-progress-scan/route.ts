@@ -45,9 +45,30 @@ export async function GET(req: NextRequest) {
 
   try {
     // Use filtered query to avoid statement timeout on 95+ plans
-    const allPlans = await seoPlans.queryFilteredAsync([
-      { column: 'data->>status', op: 'in', value: ['active', 'plan_generated', 'visibility_done'] },
-    ]);
+    // Retry once on transient connection errors (e.g. Supabase 522)
+    let allPlans: any[];
+    try {
+      allPlans = await seoPlans.queryFilteredAsync([
+        { column: 'data->>status', op: 'in', value: ['active', 'plan_generated', 'visibility_done'] },
+      ]);
+    } catch (dbError: any) {
+      const isTransient = dbError?.status === 522 || dbError?.code === 'ECONNRESET' || dbError?.code === 'ETIMEDOUT' || /522|connection|timeout/i.test(dbError?.message || '');
+      if (isTransient) {
+        console.warn('[SEO-DAILY-SCAN] DB query failed with transient error, retrying in 5s...', dbError?.message || dbError);
+        await new Promise(r => setTimeout(r, 5000));
+        try {
+          allPlans = await seoPlans.queryFilteredAsync([
+            { column: 'data->>status', op: 'in', value: ['active', 'plan_generated', 'visibility_done'] },
+          ]);
+          console.log('[SEO-DAILY-SCAN] Retry succeeded — loaded', allPlans.length, 'plans');
+        } catch (retryError: any) {
+          console.error('[SEO-DAILY-SCAN] Retry also failed:', retryError?.message || retryError);
+          return NextResponse.json({ error: 'DB connection failed after retry', details: retryError?.message }, { status: 503 });
+        }
+      } else {
+        throw dbError;
+      }
+    }
     const activePlans = allPlans.filter((p: any) => {
       // Accept plans with clientKeywords OR targetKeywords (some plans store keywords differently)
       const hasKeywords = (Array.isArray(p.clientKeywords) && p.clientKeywords.length > 0)

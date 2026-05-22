@@ -24,9 +24,30 @@ export async function GET(req: NextRequest) {
 
   try {
     // Use filtered query — loading all 95+ plans causes statement timeout
-    const activePlans = (await seoPlans.queryFilteredAsync([
-      { column: 'data->>status', op: 'in', value: ['active', 'plan_generated'] },
-    ])).filter((p: any) => p.days && Array.isArray(p.days) && p.days.length > 0);
+    // Retry once on transient connection errors (e.g. Supabase 522)
+    let activePlans: any[];
+    try {
+      activePlans = (await seoPlans.queryFilteredAsync([
+        { column: 'data->>status', op: 'in', value: ['active', 'plan_generated'] },
+      ])).filter((p: any) => p.days && Array.isArray(p.days) && p.days.length > 0);
+    } catch (dbError: any) {
+      const isTransient = dbError?.status === 522 || dbError?.code === 'ECONNRESET' || dbError?.code === 'ETIMEDOUT' || /522|connection|timeout/i.test(dbError?.message || '');
+      if (isTransient) {
+        console.warn('[SEO-CRON] DB query failed with transient error, retrying in 5s...', dbError?.message || dbError);
+        await new Promise(r => setTimeout(r, 5000));
+        try {
+          activePlans = (await seoPlans.queryFilteredAsync([
+            { column: 'data->>status', op: 'in', value: ['active', 'plan_generated'] },
+          ])).filter((p: any) => p.days && Array.isArray(p.days) && p.days.length > 0);
+          console.log('[SEO-CRON] Retry succeeded — loaded', activePlans.length, 'active plans');
+        } catch (retryError: any) {
+          console.error('[SEO-CRON] Retry also failed:', retryError?.message || retryError);
+          return NextResponse.json({ error: 'DB connection failed after retry', details: retryError?.message }, { status: 503 });
+        }
+      } else {
+        throw dbError;
+      }
+    }
     // NOTE: WordPress connection is now checked per-task, not per-plan.
     // Non-WP tasks (technical_seo, meta_optimization, etc.) run without WP.
 

@@ -198,12 +198,17 @@ function getMimeType(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
   const mimeMap: Record<string, string> = {
     ".mp3": "audio/mpeg",
-    ".mp4": "audio/mp4",
+    ".mp4": "video/mp4",
     ".m4a": "audio/mp4",
     ".wav": "audio/wav",
-    ".webm": "audio/webm",
+    ".webm": "video/webm",
     ".ogg": "audio/ogg",
     ".flac": "audio/flac",
+    ".mov": "video/quicktime",
+    ".avi": "video/x-msvideo",
+    ".mkv": "video/x-matroska",
+    ".mpeg": "video/mpeg",
+    ".mpga": "audio/mpeg",
   };
   return mimeMap[ext] ?? "audio/mpeg";
 }

@@ -162,7 +162,7 @@ export default function PodcastClipEnginePage() {
   const [processingStages, setProcessingStages] = useState<ProcessingStage[]>([
     { key: 'upload', label: 'העלאת קובץ', status: 'pending', progress: 0 },
     { key: 'validate', label: 'אימות קובץ', status: 'pending', progress: 0 },
-    { key: 'audio', label: 'חילוץ אודיו', status: 'pending', progress: 0 },
+    { key: 'audio', label: 'הכנת קובץ', status: 'pending', progress: 0 },
     { key: 'transcribe', label: 'תמלול', status: 'pending', progress: 0 },
     { key: 'segment', label: 'פילוח נושאים', status: 'pending', progress: 0 },
     { key: 'analyze', label: 'ניתוח AI', status: 'pending', progress: 0 },
@@ -282,6 +282,17 @@ export default function PodcastClipEnginePage() {
 
     if (row.status === 'error') {
       setProcessingError((row.error_message as string) || 'העיבוד נכשל');
+      setProcessingStages((prev) =>
+        prev.map((s) =>
+          s.status === 'running' ? { ...s, status: 'error' } : s,
+        ),
+      );
+    }
+
+    // Handle case where processing was aborted (e.g. file too large for serverless)
+    // and status was reverted to 'uploaded' with an error message
+    if (row.status === 'uploaded' && row.error_message) {
+      setProcessingError((row.error_message as string));
       setProcessingStages((prev) =>
         prev.map((s) =>
           s.status === 'running' ? { ...s, status: 'error' } : s,
