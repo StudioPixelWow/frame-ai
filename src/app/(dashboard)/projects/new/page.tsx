@@ -3339,6 +3339,8 @@ function StepTrimCrop({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
 
 function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<WizardData>) => void }) {
   const [generating, setGenerating] = useState(false);
+  const [processingError, setProcessingError] = useState<string | null>(null);
+  const [processingProgress, setProcessingProgress] = useState("");
 
   const hookLabel = data.hookSkipped ? "ללא Hook (דולג)" : data.hookSelected ? `Hook נבחר (${(data.hookEndTime - data.hookStartTime).toFixed(1)}s, ציון ${data.hookScore}%)` : "לא נבחר";
   const trimLabel = data.trimMode === "full" ? "וידאו מלא" : `חיתוך: ${data.trimStart.toFixed(1)}s - ${data.trimEnd.toFixed(1)}s (${(data.trimEnd - data.trimStart).toFixed(1)}s)`;
@@ -3355,11 +3357,10 @@ function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
   const handleFinalize = async () => {
     if (!allPassed) return;
     setGenerating(true);
+    setProcessingError(null);
+    setProcessingProgress("מוריד את הוידאו המקורי...");
 
     // Resolve the actual video URL — this is the real file in Supabase Storage.
-    // On Vercel serverless we can't create intermediate video files (no FFmpeg),
-    // so hook/trim/crop parameters are stored in wizard data and applied at render time.
-    // The finalPreEditVideoId MUST point to the real uploaded video URL.
     const actualVideoUrl = data.uploadedVideoUrl
       || (data.videoUrl && !data.videoUrl.startsWith("blob:") ? data.videoUrl : "");
 
@@ -3369,16 +3370,62 @@ function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
       return;
     }
 
-    patch({
-      pipelineFinalized: true,
-      finalPreEditVideoId: actualVideoUrl,
-      trimCropVideoId: actualVideoUrl,
-      hookGeneratedVideoId: data.hookSelected ? actualVideoUrl : "",
-      originalVideoId: actualVideoUrl,
-      sourceLocked: true,
-    });
+    // Determine trim boundaries — if trimMode is "full", use 0 to a large value
+    // so the server trims the entire video length
+    const trimStart = data.trimMode === "clip" ? data.trimStart : 0;
+    const trimEnd = data.trimMode === "clip" ? data.trimEnd : 999999;
 
-    setGenerating(false);
+    try {
+      setProcessingProgress("מעבד את הוידאו — חיתוך, מיקוד והוק...");
+
+      const projectId = data.originalVideoId || `new-${Date.now()}`;
+      const resp = await fetch(`/api/video-pipeline/${encodeURIComponent(projectId)}/process-video`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceVideoUrl: actualVideoUrl,
+          trimStart,
+          trimEnd,
+          cropX: data.cropX,
+          cropY: data.cropY,
+          cropWidth: data.cropWidth,
+          cropHeight: data.cropHeight,
+          targetAspectRatio: data.format,
+          hookEnabled: data.hookSelected && !data.hookSkipped,
+          hookStartTime: data.hookSelected ? data.hookStartTime : undefined,
+          hookEndTime: data.hookSelected ? data.hookEndTime : undefined,
+        }),
+      });
+
+      const result = await resp.json();
+
+      if (!resp.ok) {
+        throw new Error(result.error || "שגיאה בעיבוד הוידאו");
+      }
+
+      const processedUrl = result.processedVideoUrl;
+      if (!processedUrl) {
+        throw new Error("שגיאה: לא התקבל קישור לוידאו המעובד");
+      }
+
+      setProcessingProgress("הוידאו עובד בהצלחה — נועל מקור...");
+
+      patch({
+        pipelineFinalized: true,
+        finalPreEditVideoId: processedUrl,
+        trimCropVideoId: processedUrl,
+        hookGeneratedVideoId: data.hookSelected ? processedUrl : "",
+        originalVideoId: actualVideoUrl,
+        sourceLocked: true,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "שגיאה בעיבוד הוידאו";
+      console.error("[StepFinalize] Processing error:", msg);
+      setProcessingError(msg);
+    } finally {
+      setGenerating(false);
+      setProcessingProgress("");
+    }
   };
 
   const resetPipeline = () => {
@@ -3441,12 +3488,45 @@ function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
         </div>
       )}
 
+      {/* Processing progress */}
+      {generating && processingProgress && (
+        <div style={{
+          maxWidth: 500, margin: "1rem auto", padding: "1rem",
+          borderRadius: 10, background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.3)",
+          textAlign: "center",
+        }}>
+          <div style={{ fontSize: "1.25rem", marginBottom: "0.375rem", animation: "spin 1s linear infinite" }}>&#9881;</div>
+          <div style={{ fontWeight: 600, color: "#2563eb", fontSize: "0.85rem" }}>
+            {processingProgress}
+          </div>
+          <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>
+            העיבוד עשוי לקחת עד דקה — אנא המתן
+          </div>
+        </div>
+      )}
+
+      {/* Processing error */}
+      {processingError && (
+        <div style={{
+          maxWidth: 500, margin: "1rem auto", padding: "1rem",
+          borderRadius: 10, background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.3)",
+          textAlign: "center",
+        }}>
+          <div style={{ fontWeight: 600, color: "#dc2626", fontSize: "0.85rem", marginBottom: "0.25rem" }}>
+            שגיאה בעיבוד הוידאו
+          </div>
+          <div style={{ fontSize: "0.75rem", color: "#dc2626" }}>
+            {processingError}
+          </div>
+        </div>
+      )}
+
       {/* Finalize button */}
       {!data.pipelineFinalized && (
         <div style={{ textAlign: "center", marginTop: "1.5rem" }}>
           <button className="wiz-btn wiz-btn-primary" style={{ fontSize: "1rem", padding: "0.75rem 2rem" }}
             onClick={handleFinalize} disabled={!allPassed || generating}>
-            {generating ? "&#9881; יוצר קובץ סופי..." : "&#128274; אשר ונעל קובץ לעריכה"}
+            {generating ? "&#9881; מעבד ויוצר קובץ סופי..." : "&#128274; אשר ונעל קובץ לעריכה"}
           </button>
           {!allPassed && (
             <div style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "#dc2626" }}>

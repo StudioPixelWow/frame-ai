@@ -19,7 +19,7 @@ export interface SpectrumImpactFlashOptions {
   glowLevel?: "low" | "medium" | "high";
   /** Play sound signature — default: true */
   sound?: boolean;
-  /** Duration in ms — default: 900 (range 600–1200) */
+  /** Duration in ms — default: 2800 (range 2000–4000) */
   durationMs?: number;
   /** Target container — default: document.body */
   container?: HTMLElement;
@@ -75,26 +75,31 @@ function getSpectrumImpactSound(): HTMLAudioElement {
 export function getSpectrumImpactFlashStyle(progress: number): React.CSSProperties {
   // progress: 0 → 1 over the transition duration
   const bell = Math.sin(progress * Math.PI);
-  const burst = Math.exp(-Math.pow((progress - 0.2) * 5, 2)); // gaussian burst at 20%
-  const glow = Math.exp(-progress * 3);
+  const burst = Math.exp(-Math.pow((progress - 0.15) * 4, 2)); // gaussian burst at 15%
+  const glow = Math.exp(-progress * 2);
+  // Secondary pulse for sustained color
+  const pulse2 = Math.exp(-Math.pow((progress - 0.45) * 3, 2));
 
   return {
     position: "absolute",
-    inset: "-10%",
+    inset: "-20%",
     zIndex: 21,
     pointerEvents: "none",
-    background: `radial-gradient(ellipse 120% 120% at 50% 50%,
-      rgba(255,255,255,${0.9 * burst}) 0%,
-      rgba(0,255,255,${0.5 * bell}) 15%,
-      rgba(80,120,255,${0.45 * bell}) 28%,
-      rgba(180,60,255,${0.4 * bell}) 42%,
-      rgba(255,60,200,${0.3 * bell}) 56%,
-      rgba(255,100,60,${0.15 * bell}) 70%,
-      transparent 85%)`,
-    opacity: bell * 0.95,
-    filter: `blur(${2 + glow * 8}px) brightness(${1 + burst * 2})`,
+    background: `radial-gradient(ellipse 140% 140% at 50% 50%,
+      rgba(255,255,255,${0.95 * burst}) 0%,
+      rgba(255,50,50,${0.7 * burst}) 8%,
+      rgba(255,200,0,${0.6 * bell}) 16%,
+      rgba(0,255,100,${0.55 * bell}) 24%,
+      rgba(0,220,255,${0.55 * bell}) 32%,
+      rgba(80,80,255,${0.5 * bell}) 40%,
+      rgba(180,0,255,${0.45 * bell}) 50%,
+      rgba(255,0,200,${0.4 * bell}) 60%,
+      rgba(255,100,60,${0.25 * pulse2}) 72%,
+      transparent 90%)`,
+    opacity: Math.min(1, bell * 1.1),
+    filter: `blur(${1 + glow * 6}px) brightness(${1 + burst * 2.5}) saturate(${1.2 + bell * 0.8})`,
     mixBlendMode: "screen" as const,
-    transform: `scale(${0.8 + bell * 0.4})`,
+    transform: `scale(${0.7 + bell * 0.5})`,
     transition: "none",
   };
 }
@@ -110,13 +115,13 @@ export function triggerSpectrumImpactFlash(options: SpectrumImpactFlashOptions =
     colorMode = "spectrum-prismatic",
     glowLevel = "high",
     sound = true,
-    durationMs = 900,
+    durationMs = 2800,
     container = document.body,
     onComplete,
   } = options;
 
-  // Clamp duration
-  const dur = Math.max(600, Math.min(1200, durationMs));
+  // Clamp duration — allow much longer flashes
+  const dur = Math.max(2000, Math.min(4000, durationMs));
 
   // Build overlay
   const overlay = document.createElement("div");
@@ -125,22 +130,29 @@ export function triggerSpectrumImpactFlash(options: SpectrumImpactFlashOptions =
 
   if (coverage === "contained") {
     overlay.style.position = "absolute";
+  } else {
+    // Ensure true fullscreen coverage
+    overlay.style.position = "fixed";
+    overlay.style.inset = "0";
+    overlay.style.width = "100vw";
+    overlay.style.height = "100vh";
+    overlay.style.zIndex = "999999";
   }
 
   // Intensity scaling
-  const opacityScale = intensity === "subtle" ? 0.5 : intensity === "standard" ? 0.75 : 1;
+  const opacityScale = intensity === "subtle" ? 0.6 : intensity === "standard" ? 0.85 : 1;
   overlay.style.opacity = String(opacityScale);
 
   // Color mode filter
   if (colorMode === "warm-spectrum") {
-    overlay.style.filter = "hue-rotate(-20deg) saturate(1.2)";
+    overlay.style.filter = "hue-rotate(-20deg) saturate(1.4)";
   } else if (colorMode === "cool-spectrum") {
-    overlay.style.filter = "hue-rotate(20deg) saturate(1.1)";
+    overlay.style.filter = "hue-rotate(20deg) saturate(1.3)";
   } else if (colorMode === "monochrome") {
     overlay.style.filter = "saturate(0.15) brightness(1.3)";
   }
 
-  // Build layers
+  // Build layers — all core layers
   const burst = document.createElement("div");
   burst.className = "spectrum-impact-flash-burst";
 
@@ -153,17 +165,25 @@ export function triggerSpectrumImpactFlash(options: SpectrumImpactFlashOptions =
   const rgbSplit = document.createElement("div");
   rgbSplit.className = "spectrum-impact-flash-rgb-split";
 
+  const rainbowSweep = document.createElement("div");
+  rainbowSweep.className = "spectrum-impact-flash-rainbow-sweep";
+
+  const rings = document.createElement("div");
+  rings.className = "spectrum-impact-flash-rings";
+
   overlay.appendChild(burst);
   overlay.appendChild(chromatic);
   overlay.appendChild(bloom);
   overlay.appendChild(rgbSplit);
+  overlay.appendChild(rainbowSweep);
+  overlay.appendChild(rings);
 
   // Glow layer (optional based on glowLevel)
   if (glowLevel !== "low") {
     const glow = document.createElement("div");
     glow.className = "spectrum-impact-flash-glow";
     if (glowLevel === "medium") {
-      glow.style.opacity = "0.5";
+      glow.style.opacity = "0.6";
     }
     overlay.appendChild(glow);
   }
@@ -179,8 +199,8 @@ export function triggerSpectrumImpactFlash(options: SpectrumImpactFlashOptions =
     }
   }
 
-  // Cleanup
-  const totalDur = dur * 1.6; // glow lingers
+  // Cleanup — glow lingers 1.8x the main duration
+  const totalDur = dur * 1.8;
   setTimeout(() => {
     overlay.remove();
     onComplete?.();

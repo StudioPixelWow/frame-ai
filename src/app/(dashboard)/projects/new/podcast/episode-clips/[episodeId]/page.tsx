@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -96,6 +96,16 @@ function formatDuration(seconds: number): string {
   return s > 0 ? `${m}:${String(s).padStart(2, '0')} דקות` : `${m} דקות`;
 }
 
+function parseTimeToSeconds(timeStr: string): number | null {
+  if (!timeStr) return null;
+  // Support MM:SS or HH:MM:SS formats
+  const parts = timeStr.split(':').map(Number);
+  if (parts.some(isNaN)) return null;
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  return null;
+}
+
 function statusColor(status: string): string {
   switch (status) {
     case 'suggested': return COLORS.suggested;
@@ -132,6 +142,13 @@ export default function EpisodeClipsPage() {
   const [selectedClips, setSelectedClips] = useState<Set<string>>(new Set());
   const [approving, setApproving] = useState(false);
   const [expandedClip, setExpandedClip] = useState<string | null>(null);
+  const [editingTimes, setEditingTimes] = useState<Record<string, { start: string; end: string }>>({});
+  const [savingClip, setSavingClip] = useState<string | null>(null);
+  const [previewingClip, setPreviewingClip] = useState<string | null>(null);
+  const [addingManual, setAddingManual] = useState(false);
+  const [manualClip, setManualClip] = useState({ title: '', startTime: '', endTime: '', description: '' });
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const previewTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Load data ─────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -238,6 +255,140 @@ export default function EpisodeClipsPage() {
     }
   };
 
+  // ── Seek video to clip ──────────────────────────────────────────────────
+  const seekToClip = useCallback((startTime: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = startTime;
+      videoRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, []);
+
+  // ── Preview clip (play from start to end) ────────────────────────────────
+  const previewClip = useCallback((clip: CandidateClip) => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Stop any existing preview
+    if (previewTimerRef.current) {
+      clearInterval(previewTimerRef.current);
+      previewTimerRef.current = null;
+    }
+
+    const start = clip.userAdjustedStart ?? clip.startTime;
+    const end = clip.userAdjustedEnd ?? clip.endTime;
+
+    video.currentTime = start;
+    video.play();
+    setPreviewingClip(clip.id);
+    video.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    previewTimerRef.current = setInterval(() => {
+      if (video.currentTime >= end || video.paused) {
+        video.pause();
+        setPreviewingClip(null);
+        if (previewTimerRef.current) {
+          clearInterval(previewTimerRef.current);
+          previewTimerRef.current = null;
+        }
+      }
+    }, 100);
+  }, []);
+
+  // ── Stop preview ─────────────────────────────────────────────────────────
+  const stopPreview = useCallback(() => {
+    if (videoRef.current) videoRef.current.pause();
+    if (previewTimerRef.current) {
+      clearInterval(previewTimerRef.current);
+      previewTimerRef.current = null;
+    }
+    setPreviewingClip(null);
+  }, []);
+
+  // ── Save time edits ─────────────────────────────────────────────────────
+  const saveTimeEdits = async (clipId: string) => {
+    const edits = editingTimes[clipId];
+    if (!edits) return;
+
+    const startSeconds = parseTimeToSeconds(edits.start);
+    const endSeconds = parseTimeToSeconds(edits.end);
+
+    if (startSeconds === null || endSeconds === null || endSeconds <= startSeconds) {
+      alert('זמנים לא תקינים — ודא שזמן הסיום גדול מזמן ההתחלה');
+      return;
+    }
+
+    setSavingClip(clipId);
+    try {
+      const res = await fetch(`/api/podcast/episode-candidates/${clipId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startTime: startSeconds, endTime: endSeconds }),
+      });
+      if (!res.ok) throw new Error('שגיאה בשמירה');
+      await loadData();
+      // Clear editing state for this clip
+      setEditingTimes(prev => {
+        const next = { ...prev };
+        delete next[clipId];
+        return next;
+      });
+    } catch (err) {
+      console.error('Save time edit error:', err);
+      alert('שגיאה בשמירת הזמנים');
+    } finally {
+      setSavingClip(null);
+    }
+  };
+
+  // ── Add manual clip ─────────────────────────────────────────────────────
+  const handleAddManualClip = async () => {
+    if (!data) return;
+    const start = parseTimeToSeconds(manualClip.startTime);
+    const end = parseTimeToSeconds(manualClip.endTime);
+
+    if (start === null || end === null || end <= start) {
+      alert('זמנים לא תקינים');
+      return;
+    }
+    if (!manualClip.title.trim()) {
+      alert('נא להזין כותרת');
+      return;
+    }
+
+    setSavingClip('manual');
+    try {
+      const res = await fetch('/api/podcast/episode-candidates/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          episodeId,
+          title: manualClip.title,
+          startTime: start,
+          endTime: end,
+          description: manualClip.description || '',
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'שגיאה בהוספה');
+      }
+      setManualClip({ title: '', startTime: '', endTime: '', description: '' });
+      setAddingManual(false);
+      await loadData();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'שגיאה בהוספת קליפ ידני');
+    } finally {
+      setSavingClip(null);
+    }
+  };
+
+  // Clean up preview timer on unmount
+  useEffect(() => {
+    return () => {
+      if (previewTimerRef.current) clearInterval(previewTimerRef.current);
+    };
+  }, []);
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -336,6 +487,52 @@ export default function EpisodeClipsPage() {
         ))}
       </div>
 
+      {/* ── Video Player ──────────────────────────────────────────────────── */}
+      {episode.sourceFilePath && (
+        <div style={{
+          background: COLORS.card,
+          borderRadius: 12,
+          padding: 24,
+          marginBottom: 32,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+          border: `1px solid ${COLORS.border}`,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, color: COLORS.text }}>
+              נגן וידאו
+            </h3>
+            {previewingClip && (
+              <button
+                onClick={stopPreview}
+                style={{
+                  padding: '6px 16px',
+                  background: COLORS.error,
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                עצור תצוגה מקדימה
+              </button>
+            )}
+          </div>
+          <video
+            ref={videoRef}
+            src={episode.sourceFilePath}
+            controls
+            style={{
+              width: '100%',
+              maxHeight: 400,
+              borderRadius: 8,
+              background: '#000',
+            }}
+          />
+        </div>
+      )}
+
       {/* ── Timeline visualization ─────────────────────────────────────────── */}
       {totalDuration > 0 && (
         <div style={{
@@ -382,7 +579,10 @@ export default function EpisodeClipsPage() {
               return (
                 <div
                   key={clip.id}
-                  onClick={() => toggleClip(clip.id)}
+                  onClick={() => {
+                    seekToClip(clip.startTime);
+                    toggleClip(clip.id);
+                  }}
                   style={{
                     position: 'absolute',
                     top: 8,
@@ -435,6 +635,21 @@ export default function EpisodeClipsPage() {
 
           <div style={{ display: 'flex', gap: 8 }}>
             <button
+              onClick={() => setAddingManual(!addingManual)}
+              style={{
+                padding: '8px 16px',
+                background: addingManual ? COLORS.primary : 'transparent',
+                border: `1px solid ${addingManual ? COLORS.primary : COLORS.accent}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                fontSize: 13,
+                color: addingManual ? '#fff' : COLORS.primary,
+                fontWeight: 600,
+              }}
+            >
+              {addingManual ? 'ביטול' : '+ הוסף קליפ ידני'}
+            </button>
+            <button
               onClick={() => {
                 const allIds = new Set(
                   candidates
@@ -471,6 +686,132 @@ export default function EpisodeClipsPage() {
             </button>
           </div>
         </div>
+
+        {/* Manual clip form */}
+        {addingManual && (
+          <div style={{
+            background: COLORS.card,
+            borderRadius: 12,
+            padding: 20,
+            marginBottom: 16,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            border: `2px solid ${COLORS.primary}`,
+          }}>
+            <h4 style={{ fontSize: 15, fontWeight: 600, color: COLORS.text, marginBottom: 12 }}>
+              הוספת קליפ ידני
+            </h4>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, color: COLORS.textSecondary, display: 'block', marginBottom: 4 }}>
+                  כותרת הקליפ *
+                </label>
+                <input
+                  type="text"
+                  value={manualClip.title}
+                  onChange={(e) => setManualClip(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="למשל: הרגע הכי מצחיק בפרק"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: `1px solid ${COLORS.border}`,
+                    borderRadius: 6,
+                    fontSize: 13,
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: COLORS.textSecondary, display: 'block', marginBottom: 4 }}>
+                  תיאור (אופציונלי)
+                </label>
+                <input
+                  type="text"
+                  value={manualClip.description}
+                  onChange={(e) => setManualClip(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="תיאור קצר"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: `1px solid ${COLORS.border}`,
+                    borderRadius: 6,
+                    fontSize: 13,
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: COLORS.textSecondary, display: 'block', marginBottom: 4 }}>
+                  זמן התחלה * (MM:SS)
+                </label>
+                <input
+                  type="text"
+                  value={manualClip.startTime}
+                  onChange={(e) => setManualClip(prev => ({ ...prev, startTime: e.target.value }))}
+                  placeholder="01:30"
+                  dir="ltr"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: `1px solid ${COLORS.border}`,
+                    borderRadius: 6,
+                    fontSize: 13,
+                    textAlign: 'center',
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: COLORS.textSecondary, display: 'block', marginBottom: 4 }}>
+                  זמן סיום * (MM:SS)
+                </label>
+                <input
+                  type="text"
+                  value={manualClip.endTime}
+                  onChange={(e) => setManualClip(prev => ({ ...prev, endTime: e.target.value }))}
+                  placeholder="02:45"
+                  dir="ltr"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: `1px solid ${COLORS.border}`,
+                    borderRadius: 6,
+                    fontSize: 13,
+                    textAlign: 'center',
+                  }}
+                />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-start' }}>
+              <button
+                onClick={handleAddManualClip}
+                disabled={savingClip === 'manual'}
+                style={{
+                  padding: '8px 24px',
+                  background: COLORS.primary,
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                {savingClip === 'manual' ? 'מוסיף...' : 'הוסף קליפ'}
+              </button>
+              <button
+                onClick={() => setAddingManual(false)}
+                style={{
+                  padding: '8px 16px',
+                  background: 'transparent',
+                  border: `1px solid ${COLORS.border}`,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  color: COLORS.textSecondary,
+                }}
+              >
+                ביטול
+              </button>
+            </div>
+          </div>
+        )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {candidates.map(clip => {
@@ -568,10 +909,36 @@ export default function EpisodeClipsPage() {
                         {clip.hookScore}
                       </div>
                     </div>
+                    {clip.confidenceScore != null && (
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 11, color: COLORS.textSecondary, marginBottom: 2 }}>ביטחון</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: clip.confidenceScore >= 70 ? COLORS.success : COLORS.warning }}>
+                          {clip.confidenceScore}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    {/* Preview button */}
+                    {episode.sourceFilePath && !isRejected && (
+                      <button
+                        onClick={() => previewingClip === clip.id ? stopPreview() : previewClip(clip)}
+                        style={{
+                          padding: '6px 12px',
+                          background: previewingClip === clip.id ? COLORS.primary : 'transparent',
+                          border: `1px solid ${COLORS.primary}`,
+                          borderRadius: 6,
+                          cursor: 'pointer',
+                          fontSize: 12,
+                          color: previewingClip === clip.id ? '#fff' : COLORS.primary,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {previewingClip === clip.id ? '⏹ עצור' : '▶ תצוגה'}
+                      </button>
+                    )}
                     <button
                       onClick={() => setExpandedClip(isExpanded ? null : clip.id)}
                       style={{
@@ -612,6 +979,119 @@ export default function EpisodeClipsPage() {
                     paddingTop: 16,
                     borderTop: `1px solid ${COLORS.border}`,
                   }}>
+                    {/* Time range editing */}
+                    {!isRejected && (
+                      <div style={{
+                        marginBottom: 16,
+                        padding: 16,
+                        background: '#F0F9FF',
+                        borderRadius: 8,
+                        border: `1px solid ${COLORS.primary}30`,
+                      }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, marginBottom: 10 }}>
+                          עריכת טווח זמנים
+                        </div>
+                        <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <label style={{ fontSize: 12, color: COLORS.textSecondary }}>התחלה:</label>
+                            <input
+                              type="text"
+                              placeholder={formatTime(clip.userAdjustedStart ?? clip.startTime)}
+                              value={editingTimes[clip.id]?.start ?? ''}
+                              onChange={(e) => setEditingTimes(prev => ({
+                                ...prev,
+                                [clip.id]: { start: e.target.value, end: prev[clip.id]?.end ?? '' },
+                              }))}
+                              style={{
+                                width: 80,
+                                padding: '6px 10px',
+                                border: `1px solid ${COLORS.border}`,
+                                borderRadius: 6,
+                                fontSize: 13,
+                                textAlign: 'center',
+                                direction: 'ltr',
+                              }}
+                            />
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <label style={{ fontSize: 12, color: COLORS.textSecondary }}>סיום:</label>
+                            <input
+                              type="text"
+                              placeholder={formatTime(clip.userAdjustedEnd ?? clip.endTime)}
+                              value={editingTimes[clip.id]?.end ?? ''}
+                              onChange={(e) => setEditingTimes(prev => ({
+                                ...prev,
+                                [clip.id]: { start: prev[clip.id]?.start ?? '', end: e.target.value },
+                              }))}
+                              style={{
+                                width: 80,
+                                padding: '6px 10px',
+                                border: `1px solid ${COLORS.border}`,
+                                borderRadius: 6,
+                                fontSize: 13,
+                                textAlign: 'center',
+                                direction: 'ltr',
+                              }}
+                            />
+                          </div>
+                          <span style={{ fontSize: 11, color: COLORS.textSecondary }}>
+                            (פורמט: MM:SS)
+                          </span>
+                          <button
+                            onClick={() => saveTimeEdits(clip.id)}
+                            disabled={savingClip === clip.id || (!editingTimes[clip.id]?.start && !editingTimes[clip.id]?.end)}
+                            style={{
+                              padding: '6px 16px',
+                              background: (!editingTimes[clip.id]?.start && !editingTimes[clip.id]?.end) ? '#D1D5DB' : COLORS.primary,
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: 6,
+                              cursor: (!editingTimes[clip.id]?.start && !editingTimes[clip.id]?.end) ? 'not-allowed' : 'pointer',
+                              fontSize: 12,
+                              fontWeight: 600,
+                            }}
+                          >
+                            {savingClip === clip.id ? 'שומר...' : 'שמור שינויים'}
+                          </button>
+                          {/* Seek to start button */}
+                          {episode.sourceFilePath && (
+                            <button
+                              onClick={() => seekToClip(clip.userAdjustedStart ?? clip.startTime)}
+                              style={{
+                                padding: '6px 12px',
+                                background: 'transparent',
+                                border: `1px solid ${COLORS.primary}`,
+                                borderRadius: 6,
+                                cursor: 'pointer',
+                                fontSize: 12,
+                                color: COLORS.primary,
+                              }}
+                            >
+                              קפוץ לנקודה בוידאו
+                            </button>
+                          )}
+                        </div>
+                        {(clip.userAdjustedStart != null || clip.userAdjustedEnd != null) && (
+                          <div style={{ marginTop: 8, fontSize: 11, color: COLORS.edited }}>
+                            זמנים ערוכים: {formatTime(clip.userAdjustedStart ?? clip.startTime)} — {formatTime(clip.userAdjustedEnd ?? clip.endTime)}
+                            {' '}(מקור: {formatTime(clip.startTime)} — {formatTime(clip.endTime)})
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Description */}
+                    {clip.description && (
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.textSecondary, marginBottom: 4 }}>
+                          תיאור:
+                        </div>
+                        <p style={{ fontSize: 14, color: COLORS.text, lineHeight: 1.6 }}>
+                          {clip.description}
+                        </p>
+                      </div>
+                    )}
+
                     {clip.reasoning && (
                       <div style={{ marginBottom: 12 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.textSecondary, marginBottom: 4 }}>

@@ -26,6 +26,7 @@ import TabCampaigns from "./tab-campaigns";
 import TabGrowth from "./tab-growth";
 import TabSeoGeo from "./tab-seo-geo";
 import DailyReportTab from "@/components/meta/daily-report-tab";
+import TabPublishingChannels from "./tab-publishing-channels";
 
 // ── BI Health Badge (inline component) ──
 
@@ -98,7 +99,7 @@ const GANTT_STATUS_COLORS: Record<string, { label: string; color: string }> = {
   none: { label: "לא יוצר", color: "#9ca3af" },
 };
 
-type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "campaigns" | "seo" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos" | "automations" | "integrations" | "growth" | "daily-report";
+type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "campaigns" | "seo" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos" | "automations" | "integrations" | "growth" | "daily-report" | "publishing-channels";
 
 const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "overview", label: "סקירה" },
@@ -118,6 +119,7 @@ const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "automations", label: "אוטומציות" },
   { id: "growth", label: "צמיחה" },
   { id: "daily-report", label: "דוח יומי" },
+  { id: "publishing-channels", label: "ערוצי פרסום" },
   { id: "integrations", label: "חיבורים" },
   { id: "activity", label: "פעילות" },
 ];
@@ -1345,6 +1347,9 @@ function ClientDetailContent() {
         )}
         {activeTab === "growth" && (
           <TabGrowth clientId={client.id} />
+        )}
+        {activeTab === "publishing-channels" && (
+          <TabPublishingChannels client={client} />
         )}
         {activeTab === "integrations" && (
           <TabIntegrations client={client} />

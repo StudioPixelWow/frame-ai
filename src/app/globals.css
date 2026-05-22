@@ -4334,117 +4334,211 @@
 
 /* ── Spectrum Impact Flash — Fullscreen Overlay System ──────────────────── */
 .spectrum-impact-flash-overlay {
-  position: fixed; inset: 0; z-index: 99999; pointer-events: none;
-  --sif-duration: 900ms;
+  position: fixed; inset: 0; width: 100vw; height: 100vh;
+  z-index: 999999; pointer-events: none;
+  --sif-duration: 2800ms;
 }
+
+/* Layer 1: Main color burst — vivid rainbow radial explosion */
 .spectrum-impact-flash-burst {
-  position: absolute; inset: -20%; z-index: 1;
-  background: radial-gradient(ellipse 100% 100% at 50% 50%,
+  position: absolute; inset: -30%; z-index: 1;
+  background: radial-gradient(ellipse 130% 130% at 50% 50%,
     rgba(255,255,255,1) 0%,
-    rgba(255,255,255,0.85) 8%,
-    rgba(0,255,255,0.6) 18%,
-    rgba(60,140,255,0.5) 28%,
-    rgba(120,80,255,0.45) 38%,
-    rgba(200,60,255,0.4) 48%,
-    rgba(255,60,180,0.3) 58%,
-    rgba(255,100,60,0.15) 70%,
-    transparent 85%);
+    rgba(255,255,255,0.95) 5%,
+    rgba(255,50,50,0.9) 12%,
+    rgba(255,165,0,0.85) 20%,
+    rgba(255,255,0,0.8) 28%,
+    rgba(0,255,100,0.75) 36%,
+    rgba(0,220,255,0.7) 44%,
+    rgba(80,80,255,0.65) 52%,
+    rgba(180,0,255,0.6) 60%,
+    rgba(255,0,200,0.5) 68%,
+    rgba(255,60,60,0.3) 78%,
+    transparent 92%);
   opacity: 0;
   animation: spectrum-burst var(--sif-duration) cubic-bezier(0.16, 1, 0.3, 1) forwards;
   mix-blend-mode: screen;
 }
 @keyframes spectrum-burst {
-  0%   { opacity: 0; transform: scale(0.1); filter: blur(20px) brightness(4); }
-  12%  { opacity: 1; transform: scale(0.6); filter: blur(8px) brightness(3.5); }
-  25%  { opacity: 1; transform: scale(1.0); filter: blur(2px) brightness(2.5); }
-  40%  { opacity: 0.85; transform: scale(1.05); filter: blur(0px) brightness(2); }
-  60%  { opacity: 0.5; transform: scale(1.1); filter: blur(3px) brightness(1.5); }
-  80%  { opacity: 0.2; transform: scale(1.15); filter: blur(8px) brightness(1.2); }
-  100% { opacity: 0; transform: scale(1.25); filter: blur(15px) brightness(1); }
+  0%   { opacity: 0; transform: scale(0.05); filter: blur(25px) brightness(5); }
+  8%   { opacity: 1; transform: scale(0.4); filter: blur(12px) brightness(4); }
+  16%  { opacity: 1; transform: scale(0.8); filter: blur(4px) brightness(3); }
+  25%  { opacity: 1; transform: scale(1.0); filter: blur(0px) brightness(2.5); }
+  35%  { opacity: 0.95; transform: scale(1.05); filter: blur(0px) brightness(2.2); }
+  50%  { opacity: 0.8; transform: scale(1.08); filter: blur(2px) brightness(1.8); }
+  65%  { opacity: 0.55; transform: scale(1.12); filter: blur(5px) brightness(1.5); }
+  80%  { opacity: 0.3; transform: scale(1.18); filter: blur(10px) brightness(1.2); }
+  90%  { opacity: 0.1; transform: scale(1.22); filter: blur(15px) brightness(1.1); }
+  100% { opacity: 0; transform: scale(1.3); filter: blur(20px) brightness(1); }
 }
 
+/* Layer 2: Chromatic rainbow ring — spinning saturated conic gradient */
 .spectrum-impact-flash-chromatic {
-  position: absolute; inset: -10%; z-index: 2;
+  position: absolute; inset: -20%; z-index: 2;
   background: conic-gradient(from 0deg at 50% 50%,
-    rgba(255,0,60,0.25) 0deg,
-    rgba(255,120,0,0.15) 45deg,
-    rgba(255,255,0,0.1) 90deg,
-    rgba(0,255,120,0.15) 135deg,
-    rgba(0,200,255,0.25) 180deg,
-    rgba(80,60,255,0.25) 225deg,
-    rgba(200,0,255,0.2) 270deg,
-    rgba(255,0,120,0.2) 315deg,
-    rgba(255,0,60,0.25) 360deg);
+    rgba(255,0,0,0.7) 0deg,
+    rgba(255,127,0,0.65) 30deg,
+    rgba(255,255,0,0.6) 60deg,
+    rgba(0,255,0,0.65) 90deg,
+    rgba(0,255,127,0.6) 120deg,
+    rgba(0,255,255,0.65) 150deg,
+    rgba(0,127,255,0.7) 180deg,
+    rgba(0,0,255,0.7) 210deg,
+    rgba(127,0,255,0.65) 240deg,
+    rgba(200,0,255,0.7) 270deg,
+    rgba(255,0,200,0.65) 300deg,
+    rgba(255,0,100,0.6) 330deg,
+    rgba(255,0,0,0.7) 360deg);
   opacity: 0;
   animation: spectrum-chromatic var(--sif-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
   mix-blend-mode: screen;
-  filter: blur(30px);
+  filter: blur(20px);
 }
 @keyframes spectrum-chromatic {
-  0%   { opacity: 0; transform: scale(0.5) rotate(0deg); }
-  20%  { opacity: 0.7; transform: scale(1.0) rotate(30deg); }
-  50%  { opacity: 0.4; transform: scale(1.1) rotate(60deg); }
-  100% { opacity: 0; transform: scale(1.3) rotate(120deg); }
+  0%   { opacity: 0; transform: scale(0.3) rotate(0deg); filter: blur(20px) saturate(2); }
+  15%  { opacity: 0.9; transform: scale(0.9) rotate(40deg); filter: blur(15px) saturate(2.5); }
+  30%  { opacity: 0.85; transform: scale(1.05) rotate(80deg); filter: blur(10px) saturate(2); }
+  50%  { opacity: 0.6; transform: scale(1.15) rotate(140deg); filter: blur(18px) saturate(1.5); }
+  70%  { opacity: 0.35; transform: scale(1.25) rotate(200deg); filter: blur(25px) saturate(1.2); }
+  100% { opacity: 0; transform: scale(1.4) rotate(300deg); filter: blur(35px) saturate(1); }
 }
 
+/* Layer 3: White-core bloom with color fringe */
 .spectrum-impact-flash-bloom {
-  position: absolute; inset: 0; z-index: 3;
+  position: absolute; inset: -10%; z-index: 3;
   background: radial-gradient(circle at 50% 50%,
-    rgba(255,255,255,0.6) 0%,
-    rgba(200,220,255,0.3) 20%,
-    transparent 50%);
+    rgba(255,255,255,0.95) 0%,
+    rgba(255,240,220,0.7) 10%,
+    rgba(200,180,255,0.5) 25%,
+    rgba(100,200,255,0.3) 40%,
+    transparent 60%);
   opacity: 0;
   animation: spectrum-bloom var(--sif-duration) cubic-bezier(0.33, 1, 0.68, 1) forwards;
   mix-blend-mode: screen;
 }
 @keyframes spectrum-bloom {
-  0%   { opacity: 0; transform: scale(0.2); filter: blur(0px); }
-  15%  { opacity: 1; transform: scale(0.8); filter: blur(5px); }
-  30%  { opacity: 0.6; transform: scale(1.2); filter: blur(15px); }
-  100% { opacity: 0; transform: scale(2.0); filter: blur(40px); }
+  0%   { opacity: 0; transform: scale(0.1); filter: blur(0px) brightness(3); }
+  10%  { opacity: 1; transform: scale(0.5); filter: blur(3px) brightness(2.5); }
+  20%  { opacity: 0.9; transform: scale(0.9); filter: blur(8px) brightness(2); }
+  35%  { opacity: 0.7; transform: scale(1.1); filter: blur(15px) brightness(1.5); }
+  55%  { opacity: 0.4; transform: scale(1.5); filter: blur(25px) brightness(1.2); }
+  75%  { opacity: 0.15; transform: scale(1.8); filter: blur(35px) brightness(1.1); }
+  100% { opacity: 0; transform: scale(2.2); filter: blur(50px) brightness(1); }
 }
 
+/* Layer 4: RGB split — chromatic aberration streaks */
 .spectrum-impact-flash-rgb-split {
-  position: absolute; inset: 0; z-index: 4;
+  position: absolute; inset: -5%; z-index: 4;
   opacity: 0;
   animation: spectrum-rgb-split var(--sif-duration) ease-out forwards;
 }
 .spectrum-impact-flash-rgb-split::before,
 .spectrum-impact-flash-rgb-split::after {
   content: '';
-  position: absolute; inset: 0;
-  border-radius: 50%;
+  position: absolute; inset: -10%;
 }
 .spectrum-impact-flash-rgb-split::before {
-  background: radial-gradient(circle at 48% 50%, rgba(0,255,255,0.3) 0%, transparent 40%);
-  filter: blur(20px);
+  background: radial-gradient(circle at 45% 50%, rgba(0,255,255,0.6) 0%, rgba(0,200,255,0.3) 25%, transparent 50%);
+  filter: blur(15px);
 }
 .spectrum-impact-flash-rgb-split::after {
-  background: radial-gradient(circle at 52% 50%, rgba(255,0,200,0.3) 0%, transparent 40%);
-  filter: blur(20px);
+  background: radial-gradient(circle at 55% 50%, rgba(255,0,180,0.6) 0%, rgba(255,50,100,0.3) 25%, transparent 50%);
+  filter: blur(15px);
 }
 @keyframes spectrum-rgb-split {
   0%   { opacity: 0; }
-  15%  { opacity: 1; }
-  40%  { opacity: 0.6; }
+  10%  { opacity: 1; }
+  25%  { opacity: 0.9; }
+  50%  { opacity: 0.6; }
+  75%  { opacity: 0.25; }
   100% { opacity: 0; }
 }
 
-.spectrum-impact-flash-glow {
-  position: absolute; inset: -5%; z-index: 0;
-  background: radial-gradient(ellipse 80% 80% at 50% 50%,
-    rgba(100,140,255,0.2) 0%,
-    rgba(160,80,255,0.1) 40%,
-    transparent 70%);
+/* Layer 5: Rainbow sweep overlay — horizontal prismatic band */
+.spectrum-impact-flash-rainbow-sweep {
+  position: absolute; inset: -10%; z-index: 5;
+  background: linear-gradient(90deg,
+    rgba(255,0,0,0.5) 0%,
+    rgba(255,127,0,0.5) 14%,
+    rgba(255,255,0,0.5) 28%,
+    rgba(0,255,0,0.5) 42%,
+    rgba(0,127,255,0.5) 57%,
+    rgba(75,0,130,0.5) 71%,
+    rgba(148,0,211,0.5) 85%,
+    rgba(255,0,100,0.5) 100%);
   opacity: 0;
-  animation: spectrum-glow calc(var(--sif-duration) * 1.5) ease-out forwards;
+  animation: spectrum-rainbow-sweep var(--sif-duration) ease-in-out forwards;
+  mix-blend-mode: screen;
+  filter: blur(30px);
+}
+@keyframes spectrum-rainbow-sweep {
+  0%   { opacity: 0; transform: translateX(-100%) scaleY(0.5); }
+  15%  { opacity: 0.8; transform: translateX(-30%) scaleY(1.2); }
+  30%  { opacity: 0.7; transform: translateX(0%) scaleY(1.0); }
+  50%  { opacity: 0.5; transform: translateX(20%) scaleY(1.1); }
+  70%  { opacity: 0.3; transform: translateX(50%) scaleY(0.8); }
+  100% { opacity: 0; transform: translateX(100%) scaleY(0.5); }
+}
+
+/* Layer 6: Lingering energy glow — slow fade out */
+.spectrum-impact-flash-glow {
+  position: absolute; inset: -15%; z-index: 0;
+  background: radial-gradient(ellipse 100% 100% at 50% 50%,
+    rgba(255,100,200,0.35) 0%,
+    rgba(100,140,255,0.3) 20%,
+    rgba(80,255,200,0.2) 40%,
+    rgba(160,80,255,0.15) 60%,
+    transparent 80%);
+  opacity: 0;
+  animation: spectrum-glow calc(var(--sif-duration) * 1.8) ease-out forwards;
   filter: blur(40px);
 }
 @keyframes spectrum-glow {
+  0%   { opacity: 0; transform: scale(0.8); }
+  20%  { opacity: 0.9; transform: scale(1.0); }
+  40%  { opacity: 0.7; transform: scale(1.05); }
+  60%  { opacity: 0.45; transform: scale(1.1); }
+  80%  { opacity: 0.2; transform: scale(1.15); }
+  100% { opacity: 0; transform: scale(1.2); }
+}
+
+/* Layer 7: Color pulse rings — concentric expanding rings */
+.spectrum-impact-flash-rings {
+  position: absolute; inset: -20%; z-index: 6;
+  opacity: 0;
+  animation: spectrum-rings var(--sif-duration) ease-out forwards;
+}
+.spectrum-impact-flash-rings::before,
+.spectrum-impact-flash-rings::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: 50%;
+}
+.spectrum-impact-flash-rings::before {
+  border: 4px solid rgba(255,200,0,0.6);
+  filter: blur(6px);
+  animation: spectrum-ring-expand-1 var(--sif-duration) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.spectrum-impact-flash-rings::after {
+  border: 3px solid rgba(0,200,255,0.5);
+  filter: blur(8px);
+  animation: spectrum-ring-expand-2 var(--sif-duration) cubic-bezier(0.16, 1, 0.3, 1) 0.15s forwards;
+}
+@keyframes spectrum-rings {
   0%   { opacity: 0; }
-  30%  { opacity: 0.8; }
-  60%  { opacity: 0.4; }
+  10%  { opacity: 1; }
+  60%  { opacity: 0.5; }
   100% { opacity: 0; }
+}
+@keyframes spectrum-ring-expand-1 {
+  0%   { transform: scale(0.05); opacity: 1; }
+  50%  { transform: scale(0.8); opacity: 0.6; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+@keyframes spectrum-ring-expand-2 {
+  0%   { transform: scale(0.05); opacity: 1; }
+  50%  { transform: scale(0.7); opacity: 0.5; }
+  100% { transform: scale(1.4); opacity: 0; }
 }
 
 .trans2-demo-punchy .trans2-demo-effect {
