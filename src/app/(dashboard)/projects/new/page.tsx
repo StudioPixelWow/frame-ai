@@ -3356,22 +3356,25 @@ function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
     if (!allPassed) return;
     setGenerating(true);
 
-    // In production: call /api/video-pipeline/[projectId]/finalize
-    // which generates the Final Pre-Edit Video and locks the source.
-    // For now, simulate the process:
-    await new Promise(r => setTimeout(r, 1500));
+    // Resolve the actual video URL — this is the real file in Supabase Storage.
+    // On Vercel serverless we can't create intermediate video files (no FFmpeg),
+    // so hook/trim/crop parameters are stored in wizard data and applied at render time.
+    // The finalPreEditVideoId MUST point to the real uploaded video URL.
+    const actualVideoUrl = data.uploadedVideoUrl
+      || (data.videoUrl && !data.videoUrl.startsWith("blob:") ? data.videoUrl : "");
 
-    const finalId = `final_pre_edit_${Date.now()}`;
-    const trimCropId = `trim_crop_${Date.now()}`;
-    const hookId = data.hookSelected ? `hook_${Date.now()}` : "";
-    const originalId = `original_${Date.now()}`;
+    if (!actualVideoUrl) {
+      alert("שגיאה: לא נמצא קובץ וידאו שהועלה. יש להעלות וידאו לפני אישור.");
+      setGenerating(false);
+      return;
+    }
 
     patch({
       pipelineFinalized: true,
-      finalPreEditVideoId: finalId,
-      trimCropVideoId: trimCropId,
-      hookGeneratedVideoId: hookId,
-      originalVideoId: originalId,
+      finalPreEditVideoId: actualVideoUrl,
+      trimCropVideoId: actualVideoUrl,
+      hookGeneratedVideoId: data.hookSelected ? actualVideoUrl : "",
+      originalVideoId: actualVideoUrl,
       sourceLocked: true,
     });
 

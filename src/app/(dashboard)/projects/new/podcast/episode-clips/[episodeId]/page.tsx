@@ -191,7 +191,7 @@ export default function EpisodeClipsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           episodeId,
-          sourceEpisodeVideoId: data.episode.sourceFilePath,
+          sourceEpisodeVideoId: data.episode.id,
           approvals,
         }),
       });

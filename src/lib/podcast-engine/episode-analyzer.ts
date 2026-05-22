@@ -22,7 +22,8 @@ import { createClient } from '@supabase/supabase-js';
 import { writeFile, mkdir, unlink } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { transcribeAudio } from './whisper-transcription';
+import { transcribeAudio, transcribeChunkedAudio } from './whisper-transcription';
+import { splitAudioIntoChunks } from './ffmpeg-service';
 import { segmentTranscript, type TranscriptSegment, type TopicSegment } from './topic-segmentation';
 import { analyzeTranscriptForClips, type AIClipSuggestion } from './clip-analyzer';
 import { scoreClipCandidates, rankClips, type RawClipCandidate, type ScoredClip } from './clip-scorer';
@@ -167,32 +168,35 @@ export async function runEpisodeAnalysis(
     // ── Stage 3: Transcribe — Whisper API ────────────────────────────────
     await updateEpisodeProgress(episodeId, 2, 0, 'מתמלל עם Whisper AI...');
 
-    // Check file size — Whisper API limit is 25MB
+    let fullText: string;
+    let transcriptSegments: unknown[];
+
+    // Auto-chunk large files (Whisper API limit is 25MB)
     if (fileSizeBytes > WHISPER_MAX_FILE_SIZE) {
       const sizeMB = Math.round(fileSizeBytes / 1024 / 1024);
-      await supabase
-        .from('podcast_episodes')
-        .update({
-          status: 'uploaded',
-          processing_progress: {
-            stage: 2,
-            stageName: 'תמלול',
-            percent: 0,
-            statusText: `הקובץ גדול מדי לתמלול אוטומטי (${sizeMB}MB). נדרש עיבוד חיצוני או קובץ קטן יותר (עד 25MB).`,
-            startedAt: new Date().toISOString(),
-          },
-          error_message: `הקובץ גדול מדי לעיבוד אוטומטי (${sizeMB}MB). הגבלת Whisper API היא 25MB.`,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', episodeId);
+      const CHUNK_DURATION_SEC = 10 * 60; // 10 minutes per chunk
 
-      return { success: false, episodeId, error: `File too large: ${sizeMB}MB > 25MB` };
+      await updateEpisodeProgress(episodeId, 2, 5, `הקובץ גדול (${sizeMB}MB) — מפצל לקטעים לתמלול...`);
+
+      const chunks = await splitAudioIntoChunks(tempFilePath, CHUNK_DURATION_SEC, tempDir);
+
+      await updateEpisodeProgress(episodeId, 2, 15, `מתמלל ${chunks.length} קטעים עם Whisper AI...`);
+
+      const transcriptionResult = await transcribeChunkedAudio(chunks, 'he');
+      fullText = transcriptionResult.text;
+      transcriptSegments = transcriptionResult.segments;
+
+      // Cleanup chunk files
+      for (const chunk of chunks) {
+        await unlink(chunk.path).catch(() => {});
+      }
+    } else {
+      await updateEpisodeProgress(episodeId, 2, 20, 'שולח קובץ ל-Whisper AI לתמלול...');
+
+      const transcriptionResult = await transcribeAudio(tempFilePath, 'he');
+      fullText = transcriptionResult.text;
+      transcriptSegments = transcriptionResult.segments;
     }
-
-    await updateEpisodeProgress(episodeId, 2, 20, 'שולח קובץ ל-Whisper AI לתמלול...');
-
-    const transcriptionResult = await transcribeAudio(tempFilePath, 'he');
-    const { text: fullText, segments: transcriptSegments } = transcriptionResult;
 
     await updateEpisodeProgress(episodeId, 2, 100, 'התמלול הושלם');
 
