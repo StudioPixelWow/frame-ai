@@ -10,11 +10,6 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
   // Note: eslint config moved to eslint.config.js in Next.js 16+
-  // Keep ffmpeg-static out of the webpack bundle — its default export is a
-  // platform-specific binary path that only makes sense at runtime, not at
-  // build-time. Without this, the build crashes with
-  // "The 'path' argument must be of type string. Received undefined".
-  serverExternalPackages: ["ffmpeg-static"],
   // Allow large file uploads (video files up to 500 MB)
   experimental: {
     serverActions: {

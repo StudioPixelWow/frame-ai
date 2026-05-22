@@ -4,7 +4,7 @@
  * Wraps ffmpeg commands for audio extraction, chunking, and segment cutting.
  * Uses child_process.execFile for safe, shell-injection-free execution.
  *
- * Uses ffmpeg-static npm package for Vercel compatibility (no system ffmpeg needed).
+ * Uses system ffmpeg binary from PATH.
  *
  * All user-facing strings are in Hebrew.
  */
@@ -17,26 +17,12 @@ import path from "path";
 const execFileAsync = promisify(execFile);
 
 // ── FFmpeg binary resolution ───────────────────────────────────────────────
-// ffmpeg-static provides a pre-built binary that works on Vercel serverless.
-// Falls back to system "ffmpeg" / "ffprobe" if the package isn't installed.
+// Uses system ffmpeg/ffprobe from PATH. On Vercel, ffmpeg is available via
+// the community layer or must be added manually. No ffmpeg-static import
+// because it crashes Turbopack builds (Next.js 16+).
 
-let _ffmpegPath: string = "ffmpeg";
-let _ffprobePath: string = "ffprobe";
-
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const ffmpegStatic = require("ffmpeg-static") as string;
-  if (ffmpegStatic) {
-    _ffmpegPath = ffmpegStatic;
-    // ffprobe-static isn't always available — derive path from ffmpeg binary
-    const ffprobeCandidate = ffmpegStatic.replace(/ffmpeg([^/\\]*)$/, "ffprobe$1");
-    if (existsSync(ffprobeCandidate)) {
-      _ffprobePath = ffprobeCandidate;
-    }
-  }
-} catch {
-  // ffmpeg-static not installed — keep system defaults
-}
+const _ffmpegPath: string = "ffmpeg";
+const _ffprobePath: string = "ffprobe";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

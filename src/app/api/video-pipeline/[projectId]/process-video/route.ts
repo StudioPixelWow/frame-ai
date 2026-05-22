@@ -24,40 +24,13 @@ export const maxDuration = 120; // allow up to 2 minutes for ffmpeg processing
 const execFileAsync = promisify(execFile);
 const EXEC_TIMEOUT_MS = 90_000; // 90 seconds
 
-// ── FFmpeg binary resolution (lazy — avoids build-time crash) ──────────
+// ── FFmpeg binary resolution ────────────────────────────────────────────
+// Use system ffmpeg/ffprobe from PATH. On Vercel, install via a community
+// build-time layer (e.g. @vercel/community/ffmpeg) or add an ffmpeg binary
+// to the project. No ffmpeg-static import — it crashes Turbopack builds.
 
-let _ffmpegPath: string | null = null;
-let _ffprobePath: string | null = null;
-
-async function getFfmpegPath(): Promise<string> {
-  if (_ffmpegPath) return _ffmpegPath;
-
-  // Try dynamic import of ffmpeg-static (only resolves at runtime, not build)
-  try {
-    const mod = await import(/* webpackIgnore: true */ "ffmpeg-static");
-    const resolved = mod.default || mod;
-    if (typeof resolved === "string" && resolved.length > 0) {
-      _ffmpegPath = resolved;
-      const ffprobeCandidate = resolved.replace(/ffmpeg([^/\\]*)$/, "ffprobe$1");
-      if (existsSync(ffprobeCandidate)) {
-        _ffprobePath = ffprobeCandidate;
-      }
-      return _ffmpegPath;
-    }
-  } catch {
-    // ffmpeg-static not available — fall through to system default
-  }
-
-  _ffmpegPath = "ffmpeg";
-  _ffprobePath = "ffprobe";
-  return _ffmpegPath;
-}
-
-async function getFfprobePath(): Promise<string> {
-  if (_ffprobePath) return _ffprobePath;
-  await getFfmpegPath(); // resolves both paths
-  return _ffprobePath || "ffprobe";
-}
+const FFMPEG_PATH = "ffmpeg";
+const FFPROBE_PATH = "ffprobe";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
