@@ -25,11 +25,11 @@ export type TransitionCategory =
 
 export type TransitionType =
   // Clean Premium
-  | 'fade' | 'crossfade' | 'soft_dissolve' | 'subtle_slide' | 'light_wipe'
+  | 'fade' | 'crossfade' | 'prismatic_flash_sweep' | 'subtle_slide' | 'light_wipe'
   // Social / TikTok Fast
   | 'whip_pan' | 'zoom_snap' | 'blur_swipe' | 'quick_flash' | 'shake_hit' | 'speed_push'
   // Luxury
-  | 'slow_cinematic_fade' | 'elegant_parallax' | 'soft_zoom_dissolve' | 'curtain_reveal' | 'depth_blur'
+  | 'slow_cinematic_fade' | 'elegant_parallax' | 'prismatic_sweep_luxury' | 'curtain_reveal' | 'depth_blur'
   // Food / Retail
   | 'pop_zoom' | 'snap_reveal' | 'object_wipe' | 'bounce_reveal' | 'fast_product_punch'
   // UGC

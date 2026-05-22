@@ -41,7 +41,7 @@ export type PacingStyle = "fast" | "standard" | "slow";
  * clean-cut  — Standard editorial cuts with minimal breathing room
  * dissolve   — Cross-dissolve (12–18 frames) between main segments
  */
-export type TransitionStyle = "jump-cut" | "clean-cut" | "dissolve";
+export type TransitionStyle = "jump-cut" | "clean-cut" | "prismatic-sweep";
 
 /**
  * How much B-roll coverage to target.

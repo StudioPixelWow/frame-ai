@@ -660,7 +660,7 @@ function getTransitionDuration(style: string): number {
     motionBlur: 300,
     premiumSlide: 600,
     punchyCut: 150,
-    cinematicDissolve: 800,
+    prismaticFlashSweep: 900,
   };
   return durations[style] ?? 500;
 }

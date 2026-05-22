@@ -72,7 +72,7 @@ export function generateAutoEdit(
       transitionType = styleTrans;
     } else {
       // Accent/variety (10%)
-      const accentOptions = ['crossfade', 'soft_dissolve', 'subtle_slide'];
+      const accentOptions = ['crossfade', 'prismatic_flash_sweep', 'subtle_slide'];
       transitionType = accentOptions[i % accentOptions.length];
     }
 

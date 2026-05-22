@@ -264,13 +264,13 @@ function generatePremiumEdit(input: ReEditInput): ReEditResult {
   // 1. Smoother pacing: keep segments natural length (no changes)
   // No pacing changes for premium mode
 
-  // 2. Elegant transitions: cinematicDissolve
-  if (input.currentTransitionStyle !== "cinematicDissolve") {
-    patch.transitionStyle = "cinematicDissolve";
+  // 2. Elegant transitions: prismaticFlashSweep
+  if (input.currentTransitionStyle !== "prismaticFlashSweep") {
+    patch.transitionStyle = "prismaticFlashSweep";
     changes.push({
       category: "transitions",
-      descriptionHe: "מעברים אלגנטיים - 'Cinematic Dissolve' לחלקה ולרכות",
-      descriptionEn: "Elegant transitions - 'Cinematic Dissolve' for smoothness",
+      descriptionHe: "מעברים פרימיום - 'Prismatic Flash Sweep' סוויפ אור פריזמטי",
+      descriptionEn: "Premium transitions - 'Prismatic Flash Sweep' for cinematic motion",
       impact: "high",
     });
   }

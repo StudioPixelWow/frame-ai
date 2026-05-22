@@ -200,7 +200,7 @@ interface WizardData {
   aiEditMode: "premium" | "viral" | "emotional" | "sales" | "";
   aiDirectionNotes: string;
 
-  transitionStyle: "cut" | "fade" | "zoom" | "motionBlur" | "premiumSlide" | "punchyCut" | "cinematicDissolve" | "lightLeak";
+  transitionStyle: "cut" | "fade" | "zoom" | "motionBlur" | "premiumSlide" | "punchyCut" | "prismaticFlashSweep" | "lightLeak";
   premiumMode: boolean;
   premiumLevel: "standard" | "premium" | "cinematic";
 
@@ -5473,7 +5473,7 @@ const TRANSITION_OPTIONS: { id: WizardData["transitionStyle"]; name: string; nam
   { id: "motionBlur", name: "Motion Blur", nameHe: "טשטוש תנועה", desc: "מעבר מהיר עם טשטוש — תחושת מהירות", category: "dynamic", speed: "300ms", demoClass: "trans2-demo-blur" },
   { id: "premiumSlide", name: "Premium Slide", nameHe: "החלקה פרימיום", desc: "החלקה כיוונית חלקה ומלוטשת — מראה יוקרתי", category: "premium", speed: "600ms", demoClass: "trans2-demo-slide" },
   { id: "punchyCut", name: "Punchy Social", nameHe: "חיתוך סושיאל", desc: "חיתוך אנרגטי וחד לרשתות חברתיות — TikTok / Reels", category: "social", speed: "150ms", demoClass: "trans2-demo-punchy" },
-  { id: "cinematicDissolve", name: "Cinematic Dissolve", nameHe: "דיזולב קולנועי", desc: "מעבר בסגנון קולנוע מקצועי — עומק ודרמה", category: "cinematic", speed: "800ms", demoClass: "trans2-demo-dissolve" },
+  { id: "prismaticFlashSweep", name: "Prismatic Flash Sweep", nameHe: "סוויפ פריזמטי", desc: "סוויפ אור פרימיום עם זוהר הולוגרפי פריזמטי — חתימת תנועה של המערכת", category: "cinematic", speed: "900ms", demoClass: "trans2-demo-prismatic" },
   { id: "lightLeak", name: "Light Leak", nameHe: "דליפת אור", desc: "דליפת אור קולנועית עם גוונים חמים — אפקט פילם פרימיום", category: "cinematic", speed: "900ms", demoClass: "trans2-demo-lightleak" },
 ];
 
@@ -5629,7 +5629,7 @@ function StepTransitions({ data, patch, videoSrc: parentVideoSrc }: { data: Wiza
         patch({ effects: newEffects });
         // Apply suggested transition if different
         if (result.transitionStyle && result.transitionStyle !== data.transitionStyle) {
-          const validTransitions = ["cut", "fade", "zoom", "motionBlur", "premiumSlide", "punchyCut", "cinematicDissolve"];
+          const validTransitions = ["cut", "fade", "zoom", "motionBlur", "premiumSlide", "punchyCut", "prismaticFlashSweep"];
           if (validTransitions.includes(result.transitionStyle)) {
             patch({ transitionStyle: result.transitionStyle });
           }
@@ -5677,7 +5677,7 @@ function StepTransitions({ data, patch, videoSrc: parentVideoSrc }: { data: Wiza
     }));
     patch({ effects: newEffects });
     if (aiSuggestedTransition && aiSuggestedTransition !== data.transitionStyle) {
-      const validTransitions = ["cut", "fade", "zoom", "motionBlur", "premiumSlide", "punchyCut", "cinematicDissolve"];
+      const validTransitions = ["cut", "fade", "zoom", "motionBlur", "premiumSlide", "punchyCut", "prismaticFlashSweep"];
       if (validTransitions.includes(aiSuggestedTransition)) {
         patch({ transitionStyle: aiSuggestedTransition as WizardData["transitionStyle"] });
       }

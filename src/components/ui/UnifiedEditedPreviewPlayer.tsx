@@ -530,9 +530,9 @@ export const UnifiedEditedPreviewPlayer = forwardRef<UnifiedPreviewHandle, Unifi
             if (transitionStyle === "punchyCut") {
               return <div style={{ position: "absolute", inset: 0, zIndex: 21, pointerEvents: "none", backgroundColor: "#fff", opacity: bell > 0.8 ? (1 - bell) * 5 : 0 }} />;
             }
-            if (transitionStyle === "cinematicDissolve") {
-              const r = (1 - bell) * 100;
-              return <div style={{ position: "absolute", inset: 0, zIndex: 21, pointerEvents: "none", background: `radial-gradient(circle, transparent ${r}%, rgba(0,0,0,0.85) ${r + 20}%)` }} />;
+            if (transitionStyle === "prismaticFlashSweep") {
+              const sweepPos = p * 200 - 50;
+              return <div style={{ position: "absolute", inset: 0, zIndex: 21, pointerEvents: "none", background: `linear-gradient(45deg, transparent ${sweepPos - 30}%, rgba(0,255,255,0.05) ${sweepPos - 20}%, rgba(100,120,255,0.25) ${sweepPos - 6}%, rgba(255,255,255,${0.7 * bell}) ${sweepPos}%, rgba(255,140,220,0.35) ${sweepPos + 3}%, rgba(255,100,180,0.25) ${sweepPos + 6}%, transparent ${sweepPos + 30}%)`, opacity: bell * 0.95, filter: `blur(${2 + bell * 3}px)`, mixBlendMode: "screen" }} />;
             }
             if (transitionStyle === "lightLeak") {
               const lightX = p * 120 - 10;

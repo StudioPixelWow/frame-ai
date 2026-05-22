@@ -441,7 +441,7 @@ export const QUALITY_PRESETS: Record<ExportQuality, QualityPreset> = {
   },
 };
 
-export type TransitionStyle = "cut" | "fade" | "zoom" | "motionBlur" | "premiumSlide" | "punchyCut" | "cinematicDissolve" | "lightLeak";
+export type TransitionStyle = "cut" | "fade" | "zoom" | "motionBlur" | "premiumSlide" | "punchyCut" | "prismaticFlashSweep" | "lightLeak";
 
 export interface TransitionConfig {
   style: TransitionStyle;
@@ -526,7 +526,7 @@ export const TRANSITION_STYLES: { id: TransitionStyle; name: string; nameHe: str
   { id: "motionBlur", name: "Motion Blur", nameHe: "טשטוש תנועה", description: "Fast motion blur transition", descriptionHe: "מעבר עם טשטוש תנועה מהיר", durationMs: 300 },
   { id: "premiumSlide", name: "Premium Slide", nameHe: "החלקה פרימיום", description: "Smooth directional slide", descriptionHe: "החלקה כיוונית חלקה", durationMs: 600 },
   { id: "punchyCut", name: "Punchy Social Cut", nameHe: "חיתוך סושיאל", description: "Fast punchy cut for social media", descriptionHe: "חיתוך מהיר ואנרגטי לרשתות", durationMs: 150 },
-  { id: "cinematicDissolve", name: "Cinematic Dissolve", nameHe: "דיזולב קולנועי", description: "Film-style dissolve", descriptionHe: "מעבר בסגנון קולנועי", durationMs: 800 },
+  { id: "prismaticFlashSweep", name: "Prismatic Flash Sweep", nameHe: "סוויפ פריזמטי", description: "Premium RGB light sweep with holographic prismatic glow", descriptionHe: "סוויפ אור פרימיום עם זוהר הולוגרפי פריזמטי", durationMs: 900 },
   { id: "lightLeak", name: "Light Leak", nameHe: "דליפת אור", description: "Premium cinematic light leak with warm film tones", descriptionHe: "דליפת אור קולנועית עם גוונים חמים של פילם", durationMs: 900 },
 ];
 

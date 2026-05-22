@@ -47,12 +47,27 @@ export const TransitionLayer: React.FC<Props> = ({ style: transStyle, durationMs
     );
   }
 
-  if (transStyle === "cinematicDissolve") {
+  if (transStyle === "prismaticFlashSweep") {
+    const bell = Math.sin(progress * Math.PI);
+    const sweepPos = progress * 200 - 50;
     return (
       <AbsoluteFill
         style={{
-          background: `radial-gradient(circle, transparent ${(1 - progress) * 100}%, black ${(1 - progress) * 100 + 20}%)`,
-          opacity: progress * 0.9,
+          background: `linear-gradient(45deg,
+            transparent ${sweepPos - 30}%,
+            rgba(0,255,255,0.05) ${sweepPos - 20}%,
+            rgba(0,200,255,0.12) ${sweepPos - 12}%,
+            rgba(100,120,255,0.25) ${sweepPos - 6}%,
+            rgba(180,140,255,0.35) ${sweepPos - 3}%,
+            rgba(255,255,255,${0.7 * bell}) ${sweepPos}%,
+            rgba(255,140,220,0.35) ${sweepPos + 3}%,
+            rgba(255,100,180,0.25) ${sweepPos + 6}%,
+            rgba(255,160,80,0.1) ${sweepPos + 12}%,
+            transparent ${sweepPos + 30}%
+          )`,
+          opacity: bell * 0.95,
+          filter: `blur(${2 + bell * 3}px)`,
+          mixBlendMode: "screen",
           zIndex: 20,
         }}
       />

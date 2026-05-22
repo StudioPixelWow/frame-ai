@@ -2653,7 +2653,7 @@ export interface BrandPreset {
     animations: {
       intro: 'fade' | 'slide' | 'zoom' | 'glitch' | 'none';
       outro: 'fade' | 'slide' | 'zoom' | 'none';
-      transition: 'cut' | 'fade' | 'dissolve' | 'slide';
+      transition: 'cut' | 'fade' | 'prismatic-sweep' | 'slide';
       textEntrance: 'fade' | 'pop' | 'typewriter' | 'slide';
     };
     fonts: {

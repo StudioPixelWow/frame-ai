@@ -89,7 +89,7 @@ export interface PreviewWizardData {
     | "motionBlur"
     | "premiumSlide"
     | "punchyCut"
-    | "cinematicDissolve";
+    | "prismaticFlashSweep";
 
   // Music
   musicEnabled: boolean;

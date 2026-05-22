@@ -217,7 +217,7 @@ export const STRATEGY_CONFIGS: Record<VariationStrategy, StrategyConfig> = {
     description: "A considered 45-second edit with deliberate pacing and breathing room — premium placements, long-form awareness.",
     targetDurationSec: 45,
     pacing:          "slow",
-    transitionStyle: "dissolve",
+    transitionStyle: "prismatic-sweep",
     brollDensity:    "generous",
     musicTone:       "cinematic",
 
@@ -225,11 +225,11 @@ export const STRATEGY_CONFIGS: Record<VariationStrategy, StrategyConfig> = {
     ctaGoalPriority:   ["awareness", "inquiry", "booking", "lead-generation", "contact"],
 
     segmentHintByRole: {
-      "hook":        "full natural delivery with a deliberate 1 s pause after — let it breathe before the first dissolve",
-      "key-claim":   "hold 1 s after final word; dissolve to supporting B-roll to let the claim land visually",
+      "hook":        "full natural delivery with a deliberate 1 s pause after — let it breathe before the first prismatic sweep",
+      "key-claim":   "hold 1 s after final word; prismatic sweep to supporting B-roll to let the claim land visually",
       "proof-point": "hold 1–2 s after delivery; cut to on-screen stat graphic or high-quality supporting visual",
-      "cta":         "dissolve to premium end card with B-roll behind CTA text; hold end card for ≥ 3 s",
-      "bridge":      "warm cross-dissolve (12–18 frames) from the previous segment — preserve natural pauses",
+      "cta":         "prismatic sweep to premium end card with B-roll behind CTA text; hold end card for ≥ 3 s",
+      "bridge":      "prismatic flash sweep (700–900ms) from the previous segment — preserve natural pauses",
       "filler":      "cut candidate — do not include",
     },
 
