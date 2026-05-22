@@ -178,7 +178,7 @@ export async function editClipCandidate(
     title?: string;
     description?: string;
   }
-): Promise<PodcastClipCandidate> {
+): Promise<PodcastClipCandidate | null> {
   const updateData: Record<string, unknown> = {
     candidateStatus: 'edited_by_user' as ClipCandidateStatus,
     updatedAt: new Date().toISOString(),
