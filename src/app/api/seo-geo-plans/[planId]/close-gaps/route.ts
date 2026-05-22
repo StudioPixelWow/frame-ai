@@ -298,7 +298,7 @@ async function processSingleDay(
       }
 
       let result: AutoTaskResult;
-      const TASK_TIMEOUT_MS = 60_000;
+      const TASK_TIMEOUT_MS = 45_000; // 45s per task — keeps total day under 5 min
       if (automationModule) {
         result = await withTimeout(
           executeAutomationModule(autoType, context, task.automationConfig),

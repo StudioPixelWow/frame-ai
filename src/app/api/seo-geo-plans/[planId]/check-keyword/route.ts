@@ -15,7 +15,17 @@ import {
 } from '@/lib/seo/platform-apis';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 120; // 2 minutes — 6 AI platform calls in parallel can be slow
+
+/** Per-platform timeout — fail fast so the overall request stays under maxDuration */
+function withPlatformTimeout<T>(promise: Promise<T>, ms: number, platformId: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout: ${platformId} took more than ${ms / 1000}s`)), ms)
+    ),
+  ]);
+}
 
 /**
  * POST /api/seo-geo-plans/[planId]/check-keyword
@@ -60,7 +70,11 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
         return { platformId, available: false, result: null };
       }
       try {
-        const result = await queryPlatform(platformId, keyword, businessName, targetDomain);
+        const result = await withPlatformTimeout(
+          queryPlatform(platformId, keyword, businessName, targetDomain),
+          15_000, // 15s per platform — generous but prevents runaway calls
+          platformId
+        );
         return { platformId, available: true, result };
       } catch (e: any) {
         console.error(`[CHECK-KEYWORD] ${platformId} error:`, e.message);

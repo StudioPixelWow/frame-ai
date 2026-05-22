@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { SeoPlan } from '@/lib/db/schema';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 300; // 5 minutes — article generation + WP upload can be slow
 import {
   ok,
   err,

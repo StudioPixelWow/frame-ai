@@ -525,7 +525,11 @@ export default function SeoPlanDetail() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keyword, keywordIndex }),
       });
-      const data = await res.json();
+      if (!res.ok) {
+        console.error(`[check-keyword] HTTP ${res.status}`);
+        return;
+      }
+      const data = await res.json().catch(() => ({ error: `שגיאת שרת (${res.status})` }));
       if (!data.error) {
         // Refresh plan data
         const refreshRes = await fetch(`/api/data/seo-plans/${plan.id}`);
@@ -575,7 +579,7 @@ export default function SeoPlanDetail() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ keyword, keywordIndex: idx, isAiKeyword }),
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({ error: `שגיאת שרת (${res.status})` }));
         if (data.error) console.error(`Check keyword ${idx} (ai=${isAiKeyword}) error:`, data.error);
       } catch (e) {
         console.error(`Check keyword ${idx} (ai=${isAiKeyword}) failed:`, e);
@@ -820,7 +824,7 @@ export default function SeoPlanDetail() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId, taskTitle, wpConnection: (plan as any)?.wpConnection || (wpForm?.siteUrl && wpForm?.username && wpForm?.applicationPassword ? wpForm : undefined) }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({ error: `שגיאת שרת (${res.status})`, success: false }));
       if (res.ok && data.success !== false) {
         setExecutionResults(prev => ({ ...prev, [taskId]: data }));
         // Update task status locally
@@ -5586,9 +5590,9 @@ export default function SeoPlanDetail() {
                                   method: 'POST',
                                   headers: { 'Content-Type': 'application/json' },
                                   body: JSON.stringify({ keyword: kwText, keywordIndex: kw.idx, isAiKeyword: true }),
-                                }).then(r => r.json()).then(() => {
+                                }).then(r => r.ok ? r.json() : Promise.resolve(null)).then(() => {
                                   return fetch(`/api/data/seo-plans/${safePlan.id}`);
-                                }).then(r => r.json()).then(data => {
+                                }).then(r => r.ok ? r.json() : null).then(data => {
                                   if (data) setPlan(data);
                                 }).catch(console.error).finally(() => setCheckingKeyword(null));
                               }}
@@ -5682,11 +5686,11 @@ export default function SeoPlanDetail() {
                   wpConnection: planAny?.wpConnection || undefined,
                 }),
               });
-              const data = await res.json();
+              const data = await res.json().catch(() => ({ error: `שגיאת שרת (${res.status})`, success: false }));
               if (res.ok && data.success !== false) {
                 // Refresh plan data
                 const refreshRes = await fetch(`/api/data/seo-plans/${safePlan.id}`);
-                const refreshData = await refreshRes.json();
+                const refreshData = await refreshRes.json().catch(() => null);
                 if (refreshData) setPlan(refreshData);
               } else {
                 alert(data.error || 'שגיאה בהפעלת המנוע');
