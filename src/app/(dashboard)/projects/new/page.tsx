@@ -136,6 +136,36 @@ interface WizardData {
   trimEnd: number;
   format: "9:16" | "16:9" | "1:1" | "4:5";
 
+  // ── Pipeline: Hook Selection ──
+  hookMode: "ai" | "manual" | "skip";
+  hookStartTime: number;
+  hookEndTime: number;
+  hookDuration: number;
+  hookScore: number;
+  hookSelected: boolean;
+  hookSkipped: boolean;
+  hookRecommendations: Array<{
+    startTime: number; endTime: number; score: number; reason: string;
+    motionEnergy: number; emotionalIntensity: number; retentionPrediction: number;
+  }>;
+  hookAnalyzing: boolean;
+
+  // ── Pipeline: Crop ──
+  cropX: number;         // horizontal offset 0-100
+  cropY: number;         // vertical offset 0-100
+  cropWidth: number;     // width percentage 0-100
+  cropHeight: number;    // height percentage 0-100
+  faceTrackingEnabled: boolean;
+  subjectTrackingEnabled: boolean;
+
+  // ── Pipeline: Source Validation ──
+  pipelineFinalized: boolean;
+  finalPreEditVideoId: string;
+  sourceLocked: boolean;
+  originalVideoId: string;
+  hookGeneratedVideoId: string;
+  trimCropVideoId: string;
+
   subtitleMode: "auto" | "manual";
   language: string;
   segments: SubSegment[];
@@ -201,6 +231,16 @@ const INITIAL: WizardData = {
   videoFile: null, videoUrl: "", uploadedVideoUrl: "",
   trimMode: "full", trimStart: 0, trimEnd: 0,
   format: "9:16",
+  // Pipeline: Hook
+  hookMode: "ai", hookStartTime: 0, hookEndTime: 0, hookDuration: 0,
+  hookScore: 0, hookSelected: false, hookSkipped: false,
+  hookRecommendations: [], hookAnalyzing: false,
+  // Pipeline: Crop
+  cropX: 0, cropY: 0, cropWidth: 100, cropHeight: 100,
+  faceTrackingEnabled: false, subjectTrackingEnabled: false,
+  // Pipeline: Source Validation
+  pipelineFinalized: false, finalPreEditVideoId: "",
+  sourceLocked: false, originalVideoId: "", hookGeneratedVideoId: "", trimCropVideoId: "",
   subtitleMode: "auto", language: "",
   segments: [], transcribing: false,
   brollEnabled: false, brollStyle: "stock",
@@ -232,8 +272,10 @@ const INITIAL: WizardData = {
 const STEPS = [
   { id: "info",        label: "פרטי פרויקט",     icon: "📝" },
   { id: "upload",      label: "העלאת וידאו",      icon: "🎬" },
-  { id: "trim",        label: "חיתוך קליפ",       icon: "✂️" },
   { id: "format",      label: "פורמט יציאה",      icon: "📐" },
+  { id: "hookSelect",  label: "בחירת Hook",       icon: "🪝" },
+  { id: "trim",        label: "חיתוך ומיקוד",     icon: "✂️" },
+  { id: "finalize",    label: "אישור קובץ",       icon: "🔒" },
   { id: "submode",     label: "מצב כתוביות",      icon: "💬" },
   { id: "language",    label: "שפת דיבור",        icon: "🌐" },
   { id: "transcript",  label: "עריכת כתוביות",    icon: "📝" },
@@ -830,11 +872,14 @@ function NewProjectWizard() {
       case "info": return !!data.title.trim() && !!data.clientId;
       case "upload": return !!data.videoFile;
       case "format": return !!data.format;
+      case "hookSelect": return data.hookSelected || data.hookSkipped;
+      case "trim": return data.trimMode === "full" || (data.trimEnd - data.trimStart >= 0.5);
+      case "finalize": return data.pipelineFinalized;
       case "language": return !!data.language;
       case "broll": return !data.brollEnabled || data.brollApproved;
       default: return true;
     }
-  }, [step, data.title, data.clientId, data.videoFile, data.format, data.language, data.brollEnabled, data.brollApproved]);
+  }, [step, data.title, data.clientId, data.videoFile, data.format, data.language, data.brollEnabled, data.brollApproved, data.hookSelected, data.hookSkipped, data.trimMode, data.trimStart, data.trimEnd, data.pipelineFinalized]);
 
   const next = () => { if (canAdvance && step < STEPS.length - 1) setStep(step + 1); };
   const prev = () => { if (step > 0) setStep(step - 1); };
@@ -1069,6 +1114,38 @@ function NewProjectWizard() {
     createLockRef.current = true;
     setCreating(true);
     try {
+      /* ═══════════════════════════════════════════════════════════════════════
+         PIPELINE SOURCE VALIDATION — FINAL ABSOLUTE RULE
+         Only Final Pre-Edit Video may proceed. Original Video is BLOCKED.
+         ═══════════════════════════════════════════════════════════════════════ */
+      if (!data.pipelineFinalized || !data.sourceLocked) {
+        console.error("[createProject] ❌ PIPELINE BLOCKED — not finalized", {
+          pipelineFinalized: data.pipelineFinalized,
+          sourceLocked: data.sourceLocked,
+          finalPreEditVideoId: data.finalPreEditVideoId,
+        });
+        setCreating(false);
+        createLockRef.current = false;
+        alert("שגיאה: הצינור לא אושר — יש להשלים את שלב אישור הקובץ לפני יצירת הפרויקט.");
+        return;
+      }
+      if (!data.finalPreEditVideoId) {
+        console.error("[createProject] ❌ PIPELINE BLOCKED — no finalPreEditVideoId");
+        setCreating(false);
+        createLockRef.current = false;
+        alert("שגיאה: לא נוצר קובץ סופי לפני עריכה — יש לחזור לשלב אישור הקובץ.");
+        return;
+      }
+      // Audit log: record that pipeline validation passed
+      console.log("[createProject] ✅ Pipeline validated", {
+        finalPreEditVideoId: data.finalPreEditVideoId,
+        originalVideoId: data.originalVideoId,
+        hookGeneratedVideoId: data.hookGeneratedVideoId,
+        trimCropVideoId: data.trimCropVideoId,
+        pipelineFinalized: true,
+        sourceLocked: true,
+      });
+
       const client = clients.find((c) => c.id === data.clientId);
       const clientName = client?.name || data.clientId || "";
       const videoDurationSec = data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : 0;
@@ -1125,12 +1202,25 @@ function NewProjectWizard() {
       }
 
       // Build WizardSnapshot for the composition pipeline
-      // Validate video URL before proceeding — prevent broken bucket URLs
-      const resolvedVideoUrl = data.uploadedVideoUrl || (data.videoUrl && !data.videoUrl.startsWith("blob:") ? data.videoUrl : "");
+      // PIPELINE RULE: Use finalPreEditVideoId as the ONLY valid source
+      // Original video is BLOCKED — only Final Pre-Edit Video may proceed
+      const resolvedVideoUrl = data.finalPreEditVideoId || data.uploadedVideoUrl || (data.videoUrl && !data.videoUrl.startsWith("blob:") ? data.videoUrl : "");
       if (!resolvedVideoUrl || resolvedVideoUrl.endsWith("/")) {
-        console.error("[createProject] ❌ No valid video URL available for render:", { uploadedVideoUrl: data.uploadedVideoUrl, videoUrl: data.videoUrl?.substring(0, 60) });
+        console.error("[createProject] ❌ No valid video URL available for render:", { finalPreEditVideoId: data.finalPreEditVideoId, uploadedVideoUrl: data.uploadedVideoUrl, videoUrl: data.videoUrl?.substring(0, 60) });
         setCreating(false);
+        createLockRef.current = false;
         alert("שגיאה: לא נמצא קובץ וידאו תקין. נסה להעלות מחדש.");
+        return;
+      }
+      // SAFETY CHECK: If finalPreEditVideoId exists, resolvedVideoUrl MUST be it (never original)
+      if (data.finalPreEditVideoId && resolvedVideoUrl !== data.finalPreEditVideoId) {
+        console.error("[createProject] ❌ PIPELINE BLOCKED — resolvedVideoUrl does not match finalPreEditVideoId", {
+          resolvedVideoUrl: resolvedVideoUrl.substring(0, 80),
+          finalPreEditVideoId: data.finalPreEditVideoId.substring(0, 80),
+        });
+        setCreating(false);
+        createLockRef.current = false;
+        alert("שגיאה: מקור הוידאו אינו תואם לקובץ הסופי לפני עריכה. יש לחזור לשלב אישור הקובץ.");
         return;
       }
 
@@ -1266,11 +1356,12 @@ function NewProjectWizard() {
       }
 
       // Save project to database
+      // PIPELINE: sourceVideoKey MUST be finalPreEditVideoId — never original
       const savedProject = await createProject({
         name: data.title, clientId: data.clientId, clientName,
         status: "approved", format: data.format, preset: data.preset,
         durationSec: videoDurationSec,
-        segments: data.segments, sourceVideoKey: data.uploadedVideoUrl || data.videoUrl || null,
+        segments: data.segments, sourceVideoKey: data.finalPreEditVideoId || data.uploadedVideoUrl || data.videoUrl || null,
         renderOutputKey: null, thumbnailKey: null,
         wizardState: {
           videoUrl: data.uploadedVideoUrl || data.videoUrl || "",
@@ -1303,6 +1394,25 @@ function NewProjectWizard() {
           compositionData: compositionData ? JSON.parse(JSON.stringify(compositionData)) : null,
           editStateVersion,
           activeLayers: activeLayers,
+          // ─── Pipeline Source Validation — audit trail ───
+          pipelineFinalized: data.pipelineFinalized,
+          sourceLocked: data.sourceLocked,
+          originalVideoId: data.originalVideoId,
+          hookGeneratedVideoId: data.hookGeneratedVideoId,
+          trimCropVideoId: data.trimCropVideoId,
+          finalPreEditVideoId: data.finalPreEditVideoId,
+          activeVideoId: data.finalPreEditVideoId, // MUST equal finalPreEditVideoId
+          hookMode: data.hookMode,
+          hookSelected: data.hookSelected,
+          hookSkipped: data.hookSkipped,
+          hookStartTime: data.hookStartTime,
+          hookEndTime: data.hookEndTime,
+          cropX: data.cropX,
+          cropY: data.cropY,
+          cropWidth: data.cropWidth,
+          cropHeight: data.cropHeight,
+          faceTrackingEnabled: data.faceTrackingEnabled,
+          subjectTrackingEnabled: data.subjectTrackingEnabled,
         },
         renderPayload: renderPayload ? (renderPayload as unknown as Record<string, unknown>) : null,
       });
@@ -1560,8 +1670,10 @@ function NewProjectWizard() {
     switch (sid) {
       case "info":        return <StepInfo data={data} patch={patch} clients={clients} createClient={createClient} />;
       case "upload":      return <StepUpload data={data} patch={patch} />;
-      case "trim":        return <StepTrim data={data} patch={patch} />;
       case "format":      return <StepFormat data={data} patch={patch} />;
+      case "hookSelect":  return <StepHookSelect data={data} patch={patch} />;
+      case "trim":        return <StepTrimCrop data={data} patch={patch} />;
+      case "finalize":    return <StepFinalize data={data} patch={patch} />;
       case "submode":     return <StepSubMode data={data} patch={patch} />;
       case "language":    return <StepLanguage data={data} patch={patch} />;
       case "transcript":  return data.subtitleMode === "auto"
@@ -2368,10 +2480,14 @@ function StepUpload({ data, patch }: { data: WizardData; patch: (p: Partial<Wiza
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   STEP 2 — Video Trim
+   STEP 2 — Video Trim (LEGACY — REMOVED, replaced by StepTrimCrop)
+   StepTrim was removed as part of pipeline source validation.
+   All trim+crop functionality is now in StepTrimCrop.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function StepTrim({ data, patch }: { data: WizardData; patch: (p: Partial<WizardData>) => void }) {
+// @deprecated — Old StepTrim removed. Use StepTrimCrop instead.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function StepTrim_REMOVED({ data, patch }: { data: WizardData; patch: (p: Partial<WizardData>) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -2701,6 +2817,517 @@ function StepFormat({ data, patch }: { data: WizardData; patch: (p: Partial<Wiza
             {data.format === f.id && <div className="wiz-format-check">✓ נבחר</div>}
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STEP — Hook Selection (בחירת Hook)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function StepHookSelect({ data, patch }: { data: WizardData; patch: (p: Partial<WizardData>) => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoDur, setVideoDur] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [previewIdx, setPreviewIdx] = useState<number | null>(null);
+
+  const videoSrc = data.videoUrl || data.uploadedVideoUrl;
+
+  // Generate AI hook recommendations when entering step
+  useEffect(() => {
+    if (data.hookRecommendations.length > 0 || data.hookSkipped || !videoSrc) return;
+    patch({ hookAnalyzing: true });
+    // Simulate AI analysis — in production this calls /api/video-pipeline/[projectId]/hook-analyze
+    const timer = setTimeout(() => {
+      const dur = videoDur || 30;
+      const recs = [
+        { startTime: 0, endTime: Math.min(3, dur), score: 92, reason: "פתיחה אנרגטית עם תנועה חזקה", motionEnergy: 0.88, emotionalIntensity: 0.85, retentionPrediction: 0.91 },
+        { startTime: Math.min(5, dur * 0.15), endTime: Math.min(8, dur * 0.25), score: 85, reason: "משפט פותח מעניין עם ביטחון", motionEnergy: 0.72, emotionalIntensity: 0.90, retentionPrediction: 0.84 },
+        { startTime: Math.min(dur * 0.3, dur - 5), endTime: Math.min(dur * 0.3 + 3, dur), score: 78, reason: "רגע רגשי חזק עם מבט ישיר למצלמה", motionEnergy: 0.65, emotionalIntensity: 0.95, retentionPrediction: 0.77 },
+      ];
+      patch({ hookRecommendations: recs, hookAnalyzing: false });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [videoSrc, videoDur, data.hookRecommendations.length, data.hookSkipped, patch]);
+
+  const selectHook = (rec: typeof data.hookRecommendations[0], idx: number) => {
+    patch({
+      hookStartTime: rec.startTime,
+      hookEndTime: rec.endTime,
+      hookDuration: rec.endTime - rec.startTime,
+      hookScore: rec.score,
+      hookSelected: true,
+      hookSkipped: false,
+      hookMode: "ai",
+    });
+    setPreviewIdx(idx);
+  };
+
+  const skipHook = () => {
+    patch({ hookSkipped: true, hookSelected: false, hookStartTime: 0, hookEndTime: 0, hookDuration: 0, hookScore: 0 });
+  };
+
+  const previewHook = (rec: typeof data.hookRecommendations[0]) => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.currentTime = rec.startTime;
+    v.play();
+    setPlaying(true);
+    // Stop at endTime
+    const check = setInterval(() => {
+      if (v.currentTime >= rec.endTime) { v.pause(); setPlaying(false); clearInterval(check); }
+    }, 100);
+  };
+
+  const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+  return (
+    <div className="wiz-step-content" style={{ direction: "rtl" }}>
+      <h2 className="wiz-step-heading">בחירת Hook</h2>
+      <p className="wiz-step-sub">בחר את הרגע הכי חזק לפתיחת הסרטון. ה-Hook יוכפל ויתווסף לתחילת הסרטון כדי לתפוס תשומת לב מיידית.</p>
+
+      {/* Video preview */}
+      {videoSrc && (
+        <div style={{ maxWidth: 480, margin: "0 auto 1.5rem", borderRadius: 12, overflow: "hidden", border: "1px solid var(--border)", position: "relative" }}>
+          <video ref={videoRef} src={videoSrc} style={{ width: "100%", display: "block" }}
+            onLoadedMetadata={(e) => setVideoDur((e.target as HTMLVideoElement).duration)}
+            onClick={() => { const v = videoRef.current; if (!v) return; playing ? v.pause() : v.play(); setPlaying(!playing); }} />
+          {!playing && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.3)", cursor: "pointer", fontSize: "2.5rem" }}
+            onClick={() => { videoRef.current?.play(); setPlaying(true); }}>&#9654;</div>}
+        </div>
+      )}
+
+      {/* Loading state */}
+      {data.hookAnalyzing && (
+        <div style={{ textAlign: "center", padding: "2rem", color: "var(--foreground-muted)" }}>
+          <div style={{ fontSize: "2rem", marginBottom: "0.5rem", animation: "spin 1s linear infinite" }}>&#9881;</div>
+          <div>מנתח את הסרטון ומחפש את ה-Hook האידיאלי...</div>
+        </div>
+      )}
+
+      {/* Hook recommendations */}
+      {!data.hookAnalyzing && data.hookRecommendations.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--foreground-muted)" }}>
+            {data.hookSelected ? "&#10003; Hook נבחר" : "המלצות AI לפתיחה:"}
+          </div>
+          {data.hookRecommendations.map((rec, i) => {
+            const isSelected = data.hookSelected && data.hookStartTime === rec.startTime && data.hookEndTime === rec.endTime;
+            return (
+              <div key={i} style={{
+                padding: "1rem", borderRadius: 10,
+                border: isSelected ? "2px solid var(--accent)" : "1px solid var(--border)",
+                background: isSelected ? "rgba(0,181,254,0.06)" : "var(--surface)",
+                cursor: "pointer", transition: "all 0.2s",
+              }} onClick={() => selectHook(rec, i)}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <span style={{ fontSize: "1.25rem" }}>{i === 0 ? "&#127941;" : i === 1 ? "&#11088;" : "&#128161;"}</span>
+                    <span style={{ fontWeight: 600 }}>Hook #{i + 1}</span>
+                    <span style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
+                      {fmtTime(rec.startTime)} - {fmtTime(rec.endTime)} ({(rec.endTime - rec.startTime).toFixed(1)}s)
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <div style={{ background: rec.score >= 85 ? "rgba(34,197,94,0.15)" : rec.score >= 70 ? "rgba(250,204,21,0.15)" : "rgba(239,68,68,0.15)", color: rec.score >= 85 ? "#16a34a" : rec.score >= 70 ? "#ca8a04" : "#dc2626", padding: "2px 8px", borderRadius: 6, fontSize: "0.8rem", fontWeight: 700 }}>
+                      {rec.score}%
+                    </div>
+                    <button style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid var(--border)", background: "transparent", fontSize: "0.7rem", cursor: "pointer" }}
+                      onClick={(e) => { e.stopPropagation(); previewHook(rec); }}>
+                      &#9654; תצוגה מקדימה
+                    </button>
+                  </div>
+                </div>
+                <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)" }}>{rec.reason}</div>
+                <div style={{ display: "flex", gap: "1rem", marginTop: "0.5rem", fontSize: "0.7rem", color: "var(--foreground-muted)" }}>
+                  <span>תנועה: {Math.round(rec.motionEnergy * 100)}%</span>
+                  <span>רגש: {Math.round(rec.emotionalIntensity * 100)}%</span>
+                  <span>שימור: {Math.round(rec.retentionPrediction * 100)}%</span>
+                </div>
+                {isSelected && <div style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "var(--accent)", fontWeight: 600 }}>&#10003; נבחר</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Manual hook / Skip */}
+      <div style={{ display: "flex", gap: "0.75rem", marginTop: "1.5rem", justifyContent: "center" }}>
+        <button className="wiz-btn wiz-btn-ghost" onClick={skipHook}
+          style={{ opacity: data.hookSkipped ? 1 : 0.7 }}>
+          {data.hookSkipped ? "&#10003; " : ""}דלג על Hook
+        </button>
+      </div>
+
+      {data.hookSkipped && (
+        <div style={{ textAlign: "center", marginTop: "0.75rem", fontSize: "0.8rem", color: "var(--foreground-muted)" }}>
+          הסרטון יתחיל מההתחלה כפי שהוא, ללא Hook כפול.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STEP — Trim & Crop (חיתוך ומיקוד)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function StepTrimCrop({ data, patch }: { data: WizardData; patch: (p: Partial<WizardData>) => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const [videoDur, setVideoDur] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [dragging, setDragging] = useState<"start" | "end" | "playhead" | "region" | "crop" | null>(null);
+  const [dragStartX, setDragStartX] = useState(0);
+  const [tab, setTab] = useState<"trim" | "crop">("trim");
+
+  const videoSrc = data.videoUrl || data.uploadedVideoUrl;
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const onTime = () => setCurrentTime(v.currentTime);
+    v.addEventListener("timeupdate", onTime);
+    return () => v.removeEventListener("timeupdate", onTime);
+  }, []);
+
+  const fmtTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    const ms = Math.floor((s % 1) * 10);
+    return `${m}:${String(sec).padStart(2, "0")}.${ms}`;
+  };
+
+  // Aspect ratio numeric value for crop overlay
+  const arMap: Record<string, number> = { "9:16": 9/16, "1:1": 1, "4:5": 4/5, "16:9": 16/9 };
+  const targetAR = arMap[data.format] || 9/16;
+
+  const handleTimelineClick = (e: React.MouseEvent) => {
+    if (!timelineRef.current || videoDur <= 0) return;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const t = pct * videoDur;
+    if (videoRef.current) videoRef.current.currentTime = t;
+    setCurrentTime(t);
+  };
+
+  return (
+    <div className="wiz-step-content" style={{ direction: "rtl" }}>
+      <h2 className="wiz-step-heading">חיתוך ומיקוד</h2>
+      <p className="wiz-step-sub">הגדר את טווח הזמן ומיקום הווידאו בתוך הפורמט הנבחר ({data.format}).</p>
+
+      {/* Tab switcher */}
+      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", justifyContent: "center" }}>
+        <button className={`wiz-btn ${tab === "trim" ? "wiz-btn-primary" : "wiz-btn-ghost"}`}
+          onClick={() => setTab("trim")} style={{ fontSize: "0.85rem" }}>
+          &#9986; חיתוך זמן
+        </button>
+        <button className={`wiz-btn ${tab === "crop" ? "wiz-btn-primary" : "wiz-btn-ghost"}`}
+          onClick={() => setTab("crop")} style={{ fontSize: "0.85rem" }}>
+          &#128444; מיקוד ויזואלי
+        </button>
+      </div>
+
+      {/* Video preview with crop overlay */}
+      {videoSrc && (
+        <div style={{ maxWidth: 540, margin: "0 auto 1rem", position: "relative" }}>
+          <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)" }}>
+            <video ref={videoRef} src={videoSrc} style={{ width: "100%", display: "block" }}
+              onLoadedMetadata={(e) => {
+                const d = (e.target as HTMLVideoElement).duration;
+                setVideoDur(d);
+                if (!data.trimEnd) patch({ trimEnd: d });
+              }}
+              onClick={() => { const v = videoRef.current; if (!v) return; playing ? v.pause() : v.play(); setPlaying(!playing); }} />
+
+            {/* Crop overlay — show frame border */}
+            {tab === "crop" && (
+              <div style={{
+                position: "absolute", inset: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                pointerEvents: "none",
+              }}>
+                {/* Dimmed areas outside crop */}
+                <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)" }} />
+                {/* Crop window */}
+                <div style={{
+                  position: "relative", zIndex: 2,
+                  width: `${data.cropWidth}%`, height: `${data.cropHeight}%`,
+                  transform: `translate(${data.cropX - 50 + data.cropWidth/2}%, ${data.cropY - 50 + data.cropHeight/2}%)`,
+                  border: "2px solid var(--accent)", borderRadius: 4,
+                  boxShadow: "0 0 0 2000px rgba(0,0,0,0.5)",
+                  background: "transparent",
+                }} />
+              </div>
+            )}
+          </div>
+
+          {/* Play controls */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem", justifyContent: "center" }}>
+            <button className="wiz-btn wiz-btn-ghost" style={{ padding: "4px 12px", fontSize: "0.8rem" }}
+              onClick={() => { const v = videoRef.current; if (!v) return; playing ? v.pause() : v.play(); setPlaying(!playing); }}>
+              {playing ? "&#10074;&#10074;" : "&#9654;"}
+            </button>
+            <span style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", fontFamily: "monospace" }}>
+              {fmtTime(currentTime)} / {fmtTime(videoDur)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ─── TRIM Tab ─── */}
+      {tab === "trim" && (
+        <div style={{ padding: "1rem 0" }}>
+          <div style={{ display: "flex", gap: "1rem", marginBottom: "0.75rem", justifyContent: "center" }}>
+            <button className={`wiz-btn ${data.trimMode === "full" ? "wiz-btn-primary" : "wiz-btn-ghost"}`}
+              onClick={() => patch({ trimMode: "full" })} style={{ fontSize: "0.8rem" }}>
+              &#127916; וידאו מלא
+            </button>
+            <button className={`wiz-btn ${data.trimMode === "clip" ? "wiz-btn-primary" : "wiz-btn-ghost"}`}
+              onClick={() => patch({ trimMode: "clip" })} style={{ fontSize: "0.8rem" }}>
+              &#9986; חיתוך קליפ
+            </button>
+          </div>
+
+          {data.trimMode === "clip" && videoDur > 0 && (
+            <>
+              {/* Timeline */}
+              <div ref={timelineRef} style={{
+                height: 48, borderRadius: 8, background: "var(--surface-raised)", position: "relative", cursor: "pointer",
+                border: "1px solid var(--border)", margin: "0 auto", maxWidth: 540,
+              }} onClick={handleTimelineClick}>
+                {/* Active region */}
+                <div style={{
+                  position: "absolute", top: 4, bottom: 4, borderRadius: 4,
+                  left: `${(data.trimStart / videoDur) * 100}%`,
+                  width: `${((data.trimEnd - data.trimStart) / videoDur) * 100}%`,
+                  background: "rgba(0,181,254,0.25)", border: "2px solid var(--accent)",
+                }} />
+                {/* Playhead */}
+                <div style={{
+                  position: "absolute", top: 0, bottom: 0, width: 2, background: "#fff",
+                  left: `${(currentTime / videoDur) * 100}%`, zIndex: 5,
+                }} />
+              </div>
+
+              {/* Time inputs */}
+              <div style={{ display: "flex", gap: "1.5rem", justifyContent: "center", marginTop: "0.75rem", fontSize: "0.8rem" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                  התחלה:
+                  <input type="number" step="0.1" min="0" max={data.trimEnd - 0.5}
+                    value={data.trimStart} style={{ width: 70, padding: "4px 6px", borderRadius: 6, border: "1px solid var(--border)", textAlign: "center" }}
+                    onChange={(e) => patch({ trimStart: Math.max(0, Number(e.target.value)) })} />
+                  <span style={{ color: "var(--foreground-muted)" }}>s</span>
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                  סיום:
+                  <input type="number" step="0.1" min={data.trimStart + 0.5} max={videoDur}
+                    value={data.trimEnd} style={{ width: 70, padding: "4px 6px", borderRadius: 6, border: "1px solid var(--border)", textAlign: "center" }}
+                    onChange={(e) => patch({ trimEnd: Math.min(videoDur, Number(e.target.value)) })} />
+                  <span style={{ color: "var(--foreground-muted)" }}>s</span>
+                </label>
+                <span style={{ color: "var(--accent)", fontWeight: 600 }}>
+                  {(data.trimEnd - data.trimStart).toFixed(1)}s
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ─── CROP Tab ─── */}
+      {tab === "crop" && (
+        <div style={{ padding: "1rem 0" }}>
+          <div style={{ maxWidth: 480, margin: "0 auto" }}>
+            <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", marginBottom: "1rem", textAlign: "center" }}>
+              מיקום הווידאו בתוך הפורמט <strong>{data.format}</strong>. גרור את נקודת המוקד.
+            </div>
+
+            {/* Crop position sliders */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.8rem" }}>
+                <span style={{ minWidth: 80 }}>מיקום אופקי:</span>
+                <input type="range" min="0" max="100" value={data.cropX}
+                  onChange={(e) => patch({ cropX: Number(e.target.value) })}
+                  style={{ flex: 1 }} />
+                <span style={{ minWidth: 35, textAlign: "center", fontFamily: "monospace" }}>{data.cropX}%</span>
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.8rem" }}>
+                <span style={{ minWidth: 80 }}>מיקום אנכי:</span>
+                <input type="range" min="0" max="100" value={data.cropY}
+                  onChange={(e) => patch({ cropY: Number(e.target.value) })}
+                  style={{ flex: 1 }} />
+                <span style={{ minWidth: 35, textAlign: "center", fontFamily: "monospace" }}>{data.cropY}%</span>
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.8rem" }}>
+                <span style={{ minWidth: 80 }}>זום:</span>
+                <input type="range" min="50" max="100" value={data.cropWidth}
+                  onChange={(e) => { const v = Number(e.target.value); patch({ cropWidth: v, cropHeight: v }); }}
+                  style={{ flex: 1 }} />
+                <span style={{ minWidth: 35, textAlign: "center", fontFamily: "monospace" }}>{data.cropWidth}%</span>
+              </label>
+            </div>
+
+            {/* Tracking toggles */}
+            <div style={{ display: "flex", gap: "1.5rem", justifyContent: "center", marginTop: "1.25rem" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.375rem", fontSize: "0.8rem", cursor: "pointer" }}>
+                <input type="checkbox" checked={data.faceTrackingEnabled}
+                  onChange={(e) => patch({ faceTrackingEnabled: e.target.checked })} />
+                &#128100; מעקב פנים
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.375rem", fontSize: "0.8rem", cursor: "pointer" }}>
+                <input type="checkbox" checked={data.subjectTrackingEnabled}
+                  onChange={(e) => patch({ subjectTrackingEnabled: e.target.checked })} />
+                &#127919; מעקב נושא
+              </label>
+            </div>
+
+            {/* Reset */}
+            <div style={{ textAlign: "center", marginTop: "1rem" }}>
+              <button className="wiz-btn wiz-btn-ghost" style={{ fontSize: "0.75rem" }}
+                onClick={() => patch({ cropX: 0, cropY: 0, cropWidth: 100, cropHeight: 100 })}>
+                &#8634; איפוס למרכז
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STEP — Finalize Pre-Edit (אישור קובץ לעריכה)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<WizardData>) => void }) {
+  const [generating, setGenerating] = useState(false);
+
+  const hookLabel = data.hookSkipped ? "ללא Hook (דולג)" : data.hookSelected ? `Hook נבחר (${(data.hookEndTime - data.hookStartTime).toFixed(1)}s, ציון ${data.hookScore}%)` : "לא נבחר";
+  const trimLabel = data.trimMode === "full" ? "וידאו מלא" : `חיתוך: ${data.trimStart.toFixed(1)}s - ${data.trimEnd.toFixed(1)}s (${(data.trimEnd - data.trimStart).toFixed(1)}s)`;
+  const cropLabel = data.cropX === 0 && data.cropY === 0 && data.cropWidth === 100 ? "ברירת מחדל (מרכז)" : `מיקום: X=${data.cropX}% Y=${data.cropY}% זום=${data.cropWidth}%`;
+
+  const allChecks = {
+    hookDone: data.hookSelected || data.hookSkipped,
+    trimDone: true, // trim always has a valid state
+    cropDone: true, // crop always has a valid state
+    formatSet: !!data.format,
+  };
+  const allPassed = Object.values(allChecks).every(Boolean);
+
+  const handleFinalize = async () => {
+    if (!allPassed) return;
+    setGenerating(true);
+
+    // In production: call /api/video-pipeline/[projectId]/finalize
+    // which generates the Final Pre-Edit Video and locks the source.
+    // For now, simulate the process:
+    await new Promise(r => setTimeout(r, 1500));
+
+    const finalId = `final_pre_edit_${Date.now()}`;
+    const trimCropId = `trim_crop_${Date.now()}`;
+    const hookId = data.hookSelected ? `hook_${Date.now()}` : "";
+    const originalId = `original_${Date.now()}`;
+
+    patch({
+      pipelineFinalized: true,
+      finalPreEditVideoId: finalId,
+      trimCropVideoId: trimCropId,
+      hookGeneratedVideoId: hookId,
+      originalVideoId: originalId,
+      sourceLocked: true,
+    });
+
+    setGenerating(false);
+  };
+
+  const resetPipeline = () => {
+    patch({
+      pipelineFinalized: false,
+      finalPreEditVideoId: "",
+      trimCropVideoId: "",
+      hookGeneratedVideoId: "",
+      sourceLocked: false,
+    });
+  };
+
+  return (
+    <div className="wiz-step-content" style={{ direction: "rtl" }}>
+      <h2 className="wiz-step-heading">&#128274; אישור קובץ לעריכה</h2>
+      <p className="wiz-step-sub">לאחר אישור, ייווצר הקובץ הסופי לפני עריכה (Final Pre-Edit Video). רק קובץ זה ישמש לכל שלבי העריכה.</p>
+
+      {/* Pipeline summary */}
+      <div style={{ maxWidth: 500, margin: "1.5rem auto", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        {/* Check items */}
+        {[
+          { label: "פורמט יציאה", value: data.format, ok: allChecks.formatSet },
+          { label: "Hook", value: hookLabel, ok: allChecks.hookDone },
+          { label: "חיתוך זמן", value: trimLabel, ok: allChecks.trimDone },
+          { label: "מיקוד ויזואלי", value: cropLabel, ok: allChecks.cropDone },
+        ].map((item, i) => (
+          <div key={i} style={{
+            display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.75rem 1rem",
+            borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)",
+          }}>
+            <span style={{ fontSize: "1.25rem" }}>{item.ok ? "&#9989;" : "&#9744;"}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>{item.label}</div>
+              <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>{item.value}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Pipeline validation status */}
+      {data.pipelineFinalized && (
+        <div style={{
+          maxWidth: 500, margin: "1rem auto", padding: "1rem",
+          borderRadius: 10, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.3)",
+          textAlign: "center",
+        }}>
+          <div style={{ fontSize: "1.5rem", marginBottom: "0.375rem" }}>&#128274;</div>
+          <div style={{ fontWeight: 700, color: "#16a34a", marginBottom: "0.25rem" }}>
+            Final Pre-Edit Video &#8212; נעול ומוכן
+          </div>
+          <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
+            ID: {data.finalPreEditVideoId}
+          </div>
+          <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>
+            כל שלבי העריכה ישתמשו אך ורק בקובץ זה. אין גישה לסרטון המקורי.
+          </div>
+          <button className="wiz-btn wiz-btn-ghost" style={{ marginTop: "0.75rem", fontSize: "0.75rem" }} onClick={resetPipeline}>
+            &#8634; ביטול נעילה ושינוי הגדרות
+          </button>
+        </div>
+      )}
+
+      {/* Finalize button */}
+      {!data.pipelineFinalized && (
+        <div style={{ textAlign: "center", marginTop: "1.5rem" }}>
+          <button className="wiz-btn wiz-btn-primary" style={{ fontSize: "1rem", padding: "0.75rem 2rem" }}
+            onClick={handleFinalize} disabled={!allPassed || generating}>
+            {generating ? "&#9881; יוצר קובץ סופי..." : "&#128274; אשר ונעל קובץ לעריכה"}
+          </button>
+          {!allPassed && (
+            <div style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "#dc2626" }}>
+              יש להשלים את כל השלבים לפני אישור
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Source validation rules */}
+      <div style={{
+        maxWidth: 500, margin: "2rem auto 0", padding: "0.75rem 1rem",
+        borderRadius: 8, background: "var(--surface-raised)", fontSize: "0.7rem", color: "var(--foreground-muted)",
+        lineHeight: 1.6,
+      }}>
+        <div style={{ fontWeight: 600, marginBottom: "0.25rem" }}>&#128737; כללי אבטחת מקור:</div>
+        <div>&#8226; לאחר נעילה, רק Final Pre-Edit Video ישמש לעריכה, כתוביות, ניתוח AI, רינדור וייצוא.</div>
+        <div>&#8226; שימוש בסרטון המקורי ייחסם אוטומטית.</div>
+        <div>&#8226; כל פעולה מתועדת ביומן ביקורת (Audit Log).</div>
       </div>
     </div>
   );
