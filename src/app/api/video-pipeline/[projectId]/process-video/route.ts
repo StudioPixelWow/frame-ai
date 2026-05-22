@@ -24,24 +24,39 @@ export const maxDuration = 120; // allow up to 2 minutes for ffmpeg processing
 const execFileAsync = promisify(execFile);
 const EXEC_TIMEOUT_MS = 90_000; // 90 seconds
 
-// ── FFmpeg binary resolution ────────────────────────────────────────────
+// ── FFmpeg binary resolution (lazy — avoids build-time crash) ──────────
 
-let _ffmpegPath = "ffmpeg";
-let _ffprobePath = "ffprobe";
+let _ffmpegPath: string | null = null;
+let _ffprobePath: string | null = null;
 
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const mod = "ffmpeg-static";
-  const ffmpegStatic = require(mod) as string;
-  if (ffmpegStatic) {
-    _ffmpegPath = ffmpegStatic;
-    const ffprobeCandidate = ffmpegStatic.replace(/ffmpeg([^/\\]*)$/, "ffprobe$1");
-    if (existsSync(ffprobeCandidate)) {
-      _ffprobePath = ffprobeCandidate;
+async function getFfmpegPath(): Promise<string> {
+  if (_ffmpegPath) return _ffmpegPath;
+
+  // Try dynamic import of ffmpeg-static (only resolves at runtime, not build)
+  try {
+    const mod = await import(/* webpackIgnore: true */ "ffmpeg-static");
+    const resolved = mod.default || mod;
+    if (typeof resolved === "string" && resolved.length > 0) {
+      _ffmpegPath = resolved;
+      const ffprobeCandidate = resolved.replace(/ffmpeg([^/\\]*)$/, "ffprobe$1");
+      if (existsSync(ffprobeCandidate)) {
+        _ffprobePath = ffprobeCandidate;
+      }
+      return _ffmpegPath;
     }
+  } catch {
+    // ffmpeg-static not available — fall through to system default
   }
-} catch {
-  // ffmpeg-static not installed — keep system defaults
+
+  _ffmpegPath = "ffmpeg";
+  _ffprobePath = "ffprobe";
+  return _ffmpegPath;
+}
+
+async function getFfprobePath(): Promise<string> {
+  if (_ffprobePath) return _ffprobePath;
+  await getFfmpegPath(); // resolves both paths
+  return _ffprobePath || "ffprobe";
 }
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -117,7 +132,8 @@ async function downloadFromSupabase(url: string): Promise<Buffer> {
 
 async function runFfmpeg(args: string[]): Promise<{ stdout: string; stderr: string }> {
   try {
-    return await execFileAsync(_ffmpegPath, args, { timeout: EXEC_TIMEOUT_MS });
+    const ffmpeg = await getFfmpegPath();
+    return await execFileAsync(ffmpeg, args, { timeout: EXEC_TIMEOUT_MS });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`שגיאת FFmpeg: ${msg}`);
@@ -125,7 +141,8 @@ async function runFfmpeg(args: string[]): Promise<{ stdout: string; stderr: stri
 }
 
 async function getVideoInfo(filePath: string): Promise<{ width: number; height: number; duration: number }> {
-  const { stdout } = await execFileAsync(_ffprobePath, [
+  const ffprobe = await getFfprobePath();
+  const { stdout } = await execFileAsync(ffprobe, [
     "-v", "error",
     "-select_streams", "v:0",
     "-show_entries", "stream=width,height,duration",
