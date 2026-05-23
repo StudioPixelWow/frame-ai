@@ -14,6 +14,19 @@ const nextConfig: NextConfig = {
   // We never import these packages directly (Turbopack crashes); instead
   // src/lib/ffmpeg-paths.ts resolves them at runtime via new Function().
   serverExternalPackages: ["ffmpeg-static", "ffprobe-static"],
+  // Force Vercel's @vercel/nft file tracer to include ffmpeg/ffprobe binaries
+  // in ALL API route serverless functions. Required because our `new Function()`
+  // dynamic require is invisible to static analysis.
+  // NOTE: In Next.js 16+, this is a TOP-LEVEL config option (not inside experimental).
+  outputFileTracingIncludes: {
+    "/api/*": [
+      "./node_modules/ffmpeg-static/ffmpeg",
+      "./node_modules/ffmpeg-static/package.json",
+      "./node_modules/ffprobe-static/bin/**/*",
+      "./node_modules/ffprobe-static/package.json",
+      "./node_modules/ffprobe-static/index.js",
+    ],
+  },
   // Allow large file uploads (video files up to 500 MB)
   experimental: {
     serverActions: {
@@ -22,18 +35,6 @@ const nextConfig: NextConfig = {
     // Raise the body clone / proxy limit so large uploads reach route handlers intact
     // Default is 10MB — too small for video files
     proxyClientMaxBodySize: "500mb",
-    // Force Vercel's @vercel/nft file tracer to include ffmpeg/ffprobe binaries
-    // in ALL API route serverless functions. Required because our `new Function()`
-    // dynamic require is invisible to static analysis.
-    outputFileTracingIncludes: {
-      "/api/*": [
-        "./node_modules/ffmpeg-static/ffmpeg",
-        "./node_modules/ffmpeg-static/package.json",
-        "./node_modules/ffprobe-static/bin/**/*",
-        "./node_modules/ffprobe-static/package.json",
-        "./node_modules/ffprobe-static/index.js",
-      ],
-    },
   },
 };
 
