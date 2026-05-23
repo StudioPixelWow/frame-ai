@@ -349,7 +349,8 @@ export default function PodcastClipEnginePage() {
   }, [episodeId, currentStage, applyProgressFromRow]);
 
   // ── Polling fallback: fetch episode status every 5 seconds
-  //    Works even if Realtime is not enabled for the table
+  //    Uses the Next.js API route instead of direct Supabase client queries
+  //    to avoid 406 errors (PostgREST schema cache / RLS issues with anon key)
   useEffect(() => {
     if (!episodeId || currentStage !== 2) return;
 
@@ -360,20 +361,14 @@ export default function PodcastClipEnginePage() {
       return;
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    );
-
     const poll = async () => {
       try {
-        const { data, error } = await supabase
-          .from('podcast_episodes')
-          .select('id, status, processing_progress, error_message')
-          .eq('id', episodeId)
-          .single();
+        const res = await fetch(`/api/podcast/episodes/${encodeURIComponent(episodeId)}`, {
+          cache: 'no-store',
+        });
 
-        if (!error && data) {
+        if (res.ok) {
+          const data = await res.json();
           applyProgressFromRow(data as Record<string, unknown>);
         }
       } catch {
