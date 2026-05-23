@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
   // Note: eslint config moved to eslint.config.js in Next.js 16+
+  // Include ffmpeg/ffprobe binaries in serverless function bundles.
+  // We never import these packages directly (Turbopack crashes); instead
+  // src/lib/ffmpeg-paths.ts resolves them at runtime via new Function().
+  serverExternalPackages: ["ffmpeg-static", "ffprobe-static"],
   // Allow large file uploads (video files up to 500 MB)
   experimental: {
     serverActions: {

@@ -13,16 +13,9 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { existsSync } from "fs";
 import path from "path";
+import { getFfmpegPath, getFfprobePath } from "@/lib/ffmpeg-paths";
 
 const execFileAsync = promisify(execFile);
-
-// ── FFmpeg binary resolution ───────────────────────────────────────────────
-// Uses system ffmpeg/ffprobe from PATH. On Vercel, ffmpeg is available via
-// the community layer or must be added manually. No ffmpeg-static import
-// because it crashes Turbopack builds (Next.js 16+).
-
-const _ffmpegPath: string = "ffmpeg";
-const _ffprobePath: string = "ffprobe";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,7 +63,7 @@ function assertFileExists(filePath: string, label: string): void {
  */
 async function runFfmpeg(args: string[]): Promise<{ stdout: string; stderr: string }> {
   try {
-    return await execFileAsync(_ffmpegPath, args, { timeout: EXEC_TIMEOUT_MS });
+    return await execFileAsync(getFfmpegPath(), args, { timeout: EXEC_TIMEOUT_MS });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`שגיאת FFmpeg: ${msg}`);
@@ -82,7 +75,7 @@ async function runFfmpeg(args: string[]): Promise<{ stdout: string; stderr: stri
  */
 async function getMediaDuration(filePath: string): Promise<number> {
   try {
-    const { stdout } = await execFileAsync(_ffprobePath, [
+    const { stdout } = await execFileAsync(getFfprobePath(), [
       "-v", "error",
       "-show_entries", "format=duration",
       "-of", "default=noprint_wrappers=1:nokey=1",

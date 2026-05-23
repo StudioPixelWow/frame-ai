@@ -76,7 +76,13 @@ const COLORS = {
   warning: '#F59E0B',
 };
 
-const STAGE_LABELS = ['העלאה', 'עיבוד', 'סקירת קליפים', 'הגדרות', 'רנדור'];
+const STAGE_LABELS = [
+  'העלאה',            // 1. Upload
+  'אימות וניתוח',     // 2. Validate + Analyze + Detect
+  'תצוגה מקדימה',     // 3. Full Episode Preview + Timeline
+  'אישור קליפים',     // 4. User Approves / Edits
+  'עיבוד קליפים',     // 5. Save + Process Each Clip
+];
 
 const FORMAT_OPTIONS = [
   { value: '16:9', label: '16:9 (רוחבי)' },
@@ -162,14 +168,17 @@ export default function PodcastClipEnginePage() {
   const [processingError, setProcessingError] = useState<string | null>(null);
 
   // ── Stage 2: Processing
+  // Processing sub-stages — matches the 9-step flow:
+  // Steps 1-3 are automatic processing (shown here)
+  // Steps 4-9 happen in the episode-clips review page after processing completes
   const [processingStages, setProcessingStages] = useState<ProcessingStage[]>([
     { key: 'upload', label: 'העלאת קובץ', status: 'pending', progress: 0 },
-    { key: 'validate', label: 'אימות קובץ', status: 'pending', progress: 0 },
-    { key: 'audio', label: 'הכנת קובץ', status: 'pending', progress: 0 },
-    { key: 'transcribe', label: 'תמלול', status: 'pending', progress: 0 },
-    { key: 'segment', label: 'פילוח נושאים', status: 'pending', progress: 0 },
-    { key: 'analyze', label: 'ניתוח AI', status: 'pending', progress: 0 },
-    { key: 'clips', label: 'זיהוי קליפים', status: 'pending', progress: 0 },
+    { key: 'validate', label: 'אימות פרק', status: 'pending', progress: 0 },
+    { key: 'audio', label: 'הכנת אודיו לניתוח', status: 'pending', progress: 0 },
+    { key: 'transcribe', label: 'תמלול ושפה', status: 'pending', progress: 0 },
+    { key: 'segment', label: 'ניתוח פרק ופילוח נושאים', status: 'pending', progress: 0 },
+    { key: 'analyze', label: 'ניתוח AI מתקדם', status: 'pending', progress: 0 },
+    { key: 'clips', label: 'זיהוי קליפים מומלצים', status: 'pending', progress: 0 },
   ]);
 
   // ── Stage 3: Review Clips

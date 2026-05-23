@@ -17,20 +17,13 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "fs";
 import path from "path";
+import { getFfmpegPath, getFfprobePath } from "@/lib/ffmpeg-paths";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120; // allow up to 2 minutes for ffmpeg processing
 
 const execFileAsync = promisify(execFile);
 const EXEC_TIMEOUT_MS = 90_000; // 90 seconds
-
-// ── FFmpeg binary resolution ────────────────────────────────────────────
-// Use system ffmpeg/ffprobe from PATH. On Vercel, install via a community
-// build-time layer (e.g. @vercel/community/ffmpeg) or add an ffmpeg binary
-// to the project. No ffmpeg-static import — it crashes Turbopack builds.
-
-const FFMPEG_PATH = "ffmpeg";
-const FFPROBE_PATH = "ffprobe";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -105,7 +98,7 @@ async function downloadFromSupabase(url: string): Promise<Buffer> {
 
 async function runFfmpeg(args: string[]): Promise<{ stdout: string; stderr: string }> {
   try {
-    return await execFileAsync(FFMPEG_PATH, args, { timeout: EXEC_TIMEOUT_MS });
+    return await execFileAsync(getFfmpegPath(), args, { timeout: EXEC_TIMEOUT_MS });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`שגיאת FFmpeg: ${msg}`);
@@ -113,7 +106,7 @@ async function runFfmpeg(args: string[]): Promise<{ stdout: string; stderr: stri
 }
 
 async function getVideoInfo(filePath: string): Promise<{ width: number; height: number; duration: number }> {
-  const { stdout } = await execFileAsync(FFPROBE_PATH, [
+  const { stdout } = await execFileAsync(getFfprobePath(), [
     "-v", "error",
     "-select_streams", "v:0",
     "-show_entries", "stream=width,height,duration",

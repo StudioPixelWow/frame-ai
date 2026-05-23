@@ -433,6 +433,62 @@ export default function EpisodeClipsPage() {
 
   return (
     <div dir="rtl" style={{ padding: '24px 32px', maxWidth: 1400, margin: '0 auto' }}>
+      {/* ── Step Flow Navigation ─────────────────────────────────────────── */}
+      {(() => {
+        const FLOW_STEPS = [
+          { label: 'אימות פרק', icon: '✅', done: true },
+          { label: 'ניתוח פרק', icon: '🔍', done: true },
+          { label: 'זיהוי קליפים מומלצים', icon: '🎯', done: true },
+          { label: 'תצוגת פרק מלא', icon: '🎬', done: true },
+          { label: 'קליפים מוצעים על ציר הזמן', icon: '📊', active: !isAlreadyApproved },
+          { label: 'אישור / עריכה / החלפה', icon: '✏️', active: !isAlreadyApproved },
+          { label: 'שמירה למסד נתונים', icon: '💾', done: isAlreadyApproved },
+          { label: 'יצירת רשומות קליפ', icon: '📋', done: isAlreadyApproved },
+          { label: 'עיבוד כל קליפ בנפרד', icon: '⚙️', done: episode.status === 'processing_clips' },
+        ];
+        return (
+          <div style={{
+            background: COLORS.card,
+            borderRadius: 16,
+            padding: '16px 24px',
+            marginBottom: 24,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+            border: `1px solid ${COLORS.border}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            overflowX: 'auto',
+          }}>
+            {FLOW_STEPS.map((step, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  background: step.active ? `${COLORS.primary}15` : step.done ? `${COLORS.success}10` : 'transparent',
+                  border: step.active ? `2px solid ${COLORS.primary}` : step.done ? `1px solid ${COLORS.success}40` : `1px solid ${COLORS.border}`,
+                }}>
+                  <span style={{ fontSize: 14 }}>{step.icon}</span>
+                  <span style={{
+                    fontSize: 12,
+                    fontWeight: step.active ? 700 : 500,
+                    color: step.active ? COLORS.primary : step.done ? COLORS.success : COLORS.textSecondary,
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {step.label}
+                  </span>
+                </div>
+                {i < FLOW_STEPS.length - 1 && (
+                  <span style={{ color: COLORS.border, margin: '0 2px', fontSize: 12 }}>←</span>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div style={{ marginBottom: 32 }}>
         <button

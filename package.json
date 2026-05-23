@@ -23,6 +23,8 @@
     "@remotion/renderer": "^4.0.447",
     "@supabase/supabase-js": "^2.49.4",
     "cheerio": "^1.2.0",
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0",
     "jszip": "^3.10.1",
     "next": "^16.2.3",
     "openai": "^6.34.0",
