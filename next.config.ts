@@ -22,6 +22,18 @@ const nextConfig: NextConfig = {
     // Raise the body clone / proxy limit so large uploads reach route handlers intact
     // Default is 10MB — too small for video files
     proxyClientMaxBodySize: "500mb",
+    // Force Vercel's @vercel/nft file tracer to include ffmpeg/ffprobe binaries
+    // in ALL API route serverless functions. Required because our `new Function()`
+    // dynamic require is invisible to static analysis.
+    outputFileTracingIncludes: {
+      "/api/*": [
+        "./node_modules/ffmpeg-static/ffmpeg",
+        "./node_modules/ffmpeg-static/package.json",
+        "./node_modules/ffprobe-static/bin/**/*",
+        "./node_modules/ffprobe-static/package.json",
+        "./node_modules/ffprobe-static/index.js",
+      ],
+    },
   },
 };
 

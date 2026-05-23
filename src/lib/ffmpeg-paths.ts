@@ -38,11 +38,13 @@ export function getFfmpegPath(): string {
   if (_ffmpegPath) return _ffmpegPath;
 
   const resolved = safeRequire("ffmpeg-static");
+  console.log("[ffmpeg-paths] ffmpeg-static resolved:", typeof resolved, resolved ? String(resolved).slice(0, 120) : "undefined");
   if (typeof resolved === "string" && resolved.length > 0) {
     _ffmpegPath = resolved;
     return resolved;
   }
 
+  console.warn("[ffmpeg-paths] ⚠️ ffmpeg-static not found, falling back to system 'ffmpeg'");
   _ffmpegPath = "ffmpeg";
   return "ffmpeg";
 }
@@ -57,11 +59,13 @@ export function getFfprobePath(): string {
   const resolved = safeRequire("ffprobe-static") as
     | { path?: string }
     | undefined;
+  console.log("[ffmpeg-paths] ffprobe-static resolved:", typeof resolved, resolved ? JSON.stringify(resolved).slice(0, 120) : "undefined");
   if (resolved && typeof resolved.path === "string") {
     _ffprobePath = resolved.path;
     return resolved.path;
   }
 
+  console.warn("[ffmpeg-paths] ⚠️ ffprobe-static not found, falling back to system 'ffprobe'");
   _ffprobePath = "ffprobe";
   return "ffprobe";
 }
