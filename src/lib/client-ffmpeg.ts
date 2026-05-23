@@ -220,11 +220,17 @@ export async function processVideoClientSide(
   onProgress?.("שומר את הוידאו המעובד...");
   const outputData = await ffmpeg.readFile(finalFile);
   // readFile returns FileData (string | Uint8Array<ArrayBufferLike>).
-  // Copy into a plain ArrayBuffer so it's assignable to BlobPart.
-  const bytes = outputData instanceof Uint8Array
-    ? new Uint8Array(outputData.buffer.slice(outputData.byteOffset, outputData.byteOffset + outputData.byteLength))
-    : new TextEncoder().encode(outputData as string);
-  const blob = new Blob([bytes], { type: "video/mp4" });
+  // The Uint8Array generic may reference SharedArrayBuffer which isn't BlobPart-compatible.
+  // Copying into a fresh ArrayBuffer solves the type mismatch.
+  let rawBytes: ArrayBuffer;
+  if (outputData instanceof Uint8Array) {
+    const ab = new ArrayBuffer(outputData.byteLength);
+    new Uint8Array(ab).set(outputData);
+    rawBytes = ab;
+  } else {
+    rawBytes = new TextEncoder().encode(outputData as string).buffer as ArrayBuffer;
+  }
+  const blob = new Blob([rawBytes], { type: "video/mp4" });
 
   // Cleanup WASM filesystem
   try { await ffmpeg.deleteFile("input.mp4"); } catch { /* ignore */ }
