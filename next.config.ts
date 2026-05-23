@@ -14,26 +14,10 @@ const nextConfig: NextConfig = {
   // We never import these packages directly (Turbopack crashes); instead
   // src/lib/ffmpeg-paths.ts resolves them at runtime via new Function().
   serverExternalPackages: ["ffmpeg-static", "ffprobe-static"],
-  // Force Vercel's @vercel/nft file tracer to include ffmpeg/ffprobe binaries
-  // in ALL API route serverless functions. Required because our `new Function()`
-  // dynamic require is invisible to static analysis.
-  // NOTE: In Next.js 16+, this is a TOP-LEVEL config option (not inside experimental).
-  outputFileTracingIncludes: {
-    "/api/video-pipeline/[projectId]/process-video": [
-      "./node_modules/ffmpeg-static/ffmpeg",
-      "./node_modules/ffmpeg-static/package.json",
-      "./node_modules/ffprobe-static/bin/**/*",
-      "./node_modules/ffprobe-static/package.json",
-      "./node_modules/ffprobe-static/index.js",
-    ],
-    "/api/podcast/process": [
-      "./node_modules/ffmpeg-static/ffmpeg",
-      "./node_modules/ffmpeg-static/package.json",
-      "./node_modules/ffprobe-static/bin/**/*",
-      "./node_modules/ffprobe-static/package.json",
-      "./node_modules/ffprobe-static/index.js",
-    ],
-  },
+  // NOTE: ffmpeg-static binary (~100MB) exceeds Vercel's 250MB serverless limit.
+  // Video/podcast processing that requires ffmpeg should use an external service
+  // (e.g. Vercel Edge + external API, or a dedicated processing server).
+  // The ffmpeg-paths.ts fallback to system 'ffmpeg'/'ffprobe' handles this gracefully.
   // Allow large file uploads (video files up to 500 MB)
   experimental: {
     serverActions: {
