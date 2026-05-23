@@ -3447,43 +3447,64 @@ function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
         onProgress: (msg) => setProcessingProgress(msg),
       });
 
-      // ── Upload processed video to Supabase ──
-      setProcessingProgress("מעלה את הוידאו המעובד...");
+      // ── Upload processed video to Supabase (with retry) ──
+      const sizeMB = (processedBlob.size / 1048576).toFixed(1);
+      setProcessingProgress(`מעלה את הוידאו המעובד (${sizeMB}MB)...`);
+      console.log(`[StepFinalize] Uploading processed video: ${sizeMB}MB`);
 
-      // 1. Get a signed upload URL
-      const initRes = await fetch("/api/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: `processed-${Date.now()}.mp4`,
-          contentType: "video/mp4",
-          fileSize: processedBlob.size,
-        }),
-      });
+      let processedUrl = "";
+      const MAX_UPLOAD_ATTEMPTS = 3;
 
-      if (!initRes.ok) {
-        const errData = await initRes.json().catch(() => ({}));
-        throw new Error(errData.error || "שגיאה ביצירת קישור העלאה");
+      for (let attempt = 1; attempt <= MAX_UPLOAD_ATTEMPTS; attempt++) {
+        try {
+          // 1. Get a signed upload URL
+          const initRes = await fetch("/api/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fileName: `processed-${Date.now()}.mp4`,
+              contentType: "video/mp4",
+              fileSize: processedBlob.size,
+            }),
+          });
+
+          if (!initRes.ok) {
+            const errData = await initRes.json().catch(() => ({}));
+            throw new Error(errData.error || "שגיאה ביצירת קישור העלאה");
+          }
+
+          const { uploadUrl, publicUrl } = await initRes.json();
+          if (!uploadUrl || !publicUrl) throw new Error("שרת לא החזיר כתובת העלאה תקינה");
+
+          // 2. PUT the processed blob directly to Supabase
+          const putRes = await fetch(uploadUrl, {
+            method: "PUT",
+            headers: { "Content-Type": "video/mp4" },
+            body: processedBlob,
+          });
+
+          if (!putRes.ok) {
+            let errMsg = `status ${putRes.status}`;
+            try { const b = await putRes.json(); if (b.error || b.message) errMsg = b.error || b.message; } catch {}
+            throw new Error(errMsg);
+          }
+
+          processedUrl = publicUrl;
+          console.log(`[StepFinalize] Upload succeeded on attempt ${attempt}:`, processedUrl);
+          break; // success — exit retry loop
+        } catch (uploadErr) {
+          const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+          console.warn(`[StepFinalize] Upload attempt ${attempt}/${MAX_UPLOAD_ATTEMPTS} failed: ${msg}`);
+          if (attempt === MAX_UPLOAD_ATTEMPTS) {
+            throw new Error(`שגיאה בהעלאת הוידאו המעובד לאחר ${MAX_UPLOAD_ATTEMPTS} ניסיונות: ${msg}`);
+          }
+          // Wait before retry (2s, 4s)
+          const delay = attempt * 2000;
+          setProcessingProgress(`העלאה נכשלה — מנסה שוב בעוד ${delay / 1000} שניות...`);
+          await new Promise(r => setTimeout(r, delay));
+          setProcessingProgress(`מעלה את הוידאו המעובד (${sizeMB}MB) — ניסיון ${attempt + 1}...`);
+        }
       }
-
-      const { uploadUrl, publicUrl } = await initRes.json();
-      if (!uploadUrl || !publicUrl) throw new Error("שרת לא החזיר כתובת העלאה תקינה");
-
-      // 2. PUT the processed blob directly to Supabase
-      const putRes = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": "video/mp4" },
-        body: processedBlob,
-      });
-
-      if (!putRes.ok) {
-        let errMsg = `status ${putRes.status}`;
-        try { const b = await putRes.json(); if (b.error || b.message) errMsg = b.error || b.message; } catch {}
-        throw new Error(`שגיאה בהעלאת הוידאו המעובד: ${errMsg}`);
-      }
-
-      const processedUrl = publicUrl;
-      console.log("[StepFinalize] Processed video uploaded:", processedUrl);
 
       setProcessingProgress("הוידאו עובד בהצלחה — נועל מקור...");
 
