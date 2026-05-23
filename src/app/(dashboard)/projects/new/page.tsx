@@ -914,9 +914,10 @@ function NewProjectWizard() {
   }, [data.uploadedVideoUrl, data.videoUrl]);
 
   /** originalVideoSource — the SINGLE source of truth for ALL preview/editing steps.
-   *  After pipeline finalize: uses the PROCESSED video (finalPreEditVideoId).
-   *  Before finalize: uses local blob URL or uploadedVideoUrl for playback. */
-  const originalVideoSource = data.finalPreEditVideoId || data.videoUrl || data.uploadedVideoUrl;
+   *  Priority: blob URL (works in <video>) > Supabase URL (may 544 in browser).
+   *  After finalize, data.videoUrl is set to the PROCESSED blob URL.
+   *  finalPreEditVideoId (Supabase URL) is used for server-side rendering only. */
+  const originalVideoSource = data.videoUrl || data.finalPreEditVideoId || data.uploadedVideoUrl;
 
   if (process.env.NODE_ENV === "development") {
     console.debug("[originalVideoSource]", originalVideoSource || "(empty)")
@@ -3507,9 +3508,13 @@ function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
 
       setProcessingProgress("הוידאו עובד בהצלחה — נועל מקור...");
 
+      // Create a blob URL for browser playback (Supabase public URLs return 544)
+      const processedBlobUrl = URL.createObjectURL(processedBlob);
+
       patch({
         pipelineFinalized: true,
         finalPreEditVideoId: processedUrl,
+        videoUrl: processedBlobUrl, // blob URL for <video> playback in browser
         trimCropVideoId: processedUrl,
         hookGeneratedVideoId: data.hookSelected ? processedUrl : "",
         originalVideoId: actualVideoUrl,
@@ -3568,23 +3573,40 @@ function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
       {/* Pipeline validation status */}
       {data.pipelineFinalized && (
         <div style={{
-          maxWidth: 500, margin: "1rem auto", padding: "1rem",
-          borderRadius: 10, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.3)",
+          maxWidth: 600, margin: "1rem auto", padding: "1.25rem",
+          borderRadius: 12, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.3)",
           textAlign: "center",
         }}>
           <div style={{ fontSize: "1.5rem", marginBottom: "0.375rem" }}>&#128274;</div>
-          <div style={{ fontWeight: 700, color: "#16a34a", marginBottom: "0.25rem" }}>
-            Final Pre-Edit Video &#8212; נעול ומוכן
+          <div style={{ fontWeight: 700, color: "#16a34a", marginBottom: "0.5rem", fontSize: "1.1rem" }}>
+            הסרטון המעובד מוכן — צפה ואשר
           </div>
-          <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
-            ID: {data.finalPreEditVideoId}
+
+          {/* Video preview of the processed result */}
+          {data.videoUrl && (
+            <div style={{
+              margin: "1rem auto", maxWidth: 520, borderRadius: 10, overflow: "hidden",
+              border: "2px solid rgba(34,197,94,0.4)", background: "#000",
+            }}>
+              <video
+                src={data.videoUrl}
+                controls
+                playsInline
+                style={{ width: "100%", display: "block", maxHeight: 360 }}
+              />
+            </div>
+          )}
+
+          <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", marginTop: "0.5rem" }}>
+            זהו הסרטון שייכנס לעריכה — כולל חיתוך, מיקוד{data.hookSelected ? " והוק" : ""}.
+            <br />כל שלבי העריכה (כתוביות, מוזיקה, מעברים וכו׳) ישתמשו בסרטון הזה.
           </div>
-          <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>
-            כל שלבי העריכה ישתמשו אך ורק בקובץ זה. אין גישה לסרטון המקורי.
+
+          <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center", marginTop: "1rem", flexWrap: "wrap" }}>
+            <button className="wiz-btn wiz-btn-ghost" style={{ fontSize: "0.8rem" }} onClick={resetPipeline}>
+              &#8634; לא מרוצה — חזרה לעריכה
+            </button>
           </div>
-          <button className="wiz-btn wiz-btn-ghost" style={{ marginTop: "0.75rem", fontSize: "0.75rem" }} onClick={resetPipeline}>
-            &#8634; ביטול נעילה ושינוי הגדרות
-          </button>
         </div>
       )}
 
