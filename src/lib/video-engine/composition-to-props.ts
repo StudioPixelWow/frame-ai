@@ -241,6 +241,8 @@ export function compositionToProps(data: FinalCompositionData): RemotionInputPro
       zoomOnSpeech: data.visual.zoomOnSpeech,
       zoomOnTransition: data.visual.zoomOnTransition,
       cropForVertical: data.visual.cropForVertical,
+      cropPositionX: data.visual.cropPositionX ?? 50,
+      cropPositionY: data.visual.cropPositionY ?? 50,
     },
 
     premium: {

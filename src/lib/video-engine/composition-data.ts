@@ -30,6 +30,8 @@ export interface WizardSnapshot {
   trimStart: number;
   trimEnd: number;
   format: OutputFormat;
+  cropX?: number;
+  cropY?: number;
 
   // Subtitles
   subtitleMode: "auto" | "manual";
@@ -195,6 +197,9 @@ export interface FinalCompositionData {
     zoomOnTransition: number;
     framingEnabled: boolean;
     cropForVertical: boolean;
+    /** Manual crop position — used as objectPosition in Remotion render (0-100%) */
+    cropPositionX: number;
+    cropPositionY: number;
   };
 
   // Premium
@@ -769,6 +774,8 @@ export function buildFinalCompositionData(ws: WizardSnapshot): FinalCompositionD
       zoomOnTransition: presetConfig?.zoomBehavior?.onTransition ?? 1.0,
       framingEnabled: true,
       cropForVertical: ws.format === "9:16",
+      cropPositionX: ws.cropX ?? 50,
+      cropPositionY: ws.cropY ?? 50,
     },
 
     premium: {

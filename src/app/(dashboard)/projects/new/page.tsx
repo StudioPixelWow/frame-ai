@@ -3582,20 +3582,30 @@ function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
             הסרטון המעובד מוכן — צפה ואשר
           </div>
 
-          {/* Video preview of the processed result */}
-          {data.videoUrl && (
-            <div style={{
-              margin: "1rem auto", maxWidth: 520, borderRadius: 10, overflow: "hidden",
-              border: "2px solid rgba(34,197,94,0.4)", background: "#000",
-            }}>
-              <video
-                src={data.videoUrl}
-                controls
-                playsInline
-                style={{ width: "100%", display: "block", maxHeight: 360 }}
-              />
-            </div>
-          )}
+          {/* Video preview of the processed result — shown in selected format aspect ratio */}
+          {data.videoUrl && (() => {
+            const fmtCss: Record<string, string> = { "9:16": "9 / 16", "1:1": "1 / 1", "4:5": "4 / 5", "16:9": "16 / 9" };
+            const isPort = ["9:16", "4:5"].includes(data.format);
+            return (
+              <div style={{
+                margin: "1rem auto", maxWidth: isPort ? 280 : 520, borderRadius: 10, overflow: "hidden",
+                border: "2px solid rgba(34,197,94,0.4)", background: "#000",
+              }}>
+                <div style={{ position: "relative", width: "100%", aspectRatio: fmtCss[data.format] || "9 / 16", overflow: "hidden" }}>
+                  <video
+                    src={data.videoUrl}
+                    controls
+                    playsInline
+                    style={{
+                      width: "100%", height: "100%", objectFit: "cover",
+                      objectPosition: `${data.cropX}% ${data.cropY}%`,
+                      display: "block",
+                    }}
+                  />
+                </div>
+              </div>
+            );
+          })()}
 
           <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", marginTop: "0.5rem" }}>
             זהו הסרטון שייכנס לעריכה — כולל חיתוך, מיקוד{data.hookSelected ? " והוק" : ""}.
@@ -4385,7 +4395,7 @@ function StepTranscriptReview({ data, patch, videoSrc: parentVideoSrc }: { data:
       if (data.pipelineFinalized && data.finalPreEditVideoId) {
         transcriptionUrl = data.finalPreEditVideoId;
         offsetSec = 0; // processed video starts at 0
-        effectiveDur = 0; // let the API auto-detect duration from the processed file
+        effectiveDur = dur > 0 ? dur : 60; // use actual video duration (fallback 60s if unavailable)
         console.log("[runTranscription] Using PROCESSED video (finalPreEditVideoId):", transcriptionUrl.substring(0, 80));
       } else if (data.uploadedVideoUrl) {
         // Best case: StepUpload already uploaded the video — reuse that URL

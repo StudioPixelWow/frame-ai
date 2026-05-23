@@ -288,7 +288,10 @@ export const PixelManageEdit: React.FC<CompositionProps> = (props) => {
                   src={safeVideoUrl}
                   startFrom={Math.round(clip.sourceStart * fps)}
                   endAt={Math.round(clip.sourceEnd * fps)}
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  style={{
+                    width: "100%", height: "100%", objectFit: "cover",
+                    objectPosition: `${visual.cropPositionX ?? 50}% ${visual.cropPositionY ?? 50}%`,
+                  }}
                 />
               </AbsoluteFill>
             </Sequence>

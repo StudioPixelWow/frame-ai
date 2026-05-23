@@ -82,6 +82,9 @@ export interface VisualProps {
   zoomOnSpeech: number;
   zoomOnTransition: number;
   cropForVertical: boolean;
+  /** Manual crop position — controls objectPosition on the video element (0-100%) */
+  cropPositionX?: number;
+  cropPositionY?: number;
 }
 
 export interface PremiumProps {
