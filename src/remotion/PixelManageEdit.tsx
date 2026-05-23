@@ -332,6 +332,19 @@ export const PixelManageEdit: React.FC<CompositionProps> = (props) => {
         })
       )}
 
+      {/* Layer 3b: Hook-to-body transition — always applied when hook exists */}
+      {hookBoost?.active && hookBoost.hookEndSec > 0 && (() => {
+        const hookTransStyle = transition.style !== "cut" ? transition.style : "spectrumImpactFlash";
+        const hookTransDur = transition.style !== "cut" ? transition.durationMs : 800;
+        const hookTransFrames = Math.ceil((hookTransDur / 1000) * fps);
+        const hookTransStart = Math.round(hookBoost.hookEndSec * fps) - Math.ceil(hookTransFrames / 2);
+        return (
+          <Sequence from={Math.max(0, hookTransStart)} durationInFrames={hookTransFrames}>
+            <TransitionLayer style={hookTransStyle} durationMs={hookTransDur} at="start" />
+          </Sequence>
+        );
+      })()}
+
       {/* Layer 4: Subtitles */}
       <SubtitleLayer segments={segments} style={subtitleStyle} cleanupCuts={cleanupCuts} />
 

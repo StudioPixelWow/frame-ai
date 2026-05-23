@@ -2852,9 +2852,9 @@ function StepHookSelect({ data, patch }: { data: WizardData; patch: (p: Partial<
     const timer = setTimeout(() => {
       const dur = videoDur || 30;
       const recs = [
-        { startTime: 0, endTime: Math.min(3, dur), score: 92, reason: "פתיחה אנרגטית עם תנועה חזקה", motionEnergy: 0.88, emotionalIntensity: 0.85, retentionPrediction: 0.91 },
-        { startTime: Math.min(5, dur * 0.15), endTime: Math.min(8, dur * 0.25), score: 85, reason: "משפט פותח מעניין עם ביטחון", motionEnergy: 0.72, emotionalIntensity: 0.90, retentionPrediction: 0.84 },
-        { startTime: Math.min(dur * 0.3, dur - 5), endTime: Math.min(dur * 0.3 + 3, dur), score: 78, reason: "רגע רגשי חזק עם מבט ישיר למצלמה", motionEnergy: 0.65, emotionalIntensity: 0.95, retentionPrediction: 0.77 },
+        { startTime: 0, endTime: Math.min(5, dur), score: 92, reason: "פתיחה אנרגטית עם תנועה חזקה", motionEnergy: 0.88, emotionalIntensity: 0.85, retentionPrediction: 0.91 },
+        { startTime: Math.min(5, dur * 0.15), endTime: Math.min(10, dur * 0.25), score: 85, reason: "משפט פותח מעניין עם ביטחון", motionEnergy: 0.72, emotionalIntensity: 0.90, retentionPrediction: 0.84 },
+        { startTime: Math.min(dur * 0.3, dur - 5), endTime: Math.min(dur * 0.3 + 5, dur), score: 78, reason: "רגע רגשי חזק עם מבט ישיר למצלמה", motionEnergy: 0.65, emotionalIntensity: 0.95, retentionPrediction: 0.77 },
       ];
       patch({ hookRecommendations: recs, hookAnalyzing: false });
     }, 2000);
@@ -4371,18 +4371,23 @@ function StepTranscriptReview({ data, patch, videoSrc: parentVideoSrc }: { data:
     setTranscribeError("");
     try {
       const dur = await getVideoDuration();
-      const effectiveDur = data.trimMode === "clip" ? (data.trimEnd - data.trimStart) : dur;
-      const offsetSec = data.trimMode === "clip" ? data.trimStart : 0;
 
       // ─── TRANSCRIPTION-ONLY UPLOAD ───
       // HARD RULE: This block NEVER writes to uploadedVideoUrl or videoUrl.
-      // Those fields are the originalVideoSource for preview/editing.
       // We only need a server-accessible URL to send to the transcription API.
-      // The result is a LOCAL variable — not stored in wizard state.
       let transcriptionUrl = "";
+      let effectiveDur = data.trimMode === "clip" ? (data.trimEnd - data.trimStart) : dur;
+      let offsetSec = data.trimMode === "clip" ? data.trimStart : 0;
 
-      // Priority: reuse existing server URL > upload fresh for transcription only
-      if (data.uploadedVideoUrl) {
+      // CRITICAL: If pipeline is finalized, transcribe the PROCESSED video
+      // (which already includes hook + trim + crop). Offset must be 0 because
+      // the processed video timeline starts at 0, not at the original trim point.
+      if (data.pipelineFinalized && data.finalPreEditVideoId) {
+        transcriptionUrl = data.finalPreEditVideoId;
+        offsetSec = 0; // processed video starts at 0
+        effectiveDur = 0; // let the API auto-detect duration from the processed file
+        console.log("[runTranscription] Using PROCESSED video (finalPreEditVideoId):", transcriptionUrl.substring(0, 80));
+      } else if (data.uploadedVideoUrl) {
         // Best case: StepUpload already uploaded the video — reuse that URL
         transcriptionUrl = data.uploadedVideoUrl;
         console.debug("[runTranscription] Reusing uploadedVideoUrl for transcription:", transcriptionUrl);
