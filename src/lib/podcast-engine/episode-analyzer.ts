@@ -19,16 +19,22 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { writeFile, mkdir, unlink } from 'fs/promises';
+import { writeFile, mkdir, unlink, stat } from 'fs/promises';
+import { existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { transcribeAudio, transcribeChunkedAudio } from './whisper-transcription';
-import { splitAudioIntoChunks } from './ffmpeg-service';
+import { extractAudio, splitAudioIntoChunks } from './ffmpeg-service';
 import { segmentTranscript, type TranscriptSegment, type TopicSegment } from './topic-segmentation';
 import { analyzeTranscriptForClips, type AIClipSuggestion } from './clip-analyzer';
 import { scoreClipCandidates, rankClips, type RawClipCandidate, type ScoredClip } from './clip-scorer';
 import { episodeAnalyses, podcastClipCandidates } from '@/lib/db/collections';
 import type { EpisodeAnalysis, PodcastClipCandidate } from '@/lib/db/schema';
+import { getFfmpegPath } from '@/lib/ffmpeg-paths';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -122,48 +128,73 @@ export async function runEpisodeAnalysis(
   episodeId: string,
   sourceFilePath: string
 ): Promise<AnalysisResult> {
-  let tempFilePath: string | null = null;
+  let tempDir: string | null = null;
 
   try {
-    // ── Stage 1: Validate — check file exists in Storage ──────────────────
+    // ── Stage 1: Validate — generate signed URL (no download) ────────────
     await updateEpisodeProgress(episodeId, 0, 0, 'מאתר את הקובץ בשרת...');
 
-    const { data: fileData, error: fileError } = await supabase
+    // Generate a signed URL — this validates the file exists AND gives us
+    // a URL that ffmpeg can stream from without downloading to memory.
+    const { data: signedData, error: signedError } = await supabase
       .storage
       .from('project-files')
-      .list('', {
-        search: sourceFilePath.split('/').pop() ?? '',
-      });
+      .createSignedUrl(sourceFilePath, 1800); // 30 minute validity
 
-    if (fileError || !fileData || fileData.length === 0) {
-      throw new Error(`קובץ לא נמצא ב-Storage: ${sourceFilePath}`);
+    if (signedError || !signedData?.signedUrl) {
+      // Fallback: check if file exists via list
+      const { data: fileData, error: fileError } = await supabase
+        .storage
+        .from('project-files')
+        .list('', { search: sourceFilePath.split('/').pop() ?? '' });
+
+      if (fileError || !fileData || fileData.length === 0) {
+        throw new Error(`קובץ לא נמצא ב-Storage: ${sourceFilePath}`);
+      }
+      throw new Error(`לא ניתן ליצור קישור לקובץ: ${signedError?.message ?? 'שגיאה לא ידועה'}`);
     }
+
+    const signedUrl = signedData.signedUrl;
+    console.log(`[episode-analyzer] Signed URL generated for ${sourceFilePath}`);
 
     await updateEpisodeProgress(episodeId, 0, 100, 'הקובץ אומת בהצלחה');
 
-    // ── Stage 2: Download — download file from Storage to tmp ─────────────
-    await updateEpisodeProgress(episodeId, 1, 0, 'מוריד את הקובץ מהשרת...');
+    // ── Stage 2: Extract audio via ffmpeg (streaming from URL — NO download to memory) ──
+    await updateEpisodeProgress(episodeId, 1, 0, 'מחלץ אודיו מהסרטון (ללא הורדה מלאה)...');
 
-    const { data: fileBlob, error: downloadError } = await supabase
-      .storage
-      .from('project-files')
-      .download(sourceFilePath);
+    tempDir = join(tmpdir(), `episode-analysis-${episodeId}`);
+    await mkdir(tempDir, { recursive: true });
+    const audioPath = join(tempDir, 'audio.mp3');
 
-    if (downloadError || !fileBlob) {
-      throw new Error(`שגיאה בהורדת הקובץ: ${downloadError?.message ?? 'לא התקבל קובץ'}`);
+    // ffmpeg reads directly from the signed URL and outputs compressed audio.
+    // This avoids loading the entire video into memory — only the audio stream
+    // is downloaded and compressed, resulting in a file ~10-20x smaller.
+    try {
+      await execFileAsync(getFfmpegPath(), [
+        '-y',
+        '-i', signedUrl,           // Stream from Supabase URL
+        '-vn',                      // Strip video — audio only
+        '-acodec', 'libmp3lame',
+        '-ar', '16000',             // 16kHz — Whisper optimal
+        '-ac', '1',                 // Mono
+        '-b:a', '64k',             // 64kbps — small but clear
+        audioPath,
+      ], { timeout: 5 * 60 * 1000 }); // 5 minute timeout for extraction
+    } catch (ffmpegErr) {
+      const msg = ffmpegErr instanceof Error ? ffmpegErr.message : String(ffmpegErr);
+      console.error(`[episode-analyzer] ffmpeg audio extraction failed:`, msg);
+      throw new Error(`שגיאה בחילוץ אודיו: ${msg}`);
     }
 
-    const blobArrayBuffer = await fileBlob.arrayBuffer();
-    const fileSizeBytes = blobArrayBuffer.byteLength;
+    if (!existsSync(audioPath)) {
+      throw new Error('חילוץ האודיו נכשל — קובץ הפלט לא נוצר');
+    }
 
-    // Write to temp for Whisper API
-    const tempDir = join(tmpdir(), `episode-analysis-${episodeId}`);
-    await mkdir(tempDir, { recursive: true });
-    const ext = sourceFilePath.split('.').pop() || 'mp4';
-    tempFilePath = join(tempDir, `source.${ext}`);
-    await writeFile(tempFilePath, Buffer.from(blobArrayBuffer));
+    const audioStat = await stat(audioPath);
+    const audioSizeMB = Math.round(audioStat.size / 1024 / 1024);
+    console.log(`[episode-analyzer] Audio extracted: ${audioSizeMB}MB`);
 
-    await updateEpisodeProgress(episodeId, 1, 100, 'הקובץ הורד בהצלחה');
+    await updateEpisodeProgress(episodeId, 1, 100, `אודיו חולץ בהצלחה (${audioSizeMB}MB)`);
 
     // ── Stage 3: Transcribe — Whisper API ────────────────────────────────
     await updateEpisodeProgress(episodeId, 2, 0, 'מתמלל עם Whisper AI...');
@@ -171,14 +202,13 @@ export async function runEpisodeAnalysis(
     let fullText: string;
     let transcriptSegments: unknown[];
 
-    // Auto-chunk large files (Whisper API limit is 25MB)
-    if (fileSizeBytes > WHISPER_MAX_FILE_SIZE) {
-      const sizeMB = Math.round(fileSizeBytes / 1024 / 1024);
+    // Auto-chunk if audio is still > 25MB (very long episodes)
+    if (audioStat.size > WHISPER_MAX_FILE_SIZE) {
       const CHUNK_DURATION_SEC = 10 * 60; // 10 minutes per chunk
 
-      await updateEpisodeProgress(episodeId, 2, 5, `הקובץ גדול (${sizeMB}MB) — מפצל לקטעים לתמלול...`);
+      await updateEpisodeProgress(episodeId, 2, 5, `אודיו גדול (${audioSizeMB}MB) — מפצל לקטעים...`);
 
-      const chunks = await splitAudioIntoChunks(tempFilePath, CHUNK_DURATION_SEC, tempDir);
+      const chunks = await splitAudioIntoChunks(audioPath, CHUNK_DURATION_SEC, tempDir);
 
       await updateEpisodeProgress(episodeId, 2, 15, `מתמלל ${chunks.length} קטעים עם Whisper AI...`);
 
@@ -191,19 +221,18 @@ export async function runEpisodeAnalysis(
         await unlink(chunk.path).catch(() => {});
       }
     } else {
-      await updateEpisodeProgress(episodeId, 2, 20, 'שולח קובץ ל-Whisper AI לתמלול...');
+      await updateEpisodeProgress(episodeId, 2, 20, 'שולח אודיו ל-Whisper AI לתמלול...');
 
-      const transcriptionResult = await transcribeAudio(tempFilePath, 'he');
+      const transcriptionResult = await transcribeAudio(audioPath, 'he');
       fullText = transcriptionResult.text;
       transcriptSegments = transcriptionResult.segments;
     }
 
     await updateEpisodeProgress(episodeId, 2, 100, 'התמלול הושלם');
 
-    // Cleanup temp file early
-    if (tempFilePath) {
-      await unlink(tempFilePath).catch(() => {});
-      tempFilePath = null;
+    // Cleanup temp audio files early to free disk
+    if (tempDir) {
+      await unlink(join(tempDir, 'audio.mp3')).catch(() => {});
     }
 
     // ── Stage 4: Segment Topics ──────────────────────────────────────────
@@ -385,8 +414,10 @@ export async function runEpisodeAnalysis(
     await markEpisodeError(episodeId, message);
     return { success: false, episodeId, error: message };
   } finally {
-    if (tempFilePath) {
-      await unlink(tempFilePath).catch(() => {});
+    // Cleanup entire temp directory
+    if (tempDir) {
+      const { rm } = await import('fs/promises');
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
   }
 }

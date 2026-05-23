@@ -27,6 +27,17 @@ export async function GET(
       .single();
 
     if (!episodeError && episode) {
+      // During processing/analyzing, skip extra queries — clips/renders don't exist yet
+      const isProcessing = ['analyzing', 'processing', 'uploaded'].includes(episode.status);
+
+      if (isProcessing) {
+        return NextResponse.json({
+          ...episode,
+          clips_count: 0,
+          render_status: { total: 0, completed: 0, rendering: 0, queued: 0, failed: 0 },
+        });
+      }
+
       // Found in relational table — enrich with clips/render counts
       const { count: clipsCount } = await sb
         .from('podcast_clip_candidates')

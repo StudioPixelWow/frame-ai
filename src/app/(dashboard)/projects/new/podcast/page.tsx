@@ -379,7 +379,9 @@ export default function PodcastClipEnginePage() {
     // First poll immediately
     poll();
 
-    const interval = setInterval(poll, 5000);
+    // Poll every 15s (not 5s) to reduce Supabase connection pressure.
+    // Realtime subscription above provides instant updates when available.
+    const interval = setInterval(poll, 15000);
     return () => clearInterval(interval);
   }, [episodeId, currentStage, applyProgressFromRow]);
 

@@ -13,21 +13,17 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { runEpisodeAnalysis } from '@/lib/podcast-engine/episode-analyzer';
 import { podcastEpisodes } from '@/lib/db/collections';
+import { getSupabase } from '@/lib/db/store';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
 async function findEpisode(episodeId: string) {
   // Try relational table first
-  const { data, error } = await supabase
+  const sb = getSupabase();
+  const { data, error } = await sb
     .from('podcast_episodes')
     .select('id, status, source_file_path')
     .eq('id', episodeId)
@@ -74,7 +70,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Mark as analyzing immediately
-    await supabase
+    const sb2 = getSupabase();
+    await sb2
       .from('podcast_episodes')
       .update({
         status: 'analyzing',
