@@ -963,6 +963,9 @@ function NewProjectWizard() {
         preset: data.preset, exportQuality: data.exportQuality || "premium",
         aiEditMode: data.aiEditMode || "", aiDirectionNotes: data.creativePrompt,
         premiumMode: data.premiumMode, premiumLevel: data.premiumLevel,
+        hookSelected: data.hookSelected, hookSkipped: data.hookSkipped,
+        hookStartTime: data.hookStartTime, hookEndTime: data.hookEndTime,
+        hookDuration: data.hookDuration, hookScore: data.hookScore,
       };
       const compositionData = buildFinalCompositionData(snapshot);
 
@@ -1292,6 +1295,9 @@ function NewProjectWizard() {
         aiDirectionNotes: data.creativePrompt,
         premiumMode: data.premiumMode,
         premiumLevel: data.premiumLevel,
+        hookSelected: data.hookSelected, hookSkipped: data.hookSkipped,
+        hookStartTime: data.hookStartTime, hookEndTime: data.hookEndTime,
+        hookDuration: data.hookDuration, hookScore: data.hookScore,
       };
 
       // Build FinalCompositionData — the single source of truth
@@ -2052,17 +2058,31 @@ function StableVideoPreview({ src, videoRef: externalRef, stepName, subtitleData
     );
   }
 
+  // Format-aware container: show video in the approved format/crop
+  const fmt = subtitleData?.format || "16:9";
+  const fmtCssMap: Record<string, string> = { "9:16": "9 / 16", "1:1": "1 / 1", "4:5": "4 / 5", "16:9": "16 / 9" };
+  const isPortrait = ["9:16", "4:5"].includes(fmt);
+  const cropXVal = subtitleData?.cropX ?? 50;
+  const cropYVal = subtitleData?.cropY ?? 50;
+
   return (
-    <div style={{ width: "100%", maxWidth: 520, margin: "0 auto" }}>
-      {/* Video + all overlay layers */}
-      <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "#000" }}>
+    <div style={{ width: "100%", maxWidth: isPortrait ? 280 : 520, margin: "0 auto" }}>
+      {/* Video + all overlay layers — format-aware container */}
+      <div style={{
+        position: "relative", borderRadius: 12, overflow: "hidden", background: "#000",
+        aspectRatio: fmtCssMap[fmt] || "16 / 9",
+      }}>
         <video
           ref={vRef}
           src={src}
           controls
           playsInline
           preload="metadata"
-          style={{ width: "100%", display: "block", background: "#000" }}
+          style={{
+            width: "100%", height: "100%", display: "block", background: "#000",
+            objectFit: "cover",
+            objectPosition: `${cropXVal}% ${cropYVal}%`,
+          }}
           onPlay={() => console.debug(`[Video:${stepName}] PLAY`)}
           onPause={() => console.debug(`[Video:${stepName}] PAUSE`)}
           onError={(e) => console.error(`[Video:${stepName}] ERROR:`, (e.target as HTMLVideoElement)?.error?.message, (e.target as HTMLVideoElement)?.error?.code)}
@@ -6671,6 +6691,9 @@ function StepPreview({ data, patch, videoSrc: parentVideoSrc }: { data: WizardDa
         preset: data.preset, exportQuality: data.exportQuality || "premium",
         aiEditMode: data.aiEditMode || "", aiDirectionNotes: data.creativePrompt,
         premiumMode: data.premiumMode, premiumLevel: data.premiumLevel,
+        hookSelected: data.hookSelected, hookSkipped: data.hookSkipped,
+        hookStartTime: data.hookStartTime, hookEndTime: data.hookEndTime,
+        hookDuration: data.hookDuration, hookScore: data.hookScore,
       };
       const compData = buildFinalCompositionData(snapshot);
       const remotionProps = compositionToProps(compData);
@@ -7308,6 +7331,9 @@ function StepApprove({ data, patch, clients, onApprove, onSaveDraft, onBack, vid
         preset: data.preset, exportQuality: data.exportQuality || "premium",
         aiEditMode: data.aiEditMode || "", aiDirectionNotes: data.creativePrompt,
         premiumMode: data.premiumMode, premiumLevel: data.premiumLevel,
+        hookSelected: data.hookSelected, hookSkipped: data.hookSkipped,
+        hookStartTime: data.hookStartTime, hookEndTime: data.hookEndTime,
+        hookDuration: data.hookDuration, hookScore: data.hookScore,
       };
       const compData = buildFinalCompositionData(snapshot);
       const remotionProps = compositionToProps(compData);

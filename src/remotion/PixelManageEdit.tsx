@@ -9,7 +9,7 @@
  *  - Color grading, vignette, film grain via VisualEffects
  */
 import React from "react";
-import { AbsoluteFill, Img, OffthreadVideo, Sequence, useCurrentFrame, useVideoConfig, interpolate, Easing, spring } from "remotion";
+import { AbsoluteFill, Img, OffthreadVideo, Sequence, useCurrentFrame, useVideoConfig, interpolate, Easing, spring, staticFile } from "remotion";
 import type { CompositionProps } from "./types";
 import { FPS } from "./types";
 import { SubtitleLayer } from "./components/SubtitleLayer";
@@ -352,7 +352,7 @@ export const PixelManageEdit: React.FC<CompositionProps> = (props) => {
       <SubtitleLayer segments={segments} style={subtitleStyle} cleanupCuts={cleanupCuts} />
 
       {/* Layer 5: Logo Credit Overlay (first N seconds) */}
-      {logoCredit?.url && (() => {
+      {logoCredit && (() => {
         const logoDur = logoCredit.durationSec || 4;
         const logoFrames = Math.round(logoDur * fps);
         const logoSize = logoCredit.sizePx || 80;
@@ -371,7 +371,7 @@ export const PixelManageEdit: React.FC<CompositionProps> = (props) => {
             <AbsoluteFill style={{ pointerEvents: "none" }}>
               <div style={posStyle}>
                 <Img
-                  src={logoCredit.url}
+                  src={logoCredit.url.startsWith("/") ? staticFile(logoCredit.url.replace(/^\//, "")) : logoCredit.url}
                   style={{
                     width: logoSize,
                     height: "auto",

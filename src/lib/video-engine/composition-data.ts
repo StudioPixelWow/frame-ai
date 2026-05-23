@@ -113,6 +113,14 @@ export interface WizardSnapshot {
     removed: boolean;
   }[];
 
+  // Hook
+  hookSelected?: boolean;
+  hookSkipped?: boolean;
+  hookStartTime?: number;
+  hookEndTime?: number;
+  hookDuration?: number;
+  hookScore?: number;
+
   // AI & Presets
   preset: string;
   exportQuality: ExportQuality;
@@ -827,7 +835,18 @@ export function buildFinalCompositionData(ws: WizardSnapshot): FinalCompositionD
     editEngine: {
       zoomKeyframes: [],
       pacingSegments: [],
-      hook: null,
+      hook: (ws.hookSelected && !ws.hookSkipped && ws.hookEndTime && ws.hookEndTime > 0)
+        ? {
+            hookType: "ai",
+            hookScore: ws.hookScore || 0,
+            hookEndSec: ws.hookEndTime || 0,
+            zoomBoost: 1.15,
+            pacingBoost: 1.0,
+            brollIntensity: 1.0,
+            subtitleFontSizeMultiplier: 1.1,
+            skipIntroToSec: 0,
+          }
+        : null,
       retentionCurve: [],
       profile: null,
       overallEditScore: 0,
