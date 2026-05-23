@@ -150,6 +150,11 @@ interface WizardData {
   }>;
   hookAnalyzing: boolean;
 
+  // ── Pipeline: Source metadata (from client video element, sent to server to avoid ffprobe) ──
+  sourceWidth: number;
+  sourceHeight: number;
+  sourceDuration: number;
+
   // ── Pipeline: Crop ──
   cropX: number;         // horizontal offset 0-100
   cropY: number;         // vertical offset 0-100
@@ -235,6 +240,8 @@ const INITIAL: WizardData = {
   hookMode: "ai", hookStartTime: 0, hookEndTime: 0, hookDuration: 0,
   hookScore: 0, hookSelected: false, hookSkipped: false,
   hookRecommendations: [], hookAnalyzing: false,
+  // Pipeline: Source metadata (sent to server to avoid ffprobe)
+  sourceWidth: 0, sourceHeight: 0, sourceDuration: 0,
   // Pipeline: Crop
   cropX: 0, cropY: 0, cropWidth: 100, cropHeight: 100,
   faceTrackingEnabled: false, subjectTrackingEnabled: false,
@@ -2631,6 +2638,8 @@ function StepTrim_REMOVED({ data, patch }: { data: WizardData; patch: (p: Partia
             const d = v.duration;
             setDur(d);
             if (data.trimEnd === 0) patch({ trimEnd: d });
+            // Store video metadata for server-side processing (avoids needing ffprobe on Vercel)
+            patch({ sourceWidth: v.videoWidth, sourceHeight: v.videoHeight, sourceDuration: d });
             if (process.env.NODE_ENV === "development") {
               console.debug("[StepTrim] Video loaded:", { src: v.src?.substring(0, 80), duration: d, readyState: v.readyState, videoWidth: v.videoWidth, videoHeight: v.videoHeight });
             }
@@ -3434,6 +3443,10 @@ function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
           hookEnabled: data.hookSelected && !data.hookSkipped,
           hookStartTime: data.hookSelected ? data.hookStartTime : undefined,
           hookEndTime: data.hookSelected ? data.hookEndTime : undefined,
+          // Pass video metadata from client — avoids needing ffprobe on Vercel
+          sourceWidth: data.sourceWidth || undefined,
+          sourceHeight: data.sourceHeight || undefined,
+          sourceDuration: data.sourceDuration || undefined,
         }),
       });
 

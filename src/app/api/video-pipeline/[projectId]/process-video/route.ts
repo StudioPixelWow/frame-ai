@@ -41,6 +41,10 @@ interface ProcessVideoBody {
   hookEnabled: boolean;
   hookStartTime?: number;
   hookEndTime?: number;
+  // Client-side metadata — avoids needing ffprobe on server
+  sourceWidth?: number;
+  sourceHeight?: number;
+  sourceDuration?: number;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -105,26 +109,49 @@ async function runFfmpeg(args: string[]): Promise<{ stdout: string; stderr: stri
   }
 }
 
-async function getVideoInfo(filePath: string): Promise<{ width: number; height: number; duration: number }> {
-  const { stdout } = await execFileAsync(getFfprobePath(), [
-    "-v", "error",
-    "-select_streams", "v:0",
-    "-show_entries", "stream=width,height,duration",
-    "-show_entries", "format=duration",
-    "-of", "json",
-    filePath,
-  ], { timeout: 30_000 });
+async function getVideoInfo(
+  filePath: string,
+  clientMeta?: { width?: number; height?: number; duration?: number }
+): Promise<{ width: number; height: number; duration: number }> {
+  // If client provided metadata, use it (avoids needing ffprobe binary on Vercel)
+  if (clientMeta?.width && clientMeta?.height) {
+    console.log(`[process-video] Using client-provided metadata: ${clientMeta.width}x${clientMeta.height}, duration=${clientMeta.duration || 0}`);
+    return {
+      width: clientMeta.width,
+      height: clientMeta.height,
+      duration: clientMeta.duration || 0,
+    };
+  }
 
-  const info = JSON.parse(stdout);
-  const stream = info.streams?.[0];
-  const w = stream?.width;
-  const h = stream?.height;
-  if (!w || !h) throw new Error("שגיאה בקריאת מידות הוידאו");
+  // Fallback to ffprobe if available
+  try {
+    const ffprobePath = getFfprobePath();
+    const { stdout } = await execFileAsync(ffprobePath, [
+      "-v", "error",
+      "-select_streams", "v:0",
+      "-show_entries", "stream=width,height,duration",
+      "-show_entries", "format=duration",
+      "-of", "json",
+      filePath,
+    ], { timeout: 30_000 });
 
-  // Duration can come from stream or format level
-  const duration = parseFloat(stream?.duration) || parseFloat(info.format?.duration) || 0;
+    const info = JSON.parse(stdout);
+    const stream = info.streams?.[0];
+    const w = stream?.width;
+    const h = stream?.height;
+    if (!w || !h) throw new Error("שגיאה בקריאת מידות הוידאו");
 
-  return { width: w, height: h, duration };
+    const duration = parseFloat(stream?.duration) || parseFloat(info.format?.duration) || 0;
+    return { width: w, height: h, duration };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("ENOENT")) {
+      throw new Error(
+        "ffprobe לא זמין בסביבת Vercel. יש לשלוח sourceWidth, sourceHeight ו-sourceDuration מהלקוח."
+      );
+    }
+    throw err;
+  }
 }
 
 function cleanupFiles(...files: string[]) {
@@ -172,6 +199,20 @@ export async function POST(req: NextRequest, context: Params) {
       );
     }
 
+    // ── Check ffmpeg availability ──
+    const ffmpegBin = getFfmpegPath();
+    if (ffmpegBin === "ffmpeg") {
+      // System fallback — check if it actually exists
+      try {
+        await execFileAsync("which", ["ffmpeg"], { timeout: 5000 });
+      } catch {
+        return NextResponse.json(
+          { error: "שגיאה: ffmpeg לא זמין בסביבת השרת. עיבוד וידאו דורש שרת עם ffmpeg מותקן." },
+          { status: 503 },
+        );
+      }
+    }
+
     // ── Setup temp directory ──
     const tmpDir = path.join("/tmp", `process-video-${projectId}-${Date.now()}`);
     mkdirSync(tmpDir, { recursive: true });
@@ -186,7 +227,11 @@ export async function POST(req: NextRequest, context: Params) {
     console.log(`[process-video] Downloaded ${(sourceBuffer.length / 1048576).toFixed(1)}MB`);
 
     // ── Get video info for crop calculations and duration clamping ──
-    const { width: srcWidth, height: srcHeight, duration: srcDuration } = await getVideoInfo(sourcePath);
+    const { width: srcWidth, height: srcHeight, duration: srcDuration } = await getVideoInfo(sourcePath, {
+      width: body.sourceWidth,
+      height: body.sourceHeight,
+      duration: body.sourceDuration,
+    });
     console.log(`[process-video] Source: ${srcWidth}x${srcHeight}, duration=${srcDuration.toFixed(1)}s`);
 
     // Clamp trimEnd to actual video duration
