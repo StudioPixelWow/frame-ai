@@ -2669,7 +2669,7 @@ function SeoGeoWizard() {
                                           </div>
                                           <div style={{ flex: 1 }}>
                                             <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
-                                              יום {day.day}: {day.focusTitle}
+                                              יום {day.day}{day.date ? ` (${new Date(day.date + 'T00:00:00').toLocaleDateString('he-IL', { day: 'numeric', month: 'short' })})` : ''}: {day.focusTitle}
                                             </div>
                                             <div style={{ fontSize: 11, color: C.textMuted, marginTop: 1 }}>
                                               {day.tasks.length} משימות · {day.tasks.reduce((s, t) => s + t.effortHours, 0)} שעות

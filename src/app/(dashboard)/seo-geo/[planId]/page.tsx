@@ -2434,7 +2434,7 @@ export default function SeoPlanDetail() {
                                     fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 8,
                                     display: "flex", justifyContent: "space-between", alignItems: "center",
                                   }}>
-                                    <span>יום {s(day.day)}: {s(day.focusTitle)}</span>
+                                    <span>יום {s(day.day)}{day.date ? ` (${new Date(day.date + 'T00:00:00').toLocaleDateString('he-IL', { day: 'numeric', month: 'short' })})` : ''}: {s(day.focusTitle)}</span>
                                     <span style={{ fontSize: 11, color: C.textMuted }}>{dayDone}/{dayTotal} משימות ({dayPct}%)</span>
                                   </div>
                                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
