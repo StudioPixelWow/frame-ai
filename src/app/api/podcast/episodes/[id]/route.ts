@@ -61,7 +61,7 @@ export async function GET(
     // JSONB fallback
     try {
       const items = await podcastEpisodes.getAllAsync();
-      const found = (items as Record<string, unknown>[]).find(
+      const found = (items as unknown as Record<string, unknown>[]).find(
         (ep) => ep.id === id && ep.status !== 'deleted'
       );
       if (found) {
