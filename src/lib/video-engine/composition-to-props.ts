@@ -74,6 +74,8 @@ export interface RemotionInputProps {
     zoomOnSpeech: number;
     zoomOnTransition: number;
     cropForVertical: boolean;
+    cropPositionX?: number;
+    cropPositionY?: number;
   };
   premium: {
     enabled: boolean;
