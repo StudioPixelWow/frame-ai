@@ -19,7 +19,14 @@ const nextConfig: NextConfig = {
   // dynamic require is invisible to static analysis.
   // NOTE: In Next.js 16+, this is a TOP-LEVEL config option (not inside experimental).
   outputFileTracingIncludes: {
-    "/api/*": [
+    "/api/video-pipeline/[projectId]/process-video": [
+      "./node_modules/ffmpeg-static/ffmpeg",
+      "./node_modules/ffmpeg-static/package.json",
+      "./node_modules/ffprobe-static/bin/**/*",
+      "./node_modules/ffprobe-static/package.json",
+      "./node_modules/ffprobe-static/index.js",
+    ],
+    "/api/podcast/process": [
       "./node_modules/ffmpeg-static/ffmpeg",
       "./node_modules/ffmpeg-static/package.json",
       "./node_modules/ffprobe-static/bin/**/*",
