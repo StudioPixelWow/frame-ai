@@ -23,6 +23,7 @@ import { generateReEdit, getReEditModes, type ReEditResult, type ReEditMode } fr
 import type { FinalCompositionData } from "@/lib/video-engine/composition-data";
 import { generateUnifiedEditPlan, getEditPresets, EDIT_PRESETS, type UnifiedEditPlan, type EditProfile } from "@/lib/video-engine/edit-coordinator";
 import type { TranscriptSegment } from "@/lib/video-engine/broll-analysis";
+import { processVideoClientSide, terminateFFmpeg } from "@/lib/client-ffmpeg";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Types & Constants
@@ -3427,39 +3428,62 @@ function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
     try {
       setProcessingProgress("מעבד את הוידאו — חיתוך, מיקוד והוק...");
 
-      const projectId = data.originalVideoId || `new-${Date.now()}`;
-      const resp = await fetch(`/api/video-pipeline/${encodeURIComponent(projectId)}/process-video`, {
+      // ── Client-side processing with ffmpeg.wasm ──
+      // Runs entirely in the browser — no server binary needed.
+      const { blob: processedBlob } = await processVideoClientSide({
+        source: actualVideoUrl,
+        trimStart,
+        trimEnd,
+        cropX: data.cropX,
+        cropY: data.cropY,
+        cropWidth: data.cropWidth,
+        cropHeight: data.cropHeight,
+        sourceWidth: data.sourceWidth || 1920,
+        sourceHeight: data.sourceHeight || 1080,
+        sourceDuration: data.sourceDuration || 0,
+        hookEnabled: !!(data.hookSelected && !data.hookSkipped),
+        hookStartTime: data.hookSelected ? data.hookStartTime : undefined,
+        hookEndTime: data.hookSelected ? data.hookEndTime : undefined,
+        onProgress: (msg) => setProcessingProgress(msg),
+      });
+
+      // ── Upload processed video to Supabase ──
+      setProcessingProgress("מעלה את הוידאו המעובד...");
+
+      // 1. Get a signed upload URL
+      const initRes = await fetch("/api/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sourceVideoUrl: actualVideoUrl,
-          trimStart,
-          trimEnd,
-          cropX: data.cropX,
-          cropY: data.cropY,
-          cropWidth: data.cropWidth,
-          cropHeight: data.cropHeight,
-          targetAspectRatio: data.format,
-          hookEnabled: data.hookSelected && !data.hookSkipped,
-          hookStartTime: data.hookSelected ? data.hookStartTime : undefined,
-          hookEndTime: data.hookSelected ? data.hookEndTime : undefined,
-          // Pass video metadata from client — avoids needing ffprobe on Vercel
-          sourceWidth: data.sourceWidth || undefined,
-          sourceHeight: data.sourceHeight || undefined,
-          sourceDuration: data.sourceDuration || undefined,
+          fileName: `processed-${Date.now()}.mp4`,
+          contentType: "video/mp4",
+          fileSize: processedBlob.size,
         }),
       });
 
-      const result = await resp.json();
-
-      if (!resp.ok) {
-        throw new Error(result.error || "שגיאה בעיבוד הוידאו");
+      if (!initRes.ok) {
+        const errData = await initRes.json().catch(() => ({}));
+        throw new Error(errData.error || "שגיאה ביצירת קישור העלאה");
       }
 
-      const processedUrl = result.processedVideoUrl;
-      if (!processedUrl) {
-        throw new Error("שגיאה: לא התקבל קישור לוידאו המעובד");
+      const { uploadUrl, publicUrl } = await initRes.json();
+      if (!uploadUrl || !publicUrl) throw new Error("שרת לא החזיר כתובת העלאה תקינה");
+
+      // 2. PUT the processed blob directly to Supabase
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "video/mp4" },
+        body: processedBlob,
+      });
+
+      if (!putRes.ok) {
+        let errMsg = `status ${putRes.status}`;
+        try { const b = await putRes.json(); if (b.error || b.message) errMsg = b.error || b.message; } catch {}
+        throw new Error(`שגיאה בהעלאת הוידאו המעובד: ${errMsg}`);
       }
+
+      const processedUrl = publicUrl;
+      console.log("[StepFinalize] Processed video uploaded:", processedUrl);
 
       setProcessingProgress("הוידאו עובד בהצלחה — נועל מקור...");
 
@@ -3471,6 +3495,9 @@ function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
         originalVideoId: actualVideoUrl,
         sourceLocked: true,
       });
+
+      // Free WASM memory
+      terminateFFmpeg();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "שגיאה בעיבוד הוידאו";
       console.error("[StepFinalize] Processing error:", msg);
