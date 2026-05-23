@@ -42,85 +42,86 @@ export const TransitionLayer: React.FC<Props> = ({ style: transStyle, durationMs
     const burst = Math.exp(-Math.pow((progress - 0.15) * 6, 2));
     const bell = Math.sin(progress * Math.PI);
     const glow = Math.exp(-progress * 2.5);
-    const ringExpand = interpolate(progress, [0, 0.5, 1], [0.2, 1.8, 2.5], { extrapolateRight: "clamp" });
     const sweepAngle = progress * 360;
 
     return (
       <AbsoluteFill style={{ zIndex: 20, pointerEvents: "none" }}>
-        {/* Layer 1: White burst — explosive center flash */}
+        {/* Layer 1: Full-screen white/golden flash */}
         <AbsoluteFill
           style={{
-            background: `radial-gradient(circle at 50% 50%,
+            background: `linear-gradient(135deg,
               rgba(255,255,255,${0.95 * burst}) 0%,
-              rgba(255,255,240,${0.7 * burst}) 15%,
-              rgba(255,220,180,${0.3 * burst}) 35%,
-              transparent 60%)`,
-            filter: `brightness(${1 + burst * 3})`,
+              rgba(255,240,200,${0.85 * burst}) 30%,
+              rgba(255,200,100,${0.7 * burst}) 60%,
+              rgba(255,160,50,${0.5 * burst}) 100%)`,
+            filter: `brightness(${1 + burst * 4})`,
             mixBlendMode: "screen",
-            transform: `scale(${1 + burst * 0.5})`,
           }}
         />
-        {/* Layer 2: Chromatic ring — expanding colorful halo */}
+        {/* Layer 2: Orange-yellow fire wash */}
         <AbsoluteFill
           style={{
-            background: `radial-gradient(circle at 50% 50%,
-              transparent ${ringExpand * 15}%,
-              rgba(0,255,255,${0.6 * bell}) ${ringExpand * 20}%,
-              rgba(80,120,255,${0.55 * bell}) ${ringExpand * 28}%,
-              rgba(180,60,255,${0.5 * bell}) ${ringExpand * 36}%,
-              rgba(255,60,200,${0.45 * bell}) ${ringExpand * 44}%,
-              rgba(255,100,60,${0.3 * bell}) ${ringExpand * 52}%,
-              transparent ${ringExpand * 65}%)`,
-            filter: `blur(${3 + glow * 6}px)`,
+            background: `linear-gradient(${sweepAngle}deg,
+              rgba(255,165,0,${0.7 * bell}) 0%,
+              rgba(255,200,0,${0.65 * bell}) 20%,
+              rgba(255,140,0,${0.6 * bell}) 40%,
+              rgba(255,80,0,${0.5 * bell}) 60%,
+              rgba(255,200,50,${0.55 * bell}) 80%,
+              rgba(255,165,0,${0.7 * bell}) 100%)`,
+            filter: `blur(${5 + bell * 10}px)`,
             mixBlendMode: "screen",
-            transform: `scale(${1.2 + bell * 0.3})`,
           }}
         />
-        {/* Layer 3: RGB split bloom — tri-color offset glow */}
+        {/* Layer 3: Chromatic color bands — full-screen horizontal sweep */}
         <AbsoluteFill
           style={{
-            background: `
-              radial-gradient(ellipse 150% 150% at ${48 - bell * 3}% 50%, rgba(255,30,60,${0.35 * bell}) 0%, transparent 50%),
-              radial-gradient(ellipse 150% 150% at ${52 + bell * 3}% 50%, rgba(30,120,255,${0.35 * bell}) 0%, transparent 50%),
-              radial-gradient(ellipse 150% 150% at 50% ${48 - bell * 3}%, rgba(30,255,120,${0.3 * bell}) 0%, transparent 50%)`,
-            filter: `blur(${8 + glow * 12}px)`,
+            background: `linear-gradient(90deg,
+              rgba(255,100,0,${0.5 * bell}) 0%,
+              rgba(255,200,0,${0.45 * bell}) 15%,
+              rgba(0,255,200,${0.35 * bell}) 30%,
+              rgba(80,120,255,${0.35 * bell}) 45%,
+              rgba(200,60,255,${0.35 * bell}) 60%,
+              rgba(255,60,150,${0.4 * bell}) 75%,
+              rgba(255,140,0,${0.5 * bell}) 90%,
+              rgba(255,200,50,${0.45 * bell}) 100%)`,
+            filter: `blur(${8 + glow * 15}px)`,
             mixBlendMode: "screen",
+            transform: `scale(${1.3 + bell * 0.3})`,
           }}
         />
-        {/* Layer 4: Rainbow sweep — rotating conic gradient */}
+        {/* Layer 4: Warm rainbow sweep — rotating full-screen */}
         <AbsoluteFill
           style={{
             background: `conic-gradient(from ${sweepAngle}deg at 50% 50%,
-              rgba(255,0,0,${0.2 * bell}),
-              rgba(255,165,0,${0.2 * bell}),
-              rgba(255,255,0,${0.2 * bell}),
-              rgba(0,255,0,${0.2 * bell}),
-              rgba(0,255,255,${0.2 * bell}),
-              rgba(0,0,255,${0.2 * bell}),
-              rgba(128,0,255,${0.2 * bell}),
-              rgba(255,0,255,${0.2 * bell}),
-              rgba(255,0,0,${0.2 * bell}))`,
-            filter: `blur(${20 + bell * 15}px)`,
+              rgba(255,140,0,${0.3 * bell}),
+              rgba(255,200,0,${0.3 * bell}),
+              rgba(255,255,100,${0.25 * bell}),
+              rgba(0,255,200,${0.2 * bell}),
+              rgba(0,180,255,${0.2 * bell}),
+              rgba(150,80,255,${0.2 * bell}),
+              rgba(255,60,200,${0.25 * bell}),
+              rgba(255,100,0,${0.3 * bell}),
+              rgba(255,200,50,${0.3 * bell}))`,
+            filter: `blur(${25 + bell * 20}px)`,
             mixBlendMode: "screen",
-            transform: `scale(${1.5 + bell * 0.5})`,
-            opacity: bell * 0.7,
+            transform: `scale(${1.8 + bell * 0.5})`,
+            opacity: bell * 0.8,
           }}
         />
-        {/* Layer 5: Expanding rings */}
+        {/* Layer 5: Full-screen golden brightness flash */}
         <AbsoluteFill
           style={{
-            background: `
-              radial-gradient(circle at 50% 50%, transparent ${ringExpand * 30}%, rgba(255,255,255,${0.15 * bell}) ${ringExpand * 32}%, transparent ${ringExpand * 35}%),
-              radial-gradient(circle at 50% 50%, transparent ${ringExpand * 50}%, rgba(0,200,255,${0.12 * bell}) ${ringExpand * 52}%, transparent ${ringExpand * 55}%),
-              radial-gradient(circle at 50% 50%, transparent ${ringExpand * 70}%, rgba(180,60,255,${0.08 * bell}) ${ringExpand * 72}%, transparent ${ringExpand * 75}%)`,
+            backgroundColor: `rgba(255,200,80,${burst * 0.35})`,
             mixBlendMode: "screen",
-            transform: `scale(${1.1 + bell * 0.4})`,
           }}
         />
-        {/* Layer 6: Full-screen brightness overlay */}
+        {/* Layer 6: Warm amber afterglow */}
         <AbsoluteFill
           style={{
-            backgroundColor: `rgba(255,255,255,${burst * 0.25})`,
+            background: `linear-gradient(180deg,
+              rgba(255,180,50,${0.2 * glow}) 0%,
+              rgba(255,140,0,${0.15 * glow}) 50%,
+              rgba(255,100,0,${0.1 * glow}) 100%)`,
             mixBlendMode: "screen",
           }}
         />

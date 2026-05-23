@@ -2066,7 +2066,7 @@ function StableVideoPreview({ src, videoRef: externalRef, stepName, subtitleData
   const cropYVal = subtitleData?.cropY ?? 50;
 
   return (
-    <div style={{ width: "100%", maxWidth: isPortrait ? 280 : 520, margin: "0 auto" }}>
+    <div style={{ width: "100%", margin: "0 auto" }}>
       {/* Video + all overlay layers — format-aware container */}
       <div style={{
         position: "relative", borderRadius: 12, overflow: "hidden", background: "#000",
