@@ -914,10 +914,9 @@ function NewProjectWizard() {
   }, [data.uploadedVideoUrl, data.videoUrl]);
 
   /** originalVideoSource — the SINGLE source of truth for ALL preview/editing steps.
-   *  Prefers the local blob URL (data.videoUrl) for browser playback — Supabase public
-   *  URLs return 544 and can't be played by <video> or Remotion Player.
-   *  Falls back to uploadedVideoUrl (signed URL or proxy) only if blob is gone. */
-  const originalVideoSource = data.videoUrl || data.uploadedVideoUrl;
+   *  After pipeline finalize: uses the PROCESSED video (finalPreEditVideoId).
+   *  Before finalize: uses local blob URL or uploadedVideoUrl for playback. */
+  const originalVideoSource = data.finalPreEditVideoId || data.videoUrl || data.uploadedVideoUrl;
 
   if (process.env.NODE_ENV === "development") {
     console.debug("[originalVideoSource]", originalVideoSource || "(empty)")
