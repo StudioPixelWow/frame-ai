@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       if (isFinalComposition) {
         try {
           inputProps = compositionToProps(compositionData);
-          console.log(`${tag} ✅ compositionToProps succeeded — segments: ${inputProps.segments?.length}, broll: ${inputProps.brollPlacements?.length}, videoClips: ${inputProps.videoClips?.length}, subtitleFont: ${inputProps.subtitleStyle?.font}, musicUrl: ${inputProps.music?.trackUrl?.substring(0, 60) || "(none)"}`);
+          console.log(`${tag} ✅ compositionToProps succeeded — segments: ${inputProps.segments?.length}, broll: ${inputProps.brollPlacements?.length}, videoClips: ${inputProps.videoClips?.length}, subtitleFont: ${inputProps.subtitleStyle?.font}, musicUrl: ${inputProps.music?.trackUrl?.substring(0, 60) || "(none)"}, logoCredit: ${inputProps.logoCredit ? `${inputProps.logoCredit.url?.substring(0, 30)}... size=${inputProps.logoCredit.sizePx}` : "MISSING"}`);
         } catch (convErr) {
           console.error(`${tag} ⚠️ compositionToProps failed, falling back to flat extraction:`, convErr instanceof Error ? convErr.message : convErr);
           // Fallback: try flat keys (legacy path for older clients)
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
             videoClips: compositionData.videoClips ?? [],
             zoomKeyframes: compositionData.zoomKeyframes ?? [],
             hookBoost: compositionData.hookBoost ?? { active: false, hookEndSec: 0, zoomMultiplier: 1, subtitleFontMultiplier: 1 },
-            logoCredit: compositionData.logoCredit ?? { url: "/logo-credit.svg", durationSec: 4, position: "bottom-right", sizePx: 120, opacity: 0.85 },
+            logoCredit: compositionData.logoCredit ?? { url: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNDAgNjAiIGZpbGw9Im5vbmUiPgo8cmVjdCB3aWR0aD0iMjQwIiBoZWlnaHQ9IjYwIiByeD0iMTIiIGZpbGw9IiMwYTBhMTIiIGZpbGwtb3BhY2l0eT0iMC43Ii8+CjxwYXRoIGQ9Ik0xNiAxNGgxMGw4IDE2LTggMTZIMTZsOC0xNi04LTE2eiIgZmlsbD0iIzAwQjVGRSIvPgo8cGF0aCBkPSJNMzAgMTRoMTBsLTggMTYgOCAxNkgzMGwtOC0xNiA4LTE2eiIgZmlsbD0iIzAwQjVGRSIgb3BhY2l0eT0iMC41Ii8+CjxjaXJjbGUgY3g9IjQ0IiBjeT0iMTQiIHI9IjMuNSIgZmlsbD0iIzAwQjVGRSIgb3BhY2l0eT0iMC44Ii8+Cjx0ZXh0IHg9IjU2IiB5PSIzMCIgZm9udC1mYW1pbHk9IkFyaWFsLCBIZWx2ZXRpY2EsIHNhbnMtc2VyaWYiIGZvbnQtd2VpZ2h0PSI3MDAiIGZvbnQtc2l6ZT0iMTgiIGZpbGw9IiNGRkZGRkYiIGxldHRlci1zcGFjaW5nPSIwLjUiPlBpeGVsTWFuYWdlPC90ZXh0Pgo8dGV4dCB4PSI1NiIgeT0iNDciIGZvbnQtZmFtaWx5PSJBcmlhbCwgSGVsdmV0aWNhLCBzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iNDAwIiBmb250LXNpemU9IjExIiBmaWxsPSIjMDBCNUZFIiBvcGFjaXR5PSIwLjg1IiBsZXR0ZXItc3BhY2luZz0iMC4zIj5BSSBWaWRlbyBFZGl0b3I8L3RleHQ+Cjwvc3ZnPg==", durationSec: 5, position: "bottom-right" as const, sizePx: 180, opacity: 0.9 },
           };
         }
       } else {

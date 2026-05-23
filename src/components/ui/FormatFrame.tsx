@@ -65,12 +65,12 @@ export interface FormatFrameProps {
   onClick?: () => void;
 }
 
-/** Sensible max-width per format */
+/** Max-width per format — large enough for full-size preview */
 const DEFAULT_MAX_WIDTH: Record<string, number> = {
-  "9:16": 280,
-  "16:9": 640,
-  "1:1": 400,
-  "4:5": 320,
+  "9:16": 480,
+  "16:9": 960,
+  "1:1": 600,
+  "4:5": 520,
 };
 
 export function FormatFrame({

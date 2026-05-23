@@ -383,7 +383,7 @@ export const UnifiedEditedPreviewPlayer = forwardRef<UnifiedPreviewHandle, Unifi
   }, [ss]);
 
   /* ── Scaled subtitle style for preview ── */
-  const scaleFactor = compact ? 0.45 : 0.55;
+  const scaleFactor = compact ? 0.5 : 0.75;
   const scaledFontSize = Math.max(ss.subtitleFontSize * scaleFactor, 11);
   const scaledOutline = Math.max(ss.subtitleOutlineThickness * scaleFactor, 1);
 
@@ -418,7 +418,7 @@ export const UnifiedEditedPreviewPlayer = forwardRef<UnifiedPreviewHandle, Unifi
   }, [ss, scaledFontSize, scaledOutline]);
 
   /* ── Compute container sizing ── */
-  const containerMaxWidth = maxWidth ?? (aspectRatio < 1 ? (compact ? 240 : 340) : "100%");
+  const containerMaxWidth = maxWidth ?? (aspectRatio < 1 ? (compact ? 320 : 480) : "100%");
 
   /* ═══════════════ JSX ═══════════════ */
   return (
@@ -524,9 +524,34 @@ export const UnifiedEditedPreviewPlayer = forwardRef<UnifiedPreviewHandle, Unifi
               return <div style={{ position: "absolute", inset: 0, zIndex: 21, pointerEvents: "none", backdropFilter: `blur(${bell * 12}px)` }} />;
             }
             if (transitionStyle === "spectrumImpactFlash") {
-              const burst = Math.exp(-Math.pow((p - 0.2) * 5, 2));
-              const glowD = Math.exp(-p * 3);
-              return <div style={{ position: "absolute", inset: "-10%", zIndex: 21, pointerEvents: "none", background: `radial-gradient(ellipse 120% 120% at 50% 50%, rgba(255,255,255,${0.9 * burst}) 0%, rgba(0,255,255,${0.5 * bell}) 15%, rgba(80,120,255,${0.45 * bell}) 28%, rgba(180,60,255,${0.4 * bell}) 42%, rgba(255,60,200,${0.3 * bell}) 56%, transparent 85%)`, opacity: bell * 0.95, filter: `blur(${2 + glowD * 8}px) brightness(${1 + burst * 2})`, mixBlendMode: "screen" as const, transform: `scale(${0.8 + bell * 0.4})` }} />;
+              const burst = Math.exp(-Math.pow((p - 0.12) * 5, 2));
+              const glowD = Math.exp(-p * 2);
+              return (
+                <div style={{ position: "absolute", inset: 0, zIndex: 21, pointerEvents: "none" }}>
+                  {/* Full-screen orange-white flash */}
+                  <div style={{
+                    position: "absolute", inset: 0,
+                    background: `linear-gradient(135deg, rgba(255,255,255,${burst * 0.95}) 0%, rgba(255,200,0,${burst * 0.9}) 30%, rgba(255,140,0,${burst * 0.8}) 60%, rgba(255,80,0,${burst * 0.7}) 100%)`,
+                    filter: `brightness(${1 + burst * 5})`,
+                    mixBlendMode: "screen" as const,
+                  }} />
+                  {/* Vibrant rainbow sweep */}
+                  <div style={{
+                    position: "absolute", inset: 0,
+                    background: `linear-gradient(90deg, rgba(255,80,0,${0.6 * bell}) 0%, rgba(255,220,0,${0.55 * bell}) 15%, rgba(0,255,180,${0.4 * bell}) 35%, rgba(0,180,255,${0.35 * bell}) 50%, rgba(180,60,255,${0.4 * bell}) 65%, rgba(255,60,200,${0.45 * bell}) 80%, rgba(255,160,0,${0.6 * bell}) 100%)`,
+                    filter: `blur(${4 + glowD * 10}px)`,
+                    mixBlendMode: "screen" as const,
+                    opacity: bell * 0.9,
+                    transform: `scale(${1.3 + bell * 0.3})`,
+                  }} />
+                  {/* Golden afterglow */}
+                  <div style={{
+                    position: "absolute", inset: 0,
+                    backgroundColor: `rgba(255,180,0,${burst * 0.5})`,
+                    mixBlendMode: "screen" as const,
+                  }} />
+                </div>
+              );
             }
             if (transitionStyle === "punchyCut") {
               return <div style={{ position: "absolute", inset: 0, zIndex: 21, pointerEvents: "none", backgroundColor: "#fff", opacity: bell > 0.8 ? (1 - bell) * 5 : 0 }} />;

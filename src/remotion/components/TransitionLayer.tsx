@@ -39,90 +39,101 @@ export const TransitionLayer: React.FC<Props> = ({ style: transStyle, durationMs
   }
 
   if (transStyle === "spectrumImpactFlash") {
-    const burst = Math.exp(-Math.pow((progress - 0.15) * 6, 2));
+    const burst = Math.exp(-Math.pow((progress - 0.12) * 5, 2));
     const bell = Math.sin(progress * Math.PI);
-    const glow = Math.exp(-progress * 2.5);
-    const sweepAngle = progress * 360;
+    const glow = Math.exp(-progress * 2);
+    const sweepAngle = progress * 540;
 
     return (
       <AbsoluteFill style={{ zIndex: 20, pointerEvents: "none" }}>
-        {/* Layer 1: Full-screen white/golden flash */}
+        {/* Layer 1: MASSIVE full-screen white-to-orange explosion */}
         <AbsoluteFill
           style={{
             background: `linear-gradient(135deg,
-              rgba(255,255,255,${0.95 * burst}) 0%,
-              rgba(255,240,200,${0.85 * burst}) 30%,
-              rgba(255,200,100,${0.7 * burst}) 60%,
-              rgba(255,160,50,${0.5 * burst}) 100%)`,
-            filter: `brightness(${1 + burst * 4})`,
+              rgba(255,255,255,${1.0 * burst}) 0%,
+              rgba(255,220,100,${0.95 * burst}) 20%,
+              rgba(255,165,0,${0.9 * burst}) 45%,
+              rgba(255,120,0,${0.85 * burst}) 70%,
+              rgba(255,80,0,${0.75 * burst}) 100%)`,
+            filter: `brightness(${1 + burst * 6})`,
             mixBlendMode: "screen",
           }}
         />
-        {/* Layer 2: Orange-yellow fire wash */}
+        {/* Layer 2: Intense orange-yellow fire wall — full screen */}
         <AbsoluteFill
           style={{
             background: `linear-gradient(${sweepAngle}deg,
-              rgba(255,165,0,${0.7 * bell}) 0%,
-              rgba(255,200,0,${0.65 * bell}) 20%,
-              rgba(255,140,0,${0.6 * bell}) 40%,
-              rgba(255,80,0,${0.5 * bell}) 60%,
-              rgba(255,200,50,${0.55 * bell}) 80%,
-              rgba(255,165,0,${0.7 * bell}) 100%)`,
-            filter: `blur(${5 + bell * 10}px)`,
+              rgba(255,200,0,${0.9 * bell}) 0%,
+              rgba(255,165,0,${0.85 * bell}) 15%,
+              rgba(255,120,0,${0.8 * bell}) 30%,
+              rgba(255,80,0,${0.75 * bell}) 45%,
+              rgba(255,200,50,${0.85 * bell}) 60%,
+              rgba(255,255,0,${0.8 * bell}) 75%,
+              rgba(255,140,0,${0.9 * bell}) 100%)`,
+            filter: `blur(${3 + bell * 8}px)`,
             mixBlendMode: "screen",
+            transform: `scale(${1.2 + bell * 0.3})`,
           }}
         />
-        {/* Layer 3: Chromatic color bands — full-screen horizontal sweep */}
+        {/* Layer 3: Full-screen chromatic color sweep — vibrant rainbow */}
         <AbsoluteFill
           style={{
-            background: `linear-gradient(90deg,
-              rgba(255,100,0,${0.5 * bell}) 0%,
-              rgba(255,200,0,${0.45 * bell}) 15%,
-              rgba(0,255,200,${0.35 * bell}) 30%,
-              rgba(80,120,255,${0.35 * bell}) 45%,
-              rgba(200,60,255,${0.35 * bell}) 60%,
-              rgba(255,60,150,${0.4 * bell}) 75%,
-              rgba(255,140,0,${0.5 * bell}) 90%,
-              rgba(255,200,50,${0.45 * bell}) 100%)`,
-            filter: `blur(${8 + glow * 15}px)`,
+            background: `linear-gradient(${90 + sweepAngle * 0.3}deg,
+              rgba(255,80,0,${0.7 * bell}) 0%,
+              rgba(255,200,0,${0.65 * bell}) 12%,
+              rgba(255,255,0,${0.6 * bell}) 22%,
+              rgba(0,255,180,${0.45 * bell}) 35%,
+              rgba(0,180,255,${0.4 * bell}) 48%,
+              rgba(140,80,255,${0.45 * bell}) 60%,
+              rgba(255,60,200,${0.5 * bell}) 72%,
+              rgba(255,100,0,${0.65 * bell}) 85%,
+              rgba(255,220,50,${0.7 * bell}) 100%)`,
+            filter: `blur(${6 + glow * 12}px)`,
             mixBlendMode: "screen",
-            transform: `scale(${1.3 + bell * 0.3})`,
+            transform: `scale(${1.5 + bell * 0.4})`,
           }}
         />
-        {/* Layer 4: Warm rainbow sweep — rotating full-screen */}
+        {/* Layer 4: Rotating warm spectrum — massive scale */}
         <AbsoluteFill
           style={{
-            background: `conic-gradient(from ${sweepAngle}deg at 50% 50%,
-              rgba(255,140,0,${0.3 * bell}),
-              rgba(255,200,0,${0.3 * bell}),
-              rgba(255,255,100,${0.25 * bell}),
-              rgba(0,255,200,${0.2 * bell}),
-              rgba(0,180,255,${0.2 * bell}),
-              rgba(150,80,255,${0.2 * bell}),
-              rgba(255,60,200,${0.25 * bell}),
-              rgba(255,100,0,${0.3 * bell}),
-              rgba(255,200,50,${0.3 * bell}))`,
-            filter: `blur(${25 + bell * 20}px)`,
+            background: `linear-gradient(${sweepAngle + 45}deg,
+              rgba(255,200,0,${0.6 * bell}) 0%,
+              rgba(255,140,0,${0.55 * bell}) 20%,
+              rgba(255,60,0,${0.5 * bell}) 40%,
+              rgba(255,0,100,${0.4 * bell}) 55%,
+              rgba(180,0,255,${0.35 * bell}) 70%,
+              rgba(0,200,255,${0.35 * bell}) 85%,
+              rgba(255,255,0,${0.55 * bell}) 100%)`,
+            filter: `blur(${15 + bell * 25}px)`,
             mixBlendMode: "screen",
-            transform: `scale(${1.8 + bell * 0.5})`,
-            opacity: bell * 0.8,
+            transform: `scale(${2.0 + bell * 0.8})`,
+            opacity: bell * 0.9,
           }}
         />
-        {/* Layer 5: Full-screen golden brightness flash */}
+        {/* Layer 5: Massive golden brightness blast — full opacity */}
         <AbsoluteFill
           style={{
-            backgroundColor: `rgba(255,200,80,${burst * 0.35})`,
+            backgroundColor: `rgba(255,180,0,${burst * 0.6})`,
             mixBlendMode: "screen",
+            filter: `brightness(${1 + burst * 3})`,
           }}
         />
-        {/* Layer 6: Warm amber afterglow */}
+        {/* Layer 6: Deep orange afterglow — lingers */}
         <AbsoluteFill
           style={{
             background: `linear-gradient(180deg,
-              rgba(255,180,50,${0.2 * glow}) 0%,
-              rgba(255,140,0,${0.15 * glow}) 50%,
-              rgba(255,100,0,${0.1 * glow}) 100%)`,
+              rgba(255,200,50,${0.35 * glow}) 0%,
+              rgba(255,150,0,${0.3 * glow}) 40%,
+              rgba(255,100,0,${0.25 * glow}) 70%,
+              rgba(255,60,0,${0.15 * glow}) 100%)`,
             mixBlendMode: "screen",
+          }}
+        />
+        {/* Layer 7: Final yellow flash punch */}
+        <AbsoluteFill
+          style={{
+            backgroundColor: `rgba(255,255,0,${burst * 0.25})`,
+            mixBlendMode: "overlay",
           }}
         />
       </AbsoluteFill>

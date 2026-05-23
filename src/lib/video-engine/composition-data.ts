@@ -825,10 +825,10 @@ export function buildFinalCompositionData(ws: WizardSnapshot): FinalCompositionD
     // Logo credit — PixelManage watermark in bottom-right corner for first 4 seconds
     logoCredit: {
       url: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNDAgNjAiIGZpbGw9Im5vbmUiPgogIDwhLS0gQmFja2dyb3VuZCBwaWxsIC0tPgogIDxyZWN0IHdpZHRoPSIyNDAiIGhlaWdodD0iNjAiIHJ4PSIxMiIgZmlsbD0iIzBhMGExMiIgZmlsbC1vcGFjaXR5PSIwLjciLz4KICA8IS0tIEljb246IHR3aW4gY2hldnJvbnMgKG1hdGNoZXMgZmF2aWNvbikgLS0+CiAgPHBhdGggZD0iTTE2IDE0aDEwbDggMTYtOCAxNkgxNmw4LTE2LTgtMTZ6IiBmaWxsPSIjMDBCNUZFIi8+CiAgPHBhdGggZD0iTTMwIDE0aDEwbC04IDE2IDggMTZIMzBsLTgtMTYgOC0xNnoiIGZpbGw9IiMwMEI1RkUiIG9wYWNpdHk9IjAuNSIvPgogIDxjaXJjbGUgY3g9IjQ0IiBjeT0iMTQiIHI9IjMuNSIgZmlsbD0iIzAwQjVGRSIgb3BhY2l0eT0iMC44Ii8+CiAgPCEtLSBUZXh0IC0tPgogIDx0ZXh0IHg9IjU2IiB5PSIzMCIgZm9udC1mYW1pbHk9IkFyaWFsLCBIZWx2ZXRpY2EsIHNhbnMtc2VyaWYiIGZvbnQtd2VpZ2h0PSI3MDAiIGZvbnQtc2l6ZT0iMTgiIGZpbGw9IiNGRkZGRkYiIGxldHRlci1zcGFjaW5nPSIwLjUiPlBpeGVsTWFuYWdlPC90ZXh0PgogIDx0ZXh0IHg9IjU2IiB5PSI0NyIgZm9udC1mYW1pbHk9IkFyaWFsLCBIZWx2ZXRpY2EsIHNhbnMtc2VyaWYiIGZvbnQtd2VpZ2h0PSI0MDAiIGZvbnQtc2l6ZT0iMTEiIGZpbGw9IiMwMEI1RkUiIG9wYWNpdHk9IjAuODUiIGxldHRlci1zcGFjaW5nPSIwLjMiPkFJIFZpZGVvIEVkaXRvcjwvdGV4dD4KPC9zdmc+Cg==",
-      durationSec: 4,
+      durationSec: 5,
       position: "bottom-right",
-      sizePx: 120,
-      opacity: 0.85,
+      sizePx: 180,
+      opacity: 0.9,
     },
 
     // Edit engine — defaults (populated by unified coordinator when active)
