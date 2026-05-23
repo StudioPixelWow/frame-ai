@@ -219,7 +219,12 @@ export async function processVideoClientSide(
   // ── Read result ──
   onProgress?.("שומר את הוידאו המעובד...");
   const outputData = await ffmpeg.readFile(finalFile);
-  const blob = new Blob([outputData], { type: "video/mp4" });
+  // readFile returns FileData (string | Uint8Array<ArrayBufferLike>).
+  // Copy into a plain ArrayBuffer so it's assignable to BlobPart.
+  const bytes = outputData instanceof Uint8Array
+    ? new Uint8Array(outputData.buffer.slice(outputData.byteOffset, outputData.byteOffset + outputData.byteLength))
+    : new TextEncoder().encode(outputData as string);
+  const blob = new Blob([bytes], { type: "video/mp4" });
 
   // Cleanup WASM filesystem
   try { await ffmpeg.deleteFile("input.mp4"); } catch { /* ignore */ }
