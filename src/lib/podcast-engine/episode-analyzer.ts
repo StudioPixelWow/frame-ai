@@ -419,6 +419,9 @@ export async function runEpisodeAnalysis(
     // ── Stage 4: Segment Topics ──────────────────────────────────────────
     await updateEpisodeProgress(episodeId, 3, 0, 'מנתח נושאים ומזהה מעברים בשיחה...');
 
+    const segmentCount = transcriptSegments.length;
+    await updateEpisodeProgress(episodeId, 3, 20, `מפצל ${segmentCount} סגמנטים למילים בודדות...`);
+
     // Whisper returns TranscriptionSegment (text, start, end) — segmentTranscript
     // now handles both word-level and sentence-level segments automatically
     const topicSegments = segmentTranscript(
@@ -431,20 +434,25 @@ export async function runEpisodeAnalysis(
       }))
     );
 
-    await updateEpisodeProgress(episodeId, 3, 100, `זוהו ${topicSegments.length} נושאים`);
+    await updateEpisodeProgress(episodeId, 3, 60, `מחשב מרחקי אוצר מילים בין חלקי השיחה...`);
+    await updateEpisodeProgress(episodeId, 3, 100, `זוהו ${topicSegments.length} נושאים בפרק`);
 
     // ── Stage 5: AI Analysis — Claude for clip candidate detection ───────
-    await updateEpisodeProgress(episodeId, 4, 0, 'AI מנתח את התמלול לזיהוי רגעים ויראליים...');
+    await updateEpisodeProgress(episodeId, 4, 0, 'מכין את התמלול לניתוח AI...');
+    await updateEpisodeProgress(episodeId, 4, 15, `שולח ${topicSegments.length} נושאים ו-${fullText.length.toLocaleString()} תווים לניתוח...`);
+    await updateEpisodeProgress(episodeId, 4, 30, 'AI מזהה רגעים ויראליים, הוקים חזקים ונקודות עניין...');
 
     const aiClips: AIClipSuggestion[] = await analyzeTranscriptForClips(
       fullText,
       topicSegments
     );
 
-    await updateEpisodeProgress(episodeId, 4, 100, `נמצאו ${aiClips.length} קליפים מומלצים`);
+    await updateEpisodeProgress(episodeId, 4, 80, `AI סיים — נמצאו ${aiClips.length} רגעים מעניינים`);
+    await updateEpisodeProgress(episodeId, 4, 100, `${aiClips.length} קליפים מומלצים מוכנים לדירוג`);
 
     // ── Stage 6: Score & Save — save analysis + candidates ───────────────
-    await updateEpisodeProgress(episodeId, 5, 0, 'מחשב ציונים ושומר ניתוח...');
+    await updateEpisodeProgress(episodeId, 5, 0, 'מתחיל דירוג ושמירת תוצאות...');
+    await updateEpisodeProgress(episodeId, 5, 10, `מחשב ציוני ויראליות, engagement והוק ל-${aiClips.length} קליפים...`);
 
     // Map AI suggestions to RawClipCandidate for scoring
     const rawCandidates: RawClipCandidate[] = aiClips.map((clip, idx) => ({
@@ -464,6 +472,7 @@ export async function runEpisodeAnalysis(
 
     const scoredClips = scoreClipCandidates(rawCandidates);
     const rankedClips = rankClips(scoredClips);
+    await updateEpisodeProgress(episodeId, 5, 20, `${rankedClips.length} קליפים דורגו — שומר תמלול...`);
 
     // Save transcript to podcast_transcripts
     const { data: transcriptRow, error: transcriptInsertError } = await sb
@@ -487,7 +496,7 @@ export async function runEpisodeAnalysis(
 
     const transcriptId = transcriptRow?.id || null;
 
-    await updateEpisodeProgress(episodeId, 5, 30, 'שומר ניתוח פרק...');
+    await updateEpisodeProgress(episodeId, 5, 35, 'תמלול נשמר — מזהה שתיקות ורגעים מתים...');
 
     // Detect silences (segments with long gaps) — works with any segment that has start/end
     const silences = detectSilences(

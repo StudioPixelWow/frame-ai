@@ -9,23 +9,19 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { episodeAnalyses, podcastClipCandidates } from '@/lib/db/collections';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabase } from '@/lib/db/store';
 import type { EpisodeAnalysis, PodcastClipCandidate } from '@/lib/db/schema';
 
 export const dynamic = 'force-dynamic';
 
 type Params = { params: Promise<{ episodeId: string }> };
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
 export async function GET(_req: NextRequest, context: Params) {
   const { episodeId } = await context.params;
 
   try {
     // Get episode info
+    const supabase = getSupabase();
     const { data: episode, error: epError } = await supabase
       .from('podcast_episodes')
       .select('id, status, title, processing_progress, error_message, source_file_path, duration_seconds')
