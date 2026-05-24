@@ -7,8 +7,9 @@
  * Supabase TUS endpoint: ${supabaseUrl}/storage/v1/upload/resumable
  *
  * 544 = Supabase DB connection pool exhausted.
- * Mitigations: 1 MB chunks, long exponential backoff (5s → 60s),
- * onShouldRetry always retries on 544, parallelUploads=1.
+ * Mitigations: 50 MB chunks (only ~12 requests for 600MB file),
+ * long exponential backoff (10s → 120s), onShouldRetry always retries
+ * on 544, parallelUploads=1.
  */
 
 import * as tus from 'tus-js-client';
@@ -24,18 +25,19 @@ export interface TusUploadOptions {
   onSuccess?: (url: string) => void;
   /** Custom metadata key-value pairs sent via Upload-Metadata header. */
   metadata?: Record<string, string>;
-  /** Override default chunk size (bytes). Default 1 MB. */
+  /** Override default chunk size (bytes). Default 50 MB. */
   chunkSize?: number;
-  /** Max retry attempts per chunk. Default 8. */
+  /** Max retry attempts per chunk. Default 12. */
   maxRetries?: number;
 }
 
 /* ── Constants ─────────────────────────────────────────────────────────── */
 
-// 6 MB chunks — larger chunks = fewer connections = less pool pressure
-// For a 600MB file: ~100 chunks instead of ~600
-const DEFAULT_CHUNK_SIZE = 6 * 1024 * 1024;
-const MAX_RETRIES = 8;
+// 50 MB chunks — massive chunks = minimal connections = no pool pressure
+// For a 600MB file: only ~12 chunks instead of hundreds
+// Supabase free tier has a very small connection pool — we MUST minimize requests.
+const DEFAULT_CHUNK_SIZE = 50 * 1024 * 1024;
+const MAX_RETRIES = 12;
 
 /* ── TusUploader ───────────────────────────────────────────────────────── */
 
@@ -87,6 +89,14 @@ export class TusUploader {
           ...(options.metadata ?? {}),
         },
         removeFingerprintOnSuccess: true,
+
+        // Throttle: add 500ms delay between chunk uploads to ease pool pressure
+        onAfterResponse: (_req: any, res: any) => {
+          const status = res?.getStatus?.() || 0;
+          if (status >= 200 && status < 300) {
+            return new Promise<void>((r) => setTimeout(r, 500));
+          }
+        },
 
         // Always retry on 544 (DB connection timeout)
         onShouldRetry: (err: any, retryAttempt: number, _options: any) => {
@@ -175,6 +185,14 @@ export class TusUploader {
           ...(options.metadata ?? {}),
         },
         removeFingerprintOnSuccess: true,
+
+        // Throttle: add 500ms delay between chunk uploads to ease pool pressure
+        onAfterResponse: (_req: any, res: any) => {
+          const status = res?.getStatus?.() || 0;
+          if (status >= 200 && status < 300) {
+            return new Promise<void>((r) => setTimeout(r, 500));
+          }
+        },
 
         onShouldRetry: (err: any, retryAttempt: number, _options: any) => {
           const status = err?.originalResponse?.getStatus?.() || 0;
@@ -266,14 +284,15 @@ export class TusUploader {
 
   /**
    * Build exponential backoff retry delays array for tus-js-client.
-   * Aggressive delays: 5s, 10s, 15s, 20s, 30s, 45s, 60s, 60s
-   * Supabase 544 = connection pool exhausted — needs long cooldown.
+   * Very long delays: 10s, 20s, 30s, 45s, 60s, 90s, 120s, 120s...
+   * Supabase 544 = connection pool exhausted — needs LONG cooldown
+   * to let connections drain before retrying.
    */
   private buildRetryDelays(maxRetries: number): number[] {
+    const baseDelays = [10000, 20000, 30000, 45000, 60000, 90000, 120000];
     const delays: number[] = [];
     for (let i = 0; i < maxRetries; i++) {
-      // 5s, 10s, 15s, 20s, 30s, 45s, 60s, 60s...
-      delays.push(Math.min(5000 + (i * 5000) + (i > 3 ? i * 5000 : 0), 60000));
+      delays.push(baseDelays[Math.min(i, baseDelays.length - 1)]);
     }
     return delays;
   }
