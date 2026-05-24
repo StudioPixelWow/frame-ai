@@ -87,9 +87,27 @@ export async function POST(req: NextRequest) {
       })
       .eq('id', episodeId);
 
-    // Run in background
+    // Run in background — wrap with error handling to catch silent failures
     after(async () => {
-      await runEpisodeAnalysis(episodeId, episode.source_file_path);
+      try {
+        console.log(`[episode-analyze] after() started for ${episodeId}`);
+        await runEpisodeAnalysis(episodeId, episode.source_file_path);
+        console.log(`[episode-analyze] after() completed for ${episodeId}`);
+      } catch (bgErr) {
+        const bgMsg = bgErr instanceof Error ? bgErr.message : String(bgErr);
+        console.error(`[episode-analyze] after() CRASHED for ${episodeId}:`, bgMsg);
+        // Write error to DB so frontend can detect it
+        try {
+          const sbErr = getSupabase();
+          await sbErr.from('podcast_episodes').update({
+            status: 'error',
+            error_message: `שגיאת עיבוד: ${bgMsg}`,
+            updated_at: new Date().toISOString(),
+          }).eq('id', episodeId);
+        } catch (dbErr) {
+          console.error(`[episode-analyze] Failed to write error to DB:`, dbErr);
+        }
+      }
     });
 
     return NextResponse.json(

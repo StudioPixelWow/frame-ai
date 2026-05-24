@@ -337,8 +337,8 @@ export const PixelManageEdit: React.FC<CompositionProps> = (props) => {
 
       {/* Layer 3b: Hook-to-body transition — always applied when hook exists */}
       {hookBoost?.active && hookBoost.hookEndSec > 0 && (() => {
-        const hookTransStyle = transition.style !== "cut" ? transition.style : "spectrumImpactFlash";
-        const hookTransDur = transition.style !== "cut" ? transition.durationMs : 800;
+        const hookTransStyle = "prismaticFlashSweep";
+        const hookTransDur = 1000;
         const hookTransFrames = Math.ceil((hookTransDur / 1000) * fps);
         const hookTransStart = Math.round(hookBoost.hookEndSec * fps) - Math.ceil(hookTransFrames / 2);
         return (
@@ -352,12 +352,17 @@ export const PixelManageEdit: React.FC<CompositionProps> = (props) => {
       <SubtitleLayer segments={segments} style={subtitleStyle} cleanupCuts={cleanupCuts} />
 
       {/* Layer 5: Logo Credit Overlay (first N seconds) */}
-      {logoCredit && (() => {
-        const logoDur = logoCredit.durationSec || 4;
+      {(() => {
+        // Always show logo credit — use props if available, else hardcoded default
+        const lc = logoCredit || {
+          url: "https://s-pixel.co.il/wp-content/uploads/2026/05/Layer-423-e1779184604839.png",
+          durationSec: 5, position: "bottom-right" as const, sizePx: 180, opacity: 0.9,
+        };
+        const logoDur = lc.durationSec || 5;
         const logoFrames = Math.round(logoDur * fps);
-        const logoSize = logoCredit.sizePx || 80;
-        const logoOpacity = logoCredit.opacity ?? 0.85;
-        const pos = logoCredit.position || "top-right";
+        const logoSize = lc.sizePx || 180;
+        const logoOpacity = lc.opacity ?? 0.9;
+        const pos = lc.position || "bottom-right";
 
         // Position mapping
         const posStyle: React.CSSProperties = {
@@ -371,7 +376,7 @@ export const PixelManageEdit: React.FC<CompositionProps> = (props) => {
             <AbsoluteFill style={{ pointerEvents: "none" }}>
               <div style={posStyle}>
                 <Img
-                  src={logoCredit.url.startsWith("/") ? staticFile(logoCredit.url.replace(/^\//, "")) : logoCredit.url}
+                  src={lc.url.startsWith("/") ? staticFile(lc.url.replace(/^\//, "")) : lc.url}
                   style={{
                     width: logoSize,
                     height: "auto",
