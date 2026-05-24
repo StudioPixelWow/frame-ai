@@ -35,6 +35,7 @@ interface ProcessingStage {
   progress: number;
   statusText?: string;
   startedAt?: number; // timestamp when this stage started running
+  estimatedRemaining?: number | null; // seconds remaining for this stage
 }
 
 interface Clip {
@@ -263,16 +264,17 @@ export default function PodcastClipEnginePage() {
       stageName?: string;
       percent?: number;
       statusText?: string;
+      estimatedRemaining?: number | null;
     } | null;
 
     if (progress && typeof progress.stage === 'number') {
       setProcessingStages((prev) =>
         prev.map((s, idx) => {
           if (s.key === 'upload') {
-            return { ...s, status: 'done', progress: 100 };
+            return { ...s, status: 'done', progress: 100, estimatedRemaining: null };
           }
           if (idx < progress.stage!) {
-            return { ...s, status: 'done', progress: 100, statusText: undefined };
+            return { ...s, status: 'done', progress: 100, statusText: undefined, estimatedRemaining: null };
           }
           if (idx === progress.stage!) {
             return {
@@ -281,9 +283,10 @@ export default function PodcastClipEnginePage() {
               progress: progress.percent ?? 0,
               statusText: progress.statusText || progress.stageName,
               startedAt: s.status !== 'running' ? Date.now() : s.startedAt,
+              estimatedRemaining: progress.estimatedRemaining ?? null,
             };
           }
-          return { ...s, status: 'pending', progress: 0, statusText: undefined };
+          return { ...s, status: 'pending', progress: 0, statusText: undefined, estimatedRemaining: null };
         }),
       );
     }
@@ -1441,6 +1444,25 @@ export default function PodcastClipEnginePage() {
                         animation: 'pulse-ring 1.5s ease-in-out infinite',
                       }} />
                       {stage.statusText}
+                    </div>
+                  )}
+
+                  {/* ETA for running server stages */}
+                  {isRunning && stage.key !== 'upload' && typeof stage.estimatedRemaining === 'number' && stage.estimatedRemaining > 0 && (
+                    <div style={{
+                      marginTop: 4,
+                      fontSize: 11,
+                      color: COLORS.textSecondary,
+                      fontWeight: 400,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}>
+                      <span>⏱</span>
+                      <span>זמן משוער: {stage.estimatedRemaining < 60
+                        ? `${stage.estimatedRemaining} שניות`
+                        : `${Math.ceil(stage.estimatedRemaining / 60)} דקות`
+                      }</span>
                     </div>
                   )}
                 </div>

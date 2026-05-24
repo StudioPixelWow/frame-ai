@@ -59,6 +59,47 @@ export const ANALYSIS_STAGES = [
   { stage: 6, stageName: 'שמירת ניתוח ומועמדים' },
 ] as const;
 
+// ── ETA helpers ──────────────────────────────────────────────────────────────
+
+/** Estimated typical durations per stage in seconds (based on ~1hr podcast). */
+const STAGE_ESTIMATED_SECONDS: Record<number, number> = {
+  1: 5,    // Validate — very fast
+  2: 30,   // Download / prepare file
+  3: 90,   // Transcription — Whisper API (largest stage)
+  4: 5,    // Topic segmentation — local, fast
+  5: 30,   // AI analysis — Claude API
+  6: 10,   // Score & save
+};
+
+/** Track when each stage actually started so we can compute elapsed time. */
+const stageStartTimes: Record<string, number> = {};
+
+/** Compute estimated remaining seconds for a stage based on percent done. */
+function computeEstimatedRemaining(stageIndex: number, percent: number, episodeId: string): number | null {
+  const stageNum = ANALYSIS_STAGES[stageIndex].stage;
+  const key = `${episodeId}_${stageNum}`;
+
+  if (percent <= 0) {
+    // Stage just started — record start time and return full estimate
+    stageStartTimes[key] = Date.now();
+    return STAGE_ESTIMATED_SECONDS[stageNum] ?? null;
+  }
+
+  if (percent >= 100) return 0;
+
+  const startedAt = stageStartTimes[key];
+  if (startedAt) {
+    // Use actual elapsed time to project remaining
+    const elapsedSec = (Date.now() - startedAt) / 1000;
+    const projectedTotal = (elapsedSec / percent) * 100;
+    return Math.max(0, Math.round(projectedTotal - elapsedSec));
+  }
+
+  // Fallback: linear estimate from typical duration
+  const typicalTotal = STAGE_ESTIMATED_SECONDS[stageNum] ?? 30;
+  return Math.max(0, Math.round(typicalTotal * (1 - percent / 100)));
+}
+
 // ── Progress helpers ──────────────────────────────────────────────────────────
 
 async function updateEpisodeProgress(
@@ -68,12 +109,14 @@ async function updateEpisodeProgress(
   statusText?: string
 ): Promise<void> {
   const { stage, stageName } = ANALYSIS_STAGES[stageIndex];
+  const estimatedRemaining = computeEstimatedRemaining(stageIndex, percent, episodeId);
   const progressData = {
     stage,
     stageName,
     percent: Math.round(percent),
     statusText: statusText || stageName,
     startedAt: new Date().toISOString(),
+    estimatedRemaining, // seconds remaining for current stage (null if unknown)
   };
   const now = new Date().toISOString();
 
@@ -376,7 +419,17 @@ export async function runEpisodeAnalysis(
     // ── Stage 4: Segment Topics ──────────────────────────────────────────
     await updateEpisodeProgress(episodeId, 3, 0, 'מנתח נושאים ומזהה מעברים בשיחה...');
 
-    const topicSegments = segmentTranscript(transcriptSegments as unknown as TranscriptSegment[]);
+    // Whisper returns TranscriptionSegment (text, start, end) — segmentTranscript
+    // now handles both word-level and sentence-level segments automatically
+    const topicSegments = segmentTranscript(
+      transcriptSegments.map((seg: any) => ({
+        text: seg.text,
+        word: seg.word,
+        start: seg.start,
+        end: seg.end,
+        confidence: seg.confidence,
+      }))
+    );
 
     await updateEpisodeProgress(episodeId, 3, 100, `זוהו ${topicSegments.length} נושאים`);
 
@@ -436,8 +489,10 @@ export async function runEpisodeAnalysis(
 
     await updateEpisodeProgress(episodeId, 5, 30, 'שומר ניתוח פרק...');
 
-    // Detect silences (segments with long gaps)
-    const silences = detectSilences(transcriptSegments as unknown as TranscriptSegment[]);
+    // Detect silences (segments with long gaps) — works with any segment that has start/end
+    const silences = detectSilences(
+      transcriptSegments.map((seg: any) => ({ word: seg.text || seg.word || '', start: seg.start, end: seg.end }))
+    );
 
     // Detect dead moments (low-keyword-density segments)
     const deadMoments = detectDeadMoments(topicSegments);
@@ -451,9 +506,8 @@ export async function runEpisodeAnalysis(
     }));
 
     // Calculate duration from transcript
-    const allSegs = transcriptSegments as unknown as TranscriptSegment[];
-    const durationSeconds = allSegs.length > 0
-      ? Math.ceil(allSegs[allSegs.length - 1].end)
+    const durationSeconds = transcriptSegments.length > 0
+      ? Math.ceil((transcriptSegments[transcriptSegments.length - 1] as any).end || 0)
       : 0;
 
     // Save EpisodeAnalysis via JSONB collection
@@ -494,10 +548,10 @@ export async function runEpisodeAnalysis(
       );
 
       // Extract transcript excerpt for this clip's time range
-      const clipSegments = allSegs.filter(
-        seg => seg.start >= clip.startTime && seg.end <= clip.endTime
+      const clipSegments = (transcriptSegments as any[]).filter(
+        (seg: any) => seg.start >= clip.startTime && seg.end <= clip.endTime
       );
-      const transcriptExcerpt = clipSegments.map(s => s.word || (s as unknown as { text: string }).text).join(' ');
+      const transcriptExcerpt = clipSegments.map((s: any) => s.text || s.word || '').join(' ');
 
       const candidateData: Omit<PodcastClipCandidate, 'id'> = {
         episodeId,
@@ -563,7 +617,7 @@ export async function runEpisodeAnalysis(
 // ── Silence detection ─────────────────────────────────────────────────────────
 
 function detectSilences(
-  segments: TranscriptSegment[],
+  segments: Array<{ start: number; end: number; word?: string }>,
   minGapSeconds = 2.0
 ): Array<{ start: number; end: number; duration: number }> {
   const silences: Array<{ start: number; end: number; duration: number }> = [];

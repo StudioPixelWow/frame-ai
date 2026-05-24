@@ -8,12 +8,18 @@
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-/** A single word-level transcript entry from Whisper or equivalent STT. */
+/**
+ * A single transcript entry from Whisper or equivalent STT.
+ * Supports both word-level (word field) and sentence-level (text field) segments.
+ */
 export interface TranscriptSegment {
-  word: string;
+  /** Word-level text (from Whisper word timestamps). */
+  word?: string;
+  /** Sentence-level text (from Whisper segment timestamps). */
+  text?: string;
   start: number;
   end: number;
-  confidence: number;
+  confidence?: number;
 }
 
 /** A detected topic boundary with auto-generated Hebrew label. */
@@ -138,27 +144,56 @@ function generateHebrewLabel(keywords: string[], index: number): string {
 export function segmentTranscript(segments: TranscriptSegment[]): TopicSegment[] {
   if (segments.length === 0) return [];
 
+  // ── Normalise input: handle both word-level and sentence-level segments ──
+  // Whisper API returns sentence-level segments with `text` field.
+  // If segments have `text` instead of `word`, split each sentence into
+  // individual word entries with interpolated timestamps.
+  const wordSegments: TranscriptSegment[] = [];
+  for (const seg of segments) {
+    const content = seg.word || seg.text || '';
+    if (!content.trim()) continue;
+
+    // If this is a sentence-level segment (has `text`, no `word`), split into words
+    if (!seg.word && seg.text) {
+      const words = seg.text.trim().split(/\s+/);
+      const duration = (seg.end || 0) - (seg.start || 0);
+      const wordDuration = words.length > 0 ? duration / words.length : 0;
+      for (let i = 0; i < words.length; i++) {
+        wordSegments.push({
+          word: words[i],
+          start: seg.start + i * wordDuration,
+          end: seg.start + (i + 1) * wordDuration,
+          confidence: seg.confidence,
+        });
+      }
+    } else {
+      wordSegments.push({ ...seg, word: content });
+    }
+  }
+
+  if (wordSegments.length === 0) return [];
+
   // If the transcript is too short to segment, return a single topic
-  if (segments.length < WINDOW_SIZE * 2) {
+  if (wordSegments.length < WINDOW_SIZE * 2) {
     const keywords = extractKeywords(
-      segments.map((s) => s.word),
+      wordSegments.map((s) => s.word!),
       MAX_KEYWORDS
     );
     return [
       {
         id: "topic_001",
-        startTime: segments[0].start,
-        endTime: segments[segments.length - 1].end,
+        startTime: wordSegments[0].start,
+        endTime: wordSegments[wordSegments.length - 1].end,
         label: generateHebrewLabel(keywords, 0),
         keywords,
-        wordCount: segments.length,
+        wordCount: wordSegments.length,
       },
     ];
   }
 
   // ── Step 1: Detect boundary indices ──────────────────────────────────────
 
-  const words = segments.map((s) => s.word);
+  const words = wordSegments.map((s) => s.word!);
   const boundaryIndices: number[] = [];
 
   for (let i = WINDOW_SIZE; i <= words.length - WINDOW_SIZE; i++) {
@@ -179,7 +214,7 @@ export function segmentTranscript(segments: TranscriptSegment[]): TopicSegment[]
 
   // ── Step 2: Build raw segments from boundaries ───────────────────────────
 
-  const cuts = [0, ...boundaryIndices, segments.length];
+  const cuts = [0, ...boundaryIndices, wordSegments.length];
   const rawTopics: { startIdx: number; endIdx: number }[] = [];
   for (let i = 0; i < cuts.length - 1; i++) {
     rawTopics.push({ startIdx: cuts[i], endIdx: cuts[i + 1] - 1 });
@@ -201,8 +236,8 @@ export function segmentTranscript(segments: TranscriptSegment[]): TopicSegment[]
   // ── Step 4: Build final TopicSegment array ───────────────────────────────
 
   return mergedTopics.map((topic, idx) => {
-    const slice = segments.slice(topic.startIdx, topic.endIdx + 1);
-    const topicWords = slice.map((s) => s.word);
+    const slice = wordSegments.slice(topic.startIdx, topic.endIdx + 1);
+    const topicWords = slice.map((s) => s.word!);
     const keywords = extractKeywords(topicWords, MAX_KEYWORDS);
     const padded = String(idx + 1).padStart(3, "0");
 
