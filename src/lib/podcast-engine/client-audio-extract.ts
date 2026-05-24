@@ -10,7 +10,7 @@
  */
 
 import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile, toBlobURL } from '@ffmpeg/util';
+import { toBlobURL } from '@ffmpeg/util';
 
 // CDN base — same version as client-ffmpeg.ts
 const CORE_VERSION = '0.12.6';
@@ -90,17 +90,34 @@ export async function extractAudioClientSide(
 ): Promise<AudioExtractionResult> {
   const { videoFile, onProgress } = opts;
 
-  console.log(`[client-audio-extract] Starting — source: ${videoFile.name} (${Math.round(videoFile.size / 1048576)}MB)`);
+  const sizeMBInput = Math.round(videoFile.size / 1048576);
+  console.log(`[client-audio-extract] Starting — source: ${videoFile.name} (${sizeMBInput}MB)`);
 
   const ffmpeg = await getFFmpegForAudio(onProgress);
 
   // Write video to WASM filesystem
-  onProgress?.('טוען את הסרטון לחילוץ אודיו...');
-  const videoData = await fetchFile(videoFile);
-  await ffmpeg.writeFile('input_video', videoData);
+  // For large files (>200MB), read in chunks via arrayBuffer to avoid fetchFile overhead
+  onProgress?.(`טוען את הסרטון לחילוץ אודיו... (${sizeMBInput}MB)`);
+  console.log(`[client-audio-extract] Loading file into WASM filesystem (${sizeMBInput}MB)...`);
+  const loadStart = Date.now();
+
+  try {
+    // Use arrayBuffer() directly — avoids fetchFile's extra copy for File objects
+    const buffer = await videoFile.arrayBuffer();
+    console.log(`[client-audio-extract] arrayBuffer() completed in ${((Date.now() - loadStart) / 1000).toFixed(1)}s`);
+    const videoData = new Uint8Array(buffer);
+    await ffmpeg.writeFile('input_video', videoData);
+    console.log(`[client-audio-extract] writeFile() completed — file loaded into WASM FS`);
+  } catch (loadErr) {
+    const msg = loadErr instanceof Error ? loadErr.message : String(loadErr);
+    console.error(`[client-audio-extract] FAILED to load file into WASM: ${msg}`);
+    throw new Error(`נכשל טעינת הקובץ לחילוץ אודיו (${sizeMBInput}MB): ${msg}`);
+  }
 
   // Extract audio — mono, 16kHz, 48kbps MP3 (optimal for Whisper, small file)
-  onProgress?.('מחלץ אודיו מהסרטון...');
+  onProgress?.(`מחלץ אודיו מהסרטון (${sizeMBInput}MB)...`);
+  console.log(`[client-audio-extract] Running ffmpeg exec — extracting audio...`);
+  const execStart = Date.now();
   await ffmpeg.exec([
     '-y',
     '-i', 'input_video',
@@ -111,6 +128,8 @@ export async function extractAudioClientSide(
     '-b:a', '48k',              // 48kbps — ~22MB/hour, under Whisper's 25MB limit
     'output.mp3',
   ]);
+
+  console.log(`[client-audio-extract] ffmpeg exec completed in ${((Date.now() - execStart) / 1000).toFixed(1)}s`);
 
   // Read the output
   const audioData = await ffmpeg.readFile('output.mp3');

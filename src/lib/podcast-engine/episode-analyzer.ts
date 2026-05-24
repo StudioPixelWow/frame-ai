@@ -208,7 +208,32 @@ export async function runEpisodeAnalysis(
 
     // If whisperFilePath was NOT set above (no audio file, or it failed), try the video
     if (!whisperFilePath) {
-      console.log(`[episode-analyzer] No pre-extracted audio — downloading video from signed URL`);
+      console.log(`[episode-analyzer] No pre-extracted audio — checking video size before download`);
+
+      // PRE-FLIGHT: Check file size BEFORE downloading to avoid OOM crash.
+      // Get file metadata from Storage to know the size without downloading.
+      const fileName = sourceFilePath.split('/').pop() || '';
+      const folderPath = sourceFilePath.substring(0, sourceFilePath.lastIndexOf('/')) || '';
+      const { data: fileList } = await supabase.storage
+        .from('project-files')
+        .list(folderPath, { search: fileName, limit: 1 });
+
+      const fileMetadata = fileList?.find(f => f.name === fileName);
+      const estimatedSizeBytes = fileMetadata?.metadata?.size || 0;
+      const estimatedSizeMB = Math.round(estimatedSizeBytes / 1024 / 1024);
+
+      if (estimatedSizeBytes > WHISPER_MAX_FILE_SIZE) {
+        // File is too large for Whisper AND no pre-extracted audio exists.
+        // Do NOT attempt to download — it will crash the serverless function with OOM.
+        console.error(`[episode-analyzer] ABORT: Video is ${estimatedSizeMB}MB, no audio file. Would crash on download.`);
+        throw new Error(
+          `חילוץ האודיו בדפדפן נכשל, והקובץ גדול מדי (${estimatedSizeMB || '???'}MB) לעיבוד ישיר בשרת. ` +
+          `מגבלת Whisper API היא 25MB. ` +
+          `נסה לרענן את הדף ולהעלות שוב — חילוץ האודיו אמור לקרות אוטומטית בדפדפן.`
+        );
+      }
+
+      // Video is small enough — safe to download into memory
       await updateEpisodeProgress(episodeId, 1, 30, 'מוריד את קובץ הווידאו...');
 
       let downloadResponse: Response;
@@ -231,16 +256,13 @@ export async function runEpisodeAnalysis(
       console.log(`[episode-analyzer] Video downloaded: ${fileSizeMB}MB (${fileExt})`);
 
       if (fileBuffer.length <= WHISPER_MAX_FILE_SIZE) {
-        // Video is small enough — send directly to Whisper
         whisperFilePath = downloadedPath;
         console.log(`[episode-analyzer] Video ≤25MB — sending directly to Whisper`);
         await updateEpisodeProgress(episodeId, 1, 100, `קובץ מוכן לתמלול (${fileSizeMB}MB)`);
       } else {
-        // Video too large and no pre-extracted audio available
+        // Shouldn't reach here due to pre-flight check, but just in case
         throw new Error(
-          `הקובץ גדול מדי לתמלול (${fileSizeMB}MB). ` +
-          `מגבלת Whisper API היא 25MB. ` +
-          `חילוץ האודיו בדפדפן נכשל — נסה לרענן את הדף ולהעלות שוב.`
+          `הקובץ גדול מדי לתמלול (${fileSizeMB}MB). מגבלת Whisper API היא 25MB.`
         );
       }
     }
