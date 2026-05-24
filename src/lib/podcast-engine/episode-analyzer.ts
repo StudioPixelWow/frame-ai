@@ -20,21 +20,16 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { writeFile, mkdir, unlink, stat } from 'fs/promises';
-import { existsSync } from 'fs';
+// existsSync no longer needed — removed native ffmpeg dependency
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { transcribeAudio, transcribeChunkedAudio } from './whisper-transcription';
-import { extractAudio, splitAudioIntoChunks } from './ffmpeg-service';
+import { transcribeAudio } from './whisper-transcription';
+import { extractAudioWasm } from './server-ffmpeg';
 import { segmentTranscript, type TranscriptSegment, type TopicSegment } from './topic-segmentation';
 import { analyzeTranscriptForClips, type AIClipSuggestion } from './clip-analyzer';
 import { scoreClipCandidates, rankClips, type RawClipCandidate, type ScoredClip } from './clip-scorer';
 import { episodeAnalyses, podcastClipCandidates } from '@/lib/db/collections';
 import type { EpisodeAnalysis, PodcastClipCandidate } from '@/lib/db/schema';
-import { getFfmpegPath } from '@/lib/ffmpeg-paths';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-
-const execFileAsync = promisify(execFile);
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -135,7 +130,7 @@ export async function runEpisodeAnalysis(
     await updateEpisodeProgress(episodeId, 0, 0, 'מאתר את הקובץ בשרת...');
 
     // Generate a signed URL — this validates the file exists AND gives us
-    // a URL that ffmpeg can stream from without downloading to memory.
+    // a URL we can download the file from.
     const { data: signedData, error: signedError } = await supabase
       .storage
       .from('project-files')
@@ -159,42 +154,74 @@ export async function runEpisodeAnalysis(
 
     await updateEpisodeProgress(episodeId, 0, 100, 'הקובץ אומת בהצלחה');
 
-    // ── Stage 2: Extract audio via ffmpeg (streaming from URL — NO download to memory) ──
-    await updateEpisodeProgress(episodeId, 1, 0, 'מחלץ אודיו מהסרטון (ללא הורדה מלאה)...');
+    // ── Stage 2: Download file + prepare for Whisper ──────────────────────
+    // NO native ffmpeg binary — uses fetch to download, then either:
+    //   a) Send video directly to Whisper (if ≤25MB)
+    //   b) Extract audio via WASM ffmpeg (if >25MB)
+    await updateEpisodeProgress(episodeId, 1, 0, 'מוריד את הקובץ מהשרת...');
 
     tempDir = join(tmpdir(), `episode-analysis-${episodeId}`);
     await mkdir(tempDir, { recursive: true });
-    const audioPath = join(tempDir, 'audio.mp3');
 
-    // ffmpeg reads directly from the signed URL and outputs compressed audio.
-    // This avoids loading the entire video into memory — only the audio stream
-    // is downloaded and compressed, resulting in a file ~10-20x smaller.
+    // Download the file from Supabase signed URL
+    let downloadResponse: Response;
     try {
-      await execFileAsync(getFfmpegPath(), [
-        '-y',
-        '-i', signedUrl,           // Stream from Supabase URL
-        '-vn',                      // Strip video — audio only
-        '-acodec', 'libmp3lame',
-        '-ar', '16000',             // 16kHz — Whisper optimal
-        '-ac', '1',                 // Mono
-        '-b:a', '64k',             // 64kbps — small but clear
-        audioPath,
-      ], { timeout: 5 * 60 * 1000 }); // 5 minute timeout for extraction
-    } catch (ffmpegErr) {
-      const msg = ffmpegErr instanceof Error ? ffmpegErr.message : String(ffmpegErr);
-      console.error(`[episode-analyzer] ffmpeg audio extraction failed:`, msg);
-      throw new Error(`שגיאה בחילוץ אודיו: ${msg}`);
+      downloadResponse = await fetch(signedUrl);
+      if (!downloadResponse.ok) {
+        throw new Error(`HTTP ${downloadResponse.status}: ${downloadResponse.statusText}`);
+      }
+    } catch (dlErr) {
+      const msg = dlErr instanceof Error ? dlErr.message : String(dlErr);
+      throw new Error(`שגיאה בהורדת הקובץ: ${msg}`);
     }
 
-    if (!existsSync(audioPath)) {
-      throw new Error('חילוץ האודיו נכשל — קובץ הפלט לא נוצר');
+    const fileBuffer = Buffer.from(await downloadResponse.arrayBuffer());
+    const fileExt = sourceFilePath.split('.').pop()?.toLowerCase() || 'mp4';
+    const downloadedPath = join(tempDir, `source.${fileExt}`);
+    await writeFile(downloadedPath, fileBuffer);
+
+    const fileSizeMB = Math.round(fileBuffer.length / 1024 / 1024);
+    console.log(`[episode-analyzer] File downloaded: ${fileSizeMB}MB (${fileExt})`);
+
+    await updateEpisodeProgress(episodeId, 1, 50, `הקובץ הורד (${fileSizeMB}MB)`);
+
+    // Decide: send directly to Whisper or extract audio first
+    let whisperFilePath: string;
+
+    if (fileBuffer.length <= WHISPER_MAX_FILE_SIZE) {
+      // File is small enough — send directly to Whisper (it accepts mp4, webm, mov, etc.)
+      whisperFilePath = downloadedPath;
+      console.log(`[episode-analyzer] File ≤25MB — sending directly to Whisper`);
+      await updateEpisodeProgress(episodeId, 1, 100, `קובץ מוכן לתמלול (${fileSizeMB}MB)`);
+    } else {
+      // File too large — extract audio using WASM ffmpeg (no native binary needed)
+      console.log(`[episode-analyzer] File >25MB — extracting audio via WASM ffmpeg`);
+      await updateEpisodeProgress(episodeId, 1, 60, 'מחלץ אודיו באמצעות WASM...');
+
+      try {
+        const { audioPath, sizeBytes } = await extractAudioWasm(downloadedPath, tempDir);
+        whisperFilePath = audioPath;
+        const audioSizeMB = Math.round(sizeBytes / 1024 / 1024);
+        console.log(`[episode-analyzer] Audio extracted via WASM: ${audioSizeMB}MB`);
+        await updateEpisodeProgress(episodeId, 1, 100, `אודיו חולץ בהצלחה (${audioSizeMB}MB)`);
+      } catch (wasmErr) {
+        const msg = wasmErr instanceof Error ? wasmErr.message : String(wasmErr);
+        console.error(`[episode-analyzer] WASM audio extraction failed:`, msg);
+        throw new Error(`שגיאה בחילוץ אודיו (WASM): ${msg}. נסה להעלות קובץ קטן יותר או קובץ אודיו בלבד (mp3/m4a).`);
+      }
+
+      // Clean up the large video file to free disk space
+      await unlink(downloadedPath).catch(() => {});
     }
 
-    const audioStat = await stat(audioPath);
-    const audioSizeMB = Math.round(audioStat.size / 1024 / 1024);
-    console.log(`[episode-analyzer] Audio extracted: ${audioSizeMB}MB`);
-
-    await updateEpisodeProgress(episodeId, 1, 100, `אודיו חולץ בהצלחה (${audioSizeMB}MB)`);
+    // Check if whisper file exists and isn't too large
+    const whisperStat = await stat(whisperFilePath);
+    if (whisperStat.size > WHISPER_MAX_FILE_SIZE) {
+      throw new Error(
+        `הקובץ עדיין גדול מדי לתמלול (${Math.round(whisperStat.size / 1024 / 1024)}MB). ` +
+        `מגבלת Whisper API היא 25MB. נסה להעלות קובץ קטן יותר.`
+      );
+    }
 
     // ── Stage 3: Transcribe — Whisper API ────────────────────────────────
     await updateEpisodeProgress(episodeId, 2, 0, 'מתמלל עם Whisper AI...');
@@ -202,37 +229,17 @@ export async function runEpisodeAnalysis(
     let fullText: string;
     let transcriptSegments: unknown[];
 
-    // Auto-chunk if audio is still > 25MB (very long episodes)
-    if (audioStat.size > WHISPER_MAX_FILE_SIZE) {
-      const CHUNK_DURATION_SEC = 10 * 60; // 10 minutes per chunk
+    await updateEpisodeProgress(episodeId, 2, 20, 'שולח קובץ ל-Whisper AI לתמלול...');
 
-      await updateEpisodeProgress(episodeId, 2, 5, `אודיו גדול (${audioSizeMB}MB) — מפצל לקטעים...`);
-
-      const chunks = await splitAudioIntoChunks(audioPath, CHUNK_DURATION_SEC, tempDir);
-
-      await updateEpisodeProgress(episodeId, 2, 15, `מתמלל ${chunks.length} קטעים עם Whisper AI...`);
-
-      const transcriptionResult = await transcribeChunkedAudio(chunks, 'he');
-      fullText = transcriptionResult.text;
-      transcriptSegments = transcriptionResult.segments;
-
-      // Cleanup chunk files
-      for (const chunk of chunks) {
-        await unlink(chunk.path).catch(() => {});
-      }
-    } else {
-      await updateEpisodeProgress(episodeId, 2, 20, 'שולח אודיו ל-Whisper AI לתמלול...');
-
-      const transcriptionResult = await transcribeAudio(audioPath, 'he');
-      fullText = transcriptionResult.text;
-      transcriptSegments = transcriptionResult.segments;
-    }
+    const transcriptionResult = await transcribeAudio(whisperFilePath, 'he');
+    fullText = transcriptionResult.text;
+    transcriptSegments = transcriptionResult.segments;
 
     await updateEpisodeProgress(episodeId, 2, 100, 'התמלול הושלם');
 
-    // Cleanup temp audio files early to free disk
+    // Cleanup temp files early to free disk
     if (tempDir) {
-      await unlink(join(tempDir, 'audio.mp3')).catch(() => {});
+      await unlink(whisperFilePath).catch(() => {});
     }
 
     // ── Stage 4: Segment Topics ──────────────────────────────────────────
