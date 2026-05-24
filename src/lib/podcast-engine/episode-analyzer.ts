@@ -18,7 +18,6 @@
  *   6. Score & Save — deterministic scoring + save analysis + candidates
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { writeFile, mkdir, unlink, stat } from 'fs/promises';
 import { createWriteStream } from 'fs';
 import { Readable } from 'stream';
@@ -28,6 +27,7 @@ import { promisify } from 'util';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { getFfmpegPath } from '@/lib/ffmpeg-paths';
+import { getSupabase } from '@/lib/db/store';
 import { transcribeAudio } from './whisper-transcription';
 import { segmentTranscript, type TranscriptSegment, type TopicSegment } from './topic-segmentation';
 import { analyzeTranscriptForClips, type AIClipSuggestion } from './clip-analyzer';
@@ -35,10 +35,15 @@ import { scoreClipCandidates, rankClips, type RawClipCandidate, type ScoredClip 
 import { episodeAnalyses, podcastClipCandidates } from '@/lib/db/collections';
 import type { EpisodeAnalysis, PodcastClipCandidate } from '@/lib/db/schema';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+/**
+ * Use the shared Supabase client from store.ts which has the hardcoded
+ * fallback URL. The old standalone createClient() used
+ * process.env.NEXT_PUBLIC_SUPABASE_URL! which is undefined on the server,
+ * causing ALL DB updates (status, progress) to silently fail.
+ */
+function getAnalyzerSupabase() {
+  return getSupabase();
+}
 
 /** Maximum file size Whisper API accepts (25MB). */
 const WHISPER_MAX_FILE_SIZE = 25 * 1024 * 1024;
@@ -63,7 +68,7 @@ async function updateEpisodeProgress(
   statusText?: string
 ): Promise<void> {
   const { stage, stageName } = ANALYSIS_STAGES[stageIndex];
-  await supabase
+  const { error: progressError } = await getAnalyzerSupabase()
     .from('podcast_episodes')
     .update({
       status: 'analyzing',
@@ -77,10 +82,15 @@ async function updateEpisodeProgress(
       updated_at: new Date().toISOString(),
     })
     .eq('id', episodeId);
+  if (progressError) {
+    console.error(`[episode-analyzer] ❌ FAILED to update progress for ${episodeId}:`, progressError.message);
+  } else {
+    console.log(`[episode-analyzer] ✅ Progress updated: stage=${stage} percent=${Math.round(percent)} status=${statusText || stageName}`);
+  }
 }
 
 async function markEpisodeError(episodeId: string, errorMessage: string): Promise<void> {
-  await supabase
+  await getAnalyzerSupabase()
     .from('podcast_episodes')
     .update({
       status: 'error',
@@ -91,7 +101,7 @@ async function markEpisodeError(episodeId: string, errorMessage: string): Promis
 }
 
 async function markEpisodeCandidatesReady(episodeId: string, candidateCount: number): Promise<void> {
-  await supabase
+  await getAnalyzerSupabase()
     .from('podcast_episodes')
     .update({
       status: 'candidates_ready',
@@ -136,14 +146,15 @@ export async function runEpisodeAnalysis(
 
     // Generate a signed URL — this validates the file exists AND gives us
     // a URL we can download the file from.
-    const { data: signedData, error: signedError } = await supabase
+    const sb = getAnalyzerSupabase();
+    const { data: signedData, error: signedError } = await sb
       .storage
       .from('project-files')
       .createSignedUrl(sourceFilePath, 1800); // 30 minute validity
 
     if (signedError || !signedData?.signedUrl) {
       // Fallback: check if file exists via list
-      const { data: fileData, error: fileError } = await supabase
+      const { data: fileData, error: fileError } = await sb
         .storage
         .from('project-files')
         .list('', { search: sourceFilePath.split('/').pop() ?? '' });
@@ -179,7 +190,7 @@ export async function runEpisodeAnalysis(
       await updateEpisodeProgress(episodeId, 1, 20, 'מוריד קובץ אודיו מוכן...');
 
       // Generate signed URL for the audio file
-      const { data: audioSignedData, error: audioSignedError } = await supabase
+      const { data: audioSignedData, error: audioSignedError } = await sb
         .storage
         .from('project-files')
         .createSignedUrl(audioFilePath, 1800);
@@ -355,7 +366,7 @@ export async function runEpisodeAnalysis(
     const rankedClips = rankClips(scoredClips);
 
     // Save transcript to podcast_transcripts
-    const { data: transcriptRow, error: transcriptInsertError } = await supabase
+    const { data: transcriptRow, error: transcriptInsertError } = await sb
       .from('podcast_transcripts')
       .insert({
         episode_id: episodeId,
