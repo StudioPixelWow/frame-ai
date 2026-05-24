@@ -14,43 +14,74 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { runEpisodeAnalysis } from '@/lib/podcast-engine/episode-analyzer';
 import { podcastEpisodes } from '@/lib/db/collections';
-// getSupabase removed — using service role createClient directly to bypass RLS
+import { getSupabase } from '@/lib/db/store';
 
-// Use service role key — same as episode-analyzer.ts — to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// Use getSupabase() which already uses SUPABASE_SERVICE_ROLE_KEY
+const supabase = getSupabase();
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes
 
 async function findEpisode(episodeId: string) {
-  // Try relational table first — use service role to bypass RLS
+  // Try relational table first
   const { data, error } = await supabase
     .from('podcast_episodes')
-    .select('id, status, source_file_path, audio_file_path')
+    .select('id, status, source_file_path, audio_file_path, title, show_name, guest_names, language, source_file_size, client_id, metadata')
     .eq('id', episodeId)
     .single();
 
-  if (!error && data) return data;
+  if (!error && data) {
+    console.log(`[episode-analyze] Found episode in relational table: ${episodeId}`);
+    return data;
+  }
 
-  // JSONB fallback
+  console.warn(`[episode-analyze] Relational lookup failed: ${error?.message}. Trying JSONB...`);
+
+  // JSONB fallback — if found, COPY to relational table so all status updates work
   try {
     const items = await podcastEpisodes.getAllAsync();
     const found = (items as Record<string, any>[]).find(ep => ep.id === episodeId);
     if (found) {
-      return {
+      console.log(`[episode-analyze] Found episode in JSONB. Migrating to relational table...`);
+      const row = {
         id: found.id,
+        title: found.title || 'Untitled',
         status: found.status || 'uploaded',
         source_file_path: found.sourceFilePath || found.source_file_path || '',
+        source_file_size: found.sourceFileSize || found.source_file_size || null,
         audio_file_path: found.audioFilePath || found.audio_file_path || null,
+        show_name: found.showName || found.show_name || null,
+        guest_names: found.guestNames || found.guest_names || null,
+        language: found.language || 'he',
+        client_id: found.clientId || found.client_id || null,
+        processing_progress: found.processingProgress || found.processing_progress || {},
+        metadata: found.metadata || {},
+      };
+
+      // Upsert into relational table so all subsequent updates work
+      const { error: upsertErr } = await supabase
+        .from('podcast_episodes')
+        .upsert(row, { onConflict: 'id' });
+
+      if (upsertErr) {
+        console.error(`[episode-analyze] Failed to migrate episode to relational table:`, upsertErr.message);
+        // Still return the data — updates might fail but at least the analysis can try
+      } else {
+        console.log(`[episode-analyze] Episode migrated to relational table successfully`);
+      }
+
+      return {
+        id: row.id,
+        status: row.status,
+        source_file_path: row.source_file_path,
+        audio_file_path: row.audio_file_path,
       };
     }
-  } catch {}
+  } catch (e) {
+    console.error(`[episode-analyze] JSONB fallback failed:`, e);
+  }
 
   return null;
 }
@@ -77,8 +108,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Mark as analyzing immediately — use service role to bypass RLS
-    const { error: updateError } = await supabase
+    // Mark as analyzing immediately
+    const { data: updateData, error: updateError } = await supabase
       .from('podcast_episodes')
       .update({
         status: 'analyzing',
@@ -92,10 +123,14 @@ export async function POST(req: NextRequest) {
         },
         updated_at: new Date().toISOString(),
       })
-      .eq('id', episodeId);
+      .eq('id', episodeId)
+      .select('id, status')
+      .single();
 
     if (updateError) {
       console.error(`[episode-analyze] Failed to set status=analyzing:`, updateError.message);
+    } else {
+      console.log(`[episode-analyze] Status set to analyzing:`, updateData?.id, updateData?.status);
     }
 
     // Run the analysis inline — the function stays alive for up to maxDuration (300s).
