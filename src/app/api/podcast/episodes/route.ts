@@ -266,6 +266,8 @@ export async function POST(req: NextRequest) {
       language: language || 'he',
       sourceFilePath,
       sourceFileSize: sourceFileSize || null,
+      audioFilePath: audioFilePath || null,       // CRITICAL: save audio path so analyzer uses the small MP3
+      audio_file_path: audioFilePath || null,     // snake_case alias for findEpisode fallback
       clientId: clientId || null,
       status: 'uploaded',
       processingProgress: { stage: '', percent: 0, stageLabel: '', startedAt: null, estimatedRemaining: null },

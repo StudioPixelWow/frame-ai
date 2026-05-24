@@ -143,7 +143,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'הפרק לא נמצא' }, { status: 404 });
     }
 
-    console.log(`[episode-analyze] Episode found: id=${episode.id}, status=${episode.status}, source=${episode.source_file_path}, audio=${episode.audio_file_path || 'NONE'}`);
+    console.log(`[episode-analyze] Episode found: id=${episode.id}, status=${episode.status}, source=${episode.source_file_path}, audio=${episode.audio_file_path || 'NONE — WILL DOWNLOAD FULL VIDEO!'}`);
+    if (!episode.audio_file_path) {
+      console.warn(`[episode-analyze] ⚠️ No audio_file_path found! This means the 600MB video will be downloaded. Check if audioFilePath was saved during episode creation.`);
+    }
 
     // Prevent re-analysis if already in progress
     if (episode.status === 'analyzing' || episode.status === 'processing') {
