@@ -18,13 +18,19 @@ import { runEpisodeAnalysis } from '@/lib/podcast-engine/episode-analyzer';
 import { podcastEpisodes } from '@/lib/db/collections';
 import { getSupabase } from '@/lib/db/store';
 
-// Use getSupabase() which already uses SUPABASE_SERVICE_ROLE_KEY
-const supabase = getSupabase();
+// LAZY initialization — avoid crashing the module if env vars aren't ready at import time
+let _supabase: ReturnType<typeof getSupabase> | null = null;
+function getSb() {
+  if (!_supabase) _supabase = getSupabase();
+  return _supabase;
+}
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes
 
 async function findEpisode(episodeId: string) {
+  const supabase = getSb();
+
   // Try relational table first
   const { data, error } = await supabase
     .from('podcast_episodes')
@@ -33,7 +39,7 @@ async function findEpisode(episodeId: string) {
     .single();
 
   if (!error && data) {
-    console.log(`[episode-analyze] Found episode in relational table: ${episodeId}`);
+    console.log(`[episode-analyze] Found episode in relational table: ${episodeId}, status=${data.status}, audio=${data.audio_file_path || 'NONE'}`);
     return data;
   }
 
@@ -67,7 +73,6 @@ async function findEpisode(episodeId: string) {
 
       if (upsertErr) {
         console.error(`[episode-analyze] Failed to migrate episode to relational table:`, upsertErr.message);
-        // Still return the data — updates might fail but at least the analysis can try
       } else {
         console.log(`[episode-analyze] Episode migrated to relational table successfully`);
       }
@@ -86,22 +91,51 @@ async function findEpisode(episodeId: string) {
   return null;
 }
 
+/** Write error status to DB so the frontend polling can detect it */
+async function writeErrorToDB(episodeId: string, errorMessage: string): Promise<void> {
+  try {
+    const supabase = getSb();
+    const { error } = await supabase.from('podcast_episodes').update({
+      status: 'error',
+      error_message: errorMessage,
+      updated_at: new Date().toISOString(),
+    }).eq('id', episodeId);
+    if (error) {
+      console.error(`[episode-analyze] Failed to write error to DB:`, error.message);
+    } else {
+      console.log(`[episode-analyze] Error written to DB for ${episodeId}: ${errorMessage.slice(0, 100)}`);
+    }
+  } catch (dbErr) {
+    console.error(`[episode-analyze] writeErrorToDB crashed:`, dbErr);
+  }
+}
+
 export async function POST(req: NextRequest) {
+  let episodeId: string | undefined;
+
   try {
     const body = await req.json();
-    const { episodeId } = body;
+    episodeId = body.episodeId;
+
+    console.log(`[episode-analyze] === POST received === episodeId=${episodeId}`);
 
     if (!episodeId) {
       return NextResponse.json({ error: 'חסר episodeId' }, { status: 400 });
     }
 
+    const supabase = getSb();
+
     const episode = await findEpisode(episodeId);
     if (!episode) {
+      console.error(`[episode-analyze] Episode NOT FOUND in any table: ${episodeId}`);
       return NextResponse.json({ error: 'הפרק לא נמצא' }, { status: 404 });
     }
 
+    console.log(`[episode-analyze] Episode found: id=${episode.id}, status=${episode.status}, source=${episode.source_file_path}, audio=${episode.audio_file_path || 'NONE'}`);
+
     // Prevent re-analysis if already in progress
     if (episode.status === 'analyzing' || episode.status === 'processing') {
+      console.warn(`[episode-analyze] Skipping — already ${episode.status}`);
       return NextResponse.json(
         { error: 'הפרק כבר בתהליך ניתוח' },
         { status: 409 }
@@ -128,21 +162,22 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (updateError) {
-      console.error(`[episode-analyze] Failed to set status=analyzing:`, updateError.message);
+      console.error(`[episode-analyze] CRITICAL: Failed to set status=analyzing:`, updateError.message);
+      // Don't abort — try to proceed anyway, the analysis might still work
     } else {
-      console.log(`[episode-analyze] Status set to analyzing:`, updateData?.id, updateData?.status);
+      console.log(`[episode-analyze] Status set to analyzing OK: id=${updateData?.id} status=${updateData?.status}`);
     }
 
     // Run the analysis inline — the function stays alive for up to maxDuration (300s).
     // The frontend does NOT await this response; it polls via a separate endpoint.
-    console.log(`[episode-analyze] Starting analysis inline for ${episodeId}`);
+    console.log(`[episode-analyze] Starting analysis for ${episodeId} (source=${episode.source_file_path}, audio=${episode.audio_file_path || 'NONE'})`);
     try {
       const result = await runEpisodeAnalysis(
         episodeId,
         episode.source_file_path,
         episode.audio_file_path || undefined
       );
-      console.log(`[episode-analyze] Analysis completed for ${episodeId}:`, result.success);
+      console.log(`[episode-analyze] Analysis completed for ${episodeId}: success=${result.success}, candidates=${result.candidateCount}`);
 
       return NextResponse.json(
         {
@@ -157,16 +192,7 @@ export async function POST(req: NextRequest) {
       const errMsg = analysisErr instanceof Error ? analysisErr.message : String(analysisErr);
       console.error(`[episode-analyze] Analysis FAILED for ${episodeId}:`, errMsg);
 
-      // Write error to DB so frontend polling can detect it
-      try {
-        await supabase.from('podcast_episodes').update({
-          status: 'error',
-          error_message: `שגיאת עיבוד: ${errMsg}`,
-          updated_at: new Date().toISOString(),
-        }).eq('id', episodeId);
-      } catch (dbErr) {
-        console.error(`[episode-analyze] Failed to write error to DB:`, dbErr);
-      }
+      await writeErrorToDB(episodeId, `שגיאת עיבוד: ${errMsg}`);
 
       return NextResponse.json(
         { error: `שגיאת ניתוח: ${errMsg}`, episodeId },
@@ -175,6 +201,13 @@ export async function POST(req: NextRequest) {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    console.error(`[episode-analyze] OUTER CATCH for episodeId=${episodeId}:`, message);
+
+    // CRITICAL: Write error to DB even for outer exceptions so polling detects it
+    if (episodeId) {
+      await writeErrorToDB(episodeId, `שגיאה בהפעלת הניתוח: ${message}`);
+    }
+
     return NextResponse.json(
       { error: `שגיאה בהפעלת הניתוח: ${message}` },
       { status: 500 }
