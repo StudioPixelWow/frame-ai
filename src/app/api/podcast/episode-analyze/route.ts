@@ -93,21 +93,33 @@ async function findEpisode(episodeId: string) {
 
 /** Write error status to DB so the frontend polling can detect it */
 async function writeErrorToDB(episodeId: string, errorMessage: string): Promise<void> {
+  const now = new Date().toISOString();
   try {
     const supabase = getSb();
     const { error } = await supabase.from('podcast_episodes').update({
       status: 'error',
       error_message: errorMessage,
-      updated_at: new Date().toISOString(),
+      updated_at: now,
     }).eq('id', episodeId);
     if (error) {
-      console.error(`[episode-analyze] Failed to write error to DB:`, error.message);
+      console.error(`[episode-analyze] Failed to write error to relational DB:`, error.message);
     } else {
       console.log(`[episode-analyze] Error written to DB for ${episodeId}: ${errorMessage.slice(0, 100)}`);
     }
   } catch (dbErr) {
-    console.error(`[episode-analyze] writeErrorToDB crashed:`, dbErr);
+    console.error(`[episode-analyze] writeErrorToDB relational crashed:`, dbErr);
   }
+
+  // JSONB fallback — so polling always sees the error regardless of which table episode lives in
+  try {
+    await podcastEpisodes.updateAsync(episodeId, {
+      status: 'error',
+      errorMessage,
+      error_message: errorMessage,
+      updatedAt: now,
+      updated_at: now,
+    } as any);
+  } catch {}
 }
 
 export async function POST(req: NextRequest) {
@@ -143,29 +155,47 @@ export async function POST(req: NextRequest) {
     }
 
     // Mark as analyzing immediately
+    const now = new Date().toISOString();
+    const initialProgress = {
+      stage: 1,
+      stageName: 'אימות קובץ',
+      percent: 0,
+      statusText: 'מתחיל ניתוח פרק...',
+      startedAt: now,
+    };
+
     const { data: updateData, error: updateError } = await supabase
       .from('podcast_episodes')
       .update({
         status: 'analyzing',
         error_message: null,
-        processing_progress: {
-          stage: 1,
-          stageName: 'אימות קובץ',
-          percent: 0,
-          statusText: 'מתחיל ניתוח פרק...',
-          startedAt: new Date().toISOString(),
-        },
-        updated_at: new Date().toISOString(),
+        processing_progress: initialProgress,
+        updated_at: now,
       })
       .eq('id', episodeId)
       .select('id, status')
       .single();
 
     if (updateError) {
-      console.error(`[episode-analyze] CRITICAL: Failed to set status=analyzing:`, updateError.message);
-      // Don't abort — try to proceed anyway, the analysis might still work
+      console.error(`[episode-analyze] CRITICAL: Failed to set status=analyzing in relational:`, updateError.message);
     } else {
       console.log(`[episode-analyze] Status set to analyzing OK: id=${updateData?.id} status=${updateData?.status}`);
+    }
+
+    // JSONB fallback — so polling always sees analyzing status regardless of which table episode lives in
+    try {
+      await podcastEpisodes.updateAsync(episodeId, {
+        status: 'analyzing',
+        errorMessage: null,
+        error_message: null,
+        processingProgress: initialProgress,
+        processing_progress: initialProgress,
+        updatedAt: now,
+        updated_at: now,
+      } as any);
+      console.log(`[episode-analyze] JSONB status=analyzing also set`);
+    } catch (jsonbErr) {
+      // Non-critical
     }
 
     // Run the analysis inline — the function stays alive for up to maxDuration (300s).

@@ -32,7 +32,7 @@ import { transcribeAudio } from './whisper-transcription';
 import { segmentTranscript, type TranscriptSegment, type TopicSegment } from './topic-segmentation';
 import { analyzeTranscriptForClips, type AIClipSuggestion } from './clip-analyzer';
 import { scoreClipCandidates, rankClips, type RawClipCandidate, type ScoredClip } from './clip-scorer';
-import { episodeAnalyses, podcastClipCandidates } from '@/lib/db/collections';
+import { episodeAnalyses, podcastClipCandidates, podcastEpisodes } from '@/lib/db/collections';
 import type { EpisodeAnalysis, PodcastClipCandidate } from '@/lib/db/schema';
 
 /**
@@ -68,53 +68,100 @@ async function updateEpisodeProgress(
   statusText?: string
 ): Promise<void> {
   const { stage, stageName } = ANALYSIS_STAGES[stageIndex];
+  const progressData = {
+    stage,
+    stageName,
+    percent: Math.round(percent),
+    statusText: statusText || stageName,
+    startedAt: new Date().toISOString(),
+  };
+  const now = new Date().toISOString();
+
+  // Write to relational table
   const { error: progressError } = await getAnalyzerSupabase()
     .from('podcast_episodes')
     .update({
       status: 'analyzing',
-      processing_progress: {
-        stage,
-        stageName,
-        percent: Math.round(percent),
-        statusText: statusText || stageName,
-        startedAt: new Date().toISOString(),
-      },
-      updated_at: new Date().toISOString(),
+      processing_progress: progressData,
+      updated_at: now,
     })
     .eq('id', episodeId);
+
   if (progressError) {
-    console.error(`[episode-analyzer] ❌ FAILED to update progress for ${episodeId}:`, progressError.message);
+    console.error(`[episode-analyzer] ❌ Relational progress update failed for ${episodeId}:`, progressError.message);
   } else {
     console.log(`[episode-analyzer] ✅ Progress updated: stage=${stage} percent=${Math.round(percent)} status=${statusText || stageName}`);
+  }
+
+  // ALWAYS also write to JSONB so polling sees updates regardless of which table the episode lives in
+  try {
+    await podcastEpisodes.updateAsync(episodeId, {
+      status: 'analyzing',
+      processingProgress: progressData,
+      processing_progress: progressData,
+      updatedAt: now,
+      updated_at: now,
+    } as any);
+  } catch (jsonbErr) {
+    // Non-critical — relational is primary
   }
 }
 
 async function markEpisodeError(episodeId: string, errorMessage: string): Promise<void> {
+  const now = new Date().toISOString();
+
+  // Relational table
   await getAnalyzerSupabase()
     .from('podcast_episodes')
     .update({
       status: 'error',
       error_message: errorMessage,
-      updated_at: new Date().toISOString(),
+      updated_at: now,
     })
     .eq('id', episodeId);
+
+  // JSONB fallback
+  try {
+    await podcastEpisodes.updateAsync(episodeId, {
+      status: 'error',
+      errorMessage,
+      error_message: errorMessage,
+      updatedAt: now,
+      updated_at: now,
+    } as any);
+  } catch {}
 }
 
 async function markEpisodeCandidatesReady(episodeId: string, candidateCount: number): Promise<void> {
+  const now = new Date().toISOString();
+  const progressData = {
+    stage: 6,
+    stageName: 'מוכן לבחירה',
+    percent: 100,
+    statusText: `נמצאו ${candidateCount} קליפים מומלצים — ממתין לאישור`,
+    startedAt: now,
+  };
+
+  // Relational table
   await getAnalyzerSupabase()
     .from('podcast_episodes')
     .update({
       status: 'candidates_ready',
-      processing_progress: {
-        stage: 6,
-        stageName: 'מוכן לבחירה',
-        percent: 100,
-        statusText: `נמצאו ${candidateCount} קליפים מומלצים — ממתין לאישור`,
-        startedAt: new Date().toISOString(),
-      },
-      updated_at: new Date().toISOString(),
+      processing_progress: progressData,
+      updated_at: now,
     })
     .eq('id', episodeId);
+
+  // JSONB fallback
+  try {
+    await podcastEpisodes.updateAsync(episodeId, {
+      status: 'candidates_ready',
+      processingProgress: progressData,
+      processing_progress: progressData,
+      updatedAt: now,
+      updated_at: now,
+    } as any);
+  } catch {}
 }
 
 // ── Analysis result type ──────────────────────────────────────────────────────

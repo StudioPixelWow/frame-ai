@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { getSupabase } from '@/lib/db/store';
 import { podcastEpisodes } from '@/lib/db';
-import { createClient } from '@supabase/supabase-js';
+// createClient removed — all Supabase access goes through getSupabase() from store.ts
 
 export const dynamic = 'force-dynamic';
 
@@ -45,12 +45,9 @@ async function ensureTable(): Promise<boolean> {
   if (_tableCreationAttempted) return false;
   _tableCreationAttempted = true;
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return false;
-
-  // Try exec_sql RPC
-  const sb = createClient(url, key);
+  // Use the shared Supabase client (has hardcoded fallback URL)
+  // instead of process.env.NEXT_PUBLIC_SUPABASE_URL which is undefined on server
+  const sb = getSupabase();
   for (const param of ['sql', 'query', 'sql_text']) {
     try {
       const { error } = await sb.rpc('exec_sql', { [param]: CREATE_TABLE_SQL });
@@ -65,24 +62,7 @@ async function ensureTable(): Promise<boolean> {
     } catch { continue; }
   }
 
-  // Fallback: REST endpoint
-  try {
-    const res = await fetch(`${url}/rest/v1/rpc/exec_sql`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-      },
-      body: JSON.stringify({ sql: CREATE_TABLE_SQL }),
-    });
-    if (res.ok) {
-      console.log('[podcast-episodes] Auto-created podcast_episodes table via REST');
-      return true;
-    }
-  } catch {}
-
-  console.warn('[podcast-episodes] Could not auto-create table — run migration manually');
+  console.warn('[podcast-episodes] Could not auto-create table via exec_sql — run migration manually');
   return false;
 }
 
