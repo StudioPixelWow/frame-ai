@@ -111,6 +111,8 @@ export interface UnifiedPreviewProps {
   transitionStyle?: string;
   /** Transition duration in ms */
   transitionDurationMs?: number;
+  /** Hook end time (sec) — triggers automatic prismatic flash sweep at this boundary */
+  hookEndSec?: number;
 }
 
 export interface UnifiedPreviewHandle {
@@ -178,6 +180,7 @@ export const UnifiedEditedPreviewPlayer = forwardRef<UnifiedPreviewHandle, Unifi
     debug = false,
     transitionStyle = "cut",
     transitionDurationMs = 500,
+    hookEndSec = 0,
   } = props;
 
   /* ── Refs & State ── */
@@ -248,6 +251,18 @@ export const UnifiedEditedPreviewPlayer = forwardRef<UnifiedPreviewHandle, Unifi
     if (!brollEnabled) return null;
     return brollPlacements.find(p => currentTime >= p.startSec && currentTime <= p.endSec && p.stockPreviewUrl) || null;
   }, [currentTime, brollPlacements, brollEnabled]);
+
+  /* ── Hook transition overlay — prismatic flash sweep at hook boundary ── */
+  const hookTransitionOverlay = useMemo(() => {
+    if (!hookEndSec || hookEndSec <= 0) return null;
+    const hookDurSec = 1.0; // 1s prismatic flash sweep
+    const halfDur = hookDurSec / 2;
+    if (currentTime >= hookEndSec - halfDur && currentTime <= hookEndSec + halfDur) {
+      const progress = (currentTime - (hookEndSec - halfDur)) / hookDurSec;
+      return Math.max(0, Math.min(1, progress));
+    }
+    return null;
+  }, [currentTime, hookEndSec]);
 
   /* ── Transition overlay state ── */
   const transitionOverlay = useMemo(() => {
@@ -586,6 +601,31 @@ export const UnifiedEditedPreviewPlayer = forwardRef<UnifiedPreviewHandle, Unifi
               );
             }
             return null;
+          })()}
+
+          {/* Hook-to-body transition — prismatic flash sweep at hookEndSec */}
+          {hookTransitionOverlay !== null && (() => {
+            const p = hookTransitionOverlay; // 0→1 progress
+            const bell = Math.sin(p * Math.PI);
+            const sweepPos = p * 200 - 50;
+            return (
+              <div style={{ position: "absolute", inset: 0, zIndex: 22, pointerEvents: "none" }}>
+                {/* Prismatic sweep beam */}
+                <div style={{
+                  position: "absolute", inset: 0,
+                  background: `linear-gradient(45deg, transparent ${sweepPos - 30}%, rgba(0,255,255,0.05) ${sweepPos - 20}%, rgba(100,120,255,0.25) ${sweepPos - 6}%, rgba(255,255,255,${0.7 * bell}) ${sweepPos}%, rgba(255,140,220,0.35) ${sweepPos + 3}%, rgba(255,100,180,0.25) ${sweepPos + 6}%, transparent ${sweepPos + 30}%)`,
+                  opacity: bell * 0.95,
+                  filter: `blur(${2 + bell * 3}px)`,
+                  mixBlendMode: "screen" as const,
+                }} />
+                {/* Warm flash burst at peak */}
+                <div style={{
+                  position: "absolute", inset: 0,
+                  background: `radial-gradient(ellipse at 50% 50%, rgba(255,200,100,${bell * 0.35}) 0%, rgba(255,140,50,${bell * 0.2}) 40%, transparent 70%)`,
+                  mixBlendMode: "screen" as const,
+                }} />
+              </div>
+            );
           })()}
 
           {/* Layer 1+2: Subtitle + AI highlight overlay */}

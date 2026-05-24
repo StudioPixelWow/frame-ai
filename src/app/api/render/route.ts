@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
             videoClips: compositionData.videoClips ?? [],
             zoomKeyframes: compositionData.zoomKeyframes ?? [],
             hookBoost: compositionData.hookBoost ?? { active: false, hookEndSec: 0, zoomMultiplier: 1, subtitleFontMultiplier: 1 },
-            logoCredit: compositionData.logoCredit ?? { url: "https://s-pixel.co.il/wp-content/uploads/2026/05/Layer-423-e1779184604839.png", durationSec: 5, position: "bottom-right" as const, sizePx: 180, opacity: 0.9 },
+            logoCredit: compositionData.logoCredit ?? { url: "https://s-pixel.co.il/wp-content/uploads/2026/05/Layer-423-e1779184604839.png", durationSec: 5, position: "right-side" as const, sizePx: 120, opacity: 0.85 },
           };
         }
       } else {

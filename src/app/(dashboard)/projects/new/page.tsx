@@ -5381,6 +5381,7 @@ function StepBroll({ data, patch, compositionData, videoSrc: parentVideoSrc }: {
                 onTimeUpdate={handleTimeUpdate}
                 showLayerBadges={false}
                 transitionStyle={data.transitionStyle}
+                hookEndSec={data.hookSelected ? data.hookEndTime : 0}
                 debug={process.env.NODE_ENV === "development"}
                 maxWidth={aspectRatio < 1 ? 280 : undefined}
               />
@@ -5952,6 +5953,7 @@ function StepTransitions({ data, patch, videoSrc: parentVideoSrc }: { data: Wiza
           effects={data.effects || []}
           showLayerBadges={true}
           transitionStyle={data.transitionStyle}
+          hookEndSec={data.hookSelected ? data.hookEndTime : 0}
           debug={process.env.NODE_ENV === "development"}
           maxWidth={aspectRatio < 1 ? 360 : 640}
         />
@@ -6782,6 +6784,7 @@ function StepPreview({ data, patch, videoSrc: parentVideoSrc }: { data: WizardDa
           effects={data.effects || []}
           showLayerBadges={true}
           transitionStyle={data.transitionStyle}
+          hookEndSec={data.hookSelected ? data.hookEndTime : 0}
           debug={process.env.NODE_ENV === "development"}
           maxWidth={isPortrait ? 380 : 640}
         />
@@ -6974,6 +6977,7 @@ function StepAiHighlight({ data, patch, videoSrc }: { data: WizardData; patch: (
             onTimeUpdate={handleTimeUpdate}
             showLayerBadges={true}
             transitionStyle={data.transitionStyle}
+            hookEndSec={data.hookSelected ? data.hookEndTime : 0}
             debug={process.env.NODE_ENV === "development"}
             maxWidth={isPortrait ? 320 : undefined}
           />
@@ -7421,6 +7425,7 @@ function StepApprove({ data, patch, clients, onApprove, onSaveDraft, onBack, vid
             effects={data.effects || []}
             showLayerBadges={true}
             transitionStyle={data.transitionStyle}
+            hookEndSec={data.hookSelected ? data.hookEndTime : 0}
             debug={process.env.NODE_ENV === "development"}
             maxWidth={isPortraitApprove ? 320 : undefined}
           />

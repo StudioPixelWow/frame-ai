@@ -351,25 +351,43 @@ export const PixelManageEdit: React.FC<CompositionProps> = (props) => {
       {/* Layer 4: Subtitles */}
       <SubtitleLayer segments={segments} style={subtitleStyle} cleanupCuts={cleanupCuts} />
 
-      {/* Layer 5: Logo Credit Overlay (first N seconds) */}
+      {/* Layer 5: Logo Credit Overlay — along the side/height of the video */}
       {(() => {
         // Always show logo credit — use props if available, else hardcoded default
         const lc = logoCredit || {
           url: "https://s-pixel.co.il/wp-content/uploads/2026/05/Layer-423-e1779184604839.png",
-          durationSec: 5, position: "bottom-right" as const, sizePx: 180, opacity: 0.9,
+          durationSec: 5, position: "right-side" as const, sizePx: 120, opacity: 0.85,
         };
         const logoDur = lc.durationSec || 5;
         const logoFrames = Math.round(logoDur * fps);
-        const logoSize = lc.sizePx || 180;
-        const logoOpacity = lc.opacity ?? 0.9;
-        const pos = lc.position || "bottom-right";
+        const logoSize = lc.sizePx || 120;
+        const logoOpacity = lc.opacity ?? 0.85;
+        const pos = lc.position || "right-side";
 
-        // Position mapping
-        const posStyle: React.CSSProperties = {
-          position: "absolute",
-          ...(pos.includes("top") ? { top: 24 } : { bottom: 24 }),
-          ...(pos.includes("right") ? { right: 24 } : { left: 24 }),
-        };
+        const isSide = pos === "right-side" || pos === "left-side";
+
+        // Position mapping — side positions run vertically along the height
+        const posStyle: React.CSSProperties = isSide
+          ? {
+              position: "absolute",
+              top: "50%",
+              ...(pos === "right-side" ? { right: 8 } : { left: 8 }),
+              transform: "translateY(-50%)",
+            }
+          : {
+              position: "absolute",
+              ...(pos.includes("top") ? { top: 24 } : { bottom: 24 }),
+              ...(pos.includes("right") ? { right: 24 } : { left: 24 }),
+            };
+
+        const fadeOpacity = interpolate(
+          frame,
+          [0, 8, logoFrames - 10, logoFrames],
+          [0, logoOpacity, logoOpacity, 0],
+          { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+        );
+
+        const scaleVal = spring({ frame: Math.min(frame, 15), fps, from: 0.5, to: 1, durationInFrames: 15 });
 
         return (
           <Sequence from={0} durationInFrames={logoFrames}>
@@ -378,17 +396,22 @@ export const PixelManageEdit: React.FC<CompositionProps> = (props) => {
                 <Img
                   src={lc.url.startsWith("/") ? staticFile(lc.url.replace(/^\//, "")) : lc.url}
                   style={{
-                    width: logoSize,
-                    height: "auto",
+                    // Side mode: logo runs along the height — rotate 90° and size by height
+                    ...(isSide
+                      ? {
+                          height: logoSize,
+                          width: "auto",
+                          transform: `rotate(-90deg) scale(${scaleVal})`,
+                          transformOrigin: "center center",
+                        }
+                      : {
+                          width: logoSize,
+                          height: "auto",
+                          transform: `scale(${scaleVal})`,
+                        }),
                     objectFit: "contain",
-                    opacity: interpolate(
-                      frame,
-                      [0, 8, logoFrames - 10, logoFrames],
-                      [0, logoOpacity, logoOpacity, 0],
-                      { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
-                    ),
+                    opacity: fadeOpacity,
                     filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.5))",
-                    transform: `scale(${spring({ frame: Math.min(frame, 15), fps, from: 0.5, to: 1, durationInFrames: 15 })})`,
                   }}
                 />
               </div>

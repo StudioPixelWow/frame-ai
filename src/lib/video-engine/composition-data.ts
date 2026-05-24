@@ -236,11 +236,11 @@ export interface FinalCompositionData {
     language: string;
   };
 
-  // Logo credit overlay (shown in corner for first N seconds)
+  // Logo credit overlay (shown along the side/height of the video)
   logoCredit?: {
     url: string;
     durationSec: number;
-    position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+    position: "right-side" | "left-side" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
     sizePx: number;
     opacity: number;
   };
@@ -822,13 +822,13 @@ export function buildFinalCompositionData(ws: WizardSnapshot): FinalCompositionD
       language: ws.language,
     },
 
-    // Logo credit — PixelManage watermark in bottom-right corner for first 4 seconds
+    // Logo credit — placed along the right side/height of the video
     logoCredit: {
       url: "https://s-pixel.co.il/wp-content/uploads/2026/05/Layer-423-e1779184604839.png",
       durationSec: 5,
-      position: "bottom-right",
-      sizePx: 180,
-      opacity: 0.9,
+      position: "right-side",
+      sizePx: 120,
+      opacity: 0.85,
     },
 
     // Edit engine — defaults (populated by unified coordinator when active)

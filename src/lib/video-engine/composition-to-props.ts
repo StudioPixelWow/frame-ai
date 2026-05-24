@@ -115,7 +115,7 @@ export interface RemotionInputProps {
   logoCredit?: {
     url: string;
     durationSec: number;
-    position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+    position: "right-side" | "left-side" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
     sizePx: number;
     opacity: number;
   };

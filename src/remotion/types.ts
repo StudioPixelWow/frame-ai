@@ -155,12 +155,12 @@ export interface CompositionProps {
     subtitleFontMultiplier: number;
   };
 
-  // Logo credit overlay (shown in corner for first N seconds)
+  // Logo credit overlay (shown along the side/height of the video)
   logoCredit?: {
     url: string;           // URL to logo image (PNG/SVG)
-    durationSec: number;   // How long to show (default 4)
-    position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
-    sizePx: number;        // Width in pixels (height auto)
+    durationSec: number;   // How long to show (default 5)
+    position: "right-side" | "left-side" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
+    sizePx: number;        // Height of the logo when placed on the side (auto width)
     opacity: number;       // 0-1
   };
 }
