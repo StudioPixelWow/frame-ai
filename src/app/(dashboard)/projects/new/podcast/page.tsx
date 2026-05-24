@@ -384,7 +384,7 @@ export default function PodcastClipEnginePage() {
             setProcessingError('העיבוד נתקע — ייתכן ששרת העיבוד אינו פעיל. נסה שוב מאוחר יותר או בדוק את לוגי השרת.');
           }
           // If the server reverted to 'uploaded' without error, it means the background task failed silently
-          if (pollCount >= 2 && row.status === 'uploaded' && !row.error_message) {
+          if (pollCount >= 8 && row.status === 'uploaded' && !row.error_message) {
             console.warn('[podcast-poll] Episode reverted to uploaded — background task likely failed');
             setProcessingError('שגיאה: תהליך הניתוח לא הצליח להתחיל. ייתכן שיש בעיית שרת. נסה שוב.');
             setProcessingStages((prev) =>

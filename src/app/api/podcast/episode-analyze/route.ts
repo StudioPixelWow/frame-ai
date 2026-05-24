@@ -14,17 +14,23 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { runEpisodeAnalysis } from '@/lib/podcast-engine/episode-analyzer';
 import { podcastEpisodes } from '@/lib/db/collections';
-import { getSupabase } from '@/lib/db/store';
+// getSupabase removed — using service role createClient directly to bypass RLS
+
+// Use service role key — same as episode-analyzer.ts — to bypass RLS
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes
 
 async function findEpisode(episodeId: string) {
-  // Try relational table first
-  const sb = getSupabase();
-  const { data, error } = await sb
+  // Try relational table first — use service role to bypass RLS
+  const { data, error } = await supabase
     .from('podcast_episodes')
     .select('id, status, source_file_path, audio_file_path')
     .eq('id', episodeId)
@@ -71,9 +77,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Mark as analyzing immediately
-    const sb2 = getSupabase();
-    await sb2
+    // Mark as analyzing immediately — use service role to bypass RLS
+    const { error: updateError } = await supabase
       .from('podcast_episodes')
       .update({
         status: 'analyzing',
@@ -88,6 +93,10 @@ export async function POST(req: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', episodeId);
+
+    if (updateError) {
+      console.error(`[episode-analyze] Failed to set status=analyzing:`, updateError.message);
+    }
 
     // Run the analysis inline — the function stays alive for up to maxDuration (300s).
     // The frontend does NOT await this response; it polls via a separate endpoint.
@@ -115,8 +124,7 @@ export async function POST(req: NextRequest) {
 
       // Write error to DB so frontend polling can detect it
       try {
-        const sbErr = getSupabase();
-        await sbErr.from('podcast_episodes').update({
+        await supabase.from('podcast_episodes').update({
           status: 'error',
           error_message: `שגיאת עיבוד: ${errMsg}`,
           updated_at: new Date().toISOString(),
