@@ -8,11 +8,12 @@
  *   3. Saves PodcastClipCandidate records with candidateStatus='suggested'
  *   4. Updates episode status to 'candidates_ready'
  *
- * Returns 202 immediately, runs pipeline in background via next/server after().
+ * Runs the analysis inline (synchronous) within maxDuration=300s.
+ * The frontend fires this request without awaiting the response and polls
+ * the episode status via a separate endpoint. No after() needed.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { after } from 'next/server';
 import { runEpisodeAnalysis } from '@/lib/podcast-engine/episode-analyzer';
 import { podcastEpisodes } from '@/lib/db/collections';
 import { getSupabase } from '@/lib/db/store';
@@ -88,33 +89,47 @@ export async function POST(req: NextRequest) {
       })
       .eq('id', episodeId);
 
-    // Run in background — wrap with error handling to catch silent failures
-    after(async () => {
-      try {
-        console.log(`[episode-analyze] after() started for ${episodeId}`);
-        await runEpisodeAnalysis(episodeId, episode.source_file_path, episode.audio_file_path || undefined);
-        console.log(`[episode-analyze] after() completed for ${episodeId}`);
-      } catch (bgErr) {
-        const bgMsg = bgErr instanceof Error ? bgErr.message : String(bgErr);
-        console.error(`[episode-analyze] after() CRASHED for ${episodeId}:`, bgMsg);
-        // Write error to DB so frontend can detect it
-        try {
-          const sbErr = getSupabase();
-          await sbErr.from('podcast_episodes').update({
-            status: 'error',
-            error_message: `שגיאת עיבוד: ${bgMsg}`,
-            updated_at: new Date().toISOString(),
-          }).eq('id', episodeId);
-        } catch (dbErr) {
-          console.error(`[episode-analyze] Failed to write error to DB:`, dbErr);
-        }
-      }
-    });
+    // Run the analysis inline — the function stays alive for up to maxDuration (300s).
+    // The frontend does NOT await this response; it polls via a separate endpoint.
+    console.log(`[episode-analyze] Starting analysis inline for ${episodeId}`);
+    try {
+      const result = await runEpisodeAnalysis(
+        episodeId,
+        episode.source_file_path,
+        episode.audio_file_path || undefined
+      );
+      console.log(`[episode-analyze] Analysis completed for ${episodeId}:`, result.success);
 
-    return NextResponse.json(
-      { success: true, message: 'הניתוח התחיל', episodeId },
-      { status: 202 }
-    );
+      return NextResponse.json(
+        {
+          success: true,
+          message: 'הניתוח הושלם',
+          episodeId,
+          candidateCount: result.candidateCount ?? 0,
+        },
+        { status: 200 }
+      );
+    } catch (analysisErr) {
+      const errMsg = analysisErr instanceof Error ? analysisErr.message : String(analysisErr);
+      console.error(`[episode-analyze] Analysis FAILED for ${episodeId}:`, errMsg);
+
+      // Write error to DB so frontend polling can detect it
+      try {
+        const sbErr = getSupabase();
+        await sbErr.from('podcast_episodes').update({
+          status: 'error',
+          error_message: `שגיאת עיבוד: ${errMsg}`,
+          updated_at: new Date().toISOString(),
+        }).eq('id', episodeId);
+      } catch (dbErr) {
+        console.error(`[episode-analyze] Failed to write error to DB:`, dbErr);
+      }
+
+      return NextResponse.json(
+        { error: `שגיאת ניתוח: ${errMsg}`, episodeId },
+        { status: 500 }
+      );
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(

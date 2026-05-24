@@ -570,21 +570,23 @@ export default function PodcastClipEnginePage() {
       );
 
       console.log('[podcast] Triggering episode analysis for:', newEpisodeId);
-      const processRes = await fetch('/api/podcast/episode-analyze', {
+      // Fire-and-forget: the analysis runs synchronously on the server (up to 5min).
+      // We do NOT await the response — polling handles progress updates.
+      fetch('/api/podcast/episode-analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ episodeId: newEpisodeId }),
+      }).then(async (res) => {
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          console.error('[podcast] episode-analyze returned error:', res.status, errBody);
+        } else {
+          const body = await res.json().catch(() => ({}));
+          console.log('[podcast] Analysis completed:', body);
+        }
+      }).catch((err) => {
+        console.error('[podcast] episode-analyze fetch error:', err);
       });
-
-      if (!processRes.ok) {
-        const errBody = await processRes.json().catch(() => ({}));
-        const errMsg = (errBody as { error?: string }).error || `שגיאה בהפעלת הניתוח (${processRes.status})`;
-        console.error('[podcast] episode-analyze failed:', processRes.status, errMsg);
-        throw new Error(errMsg);
-      }
-
-      const analyzeBody = await processRes.json().catch(() => ({}));
-      console.log('[podcast] Analysis triggered:', analyzeBody);
 
       setProcessingStages((prev) =>
         prev.map((s) =>
