@@ -19,10 +19,15 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { writeFile, mkdir, unlink } from 'fs/promises';
-// existsSync no longer needed — removed native ffmpeg dependency
+import { writeFile, mkdir, unlink, stat } from 'fs/promises';
+import { createWriteStream } from 'fs';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { getFfmpegPath } from '@/lib/ffmpeg-paths';
 import { transcribeAudio } from './whisper-transcription';
 import { segmentTranscript, type TranscriptSegment, type TopicSegment } from './topic-segmentation';
 import { analyzeTranscriptForClips, type AIClipSuggestion } from './clip-analyzer';
@@ -208,34 +213,10 @@ export async function runEpisodeAnalysis(
 
     // If whisperFilePath was NOT set above (no audio file, or it failed), try the video
     if (!whisperFilePath) {
-      console.log(`[episode-analyzer] No pre-extracted audio — checking video size before download`);
+      console.log(`[episode-analyzer] No pre-extracted audio — downloading video via streaming + server-side ffmpeg extraction`);
+      await updateEpisodeProgress(episodeId, 1, 20, 'מוריד את הווידאו מהשרת...');
 
-      // PRE-FLIGHT: Check file size BEFORE downloading to avoid OOM crash.
-      // Get file metadata from Storage to know the size without downloading.
-      const fileName = sourceFilePath.split('/').pop() || '';
-      const folderPath = sourceFilePath.substring(0, sourceFilePath.lastIndexOf('/')) || '';
-      const { data: fileList } = await supabase.storage
-        .from('project-files')
-        .list(folderPath, { search: fileName, limit: 1 });
-
-      const fileMetadata = fileList?.find(f => f.name === fileName);
-      const estimatedSizeBytes = fileMetadata?.metadata?.size || 0;
-      const estimatedSizeMB = Math.round(estimatedSizeBytes / 1024 / 1024);
-
-      if (estimatedSizeBytes > WHISPER_MAX_FILE_SIZE) {
-        // File is too large for Whisper AND no pre-extracted audio exists.
-        // Do NOT attempt to download — it will crash the serverless function with OOM.
-        console.error(`[episode-analyzer] ABORT: Video is ${estimatedSizeMB}MB, no audio file. Would crash on download.`);
-        throw new Error(
-          `חילוץ האודיו בדפדפן נכשל, והקובץ גדול מדי (${estimatedSizeMB || '???'}MB) לעיבוד ישיר בשרת. ` +
-          `מגבלת Whisper API היא 25MB. ` +
-          `נסה לרענן את הדף ולהעלות שוב — חילוץ האודיו אמור לקרות אוטומטית בדפדפן.`
-        );
-      }
-
-      // Video is small enough — safe to download into memory
-      await updateEpisodeProgress(episodeId, 1, 30, 'מוריד את קובץ הווידאו...');
-
+      // STREAM download to disk — avoids loading entire file into memory (prevents OOM on 500MB+ files)
       let downloadResponse: Response;
       try {
         downloadResponse = await fetch(signedUrl);
@@ -247,23 +228,71 @@ export async function runEpisodeAnalysis(
         throw new Error(`שגיאה בהורדת הקובץ: ${msg}`);
       }
 
-      const fileBuffer = Buffer.from(await downloadResponse.arrayBuffer());
       const fileExt = sourceFilePath.split('.').pop()?.toLowerCase() || 'mp4';
       const downloadedPath = join(tempDir, `source.${fileExt}`);
-      await writeFile(downloadedPath, fileBuffer);
 
-      const fileSizeMB = Math.round(fileBuffer.length / 1024 / 1024);
-      console.log(`[episode-analyzer] Video downloaded: ${fileSizeMB}MB (${fileExt})`);
+      // Stream response body to disk — memory usage stays low regardless of file size
+      if (!downloadResponse.body) {
+        throw new Error('שגיאה: גוף התשובה ריק — אין מה להוריד');
+      }
 
-      if (fileBuffer.length <= WHISPER_MAX_FILE_SIZE) {
+      const nodeStream = Readable.fromWeb(downloadResponse.body as any);
+      const writeStream = createWriteStream(downloadedPath);
+      await pipeline(nodeStream, writeStream);
+
+      const fileStat = await stat(downloadedPath);
+      const fileSizeMB = Math.round(fileStat.size / 1024 / 1024);
+      console.log(`[episode-analyzer] Video streamed to disk: ${fileSizeMB}MB (${fileExt})`);
+      await updateEpisodeProgress(episodeId, 1, 50, `וידאו הורד (${fileSizeMB}MB) — מחלץ אודיו...`);
+
+      if (fileStat.size <= WHISPER_MAX_FILE_SIZE) {
+        // Video is small enough — send directly to Whisper, no extraction needed
         whisperFilePath = downloadedPath;
         console.log(`[episode-analyzer] Video ≤25MB — sending directly to Whisper`);
         await updateEpisodeProgress(episodeId, 1, 100, `קובץ מוכן לתמלול (${fileSizeMB}MB)`);
       } else {
-        // Shouldn't reach here due to pre-flight check, but just in case
-        throw new Error(
-          `הקובץ גדול מדי לתמלול (${fileSizeMB}MB). מגבלת Whisper API היא 25MB.`
-        );
+        // Video too large for Whisper — extract audio with server-side ffmpeg
+        console.log(`[episode-analyzer] Video ${fileSizeMB}MB > 25MB — extracting audio with ffmpeg`);
+        await updateEpisodeProgress(episodeId, 1, 60, `מחלץ אודיו מהווידאו (${fileSizeMB}MB)...`);
+
+        const audioOutputPath = join(tempDir, 'extracted_audio.mp3');
+        const ffmpegBin = getFfmpegPath();
+        console.log(`[episode-analyzer] Using ffmpeg binary: ${ffmpegBin}`);
+
+        const execFileAsync = promisify(execFile);
+        try {
+          await execFileAsync(ffmpegBin, [
+            '-y',
+            '-i', downloadedPath,
+            '-vn',                    // Strip video
+            '-acodec', 'libmp3lame',
+            '-ar', '16000',           // 16kHz sample rate (optimal for Whisper)
+            '-ac', '1',               // Mono
+            '-b:a', '48k',            // 48kbps — ~22MB/hour, under Whisper's 25MB limit
+            audioOutputPath,
+          ], { timeout: 180_000 }); // 3 minute timeout for extraction
+        } catch (ffErr) {
+          const msg = ffErr instanceof Error ? ffErr.message : String(ffErr);
+          console.error(`[episode-analyzer] ffmpeg extraction failed:`, msg);
+          throw new Error(`שגיאה בחילוץ אודיו מהווידאו: ${msg}`);
+        }
+
+        // Delete the large video file immediately to free disk space
+        await unlink(downloadedPath).catch(() => {});
+
+        const audioStat = await stat(audioOutputPath);
+        const audioSizeMB = (audioStat.size / 1024 / 1024).toFixed(1);
+        console.log(`[episode-analyzer] Audio extracted: ${audioSizeMB}MB`);
+
+        if (audioStat.size > WHISPER_MAX_FILE_SIZE) {
+          throw new Error(
+            `קובץ האודיו שחולץ גדול מדי (${audioSizeMB}MB). ` +
+            `מגבלת Whisper API היא 25MB. נסה להשתמש בהקלטה קצרה יותר.`
+          );
+        }
+
+        whisperFilePath = audioOutputPath;
+        await updateEpisodeProgress(episodeId, 1, 100, `אודיו חולץ בהצלחה (${audioSizeMB}MB)`);
       }
     }
 
