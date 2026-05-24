@@ -361,7 +361,9 @@ export default function PodcastClipEnginePage() {
       return;
     }
 
+    let pollCount = 0;
     const poll = async () => {
+      pollCount++;
       try {
         const res = await fetch(`/api/podcast/episodes/${encodeURIComponent(episodeId)}`, {
           cache: 'no-store',
@@ -369,19 +371,40 @@ export default function PodcastClipEnginePage() {
 
         if (res.ok) {
           const data = await res.json();
-          applyProgressFromRow(data as Record<string, unknown>);
+          const row = data as Record<string, unknown>;
+          const progress = row.processing_progress as { stage?: number; percent?: number; statusText?: string } | null;
+          console.log(`[podcast-poll] #${pollCount} status=${row.status} stage=${progress?.stage} percent=${progress?.percent} text=${progress?.statusText}`);
+          applyProgressFromRow(row);
+
+          // Detect stuck state — if status is still 'uploaded' or 'analyzing' with no real progress
+          // after many polls, show warning to user
+          if (pollCount >= 4 && row.status === 'analyzing' && progress?.stage === 1 && (progress?.percent ?? 0) === 0) {
+            console.warn('[podcast-poll] Processing appears stuck — no progress after', pollCount, 'polls');
+            setProcessingError('העיבוד נתקע — ייתכן ששרת העיבוד אינו פעיל. נסה שוב מאוחר יותר או בדוק את לוגי השרת.');
+          }
+          // If the server reverted to 'uploaded' without error, it means the background task failed silently
+          if (pollCount >= 2 && row.status === 'uploaded' && !row.error_message) {
+            console.warn('[podcast-poll] Episode reverted to uploaded — background task likely failed');
+            setProcessingError('שגיאה: תהליך הניתוח לא הצליח להתחיל. ייתכן שיש בעיית שרת. נסה שוב.');
+            setProcessingStages((prev) =>
+              prev.map((s) =>
+                s.status === 'running' ? { ...s, status: 'error' as const } : s,
+              ),
+            );
+          }
+        } else {
+          console.warn(`[podcast-poll] #${pollCount} HTTP ${res.status}`);
         }
-      } catch {
-        // Silently retry on next poll
+      } catch (pollErr) {
+        console.warn(`[podcast-poll] #${pollCount} error:`, pollErr);
       }
     };
 
     // First poll immediately
     poll();
 
-    // Poll every 15s (not 5s) to reduce Supabase connection pressure.
-    // Realtime subscription above provides instant updates when available.
-    const interval = setInterval(poll, 15000);
+    // Poll every 8s — fast enough to catch errors, not too aggressive
+    const interval = setInterval(poll, 8000);
     return () => clearInterval(interval);
   }, [episodeId, currentStage, applyProgressFromRow]);
 
@@ -447,6 +470,14 @@ export default function PodcastClipEnginePage() {
       setUploadProgress(null);
 
       // Step 2: Create the episode record via API
+      // Mark validate as running immediately so the user sees progress
+      setProcessingStages((prev) =>
+        prev.map((s) =>
+          s.key === 'validate' ? { ...s, status: 'running' as const, progress: 0, statusText: 'יוצר רשומת פרק...' } : s,
+        ),
+      );
+
+      console.log('[podcast] Creating episode record...');
       const created = await createEpisode({
         title: episode.title || episode.file.name,
         showName: episode.showName || undefined,
@@ -458,6 +489,7 @@ export default function PodcastClipEnginePage() {
       } as Record<string, unknown> as Parameters<typeof createEpisode>[0]);
 
       const newEpisodeId = created.id;
+      console.log('[podcast] Episode created:', newEpisodeId);
 
       // Validate the returned episode ID is a real UUID before proceeding
       const uuidCheck = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -472,6 +504,13 @@ export default function PodcastClipEnginePage() {
       setProcessingStartTime(Date.now());
       setElapsedSeconds(0);
 
+      setProcessingStages((prev) =>
+        prev.map((s) =>
+          s.key === 'validate' ? { ...s, statusText: 'מפעיל ניתוח פרק...' } : s,
+        ),
+      );
+
+      console.log('[podcast] Triggering episode analysis for:', newEpisodeId);
       const processRes = await fetch('/api/podcast/episode-analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -480,14 +519,31 @@ export default function PodcastClipEnginePage() {
 
       if (!processRes.ok) {
         const errBody = await processRes.json().catch(() => ({}));
-        throw new Error((errBody as { error?: string }).error || 'Failed to start processing');
+        const errMsg = (errBody as { error?: string }).error || `שגיאה בהפעלת הניתוח (${processRes.status})`;
+        console.error('[podcast] episode-analyze failed:', processRes.status, errMsg);
+        throw new Error(errMsg);
       }
+
+      const analyzeBody = await processRes.json().catch(() => ({}));
+      console.log('[podcast] Analysis triggered:', analyzeBody);
+
+      setProcessingStages((prev) =>
+        prev.map((s) =>
+          s.key === 'validate' ? { ...s, statusText: 'הניתוח התחיל — ממתין לעדכוני התקדמות...' } : s,
+        ),
+      );
 
       // Realtime subscription (in useEffect above) will handle progress updates
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setProcessingError(message);
-      console.error('startProcessing error:', message);
+      console.error('[podcast] startProcessing error:', message);
+      // Mark the current running stage as error so the user sees it
+      setProcessingStages((prev) =>
+        prev.map((s) =>
+          s.status === 'running' ? { ...s, status: 'error' as const, statusText: message } : s,
+        ),
+      );
     }
   }, [episode, createEpisode]);
 
@@ -1256,6 +1312,18 @@ export default function PodcastClipEnginePage() {
                       </span>
                     )}
                   </div>
+
+                  {/* Status text for running/error stages */}
+                  {(isRunning || isError) && stage.statusText && (
+                    <div style={{
+                      fontSize: 12,
+                      color: isError ? COLORS.error : COLORS.textSecondary,
+                      marginTop: 4,
+                      fontWeight: 400,
+                    }}>
+                      {stage.statusText}
+                    </div>
+                  )}
 
                   {/* Progress bar for running stage */}
                   {isRunning && (

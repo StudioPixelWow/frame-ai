@@ -75,18 +75,18 @@ export const TransitionLayer: React.FC<Props> = ({ style: transStyle, durationMs
             transform: `scale(${1.2 + bell * 0.3})`,
           }}
         />
-        {/* Layer 3: Full-screen chromatic color sweep — vibrant rainbow */}
+        {/* Layer 3: Full-screen warm color sweep — orange/amber/gold */}
         <AbsoluteFill
           style={{
             background: `linear-gradient(${90 + sweepAngle * 0.3}deg,
               rgba(255,80,0,${0.7 * bell}) 0%,
               rgba(255,200,0,${0.65 * bell}) 12%,
               rgba(255,255,0,${0.6 * bell}) 22%,
-              rgba(0,255,180,${0.45 * bell}) 35%,
-              rgba(0,180,255,${0.4 * bell}) 48%,
-              rgba(140,80,255,${0.45 * bell}) 60%,
-              rgba(255,60,200,${0.5 * bell}) 72%,
-              rgba(255,100,0,${0.65 * bell}) 85%,
+              rgba(255,180,30,${0.55 * bell}) 35%,
+              rgba(255,140,0,${0.5 * bell}) 48%,
+              rgba(255,100,0,${0.55 * bell}) 60%,
+              rgba(255,160,30,${0.6 * bell}) 72%,
+              rgba(255,200,50,${0.65 * bell}) 85%,
               rgba(255,220,50,${0.7 * bell}) 100%)`,
             filter: `blur(${6 + glow * 12}px)`,
             mixBlendMode: "screen",
@@ -100,9 +100,9 @@ export const TransitionLayer: React.FC<Props> = ({ style: transStyle, durationMs
               rgba(255,200,0,${0.6 * bell}) 0%,
               rgba(255,140,0,${0.55 * bell}) 20%,
               rgba(255,60,0,${0.5 * bell}) 40%,
-              rgba(255,0,100,${0.4 * bell}) 55%,
-              rgba(180,0,255,${0.35 * bell}) 70%,
-              rgba(0,200,255,${0.35 * bell}) 85%,
+              rgba(255,100,20,${0.45 * bell}) 55%,
+              rgba(255,160,0,${0.4 * bell}) 70%,
+              rgba(255,220,50,${0.4 * bell}) 85%,
               rgba(255,255,0,${0.55 * bell}) 100%)`,
             filter: `blur(${15 + bell * 25}px)`,
             mixBlendMode: "screen",

@@ -535,10 +535,10 @@ export const UnifiedEditedPreviewPlayer = forwardRef<UnifiedPreviewHandle, Unifi
                     filter: `brightness(${1 + burst * 5})`,
                     mixBlendMode: "screen" as const,
                   }} />
-                  {/* Vibrant rainbow sweep */}
+                  {/* Warm orange/amber sweep */}
                   <div style={{
                     position: "absolute", inset: 0,
-                    background: `linear-gradient(90deg, rgba(255,80,0,${0.6 * bell}) 0%, rgba(255,220,0,${0.55 * bell}) 15%, rgba(0,255,180,${0.4 * bell}) 35%, rgba(0,180,255,${0.35 * bell}) 50%, rgba(180,60,255,${0.4 * bell}) 65%, rgba(255,60,200,${0.45 * bell}) 80%, rgba(255,160,0,${0.6 * bell}) 100%)`,
+                    background: `linear-gradient(90deg, rgba(255,80,0,${0.6 * bell}) 0%, rgba(255,220,0,${0.55 * bell}) 15%, rgba(255,180,30,${0.5 * bell}) 35%, rgba(255,140,0,${0.45 * bell}) 50%, rgba(255,100,0,${0.5 * bell}) 65%, rgba(255,160,30,${0.55 * bell}) 80%, rgba(255,200,50,${0.6 * bell}) 100%)`,
                     filter: `blur(${4 + glowD * 10}px)`,
                     mixBlendMode: "screen" as const,
                     opacity: bell * 0.9,
