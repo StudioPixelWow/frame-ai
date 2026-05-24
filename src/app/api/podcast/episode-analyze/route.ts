@@ -25,7 +25,7 @@ async function findEpisode(episodeId: string) {
   const sb = getSupabase();
   const { data, error } = await sb
     .from('podcast_episodes')
-    .select('id, status, source_file_path')
+    .select('id, status, source_file_path, audio_file_path')
     .eq('id', episodeId)
     .single();
 
@@ -40,6 +40,7 @@ async function findEpisode(episodeId: string) {
         id: found.id,
         status: found.status || 'uploaded',
         source_file_path: found.sourceFilePath || found.source_file_path || '',
+        audio_file_path: found.audioFilePath || found.audio_file_path || null,
       };
     }
   } catch {}
@@ -91,7 +92,7 @@ export async function POST(req: NextRequest) {
     after(async () => {
       try {
         console.log(`[episode-analyze] after() started for ${episodeId}`);
-        await runEpisodeAnalysis(episodeId, episode.source_file_path);
+        await runEpisodeAnalysis(episodeId, episode.source_file_path, episode.audio_file_path || undefined);
         console.log(`[episode-analyze] after() completed for ${episodeId}`);
       } catch (bgErr) {
         const bgMsg = bgErr instanceof Error ? bgErr.message : String(bgErr);

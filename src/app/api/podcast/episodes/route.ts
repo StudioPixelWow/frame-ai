@@ -194,6 +194,7 @@ export async function POST(req: NextRequest) {
       sourceFilePath,
       sourceFileSize,
       clientId,
+      audioFilePath,
     } = body;
 
     if (!title || !sourceFilePath) {
@@ -217,6 +218,7 @@ export async function POST(req: NextRequest) {
             language: language || 'he',
             source_file_path: sourceFilePath,
             source_file_size: sourceFileSize || null,
+            audio_file_path: audioFilePath || null,
             client_id: clientId || null,
             status: 'uploaded',
             processing_progress: {},
@@ -257,6 +259,7 @@ export async function POST(req: NextRequest) {
           language: language || 'he',
           source_file_path: sourceFilePath,
           source_file_size: sourceFileSize || null,
+          audio_file_path: audioFilePath || null,
           client_id: clientId || null,
           status: 'uploaded',
           processing_progress: {},

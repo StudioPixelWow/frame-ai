@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { usePodcastEpisodes } from '@/lib/api/use-podcast';
 import { TusUploader } from '@/lib/storage/tus-upload';
 import { createClient } from '@supabase/supabase-js';
+import { extractAudioClientSide, terminateAudioFFmpeg } from '@/lib/podcast-engine/client-audio-extract';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Types
@@ -469,11 +470,68 @@ export default function PodcastClipEnginePage() {
       );
       setUploadProgress(null);
 
-      // Step 2: Create the episode record via API
-      // Mark validate as running immediately so the user sees progress
+      // Step 1.5: Extract audio client-side using WASM FFmpeg
+      // This produces a small MP3 (~22MB/hour) that the server can send
+      // directly to Whisper — no server-side ffmpeg needed.
       setProcessingStages((prev) =>
         prev.map((s) =>
-          s.key === 'validate' ? { ...s, status: 'running' as const, progress: 0, statusText: 'יוצר רשומת פרק...' } : s,
+          s.key === 'validate' ? { ...s, status: 'running' as const, progress: 0, statusText: 'מחלץ אודיו מהסרטון...' } : s,
+        ),
+      );
+
+      let audioStoragePath: string | undefined;
+      try {
+        console.log('[podcast] Extracting audio client-side...');
+        const audioResult = await extractAudioClientSide({
+          videoFile: episode.file,
+          onProgress: (msg) => {
+            setProcessingStages((prev) =>
+              prev.map((s) =>
+                s.key === 'validate' ? { ...s, statusText: msg } : s,
+              ),
+            );
+          },
+        });
+
+        console.log(`[podcast] Audio extracted: ${(audioResult.sizeBytes / 1048576).toFixed(1)}MB`);
+
+        // Upload the small audio file to Supabase Storage
+        setProcessingStages((prev) =>
+          prev.map((s) =>
+            s.key === 'validate' ? { ...s, progress: 70, statusText: 'מעלה קובץ אודיו...' } : s,
+          ),
+        );
+
+        audioStoragePath = `uploads/${timestamp}-audio.mp3`;
+        const supabaseClient = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        );
+
+        const audioFile = new File([audioResult.audioBlob], audioResult.filename, { type: 'audio/mpeg' });
+        const { error: audioUploadErr } = await supabaseClient.storage
+          .from('project-files')
+          .upload(audioStoragePath, audioFile, { upsert: true });
+
+        if (audioUploadErr) {
+          console.warn('[podcast] Audio upload failed, will fall back to server extraction:', audioUploadErr.message);
+          audioStoragePath = undefined;
+        } else {
+          console.log(`[podcast] Audio uploaded to: ${audioStoragePath}`);
+        }
+
+        // Free WASM memory
+        terminateAudioFFmpeg();
+      } catch (audioErr) {
+        console.warn('[podcast] Client-side audio extraction failed, server will handle it:', audioErr);
+        audioStoragePath = undefined;
+        // Don't throw — the server can still try WASM extraction as fallback
+      }
+
+      // Step 2: Create the episode record via API
+      setProcessingStages((prev) =>
+        prev.map((s) =>
+          s.key === 'validate' ? { ...s, progress: 85, statusText: 'יוצר רשומת פרק...' } : s,
         ),
       );
 
@@ -486,6 +544,7 @@ export default function PodcastClipEnginePage() {
         sourceFilePath: storagePath,
         sourceFileSize: episode.file.size,
         clientId: episode.clientId || undefined,
+        ...(audioStoragePath ? { audioFilePath: audioStoragePath } : {}),
       } as Record<string, unknown> as Parameters<typeof createEpisode>[0]);
 
       const newEpisodeId = created.id;
