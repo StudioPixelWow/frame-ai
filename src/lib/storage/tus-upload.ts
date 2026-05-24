@@ -32,8 +32,9 @@ export interface TusUploadOptions {
 
 /* ── Constants ─────────────────────────────────────────────────────────── */
 
-// 1 MB chunks — keeps Supabase connection pool happy
-const DEFAULT_CHUNK_SIZE = 1 * 1024 * 1024;
+// 6 MB chunks — larger chunks = fewer connections = less pool pressure
+// For a 600MB file: ~100 chunks instead of ~600
+const DEFAULT_CHUNK_SIZE = 6 * 1024 * 1024;
 const MAX_RETRIES = 8;
 
 /* ── TusUploader ───────────────────────────────────────────────────────── */
