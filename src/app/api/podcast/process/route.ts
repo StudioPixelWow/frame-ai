@@ -199,15 +199,27 @@ async function runPipeline(episodeId: string, sourceFilePath: string): Promise<v
     // ── Stage 1: אימות — בדיקת קובץ ב-Storage ────────────────────────────
     await updateProgress(episodeId, 0, 0, 'מאתר את הקובץ בשרת...');
 
+    // Extract folder and filename from path (e.g. "uploads/123-file.mp4" → folder="uploads", file="123-file.mp4")
+    const pathParts = sourceFilePath.split('/');
+    const fileName = pathParts.pop() ?? '';
+    const folder = pathParts.join('/') || '';
+
     const { data: fileData, error: fileError } = await supabase
       .storage
       .from('project-files')
-      .list('', {
-        search: sourceFilePath.split('/').pop() ?? '',
+      .list(folder, {
+        search: fileName,
       });
 
     if (fileError || !fileData || fileData.length === 0) {
-      throw new Error(`קובץ לא נמצא ב-Storage: ${sourceFilePath}`);
+      // Fallback: try downloading directly — list+search can fail with special chars in filenames
+      const { data: headCheck, error: headErr } = await supabase
+        .storage
+        .from('project-files')
+        .createSignedUrl(sourceFilePath, 10);
+      if (headErr || !headCheck?.signedUrl) {
+        throw new Error(`קובץ לא נמצא ב-Storage: ${sourceFilePath}`);
+      }
     }
 
     await updateProgress(episodeId, 0, 100, 'הקובץ אומת בהצלחה');
