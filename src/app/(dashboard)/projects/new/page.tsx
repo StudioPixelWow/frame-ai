@@ -298,6 +298,26 @@ const STEPS = [
   { id: "approve",     label: "אישור ויצוא",      icon: "📤" },
 ];
 
+// Podcast-clip flow: Trim first (define segment), then format, then Hook (from trimmed segment), then rest
+const PODCAST_CLIP_STEPS = [
+  { id: "trim",        label: "חיתוך ומיקוד",     icon: "✂️" },
+  { id: "format",      label: "פורמט יציאה",      icon: "📐" },
+  { id: "hookSelect",  label: "בחירת Hook",       icon: "🪝" },
+  { id: "finalize",    label: "אישור קובץ",       icon: "🔒" },
+  { id: "submode",     label: "מצב כתוביות",      icon: "💬" },
+  { id: "language",    label: "שפת דיבור",        icon: "🌐" },
+  { id: "transcript",  label: "עריכת כתוביות",    icon: "📝" },
+  { id: "substyle",    label: "עיצוב כתוביות",    icon: "🎨" },
+  { id: "aiHighlight", label: "הדגשה חכמה (AI)",  icon: "✨" },
+  { id: "aidirection", label: "כיוון עריכה AI",   icon: "🎯" },
+  { id: "cleanup",     label: "ניקוי חכם",        icon: "🧹" },
+  { id: "broll",       label: "B-Roll",           icon: "🎞️" },
+  { id: "transitions", label: "מעברים ואפקטים",   icon: "🔀" },
+  { id: "music",       label: "מוזיקה ואודיו",    icon: "🎵" },
+  { id: "preview",     label: "תצוגה מקדימה",     icon: "👁️" },
+  { id: "approve",     label: "אישור ויצוא",      icon: "📤" },
+];
+
 const GOOGLE_FONTS = [
   { name: "Assistant", languages: ["he","en","ar"] },
   { name: "Heebo", languages: ["he","en"] },
@@ -841,6 +861,8 @@ function NewProjectWizard() {
   const { create: createProject, update: updateProject } = useProjects();
 
   const [step, setStep] = useState(0);
+  const [isPodcastClip, setIsPodcastClip] = useState(false);
+  const activeSteps = isPodcastClip ? PODCAST_CLIP_STEPS : STEPS;
   const [data, setData] = useState<WizardData>(INITIAL);
   const [creating, setCreating] = useState(false);
   const createLockRef = useRef(false);
@@ -872,13 +894,15 @@ function NewProjectWizard() {
 
     console.log('[Wizard] Podcast-clip source detected:', { clipTitle, episodeIdParam, startTime, endTime });
 
-    // Pre-populate title, clientId, format, and trim settings — skip straight to trim step
+    // Activate podcast-clip pipeline (reordered steps: trim → format → hook → rest)
+    setIsPodcastClip(true);
+
+    // Pre-populate title, clientId, and trim settings — hook is NOT skipped in podcast-clip flow
     patch({
       title: clipTitle,
       clientId: 'podcast-clip', // placeholder so canAdvance("info") passes
-      format: '9:16', // default vertical format for social clips
       hookSelected: false,
-      hookSkipped: true, // skip hook step for podcast clips
+      hookSkipped: false, // hook is now selected AFTER trim in podcast-clip flow
       trimMode: 'clip',
       trimStart: startTime,
       trimEnd: endTime,
@@ -898,10 +922,9 @@ function NewProjectWizard() {
               uploadedVideoUrl: videoUrl,
               videoUrl: videoUrl,
             });
-            // Skip directly to trim step (index 4) — video is already loaded from podcast
-            const trimStepIdx = STEPS.findIndex(s => s.id === "trim");
-            setStep(trimStepIdx >= 0 ? trimStepIdx : 4);
-            console.log('[Wizard] Podcast-clip: skipping to trim step', trimStepIdx);
+            // Start at step 0 which is "trim" in PODCAST_CLIP_STEPS
+            setStep(0);
+            console.log('[Wizard] Podcast-clip: starting at trim step (index 0 in podcast flow)');
           }
         } catch (err) {
           console.error('[Wizard] Failed to load podcast episode video:', err);
@@ -925,10 +948,10 @@ function NewProjectWizard() {
   // Steps where persistent preview should show (editing steps with video context)
   const PREVIEW_STEPS = new Set(["substyle", "transcript", "aiHighlight", "aidirection", "cleanup", "broll", "transitions", "music", "preview", "approve"]);
 
-  const stepId = STEPS[step]?.id;
+  const stepId = activeSteps[step]?.id;
 
   const canAdvance = useMemo(() => {
-    const sid = STEPS[step]?.id;
+    const sid = activeSteps[step]?.id;
     switch (sid) {
       case "info": return !!data.title.trim() && !!data.clientId;
       case "upload": return !!data.videoFile || !!data.uploadedVideoUrl;
@@ -940,9 +963,9 @@ function NewProjectWizard() {
       case "broll": return !data.brollEnabled || data.brollApproved;
       default: return true;
     }
-  }, [step, data.title, data.clientId, data.videoFile, data.uploadedVideoUrl, data.format, data.language, data.brollEnabled, data.brollApproved, data.hookSelected, data.hookSkipped, data.trimMode, data.trimStart, data.trimEnd, data.pipelineFinalized]);
+  }, [step, activeSteps, data.title, data.clientId, data.videoFile, data.uploadedVideoUrl, data.format, data.language, data.brollEnabled, data.brollApproved, data.hookSelected, data.hookSkipped, data.trimMode, data.trimStart, data.trimEnd, data.pipelineFinalized]);
 
-  const next = () => { if (canAdvance && step < STEPS.length - 1) setStep(step + 1); };
+  const next = () => { if (canAdvance && step < activeSteps.length - 1) setStep(step + 1); };
   const prev = () => { if (step > 0) setStep(step - 1); };
 
   // ─── Video Source Resolution ───
@@ -1733,7 +1756,7 @@ function NewProjectWizard() {
   useEffect(() => { return () => { if (data.videoUrl) URL.revokeObjectURL(data.videoUrl); }; }, [data.videoUrl]);
 
   const stepContent = (() => {
-    const sid = STEPS[step]?.id;
+    const sid = activeSteps[step]?.id;
     switch (sid) {
       case "info":        return <StepInfo data={data} patch={patch} clients={clients} createClient={createClient} />;
       case "upload":      return <StepUpload data={data} patch={patch} />;
@@ -1754,7 +1777,7 @@ function NewProjectWizard() {
       case "transitions": return <StepTransitions data={data} patch={patch} videoSrc={originalVideoSource} />;
       case "music":       return <StepMusic data={data} patch={patch} videoSrc={originalVideoSource} />;
       case "preview":     return <StepPreview data={data} patch={patch} videoSrc={originalVideoSource} />;
-      case "approve":     return <StepApprove data={data} patch={patch} clients={clients} onApprove={handleCreate} onSaveDraft={handleSaveDraft} onBack={() => setStep(STEPS.findIndex(s => s.id === "preview"))} videoSrc={originalVideoSource} creating={creating} />;
+      case "approve":     return <StepApprove data={data} patch={patch} clients={clients} onApprove={handleCreate} onSaveDraft={handleSaveDraft} onBack={() => setStep(activeSteps.findIndex(s => s.id === "preview"))} videoSrc={originalVideoSource} creating={creating} />;
       default: return null;
     }
   })();
@@ -1769,9 +1792,9 @@ function NewProjectWizard() {
           <img src="https://s-pixel.co.il/wp-content/uploads/2025/12/Layer-47.png" alt="PixelManageAI" style={{ height: 32, marginLeft: 8 }} />
           PixelManage<span className="wiz-sidebar-ai">AI</span>
         </div>
-        <div className="wiz-sidebar-title">פרויקט חדש</div>
+        <div className="wiz-sidebar-title">{isPodcastClip ? "עריכת קליפ פודקאסט" : "פרויקט חדש"}</div>
         <nav className="wiz-steps-nav">
-          {STEPS.map((s, i) => (
+          {activeSteps.map((s, i) => (
             <button key={s.id} className={`wiz-step-btn ${i === step ? "active" : ""} ${i < step ? "done" : ""}`}
               onClick={() => { if (i < step) setStep(i); }}>
               <span className="wiz-step-num">{i < step ? "✓" : s.icon}</span>
@@ -1809,7 +1832,7 @@ function NewProjectWizard() {
         {/* ─── Debug Bar ─── */}
         {showDebug && (
           <div style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "0.375rem 1rem", background: "rgba(0,181,254,0.06)", borderBottom: "1px solid rgba(0,181,254,0.15)", fontSize: "0.65rem", color: "var(--accent)", fontFamily: "monospace", flexShrink: 0 }}>
-            <span>שלב: {stepId} ({step + 1}/{STEPS.length})</span>
+            <span>שלב: {stepId} ({step + 1}/{activeSteps.length})</span>
             <span>גרסת עריכה: v{editStateVersion}</span>
             <span>שכבות: {activeLayers.length}</span>
             <span>כתוביות: {data.segments.length}</span>
@@ -1911,7 +1934,7 @@ function NewProjectWizard() {
         )}
 
         {/* Bottom navigation bar */}
-        {step < STEPS.length - 1 && (
+        {step < activeSteps.length - 1 && (
           <div className="wiz-bottom-bar" style={{ flexShrink: 0 }}>
             <button className="wiz-btn wiz-btn-ghost" onClick={() => router.push("/projects")}>ביטול</button>
             <div style={{ flex: 1 }} />
