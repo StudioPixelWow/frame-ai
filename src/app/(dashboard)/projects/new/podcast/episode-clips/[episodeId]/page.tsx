@@ -27,6 +27,27 @@ interface CandidateClip {
   userAdjustedEnd: number | null;
 }
 
+interface ApprovedClipData {
+  id: string;
+  episodeId: string;
+  clipCandidateId: string;
+  sourceEpisodeVideoId: string;
+  startTime: number;
+  endTime: number;
+  duration: number;
+  title: string;
+  description: string;
+  transcriptSnippet: string;
+  viralScore: number;
+  engagementScore: number;
+  confidenceScore: number;
+  status: string;
+  queuePosition: number | null;
+  pipelineStateId: string | null;
+  approvedAt: string;
+  completedAt: string | null;
+}
+
 interface EpisodeAnalysisData {
   episode: {
     id: string;
@@ -147,8 +168,17 @@ export default function EpisodeClipsPage() {
   const [previewingClip, setPreviewingClip] = useState<string | null>(null);
   const [addingManual, setAddingManual] = useState(false);
   const [manualClip, setManualClip] = useState({ title: '', startTime: '', endTime: '', description: '' });
+  const [approvedClipsList, setApprovedClipsList] = useState<ApprovedClipData[]>([]);
+  const [loadingApproved, setLoadingApproved] = useState(false);
+  const [playingApprovedClip, setPlayingApprovedClip] = useState<string | null>(null);
+  const approvedVideoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
+  const approvedTimerRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timelineSectionRef = useRef<HTMLDivElement>(null);
+  const clipListSectionRef = useRef<HTMLDivElement>(null);
+  const videoSectionRef = useRef<HTMLDivElement>(null);
+  const approveSectionRef = useRef<HTMLDivElement>(null);
 
   // ── Load data ─────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -177,6 +207,105 @@ export default function EpisodeClipsPage() {
   }, [episodeId]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // ── Load approved clips when episode is approved ─────────────────────────
+  const loadApprovedClips = useCallback(async () => {
+    setLoadingApproved(true);
+    try {
+      const res = await fetch(`/api/podcast/episode-queue?episodeId=${episodeId}`);
+      if (res.ok) {
+        const result = await res.json();
+        setApprovedClipsList(result.clips || []);
+      }
+    } catch (err) {
+      console.warn('[episode-clips] Failed to load approved clips:', err);
+    } finally {
+      setLoadingApproved(false);
+    }
+  }, [episodeId]);
+
+  useEffect(() => {
+    if (data?.episode?.status === 'clips_approved' || data?.episode?.status === 'processing_clips') {
+      loadApprovedClips();
+    }
+  }, [data?.episode?.status, loadApprovedClips]);
+
+  // ── Play approved clip preview ────────────────────────────────────────────
+  const playApprovedClip = useCallback((clip: ApprovedClipData) => {
+    const video = approvedVideoRefs.current[clip.id];
+    if (!video) return;
+
+    // Stop any currently playing clip
+    if (playingApprovedClip && playingApprovedClip !== clip.id) {
+      const prev = approvedVideoRefs.current[playingApprovedClip];
+      if (prev) prev.pause();
+      if (approvedTimerRefs.current[playingApprovedClip]) {
+        clearInterval(approvedTimerRefs.current[playingApprovedClip]);
+        delete approvedTimerRefs.current[playingApprovedClip];
+      }
+    }
+
+    video.currentTime = clip.startTime;
+    video.play();
+    setPlayingApprovedClip(clip.id);
+
+    approvedTimerRefs.current[clip.id] = setInterval(() => {
+      if (video.currentTime >= clip.endTime || video.paused) {
+        video.pause();
+        setPlayingApprovedClip(prev => prev === clip.id ? null : prev);
+        clearInterval(approvedTimerRefs.current[clip.id]);
+        delete approvedTimerRefs.current[clip.id];
+      }
+    }, 100);
+  }, [playingApprovedClip]);
+
+  const stopApprovedClip = useCallback((clipId: string) => {
+    const video = approvedVideoRefs.current[clipId];
+    if (video) video.pause();
+    if (approvedTimerRefs.current[clipId]) {
+      clearInterval(approvedTimerRefs.current[clipId]);
+      delete approvedTimerRefs.current[clipId];
+    }
+    setPlayingApprovedClip(prev => prev === clipId ? null : prev);
+  }, []);
+
+  // ── Navigate to clip editing ──────────────────────────────────────────────
+  const [creatingClipProject, setCreatingClipProject] = useState<string | null>(null);
+
+  const startClipEditing = useCallback(async (clip: ApprovedClipData) => {
+    if (creatingClipProject) return; // prevent double-click
+    setCreatingClipProject(clip.id);
+    try {
+      // If clip already has a pipelineStateId, navigate directly to it
+      if (clip.pipelineStateId) {
+        router.push(`/projects/${clip.pipelineStateId}/pipeline`);
+        return;
+      }
+
+      // Create a project for this clip via API
+      const res = await fetch('/api/podcast/create-clip-project', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clipId: clip.id,
+          episodeId,
+          startTime: clip.startTime,
+          endTime: clip.endTime,
+          videoUrl: data?.episode?.sourceFilePath || '',
+          clipTitle: clip.title,
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'שגיאה ביצירת פרויקט');
+
+      // Navigate to the pipeline page for this new project
+      router.push(`/projects/${result.projectId}/pipeline`);
+    } catch (err) {
+      console.error('[startClipEditing] Error:', err);
+      alert(err instanceof Error ? err.message : 'שגיאה ביצירת פרויקט לקליפ');
+      setCreatingClipProject(null);
+    }
+  }, [episodeId, data?.episode?.sourceFilePath, router, creatingClipProject]);
 
   // ── Toggle clip selection ─────────────────────────────────────────────────
   const toggleClip = (clipId: string) => {
@@ -385,10 +514,11 @@ export default function EpisodeClipsPage() {
     }
   };
 
-  // Clean up preview timer on unmount
+  // Clean up preview timers on unmount
   useEffect(() => {
     return () => {
       if (previewTimerRef.current) clearInterval(previewTimerRef.current);
+      Object.values(approvedTimerRefs.current).forEach(t => clearInterval(t));
     };
   }, []);
 
@@ -438,16 +568,24 @@ export default function EpisodeClipsPage() {
     <div dir="rtl" style={{ padding: '24px 32px', maxWidth: 1400, margin: '0 auto' }}>
       {/* ── Step Flow Navigation ─────────────────────────────────────────── */}
       {(() => {
-        const FLOW_STEPS = [
+        type FlowStep = {
+          label: string;
+          icon: string;
+          done?: boolean;
+          active?: boolean;
+          scrollRef?: React.RefObject<HTMLDivElement | null>;
+          onClick?: () => void;
+        };
+        const FLOW_STEPS: FlowStep[] = [
           { label: 'אימות פרק', icon: '✅', done: true },
           { label: 'ניתוח פרק', icon: '🔍', done: true },
           { label: 'זיהוי קליפים מומלצים', icon: '🎯', done: true },
-          { label: 'תצוגת פרק מלא', icon: '🎬', done: true },
-          { label: 'קליפים מוצעים על ציר הזמן', icon: '📊', active: !isAlreadyApproved },
-          { label: 'אישור / עריכה / החלפה', icon: '✏️', active: !isAlreadyApproved },
+          { label: 'תצוגת פרק מלא', icon: '🎬', done: true, scrollRef: videoSectionRef },
+          { label: 'קליפים מוצעים על ציר הזמן', icon: '📊', active: !isAlreadyApproved, scrollRef: timelineSectionRef },
+          { label: 'אישור / עריכה / החלפה', icon: '✏️', active: !isAlreadyApproved, scrollRef: clipListSectionRef },
           { label: 'שמירה למסד נתונים', icon: '💾', done: isAlreadyApproved },
           { label: 'יצירת רשומות קליפ', icon: '📋', done: isAlreadyApproved },
-          { label: 'עיבוד כל קליפ בנפרד', icon: '⚙️', done: episode.status === 'processing_clips' },
+          { label: 'עיבוד כל קליפ בנפרד', icon: '⚙️', done: episode.status === 'processing_clips', scrollRef: approveSectionRef },
         ];
         return (
           <div style={{
@@ -462,32 +600,47 @@ export default function EpisodeClipsPage() {
             gap: 4,
             overflowX: 'auto',
           }}>
-            {FLOW_STEPS.map((step, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '8px 12px',
-                  borderRadius: 8,
-                  background: step.active ? `${COLORS.primary}15` : step.done ? `${COLORS.success}10` : 'transparent',
-                  border: step.active ? `2px solid ${COLORS.primary}` : step.done ? `1px solid ${COLORS.success}40` : `1px solid ${COLORS.border}`,
-                }}>
-                  <span style={{ fontSize: 14 }}>{step.icon}</span>
-                  <span style={{
-                    fontSize: 12,
-                    fontWeight: step.active ? 700 : 500,
-                    color: step.active ? COLORS.primary : step.done ? COLORS.success : COLORS.textSecondary,
-                    whiteSpace: 'nowrap',
-                  }}>
-                    {step.label}
-                  </span>
+            {FLOW_STEPS.map((step, i) => {
+              const isClickable = !!(step.scrollRef || step.onClick);
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                  <div
+                    onClick={() => {
+                      if (step.onClick) step.onClick();
+                      else if (step.scrollRef?.current) {
+                        step.scrollRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '8px 12px',
+                      borderRadius: 8,
+                      background: step.active ? `${COLORS.primary}15` : step.done ? `${COLORS.success}10` : 'transparent',
+                      border: step.active ? `2px solid ${COLORS.primary}` : step.done ? `1px solid ${COLORS.success}40` : `1px solid ${COLORS.border}`,
+                      cursor: isClickable ? 'pointer' : 'default',
+                      transition: 'all 0.2s',
+                      ...(isClickable ? { ':hover': { opacity: 0.8 } } as any : {}),
+                    }}
+                    title={isClickable ? `לחץ לגלול ל${step.label}` : undefined}
+                  >
+                    <span style={{ fontSize: 14 }}>{step.icon}</span>
+                    <span style={{
+                      fontSize: 12,
+                      fontWeight: step.active ? 700 : 500,
+                      color: step.active ? COLORS.primary : step.done ? COLORS.success : COLORS.textSecondary,
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {step.label}
+                    </span>
+                  </div>
+                  {i < FLOW_STEPS.length - 1 && (
+                    <span style={{ color: COLORS.border, margin: '0 2px', fontSize: 12 }}>←</span>
+                  )}
                 </div>
-                {i < FLOW_STEPS.length - 1 && (
-                  <span style={{ color: COLORS.border, margin: '0 2px', fontSize: 12 }}>←</span>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         );
       })()}
@@ -548,7 +701,7 @@ export default function EpisodeClipsPage() {
 
       {/* ── Video Player ──────────────────────────────────────────────────── */}
       {episode.sourceFilePath && (
-        <div style={{
+        <div ref={videoSectionRef} style={{
           background: COLORS.card,
           borderRadius: 12,
           padding: 24,
@@ -594,7 +747,7 @@ export default function EpisodeClipsPage() {
 
       {/* ── Timeline visualization ─────────────────────────────────────────── */}
       {totalDuration > 0 && (
-        <div style={{
+        <div ref={timelineSectionRef} style={{
           background: COLORS.card,
           borderRadius: 12,
           padding: 24,
@@ -686,7 +839,7 @@ export default function EpisodeClipsPage() {
       )}
 
       {/* ── Clip candidates list ───────────────────────────────────────────── */}
-      <div style={{ marginBottom: 32 }}>
+      <div ref={clipListSectionRef} style={{ marginBottom: 32 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h3 style={{ fontSize: 18, fontWeight: 600, color: COLORS.text }}>
             קליפים מומלצים ({candidates.length})
@@ -1227,67 +1380,433 @@ export default function EpisodeClipsPage() {
         </div>
       </div>
 
-      {/* ── Approve button ─────────────────────────────────────────────────── */}
-      <div style={{
-        position: 'sticky',
-        bottom: 0,
-        background: 'linear-gradient(transparent, rgba(247,249,252,0.95) 20%)',
-        padding: '24px 0',
-        display: 'flex',
-        justifyContent: 'center',
-        gap: 16,
-      }}>
-        {isAlreadyApproved ? (
+      {/* ── Post-approval: Approved clips editing section ─────────────────── */}
+      {isAlreadyApproved && (
+        <div ref={approveSectionRef} style={{ marginBottom: 32 }}>
+          {/* Header */}
           <div style={{
-            padding: '14px 32px',
-            background: COLORS.success,
-            color: '#fff',
-            borderRadius: 12,
-            fontSize: 16,
-            fontWeight: 600,
+            background: `linear-gradient(135deg, ${COLORS.success}15, ${COLORS.primary}10)`,
+            borderRadius: 16,
+            padding: '24px 28px',
+            marginBottom: 24,
+            border: `2px solid ${COLORS.success}40`,
           }}>
-            ✅ הקליפים אושרו — עוברים לעיבוד
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <span style={{ fontSize: 28 }}>🎬</span>
+              <h2 style={{ fontSize: 22, fontWeight: 700, color: COLORS.text, margin: 0 }}>
+                קליפים מאושרים — מוכנים לעריכה
+              </h2>
+            </div>
+            <p style={{ color: COLORS.textSecondary, fontSize: 14, margin: 0 }}>
+              {approvedClipsList.length > 0
+                ? `${approvedClipsList.length} קליפים אושרו. לחץ "התחל עריכה" כדי לערוך כל קליפ בנפרד.`
+                : 'טוען קליפים מאושרים...'}
+            </p>
           </div>
-        ) : (
-          <>
-            <button
-              onClick={handleApprove}
-              disabled={selectedClips.size === 0 || approving}
-              style={{
-                padding: '14px 40px',
-                background: selectedClips.size === 0 ? '#D1D5DB' : COLORS.approved,
-                color: '#fff',
-                border: 'none',
-                borderRadius: 12,
-                cursor: selectedClips.size === 0 ? 'not-allowed' : 'pointer',
-                fontSize: 16,
-                fontWeight: 700,
-                boxShadow: selectedClips.size > 0 ? '0 4px 14px rgba(16,185,129,0.3)' : undefined,
-                transition: 'all 0.2s',
-              }}
-            >
-              {approving
-                ? 'מאשר...'
-                : `אשר ${selectedClips.size} קליפים והתחל עיבוד`}
-            </button>
 
-            <button
-              onClick={() => router.back()}
-              style={{
-                padding: '14px 24px',
-                background: 'transparent',
-                border: `1px solid ${COLORS.border}`,
-                borderRadius: 12,
-                cursor: 'pointer',
-                fontSize: 14,
-                color: COLORS.textSecondary,
-              }}
-            >
-              חזור ללא שינוי
-            </button>
-          </>
-        )}
-      </div>
+          {/* Loading state */}
+          {loadingApproved && (
+            <div style={{ textAlign: 'center', padding: 40 }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
+              <p style={{ color: COLORS.textSecondary }}>טוען קליפים מאושרים...</p>
+            </div>
+          )}
+
+          {/* Approved clips grid */}
+          {!loadingApproved && approvedClipsList.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 20 }}>
+              {approvedClipsList.map((clip, idx) => {
+                const isPlaying = playingApprovedClip === clip.id;
+                const isEdited = clip.status === 'completed' || clip.status === 'in_single_clip_flow';
+                const statusIcon = clip.status === 'completed' ? '✅' :
+                  clip.status === 'processing' ? '⚙️' :
+                  clip.status === 'failed' ? '❌' : '🎬';
+                const statusText = clip.status === 'completed' ? 'נערך' :
+                  clip.status === 'processing' ? 'בעיבוד...' :
+                  clip.status === 'failed' ? 'נכשל' :
+                  clip.status === 'in_single_clip_flow' ? 'בעריכה' : 'ממתין לעריכה';
+
+                return (
+                  <div
+                    key={clip.id}
+                    style={{
+                      background: COLORS.card,
+                      borderRadius: 16,
+                      overflow: 'hidden',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                      border: isEdited
+                        ? `2px solid ${COLORS.success}`
+                        : `1px solid ${COLORS.border}`,
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    {/* Video preview */}
+                    {episode.sourceFilePath && (
+                      <div style={{
+                        position: 'relative',
+                        background: '#000',
+                        aspectRatio: '16/9',
+                      }}>
+                        <video
+                          ref={el => { approvedVideoRefs.current[clip.id] = el; }}
+                          src={`${episode.sourceFilePath}#t=${clip.startTime},${clip.endTime}`}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'contain',
+                          }}
+                          preload="metadata"
+                          muted
+                        />
+                        {/* Play overlay */}
+                        <div
+                          onClick={() => isPlaying ? stopApprovedClip(clip.id) : playApprovedClip(clip)}
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: isPlaying ? 'transparent' : 'rgba(0,0,0,0.3)',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          {!isPlaying && (
+                            <div style={{
+                              width: 56,
+                              height: 56,
+                              borderRadius: '50%',
+                              background: 'rgba(255,255,255,0.9)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 24,
+                            }}>
+                              ▶
+                            </div>
+                          )}
+                        </div>
+                        {/* Duration badge */}
+                        <div style={{
+                          position: 'absolute',
+                          bottom: 8,
+                          left: 8,
+                          background: 'rgba(0,0,0,0.7)',
+                          color: '#fff',
+                          padding: '4px 8px',
+                          borderRadius: 6,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          direction: 'ltr',
+                        }}>
+                          {formatTime(clip.startTime)} — {formatTime(clip.endTime)}
+                        </div>
+                        {/* Queue position */}
+                        <div style={{
+                          position: 'absolute',
+                          top: 8,
+                          right: 8,
+                          background: COLORS.primary,
+                          color: '#fff',
+                          width: 28,
+                          height: 28,
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 13,
+                          fontWeight: 700,
+                        }}>
+                          {idx + 1}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Clip info */}
+                    <div style={{ padding: '16px 20px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                        <h4 style={{ fontSize: 15, fontWeight: 600, color: COLORS.text, margin: 0, flex: 1 }}>
+                          {clip.title}
+                        </h4>
+                        <span style={{
+                          fontSize: 11,
+                          padding: '3px 8px',
+                          borderRadius: 12,
+                          background: clip.status === 'completed' ? `${COLORS.success}15` :
+                            clip.status === 'failed' ? `${COLORS.error}15` : `${COLORS.primary}10`,
+                          color: clip.status === 'completed' ? COLORS.success :
+                            clip.status === 'failed' ? COLORS.error : COLORS.primary,
+                          fontWeight: 600,
+                          whiteSpace: 'nowrap',
+                          marginRight: 8,
+                        }}>
+                          {statusIcon} {statusText}
+                        </span>
+                      </div>
+
+                      {clip.description && (
+                        <p style={{
+                          fontSize: 13,
+                          color: COLORS.textSecondary,
+                          margin: '0 0 12px 0',
+                          lineHeight: 1.5,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical' as const,
+                          overflow: 'hidden',
+                        }}>
+                          {clip.description}
+                        </p>
+                      )}
+
+                      {/* Scores row */}
+                      <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+                        {[
+                          { label: 'ויראלי', value: clip.viralScore },
+                          { label: 'מעורבות', value: clip.engagementScore },
+                          { label: 'ביטחון', value: clip.confidenceScore },
+                        ].map(s => (
+                          <div key={s.label} style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: 10, color: COLORS.textSecondary }}>{s.label}</div>
+                            <div style={{
+                              fontSize: 15,
+                              fontWeight: 700,
+                              color: s.value >= 70 ? COLORS.success : COLORS.warning,
+                            }}>
+                              {s.value}
+                            </div>
+                          </div>
+                        ))}
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: 10, color: COLORS.textSecondary }}>משך</div>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: COLORS.text }}>
+                            {formatDuration(clip.duration)}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action button */}
+                      <button
+                        onClick={() => startClipEditing(clip)}
+                        disabled={clip.status === 'processing' || creatingClipProject === clip.id}
+                        style={{
+                          width: '100%',
+                          padding: '12px 20px',
+                          background: creatingClipProject === clip.id
+                            ? '#93C5FD'
+                            : clip.status === 'completed'
+                            ? COLORS.success
+                            : clip.status === 'processing'
+                              ? '#D1D5DB'
+                              : COLORS.primary,
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: 10,
+                          cursor: clip.status === 'processing' ? 'not-allowed' : 'pointer',
+                          fontSize: 14,
+                          fontWeight: 700,
+                          transition: 'all 0.2s',
+                          boxShadow: clip.status === 'processing' ? undefined
+                            : '0 3px 10px rgba(0,181,254,0.2)',
+                        }}
+                      >
+                        {creatingClipProject === clip.id
+                          ? '⏳ יוצר פרויקט...'
+                          : clip.status === 'completed'
+                          ? '🎬 צפה בקליפ הערוך'
+                          : clip.status === 'processing'
+                            ? '⚙️ בעיבוד...'
+                            : clip.status === 'in_single_clip_flow'
+                              ? '✏️ המשך עריכה'
+                              : '✂️ התחל עריכה'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Summary section — shows when some clips are completed */}
+          {!loadingApproved && approvedClipsList.some(c => c.status === 'completed') && (
+            <div style={{
+              marginTop: 32,
+              background: COLORS.card,
+              borderRadius: 16,
+              padding: 28,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+              border: `1px solid ${COLORS.border}`,
+            }}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, color: COLORS.text, marginBottom: 20 }}>
+                סיכום קליפים
+              </h3>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                {/* Original clips */}
+                <div>
+                  <h4 style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: COLORS.textSecondary,
+                    marginBottom: 12,
+                    paddingBottom: 8,
+                    borderBottom: `2px solid ${COLORS.border}`,
+                  }}>
+                    🎬 קליפים לפני עריכה ({approvedClipsList.length})
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {approvedClipsList.map((clip, i) => (
+                      <div key={`orig-${clip.id}`} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '8px 12px',
+                        background: '#F8FAFC',
+                        borderRadius: 8,
+                      }}>
+                        <span style={{
+                          width: 24, height: 24, borderRadius: '50%',
+                          background: COLORS.primary, color: '#fff',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 12, fontWeight: 700, flexShrink: 0,
+                        }}>{i + 1}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>
+                            {clip.title}
+                          </div>
+                          <div style={{ fontSize: 11, color: COLORS.textSecondary }}>
+                            {formatTime(clip.startTime)} — {formatTime(clip.endTime)} ({formatDuration(clip.duration)})
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Edited clips */}
+                <div>
+                  <h4 style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: COLORS.success,
+                    marginBottom: 12,
+                    paddingBottom: 8,
+                    borderBottom: `2px solid ${COLORS.success}40`,
+                  }}>
+                    ✅ קליפים ערוכים ({approvedClipsList.filter(c => c.status === 'completed').length})
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {approvedClipsList.filter(c => c.status === 'completed').map((clip, i) => (
+                      <div key={`edit-${clip.id}`} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '8px 12px',
+                        background: `${COLORS.success}08`,
+                        borderRadius: 8,
+                        border: `1px solid ${COLORS.success}20`,
+                      }}>
+                        <span style={{
+                          width: 24, height: 24, borderRadius: '50%',
+                          background: COLORS.success, color: '#fff',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 12, fontWeight: 700, flexShrink: 0,
+                        }}>✓</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>
+                            {clip.title}
+                          </div>
+                          <div style={{ fontSize: 11, color: COLORS.textSecondary }}>
+                            הושלם {clip.completedAt ? new Date(clip.completedAt).toLocaleDateString('he-IL') : ''}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => startClipEditing(clip)}
+                          style={{
+                            padding: '4px 12px',
+                            background: 'transparent',
+                            border: `1px solid ${COLORS.success}`,
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            fontSize: 11,
+                            color: COLORS.success,
+                            fontWeight: 600,
+                          }}
+                        >
+                          צפה
+                        </button>
+                      </div>
+                    ))}
+                    {approvedClipsList.filter(c => c.status !== 'completed').length > 0 && (
+                      <div style={{
+                        padding: '12px 16px',
+                        background: `${COLORS.warning}08`,
+                        borderRadius: 8,
+                        border: `1px dashed ${COLORS.warning}40`,
+                        textAlign: 'center',
+                        fontSize: 13,
+                        color: COLORS.warning,
+                      }}>
+                        ⏳ {approvedClipsList.filter(c => c.status !== 'completed').length} קליפים ממתינים לעריכה
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Approve button (only when not yet approved) ─────────────────────── */}
+      {!isAlreadyApproved && (
+        <div style={{
+          position: 'sticky',
+          bottom: 0,
+          background: 'linear-gradient(transparent, rgba(247,249,252,0.95) 20%)',
+          padding: '24px 0',
+          display: 'flex',
+          justifyContent: 'center',
+          gap: 16,
+        }}>
+          <button
+            onClick={handleApprove}
+            disabled={selectedClips.size === 0 || approving}
+            style={{
+              padding: '14px 40px',
+              background: selectedClips.size === 0 ? '#D1D5DB' : COLORS.approved,
+              color: '#fff',
+              border: 'none',
+              borderRadius: 12,
+              cursor: selectedClips.size === 0 ? 'not-allowed' : 'pointer',
+              fontSize: 16,
+              fontWeight: 700,
+              boxShadow: selectedClips.size > 0 ? '0 4px 14px rgba(16,185,129,0.3)' : undefined,
+              transition: 'all 0.2s',
+            }}
+          >
+            {approving
+              ? 'מאשר...'
+              : `אשר ${selectedClips.size} קליפים והתחל עיבוד`}
+          </button>
+
+          <button
+            onClick={() => router.back()}
+            style={{
+              padding: '14px 24px',
+              background: 'transparent',
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: 12,
+              cursor: 'pointer',
+              fontSize: 14,
+              color: COLORS.textSecondary,
+            }}
+          >
+            חזור ללא שינוי
+          </button>
+        </div>
+      )}
     </div>
   );
 }
