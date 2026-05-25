@@ -59,17 +59,50 @@ export async function GET(_req: NextRequest, context: Params) {
       return NextResponse.json({ error: 'הפרק לא נמצא' }, { status: 404 });
     }
 
+    // Generate signed URL for video playback
+    let videoUrl = '';
+    const filePath = episode.source_file_path;
+    if (filePath) {
+      const { data: signedData } = await supabase
+        .storage
+        .from('project-files')
+        .createSignedUrl(filePath, 3600); // 1 hour validity
+      videoUrl = signedData?.signedUrl || '';
+      if (!videoUrl) {
+        console.warn(`[episode-analysis] Could not generate signed URL for: ${filePath}`);
+      }
+    }
+
     // Get analysis for this episode
-    const allAnalyses = await episodeAnalyses.getAllAsync();
-    const analysis = (allAnalyses as EpisodeAnalysis[]).find(
-      a => a.episodeId === episodeId
-    ) || null;
+    let analysis: EpisodeAnalysis | null = null;
+    try {
+      const allAnalyses = await episodeAnalyses.getAllAsync();
+      console.log(`[episode-analysis] Total analyses in DB: ${(allAnalyses as any[]).length}`);
+      analysis = (allAnalyses as EpisodeAnalysis[]).find(
+        a => a.episodeId === episodeId
+      ) || null;
+      console.log(`[episode-analysis] Found analysis for episode: ${!!analysis}`);
+    } catch (analysisErr) {
+      console.error(`[episode-analysis] Failed to load analyses:`, analysisErr);
+    }
 
     // Get candidates for this episode
-    const allCandidates = await podcastClipCandidates.getAllAsync();
-    const candidates = (allCandidates as PodcastClipCandidate[])
-      .filter(c => c.episodeId === episodeId)
-      .sort((a, b) => (a.clipIndex ?? 999) - (b.clipIndex ?? 999));
+    let candidates: PodcastClipCandidate[] = [];
+    try {
+      const allCandidates = await podcastClipCandidates.getAllAsync();
+      console.log(`[episode-analysis] Total candidates in DB: ${(allCandidates as any[]).length}, filtering for episodeId=${episodeId}`);
+      if ((allCandidates as any[]).length > 0) {
+        const sample = allCandidates[0] as any;
+        console.log(`[episode-analysis] Sample candidate keys: ${Object.keys(sample).join(', ')}`);
+        console.log(`[episode-analysis] Sample candidate episodeId: "${sample.episodeId}" vs requested: "${episodeId}"`);
+      }
+      candidates = (allCandidates as PodcastClipCandidate[])
+        .filter(c => c.episodeId === episodeId)
+        .sort((a, b) => (a.clipIndex ?? 999) - (b.clipIndex ?? 999));
+      console.log(`[episode-analysis] Matched candidates: ${candidates.length}`);
+    } catch (candidatesErr) {
+      console.error(`[episode-analysis] Failed to load candidates:`, candidatesErr);
+    }
 
     return NextResponse.json({
       episode: {
@@ -78,7 +111,7 @@ export async function GET(_req: NextRequest, context: Params) {
         title: episode.title,
         processingProgress: episode.processing_progress,
         errorMessage: episode.error_message,
-        sourceFilePath: episode.source_file_path,
+        sourceFilePath: videoUrl || episode.source_file_path, // Use signed URL for playback
         durationSeconds: episode.duration_seconds,
       },
       analysis: analysis ? {

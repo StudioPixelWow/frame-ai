@@ -49,6 +49,10 @@ const TABLES = [
   // Gmail / WhatsApp settings
   'app_gmail_settings',
   'app_whatsapp_settings',
+  // Podcast Episode Clip Extraction (JSONB collections)
+  'app_podcast_episodes',
+  'app_episode_analyses',
+  'app_podcast_clip_candidates',
 ];
 
 export async function GET() {

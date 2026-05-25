@@ -543,6 +543,7 @@ export async function runEpisodeAnalysis(
     };
 
     const savedAnalysis = await episodeAnalyses.createAsync(analysisData as EpisodeAnalysis);
+    console.log(`[episode-analyzer] Analysis saved: id=${savedAnalysis.id} (temp=${savedAnalysis.id.startsWith('temp-')})`);
 
     await updateEpisodeProgress(episodeId, 5, 60, 'שומר קליפים מומלצים...');
 
@@ -596,6 +597,7 @@ export async function runEpisodeAnalysis(
 
       const saved = await podcastClipCandidates.createAsync(candidateData as PodcastClipCandidate);
       savedCandidateIds.push(saved.id);
+      console.log(`[episode-analyzer] Saved candidate ${i + 1}/${rankedClips.length}: id=${saved.id} (temp=${saved.id.startsWith('temp-')})`);
     }
 
     await updateEpisodeProgress(episodeId, 5, 100, `${rankedClips.length} קליפים מומלצים נשמרו`);
