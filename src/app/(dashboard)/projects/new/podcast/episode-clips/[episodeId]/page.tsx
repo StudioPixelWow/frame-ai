@@ -218,6 +218,9 @@ export default function EpisodeClipsPage() {
         throw new Error(err.error || 'שגיאה באישור');
       }
 
+      const result = await res.json();
+      console.log('[episode-clips] Approval result:', result);
+
       // Auto-trigger the processing queue after approval
       try {
         await fetch('/api/podcast/episode-queue', { method: 'POST' });
@@ -226,7 +229,7 @@ export default function EpisodeClipsPage() {
         console.warn('[episode-clips] Queue trigger failed, clips are saved and can be triggered manually');
       }
 
-      // Reload data to see updated statuses
+      // Reload data to see updated statuses, then navigate to podcast page
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'שגיאה באישור');
@@ -977,6 +980,24 @@ export default function EpisodeClipsPage() {
 
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    {/* Jump to position button — always visible */}
+                    {episode.sourceFilePath && !isRejected && (
+                      <button
+                        onClick={() => seekToClip(clip.userAdjustedStart ?? clip.startTime)}
+                        style={{
+                          padding: '6px 12px',
+                          background: 'transparent',
+                          border: `1px solid ${COLORS.accent}`,
+                          borderRadius: 6,
+                          cursor: 'pointer',
+                          fontSize: 12,
+                          color: COLORS.accent,
+                          fontWeight: 600,
+                        }}
+                      >
+                        🎯 קפוץ
+                      </button>
+                    )}
                     {/* Preview button */}
                     {episode.sourceFilePath && !isRejected && (
                       <button

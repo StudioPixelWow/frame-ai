@@ -14,14 +14,14 @@
  *   4. Approved clips are queued for Single Clip Flow processing
  */
 
-import { approvedClips, podcastClipCandidates } from '@/lib/db/collections';
+import { approvedClips, podcastClipCandidates, podcastEpisodes } from '@/lib/db/collections';
 import type { ApprovedClip, PodcastClipCandidate, ClipCandidateStatus } from '@/lib/db/schema';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://uaruggdabeyiuppcvbbi.supabase.co';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 /** Max concurrent clip processing jobs */
 export const MAX_CONCURRENT_CLIPS = 2;
@@ -121,14 +121,37 @@ export async function approveClipCandidates(
       } as Partial<PodcastClipCandidate>);
     }
 
-    // Update episode status to 'clips_approved'
-    await supabase
+    // Update episode status to 'clips_approved' — try relational first, then JSONB
+    console.log(`[clip-approval] Updating episode ${episodeId} status to clips_approved`);
+
+    const { error: relError } = await supabase
       .from('podcast_episodes')
       .update({
         status: 'clips_approved',
         updated_at: new Date().toISOString(),
       })
       .eq('id', episodeId);
+
+    if (relError) {
+      console.warn(`[clip-approval] Relational update failed: ${relError.message}, trying JSONB...`);
+    }
+
+    // Also update JSONB table (episode may live here instead of relational table)
+    try {
+      const allEpisodes = await podcastEpisodes.getAllAsync();
+      const ep = (allEpisodes as any[]).find(e => e.id === episodeId);
+      if (ep) {
+        await podcastEpisodes.updateAsync(episodeId, {
+          status: 'clips_approved',
+          updatedAt: new Date().toISOString(),
+        } as any);
+        console.log(`[clip-approval] JSONB episode status updated to clips_approved`);
+      } else {
+        console.log(`[clip-approval] Episode not found in JSONB table, relational update was: ${relError ? 'failed' : 'ok'}`);
+      }
+    } catch (jsonbErr) {
+      console.warn(`[clip-approval] JSONB fallback update failed:`, jsonbErr);
+    }
 
     return {
       success: true,

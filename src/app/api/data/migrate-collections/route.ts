@@ -53,6 +53,7 @@ const TABLES = [
   'app_podcast_episodes',
   'app_episode_analyses',
   'app_podcast_clip_candidates',
+  'app_approved_clips',
 ];
 
 export async function GET() {
