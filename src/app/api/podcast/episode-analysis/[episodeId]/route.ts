@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { episodeAnalyses, podcastClipCandidates } from '@/lib/db/collections';
+import { episodeAnalyses, podcastClipCandidates, podcastEpisodes } from '@/lib/db/collections';
 import { getSupabase } from '@/lib/db/store';
 import type { EpisodeAnalysis, PodcastClipCandidate } from '@/lib/db/schema';
 
@@ -20,15 +20,42 @@ export async function GET(_req: NextRequest, context: Params) {
   const { episodeId } = await context.params;
 
   try {
-    // Get episode info
+    // Get episode info — try relational first, then JSONB fallback
     const supabase = getSupabase();
-    const { data: episode, error: epError } = await supabase
+    let episode: Record<string, any> | null = null;
+
+    const { data, error: epError } = await supabase
       .from('podcast_episodes')
       .select('id, status, title, processing_progress, error_message, source_file_path, duration_seconds')
       .eq('id', episodeId)
       .single();
 
-    if (epError || !episode) {
+    if (!epError && data) {
+      episode = data;
+    } else {
+      // JSONB fallback — episode might only exist in app_podcast_episodes
+      console.log(`[episode-analysis] Relational lookup failed (${epError?.message}), trying JSONB...`);
+      try {
+        const items = await podcastEpisodes.getAllAsync();
+        const found = (items as Record<string, any>[]).find(ep => ep.id === episodeId);
+        if (found) {
+          episode = {
+            id: found.id,
+            status: found.status || 'uploaded',
+            title: found.title || 'ללא כותרת',
+            processing_progress: found.processingProgress || found.processing_progress || {},
+            error_message: found.errorMessage || found.error_message || null,
+            source_file_path: found.sourceFilePath || found.source_file_path || '',
+            duration_seconds: found.durationSeconds || found.duration_seconds || null,
+          };
+          console.log(`[episode-analysis] Found episode in JSONB: ${episodeId}`);
+        }
+      } catch (jsonbErr) {
+        console.error(`[episode-analysis] JSONB fallback failed:`, jsonbErr);
+      }
+    }
+
+    if (!episode) {
       return NextResponse.json({ error: 'הפרק לא נמצא' }, { status: 404 });
     }
 
