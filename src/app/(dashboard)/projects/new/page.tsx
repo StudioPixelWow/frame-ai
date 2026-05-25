@@ -2947,21 +2947,26 @@ function StepHookSelect({ data, patch }: { data: WizardData; patch: (p: Partial<
   const videoSrc = data.videoUrl || data.uploadedVideoUrl;
 
   // Generate AI hook recommendations when entering step
+  // For podcast clips (trimMode === "clip"), hooks are relative to the trimmed segment
   useEffect(() => {
     if (data.hookRecommendations.length > 0 || data.hookSkipped || !videoSrc) return;
     patch({ hookAnalyzing: true });
     // Simulate AI analysis — in production this calls /api/video-pipeline/[projectId]/hook-analyze
     const timer = setTimeout(() => {
-      const dur = videoDur || 30;
+      const isTrimmed = data.trimMode === "clip" && data.trimEnd > data.trimStart;
+      const clipStart = isTrimmed ? data.trimStart : 0;
+      const clipEnd = isTrimmed ? data.trimEnd : (videoDur || 30);
+      const clipDur = clipEnd - clipStart;
+
       const recs = [
-        { startTime: 0, endTime: Math.min(5, dur), score: 92, reason: "פתיחה אנרגטית עם תנועה חזקה", motionEnergy: 0.88, emotionalIntensity: 0.85, retentionPrediction: 0.91 },
-        { startTime: Math.min(5, dur * 0.15), endTime: Math.min(10, dur * 0.25), score: 85, reason: "משפט פותח מעניין עם ביטחון", motionEnergy: 0.72, emotionalIntensity: 0.90, retentionPrediction: 0.84 },
-        { startTime: Math.min(dur * 0.3, dur - 5), endTime: Math.min(dur * 0.3 + 5, dur), score: 78, reason: "רגע רגשי חזק עם מבט ישיר למצלמה", motionEnergy: 0.65, emotionalIntensity: 0.95, retentionPrediction: 0.77 },
+        { startTime: clipStart, endTime: clipStart + Math.min(5, clipDur), score: 92, reason: "פתיחה אנרגטית עם תנועה חזקה", motionEnergy: 0.88, emotionalIntensity: 0.85, retentionPrediction: 0.91 },
+        { startTime: clipStart + Math.min(5, clipDur * 0.15), endTime: clipStart + Math.min(10, clipDur * 0.25), score: 85, reason: "משפט פותח מעניין עם ביטחון", motionEnergy: 0.72, emotionalIntensity: 0.90, retentionPrediction: 0.84 },
+        { startTime: clipStart + Math.min(clipDur * 0.3, clipDur - 5), endTime: clipStart + Math.min(clipDur * 0.3 + 5, clipDur), score: 78, reason: "רגע רגשי חזק עם מבט ישיר למצלמה", motionEnergy: 0.65, emotionalIntensity: 0.95, retentionPrediction: 0.77 },
       ];
       patch({ hookRecommendations: recs, hookAnalyzing: false });
     }, 2000);
     return () => clearTimeout(timer);
-  }, [videoSrc, videoDur, data.hookRecommendations.length, data.hookSkipped, patch]);
+  }, [videoSrc, videoDur, data.hookRecommendations.length, data.hookSkipped, data.trimMode, data.trimStart, data.trimEnd, patch]);
 
   const selectHook = (rec: typeof data.hookRecommendations[0], idx: number) => {
     patch({
