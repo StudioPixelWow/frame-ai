@@ -872,10 +872,13 @@ function NewProjectWizard() {
 
     console.log('[Wizard] Podcast-clip source detected:', { clipTitle, episodeIdParam, startTime, endTime });
 
-    // Pre-populate title, clientId (use 'podcast-clip' placeholder), and trim settings
+    // Pre-populate title, clientId, format, and trim settings — skip straight to trim step
     patch({
       title: clipTitle,
       clientId: 'podcast-clip', // placeholder so canAdvance("info") passes
+      format: '9:16', // default vertical format for social clips
+      hookSelected: false,
+      hookSkipped: true, // skip hook step for podcast clips
       trimMode: 'clip',
       trimStart: startTime,
       trimEnd: endTime,
@@ -895,7 +898,10 @@ function NewProjectWizard() {
               uploadedVideoUrl: videoUrl,
               videoUrl: videoUrl,
             });
-            setStep(1); // skip to upload step — video is loaded
+            // Skip directly to trim step (index 4) — video is already loaded from podcast
+            const trimStepIdx = STEPS.findIndex(s => s.id === "trim");
+            setStep(trimStepIdx >= 0 ? trimStepIdx : 4);
+            console.log('[Wizard] Podcast-clip: skipping to trim step', trimStepIdx);
           }
         } catch (err) {
           console.error('[Wizard] Failed to load podcast episode video:', err);
