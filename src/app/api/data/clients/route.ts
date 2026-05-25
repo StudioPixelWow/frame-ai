@@ -177,8 +177,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`[API] POST /api/data/clients ✅ id=${(inserted as unknown as ClientRow).id} keys=${Object.keys(inserted as object).join(',')}`);
-    return NextResponse.json(rowToClient(inserted as unknown as ClientRow), { status: 201 });
+    const newClient = rowToClient(inserted as unknown as ClientRow);
+    console.log(`[API] POST /api/data/clients ✅ id=${newClient.id} keys=${Object.keys(inserted as object).join(',')}`);
+
+    // Auto-generate onboarding tasks for the new client (fire-and-forget)
+    try {
+      const baseUrl = req.nextUrl.origin;
+      fetch(`${baseUrl}/api/onboarding/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: newClient.id, clientName: newClient.name }),
+      }).catch(err => console.warn('[API] Onboarding auto-trigger failed:', err));
+    } catch { /* non-critical */ }
+
+    return NextResponse.json(newClient, { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[API] POST /api/data/clients error:', msg);
