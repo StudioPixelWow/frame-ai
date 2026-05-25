@@ -872,9 +872,10 @@ function NewProjectWizard() {
 
     console.log('[Wizard] Podcast-clip source detected:', { clipTitle, episodeIdParam, startTime, endTime });
 
-    // Pre-populate title and trim settings immediately
+    // Pre-populate title, clientId (use 'podcast-clip' placeholder), and trim settings
     patch({
       title: clipTitle,
+      clientId: 'podcast-clip', // placeholder so canAdvance("info") passes
       trimMode: 'clip',
       trimStart: startTime,
       trimEnd: endTime,
@@ -933,7 +934,7 @@ function NewProjectWizard() {
       case "broll": return !data.brollEnabled || data.brollApproved;
       default: return true;
     }
-  }, [step, data.title, data.clientId, data.videoFile, data.format, data.language, data.brollEnabled, data.brollApproved, data.hookSelected, data.hookSkipped, data.trimMode, data.trimStart, data.trimEnd, data.pipelineFinalized]);
+  }, [step, data.title, data.clientId, data.videoFile, data.uploadedVideoUrl, data.format, data.language, data.brollEnabled, data.brollApproved, data.hookSelected, data.hookSkipped, data.trimMode, data.trimStart, data.trimEnd, data.pipelineFinalized]);
 
   const next = () => { if (canAdvance && step < STEPS.length - 1) setStep(step + 1); };
   const prev = () => { if (step > 0) setStep(step - 1); };

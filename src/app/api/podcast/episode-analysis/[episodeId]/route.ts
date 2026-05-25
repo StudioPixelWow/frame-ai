@@ -63,14 +63,22 @@ export async function GET(_req: NextRequest, context: Params) {
     let videoUrl = '';
     const filePath = episode.source_file_path;
     if (filePath) {
-      const { data: signedData } = await supabase
+      console.log(`[episode-analysis] Generating signed URL for: ${filePath}`);
+      const { data: signedData, error: signedError } = await supabase
         .storage
         .from('project-files')
         .createSignedUrl(filePath, 3600); // 1 hour validity
+      if (signedError) {
+        console.error(`[episode-analysis] Signed URL error for "${filePath}":`, signedError.message);
+      }
       videoUrl = signedData?.signedUrl || '';
-      if (!videoUrl) {
+      if (videoUrl) {
+        console.log(`[episode-analysis] Signed URL generated successfully (${videoUrl.substring(0, 80)}...)`);
+      } else {
         console.warn(`[episode-analysis] Could not generate signed URL for: ${filePath}`);
       }
+    } else {
+      console.warn(`[episode-analysis] No source_file_path found for episode ${episodeId}`);
     }
 
     // Get analysis for this episode
@@ -111,7 +119,7 @@ export async function GET(_req: NextRequest, context: Params) {
         title: episode.title,
         processingProgress: episode.processing_progress,
         errorMessage: episode.error_message,
-        sourceFilePath: videoUrl || episode.source_file_path, // Use signed URL for playback
+        sourceFilePath: videoUrl, // Only use signed URL — raw storage paths don't work as video src
         durationSeconds: episode.duration_seconds,
       },
       analysis: analysis ? {

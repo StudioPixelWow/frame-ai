@@ -171,6 +171,7 @@ export default function EpisodeClipsPage() {
   const [approvedClipsList, setApprovedClipsList] = useState<ApprovedClipData[]>([]);
   const [loadingApproved, setLoadingApproved] = useState(false);
   const [playingApprovedClip, setPlayingApprovedClip] = useState<string | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
   const approvedVideoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const approvedTimerRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -719,6 +720,12 @@ export default function EpisodeClipsPage() {
             ref={videoRef}
             src={episode.sourceFilePath}
             controls
+            crossOrigin="anonymous"
+            onError={(e) => {
+              const errMsg = (e.target as HTMLVideoElement).error?.message || 'שגיאה בטעינת הסרטון';
+              console.error('[episode-clips] Main video load error:', errMsg);
+              setVideoError(errMsg);
+            }}
             style={{
               width: '100%',
               maxHeight: 400,
@@ -726,6 +733,27 @@ export default function EpisodeClipsPage() {
               background: '#000',
             }}
           />
+          {videoError && (
+            <div style={{ marginTop: 8, padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 6, color: '#B91C1C', fontSize: 13 }}>
+              שגיאה בטעינת הסרטון: {videoError}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Show message when no video URL available */}
+      {!episode.sourceFilePath && (
+        <div style={{
+          background: COLORS.card,
+          borderRadius: 12,
+          padding: 24,
+          marginBottom: 32,
+          textAlign: 'center',
+          color: COLORS.textSecondary,
+          fontSize: 14,
+          border: `1px solid ${COLORS.border}`,
+        }}>
+          לא נמצא כתובת וידאו לפרק זה — ייתכן שיש בעיה ביצירת ה-Signed URL
         </div>
       )}
 
@@ -1440,7 +1468,8 @@ export default function EpisodeClipsPage() {
                             objectFit: 'contain',
                           }}
                           preload="metadata"
-                          muted
+                          crossOrigin="anonymous"
+                          onError={(e) => console.error('[episode-clips] Approved clip video error:', clip.id, (e.target as HTMLVideoElement).error?.message)}
                         />
                         {/* Play overlay */}
                         <div
