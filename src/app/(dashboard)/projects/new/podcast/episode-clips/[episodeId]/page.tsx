@@ -272,39 +272,24 @@ export default function EpisodeClipsPage() {
   // ── Navigate to clip editing ──────────────────────────────────────────────
   const [creatingClipProject, setCreatingClipProject] = useState<string | null>(null);
 
-  const startClipEditing = useCallback(async (clip: ApprovedClipData) => {
+  const startClipEditing = useCallback((clip: ApprovedClipData) => {
     if (creatingClipProject) return; // prevent double-click
     setCreatingClipProject(clip.id);
-    try {
-      // If clip already has a pipelineStateId, navigate directly to it
-      if (clip.pipelineStateId) {
-        router.push(`/projects/${clip.pipelineStateId}/pipeline`);
-        return;
-      }
 
-      // Create a project for this clip via API
-      const res = await fetch('/api/podcast/create-clip-project', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clipId: clip.id,
-          episodeId,
-          startTime: clip.startTime,
-          endTime: clip.endTime,
-          videoUrl: data?.episode?.sourceFilePath || '',
-          clipTitle: clip.title,
-        }),
-      });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'שגיאה ביצירת פרויקט');
+    // Navigate to the single-video wizard with podcast-clip params pre-loaded
+    const videoUrl = data?.episode?.sourceFilePath || '';
+    const params = new URLSearchParams({
+      mode: 'video',
+      source: 'podcast-clip',
+      clipId: clip.id,
+      episodeId,
+      startTime: String(clip.startTime),
+      endTime: String(clip.endTime),
+      clipTitle: clip.title || '',
+    });
+    if (videoUrl) params.set('videoUrl', videoUrl);
 
-      // Navigate to the pipeline page for this new project
-      router.push(`/projects/${result.projectId}/pipeline`);
-    } catch (err) {
-      console.error('[startClipEditing] Error:', err);
-      alert(err instanceof Error ? err.message : 'שגיאה ביצירת פרויקט לקליפ');
-      setCreatingClipProject(null);
-    }
+    router.push(`/projects/new?${params.toString()}`);
   }, [episodeId, data?.episode?.sourceFilePath, router, creatingClipProject]);
 
   // ── Toggle clip selection ─────────────────────────────────────────────────
@@ -1417,14 +1402,14 @@ export default function EpisodeClipsPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 20 }}>
               {approvedClipsList.map((clip, idx) => {
                 const isPlaying = playingApprovedClip === clip.id;
-                const isEdited = clip.status === 'completed' || clip.status === 'in_single_clip_flow';
-                const statusIcon = clip.status === 'completed' ? '✅' :
-                  clip.status === 'processing' ? '⚙️' :
+                // A clip is only "edited" if it was manually edited and completed by the user
+                // pipelineStateId being set means the user started editing
+                const isUserEdited = clip.status === 'completed' && !!clip.pipelineStateId;
+                const isEdited = isUserEdited;
+                const statusIcon = isUserEdited ? '✅' :
                   clip.status === 'failed' ? '❌' : '🎬';
-                const statusText = clip.status === 'completed' ? 'נערך' :
-                  clip.status === 'processing' ? 'בעיבוד...' :
-                  clip.status === 'failed' ? 'נכשל' :
-                  clip.status === 'in_single_clip_flow' ? 'בעריכה' : 'ממתין לעריכה';
+                const statusText = isUserEdited ? 'נערך' :
+                  clip.status === 'failed' ? 'נכשל' : 'ממתין לעריכה';
 
                 return (
                   <div
@@ -1589,37 +1574,30 @@ export default function EpisodeClipsPage() {
                       {/* Action button */}
                       <button
                         onClick={() => startClipEditing(clip)}
-                        disabled={clip.status === 'processing' || creatingClipProject === clip.id}
+                        disabled={creatingClipProject === clip.id}
                         style={{
                           width: '100%',
                           padding: '12px 20px',
                           background: creatingClipProject === clip.id
                             ? '#93C5FD'
-                            : clip.status === 'completed'
+                            : isUserEdited
                             ? COLORS.success
-                            : clip.status === 'processing'
-                              ? '#D1D5DB'
                               : COLORS.primary,
                           color: '#fff',
                           border: 'none',
                           borderRadius: 10,
-                          cursor: clip.status === 'processing' ? 'not-allowed' : 'pointer',
+                          cursor: creatingClipProject === clip.id ? 'wait' : 'pointer',
                           fontSize: 14,
                           fontWeight: 700,
                           transition: 'all 0.2s',
-                          boxShadow: clip.status === 'processing' ? undefined
-                            : '0 3px 10px rgba(0,181,254,0.2)',
+                          boxShadow: '0 3px 10px rgba(0,181,254,0.2)',
                         }}
                       >
                         {creatingClipProject === clip.id
-                          ? '⏳ יוצר פרויקט...'
-                          : clip.status === 'completed'
-                          ? '🎬 צפה בקליפ הערוך'
-                          : clip.status === 'processing'
-                            ? '⚙️ בעיבוד...'
-                            : clip.status === 'in_single_clip_flow'
-                              ? '✏️ המשך עריכה'
-                              : '✂️ התחל עריכה'}
+                          ? '⏳ פותח עורך...'
+                          : isUserEdited
+                            ? '🎬 צפה בקליפ הערוך'
+                            : '✂️ התחל עריכה'}
                       </button>
                     </div>
                   </div>

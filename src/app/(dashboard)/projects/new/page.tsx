@@ -857,6 +857,38 @@ function NewProjectWizard() {
 
   const patch = useCallback((p: Partial<WizardData>) => setData((d) => ({ ...d, ...p })), []);
 
+  // ─── Podcast Clip Source: pre-populate wizard from query params ───
+  const podcastClipInitRef = useRef(false);
+  useEffect(() => {
+    if (podcastClipInitRef.current) return;
+    const source = searchParams.get('source');
+    if (source !== 'podcast-clip') return;
+    podcastClipInitRef.current = true;
+
+    const clipTitle = searchParams.get('clipTitle') || 'קליפ מפודקאסט';
+    const videoUrl = searchParams.get('videoUrl') || '';
+    const startTime = parseFloat(searchParams.get('startTime') || '0');
+    const endTime = parseFloat(searchParams.get('endTime') || '0');
+
+    console.log('[Wizard] Podcast-clip source detected:', { clipTitle, videoUrl, startTime, endTime });
+
+    // Pre-populate wizard data with clip info
+    patch({
+      title: clipTitle,
+      trimMode: 'clip',
+      trimStart: startTime,
+      trimEnd: endTime,
+      uploadedVideoUrl: videoUrl,
+      videoUrl: videoUrl,
+    });
+
+    // Skip to upload step (step 1) — title is pre-filled so info step can be passed
+    // If videoUrl is already available, the upload step will show the video loaded
+    if (videoUrl) {
+      setStep(1); // upload step — video URL is pre-filled
+    }
+  }, [searchParams, patch]);
+
   // ─── Persistent Preview & Edit State ───
   const [showPreview, setShowPreview] = useState(false);
   const [liveEditMode, setLiveEditMode] = useState(false);
@@ -878,7 +910,7 @@ function NewProjectWizard() {
     const sid = STEPS[step]?.id;
     switch (sid) {
       case "info": return !!data.title.trim() && !!data.clientId;
-      case "upload": return !!data.videoFile;
+      case "upload": return !!data.videoFile || !!data.uploadedVideoUrl;
       case "format": return !!data.format;
       case "hookSelect": return data.hookSelected || data.hookSkipped;
       case "trim": return data.trimMode === "full" || (data.trimEnd - data.trimStart >= 0.5);
@@ -2455,12 +2487,12 @@ function StepUpload({ data, patch }: { data: WizardData; patch: (p: Partial<Wiza
         onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
         onClick={() => !uploading && fileRef.current?.click()}>
         <input ref={fileRef} type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-        {data.videoFile ? (
+        {(data.videoFile || data.uploadedVideoUrl) ? (
           <div className="wiz-upload-done">
             <div className="wiz-upload-thumb"><video src={data.videoUrl || data.uploadedVideoUrl} muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} /></div>
             <div className="wiz-upload-info">
-              <div className="wiz-upload-name">{data.videoFile.name}</div>
-              <div className="wiz-upload-size">{(data.videoFile.size / 1024 / 1024).toFixed(1)} MB</div>
+              <div className="wiz-upload-name">{data.videoFile?.name || 'קליפ מפודקאסט'}</div>
+              <div className="wiz-upload-size">{data.videoFile ? `${(data.videoFile.size / 1024 / 1024).toFixed(1)} MB` : '✓ וידאו טעון מפרק פודקאסט'}</div>
 
               {/* Upload progress bar */}
               {uploading && (
@@ -2502,7 +2534,7 @@ function StepUpload({ data, patch }: { data: WizardData; patch: (p: Partial<Wiza
           </div>
         )}
       </div>
-      {!data.videoFile && <div className="wiz-validation-msg"><span>⚠️</span> חובה להעלות קובץ וידאו כדי להמשיך</div>}
+      {!data.videoFile && !data.uploadedVideoUrl && <div className="wiz-validation-msg"><span>⚠️</span> חובה להעלות קובץ וידאו כדי להמשיך</div>}
     </div>
   );
 }
