@@ -89,7 +89,8 @@ ${transcript}
 
 כללים:
 - החזר 3–8 קליפים, מדורגים לפי פוטנציאל ויראלי
-- כל קליפ חייב להיות בין 30 שניות ל-3 דקות
+- כל קליפ חייב להיות בין 15 שניות לדקה אחת (60 שניות מקסימום!)
+- אם יש קטע מעניין שאורכו מעל דקה, חתוך אותו לחלק הטוב ביותר שנכנס בדקה
 - העדף קטעים עם פתיחה חזקה (hook) שמושכת תשומת לב מיידית
 - חפש רגעים עם עוצמה רגשית, תובנות מפתיעות, או סיפורים אישיים
 - הקליפ חייב לעמוד בפני עצמו — להיות מובן ללא הקשר של הפרק המלא
@@ -131,10 +132,17 @@ function validateClips(raw: unknown): AIClipSuggestion[] {
       throw new Error(`קליפ ${idx + 1}: זמן סיום חייב להיות אחרי זמן התחלה`);
     }
 
+    // Enforce max 60 seconds — trim end time if AI returned a longer clip
+    const MAX_CLIP_DURATION = 60;
+    let clippedEnd = c.endTime as number;
+    if (clippedEnd - (c.startTime as number) > MAX_CLIP_DURATION) {
+      clippedEnd = (c.startTime as number) + MAX_CLIP_DURATION;
+    }
+
     return {
       title: c.title,
       startTime: c.startTime,
-      endTime: c.endTime,
+      endTime: clippedEnd,
       reasoning: typeof c.reasoning === "string" ? c.reasoning : "",
       topicTags: Array.isArray(c.topicTags) ? c.topicTags.map(String) : [],
       hookStrengthEstimate: clamp01(Number(c.hookStrengthEstimate ?? 0.5)),

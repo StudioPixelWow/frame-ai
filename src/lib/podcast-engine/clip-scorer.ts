@@ -56,20 +56,21 @@ const WEIGHTS = {
 // ── Duration bonuses / penalties ─────────────────────────────────────────────
 
 /** Ideal clip duration range in seconds. */
-const IDEAL_MIN_DURATION_S = 30;
-const IDEAL_MAX_DURATION_S = 90;
+const IDEAL_MIN_DURATION_S = 15;
+const IDEAL_MAX_DURATION_S = 60;
 
 /**
- * Duration modifier: clips in the ideal 30-90s range get a small bonus,
+ * Duration modifier: clips in the ideal 15-60s range get a small bonus,
  * clips that are too short or too long get a penalty.
+ * Max allowed clip duration is 60 seconds.
  */
 function durationModifier(startTime: number, endTime: number): number {
   const duration = endTime - startTime;
   if (duration >= IDEAL_MIN_DURATION_S && duration <= IDEAL_MAX_DURATION_S) {
     return 0.05; // small bonus for ideal length
   }
-  if (duration < 15) return -0.10;   // too short to be useful
-  if (duration > 180) return -0.08;  // too long for social
+  if (duration < 10) return -0.15;   // too short to be useful
+  if (duration > 60) return -0.20;   // over max — should not happen after trim
   return 0; // acceptable but not ideal
 }
 
