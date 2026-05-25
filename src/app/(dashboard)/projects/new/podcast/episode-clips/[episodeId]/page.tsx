@@ -277,7 +277,7 @@ export default function EpisodeClipsPage() {
     setCreatingClipProject(clip.id);
 
     // Navigate to the single-video wizard with podcast-clip params pre-loaded
-    const videoUrl = data?.episode?.sourceFilePath || '';
+    // Video URL is fetched by the wizard from the episode API (avoids signed URL encoding issues)
     const params = new URLSearchParams({
       mode: 'video',
       source: 'podcast-clip',
@@ -287,7 +287,6 @@ export default function EpisodeClipsPage() {
       endTime: String(clip.endTime),
       clipTitle: clip.title || '',
     });
-    if (videoUrl) params.set('videoUrl', videoUrl);
 
     router.push(`/projects/new?${params.toString()}`);
   }, [episodeId, data?.episode?.sourceFilePath, router, creatingClipProject]);

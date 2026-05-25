@@ -866,26 +866,40 @@ function NewProjectWizard() {
     podcastClipInitRef.current = true;
 
     const clipTitle = searchParams.get('clipTitle') || 'קליפ מפודקאסט';
-    const videoUrl = searchParams.get('videoUrl') || '';
+    const episodeIdParam = searchParams.get('episodeId') || '';
     const startTime = parseFloat(searchParams.get('startTime') || '0');
     const endTime = parseFloat(searchParams.get('endTime') || '0');
 
-    console.log('[Wizard] Podcast-clip source detected:', { clipTitle, videoUrl, startTime, endTime });
+    console.log('[Wizard] Podcast-clip source detected:', { clipTitle, episodeIdParam, startTime, endTime });
 
-    // Pre-populate wizard data with clip info
+    // Pre-populate title and trim settings immediately
     patch({
       title: clipTitle,
       trimMode: 'clip',
       trimStart: startTime,
       trimEnd: endTime,
-      uploadedVideoUrl: videoUrl,
-      videoUrl: videoUrl,
     });
 
-    // Skip to upload step (step 1) — title is pre-filled so info step can be passed
-    // If videoUrl is already available, the upload step will show the video loaded
-    if (videoUrl) {
-      setStep(1); // upload step — video URL is pre-filled
+    // Fetch fresh signed video URL from the episode API
+    if (episodeIdParam) {
+      (async () => {
+        try {
+          const res = await fetch(`/api/podcast/episode-analysis/${episodeIdParam}`);
+          if (!res.ok) throw new Error(`Failed to fetch episode: ${res.status}`);
+          const epData = await res.json();
+          const videoUrl = epData?.episode?.sourceFilePath || '';
+          console.log('[Wizard] Podcast-clip video URL loaded:', videoUrl?.substring(0, 80));
+          if (videoUrl) {
+            patch({
+              uploadedVideoUrl: videoUrl,
+              videoUrl: videoUrl,
+            });
+            setStep(1); // skip to upload step — video is loaded
+          }
+        } catch (err) {
+          console.error('[Wizard] Failed to load podcast episode video:', err);
+        }
+      })();
     }
   }, [searchParams, patch]);
 
