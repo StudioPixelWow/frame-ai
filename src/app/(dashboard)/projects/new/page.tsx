@@ -2700,7 +2700,7 @@ function StepTrim_REMOVED({ data, patch }: { data: WizardData; patch: (p: Partia
 
       {/* Video player */}
       <div className="wiz-player">
-        <video ref={videoRef} src={data.videoUrl || data.uploadedVideoUrl}
+        <video ref={videoRef} src={data.videoUrl || data.uploadedVideoUrl} crossOrigin="anonymous"
           onLoadedMetadata={(e) => {
             const v = e.target as HTMLVideoElement;
             const d = v.duration;
@@ -2708,6 +2708,12 @@ function StepTrim_REMOVED({ data, patch }: { data: WizardData; patch: (p: Partia
             if (data.trimEnd === 0) patch({ trimEnd: d });
             // Store video metadata for server-side processing (avoids needing ffprobe on Vercel)
             patch({ sourceWidth: v.videoWidth, sourceHeight: v.videoHeight, sourceDuration: d });
+            // When entering from podcast-clip, seek to the clip start time
+            if (data.trimMode === "clip" && data.trimStart > 0) {
+              v.currentTime = data.trimStart;
+              setCt(data.trimStart);
+              console.log("[StepTrim] Seeked to clip start:", data.trimStart);
+            }
             if (process.env.NODE_ENV === "development") {
               console.debug("[StepTrim] Video loaded:", { src: v.src?.substring(0, 80), duration: d, readyState: v.readyState, videoWidth: v.videoWidth, videoHeight: v.videoHeight });
             }
@@ -3134,10 +3140,16 @@ function StepTrimCrop({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    const onTime = () => setCurrentTime(v.currentTime);
+    const onTime = () => {
+      setCurrentTime(v.currentTime);
+      // Loop within clip range when in clip mode
+      if (data.trimMode === "clip" && data.trimEnd > 0 && v.currentTime >= data.trimEnd) {
+        v.currentTime = data.trimStart;
+      }
+    };
     v.addEventListener("timeupdate", onTime);
     return () => v.removeEventListener("timeupdate", onTime);
-  }, []);
+  }, [data.trimMode, data.trimStart, data.trimEnd]);
 
   const fmtTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -3195,7 +3207,7 @@ function StepTrimCrop({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
               position: "relative", borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)",
               ...(showFormatFrame ? { width: containerSize.w, height: containerSize.h, margin: "0 auto" } : {}),
             }}>
-              <video ref={videoRef} src={videoSrc} style={{
+              <video ref={videoRef} src={videoSrc} crossOrigin="anonymous" style={{
                 display: "block",
                 ...(showFormatFrame ? {
                   // In crop mode: fill the format frame, centered based on crop position
@@ -3211,9 +3223,15 @@ function StepTrimCrop({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
                 }),
               }}
                 onLoadedMetadata={(e) => {
-                  const d = (e.target as HTMLVideoElement).duration;
+                  const v = e.target as HTMLVideoElement;
+                  const d = v.duration;
                   setVideoDur(d);
                   if (!data.trimEnd) patch({ trimEnd: d });
+                  // When entering from podcast-clip, seek to the clip start time
+                  if (data.trimMode === "clip" && data.trimStart > 0) {
+                    v.currentTime = data.trimStart;
+                    console.log("[StepTrimCrop] Seeked to clip start:", data.trimStart);
+                  }
                 }}
                 onClick={() => { const v = videoRef.current; if (!v) return; playing ? v.pause() : v.play(); setPlaying(!playing); }} />
 
