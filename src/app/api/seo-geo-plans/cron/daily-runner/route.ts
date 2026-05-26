@@ -20,28 +20,36 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  console.log('[SEO-CRON] Daily runner started at', new Date().toISOString());
+  const runnerStart = Date.now();
+  const runnerElapsed = () => `${Date.now() - runnerStart}ms`;
+  console.log(`[SEO-CRON] ========== Daily runner started at ${new Date().toISOString()} ==========`);
 
   try {
     // Use filtered query — loading all 95+ plans causes statement timeout
     // Retry once on transient connection errors (e.g. Supabase 522)
     let activePlans: any[];
+    console.log(`[SEO-CRON] Querying active plans from DB... (${runnerElapsed()})`);
     try {
-      activePlans = (await seoPlans.queryFilteredAsync([
+      const allFiltered = await seoPlans.queryFilteredAsync([
         { column: 'data->>status', op: 'in', value: ['active', 'plan_generated'] },
-      ])).filter((p: any) => p.days && Array.isArray(p.days) && p.days.length > 0);
+      ]);
+      console.log(`[SEO-CRON] DB query returned ${allFiltered.length} plans with status active/plan_generated (${runnerElapsed()})`);
+      activePlans = allFiltered.filter((p: any) => p.days && Array.isArray(p.days) && p.days.length > 0);
+      console.log(`[SEO-CRON] After filtering for plans with days: ${activePlans.length} plans (${runnerElapsed()})`);
     } catch (dbError: any) {
-      const isTransient = dbError?.status === 522 || dbError?.code === 'ECONNRESET' || dbError?.code === 'ETIMEDOUT' || /522|connection|timeout/i.test(dbError?.message || '');
+      const errMsg = dbError?.message || String(dbError);
+      const isTransient = dbError?.status === 522 || dbError?.code === 'ECONNRESET' || dbError?.code === 'ETIMEDOUT' || /522|connection|timeout/i.test(errMsg);
+      console.error(`[SEO-CRON] ❌ DB query failed (${runnerElapsed()}): ${errMsg} | transient=${isTransient} | status=${dbError?.status} | code=${dbError?.code}`);
       if (isTransient) {
-        console.warn('[SEO-CRON] DB query failed with transient error, retrying in 5s...', dbError?.message || dbError);
+        console.warn(`[SEO-CRON] Retrying in 5s...`);
         await new Promise(r => setTimeout(r, 5000));
         try {
           activePlans = (await seoPlans.queryFilteredAsync([
             { column: 'data->>status', op: 'in', value: ['active', 'plan_generated'] },
           ])).filter((p: any) => p.days && Array.isArray(p.days) && p.days.length > 0);
-          console.log('[SEO-CRON] Retry succeeded — loaded', activePlans.length, 'active plans');
+          console.log(`[SEO-CRON] Retry succeeded — loaded ${activePlans.length} active plans (${runnerElapsed()})`);
         } catch (retryError: any) {
-          console.error('[SEO-CRON] Retry also failed:', retryError?.message || retryError);
+          console.error(`[SEO-CRON] ❌ Retry also failed (${runnerElapsed()}):`, retryError?.message || retryError);
           return NextResponse.json({ error: 'DB connection failed after retry', details: retryError?.message }, { status: 503 });
         }
       } else {
@@ -52,29 +60,44 @@ export async function GET(req: NextRequest) {
     // Non-WP tasks (technical_seo, meta_optimization, etc.) run without WP.
 
     if (activePlans.length === 0) {
+      console.log(`[SEO-CRON] No active plans found — nothing to do (${runnerElapsed()})`);
       return NextResponse.json({ success: true, message: 'אין תוכניות פעילות', plansProcessed: 0 });
     }
 
+    // Log all active plans for debugging
+    console.log(`[SEO-CRON] Active plans to process:`, activePlans.map((p: any) => `${p.id}(${p.clientName || 'unnamed'},status=${p.status},days=${p.days?.length || 0})`).join(', '));
+
     const summaryResults: any[] = [];
 
-    for (const plan of activePlans) {
+    for (let i = 0; i < activePlans.length; i++) {
+      const plan = activePlans[i];
+      const planStart = Date.now();
       try {
+        console.log(`[SEO-CRON] Processing plan ${i + 1}/${activePlans.length}: ${plan.id} (${plan.clientName}) (${runnerElapsed()})`);
         const planResult = await processPlanDailyTasks(plan);
+        console.log(`[SEO-CRON] Plan ${plan.id} done in ${Date.now() - planStart}ms — tasks: ${planResult.tasksFound || 0}, executed: ${planResult.tasksExecuted || 0}`);
         summaryResults.push(planResult);
       } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`[SEO-CRON] ❌ Plan ${plan.id} (${plan.clientName}) CRASHED after ${Date.now() - planStart}ms:`, errMsg);
         summaryResults.push({
           planId: plan.id, clientName: plan.clientName, success: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: errMsg,
         });
       }
     }
+
+    const successCount = summaryResults.filter((r: any) => r.success).length;
+    console.log(`[SEO-CRON] ========== Runner finished (${runnerElapsed()}) — ${successCount}/${summaryResults.length} plans OK ==========`);
 
     return NextResponse.json({
       success: true, executedAt: new Date().toISOString(),
       plansProcessed: summaryResults.length, results: summaryResults,
     });
   } catch (error) {
-    return NextResponse.json({ error: 'Cron job failed' }, { status: 500 });
+    const errMsg = error instanceof Error ? error.message : 'Cron job failed';
+    console.error(`[SEO-CRON] ❌ FATAL ERROR (${runnerElapsed()}):`, errMsg);
+    return NextResponse.json({ error: errMsg, fatal: true }, { status: 500 });
   }
 }
 

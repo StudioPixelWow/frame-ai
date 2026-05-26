@@ -518,13 +518,20 @@ export class SupabaseCrud<T extends { id: string }> {
       query = query.limit(options.limit);
     }
 
-    const { data: rows, error } = await query;
+    // Apply timeout — prevent queries from hanging forever (default 30s)
+    const timeoutMs = options?.timeout || 30_000;
+    const queryPromise = query.then(({ data: rows, error }) => {
+      if (error) {
+        console.error(`[SupabaseCrud][${this.tableName}] queryFilteredAsync error:`, error.message);
+        throw new Error(`Failed to query ${this.tableName}: ${error.message}`);
+      }
+      return ((rows ?? []) as unknown as Array<{ id: string; data: unknown }>).map((r) => this.rowToEntity(r));
+    });
 
-    if (error) {
-      console.error(`[SupabaseCrud][${this.tableName}] queryFilteredAsync error:`, error.message);
-      throw new Error(`Failed to query ${this.tableName}: ${error.message}`);
-    }
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Query timeout after ${timeoutMs}ms on ${this.tableName}`)), timeoutMs)
+    );
 
-    return ((rows ?? []) as unknown as Array<{ id: string; data: unknown }>).map((r) => this.rowToEntity(r));
+    return Promise.race([queryPromise, timeoutPromise]);
   }
 }

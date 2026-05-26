@@ -915,8 +915,16 @@ function NewProjectWizard() {
           const res = await fetch(`/api/podcast/episode-analysis/${episodeIdParam}`);
           if (!res.ok) throw new Error(`Failed to fetch episode: ${res.status}`);
           const epData = await res.json();
-          const videoUrl = epData?.episode?.sourceFilePath || '';
-          console.log('[Wizard] Podcast-clip video URL loaded:', videoUrl?.substring(0, 80));
+          let videoUrl = epData?.episode?.sourceFilePath || '';
+          console.log('[Wizard] Podcast-clip raw sourceFilePath:', videoUrl?.substring(0, 80));
+          // sourceFilePath is a bare storage path (e.g. "uploads/1234567890.mp4"),
+          // NOT a full URL. Convert to a full Supabase public URL so signed-url
+          // endpoint and ffmpeg fetchFile can work with it.
+          if (videoUrl && !videoUrl.startsWith('http')) {
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+            videoUrl = `${supabaseUrl}/storage/v1/object/public/project-files/${videoUrl}`;
+            console.log('[Wizard] Podcast-clip: converted bare path to full URL:', videoUrl?.substring(0, 80));
+          }
           if (videoUrl) {
             patch({
               uploadedVideoUrl: videoUrl,
@@ -3551,6 +3559,14 @@ function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
       alert("שגיאה: לא נמצא קובץ וידאו שהועלה. יש להעלות וידאו לפני אישור.");
       setGenerating(false);
       return;
+    }
+
+    // Safety net: if actualVideoUrl is a bare storage path (no protocol),
+    // convert it to a full Supabase public URL so signed-url + ffmpeg work
+    if (actualVideoUrl && !actualVideoUrl.startsWith('http')) {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+      actualVideoUrl = `${supabaseUrl}/storage/v1/object/public/project-files/${actualVideoUrl}`;
+      console.log("[StepFinalize] Converted bare storage path to full URL:", actualVideoUrl.substring(0, 80));
     }
 
     // Determine trim boundaries — if trimMode is "full", use 0 to a large value

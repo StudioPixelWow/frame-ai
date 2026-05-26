@@ -6,6 +6,11 @@ import { updatePlanSafe, logActivity } from '@/lib/seo/api-helpers';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
+/** Max plans to scan per cron run — prevents timeout on large plan counts */
+const MAX_PLANS_PER_RUN = 5;
+/** Max keywords per plan — prevents one plan from consuming all time */
+const MAX_KEYWORDS_PER_PLAN = 8;
+
 const AI_PLATFORMS: PlatformId[] = ['chatgpt', 'gemini', 'perplexity', 'claude', 'google_ai_overview'];
 
 interface KeywordRank {
@@ -83,9 +88,22 @@ export async function GET(req: NextRequest) {
 
     console.log(`[SEO-DAILY-SCAN] נמצאו ${activePlans.length} תוכניות פעילות`);
 
+    // Limit plans per run to prevent timeout — rotate through plans
+    // Use day-of-year to rotate which plans get scanned
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+    let plansToScan = activePlans;
+    if (activePlans.length > MAX_PLANS_PER_RUN) {
+      const startIdx = (dayOfYear * MAX_PLANS_PER_RUN) % activePlans.length;
+      plansToScan = [];
+      for (let i = 0; i < MAX_PLANS_PER_RUN; i++) {
+        plansToScan.push(activePlans[(startIdx + i) % activePlans.length]);
+      }
+      console.log(`[SEO-DAILY-SCAN] ⚠️ Limiting to ${MAX_PLANS_PER_RUN}/${activePlans.length} plans (rotation day ${dayOfYear}, start=${startIdx})`);
+    }
+
     const summaryResults: any[] = [];
 
-    for (const plan of activePlans) {
+    for (const plan of plansToScan) {
       try {
         const result = await processDailySnapshot(plan);
         summaryResults.push(result);
@@ -174,8 +192,15 @@ async function processDailySnapshot(plan: any) {
   }
   const clientKeywords: any[] = [...rawKeywords];
 
+  // Limit keywords per plan to prevent timeout
+  const totalKeywords = clientKeywords.length;
+  if (clientKeywords.length > MAX_KEYWORDS_PER_PLAN) {
+    clientKeywords.length = MAX_KEYWORDS_PER_PLAN;
+    console.log(`[SEO-DAILY-SCAN] ⚠️ Plan ${planId}: limiting to ${MAX_KEYWORDS_PER_PLAN}/${totalKeywords} keywords`);
+  }
+
   const todayDate = new Date().toISOString().split('T')[0];
-  console.log(`[SEO-DAILY-SCAN] מעבד תוכנית ${planId} — ${businessName} (${clientKeywords.length} מילות מפתח)`);
+  console.log(`[SEO-DAILY-SCAN] מעבד תוכנית ${planId} — ${businessName} (${clientKeywords.length}/${totalKeywords} מילות מפתח)`);
 
   const keywordRanks: KeywordRank[] = [];
   const aiVisibility: DailySnapshot['aiVisibility'] = {
