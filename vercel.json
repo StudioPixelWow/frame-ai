@@ -19,6 +19,10 @@
     {
       "path": "/api/cron/whatsapp-scheduled",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/monthly-client-reports",
+      "schedule": "0 1 1 * *"
     }
   ]
 }

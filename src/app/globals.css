@@ -10129,6 +10129,146 @@
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Smart Tooltip System
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.smart-tooltip {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25), 0 2px 8px rgba(0,0,0,0.15);
+  animation: smart-tooltip-enter 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  backdrop-filter: blur(12px);
+  direction: rtl;
+}
+.smart-tooltip-exit {
+  animation: smart-tooltip-exit 150ms ease-in forwards;
+}
+.smart-tooltip-content {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--foreground);
+  font-weight: 500;
+}
+.smart-tooltip-detail {
+  font-size: 0.7rem;
+  color: var(--foreground-muted);
+  margin-top: 0.25rem;
+}
+.smart-tooltip-trend {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+.smart-tooltip-arrow {
+  font-size: 1rem;
+  font-weight: 900;
+}
+.smart-tooltip-delta {
+  font-variant-numeric: tabular-nums;
+}
+.smart-tooltip-recommendation {
+  margin-top: 0.5rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--accent-text);
+  line-height: 1.4;
+}
+.smart-tooltip-trigger {
+  cursor: help;
+}
+.smart-tooltip-trigger:hover {
+  filter: brightness(1.05);
+}
+
+@keyframes smart-tooltip-enter {
+  from { opacity: 0; transform: translateY(4px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes smart-tooltip-exit {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.97); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Micro-interaction utilities
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes mi-pulse-ring {
+  0% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+  100% { box-shadow: 0 0 0 8px transparent; opacity: 0; }
+}
+
+/* Success checkmark animation for buttons/cards */
+.mi-success-check {
+  animation: mi-check-draw 400ms ease forwards;
+}
+@keyframes mi-check-draw {
+  0% { stroke-dashoffset: 24; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* Card hover lift — add to any card for subtle depth on hover */
+.mi-hover-lift {
+  transition: transform 250ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 250ms ease;
+}
+.mi-hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* Button press effect */
+.mi-press {
+  transition: transform 100ms ease;
+}
+.mi-press:active {
+  transform: scale(0.97);
+}
+
+/* Stagger children — add to parent, each child gets delayed entry */
+.mi-stagger > * {
+  opacity: 0;
+  animation: mi-stagger-in 400ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.mi-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.mi-stagger > *:nth-child(2) { animation-delay: 60ms; }
+.mi-stagger > *:nth-child(3) { animation-delay: 120ms; }
+.mi-stagger > *:nth-child(4) { animation-delay: 180ms; }
+.mi-stagger > *:nth-child(5) { animation-delay: 240ms; }
+.mi-stagger > *:nth-child(6) { animation-delay: 300ms; }
+.mi-stagger > *:nth-child(7) { animation-delay: 360ms; }
+.mi-stagger > *:nth-child(8) { animation-delay: 420ms; }
+@keyframes mi-stagger-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Data change flash — briefly highlights a value that just changed */
+.mi-data-flash {
+  animation: mi-data-flash 800ms ease;
+}
+@keyframes mi-data-flash {
+  0% { background-color: rgba(0, 181, 254, 0.15); }
+  100% { background-color: transparent; }
+}
+
+/* Glow pulse for attention-grabbing elements */
+.mi-glow-pulse {
+  animation: mi-glow-pulse 2s ease-in-out infinite;
+}
+@keyframes mi-glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 181, 254, 0); }
+  50% { box-shadow: 0 0 12px 4px rgba(0, 181, 254, 0.2); }
+}
+
 /* ── 14. Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

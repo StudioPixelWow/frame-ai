@@ -5,6 +5,8 @@ export const dynamic = "force-dynamic";
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { wow } from '@/lib/wow';
+import { SmartTooltip } from '@/components/ui/smart-tooltip';
+import { KPIPopup } from '@/components/ui/kpi-popup';
 import {
   useClients,
   useTasks,
@@ -54,6 +56,7 @@ const QUICK_ACTIONS = [
   { icon: "📝", label: "פוסט חדש", route: "/projects/new", color: "#818cf8" },
   { icon: "🎙️", label: "הקלטה חדשה", route: "/accounting/podcast", color: "#E8F401" },
   { icon: "📋", label: "פרויקט חדש", route: "/business-projects", color: "#f97316" },
+  { icon: "📊", label: "דוחות חודשיים", route: "__monthly_reports__", color: "#00B5FE" },
 ];
 
 function getGreeting(): string {
@@ -449,6 +452,34 @@ function AdminDashboard() {
 
   const isLoading = cL || tL || pL || lL || eL || caL || aL || poL || ppL || bpL || spL;
 
+  // Monthly reports state
+  const [sendingReports, setSendingReports] = useState(false);
+  const [reportResult, setReportResult] = useState<{ sent: number; saved: number; errors: number } | null>(null);
+
+  const handleSendMonthlyReports = async () => {
+    if (sendingReports) return;
+    setSendingReports(true);
+    setReportResult(null);
+    try {
+      const res = await fetch('/api/reports/send-monthly', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sendEmail: true }),
+      });
+      const data = await res.json();
+      setReportResult({
+        sent: data.sent || 0,
+        saved: data.saved || 0,
+        errors: data.errors?.length || 0,
+      });
+      if (data.sent > 0) wow('confetti');
+    } catch {
+      setReportResult({ sent: 0, saved: 0, errors: 1 });
+    } finally {
+      setSendingReports(false);
+    }
+  };
+
   // Smart Trends — deterministic, context-aware, rotated weekly
   const smartTrends = useMemo<SmartTrend[]>(() => {
     if (isLoading) return [];
@@ -730,12 +761,29 @@ function AdminDashboard() {
         <div>
           <div className="mhd-section-label">פעולות מהירות</div>
           <div className="ux-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: "0.75rem" }}>
-            {QUICK_ACTIONS.map(a => (
-              <Link key={a.label} href={a.route} className="quick-action-btn ux-light-sweep">
-                <span className="quick-action-icon" style={{ filter: `drop-shadow(0 2px 8px ${a.color}60)` }}>{a.icon}</span>
-                <span className="quick-action-label">{a.label}</span>
-              </Link>
-            ))}
+            {QUICK_ACTIONS.map(a =>
+              a.route === '__monthly_reports__' ? (
+                <button
+                  key={a.label}
+                  onClick={handleSendMonthlyReports}
+                  disabled={sendingReports}
+                  className="quick-action-btn ux-light-sweep"
+                  style={{ border: 'none', cursor: sendingReports ? 'wait' : 'pointer', position: 'relative' }}
+                >
+                  <span className="quick-action-icon" style={{ filter: `drop-shadow(0 2px 8px ${a.color}60)` }}>
+                    {sendingReports ? '⏳' : a.icon}
+                  </span>
+                  <span className="quick-action-label">
+                    {sendingReports ? 'שולח...' : reportResult ? `${reportResult.sent} נשלחו` : a.label}
+                  </span>
+                </button>
+              ) : (
+                <Link key={a.label} href={a.route} className="quick-action-btn ux-light-sweep">
+                  <span className="quick-action-icon" style={{ filter: `drop-shadow(0 2px 8px ${a.color}60)` }}>{a.icon}</span>
+                  <span className="quick-action-label">{a.label}</span>
+                </Link>
+              )
+            )}
           </div>
         </div>
 
@@ -754,26 +802,32 @@ function AdminDashboard() {
             <SkeletonGrid count={4} columns="repeat(auto-fit, minmax(280px, 1fr))" />
           ) : analytics ? (
             <div className="ux-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
-              <SummaryPane title="סיכום כלכלי" icon="💰" color="#10b981" href="/accounting" linkText="צפה בפרטים"
-                rows={[
-                  { label: "הכנסה החודש", value: formatCurrency(analytics.revenue), color: "#10b981" },
-                  { label: "בפיגור", value: formatCurrency(analytics.overdueTotal), color: "#ef4444" },
-                  { label: "גביות קרובות", value: formatCurrency(analytics.upcomingCollections), color: "#38bdf8" },
-                  ...(analytics.projectsTotalValue > 0 ? [{ label: "שווי פרויקטים", value: formatCurrency(analytics.projectsTotalValue), color: "#818cf8" }] : []),
-                ]}
-              />
-              <SummaryPane title="בריאות לקוחות" icon="👥" color="#38bdf8" href="/clients" linkText="צפה בלקוחות"
-                rows={[
-                  { label: "ללא תוכנית", value: analytics.clientsMissingGantt, color: "#f59e0b" },
-                  { label: "ללא מנהל", value: analytics.noManagerCount, color: "#a78bfa" },
-                ]}
-              />
-              <SummaryPane title="סקירת לידים" icon="🎯" color="#34d399" href="/leads" linkText="צפה בלידים"
-                rows={[
-                  { label: "לידים פעילים", value: analytics.activeLeads, color: "#34d399" },
-                  { label: "זכו החודש", value: analytics.wonLeads, color: "#10b981" },
-                ]}
-              />
+              <SmartTooltip content="סיכום כל הנתונים הכלכליים — הכנסות, חובות וגביות צפויות" detail="לחץ לפרטים מלאים" trend={analytics.revenue > 0 ? "up" : "neutral"} placement="bottom">
+                <SummaryPane title="סיכום כלכלי" icon="💰" color="#10b981" href="/accounting" linkText="צפה בפרטים"
+                  rows={[
+                    { label: "הכנסה החודש", value: formatCurrency(analytics.revenue), color: "#10b981" },
+                    { label: "בפיגור", value: formatCurrency(analytics.overdueTotal), color: "#ef4444" },
+                    { label: "גביות קרובות", value: formatCurrency(analytics.upcomingCollections), color: "#38bdf8" },
+                    ...(analytics.projectsTotalValue > 0 ? [{ label: "שווי פרויקטים", value: formatCurrency(analytics.projectsTotalValue), color: "#818cf8" }] : []),
+                  ]}
+                />
+              </SmartTooltip>
+              <SmartTooltip content="לקוחות שדורשים תשומת לב — חסרי תוכנית תוכן או מנהל מטפל" recommendation={analytics.clientsMissingGantt > 0 ? "הוסף תוכנית לגאנט ללקוחות חסרי תוכנית" : undefined} placement="bottom">
+                <SummaryPane title="בריאות לקוחות" icon="👥" color="#38bdf8" href="/clients" linkText="צפה בלקוחות"
+                  rows={[
+                    { label: "ללא תוכנית", value: analytics.clientsMissingGantt, color: "#f59e0b" },
+                    { label: "ללא מנהל", value: analytics.noManagerCount, color: "#a78bfa" },
+                  ]}
+                />
+              </SmartTooltip>
+              <SmartTooltip content="מצב הלידים בצנרת — לידים פתוחים ולידים שהומרו ללקוחות" trend={analytics.wonLeads > 0 ? "up" : "neutral"} delta={analytics.wonLeads > 0 ? `${analytics.wonLeads} סגירות` : undefined} placement="bottom">
+                <SummaryPane title="סקירת לידים" icon="🎯" color="#34d399" href="/leads" linkText="צפה בלידים"
+                  rows={[
+                    { label: "לידים פעילים", value: analytics.activeLeads, color: "#34d399" },
+                    { label: "זכו החודש", value: analytics.wonLeads, color: "#10b981" },
+                  ]}
+                />
+              </SmartTooltip>
               <SummaryPane title="משימות וצוות" icon="👨‍💼" color="#2dd4bf" href="/tasks" linkText="צפה בלוח"
                 rows={[
                   { label: "פתוחות", value: analytics.openTasks, color: "#34d399" },
