@@ -3545,12 +3545,40 @@ function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
     const trimEnd = data.trimMode === "clip" ? data.trimEnd : 999999;
 
     try {
+      // ── Get signed download URL (Supabase public URLs return 544) ──
+      setProcessingProgress("מכין את הוידאו להורדה...");
+      let videoSourceForProcessing: string | Blob = actualVideoUrl;
+
+      // If we have the raw file blob in memory, use it directly (fastest)
+      if (data.videoFile) {
+        videoSourceForProcessing = data.videoFile;
+        console.log("[StepFinalize] Using in-memory video file for processing");
+      } else {
+        // Need to download from Supabase — get signed URL first
+        try {
+          const signRes = await fetch("/api/signed-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: actualVideoUrl, expiresIn: 3600 }),
+          });
+          if (signRes.ok) {
+            const { signedUrl } = await signRes.json();
+            if (signedUrl) {
+              videoSourceForProcessing = signedUrl;
+              console.log("[StepFinalize] Using signed URL for video download");
+            }
+          }
+        } catch (signErr) {
+          console.warn("[StepFinalize] Failed to get signed URL, trying public URL:", signErr);
+        }
+      }
+
       setProcessingProgress("מעבד את הוידאו — חיתוך, מיקוד והוק...");
 
       // ── Client-side processing with ffmpeg.wasm ──
       // Runs entirely in the browser — no server binary needed.
       const { blob: processedBlob } = await processVideoClientSide({
-        source: actualVideoUrl,
+        source: videoSourceForProcessing,
         trimStart,
         trimEnd,
         cropX: data.cropX,
