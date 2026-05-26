@@ -2948,9 +2948,17 @@ function StepHookSelect({ data, patch }: { data: WizardData; patch: (p: Partial<
 
   // Generate AI hook recommendations when entering step
   // For podcast clips (trimMode === "clip"), hooks are relative to the trimmed segment
+  // Track trim range so we regenerate if user changes trim after initial hook analysis
+  const hookTrimKey = `${data.trimMode}-${data.trimStart.toFixed(1)}-${data.trimEnd.toFixed(1)}`;
+  const [lastHookTrimKey, setLastHookTrimKey] = useState("");
+
   useEffect(() => {
-    if (data.hookRecommendations.length > 0 || data.hookSkipped || !videoSrc) return;
-    patch({ hookAnalyzing: true });
+    if (data.hookSkipped || !videoSrc) return;
+    // Regenerate if trim range changed since last generation
+    const trimChanged = lastHookTrimKey !== "" && lastHookTrimKey !== hookTrimKey;
+    if (data.hookRecommendations.length > 0 && !trimChanged) return;
+
+    patch({ hookAnalyzing: true, hookRecommendations: [], hookSelected: false, hookStartTime: 0, hookEndTime: 0 });
     // Simulate AI analysis — in production this calls /api/video-pipeline/[projectId]/hook-analyze
     const timer = setTimeout(() => {
       const isTrimmed = data.trimMode === "clip" && data.trimEnd > data.trimStart;
@@ -2963,10 +2971,11 @@ function StepHookSelect({ data, patch }: { data: WizardData; patch: (p: Partial<
         { startTime: clipStart + Math.min(5, clipDur * 0.15), endTime: clipStart + Math.min(10, clipDur * 0.25), score: 85, reason: "משפט פותח מעניין עם ביטחון", motionEnergy: 0.72, emotionalIntensity: 0.90, retentionPrediction: 0.84 },
         { startTime: clipStart + Math.min(clipDur * 0.3, clipDur - 5), endTime: clipStart + Math.min(clipDur * 0.3 + 5, clipDur), score: 78, reason: "רגע רגשי חזק עם מבט ישיר למצלמה", motionEnergy: 0.65, emotionalIntensity: 0.95, retentionPrediction: 0.77 },
       ];
+      setLastHookTrimKey(hookTrimKey);
       patch({ hookRecommendations: recs, hookAnalyzing: false });
     }, 2000);
     return () => clearTimeout(timer);
-  }, [videoSrc, videoDur, data.hookRecommendations.length, data.hookSkipped, data.trimMode, data.trimStart, data.trimEnd, patch]);
+  }, [videoSrc, videoDur, data.hookRecommendations.length, data.hookSkipped, data.trimMode, data.trimStart, data.trimEnd, hookTrimKey, lastHookTrimKey, patch]);
 
   const selectHook = (rec: typeof data.hookRecommendations[0], idx: number) => {
     patch({
@@ -3008,7 +3017,12 @@ function StepHookSelect({ data, patch }: { data: WizardData; patch: (p: Partial<
       {videoSrc && (
         <div style={{ maxWidth: 480, margin: "0 auto 1.5rem", borderRadius: 12, overflow: "hidden", border: "1px solid var(--border)", position: "relative" }}>
           <video ref={videoRef} src={videoSrc} style={{ width: "100%", display: "block" }}
-            onLoadedMetadata={(e) => setVideoDur((e.target as HTMLVideoElement).duration)}
+            onLoadedMetadata={(e) => {
+              const v = e.target as HTMLVideoElement;
+              setVideoDur(v.duration);
+              // Seek to clip start so preview shows the trimmed range, not the podcast beginning
+              if (data.trimMode === "clip" && data.trimStart > 0) v.currentTime = data.trimStart;
+            }}
             onClick={() => { const v = videoRef.current; if (!v) return; playing ? v.pause() : v.play(); setPlaying(!playing); }} />
           {!playing && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.3)", cursor: "pointer", fontSize: "2.5rem" }}
             onClick={() => { videoRef.current?.play(); setPlaying(true); }}>&#9654;</div>}
