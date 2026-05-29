@@ -1018,7 +1018,7 @@ function NewProjectWizard() {
         creativePrompt: data.creativePrompt,
         videoUrl: videoSrcForComposition,
         videoFileName: data.videoFile?.name || "",
-        videoDurationSec: data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : 30,
+        videoDurationSec: data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : Math.round(data.sourceDuration) || 30,
         trimMode: data.trimMode, trimStart: data.trimStart, trimEnd: data.trimEnd,
         format: data.format,
         subtitleMode: data.subtitleMode, language: data.language,
@@ -1140,7 +1140,7 @@ function NewProjectWizard() {
     videoUrl: originalVideoSource || videoSrcForComposition || data.videoUrl,
     uploadedVideoUrl: data.uploadedVideoUrl,
     videoFileName: data.videoFile?.name || "",
-    videoDurationSec: data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : 30,
+    videoDurationSec: data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : Math.round(data.sourceDuration) || 30,
     trimMode: data.trimMode, trimStart: data.trimStart, trimEnd: data.trimEnd,
     format: data.format,
     subtitleMode: data.subtitleMode, language: data.language,
@@ -1184,7 +1184,7 @@ function NewProjectWizard() {
   const handleReEdit = useCallback((mode: ReEditMode) => {
     const input = {
       segments: data.segments.map(s => ({ id: s.id, startSec: s.startSec, endSec: s.endSec, text: s.text, highlightWord: s.highlightWord, highlightStyle: s.highlightStyle, emphasisWords: s.emphasisWords })),
-      durationSec: data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : 30,
+      durationSec: data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : Math.round(data.sourceDuration) || 30,
       format: data.format, currentPreset: data.preset, currentTransitionStyle: data.transitionStyle,
       brollPlacements: data.brollPlacements, musicEnabled: data.musicEnabled,
       musicTrackId: data.musicTrackId, musicVolume: data.musicVolume,
@@ -1243,7 +1243,7 @@ function NewProjectWizard() {
 
       const client = clients.find((c) => c.id === data.clientId);
       const clientName = client?.name || data.clientId || "";
-      const videoDurationSec = data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : 0;
+      const videoDurationSec = data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : Math.round(data.sourceDuration) || 30;
       const projectId = `proj_${Date.now()}`;
       if (!client) console.warn(`[createProject] Client not found for clientId=${data.clientId}. Using fallback name="${clientName}".`);
 
@@ -1714,7 +1714,7 @@ function NewProjectWizard() {
       await createProject({
         name: data.title, clientId: data.clientId, clientName: draftClient?.name || data.clientId || "",
         status: "draft", format: data.format, preset: data.preset,
-        durationSec: data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : 0,
+        durationSec: data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : Math.round(data.sourceDuration) || 30,
         segments: data.segments, sourceVideoKey: data.uploadedVideoUrl || data.videoUrl || null,
         renderOutputKey: null, thumbnailKey: null,
         wizardState: {
@@ -1916,7 +1916,7 @@ function NewProjectWizard() {
         {liveEditMode && showPersistentPreview && (
           <div style={{ borderTop: "1px solid var(--border)", flexShrink: 0 }}>
             <TimelineEditor
-              durationSec={liveCompositionData?.timeline.durationSec || (data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : 30)}
+              durationSec={liveCompositionData?.timeline.durationSec || (data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : Math.round(data.sourceDuration) || 30)}
               currentTime={timelineCurrent}
               onSeek={setTimelineCurrent}
               format={data.format}
@@ -6814,7 +6814,7 @@ function StepPreview({ data, patch, videoSrc: parentVideoSrc }: { data: WizardDa
         creativePrompt: data.creativePrompt,
         videoUrl: videoSrc,
         videoFileName: data.videoFile?.name || "",
-        videoDurationSec: data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : 30,
+        videoDurationSec: data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : Math.round(data.sourceDuration) || 30,
         trimMode: data.trimMode,
         trimStart: data.trimStart,
         trimEnd: data.trimEnd,
@@ -6873,7 +6873,7 @@ function StepPreview({ data, patch, videoSrc: parentVideoSrc }: { data: WizardDa
 
   // Compute Remotion Player dimensions
   const formatDims = FORMAT_DIMENSIONS[data.format] || FORMAT_DIMENSIONS["9:16"];
-  const durationSec = compositionSummary?.duration || (data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : 30);
+  const durationSec = compositionSummary?.duration || (data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : Math.round(data.sourceDuration) || 30);
   const durationInFrames = Math.max(1, Math.ceil(durationSec * FPS));
 
   // Determine scaled preview container size
@@ -7420,7 +7420,7 @@ function StepApprove({ data, patch, clients, onApprove, onSaveDraft, onBack, vid
   onApprove: () => void; onSaveDraft: () => void; onBack: () => void; videoSrc?: string; creating?: boolean;
 }) {
   const client = clients.find((c) => c.id === data.clientId);
-  const durationSec = data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : 30;
+  const durationSec = data.trimMode === "clip" ? Math.round(data.trimEnd - data.trimStart) : Math.round(data.sourceDuration) || 30;
 
   const videoSrc = parentVideoSrc || "";
 
