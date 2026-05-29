@@ -32,17 +32,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       socialUrls: body.socialUrls || {},
     };
 
-    // Step 1: Create the research record (returns immediately)
+    // Step 1: Create the research record in DB
     const researchId = await startLeadResearch(options);
 
-    // Step 2: Run the full pipeline — AWAIT it so Vercel keeps the function alive
-    // The frontend polls /status independently, so it sees progress in real time
-    runPipelineAsync(researchId, options).catch(err => {
-      console.error('[API] Pipeline error (post-response):', err);
-    });
+    // Step 2: Run the FULL pipeline — MUST await so Vercel keeps function alive
+    // On Vercel serverless, any code after `return` is killed immediately.
+    // The frontend polls /status every 3s independently, showing real-time progress.
+    // This call takes 1-5 minutes but maxDuration=300 keeps the function alive.
+    await runPipelineAsync(researchId, options);
 
-    // Return immediately — frontend starts polling
-    return NextResponse.json({ researchId, status: 'scanning' });
+    // Response sent only after pipeline completes (frontend already shows progress via polling)
+    return NextResponse.json({ researchId, status: 'completed' });
   } catch (err: any) {
     console.error('[API] Start research error:', err);
     return NextResponse.json({ error: err?.message || 'Failed to start research' }, { status: 500 });

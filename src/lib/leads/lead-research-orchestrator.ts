@@ -65,44 +65,103 @@ function calcProgress(stages: LeadResearchStage[]): number {
 // ── Stage Runners ─────────────────────────────────────────────────────────────
 
 async function runWebsiteScan(url: string): Promise<any> {
-  // Use scan-pipeline to crawl the site, then extract facts
-  const { startScan, getJob } = await import('@/lib/seo/scan-pipeline');
-  const { extractWebsiteFacts } = await import('@/lib/seo/website-facts');
+  // Direct HTTP crawl — does NOT use scan-pipeline (which relies on in-memory Map
+  // and fire-and-forget pattern incompatible with Vercel serverless).
+  console.log('[LeadResearch] Stage 1: Direct website scan for', url);
 
-  const jobId = await startScan(url, 'quick');
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
 
-  // Poll until scan completes (max ~120s)
-  const maxWait = 120_000;
-  const pollInterval = 2_000;
-  const start = Date.now();
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; StudioPixelBot/1.0)',
+        'Accept': 'text/html',
+      },
+      signal: controller.signal,
+      redirect: 'follow',
+    });
+    clearTimeout(timeout);
 
-  while (Date.now() - start < maxWait) {
-    const job = getJob(jobId);
-    if (!job) break;
-    if (job.status === 'completed' || job.status === 'failed') {
-      const scanResult = job.result;
-      const scannedPages = scanResult?.scannedPages || [];
-      const facts = extractWebsiteFacts(scanResult, scannedPages, url);
-      return {
-        scanJobId: jobId,
-        websiteFacts: facts,
-        scanResult,
-        scannedAt: new Date().toISOString(),
-      };
+    if (!res.ok) {
+      console.warn('[LeadResearch] Website returned', res.status);
+      return null;
     }
-    await new Promise(r => setTimeout(r, pollInterval));
-  }
 
-  // Timed out — try to extract whatever we have
-  const job = getJob(jobId);
-  if (job?.result) {
-    const scanResult = job.result;
-    const scannedPages = scanResult?.scannedPages || [];
-    const facts = extractWebsiteFacts(scanResult, scannedPages, url);
-    return { scanJobId: jobId, websiteFacts: facts, scanResult, scannedAt: new Date().toISOString() };
-  }
+    const html = await res.text();
 
-  return null;
+    // Extract basic facts from HTML
+    const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+    const descMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)/i);
+    const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']*)/i);
+    const h1Match = html.match(/<h1[^>]*>([^<]*)<\/h1>/i);
+    const canonicalMatch = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']*)/i);
+
+    // Check for common CMS/platform indicators
+    let cms = 'unknown';
+    if (html.includes('wp-content') || html.includes('wordpress')) cms = 'WordPress';
+    else if (html.includes('wix.com') || html.includes('wixsite')) cms = 'Wix';
+    else if (html.includes('squarespace')) cms = 'Squarespace';
+    else if (html.includes('shopify')) cms = 'Shopify';
+    else if (html.includes('elementor')) cms = 'WordPress+Elementor';
+
+    // Check SSL
+    const isHttps = url.startsWith('https://');
+
+    // Check mobile viewport
+    const hasViewport = /meta[^>]+name=["']viewport["']/i.test(html);
+
+    // Count internal links
+    const linkMatches = html.match(/<a[^>]+href=["'][^"']*/gi) || [];
+
+    // Extract social links from HTML
+    const socialLinks: string[] = [];
+    const socialPatterns = [/facebook\.com\/[^"'\s]+/gi, /instagram\.com\/[^"'\s]+/gi, /linkedin\.com\/[^"'\s]+/gi, /tiktok\.com\/@[^"'\s]+/gi];
+    for (const pattern of socialPatterns) {
+      const matches = html.match(pattern);
+      if (matches) socialLinks.push(...matches);
+    }
+
+    // Check for structured data
+    const hasSchema = html.includes('application/ld+json');
+
+    // Check page speed indicators
+    const hasLazyLoading = html.includes('loading="lazy"') || html.includes("loading='lazy'");
+
+    const facts = {
+      title: titleMatch?.[1]?.trim() || '',
+      description: descMatch?.[1]?.trim() || '',
+      ogImage: ogImageMatch?.[1] || '',
+      h1: h1Match?.[1]?.trim() || '',
+      canonical: canonicalMatch?.[1] || '',
+      cms,
+      isHttps,
+      hasMobileViewport: hasViewport,
+      internalLinks: linkMatches.length,
+      socialLinksFound: socialLinks,
+      hasSchemaMarkup: hasSchema,
+      hasLazyLoading,
+      htmlLength: html.length,
+      pageCount: 1,
+    };
+
+    console.log('[LeadResearch] Website scan complete:', facts.title || url);
+
+    return {
+      websiteFacts: facts,
+      scannedAt: new Date().toISOString(),
+    };
+  } catch (err: any) {
+    console.error('[LeadResearch] Website scan failed:', err?.message);
+    // Try extractWebsiteFacts as fallback
+    try {
+      const { extractWebsiteFacts } = await import('@/lib/seo/website-facts');
+      const facts = extractWebsiteFacts(null, [], url);
+      return { websiteFacts: facts, scannedAt: new Date().toISOString() };
+    } catch {
+      return null;
+    }
+  }
 }
 
 async function runSocialScan(url: string, businessName: string): Promise<any> {
