@@ -128,6 +128,75 @@ async function runWebsiteScan(url: string): Promise<any> {
     // Check page speed indicators
     const hasLazyLoading = html.includes('loading="lazy"') || html.includes("loading='lazy'");
 
+    // ── Deep extraction ──────────────────────────────────────────────────
+    // H2 headings (up to 10)
+    const h2Matches = html.match(/<h2[^>]*>([\s\S]*?)<\/h2>/gi) || [];
+    const h2Headings = h2Matches.slice(0, 10).map(m => m.replace(/<[^>]*>/g, '').trim()).filter(Boolean);
+
+    // Word count estimate (strip HTML tags, count words)
+    const strippedText = html.replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const wordCount = strippedText.split(/\s+/).filter(Boolean).length;
+
+    // Number of images
+    const imageCount = (html.match(/<img[\s>]/gi) || []).length;
+
+    // Contact form detection
+    const hasContactForm = /<form[\s\S]*?<\/form>/i.test(html) &&
+      (html.includes('contact') || html.includes('email') || html.includes('message') ||
+       html.includes('שלח') || html.includes('צור קשר'));
+
+    // Phone number detection
+    const phonePattern = /(?:tel:|href=["']tel:)([^"'\s<>]+)/i;
+    const phoneInText = html.match(/(?:\+972|0[2-9])[\s\-]?\d{1,2}[\s\-]?\d{3}[\s\-]?\d{4}/);
+    const hasPhoneNumber = phonePattern.test(html) || !!phoneInText;
+
+    // WhatsApp link
+    const hasWhatsApp = /wa\.me|whatsapp\.com|api\.whatsapp/i.test(html);
+
+    // Analytics detection
+    const hasGoogleAnalytics = /google-analytics\.com|gtag|UA-\d+|G-[A-Z0-9]+/i.test(html);
+    const hasGoogleTagManager = /googletagmanager\.com|GTM-[A-Z0-9]+/i.test(html);
+
+    // Language detection
+    const detectedLanguages: string[] = [];
+    const htmlLang = html.match(/<html[^>]+lang=["']([^"']+)/i)?.[1];
+    if (htmlLang) detectedLanguages.push(htmlLang.substring(0, 2));
+    if (/[֐-׿]/.test(html)) { if (!detectedLanguages.includes('he')) detectedLanguages.push('he'); }
+    if (/[؀-ۿ]/.test(html)) { if (!detectedLanguages.includes('ar')) detectedLanguages.push('ar'); }
+    if (/[a-zA-Z]{3,}/.test(strippedText)) { if (!detectedLanguages.includes('en')) detectedLanguages.push('en'); }
+
+    // Link analysis (internal vs external)
+    let internalLinkCount = 0;
+    let externalLinkCount = 0;
+    let siteDomain = '';
+    try { siteDomain = new URL(url).hostname; } catch {}
+    for (const rawLink of linkMatches) {
+      const hrefMatch = rawLink.match(/href=["']([^"']*)/i);
+      if (!hrefMatch) continue;
+      const href = hrefMatch[1];
+      if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) continue;
+      if (href.startsWith('/') || href.startsWith('.') || !href.includes('://')) { internalLinkCount++; continue; }
+      try { const linkHost = new URL(href).hostname; linkHost === siteDomain ? internalLinkCount++ : externalLinkCount++; } catch { internalLinkCount++; }
+    }
+
+    // Blog section detection
+    const hasBlog = /\/blog|\/articles|\/posts|\/magazine|\/בלוג|\/כתבות/i.test(html) ||
+      /<a[^>]+href=["'][^"']*(?:blog|article|post|כתב)[^"']*/i.test(html);
+
+    // Favicon detection
+    const hasFavicon = /rel=["'](?:shortcut )?icon["']/i.test(html) || /rel=["']apple-touch-icon["']/i.test(html);
+
+    // Page size in KB
+    const pageSizeKB = Math.round(html.length / 1024);
+
+    // CSS and JS file counts
+    const cssFileCount = (html.match(/<link[^>]+rel=["']stylesheet["'][^>]*>/gi) || []).length;
+    const jsFileCount = (html.match(/<script[^>]+src=["'][^"']+["']/gi) || []).length;
+
     const facts = {
       title: titleMatch?.[1]?.trim() || '',
       description: descMatch?.[1]?.trim() || '',
@@ -143,6 +212,23 @@ async function runWebsiteScan(url: string): Promise<any> {
       hasLazyLoading,
       htmlLength: html.length,
       pageCount: 1,
+      // Deep analysis fields
+      h2Headings,
+      wordCount,
+      imageCount,
+      hasContactForm,
+      hasPhoneNumber,
+      hasWhatsApp,
+      hasGoogleAnalytics,
+      hasGoogleTagManager,
+      detectedLanguages,
+      internalLinkCount,
+      externalLinkCount,
+      hasBlog,
+      hasFavicon,
+      pageSizeKB,
+      cssFileCount,
+      jsFileCount,
     };
 
     console.log('[LeadResearch] Website scan complete:', facts.title || url);
@@ -166,13 +252,15 @@ async function runWebsiteScan(url: string): Promise<any> {
 
 // ── Self-contained stage runners — no external engine dependencies ────────────
 
-async function runSocialScan(url: string, businessName: string): Promise<any> {
-  // Self-contained: just check if social links exist on the website HTML
-  console.log('[LeadResearch] Stage 2: Social scan for', businessName);
+async function runSocialScan(url: string, businessName: string, socialUrls?: Record<string, string>): Promise<any> {
+  // Deep social scan: fetch each social profile and extract real meta data
+  console.log('[LeadResearch] Stage 2: Deep social scan for', businessName);
   const result: Record<string, any> = {
     facebook: null, instagram: null, linkedin: null, tiktok: null,
   };
 
+  // Step 1: discover social links from the website HTML (fallback for platforms not provided)
+  const discoveredUrls: Record<string, string> = {};
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
@@ -181,25 +269,123 @@ async function runSocialScan(url: string, businessName: string): Promise<any> {
       signal: controller.signal, redirect: 'follow',
     });
     clearTimeout(timeout);
-    if (!res.ok) return result;
-    const html = await res.text();
-
-    // Extract social links from HTML
-    const fbMatch = html.match(/(?:https?:\/\/)?(?:www\.)?facebook\.com\/[^"'\s<>]+/i);
-    const igMatch = html.match(/(?:https?:\/\/)?(?:www\.)?instagram\.com\/[^"'\s<>]+/i);
-    const liMatch = html.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/[^"'\s<>]+/i);
-    const tkMatch = html.match(/(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@[^"'\s<>]+/i);
-
-    if (fbMatch) result.facebook = { url: fbMatch[0], found: true, source: 'website' };
-    if (igMatch) result.instagram = { url: igMatch[0], found: true, source: 'website' };
-    if (liMatch) result.linkedin = { url: liMatch[0], found: true, source: 'website' };
-    if (tkMatch) result.tiktok = { url: tkMatch[0], found: true, source: 'website' };
-
-    console.log('[LeadResearch] Social found on website:', Object.keys(result).filter(k => result[k]?.found));
+    if (res.ok) {
+      const html = await res.text();
+      const fbMatch = html.match(/(?:https?:\/\/)?(?:www\.)?facebook\.com\/[^"'\s<>]+/i);
+      const igMatch = html.match(/(?:https?:\/\/)?(?:www\.)?instagram\.com\/[^"'\s<>]+/i);
+      const liMatch = html.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/[^"'\s<>]+/i);
+      const tkMatch = html.match(/(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@[^"'\s<>]+/i);
+      if (fbMatch) discoveredUrls.facebook = fbMatch[0];
+      if (igMatch) discoveredUrls.instagram = igMatch[0];
+      if (liMatch) discoveredUrls.linkedin = liMatch[0];
+      if (tkMatch) discoveredUrls.tiktok = tkMatch[0];
+    }
   } catch (e: any) {
-    console.warn('[LeadResearch] Social scan fetch error:', e?.message);
+    console.warn('[LeadResearch] Social discovery fetch error:', e?.message);
   }
 
+  // Merge: manual socialUrls override discovered ones
+  const platformUrls: Record<string, string> = { ...discoveredUrls };
+  if (socialUrls) {
+    for (const [platform, pUrl] of Object.entries(socialUrls)) {
+      if (pUrl) platformUrls[platform] = pUrl;
+    }
+  }
+
+  // Helper to fetch a social profile page and extract meta tags
+  async function fetchSocialMeta(profileUrl: string): Promise<Record<string, string>> {
+    const meta: Record<string, string> = {};
+    try {
+      let fullUrl = profileUrl;
+      if (!fullUrl.startsWith('http')) fullUrl = 'https://' + fullUrl;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
+      const res = await fetch(fullUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml',
+          'Accept-Language': 'en-US,en;q=0.9,he;q=0.8',
+        },
+        signal: controller.signal, redirect: 'follow',
+      });
+      clearTimeout(timeout);
+      if (!res.ok) return meta;
+      const html = await res.text();
+
+      // Extract common meta tags
+      const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']*)/i)?.[1];
+      const ogDesc = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']*)/i)?.[1];
+      const ogImage = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']*)/i)?.[1];
+      const metaDesc = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)/i)?.[1];
+      const titleTag = html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1];
+
+      if (ogTitle) meta.ogTitle = ogTitle.trim();
+      if (ogDesc) meta.ogDescription = ogDesc.trim();
+      if (ogImage) meta.ogImage = ogImage.trim();
+      if (metaDesc) meta.metaDescription = metaDesc.trim();
+      if (titleTag) meta.pageTitle = titleTag.trim();
+
+      // Try to extract follower/like counts from meta or visible text
+      const followersMatch = html.match(/(\d[\d,\.]+)\s*(?:Followers|followers|עוקבים)/i);
+      if (followersMatch) meta.followers = followersMatch[1].replace(/,/g, '');
+      const likesMatch = html.match(/(\d[\d,\.]+)\s*(?:likes|people like|אנשים אוהבים)/i);
+      if (likesMatch) meta.likes = likesMatch[1].replace(/,/g, '');
+
+      // Additional platform-specific extraction from JSON-LD / embedded data
+      const jsonLdMatches = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
+      for (const block of jsonLdMatches) {
+        const jsonContent = block.replace(/<[^>]*>/g, '');
+        try {
+          const parsed = JSON.parse(jsonContent);
+          if (parsed.name && !meta.ogTitle) meta.ogTitle = parsed.name;
+          if (parsed.description && !meta.ogDescription) meta.ogDescription = parsed.description;
+          if (parsed.interactionStatistic) {
+            const stats = Array.isArray(parsed.interactionStatistic) ? parsed.interactionStatistic : [parsed.interactionStatistic];
+            for (const stat of stats) {
+              if (stat.interactionType?.['@type'] === 'FollowAction') meta.followers = String(stat.userInteractionCount);
+            }
+          }
+        } catch { /* ignore malformed JSON-LD */ }
+      }
+    } catch (e: any) {
+      console.warn('[LeadResearch] Social meta fetch error:', e?.message);
+    }
+    return meta;
+  }
+
+  // Step 2: fetch and enrich each platform
+  const platforms: Array<{ key: string; label: string }> = [
+    { key: 'facebook', label: 'Facebook' },
+    { key: 'instagram', label: 'Instagram' },
+    { key: 'linkedin', label: 'LinkedIn' },
+    { key: 'tiktok', label: 'TikTok' },
+  ];
+
+  const fetchPromises = platforms.map(async (platform) => {
+    const profileUrl = platformUrls[platform.key];
+    if (!profileUrl) return;
+
+    const source = socialUrls?.[platform.key] ? 'manual' : 'website';
+    const meta = await fetchSocialMeta(profileUrl);
+
+    const platformData: Record<string, any> = {
+      url: profileUrl,
+      found: true,
+      source,
+      name: meta.ogTitle || meta.pageTitle || null,
+      description: meta.ogDescription || meta.metaDescription || null,
+      image: meta.ogImage || null,
+      followers: meta.followers ? parseInt(meta.followers, 10) || meta.followers : null,
+      likes: meta.likes ? parseInt(meta.likes, 10) || meta.likes : null,
+    };
+
+    result[platform.key] = platformData;
+  });
+
+  await Promise.all(fetchPromises);
+
+  const foundPlatforms = Object.keys(result).filter(k => result[k]?.found);
+  console.log('[LeadResearch] Social deep scan complete:', foundPlatforms, '| with meta data');
   return result;
 }
 
@@ -607,6 +793,133 @@ async function runQuarterPlan(data: {
   }
 }
 
+// ── AI Deep Analysis — runs generateWithAI on raw data per area ─────────────
+
+async function runDeepAIAnalysis(data: {
+  leadName: string;
+  websiteUrl: string;
+  websiteFacts: any;
+  socialPresence: any;
+  googlePresence: any;
+  seoAnalysis: any;
+  geoAnalysis: any;
+  competitorAnalysis: any;
+}): Promise<any> {
+  console.log('[LeadResearch] Running deep AI analysis...');
+  const { generateWithAI } = await import('@/lib/ai/openai-client');
+  const wf = data.websiteFacts || {};
+  const social = data.socialPresence || {};
+  const result: any = {};
+
+  // ── 1. Website Deep Analysis (UX + UI + Content) ──
+  try {
+    const websiteData = `
+כותרת: ${wf.title || 'לא נמצא'}
+תיאור: ${wf.description || 'לא נמצא'}
+H1: ${wf.h1 || 'חסר'}
+כותרות H2: ${(wf.h2Headings || []).join(', ') || 'אין'}
+CMS: ${wf.cms || 'לא זוהה'}
+HTTPS: ${wf.isHttps ? 'כן' : 'לא'}
+מותאם למובייל: ${wf.hasMobileViewport ? 'כן' : 'לא'}
+Schema Markup: ${wf.hasSchemaMarkup ? 'כן' : 'לא'}
+Lazy Loading: ${wf.hasLazyLoading ? 'כן' : 'לא'}
+טופס יצירת קשר: ${wf.hasContactForm ? 'כן' : 'לא'}
+מספר טלפון: ${wf.hasPhoneNumber ? 'כן' : 'לא'}
+WhatsApp: ${wf.hasWhatsApp ? 'כן' : 'לא'}
+Google Analytics: ${wf.hasGoogleAnalytics ? 'כן' : 'לא'}
+בלוג: ${wf.hasBlog ? 'כן' : 'לא'}
+מספר מילים: ${wf.wordCount || '?'}
+מספר תמונות: ${wf.imageCount || '?'}
+לינקים פנימיים: ${wf.internalLinkCount || '?'}
+לינקים חיצוניים: ${wf.externalLinkCount || '?'}
+קבצי CSS: ${wf.cssFileCount || '?'}, קבצי JS: ${wf.jsFileCount || '?'}
+גודל עמוד: ${wf.pageSizeKB || '?'} KB
+שפות: ${(wf.detectedLanguages || []).join(', ') || '?'}
+favicon: ${wf.hasFavicon ? 'כן' : 'לא'}
+OG Image: ${wf.ogImage ? 'כן' : 'לא'}`;
+
+    const r = await generateWithAI(
+      `אתה מומחה UX/UI ושיווק דיגיטלי של סטודיו פיקסל. נתח את האתר לעומק.
+החזר JSON: { "uxAnalysis": "3-4 פסקאות ניתוח UX/UI מפורט", "contentAnalysis": "3-4 פסקאות ניתוח תוכן", "technicalNotes": "2-3 פסקאות ניתוח טכני", "strengths": ["חוזק 1", "חוזק 2"], "weaknesses": ["חולשה 1", "חולשה 2"], "recommendations": ["המלצה 1", "המלצה 2", "המלצה 3"] }
+כתוב בעברית. בסס רק על הנתונים שניתנו. אל תמציא.`,
+      `נתח את האתר ${data.websiteUrl} עבור "${data.leadName}":\n${websiteData}`,
+      { temperature: 0.6, maxTokens: 2000 }
+    );
+    if (r.success && r.data) {
+      result.websiteDeepAnalysis = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+    }
+  } catch (e) { console.warn('[LeadResearch] Website AI analysis failed:', e); }
+
+  // ── 2. Social Media Deep Analysis ──
+  try {
+    const platforms = ['facebook', 'instagram', 'linkedin', 'tiktok'];
+    const socialData = platforms.map(p => {
+      const d = social[p];
+      if (!d?.found) return `${p}: לא נמצא`;
+      return `${p}: נמצא | URL: ${d.url || '?'} | שם: ${d.name || '?'} | תיאור: ${(d.description || '').substring(0, 200)} | עוקבים: ${d.followers || '?'} | לייקים: ${d.likes || '?'}`;
+    }).join('\n');
+
+    const r = await generateWithAI(
+      `אתה מומחה שיווק ברשתות חברתיות של סטודיו פיקסל. נתח כל פלטפורמה לעומק.
+החזר JSON: {
+  "overallAssessment": "2-3 פסקאות הערכה כללית של הנוכחות ברשתות",
+  "platformAnalyses": [
+    { "platform": "facebook", "analysis": "2-3 פסקאות ניתוח מעמיק — נראות, מסרים, תוכן, עוקבים, מעורבות, עקביות פרסום", "score": 0-100, "recommendations": ["המלצה 1", "המלצה 2"] },
+    { "platform": "instagram", "analysis": "...", "score": 0-100, "recommendations": [] },
+    { "platform": "tiktok", "analysis": "...", "score": 0-100, "recommendations": [] },
+    { "platform": "linkedin", "analysis": "...", "score": 0-100, "recommendations": [] }
+  ],
+  "contentStrategy": "2-3 פסקאות המלצות לאסטרטגיית תוכן",
+  "missingOpportunities": ["הזדמנות 1", "הזדמנות 2"]
+}
+כתוב בעברית. נתח גם פלטפורמות שלא נמצאו — הסבר למה הן חשובות. אל תמציא מספרים.`,
+      `נתח את הרשתות החברתיות של "${data.leadName}" (${data.websiteUrl}):\n${socialData}`,
+      { temperature: 0.6, maxTokens: 2500 }
+    );
+    if (r.success && r.data) {
+      result.socialDeepAnalysis = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+    }
+  } catch (e) { console.warn('[LeadResearch] Social AI analysis failed:', e); }
+
+  // ── 3. SEO + GEO Deep Analysis ──
+  try {
+    const seo = data.seoAnalysis || {};
+    const geo = data.geoAnalysis || {};
+    const google = data.googlePresence || {};
+    const comp = data.competitorAnalysis || {};
+
+    const seoData = `
+ציון SEO טכני: ${seo.technicalScore || 0}/100
+ציון תוכן: ${seo.contentScore || 0}/100
+בעיות שנמצאו: ${(seo.issues || []).join(', ') || 'אין'}
+נמצא בגוגל: ${google?.found ? `כן, מיקום ${google.organic?.position || '?'}` : 'לא'}
+Local Pack: ${google?.localPack?.found ? 'כן' : 'לא'}
+ביקורות: ${google?.reviews ? `${google.reviews.rating}/5 (${google.reviews.count})` : 'לא נמצאו'}
+נראות AI: ${geo?.overallVisibility ?? 0}% (${geo?.checkedCount || 0} פלטפורמות נבדקו)
+מתחרים: ${(comp.competitors || []).map((c: any) => `${c.name || c.domain} (מיקום ${c.position})`).join(', ') || 'לא נמצאו'}`;
+
+    const r = await generateWithAI(
+      `אתה מומחה SEO ו-GEO של סטודיו פיקסל. נתח את מצב הקידום האורגני ונראות AI לעומק.
+החזר JSON: {
+  "seoDeepAnalysis": "3-4 פסקאות ניתוח SEO מעמיק — on-page, technical, content, מילות מפתח",
+  "geoAnalysis": "2-3 פסקאות ניתוח GEO/AI — נראות במנועי AI, פוטנציאל, מה חסר",
+  "competitorInsights": "2-3 פסקאות ניתוח מתחרים — מה הם עושים נכון, מה אפשר ללמוד",
+  "localSeoStatus": "1-2 פסקאות ניתוח SEO מקומי — Google Business Profile, מפות",
+  "actionPlan": ["פעולה מיידית 1", "פעולה מיידית 2", "פעולה מיידית 3", "פעולה לטווח בינוני 1", "פעולה לטווח ארוך 1"]
+}
+כתוב בעברית. בסס רק על הנתונים. אל תמציא דירוגים או מספרים שלא סופקו.`,
+      `נתח SEO/GEO עבור "${data.leadName}" (${data.websiteUrl}):\n${seoData}`,
+      { temperature: 0.6, maxTokens: 2000 }
+    );
+    if (r.success && r.data) {
+      result.seoGeoDeepAnalysis = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+    }
+  } catch (e) { console.warn('[LeadResearch] SEO/GEO AI analysis failed:', e); }
+
+  console.log('[LeadResearch] Deep AI analysis complete:', Object.keys(result));
+  return result;
+}
+
 async function runReportGeneration(data: {
   leadName: string;
   websiteUrl: string;
@@ -619,46 +932,223 @@ async function runReportGeneration(data: {
   scores: any;
   salesOpportunities: any[];
   quarterPlan: any;
+  deepAnalysis?: any;
 }): Promise<any> {
   try {
     const { generateWithAI } = await import('@/lib/ai/openai-client');
 
-    const systemPrompt = `אתה כותב דוחות מקצועיים עבור סטודיו פיקסל (Studio Pixel).
-צור דוח מחקר ליד מקיף בעברית. החזר JSON בלבד בפורמט הבא:
+    const wf = data.websiteFacts || {};
+    const social = data.socialPresence || {};
+    const google = data.googlePresence || {};
+    const seo = data.seoAnalysis || {};
+    const geo = data.geoAnalysis || {};
+    const comp = data.competitorAnalysis || {};
+    const scores = data.scores || {};
+    const opportunities = data.salesOpportunities || [];
+    const plan = data.quarterPlan;
+
+    // Build per-platform social summary
+    const socialPlatforms = ['facebook', 'instagram', 'linkedin', 'tiktok'];
+    const socialDetails = socialPlatforms.map(p => {
+      const d = social[p];
+      if (!d?.found) return `  ${p}: לא נמצא`;
+      const parts = [`  ${p}: נמצא`];
+      if (d.url) parts.push(`URL: ${d.url}`);
+      if (d.name) parts.push(`שם: ${d.name}`);
+      if (d.description) parts.push(`תיאור: ${d.description.substring(0, 200)}`);
+      if (d.followers) parts.push(`עוקבים: ${d.followers}`);
+      if (d.likes) parts.push(`לייקים: ${d.likes}`);
+      parts.push(`מקור: ${d.source || 'unknown'}`);
+      return parts.join(' | ');
+    }).join('\n');
+
+    // Build competitor summary
+    const competitorList = (comp.competitors || []).map((c: any, i: number) =>
+      `  ${i + 1}. ${c.name} (${c.domain}) — מיקום ${c.position}${c.strengths?.[0] ? ` | ${c.strengths[0]}` : ''}`
+    ).join('\n') || '  לא נמצאו מתחרים';
+
+    // Build SEO issues list
+    const seoIssues = (seo.issues || []).map((issue: string) => `  - ${issue}`).join('\n') || '  אין בעיות';
+
+    // Build opportunities summary
+    const opportunitySummary = opportunities.map((o: any) =>
+      `  ${o.priority}. ${o.serviceHe} — ₪${o.estimatedValue?.toLocaleString() || '?'} | ${o.evidenceHe || o.evidence || ''}`
+    ).join('\n') || '  לא זוהו הזדמנויות';
+
+    // Build quarter plan summary
+    const quarterPlanSummary = plan?.goals
+      ? plan.goals.map((g: any) => `  - ${g.titleHe || g.title}: ${g.metric || ''} (${g.currentValue || '?'} -> ${g.targetValue || '?'})`).join('\n')
+      : '  לא נוצרה תוכנית';
+
+    // Category scores
+    const categoryScores = (scores.categories || []).map((c: any) =>
+      `  ${c.categoryHe || c.category}: ${c.score}/100 (${c.grade})`
+    ).join('\n') || '  לא חושבו ציונים';
+
+    const systemPrompt = `אתה כותב דוחות מחקר מקצועיים ומעמיקים עבור סטודיו פיקסל (Studio Pixel) — סוכנות שיווק דיגיטלי מובילה.
+הדוח מיועד להצגה ללקוח פוטנציאלי כדי להדגים את הערך שסטודיו פיקסל יכול לספק.
+
+כתוב דוח מקיף ומפורט בעברית. כל סעיף צריך לכלול 3-5 פסקאות מפורטות, לא משפט אחד.
+השתמש אך ורק בנתונים שסופקו — אל תמציא מספרים, ציונים, או עובדות.
+
+החזר JSON בלבד בפורמט הבא:
 {
   "id": "report_1",
   "title": "Lead Research Report",
   "titleHe": "דוח מחקר ליד — ${data.leadName}",
   "sections": [
-    { "id": "executive_summary", "title": "Executive Summary", "titleHe": "תקציר מנהלים", "content": [{ "type": "paragraph", "text": "..." }] },
-    { "id": "website_analysis", "title": "Website Analysis", "titleHe": "ניתוח אתר", "content": [] },
-    { "id": "seo_status", "title": "SEO Status", "titleHe": "מצב SEO", "content": [] },
-    { "id": "ai_visibility", "title": "AI Visibility", "titleHe": "נראות במנועי AI", "content": [] },
-    { "id": "competitors", "title": "Competitors", "titleHe": "ניתוח מתחרים", "content": [] },
-    { "id": "opportunities", "title": "Opportunities", "titleHe": "הזדמנויות צמיחה", "content": [] },
-    { "id": "quarter_plan", "title": "Quarter Plan", "titleHe": "תוכנית 90 יום", "content": [] },
-    { "id": "recommendations", "title": "Recommendations", "titleHe": "המלצות Studio Pixel", "content": [] }
+    { "id": "executive_summary", "title": "Executive Summary", "titleHe": "תקציר מנהלים", "content": [{ "type": "paragraph", "text": "..." }, { "type": "paragraph", "text": "..." }, { "type": "paragraph", "text": "..." }] },
+    { "id": "website_analysis", "title": "Website Analysis", "titleHe": "ניתוח אתר מעמיק", "content": [3-5 paragraphs] },
+    { "id": "website_ux_review", "title": "Website UX Review", "titleHe": "סקירת חוויית משתמש", "content": [3-5 paragraphs] },
+    { "id": "seo_status", "title": "SEO Status", "titleHe": "מצב SEO מקיף", "content": [3-5 paragraphs] },
+    { "id": "social_media_deep", "title": "Social Media Deep Analysis", "titleHe": "ניתוח מעמיק רשתות חברתיות", "content": [3-5 paragraphs] },
+    { "id": "google_presence", "title": "Google Presence", "titleHe": "נוכחות בגוגל", "content": [3-5 paragraphs] },
+    { "id": "ai_visibility", "title": "AI Visibility", "titleHe": "נראות במנועי AI", "content": [3-5 paragraphs] },
+    { "id": "competitors", "title": "Competitor Analysis", "titleHe": "ניתוח מתחרים", "content": [3-5 paragraphs] },
+    { "id": "content_strategy", "title": "Content Strategy", "titleHe": "המלצות אסטרטגיית תוכן", "content": [3-5 paragraphs] },
+    { "id": "paid_advertising", "title": "Paid Advertising Potential", "titleHe": "פוטנציאל פרסום ממומן", "content": [3-5 paragraphs] },
+    { "id": "opportunities", "title": "Sales Opportunities", "titleHe": "הזדמנויות צמיחה ומכירה", "content": [3-5 paragraphs] },
+    { "id": "quarter_plan", "title": "Quarter Plan", "titleHe": "תוכנית 90 יום", "content": [3-5 paragraphs] },
+    { "id": "recommendations", "title": "Recommendations", "titleHe": "המלצות Studio Pixel", "content": [3-5 paragraphs] }
   ],
   "generatedAt": "${new Date().toISOString()}",
   "approved": false
 }
-כל הטקסט בעברית. אל תמציא נתונים.`;
 
-    const userPrompt = `צור דוח מחקר ליד עבור "${data.leadName}" (${data.websiteUrl}).
+חשוב מאוד:
+- כל סעיף חייב לכלול לפחות 3 פסקאות מפורטות עם ניתוח מעמיק
+- השתמש בנתונים הספציפיים שסופקו (ציונים, מספרים, בעיות)
+- הסבר מה המשמעות של כל ממצא עבור העסק
+- תן המלצות קונקרטיות ומעשיות
+- הדגש את הערך שסטודיו פיקסל יכול לספק
+- כל הטקסט בעברית`;
 
-נתונים זמינים:
-- ציון כללי: ${data.scores?.overall ?? 'N/A'}/100
-- ציון SEO טכני: ${data.seoAnalysis?.technicalScore ?? 'N/A'}
-- ציון תוכן: ${data.seoAnalysis?.contentScore ?? 'N/A'}
-- נראות AI: ${data.geoAnalysis?.overallVisibility ?? 'N/A'}%
-- מתחרים: ${data.competitorAnalysis?.competitors?.length ?? 0}
-- הזדמנויות מכירה: ${data.salesOpportunities?.length ?? 0}
-- רשתות חברתיות: ${data.socialPresence ? 'נמצאו' : 'לא נמצאו'}
-- גוגל: ${data.googlePresence ? 'נמצא' : 'לא נמצא'}
+    const userPrompt = `צור דוח מחקר ליד מקיף ומפורט עבור "${data.leadName}" (${data.websiteUrl}).
 
-מלא את כל הסעיפים עם תוכן מבוסס נתונים בלבד.`;
+══════════════════════════════════════
+  נתוני אתר (Website Facts)
+══════════════════════════════════════
+  כותרת: ${wf.title || 'לא נמצא'}
+  תיאור: ${wf.description || 'לא נמצא'}
+  H1: ${wf.h1 || 'לא נמצא'}
+  H2 headings: ${(wf.h2Headings || []).join(' | ') || 'לא נמצאו'}
+  CMS/פלטפורמה: ${wf.cms || 'לא זוהה'}
+  HTTPS: ${wf.isHttps ? 'כן' : 'לא'}
+  Viewport מובייל: ${wf.hasMobileViewport ? 'כן' : 'לא'}
+  Schema Markup: ${wf.hasSchemaMarkup ? 'כן' : 'לא'}
+  Lazy Loading: ${wf.hasLazyLoading ? 'כן' : 'לא'}
+  OG Image: ${wf.ogImage ? 'כן' : 'לא'}
+  Canonical URL: ${wf.canonical || 'לא'}
+  ספירת מילים: ${wf.wordCount ?? 'N/A'}
+  מספר תמונות: ${wf.imageCount ?? 'N/A'}
+  טופס צור קשר: ${wf.hasContactForm ? 'כן' : 'לא'}
+  מספר טלפון: ${wf.hasPhoneNumber ? 'כן' : 'לא'}
+  WhatsApp: ${wf.hasWhatsApp ? 'כן' : 'לא'}
+  Google Analytics: ${wf.hasGoogleAnalytics ? 'כן' : 'לא'}
+  Google Tag Manager: ${wf.hasGoogleTagManager ? 'כן' : 'לא'}
+  שפות מזוהות: ${(wf.detectedLanguages || []).join(', ') || 'N/A'}
+  קישורים פנימיים: ${wf.internalLinkCount ?? wf.internalLinks ?? 'N/A'}
+  קישורים חיצוניים: ${wf.externalLinkCount ?? 'N/A'}
+  בלוג: ${wf.hasBlog ? 'כן' : 'לא'}
+  Favicon: ${wf.hasFavicon ? 'כן' : 'לא'}
+  גודל עמוד: ${wf.pageSizeKB ?? 'N/A'} KB
+  קבצי CSS: ${wf.cssFileCount ?? 'N/A'}
+  קבצי JS: ${wf.jsFileCount ?? 'N/A'}
 
-    const result = await generateWithAI(systemPrompt, userPrompt, { temperature: 0.5 });
+══════════════════════════════════════
+  רשתות חברתיות (Social Presence)
+══════════════════════════════════════
+${socialDetails}
+
+══════════════════════════════════════
+  נוכחות בגוגל (Google Presence)
+══════════════════════════════════════
+  נמצא בחיפוש אורגני: ${google.organic?.found ? 'כן' : 'לא'}
+  מיקום אורגני: ${google.organic?.position ?? 'N/A'}
+  תוצאות אורגניות עליונות: ${(google.organic?.results || []).map((r: any) => `${r.title} (${r.link})`).join(' | ') || 'N/A'}
+  Local Pack: ${google.localPack?.found ? 'כן' : 'לא'}
+  דירוג ביקורות: ${google.reviews?.rating ?? 'N/A'}
+  מספר ביקורות: ${google.reviews?.count ?? 'N/A'}
+
+══════════════════════════════════════
+  SEO Analysis
+══════════════════════════════════════
+  ציון טכני: ${seo.technicalScore ?? 'N/A'}/100
+  ציון תוכן: ${seo.contentScore ?? 'N/A'}/100
+  בעיות שנמצאו:
+${seoIssues}
+  פערי תוכן: ${(seo.contentGaps || []).join(', ') || 'אין'}
+
+══════════════════════════════════════
+  נראות AI / GEO
+══════════════════════════════════════
+  נראות כוללת: ${geo.overallVisibility ?? 'N/A'}%
+  פלטפורמות שנבדקו: ${geo.checkedCount ?? 0}
+  פלטפורמות: ${(geo.platforms || []).map((p: any) => `${p.platformName}: ${p.checked ? (p.found ? 'נמצא' : 'לא נמצא') : 'לא נבדק'}`).join(' | ') || 'N/A'}
+
+══════════════════════════════════════
+  ציונים (Scores)
+══════════════════════════════════════
+  ציון כללי: ${scores.overall ?? 'N/A'}/100 (${scores.grade ?? 'N/A'})
+  ביטחון: ${scores.confidence ?? 'N/A'}%
+${categoryScores}
+
+══════════════════════════════════════
+  מתחרים (Competitors)
+══════════════════════════════════════
+  מיקום בשוק: ${comp.marketPosition || 'N/A'}
+${competitorList}
+
+══════════════════════════════════════
+  הזדמנויות מכירה (Sales Opportunities)
+══════════════════════════════════════
+${opportunitySummary}
+
+══════════════════════════════════════
+  תוכנית רבעונית (Quarter Plan)
+══════════════════════════════════════
+  רבעון: ${plan?.quarter || 'N/A'}
+  ROI צפוי: ${plan?.estimatedROI || 'N/A'}
+  השקעה כוללת: ${plan?.totalInvestment ? '₪' + plan.totalInvestment.toLocaleString() : 'N/A'}
+  יעדים:
+${quarterPlanSummary}
+
+══════════════════════════════════════
+  ניתוח AI מעמיק (Deep AI Analysis)
+══════════════════════════════════════
+${data.deepAnalysis?.websiteDeepAnalysis ? `
+ניתוח אתר מעמיק:
+  UX: ${data.deepAnalysis.websiteDeepAnalysis.uxAnalysis || 'לא בוצע'}
+  תוכן: ${data.deepAnalysis.websiteDeepAnalysis.contentAnalysis || 'לא בוצע'}
+  טכני: ${data.deepAnalysis.websiteDeepAnalysis.technicalNotes || 'לא בוצע'}
+  חוזקות: ${(data.deepAnalysis.websiteDeepAnalysis.strengths || []).join(', ')}
+  חולשות: ${(data.deepAnalysis.websiteDeepAnalysis.weaknesses || []).join(', ')}
+  המלצות: ${(data.deepAnalysis.websiteDeepAnalysis.recommendations || []).join(', ')}
+` : '  ניתוח אתר: לא בוצע'}
+${data.deepAnalysis?.socialDeepAnalysis ? `
+ניתוח סושייאל מעמיק:
+  הערכה כללית: ${data.deepAnalysis.socialDeepAnalysis.overallAssessment || 'לא בוצע'}
+  אסטרטגיית תוכן: ${data.deepAnalysis.socialDeepAnalysis.contentStrategy || 'לא בוצע'}
+  הזדמנויות חסרות: ${(data.deepAnalysis.socialDeepAnalysis.missingOpportunities || []).join(', ')}
+${(data.deepAnalysis.socialDeepAnalysis.platformAnalyses || []).map((p: any) => `  ${p.platform}: ציון ${p.score}/100 — ${(p.analysis || '').substring(0, 200)}`).join('\n')}
+` : '  ניתוח סושייאל: לא בוצע'}
+${data.deepAnalysis?.seoGeoDeepAnalysis ? `
+ניתוח SEO/GEO מעמיק:
+  SEO: ${data.deepAnalysis.seoGeoDeepAnalysis.seoDeepAnalysis || 'לא בוצע'}
+  GEO: ${data.deepAnalysis.seoGeoDeepAnalysis.geoAnalysis || 'לא בוצע'}
+  מתחרים: ${data.deepAnalysis.seoGeoDeepAnalysis.competitorInsights || 'לא בוצע'}
+  SEO מקומי: ${data.deepAnalysis.seoGeoDeepAnalysis.localSeoStatus || 'לא בוצע'}
+  תוכנית פעולה: ${(data.deepAnalysis.seoGeoDeepAnalysis.actionPlan || []).join(', ')}
+` : '  ניתוח SEO/GEO: לא בוצע'}
+
+══════════════════════════════════════
+
+השתמש בניתוח AI המעמיק כבסיס לכתיבת הדוח. כל סעיף צריך 3-5 פסקאות מפורטות.
+שלב את הנתונים הגולמיים עם הניתוח המעמיק ליצירת דוח מקצועי ומעמיק ביותר.
+הדגש חוזקות, חולשות, הזדמנויות, והמלצות מעשיות לכל תחום.
+מלא את כל 13 הסעיפים שבפורמט.`;
+
+    const result = await generateWithAI(systemPrompt, userPrompt, { temperature: 0.5, maxTokens: 4000 });
     if (!result.success || !result.data) return null;
 
     const report = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
@@ -797,16 +1287,7 @@ async function runPipeline(researchId: string, options: StartResearchOptions) {
     // ── Stage 2: Social Media Scan ────────────────────────────────────────
     await markStage('social_scan', 'running');
     try {
-      socialPresence = await runSocialScan(url, options.leadName);
-      // Merge manually-provided social URLs (override discovered ones)
-      if (options.socialUrls) {
-        if (!socialPresence) socialPresence = { facebook: null, instagram: null, linkedin: null, tiktok: null };
-        const su = options.socialUrls;
-        if (su.facebook) socialPresence.facebook = { url: su.facebook, found: true, source: 'manual' } as any;
-        if (su.instagram) socialPresence.instagram = { url: su.instagram, found: true, source: 'manual' } as any;
-        if (su.linkedin) socialPresence.linkedin = { url: su.linkedin, found: true, source: 'manual' } as any;
-        if (su.tiktok) socialPresence.tiktok = { url: su.tiktok, found: true, source: 'manual' } as any;
-      }
+      socialPresence = await runSocialScan(url, options.leadName, options.socialUrls);
       await updateResearch(researchId, { socialPresence } as any);
       await markStage('social_scan', socialPresence ? 'completed' : 'skipped');
     } catch (e: any) {
@@ -876,6 +1357,21 @@ async function runPipeline(researchId: string, options: StartResearchOptions) {
       await markStage('sales_opportunities', 'skipped', e?.message);
     }
 
+    // ── Stage 9.5: Deep AI Analysis ─────────────────────────────────────
+    // Run AI analysis on ALL collected data — website UX, social content, SEO/GEO
+    let deepAnalysis: any = null;
+    try {
+      deepAnalysis = await runDeepAIAnalysis({
+        leadName: options.leadName, websiteUrl: url,
+        websiteFacts, socialPresence, googlePresence,
+        seoAnalysis, geoAnalysis, competitorAnalysis,
+      });
+      // Save deep analysis into the research record
+      await updateResearch(researchId, { deepAnalysis } as any);
+    } catch (e: any) {
+      console.warn('[LeadResearch] Deep AI analysis failed:', e?.message);
+    }
+
     // ── Stage 10: Quarter Plan ────────────────────────────────────────────
     await markStage('quarter_plan', 'running');
     try {
@@ -896,6 +1392,7 @@ async function runPipeline(researchId: string, options: StartResearchOptions) {
         leadName: options.leadName, websiteUrl: url, websiteFacts,
         socialPresence, googlePresence, seoAnalysis, geoAnalysis,
         competitorAnalysis, scores, salesOpportunities, quarterPlan,
+        deepAnalysis,
       });
       await updateResearch(researchId, { report } as any);
       await markStage('report_generation', report ? 'completed' : 'skipped');
