@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useLeads, useCampaigns, useClients } from "@/lib/api/use-entity";
 import { AdminOnly } from "@/components/role-gate";
@@ -180,10 +180,36 @@ function LeadDetailPanel({
 }) {
   const [editNotes, setEditNotes] = useState(lead.notes || "");
   const [saving, setSaving] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState({
+    fullName: lead.fullName || "",
+    company: lead.company || "",
+    email: lead.email || "",
+    phone: lead.phone || "",
+    source: lead.source || "",
+    interestType: lead.interestType || "marketing" as LeadInterestType,
+    proposalAmount: lead.proposalAmount || 0,
+    proposalSent: lead.proposalSent || false,
+  });
   const toast = useToast();
   const quality = computeLeadQuality(lead);
   const responseTime = getResponseTime(lead);
   const stage = getStage(lead.status);
+
+  // Sync edit data when lead prop changes (e.g. after external update)
+  useEffect(() => {
+    setEditData({
+      fullName: lead.fullName || "",
+      company: lead.company || "",
+      email: lead.email || "",
+      phone: lead.phone || "",
+      source: lead.source || "",
+      interestType: lead.interestType || "marketing" as LeadInterestType,
+      proposalAmount: lead.proposalAmount || 0,
+      proposalSent: lead.proposalSent || false,
+    });
+    setEditNotes(lead.notes || "");
+  }, [lead.id]);
 
   const handleStatusChange = async (newStatus: string) => {
     setSaving(true);
@@ -218,6 +244,43 @@ function LeadDetailPanel({
     setSaving(false);
   };
 
+  const handleSaveEdit = async () => {
+    setSaving(true);
+    try {
+      const changes: Partial<Lead> = {};
+      if (editData.fullName !== (lead.fullName || "")) changes.fullName = editData.fullName;
+      if (editData.company !== (lead.company || "")) changes.company = editData.company;
+      if (editData.email !== (lead.email || "")) changes.email = editData.email;
+      if (editData.phone !== (lead.phone || "")) changes.phone = editData.phone;
+      if (editData.source !== (lead.source || "")) changes.source = editData.source;
+      if (editData.interestType !== (lead.interestType || "marketing")) changes.interestType = editData.interestType;
+      if (editData.proposalAmount !== (lead.proposalAmount || 0)) changes.proposalAmount = editData.proposalAmount;
+      if (editData.proposalSent !== (lead.proposalSent || false)) changes.proposalSent = editData.proposalSent;
+      if (Object.keys(changes).length > 0) {
+        await onUpdate(lead.id, changes);
+        toast("הליד עודכן בהצלחה", "success");
+      }
+      setIsEditing(false);
+    } catch {
+      toast("שגיאה בעדכון הליד", "error");
+    }
+    setSaving(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditData({
+      fullName: lead.fullName || "",
+      company: lead.company || "",
+      email: lead.email || "",
+      phone: lead.phone || "",
+      source: lead.source || "",
+      interestType: lead.interestType || "marketing" as LeadInterestType,
+      proposalAmount: lead.proposalAmount || 0,
+      proposalSent: lead.proposalSent || false,
+    });
+    setIsEditing(false);
+  };
+
   const handleDeleteLead = async () => {
     if (!window.confirm(`למחוק את ${lead.fullName || "הליד"}?`)) return;
     try {
@@ -246,6 +309,16 @@ function LeadDetailPanel({
     color: "var(--foreground-muted)",
     marginBottom: "0.25rem",
     textTransform: "uppercase" as const,
+  };
+  const editInputStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "0.5rem 0.75rem",
+    borderRadius: "0.375rem",
+    border: "1px solid var(--border)",
+    backgroundColor: "var(--surface)",
+    color: "var(--foreground)",
+    fontSize: "0.85rem",
+    fontFamily: "inherit",
   };
 
   return (
@@ -298,30 +371,80 @@ function LeadDetailPanel({
             zIndex: 10,
           }}
         >
-          <div>
-            <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700, color: "var(--foreground)" }}>
-              {lead.fullName || "ללא שם"}
-            </h2>
-            {lead.company && (
-              <div style={{ fontSize: "0.85rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>
-                {lead.company}
+          <div style={{ flex: 1 }}>
+            {isEditing ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <input
+                  type="text"
+                  value={editData.fullName}
+                  onChange={(e) => setEditData({ ...editData, fullName: e.target.value })}
+                  placeholder="שם מלא"
+                  style={{ ...editInputStyle, fontSize: "1.1rem", fontWeight: 700 }}
+                />
+                <input
+                  type="text"
+                  value={editData.company}
+                  onChange={(e) => setEditData({ ...editData, company: e.target.value })}
+                  placeholder="חברה"
+                  style={{ ...editInputStyle, fontSize: "0.85rem" }}
+                />
               </div>
+            ) : (
+              <>
+                <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700, color: "var(--foreground)" }}>
+                  {lead.fullName || "ללא שם"}
+                </h2>
+                {lead.company && (
+                  <div style={{ fontSize: "0.85rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>
+                    {lead.company}
+                  </div>
+                )}
+              </>
             )}
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: "1.5rem",
-              cursor: "pointer",
-              color: "var(--foreground-muted)",
-              padding: "0.25rem",
-              lineHeight: 1,
-            }}
-          >
-            ×
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            {!isEditing && (
+              <button
+                onClick={() => setIsEditing(true)}
+                title="ערוך ליד"
+                style={{
+                  background: "none",
+                  border: "1px solid var(--border)",
+                  borderRadius: "0.375rem",
+                  fontSize: "0.8rem",
+                  cursor: "pointer",
+                  color: "var(--accent)",
+                  padding: "0.35rem 0.65rem",
+                  fontWeight: 600,
+                  transition: "all 150ms ease",
+                }}
+                onMouseEnter={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = "var(--accent)";
+                  (e.target as HTMLElement).style.color = "white";
+                }}
+                onMouseLeave={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = "transparent";
+                  (e.target as HTMLElement).style.color = "var(--accent)";
+                }}
+              >
+                עריכה
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              style={{
+                background: "none",
+                border: "none",
+                fontSize: "1.5rem",
+                cursor: "pointer",
+                color: "var(--foreground-muted)",
+                padding: "0.25rem",
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
+          </div>
         </div>
 
         {/* Quality + Response Time */}
@@ -455,30 +578,68 @@ function LeadDetailPanel({
         {/* Contact Info */}
         <div style={sectionStyle}>
           <div style={labelStyle}>פרטי קשר</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            {lead.email && (
-              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.85rem" }}>
-                <span style={{ color: "var(--foreground-muted)" }}>📧</span>
-                <a href={`mailto:${lead.email}`} style={{ color: "var(--accent)", textDecoration: "none", direction: "ltr" }}>
-                  {lead.email}
-                </a>
+          {isEditing ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.25rem" }}>אימייל</label>
+                <input
+                  type="email"
+                  value={editData.email}
+                  onChange={(e) => setEditData({ ...editData, email: e.target.value })}
+                  placeholder="email@example.com"
+                  style={{ ...editInputStyle, direction: "ltr" }}
+                />
               </div>
-            )}
-            {lead.phone && (
-              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.85rem" }}>
-                <span style={{ color: "var(--foreground-muted)" }}>📱</span>
-                <a href={`tel:${lead.phone}`} style={{ color: "var(--accent)", textDecoration: "none", direction: "ltr" }}>
-                  {lead.phone}
-                </a>
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.25rem" }}>טלפון</label>
+                <input
+                  type="tel"
+                  value={editData.phone}
+                  onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
+                  placeholder="050-1234567"
+                  style={{ ...editInputStyle, direction: "ltr" }}
+                />
               </div>
-            )}
-            {lead.source && (
-              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.85rem" }}>
-                <span style={{ color: "var(--foreground-muted)" }}>🔗</span>
-                <span style={{ color: "var(--foreground)" }}>{lead.source}</span>
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.25rem" }}>מקור</label>
+                <select
+                  value={editData.source}
+                  onChange={(e) => setEditData({ ...editData, source: e.target.value })}
+                  style={{ ...editInputStyle, cursor: "pointer" }}
+                >
+                  <option value="">בחר מקור</option>
+                  {SOURCE_OPTIONS.map((src) => (
+                    <option key={src} value={src}>{src}</option>
+                  ))}
+                </select>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              {lead.email && (
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.85rem" }}>
+                  <span style={{ color: "var(--foreground-muted)" }}>📧</span>
+                  <a href={`mailto:${lead.email}`} style={{ color: "var(--accent)", textDecoration: "none", direction: "ltr" }}>
+                    {lead.email}
+                  </a>
+                </div>
+              )}
+              {lead.phone && (
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.85rem" }}>
+                  <span style={{ color: "var(--foreground-muted)" }}>📱</span>
+                  <a href={`tel:${lead.phone}`} style={{ color: "var(--accent)", textDecoration: "none", direction: "ltr" }}>
+                    {lead.phone}
+                  </a>
+                </div>
+              )}
+              {lead.source && (
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.85rem" }}>
+                  <span style={{ color: "var(--foreground-muted)" }}>🔗</span>
+                  <span style={{ color: "var(--foreground)" }}>{lead.source}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Campaign Attribution */}
@@ -525,25 +686,49 @@ function LeadDetailPanel({
         )}
 
         {/* Financial */}
-        {((lead.proposalAmount || 0) > 0 || lead.proposalSent) && (
+        {(isEditing || (lead.proposalAmount || 0) > 0 || lead.proposalSent) && (
           <div style={sectionStyle}>
             <div style={labelStyle}>פיננסי</div>
-            <div style={{ display: "flex", gap: "1.5rem" }}>
-              {(lead.proposalAmount || 0) > 0 && (
-                <div>
-                  <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--accent)" }}>
-                    ₪{(lead.proposalAmount || 0).toLocaleString("he-IL")}
+            {isEditing ? (
+              <div style={{ display: "flex", gap: "1rem", alignItems: "flex-end", flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: "140px" }}>
+                  <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.25rem" }}>סכום הצעה (₪)</label>
+                  <input
+                    type="number"
+                    value={editData.proposalAmount}
+                    onChange={(e) => setEditData({ ...editData, proposalAmount: parseFloat(e.target.value) || 0 })}
+                    min="0"
+                    style={{ ...editInputStyle, direction: "ltr" }}
+                  />
+                </div>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 0", fontSize: "0.85rem", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={editData.proposalSent}
+                    onChange={(e) => setEditData({ ...editData, proposalSent: e.target.checked })}
+                    style={{ cursor: "pointer", width: "1rem", height: "1rem" }}
+                  />
+                  הצעה נשלחה
+                </label>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: "1.5rem" }}>
+                {(lead.proposalAmount || 0) > 0 && (
+                  <div>
+                    <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--accent)" }}>
+                      ₪{(lead.proposalAmount || 0).toLocaleString("he-IL")}
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>סכום הצעה</div>
                   </div>
-                  <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>סכום הצעה</div>
-                </div>
-              )}
-              {lead.proposalSent && (
-                <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                  <span style={{ color: "#22c55e", fontSize: "0.8rem" }}>✓</span>
-                  <span style={{ fontSize: "0.85rem", color: "var(--foreground)" }}>הצעה נשלחה</span>
-                </div>
-              )}
-            </div>
+                )}
+                {lead.proposalSent && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                    <span style={{ color: "#22c55e", fontSize: "0.8rem" }}>✓</span>
+                    <span style={{ fontSize: "0.85rem", color: "var(--foreground)" }}>הצעה נשלחה</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -696,7 +881,59 @@ function LeadDetailPanel({
           </div>
         </div>
 
+        {/* Edit Save/Cancel Bar */}
+        {isEditing && (
+          <div style={{
+            padding: "1rem",
+            borderBottom: "1px solid var(--border)",
+            display: "flex",
+            gap: "0.75rem",
+            position: "sticky",
+            bottom: 0,
+            backgroundColor: "var(--surface-raised)",
+            boxShadow: "0 -4px 12px rgba(0,0,0,0.1)",
+            zIndex: 10,
+          }}>
+            <button
+              onClick={handleSaveEdit}
+              disabled={saving}
+              style={{
+                flex: 1,
+                padding: "0.65rem 1rem",
+                borderRadius: "0.5rem",
+                border: "none",
+                backgroundColor: "var(--accent)",
+                color: "white",
+                fontSize: "0.85rem",
+                fontWeight: 700,
+                cursor: "pointer",
+                transition: "all 150ms ease",
+                opacity: saving ? 0.6 : 1,
+              }}
+            >
+              {saving ? "שומר..." : "שמור שינויים"}
+            </button>
+            <button
+              onClick={handleCancelEdit}
+              disabled={saving}
+              style={{
+                padding: "0.65rem 1.25rem",
+                borderRadius: "0.5rem",
+                border: "1px solid var(--border)",
+                backgroundColor: "transparent",
+                color: "var(--foreground)",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              ביטול
+            </button>
+          </div>
+        )}
+
         {/* Status Actions */}
+        {!isEditing && (
         <div style={{ padding: "1rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
           <button
             onClick={handleMarkNotRelevant}
@@ -730,6 +967,7 @@ function LeadDetailPanel({
             🗑️ מחק ליד
           </button>
         </div>
+        )}
       </div>
     </div>
   );
