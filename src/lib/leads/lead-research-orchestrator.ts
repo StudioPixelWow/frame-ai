@@ -256,7 +256,8 @@ async function runWebsiteScan(url: string): Promise<any> {
       hasSchemaMarkup: hasSchema,
       hasLazyLoading,
       htmlLength: html.length,
-      pageCount: 1,
+      pageCount: 1 + pagesToScan.length,
+      pagesScanned: [url, ...pagesToScan],
       // Deep analysis fields
       h2Headings,
       wordCount,
