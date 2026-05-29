@@ -449,36 +449,131 @@ async function runGooglePresence(url: string, businessName: string): Promise<any
 }
 
 async function runSeoAnalysis(url: string, websiteFacts: any): Promise<any> {
-  // Self-contained: score based on websiteFacts HTML analysis
-  console.log('[LeadResearch] Stage 4: SEO analysis based on website facts');
+  console.log('[LeadResearch] Stage 4: SEO analysis — HTML facts + PageSpeed + Backlinks');
 
-  if (!websiteFacts) return { technicalScore: 0, contentScore: 0, issues: [], contentGaps: [] };
+  if (!websiteFacts) return { technicalScore: 0, contentScore: 0, issues: [], contentGaps: [], pageSpeed: null, backlinks: null };
 
   const issues: string[] = [];
   let techPoints = 0;
   let contentPoints = 0;
 
-  // Technical signals
-  if (websiteFacts.isHttps) techPoints += 20; else issues.push('האתר לא משתמש ב-HTTPS');
-  if (websiteFacts.hasMobileViewport) techPoints += 20; else issues.push('אין viewport למובייל');
-  if (websiteFacts.hasSchemaMarkup) techPoints += 15; else issues.push('אין Schema Markup (נתונים מובנים)');
-  if (websiteFacts.hasLazyLoading) techPoints += 10; else issues.push('אין Lazy Loading לתמונות');
-  if (websiteFacts.canonical) techPoints += 10; else issues.push('אין Canonical URL');
-  if ((websiteFacts.cms || '').includes('WordPress')) techPoints += 10;
-  if (websiteFacts.internalLinks > 10) techPoints += 15; else if (websiteFacts.internalLinks > 3) techPoints += 8;
+  // ── Technical signals from HTML ──
+  if (websiteFacts.isHttps) techPoints += 15; else issues.push('האתר לא משתמש ב-HTTPS — פוגע באמינות ובדירוג');
+  if (websiteFacts.hasMobileViewport) techPoints += 15; else issues.push('האתר לא מותאם למובייל — 70% מהגלישה ממובייל');
+  if (websiteFacts.hasSchemaMarkup) techPoints += 10; else issues.push('אין Schema Markup — גוגל לא מבין את מבנה התוכן');
+  if (websiteFacts.hasLazyLoading) techPoints += 5; else issues.push('אין Lazy Loading — עמוד נטען לאט');
+  if (websiteFacts.canonical) techPoints += 5; else issues.push('אין Canonical URL — עלול לגרום לתוכן כפול');
+  if ((websiteFacts.cms || '').includes('WordPress')) techPoints += 5;
+  if (websiteFacts.hasGoogleAnalytics) techPoints += 5; else issues.push('אין Google Analytics — אי אפשר למדוד תוצאות');
+  if (websiteFacts.hasGoogleTagManager) techPoints += 5;
+  if (websiteFacts.hasFavicon) techPoints += 3; else issues.push('אין Favicon — נראה לא מקצועי');
+  if (websiteFacts.internalLinkCount > 10) techPoints += 7; else if (websiteFacts.internalLinkCount > 3) techPoints += 3; else issues.push('מעט מאוד לינקים פנימיים — מבנה אתר חלש');
+  if (websiteFacts.pageSizeKB > 3000) issues.push(`עמוד כבד (${websiteFacts.pageSizeKB}KB) — עלול להיטען לאט`);
+  if (websiteFacts.jsFileCount > 15) issues.push(`${websiteFacts.jsFileCount} קבצי JS — עומס שעלול להאט את האתר`);
 
-  // Content signals
-  if (websiteFacts.title && websiteFacts.title.length > 10) contentPoints += 25; else issues.push('כותרת אתר קצרה או חסרה');
-  if (websiteFacts.description && websiteFacts.description.length > 50) contentPoints += 25; else issues.push('Meta Description קצר או חסר');
-  if (websiteFacts.h1 && websiteFacts.h1.length > 3) contentPoints += 20; else issues.push('אין H1 באתר');
-  if (websiteFacts.ogImage) contentPoints += 15; else issues.push('אין תמונת OG (שיתוף ברשתות חברתיות)');
-  if (websiteFacts.htmlLength > 10000) contentPoints += 15; else issues.push('תוכן דל — פחות מ-10,000 תווים');
+  // ── Content signals ──
+  if (websiteFacts.title && websiteFacts.title.length > 10 && websiteFacts.title.length < 70) contentPoints += 20;
+  else if (websiteFacts.title) { contentPoints += 10; issues.push('כותרת אתר לא באורך אופטימלי (10-70 תווים)'); }
+  else issues.push('אין כותרת אתר כלל');
+
+  if (websiteFacts.description && websiteFacts.description.length > 50 && websiteFacts.description.length < 160) contentPoints += 20;
+  else if (websiteFacts.description) { contentPoints += 10; issues.push('Meta Description לא באורך אופטימלי (50-160 תווים)'); }
+  else issues.push('אין Meta Description — גוגל ייצור תיאור אוטומטי גרוע');
+
+  if (websiteFacts.h1 && websiteFacts.h1.length > 3) contentPoints += 15; else issues.push('אין H1 — גוגל לא יודע מה נושא העמוד');
+  if ((websiteFacts.h2Headings || []).length >= 3) contentPoints += 10; else issues.push('פחות מ-3 כותרות H2 — מבנה תוכן חלש');
+  if (websiteFacts.ogImage) contentPoints += 10; else issues.push('אין תמונת OG — שיתוף ברשתות נראה ריק');
+  if (websiteFacts.wordCount > 500) contentPoints += 10; else issues.push('תוכן דל — פחות מ-500 מילים');
+  if (websiteFacts.imageCount > 3) contentPoints += 5; else issues.push('מעט תמונות — תוכן ויזואלי חשוב');
+  if (websiteFacts.hasContactForm) contentPoints += 5;
+  if (websiteFacts.hasPhoneNumber) contentPoints += 3;
+  if (websiteFacts.hasWhatsApp) contentPoints += 2;
+  if (websiteFacts.hasBlog) contentPoints += 10; else issues.push('אין בלוג — מפספס הזדמנויות תוכן וקידום');
+
+  // ── PageSpeed Insights (real API) ──
+  let pageSpeed: any = null;
+  const pageSpeedKey = process.env.GOOGLE_PAGESPEED_API_KEY || process.env.PAGESPEED_API_KEY;
+  if (pageSpeedKey) {
+    try {
+      const psUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${pageSpeedKey}&strategy=mobile&category=performance&category=accessibility&category=seo`;
+      const psRes = await fetch(psUrl, { signal: AbortSignal.timeout(20_000) });
+      if (psRes.ok) {
+        const psData = await psRes.json();
+        const categories = psData.lighthouseResult?.categories;
+        pageSpeed = {
+          performanceScore: Math.round((categories?.performance?.score || 0) * 100),
+          accessibilityScore: Math.round((categories?.accessibility?.score || 0) * 100),
+          seoScore: Math.round((categories?.seo?.score || 0) * 100),
+          fcp: psData.lighthouseResult?.audits?.['first-contentful-paint']?.displayValue || null,
+          lcp: psData.lighthouseResult?.audits?.['largest-contentful-paint']?.displayValue || null,
+          cls: psData.lighthouseResult?.audits?.['cumulative-layout-shift']?.displayValue || null,
+          tbt: psData.lighthouseResult?.audits?.['total-blocking-time']?.displayValue || null,
+          speedIndex: psData.lighthouseResult?.audits?.['speed-index']?.displayValue || null,
+        };
+        // Adjust tech score based on real performance
+        if (pageSpeed.performanceScore < 50) { techPoints -= 10; issues.push(`ביצועי מובייל נמוכים: ${pageSpeed.performanceScore}/100`); }
+        else if (pageSpeed.performanceScore >= 80) techPoints += 10;
+        console.log('[LeadResearch] PageSpeed:', pageSpeed.performanceScore, 'perf,', pageSpeed.seoScore, 'seo');
+      }
+    } catch (e: any) { console.warn('[LeadResearch] PageSpeed API error:', e?.message); }
+  }
+
+  // ── Backlink check via Serper ──
+  let backlinks: any = null;
+  const serperKey = process.env.SERPER_API_KEY || process.env.SERP_API_KEY;
+  if (serperKey) {
+    try {
+      let domain = '';
+      try { domain = new URL(url).hostname; } catch {}
+      const blRes = await fetch('https://google.serper.dev/search', {
+        method: 'POST',
+        headers: { 'X-API-KEY': serperKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q: `link:${domain}`, gl: 'il', num: 10 }),
+      });
+      if (blRes.ok) {
+        const blData = await blRes.json();
+        const totalResults = blData.searchInformation?.totalResults || '0';
+        backlinks = {
+          estimatedCount: parseInt(totalResults.replace(/,/g, ''), 10) || 0,
+          topReferrers: (blData.organic || []).slice(0, 5).map((r: any) => ({
+            domain: (() => { try { return new URL(r.link).hostname; } catch { return r.link; } })(),
+            title: r.title,
+          })),
+        };
+        if (backlinks.estimatedCount < 10) issues.push(`מעט backlinks (${backlinks.estimatedCount}) — העסק לא מקבל לינקים מאתרים אחרים`);
+      }
+    } catch (e: any) { console.warn('[LeadResearch] Backlink check error:', e?.message); }
+  }
+
+  // ── Social post frequency via Serper ──
+  let socialActivity: any = null;
+  if (serperKey && websiteFacts.title) {
+    try {
+      const saRes = await fetch('https://google.serper.dev/search', {
+        method: 'POST',
+        headers: { 'X-API-KEY': serperKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q: `"${websiteFacts.title}" site:facebook.com OR site:instagram.com`, gl: 'il', num: 5 }),
+      });
+      if (saRes.ok) {
+        const saData = await saRes.json();
+        socialActivity = {
+          recentMentions: parseInt(saData.searchInformation?.totalResults?.replace(/,/g, '') || '0', 10),
+          mentions: (saData.organic || []).slice(0, 3).map((r: any) => ({
+            title: r.title, link: r.link, snippet: r.snippet?.substring(0, 100),
+          })),
+        };
+      }
+    } catch (e: any) { console.warn('[LeadResearch] Social activity check error:', e?.message); }
+  }
 
   return {
-    technicalScore: Math.min(techPoints, 100),
-    contentScore: Math.min(contentPoints, 100),
+    technicalScore: Math.min(Math.max(techPoints, 0), 100),
+    contentScore: Math.min(Math.max(contentPoints, 0), 100),
     issues,
-    contentGaps: issues.filter(i => i.includes('תוכן') || i.includes('Description') || i.includes('H1')),
+    contentGaps: issues.filter(i => i.includes('תוכן') || i.includes('Description') || i.includes('H1') || i.includes('בלוג')),
+    pageSpeed,
+    backlinks,
+    socialActivity,
   };
 }
 
@@ -888,6 +983,9 @@ OG Image: ${wf.ogImage ? 'כן' : 'לא'}`;
     const google = data.googlePresence || {};
     const comp = data.competitorAnalysis || {};
 
+    const ps = seo.pageSpeed;
+    const bl = seo.backlinks;
+    const sa = seo.socialActivity;
     const seoData = `
 ציון SEO טכני: ${seo.technicalScore || 0}/100
 ציון תוכן: ${seo.contentScore || 0}/100
@@ -896,7 +994,11 @@ OG Image: ${wf.ogImage ? 'כן' : 'לא'}`;
 Local Pack: ${google?.localPack?.found ? 'כן' : 'לא'}
 ביקורות: ${google?.reviews ? `${google.reviews.rating}/5 (${google.reviews.count})` : 'לא נמצאו'}
 נראות AI: ${geo?.overallVisibility ?? 0}% (${geo?.checkedCount || 0} פלטפורמות נבדקו)
-מתחרים: ${(comp.competitors || []).map((c: any) => `${c.name || c.domain} (מיקום ${c.position})`).join(', ') || 'לא נמצאו'}`;
+מתחרים: ${(comp.competitors || []).map((c: any) => `${c.name || c.domain} (מיקום ${c.position})`).join(', ') || 'לא נמצאו'}
+${ps ? `PageSpeed (מובייל): ביצועים ${ps.performanceScore}/100, נגישות ${ps.accessibilityScore}/100, SEO ${ps.seoScore}/100
+  FCP: ${ps.fcp || '?'}, LCP: ${ps.lcp || '?'}, CLS: ${ps.cls || '?'}, TBT: ${ps.tbt || '?'}` : 'PageSpeed: לא נבדק (אין API key)'}
+${bl ? `Backlinks: ~${bl.estimatedCount} לינקים נכנסים | אתרים מפנים: ${(bl.topReferrers || []).map((r: any) => r.domain).join(', ') || 'אין'}` : 'Backlinks: לא נבדק'}
+${sa ? `פעילות ברשתות (גוגל): ~${sa.recentMentions} אזכורים | ${(sa.mentions || []).map((m: any) => m.title).join(', ') || 'אין'}` : ''}`;
 
     const r = await generateWithAI(
       `אתה מומחה SEO ו-GEO של סטודיו פיקסל. נתח את מצב הקידום האורגני ונראות AI לעומק.
@@ -1078,6 +1180,30 @@ ${socialDetails}
   בעיות שנמצאו:
 ${seoIssues}
   פערי תוכן: ${(seo.contentGaps || []).join(', ') || 'אין'}
+${seo.pageSpeed ? `
+══════════════════════════════════════
+  ביצועי אתר — PageSpeed Insights (מובייל)
+══════════════════════════════════════
+  ציון ביצועים: ${seo.pageSpeed.performanceScore}/100
+  ציון נגישות: ${seo.pageSpeed.accessibilityScore}/100
+  ציון SEO: ${seo.pageSpeed.seoScore}/100
+  FCP: ${seo.pageSpeed.fcp || 'N/A'}
+  LCP: ${seo.pageSpeed.lcp || 'N/A'}
+  CLS: ${seo.pageSpeed.cls || 'N/A'}
+  TBT: ${seo.pageSpeed.tbt || 'N/A'}
+  Speed Index: ${seo.pageSpeed.speedIndex || 'N/A'}` : '  PageSpeed: לא נבדק (אין GOOGLE_PAGESPEED_API_KEY)'}
+${seo.backlinks ? `
+══════════════════════════════════════
+  Backlinks
+══════════════════════════════════════
+  כמות משוערת: ~${seo.backlinks.estimatedCount?.toLocaleString() || 0}
+  אתרים מפנים: ${(seo.backlinks.topReferrers || []).map((r: any) => r.domain).join(', ') || 'אין'}` : '  Backlinks: לא נבדק'}
+${seo.socialActivity ? `
+══════════════════════════════════════
+  פעילות ברשתות — אזכורים בגוגל
+══════════════════════════════════════
+  אזכורים: ~${seo.socialActivity.recentMentions}
+  דוגמאות: ${(seo.socialActivity.mentions || []).map((m: any) => m.title).join(' | ') || 'אין'}` : ''}
 
 ══════════════════════════════════════
   נראות AI / GEO

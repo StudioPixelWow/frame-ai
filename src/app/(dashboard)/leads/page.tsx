@@ -1327,6 +1327,47 @@ function LeadDetailPanel({
                 </div>
               )}
 
+              {/* ═══ PageSpeed + Backlinks ═══ */}
+              {(researchData.seoAnalysis?.pageSpeed || researchData.seoAnalysis?.backlinks) && (
+                <div style={{ marginBottom: '16px' }}>
+                  {researchData.seoAnalysis.pageSpeed && (
+                    <>
+                      <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)', fontWeight: 700 }}>ביצועי אתר (PageSpeed)</h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', marginBottom: '12px' }}>
+                        {[
+                          { label: 'ביצועים', val: researchData.seoAnalysis.pageSpeed.performanceScore },
+                          { label: 'נגישות', val: researchData.seoAnalysis.pageSpeed.accessibilityScore },
+                          { label: 'SEO', val: researchData.seoAnalysis.pageSpeed.seoScore },
+                        ].map(m => (
+                          <div key={m.label} style={{ background: 'var(--surface)', borderRadius: '6px', padding: '8px', textAlign: 'center', border: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: '18px', fontWeight: 700, color: m.val >= 80 ? '#22c55e' : m.val >= 50 ? '#f97316' : '#ef4444' }}>{m.val}</div>
+                            <div style={{ fontSize: '10px', color: 'var(--foreground-muted)' }}>{m.label}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px', fontSize: '11px', color: 'var(--foreground-muted)' }}>
+                        {researchData.seoAnalysis.pageSpeed.fcp && <span>FCP: {researchData.seoAnalysis.pageSpeed.fcp}</span>}
+                        {researchData.seoAnalysis.pageSpeed.lcp && <span>LCP: {researchData.seoAnalysis.pageSpeed.lcp}</span>}
+                        {researchData.seoAnalysis.pageSpeed.cls && <span>CLS: {researchData.seoAnalysis.pageSpeed.cls}</span>}
+                        {researchData.seoAnalysis.pageSpeed.tbt && <span>TBT: {researchData.seoAnalysis.pageSpeed.tbt}</span>}
+                      </div>
+                    </>
+                  )}
+                  {researchData.seoAnalysis.backlinks && (
+                    <div style={{ background: 'var(--surface)', borderRadius: '8px', padding: '10px', border: '1px solid var(--border)', marginBottom: '8px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--foreground)' }}>
+                        Backlinks: ~{researchData.seoAnalysis.backlinks.estimatedCount?.toLocaleString() || 0} לינקים נכנסים
+                      </div>
+                      {researchData.seoAnalysis.backlinks.topReferrers?.length > 0 && (
+                        <div style={{ fontSize: '11px', color: 'var(--foreground-muted)', marginTop: '4px' }}>
+                          מפנים: {researchData.seoAnalysis.backlinks.topReferrers.map((r: any) => r.domain).join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* ═══ Social Presence ═══ */}
               {researchData.socialPresence && (
                 <div style={{ marginBottom: '16px' }}>
