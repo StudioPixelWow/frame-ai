@@ -347,7 +347,6 @@ function LeadDetailPanel({
 
   const handleStartResearch = async () => {
     if (!researchWebsiteUrl) return;
-    // Set scanning state IMMEDIATELY — don't wait for API response
     setResearchStatus('scanning');
     setResearchProgress(0);
     setShowResearchInput(false);
@@ -357,15 +356,30 @@ function LeadDetailPanel({
     if (researchSocials.instagram) socialUrls.instagram = researchSocials.instagram;
     if (researchSocials.linkedin) socialUrls.linkedin = researchSocials.linkedin;
     if (researchSocials.tiktok) socialUrls.tiktok = researchSocials.tiktok;
-    // Fire the API call — don't await (pipeline runs server-side, we poll /status)
-    fetch(`/api/leads/${lead.id}/research/start`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ websiteUrl: researchWebsiteUrl, socialUrls }),
-    }).catch(err => {
+    // Fire the API call — the pipeline runs server-side for up to 5 min
+    // We poll /status independently, so we don't need to await this
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/research/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ websiteUrl: researchWebsiteUrl, socialUrls }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        console.error('[Research] Start API error:', res.status, errData);
+        setResearchStatus('failed');
+        toast(errData?.error || `שגיאה בהפעלת מחקר (${res.status})`, 'error');
+        return;
+      }
+      // Pipeline completed successfully (API awaits full pipeline)
+      const data = await res.json();
+      console.log('[Research] Pipeline done:', data);
+      // The polling will pick up the completed status
+    } catch (err: any) {
       console.error('[Research] Start failed:', err);
       setResearchStatus('failed');
-    });
+      toast('שגיאת רשת בהפעלת מחקר', 'error');
+    }
   };
 
   const handleApproveReport = async () => {
