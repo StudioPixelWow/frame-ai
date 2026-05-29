@@ -389,7 +389,7 @@ async function runSocialScan(url: string, businessName: string, socialUrls?: Rec
   return result;
 }
 
-async function runGooglePresence(url: string, businessName: string): Promise<any> {
+async function runGooglePresence(url: string, businessName: string, websiteFacts?: any): Promise<any> {
   // Self-contained: use Serper API if available, otherwise return basic info
   console.log('[LeadResearch] Stage 3: Google presence for', businessName);
   const serperKey = process.env.SERPER_API_KEY || process.env.SERP_API_KEY;
@@ -399,6 +399,7 @@ async function runGooglePresence(url: string, businessName: string): Promise<any
     organic: { found: false, position: null, results: [] },
     localPack: { found: false },
     reviews: null,
+    keywordResults: [],
   };
 
   if (!serperKey) {
@@ -410,37 +411,77 @@ async function runGooglePresence(url: string, businessName: string): Promise<any
     let domain = url;
     try { domain = new URL(url).hostname; } catch {}
 
-    const res = await fetch('https://google.serper.dev/search', {
-      method: 'POST',
-      headers: { 'X-API-KEY': serperKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: businessName, gl: 'il', hl: 'he', num: 20 }),
-    });
+    // Extract keywords from website content instead of searching for the business name
+    const keywords: string[] = [];
+    const wf = websiteFacts || {};
+    const textContent = [wf.title, wf.description, wf.h1].filter(Boolean).join(' ');
+    if (textContent.length > 10) {
+      // Use the most relevant phrases from the site
+      if (wf.description) keywords.push(wf.description.substring(0, 50));
+      if (wf.h1 && wf.h1 !== wf.title) keywords.push(wf.h1);
+    }
+    if (keywords.length === 0) keywords.push(businessName);
 
-    if (res.ok) {
-      const data = await res.json();
-      const organicResults = data.organic || [];
-      const matchIdx = organicResults.findIndex((r: any) => r.link?.includes(domain));
-      if (matchIdx >= 0) {
-        result.found = true;
-        result.organic.found = true;
-        result.organic.position = matchIdx + 1;
-      }
-      result.organic.results = organicResults.slice(0, 5).map((r: any) => ({
-        title: r.title, link: r.link, position: r.position,
-      }));
+    // Search for EACH keyword separately and report positions for each
+    const keywordResults: any[] = [];
+    let bestPosition: number | null = null;
+    let overallFound = false;
 
-      if (data.localResults?.places?.length) {
-        const localMatch = data.localResults.places.find((p: any) =>
-          p.title?.toLowerCase().includes(businessName.toLowerCase()) ||
-          p.website?.includes(domain)
-        );
-        if (localMatch) {
-          result.localPack.found = true;
-          result.reviews = { rating: localMatch.rating, count: localMatch.reviews };
+    for (const kw of keywords.slice(0, 3)) {
+      try {
+        const res = await fetch('https://google.serper.dev/search', {
+          method: 'POST',
+          headers: { 'X-API-KEY': serperKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ q: kw, gl: 'il', hl: 'he', num: 20 }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const organicResults = data.organic || [];
+          const matchIdx = organicResults.findIndex((r: any) => r.link?.includes(domain));
+          const found = matchIdx >= 0;
+          const position = found ? matchIdx + 1 : null;
+
+          keywordResults.push({
+            keyword: kw,
+            position,
+            found,
+            topResults: organicResults.slice(0, 5).map((r: any) => ({
+              title: r.title, link: r.link, position: r.position,
+            })),
+          });
+
+          if (found) {
+            overallFound = true;
+            if (bestPosition === null || (position !== null && position < bestPosition)) {
+              bestPosition = position;
+            }
+          }
+
+          // Also check local pack from first keyword search
+          if (keywordResults.length === 1 && data.localResults?.places?.length) {
+            const localMatch = data.localResults.places.find((p: any) =>
+              p.title?.toLowerCase().includes(businessName.toLowerCase()) ||
+              p.website?.includes(domain)
+            );
+            if (localMatch) {
+              result.localPack.found = true;
+              result.reviews = { rating: localMatch.rating, count: localMatch.reviews };
+            }
+          }
         }
+      } catch (kwErr: any) {
+        console.warn('[LeadResearch] Keyword search error for', kw, ':', kwErr?.message);
       }
     }
-    console.log('[LeadResearch] Google presence:', result.found ? `found at position ${result.organic.position}` : 'not found');
+
+    result.found = overallFound;
+    result.organic.found = overallFound;
+    result.organic.position = bestPosition;
+    result.organic.results = keywordResults[0]?.topResults || [];
+    result.keywordResults = keywordResults;
+
+    console.log('[LeadResearch] Google presence:', result.found ? `found at position ${result.organic.position}` : 'not found', `(${keywordResults.length} keywords searched)`);
   } catch (e: any) {
     console.warn('[LeadResearch] Google presence error:', e?.message);
   }
@@ -849,8 +890,11 @@ async function runQuarterPlan(data: {
   try {
     const { generateWithAI } = await import('@/lib/ai/openai-client');
 
-    const systemPrompt = `אתה יועץ שיווק דיגיטלי של סטודיו פיקסל (Studio Pixel).
-בנה תוכנית צמיחה רבעונית (90 יום) עבור העסק המבוקש.
+    const systemPrompt = `אתה יועץ שיווק דיגיטלי בכיר של סטודיו פיקסל (Studio Pixel) עם ניסיון של 15 שנה בבניית תוכניות צמיחה דיגיטליות.
+בנה תוכנית צמיחה רבעונית מקצועית ומפורטת (90 יום) עבור העסק המבוקש.
+
+זוהי תוכנית מקצועית שתוצג ללקוח — היא חייבת להיות מפורטת, קונקרטית ומעשית.
+
 החזר JSON בלבד בפורמט הבא:
 {
   "quarter": "Q3 2026",
@@ -858,26 +902,42 @@ async function runQuarterPlan(data: {
     {
       "id": "g1",
       "title": "...",
-      "titleHe": "...",
-      "metric": "...",
-      "currentValue": "...",
-      "targetValue": "...",
-      "actions": [{ "week": 1, "action": "...", "actionHe": "...", "responsible": "Studio Pixel" }]
+      "titleHe": "כותרת יעד בעברית — ספציפית ומדידה",
+      "metric": "המדד המדויק למדידה (למשל: תנועה אורגנית, לידים, מיקום בגוגל)",
+      "currentValue": "ערך נוכחי (אם ידוע, אחרת הערכה)",
+      "targetValue": "יעד ריאלי ל-90 יום",
+      "kpis": ["KPI 1", "KPI 2", "KPI 3"],
+      "budget": "הערכת תקציב ליעד זה",
+      "expectedResults": "מה צפוי לקרות כשהיעד יושג",
+      "actions": [
+        { "week": 1, "action": "...", "actionHe": "פעולה ספציפית ומפורטת — לא כללית", "responsible": "Studio Pixel" },
+        { "week": 2, "action": "...", "actionHe": "...", "responsible": "Studio Pixel" }
+      ]
     }
   ],
-  "estimatedROI": "...",
+  "estimatedROI": "הערכת ROI מפורטת עם הסבר",
   "totalInvestment": 0,
   "generatedAt": "${new Date().toISOString()}"
 }
-הכל בעברית. אל תמציא נתונים — השתמש רק במה שאתה יודע.`;
 
-    const userPrompt = `בנה תוכנית רבעונית עבור "${data.leadName}" (${data.websiteUrl}).
+חובה:
+- בנה בדיוק 5-7 יעדים מרכזיים (לא פחות מ-5!)
+- כל יעד חייב לכלול 8-12 פעולות שבועיות מפורטות (שבועות 1-12)
+- כל פעולה חייבת להיות ספציפית, קונקרטית ומעשית — לא "שיפור SEO" אלא "כתיבת 4 מאמרי בלוג ממוקדי מילות מפתח של 1500+ מילים"
+- הוסף KPIs, תקציב והערכת תוצאות לכל יעד
+- הכל בעברית
+- אל תמציא נתונים — השתמש רק במה שאתה יודע`;
+
+    const userPrompt = `בנה תוכנית רבעונית מקצועית ומפורטת עבור "${data.leadName}" (${data.websiteUrl}).
 ציון נוכחי: ${data.scores?.overall ?? 'לא ידוע'}/100
 ציון ביטחון: ${data.scores?.confidence ?? 'לא ידוע'}%
 הזדמנויות מכירה: ${data.salesOpportunities?.length ?? 0}
-בנה 3-5 יעדים מרכזיים, כל אחד עם פעולות שבועיות.`;
+${data.salesOpportunities?.map((o: any) => `  - ${o.serviceHe || o.service}: ${o.evidenceHe || o.evidence || ''}`).join('\n') || ''}
 
-    const result = await generateWithAI(systemPrompt, userPrompt, { temperature: 0.7 });
+בנה 5-7 יעדים מרכזיים, כל אחד עם 8-12 פעולות שבועיות מפורטות וספציפיות.
+כל פעולה חייבת לכלול מה בדיוק צריך לעשות, לא רק כותרת כללית.`;
+
+    const result = await generateWithAI(systemPrompt, userPrompt, { temperature: 0.7, maxTokens: 3000 });
     if (!result.success || !result.data) return null;
 
     // generateWithAI already parses JSON
@@ -1090,7 +1150,7 @@ async function runReportGeneration(data: {
     const systemPrompt = `אתה כותב דוחות מחקר מקצועיים ומעמיקים עבור סטודיו פיקסל (Studio Pixel) — סוכנות שיווק דיגיטלי מובילה.
 הדוח מיועד להצגה ללקוח פוטנציאלי כדי להדגים את הערך שסטודיו פיקסל יכול לספק.
 
-כתוב דוח מקיף ומפורט בעברית. כל סעיף צריך לכלול 3-5 פסקאות מפורטות, לא משפט אחד.
+כתוב דוח מקיף ומפורט בעברית. כל סעיף חייב לכלול 5-8 פסקאות מפורטות, לא 1-2 משפטים.
 השתמש אך ורק בנתונים שסופקו — אל תמציא מספרים, ציונים, או עובדות.
 
 החזר JSON בלבד בפורמט הבא:
@@ -1100,29 +1160,30 @@ async function runReportGeneration(data: {
   "titleHe": "דוח מחקר ליד — ${data.leadName}",
   "sections": [
     { "id": "executive_summary", "title": "Executive Summary", "titleHe": "תקציר מנהלים", "content": [{ "type": "paragraph", "text": "..." }, { "type": "paragraph", "text": "..." }, { "type": "paragraph", "text": "..." }] },
-    { "id": "website_analysis", "title": "Website Analysis", "titleHe": "ניתוח אתר מעמיק", "content": [3-5 paragraphs] },
-    { "id": "website_ux_review", "title": "Website UX Review", "titleHe": "סקירת חוויית משתמש", "content": [3-5 paragraphs] },
-    { "id": "seo_status", "title": "SEO Status", "titleHe": "מצב SEO מקיף", "content": [3-5 paragraphs] },
-    { "id": "social_media_deep", "title": "Social Media Deep Analysis", "titleHe": "ניתוח מעמיק רשתות חברתיות", "content": [3-5 paragraphs] },
-    { "id": "google_presence", "title": "Google Presence", "titleHe": "נוכחות בגוגל", "content": [3-5 paragraphs] },
-    { "id": "ai_visibility", "title": "AI Visibility", "titleHe": "נראות במנועי AI", "content": [3-5 paragraphs] },
-    { "id": "competitors", "title": "Competitor Analysis", "titleHe": "ניתוח מתחרים", "content": [3-5 paragraphs] },
-    { "id": "content_strategy", "title": "Content Strategy", "titleHe": "המלצות אסטרטגיית תוכן", "content": [3-5 paragraphs] },
-    { "id": "paid_advertising", "title": "Paid Advertising Potential", "titleHe": "פוטנציאל פרסום ממומן", "content": [3-5 paragraphs] },
-    { "id": "opportunities", "title": "Sales Opportunities", "titleHe": "הזדמנויות צמיחה ומכירה", "content": [3-5 paragraphs] },
-    { "id": "quarter_plan", "title": "Quarter Plan", "titleHe": "תוכנית 90 יום", "content": [3-5 paragraphs] },
-    { "id": "recommendations", "title": "Recommendations", "titleHe": "המלצות Studio Pixel", "content": [3-5 paragraphs] }
+    { "id": "website_analysis", "title": "Website Analysis", "titleHe": "ניתוח אתר מעמיק", "content": [5-8 paragraphs] },
+    { "id": "website_ux_review", "title": "Website UX Review", "titleHe": "סקירת חוויית משתמש", "content": [5-8 paragraphs] },
+    { "id": "seo_status", "title": "SEO Status", "titleHe": "מצב SEO מקיף", "content": [5-8 paragraphs] },
+    { "id": "social_media_deep", "title": "Social Media Deep Analysis", "titleHe": "ניתוח מעמיק רשתות חברתיות", "content": [5-8 paragraphs] },
+    { "id": "google_presence", "title": "Google Presence", "titleHe": "נוכחות בגוגל", "content": [5-8 paragraphs] },
+    { "id": "ai_visibility", "title": "AI Visibility", "titleHe": "נראות במנועי AI", "content": [5-8 paragraphs] },
+    { "id": "competitors", "title": "Competitor Analysis", "titleHe": "ניתוח מתחרים", "content": [5-8 paragraphs] },
+    { "id": "content_strategy", "title": "Content Strategy", "titleHe": "המלצות אסטרטגיית תוכן", "content": [5-8 paragraphs] },
+    { "id": "paid_advertising", "title": "Paid Advertising Potential", "titleHe": "פוטנציאל פרסום ממומן", "content": [5-8 paragraphs] },
+    { "id": "opportunities", "title": "Sales Opportunities", "titleHe": "הזדמנויות צמיחה ומכירה", "content": [5-8 paragraphs] },
+    { "id": "quarter_plan", "title": "Quarter Plan", "titleHe": "תוכנית 90 יום", "content": [5-8 paragraphs] },
+    { "id": "recommendations", "title": "Recommendations", "titleHe": "המלצות Studio Pixel", "content": [5-8 paragraphs] }
   ],
   "generatedAt": "${new Date().toISOString()}",
   "approved": false
 }
 
 חשוב מאוד:
-- כל סעיף חייב לכלול לפחות 3 פסקאות מפורטות עם ניתוח מעמיק
+- כל סעיף חייב לכלול לפחות 5-8 פסקאות מפורטות עם ניתוח מעמיק — לא 1-2 משפטים!
 - השתמש בנתונים הספציפיים שסופקו (ציונים, מספרים, בעיות)
 - הסבר מה המשמעות של כל ממצא עבור העסק
 - תן המלצות קונקרטיות ומעשיות
 - הדגש את הערך שסטודיו פיקסל יכול לספק
+- סעיף ההמלצות (recommendations) חייב לכלול לפחות 10 המלצות קונקרטיות ומעשיות, כל אחת עם הסבר מפורט
 - כל הטקסט בעברית`;
 
     const userPrompt = `צור דוח מחקר ליד מקיף ומפורט עבור "${data.leadName}" (${data.websiteUrl}).
@@ -1269,12 +1330,13 @@ ${data.deepAnalysis?.seoGeoDeepAnalysis ? `
 
 ══════════════════════════════════════
 
-השתמש בניתוח AI המעמיק כבסיס לכתיבת הדוח. כל סעיף צריך 3-5 פסקאות מפורטות.
+השתמש בניתוח AI המעמיק כבסיס לכתיבת הדוח. כל סעיף חייב לכלול 5-8 פסקאות מפורטות — לא פחות!
 שלב את הנתונים הגולמיים עם הניתוח המעמיק ליצירת דוח מקצועי ומעמיק ביותר.
 הדגש חוזקות, חולשות, הזדמנויות, והמלצות מעשיות לכל תחום.
-מלא את כל 13 הסעיפים שבפורמט.`;
+מלא את כל 13 הסעיפים שבפורמט.
+סעיף ההמלצות (recommendations) חייב לכלול לפחות 10 המלצות קונקרטיות, מעשיות ומפורטות — כל המלצה עם הסבר למה היא חשובה ומה ההשפעה הצפויה.`;
 
-    const result = await generateWithAI(systemPrompt, userPrompt, { temperature: 0.5, maxTokens: 4000 });
+    const result = await generateWithAI(systemPrompt, userPrompt, { temperature: 0.5, maxTokens: 8000 });
     if (!result.success || !result.data) return null;
 
     const report = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
@@ -1423,7 +1485,7 @@ async function runPipeline(researchId: string, options: StartResearchOptions) {
     // ── Stage 3: Google Presence ──────────────────────────────────────────
     await markStage('google_presence', 'running');
     try {
-      googlePresence = await runGooglePresence(url, options.leadName);
+      googlePresence = await runGooglePresence(url, options.leadName, websiteFacts);
       await updateResearch(researchId, { googlePresence } as any);
       await markStage('google_presence', googlePresence ? 'completed' : 'skipped');
     } catch (e: any) {

@@ -1372,23 +1372,37 @@ function LeadDetailPanel({
               {researchData.socialPresence && (
                 <div style={{ marginBottom: '16px' }}>
                   <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)', fontWeight: 700 }}>נוכחות ברשתות חברתיות</h4>
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     {['facebook', 'instagram', 'linkedin', 'tiktok'].map(platform => {
                       const p = researchData.socialPresence?.[platform];
                       const found = p?.found;
                       const labels: Record<string, string> = { facebook: 'פייסבוק', instagram: 'אינסטגרם', linkedin: 'לינקדאין', tiktok: 'טיקטוק' };
                       return (
-                        <span key={platform} style={{
-                          padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600,
-                          background: found ? '#22c55e18' : '#ef444418',
-                          color: found ? '#22c55e' : '#ef4444',
-                          border: `1px solid ${found ? '#22c55e30' : '#ef444430'}`,
-                        }}>
-                          {found ? '✓' : '✗'} {labels[platform]}
-                        </span>
+                        <div key={platform} style={{ background: 'var(--surface)', borderRadius: '8px', padding: '12px', border: `1px solid ${found ? '#22c55e30' : 'var(--border)'}`, borderRight: `3px solid ${found ? '#22c55e' : '#ef4444'}` }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--foreground)' }}>{labels[platform]}</span>
+                            <span style={{ fontSize: '11px', fontWeight: 600, color: found ? '#22c55e' : '#ef4444' }}>{found ? '✓ נמצא' : '✗ לא נמצא'}</span>
+                          </div>
+                          {found && p?.name && <div style={{ fontSize: '12px', color: 'var(--foreground)', marginBottom: '2px' }}>{p.name}</div>}
+                          {found && p?.description && <div style={{ fontSize: '11px', color: 'var(--foreground-muted)', marginBottom: '4px', lineHeight: 1.4 }}>{p.description.substring(0, 120)}{p.description.length > 120 ? '...' : ''}</div>}
+                          {found && p?.followers && <div style={{ fontSize: '11px', color: '#00B5FE', fontWeight: 600 }}>{typeof p.followers === 'number' ? p.followers.toLocaleString() : p.followers} עוקבים</div>}
+                          {found && p?.url && <a href={p.url.startsWith('http') ? p.url : 'https://' + p.url} target="_blank" rel="noopener" style={{ fontSize: '10px', color: '#00B5FE', textDecoration: 'none', marginTop: '4px', display: 'block' }}>{p.url}</a>}
+                          {!found && <div style={{ fontSize: '11px', color: 'var(--foreground-muted)' }}>הפלטפורמה לא נמצאה — הזדמנות לנוכחות חדשה</div>}
+                        </div>
                       );
                     })}
                   </div>
+                  {researchData.deepAnalysis?.socialDeepAnalysis?.overallAssessment && (
+                    <div style={{ background: 'var(--surface)', borderRadius: '8px', padding: '12px', border: '1px solid var(--border)', marginTop: '8px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#00B5FE', marginBottom: '6px' }}>ניתוח AI — רשתות חברתיות</div>
+                      <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', lineHeight: 1.6 }}>{researchData.deepAnalysis.socialDeepAnalysis.overallAssessment}</div>
+                      {researchData.deepAnalysis.socialDeepAnalysis.contentStrategy && (
+                        <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', lineHeight: 1.6, marginTop: '8px', borderTop: '1px solid var(--border)', paddingTop: '8px' }}>
+                          <strong style={{ color: 'var(--foreground)' }}>אסטרטגיית תוכן:</strong> {researchData.deepAnalysis.socialDeepAnalysis.contentStrategy}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
