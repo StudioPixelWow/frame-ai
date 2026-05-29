@@ -223,20 +223,33 @@ function LeadDetailPanel({
   // Poll research status when scanning
   useEffect(() => {
     if (researchStatus !== 'scanning') return;
+    let idlePollCount = 0;
     const interval = setInterval(async () => {
       try {
         const res = await fetch(`/api/leads/${lead.id}/research/status`);
         if (res.ok) {
           const data = await res.json();
-          setResearchProgress(data.progress || 0);
-          setResearchStages(data.stages || []);
           if (data.status === 'completed') {
+            setResearchProgress(100);
+            setResearchStages(data.stages || []);
             setResearchStatus('completed');
             setResearchData(data.research);
             clearInterval(interval);
           } else if (data.status === 'failed') {
             setResearchStatus('failed');
             clearInterval(interval);
+          } else if (data.status === 'scanning') {
+            idlePollCount = 0;
+            setResearchProgress(data.progress || 0);
+            setResearchStages(data.stages || []);
+          } else {
+            // status is 'idle' or null — record not found yet (race condition or table missing)
+            idlePollCount++;
+            if (idlePollCount > 20) {
+              console.error('[Research] Polling timeout — no research record found after 60s');
+              setResearchStatus('failed');
+              clearInterval(interval);
+            }
           }
         }
       } catch {}

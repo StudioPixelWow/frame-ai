@@ -43,6 +43,43 @@ const TABLES = [
   'autopilot_actions',
   'autopilot_activity_log',
   // app_accountant_documents — REMOVED. Accountant docs use app_client_files (category='accountant').
+  // Campaign Actions & Activity
+  'campaign_actions',
+  'campaign_action_approvals',
+  'campaign_activity_log',
+  // Auto Campaign Engine
+  'auto_campaign_runs',
+  'auto_campaign_findings',
+  // Reports & Notifications
+  'app_reports',
+  'app_client_notifications',
+  // Auto Growth Engine
+  'growth_runs',
+  'growth_opportunities',
+  'growth_actions',
+  'growth_action_results',
+  // Agency Knowledge Layer
+  'agency_knowledge_items',
+  'industry_playbooks',
+  // SEO/GEO Growth Plans
+  'app_seo_plans',
+  'app_seo_websites',
+  'app_seo_growth_tasks',
+  // Green Invoice + Invoicing
+  'app_invoices',
+  'app_green_invoice_settings',
+  // Receipt Scanner
+  'app_scanned_receipts',
+  // Email Sequences
+  'app_email_sequences',
+  'app_sequence_subscribers',
+  // Social Media / Postiz
+  'app_scheduled_posts',
+  // LinkedIn
+  'app_linkedin_posts',
+  // Surveys
+  'app_surveys',
+  'app_survey_responses',
   // Backlink Intelligence
   'app_backlink_campaigns',
   'app_backlink_targets',
@@ -54,6 +91,14 @@ const TABLES = [
   'app_episode_analyses',
   'app_podcast_clip_candidates',
   'app_approved_clips',
+  // Video Pipeline
+  'app_video_pipeline_states',
+  'app_video_versions',
+  'app_video_audit_logs',
+  'app_hook_analyses',
+  'app_ai_video_analyses',
+  // Lead Research & Growth Intelligence
+  'app_lead_research',
 ];
 
 export async function GET() {

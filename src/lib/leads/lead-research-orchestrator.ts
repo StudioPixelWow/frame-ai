@@ -580,12 +580,12 @@ async function runPipeline(researchId: string, options: StartResearchOptions) {
       socialPresence = await runSocialScan(url, options.leadName);
       // Merge manually-provided social URLs (override discovered ones)
       if (options.socialUrls) {
-        if (!socialPresence) socialPresence = { platforms: {} };
+        if (!socialPresence) socialPresence = { facebook: null, instagram: null, linkedin: null, tiktok: null };
         const su = options.socialUrls;
-        if (su.facebook) socialPresence.platforms = { ...socialPresence.platforms, facebook: { url: su.facebook, found: true, source: 'manual' } };
-        if (su.instagram) socialPresence.platforms = { ...socialPresence.platforms, instagram: { url: su.instagram, found: true, source: 'manual' } };
-        if (su.linkedin) socialPresence.platforms = { ...socialPresence.platforms, linkedin: { url: su.linkedin, found: true, source: 'manual' } };
-        if (su.tiktok) socialPresence.platforms = { ...socialPresence.platforms, tiktok: { url: su.tiktok, found: true, source: 'manual' } };
+        if (su.facebook) socialPresence.facebook = { url: su.facebook, found: true, source: 'manual' } as any;
+        if (su.instagram) socialPresence.instagram = { url: su.instagram, found: true, source: 'manual' } as any;
+        if (su.linkedin) socialPresence.linkedin = { url: su.linkedin, found: true, source: 'manual' } as any;
+        if (su.tiktok) socialPresence.tiktok = { url: su.tiktok, found: true, source: 'manual' } as any;
       }
       await updateResearch(researchId, { socialPresence } as any);
       await markStage('social_scan', socialPresence ? 'completed' : 'skipped');
@@ -721,9 +721,10 @@ export async function getResearchByLeadId(leadId: string): Promise<LeadResearch 
   try {
     const results = await leadResearch.queryFilteredAsync(
       [{ column: 'data->>leadId', op: 'eq', value: leadId }],
-      { limit: 1 },
     );
-    return results?.[0] || null;
+    if (!results?.length) return null;
+    // Return the most recent research (queryFilteredAsync orders by created_at ASC)
+    return results[results.length - 1];
   } catch {
     return null;
   }
