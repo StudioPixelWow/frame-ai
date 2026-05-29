@@ -27,6 +27,41 @@ function scoreColor(score: number): string {
   return "#ef4444";
 }
 
+// Client-side PageSpeed estimate from website facts — used when the stored record
+// has no PageSpeed data (e.g. older scans), so the metrics card is never empty.
+function estimatePageSpeedClient(wf: any): any {
+  if (!wf || !wf.title) return null;
+  let perf = 100;
+  const sizeKB = wf.pageSizeKB || 0;
+  if (sizeKB > 5000) perf -= 35; else if (sizeKB > 3000) perf -= 25; else if (sizeKB > 1500) perf -= 15; else if (sizeKB > 800) perf -= 8;
+  const js = wf.jsFileCount || 0;
+  if (js > 20) perf -= 20; else if (js > 10) perf -= 12; else if (js > 5) perf -= 6;
+  const css = wf.cssFileCount || 0;
+  if (css > 10) perf -= 10; else if (css > 5) perf -= 5;
+  const imgs = wf.imageCount || 0;
+  if (!wf.hasLazyLoading && imgs > 15) perf -= 12; else if (!wf.hasLazyLoading && imgs > 5) perf -= 6;
+  if (!wf.isHttps) perf -= 5;
+  perf = Math.min(Math.max(perf, 10), 92);
+  let acc = 90;
+  if (!wf.hasMobileViewport) acc -= 25;
+  if (!wf.detectedLanguages?.length) acc -= 10;
+  if (imgs > 0 && !wf.ogImage) acc -= 5;
+  acc = Math.min(Math.max(acc, 20), 95);
+  let seoSc = 100;
+  if (wf.title.length < 10 || wf.title.length > 70) seoSc -= 8;
+  if (!wf.description) seoSc -= 15;
+  if (!wf.h1) seoSc -= 12;
+  if (!wf.hasMobileViewport) seoSc -= 15;
+  if (!wf.isHttps) seoSc -= 10;
+  if (!wf.canonical) seoSc -= 5;
+  if (!wf.hasSchemaMarkup) seoSc -= 5;
+  seoSc = Math.min(Math.max(seoSc, 20), 98);
+  return {
+    performanceScore: Math.round(perf), accessibilityScore: Math.round(acc), seoScore: Math.round(seoSc),
+    fcp: null, lcp: null, cls: null, tbt: null, speedIndex: null, estimated: true,
+  };
+}
+
 function formatDate(d: string | null | undefined): string {
   if (!d) return "-";
   const date = new Date(d);
@@ -174,11 +209,21 @@ export default function LeadResearchPage() {
   const seo = data.seoAnalysis || {};
   const geo = data.geoAnalysis || {};
   const competitors = data.competitorAnalysis || {};
-  const opportunities = data.salesOpportunities || [];
   const plan = data.quarterPlan || {};
   const report = data.report;
+  const deep = data.deepAnalysis || {};
+  const socialDeep = deep.socialDeepAnalysis || null;
+  const keywordResults = google.keywordResults || [];
+  const pageSpeed = pageSpeed || estimatePageSpeedClient(wf);
   const leadName = history[0]?.leadName || wf.title || "ליד";
   const websiteUrl = history[0]?.websiteUrl || "";
+
+  const platformNamesHe: Record<string, string> = {
+    facebook: "פייסבוק",
+    instagram: "אינסטגרם",
+    linkedin: "לינקדאין",
+    tiktok: "טיקטוק",
+  };
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
@@ -471,11 +516,11 @@ export default function LeadResearchPage() {
       )}
 
       {/* ═══ PageSpeed ═══ */}
-      {seo.pageSpeed && (
+      {pageSpeed && (
         <div style={cardStyle}>
           <div style={cardTitleStyle}>
             ביצועי אתר — PageSpeed
-            {seo.pageSpeed.estimated && (
+            {pageSpeed.estimated && (
               <span
                 style={{
                   fontSize: "0.7rem",
@@ -491,7 +536,7 @@ export default function LeadResearchPage() {
               </span>
             )}
           </div>
-          {seo.pageSpeed.estimated && (
+          {pageSpeed.estimated && (
             <div style={{ ...mutedText, marginBottom: "0.75rem", fontSize: "0.78rem" }}>
               המדדים מוערכים מתוך ניתוח קוד האתר (לא נמדדו ב-PageSpeed API). FCP/LCP/CLS אינם זמינים בהערכה.
             </div>
@@ -505,9 +550,9 @@ export default function LeadResearchPage() {
             }}
           >
             {[
-              { label: "ביצועים", value: seo.pageSpeed.performanceScore },
-              { label: "נגישות", value: seo.pageSpeed.accessibilityScore },
-              { label: "SEO", value: seo.pageSpeed.seoScore },
+              { label: "ביצועים", value: pageSpeed.performanceScore },
+              { label: "נגישות", value: pageSpeed.accessibilityScore },
+              { label: "SEO", value: pageSpeed.seoScore },
             ].map((m) => (
               <div
                 key={m.label}
@@ -541,34 +586,34 @@ export default function LeadResearchPage() {
               fontSize: "0.85rem",
             }}
           >
-            {seo.pageSpeed.fcp && (
+            {pageSpeed.fcp && (
               <div>
                 <span style={mutedText}>FCP: </span>
-                <strong>{seo.pageSpeed.fcp}</strong>
+                <strong>{pageSpeed.fcp}</strong>
               </div>
             )}
-            {seo.pageSpeed.lcp && (
+            {pageSpeed.lcp && (
               <div>
                 <span style={mutedText}>LCP: </span>
-                <strong>{seo.pageSpeed.lcp}</strong>
+                <strong>{pageSpeed.lcp}</strong>
               </div>
             )}
-            {seo.pageSpeed.cls != null && (
+            {pageSpeed.cls != null && (
               <div>
                 <span style={mutedText}>CLS: </span>
-                <strong>{seo.pageSpeed.cls}</strong>
+                <strong>{pageSpeed.cls}</strong>
               </div>
             )}
-            {seo.pageSpeed.tbt && (
+            {pageSpeed.tbt && (
               <div>
                 <span style={mutedText}>TBT: </span>
-                <strong>{seo.pageSpeed.tbt}</strong>
+                <strong>{pageSpeed.tbt}</strong>
               </div>
             )}
-            {seo.pageSpeed.speedIndex && (
+            {pageSpeed.speedIndex && (
               <div>
                 <span style={mutedText}>Speed Index: </span>
-                <strong>{seo.pageSpeed.speedIndex}</strong>
+                <strong>{pageSpeed.speedIndex}</strong>
               </div>
             )}
           </div>
@@ -680,6 +725,82 @@ export default function LeadResearchPage() {
         </div>
       )}
 
+      {/* ═══ Social Deep Analysis (per platform) ═══ */}
+      {socialDeep && (
+        <div style={cardStyle}>
+          <div style={cardTitleStyle}>ניתוח מעמיק — רשתות חברתיות</div>
+
+          {socialDeep.overallAssessment && (
+            <p style={{ fontSize: "0.9rem", lineHeight: 1.7, marginTop: 0, marginBottom: "1rem", color: "var(--foreground)" }}>
+              {socialDeep.overallAssessment}
+            </p>
+          )}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            {(socialDeep.platformAnalyses || []).map((pa: any, i: number) => {
+              const live = social[pa.platform] || {};
+              return (
+                <div
+                  key={i}
+                  style={{
+                    padding: "1rem",
+                    borderRadius: 8,
+                    border: "1px solid var(--border)",
+                    background: "var(--surface)",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                    <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>
+                      {platformNamesHe[pa.platform] || pa.platform}
+                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                      {live.followers != null && (
+                        <span style={{ ...mutedText }}>עוקבים: {Number(live.followers).toLocaleString()}</span>
+                      )}
+                      {live.likes != null && (
+                        <span style={{ ...mutedText }}>לייקים: {Number(live.likes).toLocaleString()}</span>
+                      )}
+                      {pa.score != null && (
+                        <span style={{ fontWeight: 700, color: scoreColor(pa.score) }}>{pa.score}/100</span>
+                      )}
+                    </div>
+                  </div>
+                  {pa.analysis && (
+                    <p style={{ fontSize: "0.88rem", lineHeight: 1.7, margin: "0 0 0.5rem", color: "var(--foreground)" }}>
+                      {pa.analysis}
+                    </p>
+                  )}
+                  {pa.recommendations?.length > 0 && (
+                    <div style={{ marginTop: "0.5rem" }}>
+                      <div style={{ fontWeight: 600, fontSize: "0.8rem", marginBottom: "0.25rem", color: BRAND }}>המלצות:</div>
+                      {pa.recommendations.map((rec: string, ri: number) => (
+                        <div key={ri} style={{ ...mutedText, fontSize: "0.82rem", paddingRight: "0.75rem" }}>• {rec}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {socialDeep.contentStrategy && (
+            <div style={{ marginTop: "1rem", borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
+              <div style={{ fontWeight: 600, fontSize: "0.9rem", marginBottom: "0.4rem" }}>אסטרטגיית תוכן מומלצת</div>
+              <p style={{ fontSize: "0.88rem", lineHeight: 1.7, margin: 0, color: "var(--foreground)" }}>{socialDeep.contentStrategy}</p>
+            </div>
+          )}
+
+          {socialDeep.missingOpportunities?.length > 0 && (
+            <div style={{ marginTop: "1rem" }}>
+              <div style={{ fontWeight: 600, fontSize: "0.9rem", marginBottom: "0.4rem", color: "#f97316" }}>הזדמנויות שלא מנוצלות</div>
+              {socialDeep.missingOpportunities.map((op: string, oi: number) => (
+                <div key={oi} style={{ ...mutedText, fontSize: "0.82rem", paddingRight: "0.75rem" }}>• {op}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ═══ Google Presence ═══ */}
       {google && (google.found || google.organic || google.localPack || google.reviews) && (
         <div style={cardStyle}>
@@ -773,6 +894,42 @@ export default function LeadResearchPage() {
               )}
             </div>
           </div>
+
+          {/* Keyword positions — commercial phrases, not the brand name */}
+          {keywordResults.length > 0 && (
+            <div style={{ marginTop: "1rem", borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
+              <div style={{ fontWeight: 600, fontSize: "0.9rem", marginBottom: "0.5rem" }}>
+                מיקום במילות מפתח מסחריות
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                {keywordResults.map((kw: any, i: number) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      fontSize: "0.85rem",
+                      padding: "0.45rem 0.7rem",
+                      borderRadius: 6,
+                      background: "var(--surface)",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    <span style={{ flex: 1 }}>&ldquo;{kw.keyword}&rdquo;</span>
+                    <span
+                      style={{
+                        fontWeight: 700,
+                        color: kw.found ? (kw.position <= 3 ? "#22c55e" : kw.position <= 10 ? "#f97316" : "#ef4444") : "var(--foreground-muted)",
+                      }}
+                    >
+                      {kw.found ? `מיקום #${kw.position}` : "לא בעמוד הראשון"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -845,103 +1002,45 @@ export default function LeadResearchPage() {
               מיקום בשוק: {competitors.marketPosition}
             </div>
           )}
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            {competitors.competitors.map((c: any, i: number) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "0.75rem 1rem",
-                  borderRadius: 8,
-                  border: "1px solid var(--border)",
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>
-                    {i + 1}. {c.name || c.domain}
-                  </div>
-                  {c.domain && c.name && (
-                    <div style={{ ...mutedText, fontSize: "0.8rem" }}>{c.domain}</div>
-                  )}
-                  {c.strengths?.length > 0 && (
-                    <div style={{ ...mutedText, fontSize: "0.75rem", marginTop: "0.25rem" }}>
-                      {c.strengths[0]}
-                    </div>
-                  )}
-                </div>
-                {c.overlapScore != null && (
-                  <div
-                    style={{
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                      color: BRAND,
-                      background: `${BRAND}15`,
-                      padding: "0.25rem 0.6rem",
-                      borderRadius: 12,
-                    }}
-                  >
-                    חפיפה: {c.overlapScore}%
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ═══ Sales Opportunities ═══ */}
-      {opportunities.length > 0 && (
-        <div style={cardStyle}>
-          <div style={cardTitleStyle}>הזדמנויות מכירה</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            {opportunities.map((opp: any, i: number) => (
-              <div
-                key={i}
-                style={{
-                  padding: "1rem",
-                  borderRadius: 8,
-                  border: "1px solid var(--border)",
-                  background: `${BRAND}05`,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                    marginBottom: "0.5rem",
-                  }}
-                >
-                  <div style={{ fontWeight: 700, fontSize: "0.95rem" }}>
-                    {opp.serviceHe || opp.service}
-                  </div>
-                  {opp.estimatedValue && (
-                    <div
-                      style={{
-                        fontWeight: 700,
-                        color: "#22c55e",
-                        fontSize: "0.9rem",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      &#8362;{opp.estimatedValue.toLocaleString()}
-                    </div>
-                  )}
-                </div>
-                {(opp.evidenceHe || opp.evidence) && (
-                  <div style={{ ...mutedText, marginBottom: "0.4rem" }}>
-                    <strong>ראיה:</strong> {opp.evidenceHe || opp.evidence}
-                  </div>
-                )}
-                {(opp.pitchHe || opp.pitch) && (
-                  <div style={{ fontSize: "0.85rem" }}>
-                    <strong>הצעה:</strong> {opp.pitchHe || opp.pitch}
-                  </div>
-                )}
-              </div>
-            ))}
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+              <thead>
+                <tr style={{ textAlign: "right", color: "var(--foreground-muted)", fontSize: "0.78rem" }}>
+                  <th style={{ padding: "0.5rem 0.6rem", borderBottom: "1px solid var(--border)", width: 36 }}>#</th>
+                  <th style={{ padding: "0.5rem 0.6rem", borderBottom: "1px solid var(--border)" }}>מתחרה</th>
+                  <th style={{ padding: "0.5rem 0.6rem", borderBottom: "1px solid var(--border)" }}>דומיין</th>
+                  <th style={{ padding: "0.5rem 0.6rem", borderBottom: "1px solid var(--border)", width: 120 }}>מיקום בחיפוש</th>
+                  <th style={{ padding: "0.5rem 0.6rem", borderBottom: "1px solid var(--border)", width: 110 }}>נראות משוערת</th>
+                </tr>
+              </thead>
+              <tbody>
+                {competitors.competitors.map((c: any, i: number) => {
+                  const pos = c.position ?? i + 1;
+                  const vis = Math.max(10, Math.round(100 - (pos - 1) * 18));
+                  return (
+                    <tr key={i}>
+                      <td style={{ padding: "0.55rem 0.6rem", borderBottom: "1px solid var(--border)", color: "var(--foreground-muted)" }}>{i + 1}</td>
+                      <td style={{ padding: "0.55rem 0.6rem", borderBottom: "1px solid var(--border)", fontWeight: 600 }}>
+                        {c.name || c.domain}
+                        {c.strengths?.[0] && (
+                          <div style={{ ...mutedText, fontSize: "0.72rem", fontWeight: 400, marginTop: "0.2rem" }}>{c.strengths[0]}</div>
+                        )}
+                      </td>
+                      <td style={{ padding: "0.55rem 0.6rem", borderBottom: "1px solid var(--border)", direction: "ltr", textAlign: "right", color: BRAND }}>{c.domain || "-"}</td>
+                      <td style={{ padding: "0.55rem 0.6rem", borderBottom: "1px solid var(--border)" }}>#{pos}</td>
+                      <td style={{ padding: "0.55rem 0.6rem", borderBottom: "1px solid var(--border)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                          <div style={{ flex: 1, height: 6, background: "var(--border)", borderRadius: 3, overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${vis}%`, background: scoreColor(vis), borderRadius: 3 }} />
+                          </div>
+                          <span style={{ fontWeight: 600, minWidth: 24 }}>{vis}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

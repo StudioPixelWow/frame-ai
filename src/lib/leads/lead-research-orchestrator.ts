@@ -67,9 +67,13 @@ function calcProgress(stages: LeadResearchStage[]): number {
 async function fetchPage(pageUrl: string): Promise<string | null> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12_000);
+    const timeout = setTimeout(() => controller.abort(), 18_000);
     const res = await fetch(pageUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', Accept: 'text/html' },
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'he-IL,he;q=0.9,en;q=0.8',
+      },
       signal: controller.signal, redirect: 'follow',
     });
     clearTimeout(timeout);
@@ -124,7 +128,18 @@ async function runWebsiteScan(url: string): Promise<any> {
     for (const pattern of priorityPatterns) {
       const match = internalLinks.find(l => pattern.test(l));
       if (match && !pagesToScan.includes(match)) pagesToScan.push(match);
-      if (pagesToScan.length >= 4) break;
+      if (pagesToScan.length >= 5) break;
+    }
+
+    // Guaranteed common paths — many sites (esp. WordPress / Hebrew) don't expose
+    // contact/blog links in scrapeable nav, so probe standard URLs directly.
+    const commonPaths = ['/contact', '/contact-us', '/צור-קשר', '/about', '/about-us', '/אודות', '/blog', '/בלוג', '/articles', '/services', '/שירותים'];
+    for (const path of commonPaths) {
+      const candidate = baseUrl + path;
+      const already = pagesToScan.some(p => {
+        try { return new URL(p).pathname.replace(/\/$/, '') === path.replace(/\/$/, ''); } catch { return false; }
+      });
+      if (!already && pagesToScan.length < 7) pagesToScan.push(candidate);
     }
 
     // ── Step 4: Fetch internal pages in parallel ──
@@ -457,23 +472,63 @@ async function runGooglePresence(url: string, businessName: string, websiteFacts
     let domain = url;
     try { domain = new URL(url).hostname; } catch {}
 
-    // Extract keywords from website content instead of searching for the business name
-    const keywords: string[] = [];
+    // ── Build COMMERCIAL keywords (the phrases prospects actually search) ──
+    // Ranking #1 for the business's own name is meaningless, so we extract
+    // service-intent phrases from the title/H1/H2s and exclude the brand name.
     const wf = websiteFacts || {};
-    const textContent = [wf.title, wf.description, wf.h1].filter(Boolean).join(' ');
-    if (textContent.length > 10) {
-      // Use the most relevant phrases from the site
-      if (wf.description) keywords.push(wf.description.substring(0, 50));
-      if (wf.h1 && wf.h1 !== wf.title) keywords.push(wf.h1);
+    const brandTokens = (businessName || '')
+      .split(/\s+/).map(t => t.trim()).filter(t => t.length > 1);
+    const isBrandOnly = (phrase: string) => {
+      const cleaned = phrase.replace(/[|\-–—,:]/g, ' ').trim();
+      if (!cleaned) return true;
+      // brand-only if every meaningful token is part of the business name
+      const tokens = cleaned.split(/\s+/).filter(t => t.length > 1);
+      return tokens.length > 0 && tokens.every(t => brandTokens.some(b => t.includes(b) || b.includes(t)));
+    };
+
+    const candidates: string[] = [];
+    // Split the title on separators — the non-brand segments are usually services
+    if (wf.title) {
+      for (const seg of String(wf.title).split(/[|\-–—•·]/)) {
+        const s = seg.trim();
+        if (s.length >= 4 && s.length <= 60) candidates.push(s);
+      }
     }
-    if (keywords.length === 0) keywords.push(businessName);
+    if (wf.h1) candidates.push(String(wf.h1).trim());
+    for (const h2 of (wf.h2Headings || [])) {
+      const s = String(h2).trim();
+      if (s.length >= 4 && s.length <= 60) candidates.push(s);
+    }
+    if (wf.description) {
+      // first clause of the meta description
+      const firstClause = String(wf.description).split(/[.,–—|]/)[0]?.trim();
+      if (firstClause && firstClause.length >= 6 && firstClause.length <= 60) candidates.push(firstClause);
+    }
+
+    // Dedup, drop brand-only phrases, keep up to 4 commercial keywords
+    const seen = new Set<string>();
+    const keywords: string[] = [];
+    for (const c of candidates) {
+      const key = c.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (isBrandOnly(c)) continue;
+      keywords.push(c);
+      if (keywords.length >= 4) break;
+    }
+    // Fallback: if nothing commercial found, use description/h1 (still better than brand name)
+    if (keywords.length === 0) {
+      if (wf.description) keywords.push(String(wf.description).substring(0, 50));
+      else if (wf.h1) keywords.push(String(wf.h1));
+      else keywords.push(businessName);
+    }
 
     // Search for EACH keyword separately and report positions for each
     const keywordResults: any[] = [];
     let bestPosition: number | null = null;
     let overallFound = false;
 
-    for (const kw of keywords.slice(0, 3)) {
+    for (const kw of keywords.slice(0, 4)) {
       try {
         const res = await fetch('https://google.serper.dev/search', {
           method: 'POST',
@@ -526,8 +581,42 @@ async function runGooglePresence(url: string, businessName: string, websiteFacts
     result.organic.position = bestPosition;
     result.organic.results = keywordResults[0]?.topResults || [];
     result.keywordResults = keywordResults;
+    result.checkedKeywords = keywords.slice(0, 4);
 
-    console.log('[LeadResearch] Google presence:', result.found ? `found at position ${result.organic.position}` : 'not found', `(${keywordResults.length} keywords searched)`);
+    // ── Dedicated Places query — detects Google Business Profile / reviews / Local Pack ──
+    // (organic searches often don't return the map pack, so query the places endpoint directly)
+    try {
+      const placesRes = await fetch('https://google.serper.dev/places', {
+        method: 'POST',
+        headers: { 'X-API-KEY': serperKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q: businessName, gl: 'il', hl: 'he' }),
+      });
+      if (placesRes.ok) {
+        const placesData = await placesRes.json();
+        const places = placesData.places || [];
+        const bn = businessName.toLowerCase();
+        const match =
+          places.find((p: any) =>
+            p.website?.includes(domain) ||
+            p.title?.toLowerCase().includes(bn) ||
+            bn.includes((p.title || '').toLowerCase())
+          ) || places[0];
+        if (match) {
+          result.localPack.found = true;
+          result.localPack.title = match.title || null;
+          result.localPack.address = match.address || null;
+          result.localPack.category = match.category || match.type || null;
+          if (match.rating != null) {
+            result.reviews = { rating: match.rating, count: match.ratingCount ?? match.reviews ?? null };
+          }
+          result.found = true;
+        }
+      }
+    } catch (placesErr: any) {
+      console.warn('[LeadResearch] Places query error:', placesErr?.message);
+    }
+
+    console.log('[LeadResearch] Google presence:', result.found ? `found (organic #${result.organic.position ?? 'n/a'}, localPack=${result.localPack.found})` : 'not found', `(${keywordResults.length} keywords searched)`);
   } catch (e: any) {
     console.warn('[LeadResearch] Google presence error:', e?.message);
   }
@@ -1324,17 +1413,16 @@ async function runReportGeneration(data: {
       { id: 'competitors', title: 'Competitor Analysis', titleHe: 'ניתוח מתחרים', hint: 'מי המתחרים, מה הם עושים טוב, היכן הפערים, ואילו הזדמנויות נפתחות מול מצבם.' },
       { id: 'content_strategy', title: 'Content Strategy', titleHe: 'המלצות אסטרטגיית תוכן', hint: 'אסטרטגיית בלוג ותוכן, מילות מפתח ונושאים, פורמטים, לוח תוכן מומלץ, ושילוב עם SEO.' },
       { id: 'paid_advertising', title: 'Paid Advertising Potential', titleHe: 'פוטנציאל פרסום ממומן', hint: 'פוטנציאל Google Ads ו-Meta Ads, קהלי יעד, מבנה קמפיינים, תקציב מומלץ, ותחזית תוצאות.' },
-      { id: 'opportunities', title: 'Sales Opportunities', titleHe: 'הזדמנויות צמיחה ומכירה', hint: 'שירותי סטודיו פיקסל הרלוונטיים, הנימוק (ראיה) לכל אחד, הערך הכספי, וסדר עדיפויות.' },
       { id: 'quarter_plan', title: 'Quarter Plan', titleHe: 'תוכנית 90 יום', hint: 'יעדים רבעוניים, פעולות שבועיות מרכזיות, KPIs, השקעה צפויה, ו-ROI משוער.' },
       { id: 'recommendations', title: 'Recommendations', titleHe: 'המלצות Studio Pixel', hint: 'לפחות 10 המלצות קונקרטיות ומעשיות — כל המלצה עם הסבר למה היא חשובה ומה ההשפעה הצפויה.' },
     ];
 
-    // 3 balanced batches (4 + 4 + 4)
-    const SECTION_BATCHES: SectionDef[][] = [
-      SECTION_DEFS.slice(0, 4),
-      SECTION_DEFS.slice(4, 8),
-      SECTION_DEFS.slice(8, 12),
-    ];
+    // 4 batches of 3 sections — smaller batches give each section more token room
+    // (covers ALL sections; previous 3×4 slicing dropped the last section).
+    const SECTION_BATCHES: SectionDef[][] = [];
+    for (let i = 0; i < SECTION_DEFS.length; i += 3) {
+      SECTION_BATCHES.push(SECTION_DEFS.slice(i, i + 3));
+    }
 
     const baseSystemPrompt = `אתה כותב דוחות מחקר מקצועיים ומעמיקים עבור סטודיו פיקסל (Studio Pixel) — סוכנות שיווק דיגיטלי מובילה.
 הדוח מיועד להצגה ללקוח פוטנציאלי כדי להדגים את הערך שסטודיו פיקסל יכול לספק.

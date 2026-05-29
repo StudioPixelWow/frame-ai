@@ -15,11 +15,14 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  AreaChart,
+  Area,
+  LabelList,
   Cell,
 } from "recharts";
 
 const BRAND = "#00B5FE";
-const TARGET = "#F0FF02";
+const TARGET = "#7c3aed";
 const GOOD = "#22c55e";
 const WARN = "#f97316";
 const BAD = "#ef4444";
@@ -41,13 +44,13 @@ const cardStyle: React.CSSProperties = {
 const cardTitleStyle: React.CSSProperties = {
   fontSize: "1.1rem",
   fontWeight: 700,
-  marginBottom: "1rem",
+  marginBottom: "0.5rem",
   color: "var(--foreground)",
 };
 
 const mutedText: React.CSSProperties = {
   color: "var(--foreground-muted)",
-  fontSize: "0.85rem",
+  fontSize: "0.8rem",
 };
 
 interface ResearchChartsProps {
@@ -57,57 +60,30 @@ interface ResearchChartsProps {
 }
 
 /**
- * Visualizations for the lead research page:
+ * Visualizations that frame "where the client is today vs. where we can take them":
  *  1. Scores by category (radar)
- *  2. Current state vs 90-day target (grouped bars)
- *  3. Competitor comparison — estimated organic visibility (bars)
+ *  2. Gap to 90-day target (grouped bars + gap label)
+ *  3. Growth forecast over 12 months (area)
+ *  4. ROI / organic-visibility potential — today vs potential (bars)
+ *  5. Competitor positioning (horizontal bars, LTR domain labels = readable)
  */
 export default function ResearchCharts({ scores, competitors, google }: ResearchChartsProps) {
-  // recharts must render client-side only (avoids SSR hydration mismatch)
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
 
   const categories: any[] = scores?.categories || [];
   const hasCategories = categories.length > 0;
-
-  // ── Data: scores by category ──
-  const categoryData = categories.map((c) => ({
-    name: c.categoryHe || c.category,
-    score: c.score ?? 0,
-  }));
-
-  // ── Data: current vs 90-day target ──
-  // Target = a realistic 90-day goal: at least +15 over current, floor 80, cap 100.
-  const targetData = categories.map((c) => {
-    const cur = c.score ?? 0;
-    const target = Math.min(100, Math.max(cur + 15, 80));
-    return { name: c.categoryHe || c.category, current: cur, target };
-  });
-
-  // ── Data: competitor comparison (estimated organic visibility) ──
-  // Competitors only expose a search position → convert to a 0-100 visibility proxy.
-  const posToVisibility = (pos?: number) =>
-    pos && pos > 0 ? Math.max(10, Math.round(100 - (pos - 1) * 18)) : 15;
-
   const comps: any[] = competitors?.competitors || [];
-  const googleCat = categories.find(
-    (c) => c.category === "Google" || c.categoryHe === "נוכחות בגוגל"
-  );
-  const leadVisibility =
-    googleCat?.score ??
-    (google?.organic?.position
-      ? posToVisibility(google.organic.position)
-      : scores?.overall ?? 0);
 
-  const competitorData = [
-    { name: "האתר שלך", value: leadVisibility, isLead: true },
-    ...comps.slice(0, 5).map((c: any, i: number) => ({
-      name: c.name ? String(c.name).slice(0, 18) : c.domain || `מתחרה ${i + 1}`,
-      value: posToVisibility(c.position),
-      isLead: false,
-    })),
-  ];
+  const overall: number =
+    scores?.overall ??
+    (hasCategories
+      ? Math.round(categories.reduce((a, c) => a + (c.score || 0), 0) / categories.length)
+      : 0);
+
+  // 90-day target per category and overall
+  const targetOf = (cur: number) => Math.min(95, Math.max(cur + 18, 78));
 
   const tooltipStyle = {
     background: "var(--surface)",
@@ -117,98 +93,179 @@ export default function ResearchCharts({ scores, competitors, google }: Research
     color: "var(--foreground)",
   };
 
+  // ── 1. radar ──
+  const categoryData = categories.map((c) => ({ name: c.categoryHe || c.category, score: c.score ?? 0 }));
+
+  // ── 2. gap to target ──
+  const gapData = categories.map((c) => {
+    const cur = c.score ?? 0;
+    const target = targetOf(cur);
+    return { name: c.categoryHe || c.category, current: cur, gap: Math.max(0, target - cur), target };
+  });
+
+  // ── 3. growth forecast (overall score trajectory) ──
+  const oTarget = targetOf(overall);
+  const gap = oTarget - overall;
+  const forecastData = [
+    { period: "היום", score: overall },
+    { period: "3 ח׳", score: Math.round(overall + gap * 0.4) },
+    { period: "6 ח׳", score: Math.round(overall + gap * 0.7) },
+    { period: "12 ח׳", score: oTarget },
+  ];
+
+  // ── 4. ROI / visibility potential ──
+  const googleCat = categories.find((c) => c.category === "Google" || c.categoryHe === "נוכחות בגוגל");
+  const seoCat = categories.find((c) => c.category === "SEO" || c.categoryHe === "קידום אורגני");
+  const organicToday = googleCat?.score ?? overall;
+  const leadsToday = seoCat?.score ?? overall;
+  const potentialData = [
+    { name: "נראות אורגנית", today: organicToday, potential: targetOf(organicToday) },
+    { name: "יצירת לידים", today: leadsToday, potential: targetOf(leadsToday) },
+    { name: "ציון כולל", today: overall, potential: oTarget },
+  ];
+
+  // ── 5. competitor positioning (use LTR domains as labels so RTL doesn't break) ──
+  const posToVisibility = (pos?: number) =>
+    pos && pos > 0 ? Math.max(10, Math.round(100 - (pos - 1) * 18)) : 15;
+  const leadDomain = (() => {
+    try { return new URL(google?.organic?.results?.[0]?.link || "").hostname; } catch { return "האתר שלך"; }
+  })();
+  const competitorData = [
+    {
+      name: "★ " + (leadDomain || "האתר שלך"),
+      value: googleCat?.score ?? (google?.organic?.position ? posToVisibility(google.organic.position) : overall),
+      isLead: true,
+    },
+    ...comps.slice(0, 5).map((c: any, i: number) => ({
+      name: c.domain || (c.name ? String(c.name).slice(0, 20) : `competitor ${i + 1}`),
+      value: posToVisibility(c.position),
+      isLead: false,
+    })),
+  ];
+
   if (!hasCategories && comps.length === 0) return null;
 
   return (
     <>
-      {/* ═══ Scores by category (radar) + Current vs target (bars) ═══ */}
       {hasCategories && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-            gap: "1.5rem",
-            marginBottom: "1.5rem",
-          }}
-        >
-          {/* Radar — scores by category */}
-          <div style={{ ...cardStyle, marginBottom: 0 }}>
-            <div style={cardTitleStyle}>ציונים לפי קטגוריה</div>
-            <ResponsiveContainer width="100%" height={280}>
-              <RadarChart data={categoryData} outerRadius="75%">
-                <PolarGrid stroke="var(--border)" />
-                <PolarAngleAxis
-                  dataKey="name"
-                  tick={{ fill: "var(--foreground-muted)", fontSize: 12 }}
-                />
-                <PolarRadiusAxis
-                  domain={[0, 100]}
-                  tick={{ fill: "var(--foreground-muted)", fontSize: 10 }}
-                  angle={90}
-                />
-                <Radar
-                  name="ציון"
-                  dataKey="score"
-                  stroke={BRAND}
-                  fill={BRAND}
-                  fillOpacity={0.45}
-                />
-                <Tooltip contentStyle={tooltipStyle} />
-              </RadarChart>
-            </ResponsiveContainer>
+        <>
+          {/* Radar + Gap to target */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+              gap: "1.5rem",
+              marginBottom: "1.5rem",
+            }}
+          >
+            <div style={{ ...cardStyle, marginBottom: 0 }}>
+              <div style={cardTitleStyle}>ציונים לפי קטגוריה</div>
+              <div style={{ ...mutedText, marginBottom: "0.75rem" }}>מצב נוכחי בכל תחום (0-100).</div>
+              <ResponsiveContainer width="100%" height={280}>
+                <RadarChart data={categoryData} outerRadius="72%">
+                  <PolarGrid stroke="var(--border)" />
+                  <PolarAngleAxis dataKey="name" tick={{ fill: "var(--foreground-muted)", fontSize: 12 }} />
+                  <PolarRadiusAxis domain={[0, 100]} tick={{ fill: "var(--foreground-muted)", fontSize: 10 }} angle={90} />
+                  <Radar name="ציון" dataKey="score" stroke={BRAND} fill={BRAND} fillOpacity={0.45} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div style={{ ...cardStyle, marginBottom: 0 }}>
+              <div style={cardTitleStyle}>פער מול יעד 90 יום</div>
+              <div style={{ ...mutedText, marginBottom: "0.75rem" }}>
+                כחול = מצב נוכחי · סגול = הפער שנסגור עד היעד.
+              </div>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={gapData} margin={{ top: 16, right: 8, left: -16, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="name" tick={{ fill: "var(--foreground-muted)", fontSize: 11 }} interval={0} />
+                  <YAxis domain={[0, 100]} tick={{ fill: "var(--foreground-muted)", fontSize: 11 }} />
+                  <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--border)", opacity: 0.3 }} />
+                  <Bar dataKey="current" name="נוכחי" stackId="a" fill={BRAND} />
+                  <Bar dataKey="gap" name="פער ליעד" stackId="a" fill={TARGET} radius={[4, 4, 0, 0]}>
+                    <LabelList dataKey="target" position="top" formatter={(v: number) => `יעד ${v}`} style={{ fill: "var(--foreground-muted)", fontSize: 10 }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
 
-          {/* Bars — current vs 90-day target */}
-          <div style={{ ...cardStyle, marginBottom: 0 }}>
-            <div style={cardTitleStyle}>מצב נוכחי מול יעד (90 יום)</div>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={targetData} margin={{ top: 8, right: 8, left: -16, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fill: "var(--foreground-muted)", fontSize: 11 }}
-                />
-                <YAxis
-                  domain={[0, 100]}
-                  tick={{ fill: "var(--foreground-muted)", fontSize: 11 }}
-                />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--border)", opacity: 0.3 }} />
-                <Legend wrapperStyle={{ fontSize: "0.8rem" }} />
-                <Bar dataKey="current" name="נוכחי" fill={BRAND} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="target" name="יעד" fill={TARGET} radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          {/* Forecast + ROI potential */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+              gap: "1.5rem",
+              marginBottom: "1.5rem",
+            }}
+          >
+            <div style={{ ...cardStyle, marginBottom: 0 }}>
+              <div style={cardTitleStyle}>תחזית צמיחה — 12 חודשים</div>
+              <div style={{ ...mutedText, marginBottom: "0.75rem" }}>
+                מסלול הציון הכולל הצפוי עם ליווי סטודיו פיקסל (הערכה).
+              </div>
+              <ResponsiveContainer width="100%" height={260}>
+                <AreaChart data={forecastData} margin={{ top: 8, right: 12, left: -16, bottom: 8 }}>
+                  <defs>
+                    <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={BRAND} stopOpacity={0.5} />
+                      <stop offset="95%" stopColor={BRAND} stopOpacity={0.05} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="period" tick={{ fill: "var(--foreground-muted)", fontSize: 12 }} />
+                  <YAxis domain={[0, 100]} tick={{ fill: "var(--foreground-muted)", fontSize: 11 }} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Area type="monotone" dataKey="score" name="ציון צפוי" stroke={BRAND} strokeWidth={2.5} fill="url(#grad)">
+                    <LabelList dataKey="score" position="top" style={{ fill: "var(--foreground)", fontSize: 11, fontWeight: 700 }} />
+                  </Area>
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div style={{ ...cardStyle, marginBottom: 0 }}>
+              <div style={cardTitleStyle}>פוטנציאל — היום מול אפשרי</div>
+              <div style={{ ...mutedText, marginBottom: "0.75rem" }}>
+                מדדי נראות ולידים יחסיים (0-100) — היום מול הפוטנציאל הניתן להשגה (הערכה).
+              </div>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={potentialData} margin={{ top: 16, right: 8, left: -16, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="name" tick={{ fill: "var(--foreground-muted)", fontSize: 11 }} interval={0} />
+                  <YAxis domain={[0, 100]} tick={{ fill: "var(--foreground-muted)", fontSize: 11 }} />
+                  <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--border)", opacity: 0.3 }} />
+                  <Legend wrapperStyle={{ fontSize: "0.8rem" }} />
+                  <Bar dataKey="today" name="היום" fill={WARN} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="potential" name="פוטנציאל" fill={GOOD} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
-      {/* ═══ Competitor comparison ═══ */}
+      {/* Competitor positioning */}
       {comps.length > 0 && (
         <div style={cardStyle}>
-          <div style={cardTitleStyle}>השוואת מתחרים — נראות אורגנית משוערת</div>
+          <div style={cardTitleStyle}>מפת מיצוב מול מתחרים</div>
           <div style={{ ...mutedText, marginBottom: "1rem" }}>
-            מדד נראות משוער (0-100) על בסיס מיקום בתוצאות החיפוש — ערך גבוה יותר = נראות טובה יותר.
+            מדד נראות משוער (0-100) לפי מיקום בחיפוש. ★ = האתר שלך. ערך גבוה = נראות טובה יותר.
           </div>
           <ResponsiveContainer width="100%" height={Math.max(180, competitorData.length * 46)}>
-            <BarChart
-              data={competitorData}
-              layout="vertical"
-              margin={{ top: 4, right: 24, left: 8, bottom: 4 }}
-            >
+            <BarChart data={competitorData} layout="vertical" margin={{ top: 4, right: 32, left: 8, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-              <XAxis
-                type="number"
-                domain={[0, 100]}
-                tick={{ fill: "var(--foreground-muted)", fontSize: 11 }}
-              />
+              <XAxis type="number" domain={[0, 100]} tick={{ fill: "var(--foreground-muted)", fontSize: 11 }} />
               <YAxis
                 type="category"
                 dataKey="name"
-                width={110}
+                width={150}
                 tick={{ fill: "var(--foreground)", fontSize: 11 }}
               />
               <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--border)", opacity: 0.3 }} />
               <Bar dataKey="value" name="נראות" radius={[0, 4, 4, 0]}>
+                <LabelList dataKey="value" position="right" style={{ fill: "var(--foreground-muted)", fontSize: 11 }} />
                 {competitorData.map((d, i) => (
                   <Cell key={i} fill={d.isLead ? BRAND : scoreColor(d.value)} />
                 ))}
