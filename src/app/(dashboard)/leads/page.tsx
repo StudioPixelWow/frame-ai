@@ -1270,23 +1270,59 @@ function LeadDetailPanel({
                 )}
               </div>
 
+              {/* Social Presence */}
+              {researchData.socialPresence && (
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                  {['facebook', 'instagram', 'linkedin', 'tiktok'].map(platform => {
+                    const p = researchData.socialPresence?.[platform];
+                    const found = p?.found;
+                    const labels: Record<string, string> = { facebook: 'פייסבוק', instagram: 'אינסטגרם', linkedin: 'לינקדאין', tiktok: 'טיקטוק' };
+                    return (
+                      <span key={platform} style={{
+                        padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+                        background: found ? '#22c55e18' : 'var(--surface)',
+                        color: found ? '#22c55e' : 'var(--foreground-muted)',
+                        border: `1px solid ${found ? '#22c55e30' : 'var(--border)'}`,
+                      }}>
+                        {found ? '✓' : '✗'} {labels[platform] || platform}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Google Presence */}
+              {researchData.googlePresence && (
+                <div style={{ background: 'var(--surface)', borderRadius: '8px', padding: '10px', marginBottom: '12px', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--foreground)', marginBottom: '4px' }}>
+                    {researchData.googlePresence.found ? '✓ נמצא בגוגל' : '✗ לא נמצא בגוגל'}
+                    {researchData.googlePresence.organic?.position && ` (מיקום ${researchData.googlePresence.organic.position})`}
+                  </div>
+                  {researchData.googlePresence.reviews && (
+                    <div style={{ fontSize: '11px', color: 'var(--foreground-muted)' }}>
+                      דירוג: {researchData.googlePresence.reviews.rating}/5 ({researchData.googlePresence.reviews.count} ביקורות)
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Sales Opportunities */}
               {researchData.salesOpportunities?.length > 0 && (
                 <div style={{ marginBottom: '12px' }}>
                   <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)' }}>
                     הזדמנויות מכירה ({researchData.salesOpportunities.length})
                   </h4>
-                  {researchData.salesOpportunities.slice(0, 3).map((opp: any, i: number) => (
+                  {researchData.salesOpportunities.slice(0, 5).map((opp: any, i: number) => (
                     <div key={i} style={{
                       padding: '10px',
                       background: 'var(--surface)',
                       border: '1px solid var(--border)',
                       borderRadius: '8px',
-                      borderRight: `3px solid ${opp.priority === 'critical' ? '#ef4444' : opp.priority === 'high' ? '#f97316' : '#eab308'}`,
+                      borderRight: `3px solid ${(opp.priority || 99) <= 2 ? '#ef4444' : (opp.priority || 99) <= 4 ? '#f97316' : '#eab308'}`,
                       marginBottom: '6px',
                     }}>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>{opp.serviceHe}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginTop: '4px' }}>{opp.reasonHe}</div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>{opp.serviceHe || opp.service}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginTop: '4px' }}>{opp.evidenceHe || opp.reasonHe || opp.evidence || ''}</div>
                       <div style={{ fontSize: '12px', fontWeight: 600, color: '#00B5FE', marginTop: '4px' }}>₪{(opp.estimatedValue || 0).toLocaleString()}</div>
                     </div>
                   ))}

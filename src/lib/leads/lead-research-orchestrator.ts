@@ -164,115 +164,235 @@ async function runWebsiteScan(url: string): Promise<any> {
   }
 }
 
+// ── Self-contained stage runners — no external engine dependencies ────────────
+
 async function runSocialScan(url: string, businessName: string): Promise<any> {
-  // Will be implemented by social-scanner.ts (Phase 2)
-  // For now, return null — orchestrator handles gracefully
+  // Self-contained: just check if social links exist on the website HTML
+  console.log('[LeadResearch] Stage 2: Social scan for', businessName);
+  const result: Record<string, any> = {
+    facebook: null, instagram: null, linkedin: null, tiktok: null,
+  };
+
   try {
-    const { scanSocialPresence } = await import('@/lib/leads/social-scanner');
-    return await scanSocialPresence(url, businessName);
-  } catch {
-    return null;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; StudioPixelBot/1.0)', Accept: 'text/html' },
+      signal: controller.signal, redirect: 'follow',
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return result;
+    const html = await res.text();
+
+    // Extract social links from HTML
+    const fbMatch = html.match(/(?:https?:\/\/)?(?:www\.)?facebook\.com\/[^"'\s<>]+/i);
+    const igMatch = html.match(/(?:https?:\/\/)?(?:www\.)?instagram\.com\/[^"'\s<>]+/i);
+    const liMatch = html.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/[^"'\s<>]+/i);
+    const tkMatch = html.match(/(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@[^"'\s<>]+/i);
+
+    if (fbMatch) result.facebook = { url: fbMatch[0], found: true, source: 'website' };
+    if (igMatch) result.instagram = { url: igMatch[0], found: true, source: 'website' };
+    if (liMatch) result.linkedin = { url: liMatch[0], found: true, source: 'website' };
+    if (tkMatch) result.tiktok = { url: tkMatch[0], found: true, source: 'website' };
+
+    console.log('[LeadResearch] Social found on website:', Object.keys(result).filter(k => result[k]?.found));
+  } catch (e: any) {
+    console.warn('[LeadResearch] Social scan fetch error:', e?.message);
   }
+
+  return result;
 }
 
 async function runGooglePresence(url: string, businessName: string): Promise<any> {
-  // Will be implemented by google-presence-scanner.ts (Phase 2)
-  try {
-    const { scanGooglePresence } = await import('@/lib/leads/google-presence-scanner');
-    return await scanGooglePresence(url, businessName);
-  } catch {
-    return null;
+  // Self-contained: use Serper API if available, otherwise return basic info
+  console.log('[LeadResearch] Stage 3: Google presence for', businessName);
+  const serperKey = process.env.SERPER_API_KEY || process.env.SERP_API_KEY;
+
+  const result: any = {
+    found: false,
+    organic: { found: false, position: null, results: [] },
+    localPack: { found: false },
+    reviews: null,
+  };
+
+  if (!serperKey) {
+    console.warn('[LeadResearch] No SERPER_API_KEY — skipping Google presence');
+    return result;
   }
+
+  try {
+    let domain = url;
+    try { domain = new URL(url).hostname; } catch {}
+
+    const res = await fetch('https://google.serper.dev/search', {
+      method: 'POST',
+      headers: { 'X-API-KEY': serperKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: businessName, gl: 'il', hl: 'he', num: 20 }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const organicResults = data.organic || [];
+      const matchIdx = organicResults.findIndex((r: any) => r.link?.includes(domain));
+      if (matchIdx >= 0) {
+        result.found = true;
+        result.organic.found = true;
+        result.organic.position = matchIdx + 1;
+      }
+      result.organic.results = organicResults.slice(0, 5).map((r: any) => ({
+        title: r.title, link: r.link, position: r.position,
+      }));
+
+      if (data.localResults?.places?.length) {
+        const localMatch = data.localResults.places.find((p: any) =>
+          p.title?.toLowerCase().includes(businessName.toLowerCase()) ||
+          p.website?.includes(domain)
+        );
+        if (localMatch) {
+          result.localPack.found = true;
+          result.reviews = { rating: localMatch.rating, count: localMatch.reviews };
+        }
+      }
+    }
+    console.log('[LeadResearch] Google presence:', result.found ? `found at position ${result.organic.position}` : 'not found');
+  } catch (e: any) {
+    console.warn('[LeadResearch] Google presence error:', e?.message);
+  }
+
+  return result;
 }
 
 async function runSeoAnalysis(url: string, websiteFacts: any): Promise<any> {
-  try {
-    const { analyzeGaps } = await import('@/lib/seo/gap-analysis');
+  // Self-contained: score based on websiteFacts HTML analysis
+  console.log('[LeadResearch] Stage 4: SEO analysis based on website facts');
 
-    // Extract domain from URL
-    let domain = url;
-    try { domain = new URL(url).hostname; } catch { /* use raw */ }
+  if (!websiteFacts) return { technicalScore: 0, contentScore: 0, issues: [], contentGaps: [] };
 
-    const gapResult = analyzeGaps({ domain });
-    if (!gapResult) return null;
+  const issues: string[] = [];
+  let techPoints = 0;
+  let contentPoints = 0;
 
-    return {
-      technicalScore: gapResult.summary?.totalGaps ?? 0,
-      contentScore: gapResult.contentGaps?.length ?? 0,
-      issues: gapResult.technicalGaps ?? [],
-      contentGaps: gapResult.contentGaps ?? [],
-      keywordOpportunities: gapResult.keywordGaps ?? [],
-    };
-  } catch {
-    return null;
-  }
+  // Technical signals
+  if (websiteFacts.isHttps) techPoints += 20; else issues.push('האתר לא משתמש ב-HTTPS');
+  if (websiteFacts.hasMobileViewport) techPoints += 20; else issues.push('אין viewport למובייל');
+  if (websiteFacts.hasSchemaMarkup) techPoints += 15; else issues.push('אין Schema Markup (נתונים מובנים)');
+  if (websiteFacts.hasLazyLoading) techPoints += 10; else issues.push('אין Lazy Loading לתמונות');
+  if (websiteFacts.canonical) techPoints += 10; else issues.push('אין Canonical URL');
+  if ((websiteFacts.cms || '').includes('WordPress')) techPoints += 10;
+  if (websiteFacts.internalLinks > 10) techPoints += 15; else if (websiteFacts.internalLinks > 3) techPoints += 8;
+
+  // Content signals
+  if (websiteFacts.title && websiteFacts.title.length > 10) contentPoints += 25; else issues.push('כותרת אתר קצרה או חסרה');
+  if (websiteFacts.description && websiteFacts.description.length > 50) contentPoints += 25; else issues.push('Meta Description קצר או חסר');
+  if (websiteFacts.h1 && websiteFacts.h1.length > 3) contentPoints += 20; else issues.push('אין H1 באתר');
+  if (websiteFacts.ogImage) contentPoints += 15; else issues.push('אין תמונת OG (שיתוף ברשתות חברתיות)');
+  if (websiteFacts.htmlLength > 10000) contentPoints += 15; else issues.push('תוכן דל — פחות מ-10,000 תווים');
+
+  return {
+    technicalScore: Math.min(techPoints, 100),
+    contentScore: Math.min(contentPoints, 100),
+    issues,
+    contentGaps: issues.filter(i => i.includes('תוכן') || i.includes('Description') || i.includes('H1')),
+  };
 }
 
 async function runGeoAnalysis(url: string, businessName: string, websiteFacts: any): Promise<any> {
-  try {
-    const { queryPlatform, isPlatformAvailable } = await import('@/lib/seo/platform-apis');
+  // Self-contained: report as "not checked" — no fake data
+  console.log('[LeadResearch] Stage 5: GEO/AI visibility check');
 
-    const platforms = ['google_ai_overview', 'gemini', 'chatgpt', 'claude', 'perplexity'];
-    const keywords = websiteFacts?.keywords?.slice(0, 5) || [businessName];
+  const platforms = [
+    { id: 'google_ai_overview', name: 'Google AI Overview' },
+    { id: 'chatgpt', name: 'ChatGPT' },
+    { id: 'gemini', name: 'Google Gemini' },
+    { id: 'perplexity', name: 'Perplexity' },
+    { id: 'claude', name: 'Claude' },
+  ];
 
-    const results: any[] = [];
-    for (const platformId of platforms) {
-      if (!isPlatformAvailable(platformId as any)) {
-        results.push({ platformId, platformName: platformId, found: false, queries: [] });
-        continue;
+  // Try each platform if API keys are available
+  const results = platforms.map(p => ({
+    platformId: p.id,
+    platformName: p.name,
+    found: false,
+    checked: false,
+    queries: [],
+  }));
+
+  // Try Perplexity if key exists
+  const perplexityKey = process.env.PERPLEXITY_API_KEY;
+  if (perplexityKey) {
+    try {
+      const query = `מי מספק שירותי ${websiteFacts?.title || businessName} בישראל?`;
+      const res = await fetch('https://api.perplexity.ai/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${perplexityKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'sonar-pro',
+          messages: [{ role: 'user', content: query }],
+          max_tokens: 500,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const answer = data.choices?.[0]?.message?.content || '';
+        let domain = '';
+        try { domain = new URL(url).hostname.replace('www.', ''); } catch {}
+        const found = answer.toLowerCase().includes(domain) || answer.toLowerCase().includes(businessName.toLowerCase());
+        const pIdx = results.findIndex(r => r.platformId === 'perplexity');
+        if (pIdx >= 0) {
+          results[pIdx].found = found;
+          results[pIdx].checked = true;
+          results[pIdx].queries = [{ query, found, response: answer.substring(0, 300) }] as any;
+        }
       }
-
-      const queries: any[] = [];
-      for (const kw of keywords.slice(0, 3)) {
-        try {
-          const query = `מי הספק הטוב ביותר ל${kw} בישראל?`;
-          const result = await queryPlatform(platformId as any, query);
-          queries.push({
-            query,
-            found: result?.mentioned ?? false,
-            mentionType: result?.mentionType ?? 'none',
-            response: result?.response?.substring(0, 500),
-          });
-        } catch { /* skip */ }
-      }
-
-      const found = queries.some(q => q.found);
-      results.push({ platformId, platformName: platformId, found, queries });
+    } catch (e: any) {
+      console.warn('[LeadResearch] Perplexity check error:', e?.message);
     }
-
-    const totalPlatforms = results.length;
-    const foundCount = results.filter(r => r.found).length;
-    const overallVisibility = totalPlatforms > 0 ? Math.round((foundCount / totalPlatforms) * 100) : 0;
-
-    return { overallVisibility, platforms: results };
-  } catch {
-    return null;
   }
+
+  const checked = results.filter(r => r.checked);
+  const found = checked.filter(r => r.found);
+  const overallVisibility = checked.length > 0 ? Math.round((found.length / checked.length) * 100) : 0;
+
+  return { overallVisibility, platforms: results, checkedCount: checked.length };
 }
 
 async function runCompetitorAnalysis(url: string, websiteFacts: any): Promise<any> {
+  // Self-contained: use Serper to find competitors
+  console.log('[LeadResearch] Stage 7: Competitor analysis');
+  const serperKey = process.env.SERPER_API_KEY || process.env.SERP_API_KEY;
+
+  if (!serperKey || !websiteFacts?.title) {
+    return { competitors: [], marketPosition: 'unknown' };
+  }
+
   try {
-    const { analyzeCompetitors } = await import('@/lib/seo/competitor-engine');
+    let domain = '';
+    try { domain = new URL(url).hostname; } catch {}
 
-    let domain = url;
-    try { domain = new URL(url).hostname; } catch { /* use raw */ }
+    const res = await fetch('https://google.serper.dev/search', {
+      method: 'POST',
+      headers: { 'X-API-KEY': serperKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: websiteFacts.title, gl: 'il', hl: 'he', num: 10 }),
+    });
 
-    const result = analyzeCompetitors({ domain });
-    if (!result?.competitors?.length) return null;
+    if (!res.ok) return { competitors: [], marketPosition: 'unknown' };
 
-    // Map to the LeadResearch schema shape
-    return {
-      competitors: result.competitors.map(c => ({
-        name: c.domain,
-        domain: c.domain,
-        overlapScore: c.overlapScore,
-        strengths: c.keywordsTheyOwn?.slice(0, 5) ?? [],
+    const data = await res.json();
+    const competitors = (data.organic || [])
+      .filter((r: any) => !r.link?.includes(domain))
+      .slice(0, 5)
+      .map((r: any, i: number) => ({
+        name: r.title,
+        domain: new URL(r.link).hostname,
+        position: i + 1,
+        strengths: [r.snippet?.substring(0, 100)],
         weaknesses: [],
-      })),
-      marketPosition: result.summary?.overallThreatLevel ?? 'unknown',
-    };
-  } catch {
-    return null;
+      }));
+
+    return { competitors, marketPosition: competitors.length > 3 ? 'competitive' : 'niche' };
+  } catch (e: any) {
+    console.warn('[LeadResearch] Competitor analysis error:', e?.message);
+    return { competitors: [], marketPosition: 'unknown' };
   }
 }
 
@@ -284,41 +404,42 @@ async function runScoring(data: {
   socialPresence: any;
   googlePresence: any;
 }): Promise<any> {
-  try {
-    const { calculateStrategicScore } = await import('@/lib/seo/strategic-scoring');
+  // Self-contained scoring based on actual collected data
+  console.log('[LeadResearch] Stage 8: Scoring');
 
-    const score = calculateStrategicScore({
-      websiteFacts: data.websiteFacts ?? undefined,
-      gapAnalysis: data.seoAnalysis ?? undefined,
-      competitorAnalysis: data.competitorAnalysis ?? undefined,
-      aiVisibilityScore: data.geoAnalysis?.overallVisibility ?? undefined,
-    });
-    if (!score) return null;
+  const wf = data.websiteFacts || {};
+  const seo = data.seoAnalysis || {};
+  const geo = data.geoAnalysis || {};
+  const social = data.socialPresence || {};
+  const google = data.googlePresence || {};
 
-    return {
-      overall: score.overall,
-      grade: score.grade,
-      confidence: score.confidence,
-      categories: score.categories?.map(c => ({
-        category: c.name,
-        categoryHe: c.nameHe,
-        score: c.score,
-        weight: c.weight,
-        grade: c.score >= 80 ? 'A' : c.score >= 60 ? 'B' : c.score >= 40 ? 'C' : 'D',
-        topIssue: c.topIssue,
-        topAction: c.topAction,
-        signals: c.signals?.map(sId => ({
-          name: sId,
-          nameHe: sId,
-          score: 0,
-          evidence: '',
-          impact: 'medium' as const,
-        })) ?? [],
-      })) ?? [],
-    };
-  } catch {
-    return null;
-  }
+  // Calculate category scores
+  const seoScore = Math.round(((seo.technicalScore || 0) + (seo.contentScore || 0)) / 2);
+
+  const socialPlatforms = ['facebook', 'instagram', 'linkedin', 'tiktok'];
+  const socialFound = socialPlatforms.filter(p => social[p]?.found).length;
+  const socialScore = Math.round((socialFound / socialPlatforms.length) * 100);
+
+  const googleScore = google?.found ? (google.organic?.position <= 3 ? 90 : google.organic?.position <= 10 ? 70 : 50) : 10;
+
+  const aiScore = geo?.overallVisibility ?? 0;
+
+  // Overall weighted score
+  const overall = Math.round(seoScore * 0.35 + socialScore * 0.2 + googleScore * 0.25 + aiScore * 0.2);
+
+  const gradeFromScore = (s: number) => s >= 90 ? 'A+' : s >= 80 ? 'A' : s >= 70 ? 'B+' : s >= 60 ? 'B' : s >= 50 ? 'C+' : s >= 40 ? 'C' : s >= 30 ? 'D' : 'F';
+
+  return {
+    overall,
+    grade: gradeFromScore(overall),
+    confidence: wf.title ? 75 : 30,
+    categories: [
+      { category: 'SEO', categoryHe: 'קידום אורגני', score: seoScore, weight: 0.35, grade: gradeFromScore(seoScore) },
+      { category: 'Social', categoryHe: 'רשתות חברתיות', score: socialScore, weight: 0.2, grade: gradeFromScore(socialScore) },
+      { category: 'Google', categoryHe: 'נוכחות בגוגל', score: googleScore, weight: 0.25, grade: gradeFromScore(googleScore) },
+      { category: 'AI Visibility', categoryHe: 'נראות AI', score: aiScore, weight: 0.2, grade: gradeFromScore(aiScore) },
+    ],
+  };
 }
 
 async function runSalesOpportunities(data: {
@@ -329,13 +450,112 @@ async function runSalesOpportunities(data: {
   googlePresence: any;
   scores: any;
 }): Promise<any[]> {
-  // Will be fully implemented by sales-opportunity-engine.ts (Phase 2)
-  try {
-    const { analyzeSalesOpportunities } = await import('@/lib/leads/sales-opportunity-engine');
-    return await analyzeSalesOpportunities(data);
-  } catch {
-    return [];
+  // Self-contained: generate opportunities from actual scan data
+  console.log('[LeadResearch] Stage 9: Sales opportunities analysis');
+  const opportunities: any[] = [];
+  const seo = data.seoAnalysis || {};
+  const social = data.socialPresence || {};
+  const google = data.googlePresence || {};
+  const geo = data.geoAnalysis || {};
+  const wf = data.websiteFacts || {};
+
+  // Rule 1: SEO/GEO plan needed
+  const seoScore = Math.round(((seo.technicalScore || 0) + (seo.contentScore || 0)) / 2);
+  if (seoScore < 60) {
+    opportunities.push({
+      id: 'seo_plan',
+      service: 'תוכנית SEO/GEO 60 יום',
+      serviceHe: 'תוכנית SEO/GEO 60 יום',
+      priority: 1,
+      estimatedValue: 8000,
+      evidence: `ציון SEO של ${seoScore}/100 — פוטנציאל שיפור משמעותי`,
+      evidenceHe: `ציון SEO של ${seoScore}/100 — פוטנציאל שיפור משמעותי`,
+      pitch: 'תוכנית SEO/GEO מקיפה ל-60 יום שתעלה את הדירוג בגוגל ובמנועי AI',
+      pitchHe: 'תוכנית SEO/GEO מקיפה ל-60 יום שתעלה את הדירוג בגוגל ובמנועי AI',
+    });
   }
+
+  // Rule 2: AI Visibility
+  const aiVis = geo?.overallVisibility ?? 0;
+  if (aiVis < 50) {
+    opportunities.push({
+      id: 'ai_visibility',
+      service: 'נראות AI ו-GEO',
+      serviceHe: 'נראות AI ו-GEO',
+      priority: 2,
+      estimatedValue: 6000,
+      evidence: `נראות AI של ${aiVis}% בלבד — העסק כמעט בלתי נראה למנועי חיפוש AI`,
+      evidenceHe: `נראות AI של ${aiVis}% בלבד — העסק כמעט בלתי נראה למנועי חיפוש AI`,
+      pitch: 'שירות GEO שיוודא שהעסק מופיע בתשובות ChatGPT, Gemini, Perplexity ועוד',
+      pitchHe: 'שירות GEO שיוודא שהעסק מופיע בתשובות ChatGPT, Gemini, Perplexity ועוד',
+    });
+  }
+
+  // Rule 3: Website issues
+  const websiteIssues = (seo.issues || []).length;
+  if (websiteIssues >= 2 || !wf.hasMobileViewport || !wf.isHttps) {
+    opportunities.push({
+      id: 'website_upgrade',
+      service: 'שדרוג ועיצוב אתר',
+      serviceHe: 'שדרוג ועיצוב אתר',
+      priority: 3,
+      estimatedValue: 12000,
+      evidence: `${websiteIssues} בעיות טכניות זוהו באתר`,
+      evidenceHe: `${websiteIssues} בעיות טכניות זוהו באתר`,
+      pitch: 'שדרוג האתר עם עיצוב מודרני, מובייל-ראשון, ומותאם SEO',
+      pitchHe: 'שדרוג האתר עם עיצוב מודרני, מובייל-ראשון, ומותאם SEO',
+    });
+  }
+
+  // Rule 4: Social media gaps
+  const socialPlatforms = ['facebook', 'instagram', 'linkedin', 'tiktok'];
+  const missingSocial = socialPlatforms.filter(p => !social[p]?.found);
+  if (missingSocial.length >= 2) {
+    opportunities.push({
+      id: 'social_media',
+      service: 'ניהול רשתות חברתיות',
+      serviceHe: 'ניהול רשתות חברתיות',
+      priority: 4,
+      estimatedValue: 4000,
+      evidence: `חסרים ${missingSocial.length} פלטפורמות: ${missingSocial.join(', ')}`,
+      evidenceHe: `חסרים ${missingSocial.length} פלטפורמות: ${missingSocial.join(', ')}`,
+      pitch: 'ניהול מקצועי של הרשתות החברתיות עם תוכן ממוקד ופרסום ממומן',
+      pitchHe: 'ניהול מקצועי של הרשתות החברתיות עם תוכן ממוקד ופרסום ממומן',
+    });
+  }
+
+  // Rule 5: GBP
+  if (!google?.localPack?.found) {
+    opportunities.push({
+      id: 'gbp',
+      service: 'Google Business Profile',
+      serviceHe: 'Google Business Profile',
+      priority: 5,
+      estimatedValue: 2000,
+      evidence: 'לא נמצא פרופיל עסקי בגוגל',
+      evidenceHe: 'לא נמצא פרופיל עסקי בגוגל',
+      pitch: 'הקמה וניהול Google Business Profile לנוכחות מקומית חזקה',
+      pitchHe: 'הקמה וניהול Google Business Profile לנוכחות מקומית חזקה',
+    });
+  }
+
+  // Rule 6: No OG image = branding opportunity
+  if (!wf.ogImage) {
+    opportunities.push({
+      id: 'branding',
+      service: 'חבילת מיתוג דיגיטלי',
+      serviceHe: 'חבילת מיתוג דיגיטלי',
+      priority: 6,
+      estimatedValue: 5000,
+      evidence: 'אין תמונת שיתוף (OG Image) — המיתוג הדיגיטלי חלש',
+      evidenceHe: 'אין תמונת שיתוף (OG Image) — המיתוג הדיגיטלי חלש',
+      pitch: 'חבילת מיתוג מלאה: לוגו, צבעים, פונטים, תמונות שיתוף ומדיה',
+      pitchHe: 'חבילת מיתוג מלאה: לוגו, צבעים, פונטים, תמונות שיתוף ומדיה',
+    });
+  }
+
+  console.log('[LeadResearch] Found', opportunities.length, 'sales opportunities');
+  return opportunities.sort((a, b) => a.priority - b.priority);
 }
 
 async function runQuarterPlan(data: {
