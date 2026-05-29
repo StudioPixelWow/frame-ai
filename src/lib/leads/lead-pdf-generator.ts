@@ -350,25 +350,7 @@ export function generateLeadResearchPdfHtml(options: PdfOptions): string {
     </table>
   ` : ''}
 
-  <!-- Section: Sales Opportunities -->
-  <div class="page-break"></div>
-  <div class="header">
-    <div class="header-logo">Studio Pixel | סטודיו פיקסל</div>
-    <div class="header-info">${date}</div>
-  </div>
-
-  <h2>הזדמנויות צמיחה</h2>
-  ${salesOpportunities?.length ? salesOpportunities.map((opp: any) => `
-    <div class="opp-card ${typeof opp.priority === 'number' ? (opp.priority <= 1 ? 'critical' : opp.priority <= 2 ? 'high' : opp.priority <= 4 ? 'medium' : 'low') : opp.priority}">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div class="opp-service">${escapeHtml(opp.serviceHe)}</div>
-        <div class="opp-value">₪${(opp.estimatedValue || 0).toLocaleString()}</div>
-      </div>
-      <div class="opp-reason">${escapeHtml(opp.reasonHe)}</div>
-      <div class="opp-pitch">${escapeHtml(opp.pitch)}</div>
-      <div class="opp-evidence">${(Array.isArray(opp.evidence) ? opp.evidence : [opp.evidence || opp.evidenceHe]).filter(Boolean).map((e: string) => escapeHtml(e)).join(' • ')}</div>
-    </div>
-  `).join('') : '<p>לא זוהו הזדמנויות ספציפיות</p>'}
+  <!-- Sales Opportunities — INTERNAL ONLY, not shown in client-facing PDF -->
 
   <!-- Section: Quarter Plan -->
   ${quarterPlan?.goals?.length ? `

@@ -1455,23 +1455,56 @@ function LeadDetailPanel({
               )}
 
               {/* ═══ Competitors ═══ */}
-              {researchData.competitorAnalysis?.competitors?.length > 0 && (
+              {researchData.competitorAnalysis?.competitors?.length > 0 && (() => {
+                const competitors = researchData.competitorAnalysis.competitors.slice(0, 5);
+                return (
                 <div style={{ marginBottom: '16px' }}>
                   <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)', fontWeight: 700 }}>
-                    מתחרים ({researchData.competitorAnalysis.competitors.length})
+                    ניתוח מתחרים ({researchData.competitorAnalysis.competitors.length})
                   </h4>
-                  {researchData.competitorAnalysis.competitors.slice(0, 5).map((comp: any, i: number) => (
-                    <div key={i} style={{ background: 'var(--surface)', borderRadius: '6px', padding: '8px 10px', marginBottom: '4px', border: '1px solid var(--border)', fontSize: '12px' }}>
-                      <div style={{ fontWeight: 600, color: 'var(--foreground)' }}>{comp.name || comp.domain}</div>
-                      <div style={{ color: 'var(--foreground-muted)', fontSize: '11px' }}>{comp.domain}</div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                          <th style={{ padding: '8px', textAlign: 'right', color: 'var(--foreground-muted)' }}>מתחרה</th>
+                          <th style={{ padding: '8px', textAlign: 'center', color: 'var(--foreground-muted)' }}>מיקום</th>
+                          <th style={{ padding: '8px', textAlign: 'right', color: 'var(--foreground-muted)' }}>יתרון עלינו</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {competitors.map((comp: any, i: number) => (
+                          <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                            <td style={{ padding: '8px' }}>
+                              <div style={{ fontWeight: 600 }}>{comp.name || comp.domain}</div>
+                              <div style={{ fontSize: '10px', color: 'var(--foreground-muted)' }}>{comp.domain}</div>
+                            </td>
+                            <td style={{ padding: '8px', textAlign: 'center', fontWeight: 700, color: '#00B5FE' }}>
+                              #{comp.position || '—'}
+                            </td>
+                            <td style={{ padding: '8px', fontSize: '11px', color: 'var(--foreground-muted)' }}>
+                              {comp.strengths?.[0] || 'מופיע לפנינו בתוצאות'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {researchData.deepAnalysis?.seoGeoDeepAnalysis?.competitorInsights && (
+                    <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--foreground-muted)', lineHeight: 1.6 }}>
+                      {researchData.deepAnalysis.seoGeoDeepAnalysis.competitorInsights}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
+                );
+              })()}
 
+              {/* Internal only — not shown in PDF */}
               {/* ═══ Sales Opportunities ═══ */}
               {researchData.salesOpportunities?.length > 0 && (
                 <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontSize: '11px', color: '#f59e0b', fontWeight: 600, marginBottom: '4px' }}>
+                    פנימי — לא מוצג בדוח ללקוח
+                  </div>
                   <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)', fontWeight: 700 }}>
                     הזדמנויות מכירה — שירותי Studio Pixel ({researchData.salesOpportunities.length})
                   </h4>
@@ -1499,10 +1532,10 @@ function LeadDetailPanel({
               {researchData.report?.sections?.length > 0 && (
                 <div style={{ marginBottom: '16px' }}>
                   <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)', fontWeight: 700 }}>📋 דוח מחקר מפורט</h4>
-                  {researchData.report.sections.map((section: any) => (
+                  {researchData.report.sections.map((section: any, sectionIndex: number) => (
                     <div key={section.id} style={{ marginBottom: '12px' }}>
                       <div style={{ fontSize: '13px', fontWeight: 700, color: '#00B5FE', marginBottom: '6px', paddingBottom: '4px', borderBottom: '1px solid var(--border)' }}>
-                        {section.titleHe || section.title}
+                        {sectionIndex + 1}. {section.titleHe || section.title}
                       </div>
                       {section.content?.map((block: any, bi: number) => (
                         <div key={bi} style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginBottom: '4px', lineHeight: 1.6 }}>

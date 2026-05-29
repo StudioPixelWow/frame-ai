@@ -64,116 +64,160 @@ function calcProgress(stages: LeadResearchStage[]): number {
 
 // ── Stage Runners ─────────────────────────────────────────────────────────────
 
-async function runWebsiteScan(url: string): Promise<any> {
-  // Direct HTTP crawl — does NOT use scan-pipeline (which relies on in-memory Map
-  // and fire-and-forget pattern incompatible with Vercel serverless).
-  console.log('[LeadResearch] Stage 1: Direct website scan for', url);
-
+async function fetchPage(pageUrl: string): Promise<string | null> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
-
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; StudioPixelBot/1.0)',
-        'Accept': 'text/html',
-      },
-      signal: controller.signal,
-      redirect: 'follow',
+    const timeout = setTimeout(() => controller.abort(), 12_000);
+    const res = await fetch(pageUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', Accept: 'text/html' },
+      signal: controller.signal, redirect: 'follow',
     });
     clearTimeout(timeout);
+    if (!res.ok) return null;
+    return await res.text();
+  } catch { return null; }
+}
 
-    if (!res.ok) {
-      console.warn('[LeadResearch] Website returned', res.status);
+async function runWebsiteScan(url: string): Promise<any> {
+  // Multi-page crawl: homepage + up to 4 internal pages (contact, blog, about, services)
+  console.log('[LeadResearch] Stage 1: Multi-page website scan for', url);
+
+  try {
+    // ── Step 1: Fetch homepage ──
+    const html = await fetchPage(url);
+    if (!html) {
+      console.warn('[LeadResearch] Homepage fetch failed');
       return null;
     }
 
-    const html = await res.text();
+    let siteDomain = '';
+    try { siteDomain = new URL(url).hostname; } catch {}
+    const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
 
-    // Extract basic facts from HTML
+    // ── Step 2: Find internal page links ──
+    const internalLinks: string[] = [];
+    const linkRegex = /href=["']([^"'#]+)/gi;
+    let linkMatch;
+    while ((linkMatch = linkRegex.exec(html)) !== null) {
+      let href = linkMatch[1];
+      if (href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('javascript:')) continue;
+      if (href.startsWith('/')) href = baseUrl + href;
+      else if (!href.startsWith('http')) href = baseUrl + '/' + href;
+      try {
+        const linkHost = new URL(href).hostname;
+        if (linkHost === siteDomain && href !== url && href !== url + '/') {
+          internalLinks.push(href);
+        }
+      } catch {}
+    }
+
+    // ── Step 3: Pick important pages to scan ──
+    const priorityPatterns = [
+      /contact|צור.?קשר|יצירת.?קשר/i,
+      /blog|בלוג|מגזין|כתבות|articles/i,
+      /about|אודות|מי.?אנחנו/i,
+      /services|שירותים|תחומי.?עיסוק|תחומים/i,
+      /faq|שאלות/i,
+    ];
+
+    const pagesToScan: string[] = [];
+    for (const pattern of priorityPatterns) {
+      const match = internalLinks.find(l => pattern.test(l));
+      if (match && !pagesToScan.includes(match)) pagesToScan.push(match);
+      if (pagesToScan.length >= 4) break;
+    }
+
+    // ── Step 4: Fetch internal pages in parallel ──
+    let allHtml = html; // Start with homepage HTML
+    if (pagesToScan.length > 0) {
+      console.log('[LeadResearch] Scanning', pagesToScan.length, 'internal pages:', pagesToScan.map(u => new URL(u).pathname));
+      const pageResults = await Promise.all(pagesToScan.map(p => fetchPage(p)));
+      for (const pageHtml of pageResults) {
+        if (pageHtml) allHtml += '\n' + pageHtml;
+      }
+    }
+
+    // ── Analyze ALL collected HTML (homepage + internal pages) ──
+
+    // Extract basic facts from homepage HTML (titles/meta from homepage only)
     const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
-    const descMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)/i);
-    const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']*)/i);
+    const descMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)/i)
+      || html.match(/<meta[^>]+content=["']([^"']*?)["'][^>]+name=["']description["']/i);
+    const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']*)/i)
+      || html.match(/<meta[^>]+content=["']([^"']*?)["'][^>]+property=["']og:image["']/i);
     const h1Match = html.match(/<h1[^>]*>([^<]*)<\/h1>/i);
     const canonicalMatch = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']*)/i);
 
-    // Check for common CMS/platform indicators
+    // CMS detection (from ALL pages)
     let cms = 'unknown';
-    if (html.includes('wp-content') || html.includes('wordpress')) cms = 'WordPress';
-    else if (html.includes('wix.com') || html.includes('wixsite')) cms = 'Wix';
-    else if (html.includes('squarespace')) cms = 'Squarespace';
-    else if (html.includes('shopify')) cms = 'Shopify';
-    else if (html.includes('elementor')) cms = 'WordPress+Elementor';
+    if (allHtml.includes('wp-content') || allHtml.includes('wp-includes') || allHtml.includes('wordpress')) cms = 'WordPress';
+    if (allHtml.includes('elementor')) cms = cms === 'WordPress' ? 'WordPress+Elementor' : 'Elementor';
+    if (cms === 'unknown' && (allHtml.includes('wix.com') || allHtml.includes('wixsite') || allHtml.includes('_wixCIDX'))) cms = 'Wix';
+    if (cms === 'unknown' && allHtml.includes('squarespace')) cms = 'Squarespace';
+    if (cms === 'unknown' && allHtml.includes('shopify')) cms = 'Shopify';
+    if (cms === 'unknown' && allHtml.includes('webflow')) cms = 'Webflow';
 
-    // Check SSL
     const isHttps = url.startsWith('https://');
-
-    // Check mobile viewport
     const hasViewport = /meta[^>]+name=["']viewport["']/i.test(html);
+    const linkMatches = allHtml.match(/<a[^>]+href=["'][^"']*/gi) || [];
 
-    // Count internal links
-    const linkMatches = html.match(/<a[^>]+href=["'][^"']*/gi) || [];
-
-    // Extract social links from HTML
+    // Social links from ALL pages
     const socialLinks: string[] = [];
     const socialPatterns = [/facebook\.com\/[^"'\s]+/gi, /instagram\.com\/[^"'\s]+/gi, /linkedin\.com\/[^"'\s]+/gi, /tiktok\.com\/@[^"'\s]+/gi];
     for (const pattern of socialPatterns) {
-      const matches = html.match(pattern);
+      const matches = allHtml.match(pattern);
       if (matches) socialLinks.push(...matches);
     }
 
-    // Check for structured data
-    const hasSchema = html.includes('application/ld+json');
+    const hasSchema = allHtml.includes('application/ld+json');
+    const hasLazyLoading = allHtml.includes('loading="lazy"') || allHtml.includes("loading='lazy'");
 
-    // Check page speed indicators
-    const hasLazyLoading = html.includes('loading="lazy"') || html.includes("loading='lazy'");
+    // ── Deep extraction from ALL pages ──────────────────────────────────
+    const h2Matches = allHtml.match(/<h2[^>]*>([\s\S]*?)<\/h2>/gi) || [];
+    const h2Headings = h2Matches.slice(0, 15).map(m => m.replace(/<[^>]*>/g, '').trim()).filter(Boolean);
 
-    // ── Deep extraction ──────────────────────────────────────────────────
-    // H2 headings (up to 10)
-    const h2Matches = html.match(/<h2[^>]*>([\s\S]*?)<\/h2>/gi) || [];
-    const h2Headings = h2Matches.slice(0, 10).map(m => m.replace(/<[^>]*>/g, '').trim()).filter(Boolean);
-
-    // Word count estimate (strip HTML tags, count words)
-    const strippedText = html.replace(/<script[\s\S]*?<\/script>/gi, '')
+    // Word count from ALL pages
+    const strippedText = allHtml.replace(/<script[\s\S]*?<\/script>/gi, '')
       .replace(/<style[\s\S]*?<\/style>/gi, '')
       .replace(/<[^>]*>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
     const wordCount = strippedText.split(/\s+/).filter(Boolean).length;
 
-    // Number of images
-    const imageCount = (html.match(/<img[\s>]/gi) || []).length;
+    // Number of images (across all pages)
+    const imageCount = (allHtml.match(/<img[\s>]/gi) || []).length;
 
-    // Contact form detection
-    const hasContactForm = /<form[\s\S]*?<\/form>/i.test(html) &&
-      (html.includes('contact') || html.includes('email') || html.includes('message') ||
-       html.includes('שלח') || html.includes('צור קשר'));
+    // Contact form detection — broad patterns across ALL pages
+    const hasContactForm = /<form[\s\S]{0,2000}?<\/form>/i.test(allHtml) &&
+      (allHtml.includes('contact') || allHtml.includes('email') || allHtml.includes('message') ||
+       allHtml.includes('submit') || allHtml.includes('שלח') || allHtml.includes('צור קשר') ||
+       allHtml.includes('יצירת קשר') || allHtml.includes('פנייה') || allHtml.includes('השאר פרטים') ||
+       allHtml.includes('תיאום פגישה') || allHtml.includes('הרשמה') || /<input[^>]+type=["']email/i.test(allHtml));
 
-    // Phone number detection
-    const phonePattern = /(?:tel:|href=["']tel:)([^"'\s<>]+)/i;
-    const phoneInText = html.match(/(?:\+972|0[2-9])[\s\-]?\d{1,2}[\s\-]?\d{3}[\s\-]?\d{4}/);
-    const hasPhoneNumber = phonePattern.test(html) || !!phoneInText;
+    // Phone number detection — broader patterns for Israeli numbers across ALL pages
+    const hasPhoneNumber = /(?:tel:|href=["']tel:)/i.test(allHtml) ||
+      /(?:\+972|0[2-9])[\s\-.]?\d{1,2}[\s\-.]?\d{3}[\s\-.]?\d{3,4}/.test(allHtml) ||
+      /\d{2,3}[\s\-]\d{7}/.test(allHtml) ||
+      /טל|טלפון|phone|חייגו/i.test(allHtml);
 
-    // WhatsApp link
-    const hasWhatsApp = /wa\.me|whatsapp\.com|api\.whatsapp/i.test(html);
+    // WhatsApp link (across ALL pages)
+    const hasWhatsApp = /wa\.me|whatsapp\.com|api\.whatsapp|ווטסאפ|וואטסאפ/i.test(allHtml);
 
-    // Analytics detection
-    const hasGoogleAnalytics = /google-analytics\.com|gtag|UA-\d+|G-[A-Z0-9]+/i.test(html);
-    const hasGoogleTagManager = /googletagmanager\.com|GTM-[A-Z0-9]+/i.test(html);
+    // Analytics detection (across ALL pages)
+    const hasGoogleAnalytics = /google-analytics\.com|gtag|UA-\d+|G-[A-Z0-9]+|googletagservices/i.test(allHtml);
+    const hasGoogleTagManager = /googletagmanager\.com|GTM-[A-Z0-9]+/i.test(allHtml);
 
     // Language detection
     const detectedLanguages: string[] = [];
     const htmlLang = html.match(/<html[^>]+lang=["']([^"']+)/i)?.[1];
     if (htmlLang) detectedLanguages.push(htmlLang.substring(0, 2));
-    if (/[֐-׿]/.test(html)) { if (!detectedLanguages.includes('he')) detectedLanguages.push('he'); }
-    if (/[؀-ۿ]/.test(html)) { if (!detectedLanguages.includes('ar')) detectedLanguages.push('ar'); }
+    if (/[֐-׿]/.test(allHtml)) { if (!detectedLanguages.includes('he')) detectedLanguages.push('he'); }
+    if (/[؀-ۿ]/.test(allHtml)) { if (!detectedLanguages.includes('ar')) detectedLanguages.push('ar'); }
     if (/[a-zA-Z]{3,}/.test(strippedText)) { if (!detectedLanguages.includes('en')) detectedLanguages.push('en'); }
 
-    // Link analysis (internal vs external)
+    // Link analysis
     let internalLinkCount = 0;
     let externalLinkCount = 0;
-    let siteDomain = '';
-    try { siteDomain = new URL(url).hostname; } catch {}
     for (const rawLink of linkMatches) {
       const hrefMatch = rawLink.match(/href=["']([^"']*)/i);
       if (!hrefMatch) continue;
@@ -183,17 +227,18 @@ async function runWebsiteScan(url: string): Promise<any> {
       try { const linkHost = new URL(href).hostname; linkHost === siteDomain ? internalLinkCount++ : externalLinkCount++; } catch { internalLinkCount++; }
     }
 
-    // Blog section detection
-    const hasBlog = /\/blog|\/articles|\/posts|\/magazine|\/בלוג|\/כתבות/i.test(html) ||
-      /<a[^>]+href=["'][^"']*(?:blog|article|post|כתב)[^"']*/i.test(html);
+    // Blog section detection (across ALL pages + found pages)
+    const hasBlog = /\/blog|\/articles|\/posts|\/magazine|\/בלוג|\/כתבות|\/מגזין/i.test(allHtml) ||
+      /<a[^>]+href=["'][^"']*(?:blog|article|post|כתב|מגזין)[^"']*/i.test(allHtml) ||
+      pagesToScan.some(p => /blog|בלוג|כתבות|מגזין|articles/i.test(p));
 
     // Favicon detection
     const hasFavicon = /rel=["'](?:shortcut )?icon["']/i.test(html) || /rel=["']apple-touch-icon["']/i.test(html);
 
-    // Page size in KB
+    // Page size in KB (homepage only — fair measure)
     const pageSizeKB = Math.round(html.length / 1024);
 
-    // CSS and JS file counts
+    // CSS and JS file counts (homepage)
     const cssFileCount = (html.match(/<link[^>]+rel=["']stylesheet["'][^>]*>/gi) || []).length;
     const jsFileCount = (html.match(/<script[^>]+src=["'][^"']+["']/gi) || []).length;
 
@@ -495,41 +540,86 @@ async function runSeoAnalysis(url: string, websiteFacts: any): Promise<any> {
   if (!websiteFacts) return { technicalScore: 0, contentScore: 0, issues: [], contentGaps: [], pageSpeed: null, backlinks: null };
 
   const issues: string[] = [];
-  let techPoints = 0;
-  let contentPoints = 0;
+  // Start from 100 and DEDUCT for every issue — realistic scoring (almost nobody gets 100)
+  let techScore = 100;
+  let contentScore = 100;
 
-  // ── Technical signals from HTML ──
-  if (websiteFacts.isHttps) techPoints += 15; else issues.push('האתר לא משתמש ב-HTTPS — פוגע באמינות ובדירוג');
-  if (websiteFacts.hasMobileViewport) techPoints += 15; else issues.push('האתר לא מותאם למובייל — 70% מהגלישה ממובייל');
-  if (websiteFacts.hasSchemaMarkup) techPoints += 10; else issues.push('אין Schema Markup — גוגל לא מבין את מבנה התוכן');
-  if (websiteFacts.hasLazyLoading) techPoints += 5; else issues.push('אין Lazy Loading — עמוד נטען לאט');
-  if (websiteFacts.canonical) techPoints += 5; else issues.push('אין Canonical URL — עלול לגרום לתוכן כפול');
-  if ((websiteFacts.cms || '').includes('WordPress')) techPoints += 5;
-  if (websiteFacts.hasGoogleAnalytics) techPoints += 5; else issues.push('אין Google Analytics — אי אפשר למדוד תוצאות');
-  if (websiteFacts.hasGoogleTagManager) techPoints += 5;
-  if (websiteFacts.hasFavicon) techPoints += 3; else issues.push('אין Favicon — נראה לא מקצועי');
-  if (websiteFacts.internalLinkCount > 10) techPoints += 7; else if (websiteFacts.internalLinkCount > 3) techPoints += 3; else issues.push('מעט מאוד לינקים פנימיים — מבנה אתר חלש');
-  if (websiteFacts.pageSizeKB > 3000) issues.push(`עמוד כבד (${websiteFacts.pageSizeKB}KB) — עלול להיטען לאט`);
-  if (websiteFacts.jsFileCount > 15) issues.push(`${websiteFacts.jsFileCount} קבצי JS — עומס שעלול להאט את האתר`);
+  // ══════════════════════════════════════════════════════════════
+  // TECHNICAL SCORE — start 100, deduct per issue
+  // ══════════════════════════════════════════════════════════════
 
-  // ── Content signals ──
-  if (websiteFacts.title && websiteFacts.title.length > 10 && websiteFacts.title.length < 70) contentPoints += 20;
-  else if (websiteFacts.title) { contentPoints += 10; issues.push('כותרת אתר לא באורך אופטימלי (10-70 תווים)'); }
-  else issues.push('אין כותרת אתר כלל');
+  // Critical (high deductions)
+  if (!websiteFacts.isHttps) { techScore -= 20; issues.push('האתר לא משתמש ב-HTTPS — פוגע באמינות ובדירוג'); }
+  if (!websiteFacts.hasMobileViewport) { techScore -= 20; issues.push('האתר לא מותאם למובייל — 70% מהגלישה ממובייל'); }
 
-  if (websiteFacts.description && websiteFacts.description.length > 50 && websiteFacts.description.length < 160) contentPoints += 20;
-  else if (websiteFacts.description) { contentPoints += 10; issues.push('Meta Description לא באורך אופטימלי (50-160 תווים)'); }
-  else issues.push('אין Meta Description — גוגל ייצור תיאור אוטומטי גרוע');
+  // Important
+  if (!websiteFacts.hasSchemaMarkup) { techScore -= 12; issues.push('אין Schema Markup — גוגל לא מבין את מבנה התוכן'); }
+  if (!websiteFacts.canonical) { techScore -= 8; issues.push('אין Canonical URL — עלול לגרום לתוכן כפול'); }
+  if (!websiteFacts.hasGoogleAnalytics) { techScore -= 8; issues.push('אין Google Analytics — אי אפשר למדוד תוצאות'); }
+  if (!websiteFacts.hasGoogleTagManager) { techScore -= 5; issues.push('אין Google Tag Manager — ניהול תגיות לא מרכזי'); }
 
-  if (websiteFacts.h1 && websiteFacts.h1.length > 3) contentPoints += 15; else issues.push('אין H1 — גוגל לא יודע מה נושא העמוד');
-  if ((websiteFacts.h2Headings || []).length >= 3) contentPoints += 10; else issues.push('פחות מ-3 כותרות H2 — מבנה תוכן חלש');
-  if (websiteFacts.ogImage) contentPoints += 10; else issues.push('אין תמונת OG — שיתוף ברשתות נראה ריק');
-  if (websiteFacts.wordCount > 500) contentPoints += 10; else issues.push('תוכן דל — פחות מ-500 מילים');
-  if (websiteFacts.imageCount > 3) contentPoints += 5; else issues.push('מעט תמונות — תוכן ויזואלי חשוב');
-  if (websiteFacts.hasContactForm) contentPoints += 5;
-  if (websiteFacts.hasPhoneNumber) contentPoints += 3;
-  if (websiteFacts.hasWhatsApp) contentPoints += 2;
-  if (websiteFacts.hasBlog) contentPoints += 10; else issues.push('אין בלוג — מפספס הזדמנויות תוכן וקידום');
+  // Performance
+  if (!websiteFacts.hasLazyLoading) { techScore -= 7; issues.push('אין Lazy Loading — עמוד נטען לאט'); }
+  if (websiteFacts.pageSizeKB > 5000) { techScore -= 10; issues.push(`עמוד כבד מאוד (${websiteFacts.pageSizeKB}KB) — חוויית משתמש גרועה`); }
+  else if (websiteFacts.pageSizeKB > 3000) { techScore -= 5; issues.push(`עמוד כבד (${websiteFacts.pageSizeKB}KB) — עלול להיטען לאט`); }
+  if (websiteFacts.jsFileCount > 20) { techScore -= 8; issues.push(`${websiteFacts.jsFileCount} קבצי JavaScript — עומס משמעותי`); }
+  else if (websiteFacts.jsFileCount > 10) { techScore -= 4; issues.push(`${websiteFacts.jsFileCount} קבצי JS — ניתן לצמצם`); }
+  if (websiteFacts.cssFileCount > 10) { techScore -= 5; issues.push(`${websiteFacts.cssFileCount} קבצי CSS — ניתן לאחד`); }
+
+  // Structure
+  if (!websiteFacts.hasFavicon) { techScore -= 3; issues.push('אין Favicon — נראה לא מקצועי'); }
+  const internalLinks = websiteFacts.internalLinkCount || websiteFacts.internalLinks || 0;
+  if (internalLinks < 3) { techScore -= 10; issues.push('כמעט אין לינקים פנימיים — מבנה אתר חלש מאוד'); }
+  else if (internalLinks < 10) { techScore -= 5; issues.push('מעט לינקים פנימיים — מבנה ניווט חלש'); }
+  if (websiteFacts.externalLinkCount > 50) { techScore -= 5; issues.push('יותר מדי לינקים חיצוניים — דליפת ערך SEO'); }
+
+  // Accessibility & Standards
+  if (!websiteFacts.detectedLanguages?.length) { techScore -= 3; issues.push('אין הגדרת שפה ב-HTML — בעיית נגישות'); }
+  if (!websiteFacts.hasWhatsApp && !websiteFacts.hasPhoneNumber && !websiteFacts.hasContactForm) {
+    techScore -= 5; issues.push('אין דרך יצירת קשר ברורה (טלפון/WhatsApp/טופס)');
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // CONTENT SCORE — start 100, deduct per issue
+  // ══════════════════════════════════════════════════════════════
+
+  // Title
+  if (!websiteFacts.title) { contentScore -= 20; issues.push('אין כותרת אתר כלל — בעיית SEO קריטית'); }
+  else if (websiteFacts.title.length < 10) { contentScore -= 12; issues.push('כותרת אתר קצרה מדי — פחות מ-10 תווים'); }
+  else if (websiteFacts.title.length > 70) { contentScore -= 5; issues.push('כותרת אתר ארוכה מדי — גוגל יחתוך אותה'); }
+
+  // Meta Description
+  if (!websiteFacts.description) { contentScore -= 15; issues.push('אין Meta Description — גוגל ייצור תיאור אוטומטי'); }
+  else if (websiteFacts.description.length < 50) { contentScore -= 8; issues.push('Meta Description קצר מדי — לא מנצל את הפוטנציאל'); }
+  else if (websiteFacts.description.length > 160) { contentScore -= 4; issues.push('Meta Description ארוך מדי — ייחתך בתוצאות החיפוש'); }
+
+  // Headings structure
+  if (!websiteFacts.h1) { contentScore -= 12; issues.push('אין H1 — גוגל לא יודע מה נושא העמוד'); }
+  const h2Count = (websiteFacts.h2Headings || []).length;
+  if (h2Count === 0) { contentScore -= 10; issues.push('אין כותרות H2 כלל — מבנה תוכן שטוח'); }
+  else if (h2Count < 3) { contentScore -= 5; issues.push('פחות מ-3 כותרות H2 — מבנה תוכן חלש'); }
+
+  // Content depth
+  const wordCount = websiteFacts.wordCount || 0;
+  if (wordCount < 100) { contentScore -= 15; issues.push('כמעט אין תוכן טקסטואלי — האתר ריק מבחינת SEO'); }
+  else if (wordCount < 300) { contentScore -= 10; issues.push('תוכן דל מאוד — פחות מ-300 מילים'); }
+  else if (wordCount < 500) { contentScore -= 5; issues.push('תוכן מועט — פחות מ-500 מילים'); }
+
+  // Visual & Media
+  if (!websiteFacts.ogImage) { contentScore -= 8; issues.push('אין תמונת OG — שיתוף ברשתות נראה ריק וחובבני'); }
+  const imgCount = websiteFacts.imageCount || 0;
+  if (imgCount === 0) { contentScore -= 8; issues.push('אין תמונות באתר כלל — אתר טקסטואלי בלבד'); }
+  else if (imgCount < 3) { contentScore -= 4; issues.push('מעט תמונות — תוכן ויזואלי חלש'); }
+
+  // Blog & Content Marketing
+  if (!websiteFacts.hasBlog) { contentScore -= 10; issues.push('אין בלוג / מגזין תוכן — מפספס הזדמנויות SEO ותנועה'); }
+
+  // Engagement elements
+  if (!websiteFacts.hasContactForm) { contentScore -= 5; issues.push('אין טופס יצירת קשר — קשה להמיר מבקרים ללידים'); }
+
+  // E-E-A-T signals (deduct if missing)
+  if (!websiteFacts.hasPhoneNumber) { contentScore -= 3; issues.push('אין מספר טלפון גלוי — פוגע באמינות (E-E-A-T)'); }
+  if (!websiteFacts.hasWhatsApp) { contentScore -= 2; issues.push('אין WhatsApp — ערוץ תקשורת פופולרי חסר'); }
 
   // ── PageSpeed Insights (real API) ──
   let pageSpeed: any = null;
@@ -551,9 +641,12 @@ async function runSeoAnalysis(url: string, websiteFacts: any): Promise<any> {
           tbt: psData.lighthouseResult?.audits?.['total-blocking-time']?.displayValue || null,
           speedIndex: psData.lighthouseResult?.audits?.['speed-index']?.displayValue || null,
         };
-        // Adjust tech score based on real performance
-        if (pageSpeed.performanceScore < 50) { techPoints -= 10; issues.push(`ביצועי מובייל נמוכים: ${pageSpeed.performanceScore}/100`); }
-        else if (pageSpeed.performanceScore >= 80) techPoints += 10;
+        // Adjust tech score based on real PageSpeed performance
+        if (pageSpeed.performanceScore < 30) { techScore -= 15; issues.push(`ביצועי מובייל גרועים: ${pageSpeed.performanceScore}/100`); }
+        else if (pageSpeed.performanceScore < 50) { techScore -= 10; issues.push(`ביצועי מובייל נמוכים: ${pageSpeed.performanceScore}/100`); }
+        else if (pageSpeed.performanceScore < 70) { techScore -= 5; issues.push(`ביצועי מובייל בינוניים: ${pageSpeed.performanceScore}/100 — יש מה לשפר`); }
+        if (pageSpeed.accessibilityScore < 50) { techScore -= 8; issues.push(`נגישות נמוכה: ${pageSpeed.accessibilityScore}/100`); }
+        if (pageSpeed.seoScore < 80) { techScore -= 5; issues.push(`ציון SEO טכני של Google: ${pageSpeed.seoScore}/100`); }
         console.log('[LeadResearch] PageSpeed:', pageSpeed.performanceScore, 'perf,', pageSpeed.seoScore, 'seo');
       }
     } catch (e: any) { console.warn('[LeadResearch] PageSpeed API error:', e?.message); }
@@ -608,8 +701,8 @@ async function runSeoAnalysis(url: string, websiteFacts: any): Promise<any> {
   }
 
   return {
-    technicalScore: Math.min(Math.max(techPoints, 0), 100),
-    contentScore: Math.min(Math.max(contentPoints, 0), 100),
+    technicalScore: Math.min(Math.max(techScore, 0), 100),
+    contentScore: Math.min(Math.max(contentScore, 0), 100),
     issues,
     contentGaps: issues.filter(i => i.includes('תוכן') || i.includes('Description') || i.includes('H1') || i.includes('בלוג')),
     pageSpeed,
