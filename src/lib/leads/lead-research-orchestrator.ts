@@ -1572,3 +1572,15 @@ export async function getResearchByLeadId(leadId: string): Promise<LeadResearch 
     return null;
   }
 }
+
+export async function getResearchHistoryByLeadId(leadId: string): Promise<LeadResearch[]> {
+  try {
+    const results = await leadResearch.queryFilteredAsync(
+      [{ column: 'data->>leadId', op: 'eq', value: leadId }],
+    );
+    // Return all, newest first
+    return (results || []).reverse();
+  } catch {
+    return [];
+  }
+}

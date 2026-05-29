@@ -1520,6 +1520,15 @@ function LeadDetailPanel({
 
               {/* ═══ Action Buttons ═══ */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '16px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+                {/* Full report page */}
+                <Link href={`/leads/${lead.id}/research`} style={{
+                  display: 'block', width: '100%', padding: '12px', background: 'linear-gradient(135deg, #00B5FE, #0090cc)', color: '#fff',
+                  border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: 'pointer',
+                  textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box',
+                }}>
+                  📊 צפה בדוח המלא
+                </Link>
+
                 {/* PDF View */}
                 <button onClick={handleViewPdf} style={{
                   width: '100%', padding: '12px', background: 'linear-gradient(135deg, #00B5FE, #0090cc)', color: '#fff',

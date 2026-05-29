@@ -20,6 +20,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       competitorAnalysis: research.competitorAnalysis,
       salesOpportunities: research.salesOpportunities,
       quarterPlan: research.quarterPlan,
+      report: research.report,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message }, { status: 500 });
