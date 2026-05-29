@@ -75,6 +75,7 @@ import type {
   EpisodeAnalysis,
   ApprovedClip,
   PodcastClipCandidate,
+  LeadResearch,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -186,3 +187,6 @@ export const videoVersions = new SupabaseCrud<any>('app_video_versions', 'vvr');
 export const videoAuditLogs = new SupabaseCrud<any>('app_video_audit_logs', 'val');
 export const hookAnalyses = new SupabaseCrud<any>('app_hook_analyses', 'han');
 export const aiVideoAnalyses = new SupabaseCrud<any>('app_ai_video_analyses', 'ava');
+
+// Lead Research & Growth Intelligence
+export const leadResearch = new SupabaseCrud<LeadResearch>('app_lead_research', 'lrs');

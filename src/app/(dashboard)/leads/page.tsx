@@ -191,6 +191,14 @@ function LeadDetailPanel({
     proposalAmount: lead.proposalAmount || 0,
     proposalSent: lead.proposalSent || false,
   });
+  // Research state
+  const [researchStatus, setResearchStatus] = useState<'idle' | 'scanning' | 'completed' | 'failed'>('idle');
+  const [researchProgress, setResearchProgress] = useState(0);
+  const [researchStages, setResearchStages] = useState<any[]>([]);
+  const [researchData, setResearchData] = useState<any>(null);
+  const [researchWebsiteUrl, setResearchWebsiteUrl] = useState('');
+  const [showResearchInput, setShowResearchInput] = useState(false);
+
   const toast = useToast();
   const quality = computeLeadQuality(lead);
   const responseTime = getResponseTime(lead);
@@ -209,6 +217,50 @@ function LeadDetailPanel({
       proposalSent: lead.proposalSent || false,
     });
     setEditNotes(lead.notes || "");
+  }, [lead.id]);
+
+  // Poll research status when scanning
+  useEffect(() => {
+    if (researchStatus !== 'scanning') return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/leads/${lead.id}/research/status`);
+        if (res.ok) {
+          const data = await res.json();
+          setResearchProgress(data.progress || 0);
+          setResearchStages(data.stages || []);
+          if (data.status === 'completed') {
+            setResearchStatus('completed');
+            setResearchData(data.research);
+            clearInterval(interval);
+          } else if (data.status === 'failed') {
+            setResearchStatus('failed');
+            clearInterval(interval);
+          }
+        }
+      } catch {}
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [researchStatus, lead.id]);
+
+  // Load existing research on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/leads/${lead.id}/research/status`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === 'completed') {
+            setResearchStatus('completed');
+            setResearchData(data.research);
+          } else if (data.status === 'scanning') {
+            setResearchStatus('scanning');
+            setResearchProgress(data.progress || 0);
+            setResearchStages(data.stages || []);
+          }
+        }
+      } catch {}
+    })();
   }, [lead.id]);
 
   const handleStatusChange = async (newStatus: string) => {
@@ -290,6 +342,47 @@ function LeadDetailPanel({
     } catch {
       toast("שגיאה במחיקה", "error");
     }
+  };
+
+  const handleStartResearch = async () => {
+    if (!researchWebsiteUrl) return;
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/research/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ websiteUrl: researchWebsiteUrl }),
+      });
+      if (res.ok) {
+        setResearchStatus('scanning');
+        setResearchProgress(0);
+        setShowResearchInput(false);
+      }
+    } catch {}
+  };
+
+  const handleApproveReport = async () => {
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/research/approve`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setResearchData((prev: any) => prev ? { ...prev, report: data.report } : prev);
+      }
+    } catch {}
+  };
+
+  const handleSendReport = async () => {
+    if (!lead.email) return;
+    try {
+      await fetch(`/api/leads/${lead.id}/research/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: lead.email }),
+      });
+    } catch {}
+  };
+
+  const handleViewPdf = () => {
+    window.open(`/api/leads/${lead.id}/research/report?format=pdf`, '_blank');
   };
 
   const formatDate = (d: string | null | undefined) => {
@@ -931,6 +1024,238 @@ function LeadDetailPanel({
             </button>
           </div>
         )}
+
+        {/* ─── Research Section ─── */}
+        <div style={{ padding: '16px', borderTop: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <h4 style={{ margin: 0, fontSize: '15px', color: 'var(--foreground)' }}>מחקר דיגיטלי</h4>
+            {researchStatus === 'idle' && !showResearchInput && (
+              <button
+                onClick={() => setShowResearchInput(true)}
+                style={{
+                  background: 'linear-gradient(135deg, #00B5FE, #0090cc)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px 16px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                חקור מצב נוכחי
+              </button>
+            )}
+          </div>
+
+          {/* Website URL input */}
+          {showResearchInput && (
+            <div style={{ marginBottom: '12px' }}>
+              <input
+                type="url"
+                placeholder="כתובת האתר (https://...)"
+                value={researchWebsiteUrl}
+                onChange={e => setResearchWebsiteUrl(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  color: 'var(--foreground)',
+                  fontSize: '14px',
+                  direction: 'ltr',
+                  marginBottom: '8px',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={handleStartResearch}
+                  disabled={!researchWebsiteUrl}
+                  style={{
+                    flex: 1,
+                    background: researchWebsiteUrl ? '#00B5FE' : '#ccc',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '10px',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    cursor: researchWebsiteUrl ? 'pointer' : 'default',
+                  }}
+                >
+                  התחל סריקה
+                </button>
+                <button
+                  onClick={() => { setShowResearchInput(false); setResearchWebsiteUrl(''); }}
+                  style={{
+                    padding: '10px 16px',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    color: 'var(--foreground)',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                  }}
+                >
+                  ביטול
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Scanning Progress */}
+          {researchStatus === 'scanning' && (
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', color: 'var(--foreground-muted)' }}>סורק...</span>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#00B5FE' }}>{researchProgress}%</span>
+              </div>
+              <div style={{ height: '6px', background: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{
+                  width: `${researchProgress}%`,
+                  height: '100%',
+                  background: 'linear-gradient(90deg, #00B5FE, #F0FF02)',
+                  borderRadius: '3px',
+                  transition: 'width 0.5s ease',
+                }} />
+              </div>
+              {researchStages?.length > 0 && (
+                <div style={{ marginTop: '8px' }}>
+                  {researchStages.filter((s: any) => s.status !== 'pending').map((stage: any) => (
+                    <div key={stage.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', fontSize: '12px' }}>
+                      <span>{stage.status === 'completed' ? '✅' : stage.status === 'running' ? '🔄' : stage.status === 'failed' ? '❌' : '⏳'}</span>
+                      <span style={{ color: 'var(--foreground-muted)' }}>{stage.labelHe}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Research Results */}
+          {researchStatus === 'completed' && researchData && (
+            <div>
+              {/* Overall Score */}
+              {researchData.scores && (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '16px',
+                  background: 'var(--surface)',
+                  borderRadius: '10px',
+                  marginBottom: '12px',
+                  border: '1px solid var(--border)',
+                }}>
+                  <div style={{
+                    fontSize: '36px',
+                    fontWeight: 800,
+                    color: '#00B5FE',
+                    lineHeight: 1,
+                  }}>
+                    {researchData.scores.overall || 0}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginTop: '4px' }}>
+                    ציון דיגיטלי כולל / 100
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Metrics */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                {researchData.seoAnalysis && (
+                  <>
+                    <div style={{ background: 'var(--surface)', borderRadius: '8px', padding: '10px', textAlign: 'center', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--foreground)' }}>{researchData.seoAnalysis.technicalScore ?? '—'}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--foreground-muted)' }}>SEO טכני</div>
+                    </div>
+                    <div style={{ background: 'var(--surface)', borderRadius: '8px', padding: '10px', textAlign: 'center', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--foreground)' }}>{researchData.seoAnalysis.contentScore ?? '—'}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--foreground-muted)' }}>תוכן</div>
+                    </div>
+                  </>
+                )}
+                {researchData.geoAnalysis && (
+                  <div style={{ background: 'var(--surface)', borderRadius: '8px', padding: '10px', textAlign: 'center', border: '1px solid var(--border)', gridColumn: researchData.seoAnalysis ? undefined : '1 / -1' }}>
+                    <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--foreground)' }}>{researchData.geoAnalysis.overallVisibility ?? '—'}%</div>
+                    <div style={{ fontSize: '11px', color: 'var(--foreground-muted)' }}>נראות AI</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Sales Opportunities */}
+              {researchData.salesOpportunities?.length > 0 && (
+                <div style={{ marginBottom: '12px' }}>
+                  <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)' }}>
+                    הזדמנויות מכירה ({researchData.salesOpportunities.length})
+                  </h4>
+                  {researchData.salesOpportunities.slice(0, 3).map((opp: any, i: number) => (
+                    <div key={i} style={{
+                      padding: '10px',
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      borderRight: `3px solid ${opp.priority === 'critical' ? '#ef4444' : opp.priority === 'high' ? '#f97316' : '#eab308'}`,
+                      marginBottom: '6px',
+                    }}>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>{opp.serviceHe}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginTop: '4px' }}>{opp.reasonHe}</div>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#00B5FE', marginTop: '4px' }}>₪{(opp.estimatedValue || 0).toLocaleString()}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Report Actions */}
+              {researchData.report && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                  {!researchData.report.approved && (
+                    <button onClick={handleApproveReport} style={{
+                      width: '100%', padding: '10px', background: '#22c55e', color: '#fff',
+                      border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+                    }}>
+                      אישור דוח
+                    </button>
+                  )}
+                  {researchData.report.approved && !researchData.report.sentAt && lead.email && (
+                    <button onClick={handleSendReport} style={{
+                      width: '100%', padding: '10px', background: '#00B5FE', color: '#fff',
+                      border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+                    }}>
+                      שלח דוח למייל ({lead.email})
+                    </button>
+                  )}
+                  {researchData.report.sentAt && (
+                    <div style={{ textAlign: 'center', fontSize: '13px', color: '#22c55e', fontWeight: 600 }}>
+                      ✅ דוח נשלח ל-{researchData.report.sentTo}
+                    </div>
+                  )}
+                  <button onClick={() => setShowResearchInput(true)} style={{
+                    width: '100%', padding: '8px', background: 'var(--surface)',
+                    border: '1px solid var(--border)', borderRadius: '8px',
+                    fontSize: '13px', color: 'var(--foreground-muted)', cursor: 'pointer',
+                  }}>
+                    סריקה חוזרת
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Failed state */}
+          {researchStatus === 'failed' && (
+            <div style={{ textAlign: 'center', padding: '12px' }}>
+              <div style={{ fontSize: '13px', color: '#ef4444', marginBottom: '8px' }}>הסריקה נכשלה</div>
+              <button onClick={() => { setResearchStatus('idle'); setShowResearchInput(true); }} style={{
+                padding: '8px 16px', background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: '8px', fontSize: '13px', cursor: 'pointer', color: 'var(--foreground)',
+              }}>
+                נסה שוב
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Status Actions */}
         {!isEditing && (

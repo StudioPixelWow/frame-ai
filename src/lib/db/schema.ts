@@ -2697,3 +2697,187 @@ export interface ViralStyleConfig {
   colorGrade: 'vibrant' | 'cinematic' | 'neutral' | 'warm';
   pacingCurve: 'fast' | 'medium' | 'slow' | 'dynamic';
 }
+
+// ─── Lead Research & Growth Intelligence Engine ────────────────────────────
+
+export type LeadResearchStatus = 'idle' | 'scanning' | 'completed' | 'failed';
+
+export type LeadResearchStageId =
+  | 'queued'
+  | 'website_scan'
+  | 'social_scan'
+  | 'google_presence'
+  | 'seo_analysis'
+  | 'geo_analysis'
+  | 'ai_visibility'
+  | 'competitor_analysis'
+  | 'scoring'
+  | 'sales_opportunities'
+  | 'quarter_plan'
+  | 'report_generation'
+  | 'completed'
+  | 'failed';
+
+export interface LeadResearchStage {
+  id: LeadResearchStageId;
+  index: number;
+  label: string;
+  labelHe: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  error?: string;
+}
+
+export interface LeadResearchScore {
+  category: string;
+  categoryHe: string;
+  score: number;        // 0-100
+  weight: number;       // 0-1
+  grade: string;
+  topIssue: string;
+  topAction: string;
+  signals: Array<{
+    name: string;
+    nameHe: string;
+    score: number;
+    evidence: string;
+    impact: 'critical' | 'high' | 'medium' | 'low';
+  }>;
+}
+
+export interface LeadSalesOpportunity {
+  id: string;
+  service: string;         // Studio Pixel service name
+  serviceHe: string;
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  reason: string;          // Why this lead needs this service
+  reasonHe: string;
+  estimatedValue: number;  // Estimated project value in ILS
+  evidence: string[];      // What data supports this
+  pitch: string;           // Sales pitch in Hebrew
+}
+
+export interface LeadResearchReport {
+  id: string;
+  title: string;
+  titleHe: string;
+  sections: Array<{
+    id: string;
+    title: string;
+    titleHe: string;
+    content: any[];  // ReportBlock[] from report-engine pattern
+  }>;
+  generatedAt: string;
+  approved: boolean;
+  approvedAt?: string;
+  sentAt?: string;
+  sentTo?: string;
+  editedContent?: any;  // User edits before sending
+}
+
+export interface LeadQuarterPlan {
+  quarter: string;       // e.g. "Q3 2026"
+  goals: Array<{
+    id: string;
+    title: string;
+    titleHe: string;
+    metric: string;
+    currentValue: string;
+    targetValue: string;
+    actions: Array<{
+      week: number;
+      action: string;
+      actionHe: string;
+      responsible: string;
+    }>;
+  }>;
+  estimatedROI: string;
+  totalInvestment: number;
+  generatedAt: string;
+}
+
+export interface LeadResearch {
+  id: string;
+  leadId: string;
+  leadName: string;
+  websiteUrl: string;
+  status: LeadResearchStatus;
+  // Scan progress
+  stages: LeadResearchStage[];
+  currentStage: LeadResearchStageId;
+  progress: number;  // 0-100
+  // Website scan results (reuses existing scan-pipeline output)
+  websiteScan: any | null;       // ScanResult from scan-pipeline
+  websiteFacts: any | null;      // WebsiteFacts from website-facts
+  // Social media presence
+  socialPresence: {
+    facebook: { found: boolean; url?: string; followers?: number; lastPost?: string; engagement?: string; } | null;
+    instagram: { found: boolean; url?: string; followers?: number; lastPost?: string; engagement?: string; } | null;
+    linkedin: { found: boolean; url?: string; followers?: number; lastPost?: string; } | null;
+    tiktok: { found: boolean; url?: string; followers?: number; } | null;
+  } | null;
+  // Google presence
+  googlePresence: {
+    gbpFound: boolean;
+    gbpName?: string;
+    gbpRating?: number;
+    gbpReviewCount?: number;
+    gbpCategories?: string[];
+    localPackPosition?: number;
+    organicResults: Array<{ query: string; position: number; url: string; }>;
+    mapsListed: boolean;
+  } | null;
+  // SEO analysis (reuses scan-pipeline + gap-analysis output)
+  seoAnalysis: {
+    technicalScore: number;
+    contentScore: number;
+    issues: any[];          // ScanIssue[]
+    contentGaps: any[];     // from gap-analysis
+    keywordOpportunities: any[];
+  } | null;
+  // GEO / AI Visibility (reuses visibility-engine output)
+  geoAnalysis: {
+    overallVisibility: number;  // 0-100
+    platforms: Array<{
+      platformId: string;
+      platformName: string;
+      found: boolean;
+      mentionType?: string;
+      position?: number;
+      queries: any[];
+    }>;
+  } | null;
+  // Competitor analysis (reuses competitor-engine output)
+  competitorAnalysis: {
+    competitors: Array<{
+      name: string;
+      domain: string;
+      overlapScore: number;
+      strengths: string[];
+      weaknesses: string[];
+    }>;
+    marketPosition: string;
+  } | null;
+  // Scoring (reuses strategic-scoring pattern)
+  scores: {
+    overall: number;
+    grade: string;
+    confidence: number;
+    categories: LeadResearchScore[];
+  } | null;
+  // Sales opportunities for Studio Pixel
+  salesOpportunities: LeadSalesOpportunity[] | null;
+  // Quarter plan
+  quarterPlan: LeadQuarterPlan | null;
+  // Report
+  report: LeadResearchReport | null;
+  // Metadata
+  error?: string;
+  startedAt?: string;
+  completedAt?: string;
+  totalDurationMs?: number;
+  createdAt: string;
+  updatedAt: string;
+}
