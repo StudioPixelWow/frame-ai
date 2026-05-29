@@ -197,6 +197,7 @@ function LeadDetailPanel({
   const [researchStages, setResearchStages] = useState<any[]>([]);
   const [researchData, setResearchData] = useState<any>(null);
   const [researchWebsiteUrl, setResearchWebsiteUrl] = useState('');
+  const [researchSocials, setResearchSocials] = useState({ facebook: '', instagram: '', linkedin: '', tiktok: '' });
   const [showResearchInput, setShowResearchInput] = useState(false);
 
   const toast = useToast();
@@ -346,18 +347,25 @@ function LeadDetailPanel({
 
   const handleStartResearch = async () => {
     if (!researchWebsiteUrl) return;
-    try {
-      const res = await fetch(`/api/leads/${lead.id}/research/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ websiteUrl: researchWebsiteUrl }),
-      });
-      if (res.ok) {
-        setResearchStatus('scanning');
-        setResearchProgress(0);
-        setShowResearchInput(false);
-      }
-    } catch {}
+    // Set scanning state IMMEDIATELY — don't wait for API response
+    setResearchStatus('scanning');
+    setResearchProgress(0);
+    setShowResearchInput(false);
+    // Build social URLs object (only non-empty)
+    const socialUrls: Record<string, string> = {};
+    if (researchSocials.facebook) socialUrls.facebook = researchSocials.facebook;
+    if (researchSocials.instagram) socialUrls.instagram = researchSocials.instagram;
+    if (researchSocials.linkedin) socialUrls.linkedin = researchSocials.linkedin;
+    if (researchSocials.tiktok) socialUrls.tiktok = researchSocials.tiktok;
+    // Fire the API call — don't await (pipeline runs server-side, we poll /status)
+    fetch(`/api/leads/${lead.id}/research/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ websiteUrl: researchWebsiteUrl, socialUrls }),
+    }).catch(err => {
+      console.error('[Research] Start failed:', err);
+      setResearchStatus('failed');
+    });
   };
 
   const handleApproveReport = async () => {
@@ -1048,7 +1056,7 @@ function LeadDetailPanel({
             )}
           </div>
 
-          {/* Website URL input */}
+          {/* Research input form — website + social media URLs */}
           {showResearchInput && (
             <div style={{ marginBottom: '12px' }}>
               <input
@@ -1070,6 +1078,57 @@ function LeadDetailPanel({
                   boxSizing: 'border-box',
                 }}
               />
+              <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginBottom: '6px', fontWeight: 600 }}>רשתות חברתיות (אופציונלי)</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '8px' }}>
+                <input
+                  type="url"
+                  placeholder="פייסבוק"
+                  value={researchSocials.facebook}
+                  onChange={e => setResearchSocials(p => ({ ...p, facebook: e.target.value }))}
+                  style={{
+                    width: '100%', padding: '8px 10px', borderRadius: '6px',
+                    border: '1px solid var(--border)', background: 'var(--surface)',
+                    color: 'var(--foreground)', fontSize: '12px', direction: 'ltr',
+                    fontFamily: 'inherit', boxSizing: 'border-box',
+                  }}
+                />
+                <input
+                  type="url"
+                  placeholder="אינסטגרם"
+                  value={researchSocials.instagram}
+                  onChange={e => setResearchSocials(p => ({ ...p, instagram: e.target.value }))}
+                  style={{
+                    width: '100%', padding: '8px 10px', borderRadius: '6px',
+                    border: '1px solid var(--border)', background: 'var(--surface)',
+                    color: 'var(--foreground)', fontSize: '12px', direction: 'ltr',
+                    fontFamily: 'inherit', boxSizing: 'border-box',
+                  }}
+                />
+                <input
+                  type="url"
+                  placeholder="לינקדאין"
+                  value={researchSocials.linkedin}
+                  onChange={e => setResearchSocials(p => ({ ...p, linkedin: e.target.value }))}
+                  style={{
+                    width: '100%', padding: '8px 10px', borderRadius: '6px',
+                    border: '1px solid var(--border)', background: 'var(--surface)',
+                    color: 'var(--foreground)', fontSize: '12px', direction: 'ltr',
+                    fontFamily: 'inherit', boxSizing: 'border-box',
+                  }}
+                />
+                <input
+                  type="url"
+                  placeholder="טיקטוק"
+                  value={researchSocials.tiktok}
+                  onChange={e => setResearchSocials(p => ({ ...p, tiktok: e.target.value }))}
+                  style={{
+                    width: '100%', padding: '8px 10px', borderRadius: '6px',
+                    border: '1px solid var(--border)', background: 'var(--surface)',
+                    color: 'var(--foreground)', fontSize: '12px', direction: 'ltr',
+                    fontFamily: 'inherit', boxSizing: 'border-box',
+                  }}
+                />
+              </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   onClick={handleStartResearch}
@@ -1089,7 +1148,7 @@ function LeadDetailPanel({
                   התחל סריקה
                 </button>
                 <button
-                  onClick={() => { setShowResearchInput(false); setResearchWebsiteUrl(''); }}
+                  onClick={() => { setShowResearchInput(false); setResearchWebsiteUrl(''); setResearchSocials({ facebook: '', instagram: '', linkedin: '', tiktok: '' }); }}
                   style={{
                     padding: '10px 16px',
                     background: 'var(--surface)',

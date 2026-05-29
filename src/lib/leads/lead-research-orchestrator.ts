@@ -397,8 +397,18 @@ export interface StartResearchOptions {
   websiteUrl: string;
   email?: string;
   phone?: string;
+  socialUrls?: {
+    facebook?: string;
+    instagram?: string;
+    linkedin?: string;
+    tiktok?: string;
+  };
 }
 
+/**
+ * Creates the research record in DB. Does NOT run the pipeline.
+ * Call runPipelineAsync() separately to execute the scan.
+ */
 export async function startLeadResearch(options: StartResearchOptions): Promise<string> {
   const { leadId, leadName, websiteUrl } = options;
 
@@ -430,17 +440,24 @@ export async function startLeadResearch(options: StartResearchOptions): Promise<
   const created = await leadResearch.createAsync(research as any);
   const researchId = created?.id || (research as any).id;
 
-  // Run pipeline in background (don't await)
-  runPipeline(researchId, options).catch(err => {
+  return researchId;
+}
+
+/**
+ * Runs the full 11-stage pipeline. Exported so the API route can await it
+ * (keeping the Vercel serverless function alive until completion).
+ */
+export async function runPipelineAsync(researchId: string, options: StartResearchOptions) {
+  try {
+    await runPipeline(researchId, options);
+  } catch (err: any) {
     console.error('[LeadResearch] Pipeline crashed:', err);
-    updateResearch(researchId, {
+    await updateResearch(researchId, {
       status: 'failed',
       error: err?.message || 'Pipeline crashed',
       currentStage: 'failed',
     } as any);
-  });
-
-  return researchId;
+  }
 }
 
 async function runPipeline(researchId: string, options: StartResearchOptions) {
@@ -502,6 +519,15 @@ async function runPipeline(researchId: string, options: StartResearchOptions) {
     await markStage('social_scan', 'running');
     try {
       socialPresence = await runSocialScan(url, options.leadName);
+      // Merge manually-provided social URLs (override discovered ones)
+      if (options.socialUrls) {
+        if (!socialPresence) socialPresence = { platforms: {} };
+        const su = options.socialUrls;
+        if (su.facebook) socialPresence.platforms = { ...socialPresence.platforms, facebook: { url: su.facebook, found: true, source: 'manual' } };
+        if (su.instagram) socialPresence.platforms = { ...socialPresence.platforms, instagram: { url: su.instagram, found: true, source: 'manual' } };
+        if (su.linkedin) socialPresence.platforms = { ...socialPresence.platforms, linkedin: { url: su.linkedin, found: true, source: 'manual' } };
+        if (su.tiktok) socialPresence.platforms = { ...socialPresence.platforms, tiktok: { url: su.tiktok, found: true, source: 'manual' } };
+      }
       await updateResearch(researchId, { socialPresence } as any);
       await markStage('social_scan', socialPresence ? 'completed' : 'skipped');
     } catch (e: any) {
