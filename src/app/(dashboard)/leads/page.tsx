@@ -218,6 +218,14 @@ function LeadDetailPanel({
       proposalSent: lead.proposalSent || false,
     });
     setEditNotes(lead.notes || "");
+    // Pre-fill research URLs from saved lead data
+    if ((lead as any).researchWebsiteUrl) setResearchWebsiteUrl((lead as any).researchWebsiteUrl);
+    if ((lead as any).researchSocialUrls) setResearchSocials({
+      facebook: (lead as any).researchSocialUrls?.facebook || '',
+      instagram: (lead as any).researchSocialUrls?.instagram || '',
+      linkedin: (lead as any).researchSocialUrls?.linkedin || '',
+      tiktok: (lead as any).researchSocialUrls?.tiktok || '',
+    });
   }, [lead.id]);
 
   // Poll research status when scanning
@@ -265,8 +273,18 @@ function LeadDetailPanel({
         if (res.ok) {
           const data = await res.json();
           if (data.status === 'completed') {
-            setResearchStatus('completed');
-            setResearchData(data.research);
+            // Check if this is a "ghost" completion with no real data
+            const hasRealData = data.research?.scores?.overall > 0 ||
+                                data.research?.salesOpportunities?.length > 0 ||
+                                data.research?.websiteFacts?.title;
+            if (hasRealData) {
+              setResearchStatus('completed');
+              setResearchData(data.research);
+            } else {
+              // Previous scan failed silently — allow re-scan
+              console.warn('[Research] Previous scan has no real data, allowing re-scan');
+              setResearchStatus('idle');
+            }
           } else if (data.status === 'scanning') {
             setResearchStatus('scanning');
             setResearchProgress(data.progress || 0);
@@ -360,6 +378,16 @@ function LeadDetailPanel({
 
   const handleStartResearch = async () => {
     if (!researchWebsiteUrl) return;
+    // Save URLs to lead record for next time
+    const socialUrls_save: Record<string, string> = {};
+    if (researchSocials.facebook) socialUrls_save.facebook = researchSocials.facebook;
+    if (researchSocials.instagram) socialUrls_save.instagram = researchSocials.instagram;
+    if (researchSocials.linkedin) socialUrls_save.linkedin = researchSocials.linkedin;
+    if (researchSocials.tiktok) socialUrls_save.tiktok = researchSocials.tiktok;
+    onUpdate(lead.id, {
+      researchWebsiteUrl: researchWebsiteUrl,
+      researchSocialUrls: socialUrls_save,
+    } as any).catch(() => {});
     setResearchStatus('scanning');
     setResearchProgress(0);
     setShowResearchInput(false);

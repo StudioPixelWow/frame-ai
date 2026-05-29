@@ -394,6 +394,14 @@ export interface Lead {
   adId: string | null;
   adSetName: string;
   adName: string;
+  // Digital research
+  researchWebsiteUrl?: string;
+  researchSocialUrls?: {
+    facebook?: string;
+    instagram?: string;
+    linkedin?: string;
+    tiktok?: string;
+  };
   clientId: string | null;
   createdAt: string;
   updatedAt: string;
