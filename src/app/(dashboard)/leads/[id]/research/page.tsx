@@ -214,7 +214,7 @@ export default function LeadResearchPage() {
   const deep = data.deepAnalysis || {};
   const socialDeep = deep.socialDeepAnalysis || null;
   const keywordResults = google.keywordResults || [];
-  const pageSpeed = pageSpeed || estimatePageSpeedClient(wf);
+  const pageSpeed = seo.pageSpeed || estimatePageSpeedClient(wf);
   const leadName = history[0]?.leadName || wf.title || "ליד";
   const websiteUrl = history[0]?.websiteUrl || "";
 
