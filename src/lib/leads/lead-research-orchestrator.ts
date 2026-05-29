@@ -535,6 +535,61 @@ async function runGooglePresence(url: string, businessName: string, websiteFacts
   return result;
 }
 
+// Heuristic PageSpeed estimate from collected HTML facts.
+// Used as a FALLBACK when no PageSpeed API key is set or the API call fails,
+// so the report/UI never shows empty performance metrics.
+function estimatePageSpeed(wf: any): any {
+  if (!wf) return null;
+
+  // ── Performance (based on weight, scripts, lazy-loading) ──
+  let perf = 100;
+  const sizeKB = wf.pageSizeKB || 0;
+  if (sizeKB > 5000) perf -= 35;
+  else if (sizeKB > 3000) perf -= 25;
+  else if (sizeKB > 1500) perf -= 15;
+  else if (sizeKB > 800) perf -= 8;
+
+  const js = wf.jsFileCount || 0;
+  if (js > 20) perf -= 20; else if (js > 10) perf -= 12; else if (js > 5) perf -= 6;
+
+  const css = wf.cssFileCount || 0;
+  if (css > 10) perf -= 10; else if (css > 5) perf -= 5;
+
+  const imgs = wf.imageCount || 0;
+  if (!wf.hasLazyLoading && imgs > 15) perf -= 12;
+  else if (!wf.hasLazyLoading && imgs > 5) perf -= 6;
+  if (!wf.isHttps) perf -= 5;
+  // Never report a perfect score from an estimate — keep it conservative.
+  perf = Math.min(Math.max(perf, 10), 92);
+
+  // ── Accessibility (viewport, language, media) ──
+  let acc = 90;
+  if (!wf.hasMobileViewport) acc -= 25;
+  if (!wf.detectedLanguages?.length) acc -= 10;
+  if (imgs > 0 && !wf.ogImage) acc -= 5;
+  acc = Math.min(Math.max(acc, 20), 95);
+
+  // ── SEO (title, description, h1, https, mobile, canonical, schema) ──
+  let seoSc = 100;
+  if (!wf.title) seoSc -= 20;
+  else if (wf.title.length < 10 || wf.title.length > 70) seoSc -= 8;
+  if (!wf.description) seoSc -= 15;
+  if (!wf.h1) seoSc -= 12;
+  if (!wf.hasMobileViewport) seoSc -= 15;
+  if (!wf.isHttps) seoSc -= 10;
+  if (!wf.canonical) seoSc -= 5;
+  if (!wf.hasSchemaMarkup) seoSc -= 5;
+  seoSc = Math.min(Math.max(seoSc, 20), 98);
+
+  return {
+    performanceScore: Math.round(perf),
+    accessibilityScore: Math.round(acc),
+    seoScore: Math.round(seoSc),
+    fcp: null, lcp: null, cls: null, tbt: null, speedIndex: null,
+    estimated: true, // flag so UI/report can label it as an estimate
+  };
+}
+
 async function runSeoAnalysis(url: string, websiteFacts: any): Promise<any> {
   console.log('[LeadResearch] Stage 4: SEO analysis — HTML facts + PageSpeed + Backlinks');
 
@@ -651,6 +706,18 @@ async function runSeoAnalysis(url: string, websiteFacts: any): Promise<any> {
         console.log('[LeadResearch] PageSpeed:', pageSpeed.performanceScore, 'perf,', pageSpeed.seoScore, 'seo');
       }
     } catch (e: any) { console.warn('[LeadResearch] PageSpeed API error:', e?.message); }
+  }
+
+  // ── FALLBACK: if PageSpeed API was unavailable or failed, estimate from HTML facts ──
+  // Ensures the report/UI never shows empty performance metrics.
+  if (!pageSpeed) {
+    pageSpeed = estimatePageSpeed(websiteFacts);
+    if (pageSpeed) {
+      console.log('[LeadResearch] PageSpeed: using ESTIMATED metrics —', pageSpeed.performanceScore, 'perf,', pageSpeed.seoScore, 'seo');
+      // Apply lighter tech-score adjustments for the estimate
+      if (pageSpeed.performanceScore < 50) { techScore -= 8; issues.push(`ביצועי מובייל נמוכים (הערכה): ${pageSpeed.performanceScore}/100`); }
+      else if (pageSpeed.performanceScore < 70) { techScore -= 4; issues.push(`ביצועי מובייל בינוניים (הערכה): ${pageSpeed.performanceScore}/100`); }
+    }
   }
 
   // ── Backlink check via Serper ──
@@ -1241,46 +1308,44 @@ async function runReportGeneration(data: {
       `  ${c.categoryHe || c.category}: ${c.score}/100 (${c.grade})`
     ).join('\n') || '  לא חושבו ציונים';
 
-    const systemPrompt = `אתה כותב דוחות מחקר מקצועיים ומעמיקים עבור סטודיו פיקסל (Studio Pixel) — סוכנות שיווק דיגיטלי מובילה.
+    // ── Section definitions — split into batches to avoid token-limit truncation ──
+    // Generating all 13 sections (each 5-8 paragraphs) in a single call exceeds the
+    // output token budget → truncated JSON → parse failure → empty/short report.
+    // We generate the sections in 3 batches and merge them.
+    type SectionDef = { id: string; title: string; titleHe: string; hint: string };
+    const SECTION_DEFS: SectionDef[] = [
+      { id: 'executive_summary', title: 'Executive Summary', titleHe: 'תקציר מנהלים', hint: 'סקירת מצב הנוכחות הדיגיטלית, הציון הכולל ומשמעותו, 3-4 הממצאים המרכזיים, וההזדמנות העסקית עבור הלקוח.' },
+      { id: 'website_analysis', title: 'Website Analysis', titleHe: 'ניתוח אתר מעמיק', hint: 'מבנה האתר, פלטפורמה/CMS, עומק התוכן, כותרות, נכסים טכניים (HTTPS, Schema, מהירות), חוזקות וחולשות.' },
+      { id: 'website_ux_review', title: 'Website UX Review', titleHe: 'סקירת חוויית משתמש', hint: 'חוויית משתמש ועיצוב, ניווט, קריאות לפעולה (CTA), טפסים, התאמה למובייל, נגישות, מסע המשתמש.' },
+      { id: 'seo_status', title: 'SEO Status', titleHe: 'מצב SEO מקיף', hint: 'SEO on-page וטכני, תוכן ומילות מפתח, ציוני PageSpeed (כולל אם הם הערכה), backlinks, והשלכות על הדירוג.' },
+      { id: 'social_media_deep', title: 'Social Media Deep Analysis', titleHe: 'ניתוח מעמיק רשתות חברתיות', hint: 'ניתוח כל פלטפורמה (פייסבוק/אינסטגרם/לינקדאין/טיקטוק) — נוכחות, עוקבים, מסרים, עקביות, ופערים.' },
+      { id: 'google_presence', title: 'Google Presence', titleHe: 'נוכחות בגוגל', hint: 'חיפוש אורגני ומיקומים, Local Pack, ביקורות, Google Business Profile, ופוטנציאל מקומי.' },
+      { id: 'ai_visibility', title: 'AI Visibility', titleHe: 'נראות במנועי AI', hint: 'נראות ב-GEO ומנועי AI (ChatGPT/Gemini/Perplexity), מצב נוכחי, פוטנציאל, ומה צריך לעשות.' },
+      { id: 'competitors', title: 'Competitor Analysis', titleHe: 'ניתוח מתחרים', hint: 'מי המתחרים, מה הם עושים טוב, היכן הפערים, ואילו הזדמנויות נפתחות מול מצבם.' },
+      { id: 'content_strategy', title: 'Content Strategy', titleHe: 'המלצות אסטרטגיית תוכן', hint: 'אסטרטגיית בלוג ותוכן, מילות מפתח ונושאים, פורמטים, לוח תוכן מומלץ, ושילוב עם SEO.' },
+      { id: 'paid_advertising', title: 'Paid Advertising Potential', titleHe: 'פוטנציאל פרסום ממומן', hint: 'פוטנציאל Google Ads ו-Meta Ads, קהלי יעד, מבנה קמפיינים, תקציב מומלץ, ותחזית תוצאות.' },
+      { id: 'opportunities', title: 'Sales Opportunities', titleHe: 'הזדמנויות צמיחה ומכירה', hint: 'שירותי סטודיו פיקסל הרלוונטיים, הנימוק (ראיה) לכל אחד, הערך הכספי, וסדר עדיפויות.' },
+      { id: 'quarter_plan', title: 'Quarter Plan', titleHe: 'תוכנית 90 יום', hint: 'יעדים רבעוניים, פעולות שבועיות מרכזיות, KPIs, השקעה צפויה, ו-ROI משוער.' },
+      { id: 'recommendations', title: 'Recommendations', titleHe: 'המלצות Studio Pixel', hint: 'לפחות 10 המלצות קונקרטיות ומעשיות — כל המלצה עם הסבר למה היא חשובה ומה ההשפעה הצפויה.' },
+    ];
+
+    // 3 balanced batches (4 + 4 + 4)
+    const SECTION_BATCHES: SectionDef[][] = [
+      SECTION_DEFS.slice(0, 4),
+      SECTION_DEFS.slice(4, 8),
+      SECTION_DEFS.slice(8, 12),
+    ];
+
+    const baseSystemPrompt = `אתה כותב דוחות מחקר מקצועיים ומעמיקים עבור סטודיו פיקסל (Studio Pixel) — סוכנות שיווק דיגיטלי מובילה.
 הדוח מיועד להצגה ללקוח פוטנציאלי כדי להדגים את הערך שסטודיו פיקסל יכול לספק.
+כתוב בעברית, בטון מקצועי, ברור ומשכנע.
+חוקי ברזל:
+- כל סעיף חייב לכלול 5-8 פסקאות ארוכות ומפורטות. כל פסקה היא 3-5 משפטים מלאים — לא משפט בודד ולא תבליטים.
+- השתמש אך ורק בנתונים שסופקו. אל תמציא מספרים, ציונים, דירוגים או עובדות שלא ניתנו.
+- הסבר את המשמעות העסקית של כל ממצא, ולא רק את העובדה היבשה.
+- שלב המלצות קונקרטיות ומעשיות והדגש את הערך שסטודיו פיקסל יכול לספק.`;
 
-כתוב דוח מקיף ומפורט בעברית. כל סעיף חייב לכלול 5-8 פסקאות מפורטות, לא 1-2 משפטים.
-השתמש אך ורק בנתונים שסופקו — אל תמציא מספרים, ציונים, או עובדות.
-
-החזר JSON בלבד בפורמט הבא:
-{
-  "id": "report_1",
-  "title": "Lead Research Report",
-  "titleHe": "דוח מחקר ליד — ${data.leadName}",
-  "sections": [
-    { "id": "executive_summary", "title": "Executive Summary", "titleHe": "תקציר מנהלים", "content": [{ "type": "paragraph", "text": "..." }, { "type": "paragraph", "text": "..." }, { "type": "paragraph", "text": "..." }] },
-    { "id": "website_analysis", "title": "Website Analysis", "titleHe": "ניתוח אתר מעמיק", "content": [5-8 paragraphs] },
-    { "id": "website_ux_review", "title": "Website UX Review", "titleHe": "סקירת חוויית משתמש", "content": [5-8 paragraphs] },
-    { "id": "seo_status", "title": "SEO Status", "titleHe": "מצב SEO מקיף", "content": [5-8 paragraphs] },
-    { "id": "social_media_deep", "title": "Social Media Deep Analysis", "titleHe": "ניתוח מעמיק רשתות חברתיות", "content": [5-8 paragraphs] },
-    { "id": "google_presence", "title": "Google Presence", "titleHe": "נוכחות בגוגל", "content": [5-8 paragraphs] },
-    { "id": "ai_visibility", "title": "AI Visibility", "titleHe": "נראות במנועי AI", "content": [5-8 paragraphs] },
-    { "id": "competitors", "title": "Competitor Analysis", "titleHe": "ניתוח מתחרים", "content": [5-8 paragraphs] },
-    { "id": "content_strategy", "title": "Content Strategy", "titleHe": "המלצות אסטרטגיית תוכן", "content": [5-8 paragraphs] },
-    { "id": "paid_advertising", "title": "Paid Advertising Potential", "titleHe": "פוטנציאל פרסום ממומן", "content": [5-8 paragraphs] },
-    { "id": "opportunities", "title": "Sales Opportunities", "titleHe": "הזדמנויות צמיחה ומכירה", "content": [5-8 paragraphs] },
-    { "id": "quarter_plan", "title": "Quarter Plan", "titleHe": "תוכנית 90 יום", "content": [5-8 paragraphs] },
-    { "id": "recommendations", "title": "Recommendations", "titleHe": "המלצות Studio Pixel", "content": [5-8 paragraphs] }
-  ],
-  "generatedAt": "${new Date().toISOString()}",
-  "approved": false
-}
-
-חשוב מאוד:
-- כל סעיף חייב לכלול לפחות 5-8 פסקאות מפורטות עם ניתוח מעמיק — לא 1-2 משפטים!
-- השתמש בנתונים הספציפיים שסופקו (ציונים, מספרים, בעיות)
-- הסבר מה המשמעות של כל ממצא עבור העסק
-- תן המלצות קונקרטיות ומעשיות
-- הדגש את הערך שסטודיו פיקסל יכול לספק
-- סעיף ההמלצות (recommendations) חייב לכלול לפחות 10 המלצות קונקרטיות ומעשיות, כל אחת עם הסבר מפורט
-- כל הטקסט בעברית`;
-
-    const userPrompt = `צור דוח מחקר ליד מקיף ומפורט עבור "${data.leadName}" (${data.websiteUrl}).
+    const dataContext = `נתוני המחקר המלאים עבור "${data.leadName}" (${data.websiteUrl}):
 
 ══════════════════════════════════════
   נתוני אתר (Website Facts)
@@ -1430,12 +1495,98 @@ ${data.deepAnalysis?.seoGeoDeepAnalysis ? `
 מלא את כל 13 הסעיפים שבפורמט.
 סעיף ההמלצות (recommendations) חייב לכלול לפחות 10 המלצות קונקרטיות, מעשיות ומפורטות — כל המלצה עם הסבר למה היא חשובה ומה ההשפעה הצפויה.`;
 
-    const result = await generateWithAI(systemPrompt, userPrompt, { temperature: 0.5, maxTokens: 8000 });
-    if (!result.success || !result.data) return null;
+    // ── Generate each batch (in parallel) and merge the resulting sections ──
+    const collected: Record<string, any> = {};
 
-    const report = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
+    const batchResults = await Promise.all(
+      SECTION_BATCHES.map(async (batch, batchIdx) => {
+        const sectionSpec = batch
+          .map((s, i) => `${i + 1}. id="${s.id}" — "${s.titleHe}" (${s.title}): ${s.hint}`)
+          .join('\n');
+
+        const sysPrompt = `${baseSystemPrompt}
+
+כתוב כעת אך ורק את הסעיפים הבאים (${batch.length} סעיפים), בדיוק עם ה-id הנתון:
+${sectionSpec}
+
+החזר JSON בלבד בפורמט:
+{
+  "sections": [
+    { "id": "<id מהרשימה>", "title": "<English title>", "titleHe": "<כותרת בעברית>", "content": [ { "type": "paragraph", "text": "פסקה ארוכה ומפורטת..." }, { "type": "paragraph", "text": "..." } ] }
+  ]
+}
+תזכורת: כל סעיף = 5-8 פסקאות ארוכות. אל תקצר.`;
+
+        const r = await generateWithAI(sysPrompt, dataContext, { temperature: 0.5, maxTokens: 8000 });
+        if (!r.success || !r.data) {
+          console.warn(`[LeadResearch] Report batch ${batchIdx + 1} failed:`, r.error);
+          return null;
+        }
+        try {
+          const parsed = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+          return Array.isArray(parsed?.sections) ? parsed.sections : null;
+        } catch {
+          console.warn(`[LeadResearch] Report batch ${batchIdx + 1} parse failed`);
+          return null;
+        }
+      })
+    );
+
+    for (const sections of batchResults) {
+      if (!sections) continue;
+      for (const sec of sections) {
+        if (sec?.id) collected[sec.id] = sec;
+      }
+    }
+
+    // ── Assemble final report in canonical section order ──
+    const orderedSections = SECTION_DEFS
+      .map(def => {
+        const got = collected[def.id];
+        if (got && Array.isArray(got.content) && got.content.length > 0) {
+          return { id: def.id, title: got.title || def.title, titleHe: got.titleHe || def.titleHe, content: got.content };
+        }
+        return null;
+      })
+      .filter(Boolean);
+
+    // ── Fallback: if AI produced nothing usable, build from deep-analysis text ──
+    if (orderedSections.length === 0) {
+      const da = data.deepAnalysis || {};
+      const toParas = (txt?: string) =>
+        (txt || '').split(/\n{2,}/).map(t => t.trim()).filter(Boolean).map(t => ({ type: 'paragraph', text: t }));
+      const fb: any[] = [];
+      if (da.websiteDeepAnalysis) {
+        const w = da.websiteDeepAnalysis;
+        const content = [...toParas(w.uxAnalysis), ...toParas(w.contentAnalysis), ...toParas(w.technicalNotes)];
+        if (content.length) fb.push({ id: 'website_analysis', title: 'Website Analysis', titleHe: 'ניתוח אתר מעמיק', content });
+      }
+      if (da.seoGeoDeepAnalysis) {
+        const s = da.seoGeoDeepAnalysis;
+        const content = [...toParas(s.seoDeepAnalysis), ...toParas(s.geoAnalysis), ...toParas(s.competitorInsights)];
+        if (content.length) fb.push({ id: 'seo_status', title: 'SEO Status', titleHe: 'מצב SEO מקיף', content });
+      }
+      if (da.socialDeepAnalysis) {
+        const content = [...toParas(da.socialDeepAnalysis.overallAssessment), ...toParas(da.socialDeepAnalysis.contentStrategy)];
+        if (content.length) fb.push({ id: 'social_media_deep', title: 'Social Media Deep Analysis', titleHe: 'ניתוח מעמיק רשתות חברתיות', content });
+      }
+      if (fb.length === 0) return null;
+      orderedSections.push(...fb);
+    }
+
+    const report = {
+      id: 'report_1',
+      title: 'Lead Research Report',
+      titleHe: `דוח מחקר ליד — ${data.leadName}`,
+      sections: orderedSections,
+      generatedAt: new Date().toISOString(),
+      approved: false,
+    };
+
+    console.log('[LeadResearch] Report generated with', orderedSections.length, 'sections');
     return report;
-  } catch {
+  } catch (e: any) {
+    console.warn('[LeadResearch] Report generation failed:', e?.message);
     return null;
   }
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import ResearchCharts from "./ResearchCharts";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -367,6 +368,9 @@ export default function LeadResearchPage() {
         </div>
       )}
 
+      {/* ═══ Visualizations ═══ */}
+      <ResearchCharts scores={scores} competitors={competitors} google={google} />
+
       {/* ═══ Website Analysis ═══ */}
       {wf.title && (
         <div style={cardStyle}>
@@ -469,7 +473,29 @@ export default function LeadResearchPage() {
       {/* ═══ PageSpeed ═══ */}
       {seo.pageSpeed && (
         <div style={cardStyle}>
-          <div style={cardTitleStyle}>ביצועי אתר — PageSpeed</div>
+          <div style={cardTitleStyle}>
+            ביצועי אתר — PageSpeed
+            {seo.pageSpeed.estimated && (
+              <span
+                style={{
+                  fontSize: "0.7rem",
+                  fontWeight: 600,
+                  color: "#f97316",
+                  background: "#f9731620",
+                  padding: "0.15rem 0.55rem",
+                  borderRadius: 10,
+                  marginRight: "0.5rem",
+                }}
+              >
+                הערכה
+              </span>
+            )}
+          </div>
+          {seo.pageSpeed.estimated && (
+            <div style={{ ...mutedText, marginBottom: "0.75rem", fontSize: "0.78rem" }}>
+              המדדים מוערכים מתוך ניתוח קוד האתר (לא נמדדו ב-PageSpeed API). FCP/LCP/CLS אינם זמינים בהערכה.
+            </div>
+          )}
           <div
             style={{
               display: "grid",
