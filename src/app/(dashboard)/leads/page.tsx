@@ -1249,147 +1249,279 @@ function LeadDetailPanel({
             </div>
           )}
 
-          {/* Research Results */}
+          {/* Research Results — Full Professional Report */}
           {researchStatus === 'completed' && researchData && (
             <div>
-              {/* Overall Score */}
+              {/* ═══ Hero Score ═══ */}
               {researchData.scores && (
                 <div style={{
-                  textAlign: 'center',
-                  padding: '16px',
-                  background: 'var(--surface)',
-                  borderRadius: '10px',
-                  marginBottom: '12px',
-                  border: '1px solid var(--border)',
+                  textAlign: 'center', padding: '20px 16px',
+                  background: 'linear-gradient(135deg, #00B5FE10, #F0FF0208)',
+                  borderRadius: '12px', marginBottom: '16px',
+                  border: '1px solid #00B5FE30',
                 }}>
-                  <div style={{
-                    fontSize: '36px',
-                    fontWeight: 800,
-                    color: '#00B5FE',
-                    lineHeight: 1,
-                  }}>
-                    {researchData.scores.overall || 0}
+                  <div style={{ fontSize: '42px', fontWeight: 800, color: '#00B5FE', lineHeight: 1 }}>
+                    {researchData.scores.overall || 0}<span style={{ fontSize: '18px', color: 'var(--foreground-muted)' }}>/100</span>
                   </div>
-                  <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginTop: '4px' }}>
-                    ציון דיגיטלי כולל / 100
+                  <div style={{ fontSize: '13px', color: 'var(--foreground-muted)', marginTop: '6px' }}>
+                    ציון נוכחות דיגיטלית כולל
                   </div>
-                </div>
-              )}
-
-              {/* Quick Metrics */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
-                {researchData.seoAnalysis && (
-                  <>
-                    <div style={{ background: 'var(--surface)', borderRadius: '8px', padding: '10px', textAlign: 'center', border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--foreground)' }}>{researchData.seoAnalysis.technicalScore ?? '—'}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--foreground-muted)' }}>SEO טכני</div>
-                    </div>
-                    <div style={{ background: 'var(--surface)', borderRadius: '8px', padding: '10px', textAlign: 'center', border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--foreground)' }}>{researchData.seoAnalysis.contentScore ?? '—'}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--foreground-muted)' }}>תוכן</div>
-                    </div>
-                  </>
-                )}
-                {researchData.geoAnalysis && (
-                  <div style={{ background: 'var(--surface)', borderRadius: '8px', padding: '10px', textAlign: 'center', border: '1px solid var(--border)', gridColumn: researchData.seoAnalysis ? undefined : '1 / -1' }}>
-                    <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--foreground)' }}>{researchData.geoAnalysis.overallVisibility ?? '—'}%</div>
-                    <div style={{ fontSize: '11px', color: 'var(--foreground-muted)' }}>נראות AI</div>
-                  </div>
-                )}
-              </div>
-
-              {/* Social Presence */}
-              {researchData.socialPresence && (
-                <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                  {['facebook', 'instagram', 'linkedin', 'tiktok'].map(platform => {
-                    const p = researchData.socialPresence?.[platform];
-                    const found = p?.found;
-                    const labels: Record<string, string> = { facebook: 'פייסבוק', instagram: 'אינסטגרם', linkedin: 'לינקדאין', tiktok: 'טיקטוק' };
-                    return (
-                      <span key={platform} style={{
-                        padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-                        background: found ? '#22c55e18' : 'var(--surface)',
-                        color: found ? '#22c55e' : 'var(--foreground-muted)',
-                        border: `1px solid ${found ? '#22c55e30' : 'var(--border)'}`,
-                      }}>
-                        {found ? '✓' : '✗'} {labels[platform] || platform}
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Google Presence */}
-              {researchData.googlePresence && (
-                <div style={{ background: 'var(--surface)', borderRadius: '8px', padding: '10px', marginBottom: '12px', border: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--foreground)', marginBottom: '4px' }}>
-                    {researchData.googlePresence.found ? '✓ נמצא בגוגל' : '✗ לא נמצא בגוגל'}
-                    {researchData.googlePresence.organic?.position && ` (מיקום ${researchData.googlePresence.organic.position})`}
-                  </div>
-                  {researchData.googlePresence.reviews && (
-                    <div style={{ fontSize: '11px', color: 'var(--foreground-muted)' }}>
-                      דירוג: {researchData.googlePresence.reviews.rating}/5 ({researchData.googlePresence.reviews.count} ביקורות)
+                  {researchData.scores.grade && (
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: researchData.scores.overall >= 60 ? '#22c55e' : researchData.scores.overall >= 40 ? '#f97316' : '#ef4444', marginTop: '4px' }}>
+                      דירוג: {researchData.scores.grade}
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Sales Opportunities */}
-              {researchData.salesOpportunities?.length > 0 && (
-                <div style={{ marginBottom: '12px' }}>
-                  <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)' }}>
-                    הזדמנויות מכירה ({researchData.salesOpportunities.length})
+              {/* ═══ Score Breakdown ═══ */}
+              {researchData.scores?.categories && (
+                <div style={{ marginBottom: '16px' }}>
+                  <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)', fontWeight: 700 }}>פירוט ציונים</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                    {researchData.scores.categories.map((cat: any) => (
+                      <div key={cat.category} style={{ background: 'var(--surface)', borderRadius: '8px', padding: '10px', border: '1px solid var(--border)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--foreground-muted)' }}>{cat.categoryHe}</span>
+                          <span style={{ fontSize: '16px', fontWeight: 700, color: cat.score >= 60 ? '#22c55e' : cat.score >= 40 ? '#f97316' : '#ef4444' }}>{cat.score}</span>
+                        </div>
+                        <div style={{ height: '3px', background: 'var(--border)', borderRadius: '2px', marginTop: '6px' }}>
+                          <div style={{ height: '100%', width: `${cat.score}%`, background: cat.score >= 60 ? '#22c55e' : cat.score >= 40 ? '#f97316' : '#ef4444', borderRadius: '2px' }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ═══ Website Facts ═══ */}
+              {researchData.websiteFacts && (
+                <div style={{ marginBottom: '16px' }}>
+                  <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)', fontWeight: 700 }}>ניתוח אתר</h4>
+                  <div style={{ background: 'var(--surface)', borderRadius: '8px', padding: '12px', border: '1px solid var(--border)', fontSize: '12px' }}>
+                    {researchData.websiteFacts.title && <div style={{ marginBottom: '6px' }}><strong>כותרת:</strong> {researchData.websiteFacts.title}</div>}
+                    {researchData.websiteFacts.description && <div style={{ marginBottom: '6px', color: 'var(--foreground-muted)' }}>{researchData.websiteFacts.description}</div>}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginTop: '8px' }}>
+                      <span>{researchData.websiteFacts.isHttps ? '✓ HTTPS' : '✗ אין HTTPS'}</span>
+                      <span>{researchData.websiteFacts.hasMobileViewport ? '✓ מובייל' : '✗ לא מותאם למובייל'}</span>
+                      <span>{researchData.websiteFacts.hasSchemaMarkup ? '✓ Schema' : '✗ אין Schema'}</span>
+                      <span>{researchData.websiteFacts.cms !== 'unknown' ? `✓ ${researchData.websiteFacts.cms}` : '— CMS לא ידוע'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ═══ SEO Issues ═══ */}
+              {researchData.seoAnalysis?.issues?.length > 0 && (
+                <div style={{ marginBottom: '16px' }}>
+                  <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)', fontWeight: 700 }}>
+                    בעיות SEO ({researchData.seoAnalysis.issues.length})
                   </h4>
-                  {researchData.salesOpportunities.slice(0, 5).map((opp: any, i: number) => (
-                    <div key={i} style={{
-                      padding: '10px',
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '8px',
-                      borderRight: `3px solid ${(opp.priority || 99) <= 2 ? '#ef4444' : (opp.priority || 99) <= 4 ? '#f97316' : '#eab308'}`,
-                      marginBottom: '6px',
-                    }}>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>{opp.serviceHe || opp.service}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginTop: '4px' }}>{opp.evidenceHe || opp.reasonHe || opp.evidence || ''}</div>
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#00B5FE', marginTop: '4px' }}>₪{(opp.estimatedValue || 0).toLocaleString()}</div>
+                  <div style={{ background: 'var(--surface)', borderRadius: '8px', padding: '10px', border: '1px solid var(--border)' }}>
+                    {researchData.seoAnalysis.issues.map((issue: string, i: number) => (
+                      <div key={i} style={{ fontSize: '12px', padding: '4px 0', borderBottom: i < researchData.seoAnalysis.issues.length - 1 ? '1px solid var(--border)' : 'none', color: 'var(--foreground-muted)' }}>
+                        ⚠️ {issue}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ═══ Social Presence ═══ */}
+              {researchData.socialPresence && (
+                <div style={{ marginBottom: '16px' }}>
+                  <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)', fontWeight: 700 }}>נוכחות ברשתות חברתיות</h4>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {['facebook', 'instagram', 'linkedin', 'tiktok'].map(platform => {
+                      const p = researchData.socialPresence?.[platform];
+                      const found = p?.found;
+                      const labels: Record<string, string> = { facebook: 'פייסבוק', instagram: 'אינסטגרם', linkedin: 'לינקדאין', tiktok: 'טיקטוק' };
+                      return (
+                        <span key={platform} style={{
+                          padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600,
+                          background: found ? '#22c55e18' : '#ef444418',
+                          color: found ? '#22c55e' : '#ef4444',
+                          border: `1px solid ${found ? '#22c55e30' : '#ef444430'}`,
+                        }}>
+                          {found ? '✓' : '✗'} {labels[platform]}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ═══ Google Presence ═══ */}
+              {researchData.googlePresence && (
+                <div style={{ marginBottom: '16px' }}>
+                  <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)', fontWeight: 700 }}>נוכחות בגוגל</h4>
+                  <div style={{ background: 'var(--surface)', borderRadius: '8px', padding: '12px', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: researchData.googlePresence.found ? '#22c55e' : '#ef4444', marginBottom: '4px' }}>
+                      {researchData.googlePresence.found ? `✓ נמצא בתוצאות החיפוש (מיקום ${researchData.googlePresence.organic?.position || '—'})` : '✗ לא נמצא בתוצאות החיפוש'}
+                    </div>
+                    <div style={{ fontSize: '12px', color: researchData.googlePresence.localPack?.found ? '#22c55e' : 'var(--foreground-muted)' }}>
+                      {researchData.googlePresence.localPack?.found ? '✓ מופיע ב-Local Pack (מפת גוגל)' : '✗ לא מופיע ב-Local Pack'}
+                    </div>
+                    {researchData.googlePresence.reviews && (
+                      <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginTop: '4px' }}>
+                        ⭐ דירוג: {researchData.googlePresence.reviews.rating}/5 ({researchData.googlePresence.reviews.count} ביקורות)
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ═══ AI Visibility ═══ */}
+              {researchData.geoAnalysis && (
+                <div style={{ marginBottom: '16px' }}>
+                  <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)', fontWeight: 700 }}>נראות במנועי AI</h4>
+                  <div style={{ background: 'var(--surface)', borderRadius: '8px', padding: '12px', border: '1px solid var(--border)' }}>
+                    {(researchData.geoAnalysis.checkedCount || 0) === 0 ? (
+                      <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', textAlign: 'center', padding: '8px' }}>
+                        לא נבדק — נדרשים מפתחות API של Perplexity / OpenAI
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: '20px', fontWeight: 700, color: researchData.geoAnalysis.overallVisibility > 0 ? '#22c55e' : '#ef4444', textAlign: 'center' }}>
+                          {researchData.geoAnalysis.overallVisibility}%
+                        </div>
+                        {researchData.geoAnalysis.platforms?.map((p: any) => (
+                          <div key={p.platformId} style={{ fontSize: '12px', padding: '4px 0', display: 'flex', justifyContent: 'space-between' }}>
+                            <span>{p.platformName}</span>
+                            <span style={{ color: !p.checked ? 'var(--foreground-muted)' : p.found ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
+                              {!p.checked ? 'לא נבדק' : p.found ? '✓ נמצא' : '✗ לא נמצא'}
+                            </span>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ═══ Competitors ═══ */}
+              {researchData.competitorAnalysis?.competitors?.length > 0 && (
+                <div style={{ marginBottom: '16px' }}>
+                  <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)', fontWeight: 700 }}>
+                    מתחרים ({researchData.competitorAnalysis.competitors.length})
+                  </h4>
+                  {researchData.competitorAnalysis.competitors.slice(0, 5).map((comp: any, i: number) => (
+                    <div key={i} style={{ background: 'var(--surface)', borderRadius: '6px', padding: '8px 10px', marginBottom: '4px', border: '1px solid var(--border)', fontSize: '12px' }}>
+                      <div style={{ fontWeight: 600, color: 'var(--foreground)' }}>{comp.name || comp.domain}</div>
+                      <div style={{ color: 'var(--foreground-muted)', fontSize: '11px' }}>{comp.domain}</div>
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* Report Actions */}
-              {researchData.report && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
-                  {!researchData.report.approved && (
-                    <button onClick={handleApproveReport} style={{
-                      width: '100%', padding: '10px', background: '#22c55e', color: '#fff',
-                      border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+              {/* ═══ Sales Opportunities ═══ */}
+              {researchData.salesOpportunities?.length > 0 && (
+                <div style={{ marginBottom: '16px' }}>
+                  <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)', fontWeight: 700 }}>
+                    הזדמנויות מכירה — שירותי Studio Pixel ({researchData.salesOpportunities.length})
+                  </h4>
+                  <div style={{ fontSize: '11px', color: 'var(--foreground-muted)', marginBottom: '8px' }}>
+                    שירותים שהלקוח צריך על סמך הממצאים — הערך המשוער הוא פוטנציאל הכנסה
+                  </div>
+                  {researchData.salesOpportunities.map((opp: any, i: number) => (
+                    <div key={i} style={{
+                      padding: '12px', background: 'var(--surface)', border: '1px solid var(--border)',
+                      borderRadius: '8px', borderRight: `3px solid ${(opp.priority || 99) <= 2 ? '#ef4444' : (opp.priority || 99) <= 4 ? '#f97316' : '#eab308'}`,
+                      marginBottom: '6px',
                     }}>
-                      אישור דוח
-                    </button>
-                  )}
-                  {researchData.report.approved && !researchData.report.sentAt && lead.email && (
-                    <button onClick={handleSendReport} style={{
-                      width: '100%', padding: '10px', background: '#00B5FE', color: '#fff',
-                      border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
-                    }}>
-                      שלח דוח למייל ({lead.email})
-                    </button>
-                  )}
-                  {researchData.report.sentAt && (
-                    <div style={{ textAlign: 'center', fontSize: '13px', color: '#22c55e', fontWeight: 600 }}>
-                      ✅ דוח נשלח ל-{researchData.report.sentTo}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--foreground)' }}>{opp.serviceHe || opp.service}</span>
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#00B5FE' }}>₪{(opp.estimatedValue || 0).toLocaleString()}</span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginTop: '4px' }}>{opp.evidenceHe || opp.evidence || ''}</div>
+                      {opp.pitchHe && <div style={{ fontSize: '11px', color: '#00B5FE', marginTop: '6px', fontStyle: 'italic' }}>💡 {opp.pitchHe}</div>}
                     </div>
-                  )}
-                  <button onClick={() => setShowResearchInput(true)} style={{
-                    width: '100%', padding: '8px', background: 'var(--surface)',
-                    border: '1px solid var(--border)', borderRadius: '8px',
-                    fontSize: '13px', color: 'var(--foreground-muted)', cursor: 'pointer',
-                  }}>
-                    סריקה חוזרת
-                  </button>
+                  ))}
                 </div>
               )}
+
+              {/* ═══ AI Report Sections ═══ */}
+              {researchData.report?.sections?.length > 0 && (
+                <div style={{ marginBottom: '16px' }}>
+                  <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)', fontWeight: 700 }}>📋 דוח מחקר מפורט</h4>
+                  {researchData.report.sections.map((section: any) => (
+                    <div key={section.id} style={{ marginBottom: '12px' }}>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#00B5FE', marginBottom: '6px', paddingBottom: '4px', borderBottom: '1px solid var(--border)' }}>
+                        {section.titleHe || section.title}
+                      </div>
+                      {section.content?.map((block: any, bi: number) => (
+                        <div key={bi} style={{ fontSize: '12px', color: 'var(--foreground-muted)', marginBottom: '4px', lineHeight: 1.6 }}>
+                          {block.text || (typeof block === 'string' ? block : '')}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ═══ Quarter Plan ═══ */}
+              {researchData.quarterPlan?.goals?.length > 0 && (
+                <div style={{ marginBottom: '16px' }}>
+                  <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--foreground)', fontWeight: 700 }}>📅 תוכנית {researchData.quarterPlan.quarter || '90 יום'}</h4>
+                  {researchData.quarterPlan.goals.map((goal: any, i: number) => (
+                    <div key={i} style={{ background: 'var(--surface)', borderRadius: '8px', padding: '10px', border: '1px solid var(--border)', marginBottom: '6px' }}>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>{goal.titleHe || goal.title}</div>
+                      {goal.metric && <div style={{ fontSize: '11px', color: 'var(--foreground-muted)', marginTop: '2px' }}>מדד: {goal.metric} ({goal.currentValue} → {goal.targetValue})</div>}
+                      {goal.actions?.slice(0, 3).map((a: any, ai: number) => (
+                        <div key={ai} style={{ fontSize: '11px', color: 'var(--foreground-muted)', marginTop: '2px', paddingRight: '8px' }}>
+                          שבוע {a.week}: {a.actionHe || a.action}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ═══ Action Buttons ═══ */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '16px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+                {/* PDF View */}
+                <button onClick={handleViewPdf} style={{
+                  width: '100%', padding: '12px', background: 'linear-gradient(135deg, #00B5FE, #0090cc)', color: '#fff',
+                  border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: 'pointer',
+                }}>
+                  📄 צפה בדוח PDF ממותג
+                </button>
+
+                {/* Approve */}
+                {researchData.report && !researchData.report.approved && (
+                  <button onClick={handleApproveReport} style={{
+                    width: '100%', padding: '10px', background: '#22c55e', color: '#fff',
+                    border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+                  }}>
+                    ✓ אישור דוח לשליחה
+                  </button>
+                )}
+
+                {/* Send email */}
+                {researchData.report?.approved && !researchData.report?.sentAt && lead.email && (
+                  <button onClick={handleSendReport} style={{
+                    width: '100%', padding: '10px', background: '#00B5FE', color: '#fff',
+                    border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+                  }}>
+                    📧 שלח דוח למייל ({lead.email})
+                  </button>
+                )}
+
+                {researchData.report?.sentAt && (
+                  <div style={{ textAlign: 'center', fontSize: '13px', color: '#22c55e', fontWeight: 600 }}>
+                    ✅ דוח נשלח ל-{researchData.report.sentTo}
+                  </div>
+                )}
+
+                {/* Re-scan */}
+                <button onClick={() => { setResearchStatus('idle'); setShowResearchInput(true); }} style={{
+                  width: '100%', padding: '8px', background: 'var(--surface)',
+                  border: '1px solid var(--border)', borderRadius: '8px',
+                  fontSize: '13px', color: 'var(--foreground-muted)', cursor: 'pointer',
+                }}>
+                  🔄 סריקה חוזרת
+                </button>
+              </div>
             </div>
           )}
 
