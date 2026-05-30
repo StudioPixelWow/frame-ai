@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 
 const BRAND = '#00B5FE';
 
@@ -64,6 +64,9 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
   const [action, setAction] = useState<string | null>(null); // 'sync' | 'optimize' | 'create'
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: '', objective: 'OUTCOME_LEADS', dailyBudget: '' });
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Record<string, { adSets: any[]; ads: any[] }>>({});
+  const [detailLoading, setDetailLoading] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -143,6 +146,19 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
       setShowCreate(false);
       setForm({ name: '', objective: 'OUTCOME_LEADS', dailyBudget: '' });
     });
+  };
+
+  const toggleDetail = async (c: CampaignSummary) => {
+    if (expandedId === c.id) { setExpandedId(null); return; }
+    setExpandedId(c.id);
+    if (!detail[c.id]) {
+      setDetailLoading(c.id);
+      try {
+        const res = await fetch(`/api/meta-business/campaign-detail?campaignId=${encodeURIComponent(c.id)}`);
+        const data = await res.json();
+        if (res.ok) setDetail((prev) => ({ ...prev, [c.id]: { adSets: data.adSets || [], ads: data.ads || [] } }));
+      } catch { /* ignore */ } finally { setDetailLoading(null); }
+    }
   };
 
   if (loading) return <div style={{ padding: 24, color: '#6b7280' }}>טוען קמפיינים...</div>;
@@ -277,8 +293,10 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
           </thead>
           <tbody>
             {campaigns.map((c) => (
-              <tr key={c.id}>
-                <td style={{ ...cellStyle, fontWeight: 600, maxWidth: 240 }}>
+              <Fragment key={c.id}>
+              <tr>
+                <td style={{ ...cellStyle, fontWeight: 600, maxWidth: 240, cursor: 'pointer' }} onClick={() => toggleDetail(c)}>
+                  <span style={{ color: BRAND, marginInlineEnd: 4 }}>{expandedId === c.id ? '▾' : '▸'}</span>
                   {c.name}
                   {c.objective && <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>{c.objective}</div>}
                 </td>
@@ -317,6 +335,35 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
                   </div>
                 </td>
               </tr>
+              {expandedId === c.id && (
+                <tr>
+                  <td colSpan={9} style={{ padding: '0 12px 12px', background: '#f8fafc' }}>
+                    {detailLoading === c.id ? (
+                      <div style={{ padding: 12, color: '#6b7280', fontSize: 12 }}>טוען פירוט...</div>
+                    ) : !detail[c.id] || (detail[c.id].adSets.length === 0 && detail[c.id].ads.length === 0) ? (
+                      <div style={{ padding: 12, color: '#6b7280', fontSize: 12 }}>אין נתוני Ad Sets/מודעות מסונכרנים — הרץ סנכרון.</div>
+                    ) : (
+                      <div style={{ padding: '10px 4px', fontSize: 12 }}>
+                        <div style={{ fontWeight: 700, margin: '4px 0' }}>Ad Sets ({detail[c.id].adSets.length})</div>
+                        {detail[c.id].adSets.map((s) => (
+                          <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', borderBottom: '1px solid #eef0f3' }}>
+                            <span>{isActive(s.status) ? '🟢' : '⚪'} {s.name}</span>
+                            <span style={{ color: '#6b7280' }}>₪{fmt(s.spend)} · {fmt(s.leads)} לידים · CPL ₪{fmt(s.cpl, 1)} · {s.adsCount} מודעות</span>
+                          </div>
+                        ))}
+                        <div style={{ fontWeight: 700, margin: '10px 0 4px' }}>מודעות ({detail[c.id].ads.length})</div>
+                        {detail[c.id].ads.map((a) => (
+                          <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', borderBottom: '1px solid #eef0f3' }}>
+                            <span>{isActive(a.status) ? '🟢' : '⚪'} {a.name}</span>
+                            <span style={{ color: '#6b7280' }}>₪{fmt(a.spend)} · {fmt(a.leads)} לידים · CTR {fmt(a.ctr, 2)}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             ))}
           </tbody>
         </table>

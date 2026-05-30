@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import CampaignDashboard from '@/components/meta/campaign-dashboard';
 import CampaignAssigner from '@/components/meta/campaign-assigner';
+import CampaignReports from '@/components/meta/campaign-reports';
 
 const BRAND = '#00B5FE';
 
@@ -24,7 +25,7 @@ export default function MetaCampaignsPage() {
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [selected, setSelected] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'dashboard' | 'assign'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'assign' | 'reports'>('dashboard');
 
   useEffect(() => {
     (async () => {
@@ -69,7 +70,7 @@ export default function MetaCampaignsPage() {
         <>
           {/* Tabs */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '1px solid #e5e7eb' }}>
-            {([['dashboard', 'דשבורד קמפיינים'], ['assign', 'שיוך קמפיינים ללקוחות']] as const).map(([id, label]) => (
+            {([['dashboard', 'דשבורד קמפיינים'], ['reports', 'דוחות יומיים'], ['assign', 'שיוך קמפיינים ללקוחות']] as const).map(([id, label]) => (
               <button
                 key={id}
                 onClick={() => setTab(id)}
@@ -85,7 +86,14 @@ export default function MetaCampaignsPage() {
             ))}
           </div>
 
-          {tab === 'dashboard' ? (
+          {tab === 'assign' ? (
+            <div style={{ background: 'var(--surface, #fff)', border: '1px solid var(--border, #e5e7eb)', borderRadius: 12, padding: 20 }}>
+              <p style={{ color: '#6b7280', fontSize: 13, marginTop: 0, marginBottom: 16 }}>
+                בחר חשבון מודעות, וראה את הקמפיינים שבתוכו. שייך כל קמפיין ללקוח — חשבון אחד יכול לשרת כמה לקוחות.
+              </p>
+              <CampaignAssigner clients={clients.map((c) => ({ id: c.id, name: c.name }))} />
+            </div>
+          ) : (
             <>
               <div style={{ marginBottom: 20 }}>
                 <label style={{ fontSize: 13, fontWeight: 600, marginInlineEnd: 10 }}>בחר לקוח:</label>
@@ -104,17 +112,12 @@ export default function MetaCampaignsPage() {
 
               {selected && (
                 <div style={{ background: 'var(--surface, #fff)', border: '1px solid var(--border, #e5e7eb)', borderRadius: 12, padding: 20 }}>
-                  <CampaignDashboard clientId={selected} clientName={selectedClient?.name} />
+                  {tab === 'dashboard'
+                    ? <CampaignDashboard clientId={selected} clientName={selectedClient?.name} />
+                    : <CampaignReports clientId={selected} />}
                 </div>
               )}
             </>
-          ) : (
-            <div style={{ background: 'var(--surface, #fff)', border: '1px solid var(--border, #e5e7eb)', borderRadius: 12, padding: 20 }}>
-              <p style={{ color: '#6b7280', fontSize: 13, marginTop: 0, marginBottom: 16 }}>
-                בחר חשבון מודעות, וראה את הקמפיינים שבתוכו. שייך כל קמפיין ללקוח — חשבון אחד יכול לשרת כמה לקוחות.
-              </p>
-              <CampaignAssigner clients={clients.map((c) => ({ id: c.id, name: c.name }))} />
-            </div>
           )}
         </>
       )}
