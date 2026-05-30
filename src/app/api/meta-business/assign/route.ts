@@ -78,12 +78,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Assign the ad account to the target client
+    // Assign the ad account to the target client.
+    // NOTE: we intentionally do NOT store a copy of the token on the client.
+    // Operations resolve the token centrally (resolveMetaToken), so updating the
+    // token in one place (Settings) propagates everywhere — no re-assigning needed.
     const { error: updateError } = await supabase
       .from('clients')
       .update({
         meta_ad_account_id: adAccountId,
-        meta_access_token: token,
+        meta_access_token: null,
         meta_connection_status: 'connected',
         updated_at: new Date().toISOString(),
       })

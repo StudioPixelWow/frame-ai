@@ -9,11 +9,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { campaigns as campaignsCol, adSets as adSetsCol, ads as adsCol } from '@/lib/db/collections';
 import { getSupabase } from '@/lib/db/store';
+import { getSystemMetaToken } from '@/lib/meta-ads/token';
 
 export const dynamic = 'force-dynamic';
 
 // Resolve the client's Meta connection status so the UI can distinguish
 // "not connected" / "token expired" from simply "no campaigns yet".
+// A usable token = the client's own token OR the central system token.
 async function getConnectionStatus(clientId: string): Promise<string> {
   try {
     const sb = getSupabase();
@@ -21,10 +23,11 @@ async function getConnectionStatus(clientId: string): Promise<string> {
     const c = data as any;
     if (!c) return 'unknown';
     const status = c.meta_connection_status || c.metaConnectionStatus;
-    const hasToken = c.meta_access_token || c.metaAccessToken;
     const hasAccount = c.meta_ad_account_id || c.metaAdAccountId;
+    const hasToken = (c.meta_access_token || c.metaAccessToken) || (await getSystemMetaToken());
     if (status === 'token_expired') return 'token_expired';
-    if (!hasToken || !hasAccount) return 'not_connected';
+    if (!hasAccount) return 'not_connected';
+    if (!hasToken) return 'token_expired';
     if (status === 'connected') return 'connected';
     return status || 'unknown';
   } catch {

@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
+import { getSystemMetaToken } from '@/lib/meta-ads/token';
 import { runDailyOptimization, generateDailyReport, type DailyOptimizerResult, type DailyReport } from '@/lib/meta-ads/daily-optimizer';
 import { syncClientMetaAccount } from '@/lib/meta-ads/sync-service';
 import type { Client, Campaign, AdSet, Ad } from '@/lib/db/schema';
@@ -62,34 +63,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'שגיאה בטעינת לקוחות', details: clientsError?.message }, { status: 500 });
     }
 
-    // Filter to clients with Meta connected
+    // Central token — single source of truth. Clients that don't store their own
+    // token fall back to this, so updating the token in one place is enough.
+    const systemToken = await getSystemMetaToken();
+
+    // A client is "connected" if it has an ad account AND a usable token
+    // (its own OR the central system token).
     const connectedClients = clients.filter((c: any) =>
       (c.meta_connection_status === 'connected' || c.metaConnectionStatus === 'connected') &&
-      (c.meta_access_token || c.metaAccessToken) &&
-      (c.meta_ad_account_id || c.metaAdAccountId)
+      (c.meta_ad_account_id || c.metaAdAccountId) &&
+      (c.meta_access_token || c.metaAccessToken || systemToken)
     );
 
     if (connectedClients.length === 0) {
-      // Try system-level BM token
-      const { data: settings } = await sb
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'meta_business_token')
-        .single();
-
-      if (!settings?.value?.access_token) {
-        return NextResponse.json({
-          error: 'אין לקוחות עם חיבור מטא פעיל',
-          clientsChecked: clients.length,
-        }, { status: 400 });
-      }
+      return NextResponse.json({
+        error: 'אין לקוחות עם חיבור מטא פעיל',
+        clientsChecked: clients.length,
+      }, { status: 400 });
     }
 
     // Run optimization for each connected client
     for (const client of connectedClients) {
       try {
         const c = client as any;
-        const accessToken = c.meta_access_token || c.metaAccessToken || '';
+        const accessToken = c.meta_access_token || c.metaAccessToken || systemToken || '';
         const adAccountId = c.meta_ad_account_id || c.metaAdAccountId || '';
 
         if (!accessToken || !adAccountId) continue;
