@@ -36,6 +36,7 @@ function rowToClient(r: ClientRow) {
     color:              (r.color as string) ?? '#00B5FE',
     convertedFromLead:  (r.converted_from_lead as string) ?? null,
     assignedManagerId:  (r.assigned_manager_id as string) ?? null,
+    annualPaymentDate:  (r.annual_payment_date as string) ?? null,
     // Extra fields — read + write
     websiteUrl:          (r.website as string) ?? '',
     facebookPageUrl:     (r.facebook as string) ?? '',
@@ -67,6 +68,7 @@ function toDbUpdate(body: Record<string, unknown>): Record<string, unknown> {
   set('notes', 'notes');
   set('businessField', 'business_field');
   set('clientType', 'client_type');
+  set('annualPaymentDate', 'annual_payment_date');
   set('status', 'status');
   set('retainerAmount', 'retainer_amount');
   set('retainerDay', 'retainer_day');
