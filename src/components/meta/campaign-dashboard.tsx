@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, Fragment } from 'react';
 import AdPreview from './ad-preview';
+import CampaignCharts from './campaign-charts';
+import RecommendationsModal from './recommendations-modal';
 
 const BRAND = '#00B5FE';
 
@@ -70,6 +72,7 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
   const [detail, setDetail] = useState<Record<string, { adSets: any[]; ads: any[] }>>({});
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
   const [previewAdId, setPreviewAdId] = useState<string | null>(null);
+  const [showRecos, setShowRecos] = useState(false);
   const [showBuild, setShowBuild] = useState(false);
   const [building, setBuilding] = useState(false);
   const [build, setBuild] = useState({ adSetName: '', dailyBudget: '', pageId: '', message: '', headline: '', linkUrl: '', imageUrl: '' });
@@ -308,7 +311,12 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
         <button onClick={() => setShowCreate((s) => !s)} disabled={!!action} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border, #e5e7eb)', background: '#fff', color: 'var(--foreground, #1a1a2e)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
           ➕ צור קמפיין
         </button>
+        <button onClick={() => setShowRecos(true)} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #f59e0b', background: '#fffbeb', color: '#b45309', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+          💡 המלצות ייעול
+        </button>
       </div>
+
+      {showRecos && <RecommendationsModal clientId={clientId} onClose={() => { setShowRecos(false); load(); }} />}
 
       {/* Create campaign form */}
       {showCreate && (
@@ -431,6 +439,8 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
                             <span style={{ color: '#6b7280' }}>₪{fmt(s.spend)} · {fmt(s.leads)} לידים · CPL ₪{fmt(s.cpl, 1)} · {s.adsCount} מודעות</span>
                           </div>
                         ))}
+                        <CampaignCharts rows={detail[c.id].adSets.map((s) => ({ name: s.name, leads: s.leads, cpl: s.cpl, spend: s.spend }))} />
+
                         <div style={{ fontWeight: 700, margin: '10px 0 4px' }}>מודעות ({detail[c.id].ads.length})</div>
                         {detail[c.id].ads.map((a) => (
                           <div key={a.id} style={{ borderBottom: '1px solid #eef0f3', padding: '4px 8px' }}>
