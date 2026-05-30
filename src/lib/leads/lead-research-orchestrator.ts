@@ -862,32 +862,13 @@ async function runSeoAnalysis(url: string, websiteFacts: any): Promise<any> {
     }
   }
 
-  // ── Backlink check via Serper ──
-  let backlinks: any = null;
+  // ── Backlinks ──
+  // NOTE: the Google `link:` operator was deprecated years ago and returns
+  // meaningless totals, so we no longer estimate a backlink count from it (it
+  // produced misleading numbers). Real backlink data requires a dedicated
+  // provider (Ahrefs / SEMrush / Majestic). Left null until one is connected.
+  const backlinks: any = null;
   const serperKey = process.env.SERPER_API_KEY || process.env.SERP_API_KEY;
-  if (serperKey) {
-    try {
-      let domain = '';
-      try { domain = new URL(url).hostname; } catch {}
-      const blRes = await fetch('https://google.serper.dev/search', {
-        method: 'POST',
-        headers: { 'X-API-KEY': serperKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q: `link:${domain}`, gl: 'il', num: 10 }),
-      });
-      if (blRes.ok) {
-        const blData = await blRes.json();
-        const totalResults = blData.searchInformation?.totalResults || '0';
-        backlinks = {
-          estimatedCount: parseInt(totalResults.replace(/,/g, ''), 10) || 0,
-          topReferrers: (blData.organic || []).slice(0, 5).map((r: any) => ({
-            domain: (() => { try { return new URL(r.link).hostname; } catch { return r.link; } })(),
-            title: r.title,
-          })),
-        };
-        if (backlinks.estimatedCount < 10) issues.push(`מעט backlinks (${backlinks.estimatedCount}) — העסק לא מקבל לינקים מאתרים אחרים`);
-      }
-    } catch (e: any) { console.warn('[LeadResearch] Backlink check error:', e?.message); }
-  }
 
   // ── Social post frequency via Serper ──
   let socialActivity: any = null;
@@ -1148,10 +1129,15 @@ async function runScoring(data: {
     googleScore = google?.localPack?.found ? 35 : 10;
   }
 
+  const aiChecked = (geo?.checkedCount || 0) > 0;
   const aiScore = geo?.overallVisibility ?? 0;
 
-  // Overall weighted score
-  const overall = Math.round(seoScore * 0.35 + socialScore * 0.2 + googleScore * 0.25 + aiScore * 0.2);
+  // Overall weighted score. If AI visibility wasn't actually checked (no GEO
+  // platform queried), DON'T let a 0 drag the score down — redistribute its
+  // weight across the categories that were measured.
+  const overall = aiChecked
+    ? Math.round(seoScore * 0.35 + socialScore * 0.2 + googleScore * 0.25 + aiScore * 0.2)
+    : Math.round((seoScore * 0.35 + socialScore * 0.2 + googleScore * 0.25) / 0.8);
 
   const gradeFromScore = (s: number) => s >= 90 ? 'A+' : s >= 80 ? 'A' : s >= 70 ? 'B+' : s >= 60 ? 'B' : s >= 50 ? 'C+' : s >= 40 ? 'C' : s >= 30 ? 'D' : 'F';
 
@@ -1163,7 +1149,7 @@ async function runScoring(data: {
       { category: 'SEO', categoryHe: 'קידום אורגני', score: seoScore, weight: 0.35, grade: gradeFromScore(seoScore) },
       { category: 'Social', categoryHe: 'רשתות חברתיות', score: socialScore, weight: 0.2, grade: gradeFromScore(socialScore) },
       { category: 'Google', categoryHe: 'נוכחות בגוגל', score: googleScore, weight: 0.25, grade: gradeFromScore(googleScore) },
-      { category: 'AI Visibility', categoryHe: 'נראות AI', score: aiScore, weight: 0.2, grade: gradeFromScore(aiScore) },
+      { category: 'AI Visibility', categoryHe: 'נראות AI', score: aiScore, weight: 0.2, grade: gradeFromScore(aiScore), checked: aiChecked },
     ],
   };
 }
@@ -1508,6 +1494,7 @@ async function runReportGeneration(data: {
   salesOpportunities: any[];
   quarterPlan: any;
   deepAnalysis?: any;
+  adsLibrary?: any;
 }): Promise<any> {
   try {
     const { generateWithAI } = await import('@/lib/ai/openai-client');
@@ -1739,8 +1726,19 @@ ${data.deepAnalysis?.seoGeoDeepAnalysis ? `
 ` : '  ניתוח SEO/GEO: לא בוצע'}
 
 ══════════════════════════════════════
+  פרסום ממומן — ספריית המודעות של Meta
+══════════════════════════════════════
+${data.adsLibrary?.checked
+  ? (data.adsLibrary.isAdvertising
+      ? `  הפרוספקט מפרסם כרגע — נמצאו ${data.adsLibrary.activeAdsCount} מודעות פעילות.
+${(data.adsLibrary.ads || []).slice(0, 5).map((a: any) => `  - ${a.pageName || ''}: ${(a.body || '').substring(0, 120)}`).join('\n')}`
+      : '  לא נמצאו מודעות פעילות בספריית המודעות — הפרוספקט כנראה לא מפרסם בתשלום כרגע.')
+  : '  לא נבדק (אין META_ACCESS_TOKEN).'}
+
+══════════════════════════════════════
 
 השתמש בניתוח AI המעמיק כבסיס לכתיבת הדוח. כל סעיף חייב לכלול 5-8 פסקאות מפורטות — לא פחות!
+שלב גם את ממצאי ספריית המודעות (פרסום ממומן) ואת הניתוח המעמיק של הרשתות החברתיות בתוך הסעיפים הרלוונטיים.
 שלב את הנתונים הגולמיים עם הניתוח המעמיק ליצירת דוח מקצועי ומעמיק ביותר.
 הדגש חוזקות, חולשות, הזדמנויות, והמלצות מעשיות לכל תחום.
 מלא את כל 13 הסעיפים שבפורמט.
@@ -1928,6 +1926,7 @@ async function runPipeline(researchId: string, options: StartResearchOptions) {
   let salesOpportunities: any[] = [];
   let quarterPlan: any = null;
   let report: any = null;
+  let adsLibrary: any = null;
 
   const markStage = async (
     stageId: LeadResearchStageId,
@@ -2023,7 +2022,7 @@ async function runPipeline(researchId: string, options: StartResearchOptions) {
 
     // ── Meta Ad Library scan (no formal stage — stored on the record) ──
     try {
-      const adsLibrary = await runAdsLibraryScan(options.leadName, websiteFacts);
+      adsLibrary = await runAdsLibraryScan(options.leadName, websiteFacts);
       await updateResearch(researchId, { adsLibrary } as any);
     } catch (e: any) {
       console.warn('[LeadResearch] Ads Library scan error:', e?.message);
@@ -2084,7 +2083,7 @@ async function runPipeline(researchId: string, options: StartResearchOptions) {
         leadName: options.leadName, websiteUrl: url, websiteFacts,
         socialPresence, googlePresence, seoAnalysis, geoAnalysis,
         competitorAnalysis, scores, salesOpportunities, quarterPlan,
-        deepAnalysis,
+        deepAnalysis, adsLibrary,
       });
       await updateResearch(researchId, { report } as any);
       await markStage('report_generation', report ? 'completed' : 'skipped');

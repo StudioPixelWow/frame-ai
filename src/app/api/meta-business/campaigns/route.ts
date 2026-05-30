@@ -8,8 +8,29 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { campaigns as campaignsCol, adSets as adSetsCol, ads as adsCol } from '@/lib/db/collections';
+import { getSupabase } from '@/lib/db/store';
 
 export const dynamic = 'force-dynamic';
+
+// Resolve the client's Meta connection status so the UI can distinguish
+// "not connected" / "token expired" from simply "no campaigns yet".
+async function getConnectionStatus(clientId: string): Promise<string> {
+  try {
+    const sb = getSupabase();
+    const { data } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
+    const c = data as any;
+    if (!c) return 'unknown';
+    const status = c.meta_connection_status || c.metaConnectionStatus;
+    const hasToken = c.meta_access_token || c.metaAccessToken;
+    const hasAccount = c.meta_ad_account_id || c.metaAdAccountId;
+    if (status === 'token_expired') return 'token_expired';
+    if (!hasToken || !hasAccount) return 'not_connected';
+    if (status === 'connected') return 'connected';
+    return status || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -27,6 +48,11 @@ export async function GET(req: NextRequest) {
     const clientCampaigns = (allCampaigns as any[]).filter(
       (c) => c.clientId === clientId && c.metaCampaignId,
     );
+
+    // Surface connection status when there's nothing to show.
+    const connectionStatus = clientCampaigns.length === 0
+      ? await getConnectionStatus(clientId)
+      : 'connected';
 
     const summaries = clientCampaigns.map((c: any) => {
       const cAds = (allAds as any[]).filter((a) => a.campaignId === c.id);
@@ -72,6 +98,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       campaigns: summaries,
+      connectionStatus,
       totals: {
         ...totals,
         cpl: totals.leads > 0 ? totals.spend / totals.leads : 0,

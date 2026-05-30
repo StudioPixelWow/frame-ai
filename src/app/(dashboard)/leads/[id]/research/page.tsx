@@ -359,7 +359,7 @@ export default function LeadResearchPage() {
 
       {/* ═══ Key Findings ═══ */}
       {scores.categories?.length > 0 && (() => {
-        const cats = [...scores.categories].sort((a: any, b: any) => b.score - a.score);
+        const cats = [...scores.categories].filter((c: any) => c.checked !== false).sort((a: any, b: any) => b.score - a.score);
         const strongest = cats[0];
         const weakest = cats[cats.length - 1];
         const issuesCount = (seo.issues || []).length;
@@ -396,7 +396,9 @@ export default function LeadResearchPage() {
             marginBottom: "1.5rem",
           }}
         >
-          {scores.categories.map((cat: any) => (
+          {scores.categories.map((cat: any) => {
+            const notChecked = cat.checked === false;
+            return (
             <div
               key={cat.category}
               style={{
@@ -404,42 +406,32 @@ export default function LeadResearchPage() {
                 marginBottom: 0,
                 textAlign: "center",
                 padding: "1.25rem",
+                opacity: notChecked ? 0.6 : 1,
               }}
             >
               <div style={{ ...mutedText, fontSize: "0.8rem", marginBottom: "0.5rem" }}>
                 {cat.categoryHe}
               </div>
-              <div
-                style={{
-                  fontSize: "2rem",
-                  fontWeight: 800,
-                  color: scoreColor(cat.score),
-                }}
-              >
-                {cat.score}
-              </div>
-              <div
-                style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 600,
-                  color: scoreColor(cat.score),
-                  marginTop: "0.25rem",
-                }}
-              >
-                {cat.grade}
-              </div>
-              <div style={barBg}>
-                <div
-                  style={{
-                    height: "100%",
-                    width: `${cat.score}%`,
-                    background: scoreColor(cat.score),
-                    borderRadius: 3,
-                  }}
-                />
-              </div>
+              {notChecked ? (
+                <div style={{ fontSize: "1rem", fontWeight: 700, color: "var(--foreground-muted)", padding: "0.5rem 0" }}>
+                  לא נבדק
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: "2rem", fontWeight: 800, color: scoreColor(cat.score) }}>
+                    {cat.score}
+                  </div>
+                  <div style={{ fontSize: "0.75rem", fontWeight: 600, color: scoreColor(cat.score), marginTop: "0.25rem" }}>
+                    {cat.grade}
+                  </div>
+                  <div style={barBg}>
+                    <div style={{ height: "100%", width: `${cat.score}%`, background: scoreColor(cat.score), borderRadius: 3 }} />
+                  </div>
+                </>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

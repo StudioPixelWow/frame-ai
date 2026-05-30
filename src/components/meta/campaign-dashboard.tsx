@@ -55,6 +55,7 @@ const thStyle: React.CSSProperties = { ...cellStyle, textAlign: 'right', color: 
 
 export default function CampaignDashboard({ clientId, clientName }: { clientId: string; clientName?: string }) {
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
+  const [connectionStatus, setConnectionStatus] = useState<string>("connected");
   const [totals, setTotals] = useState<Totals | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +70,7 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'שגיאה בטעינת קמפיינים');
       setCampaigns(data.campaigns || []);
+      setConnectionStatus(data.connectionStatus || "connected");
       setTotals(data.totals || null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'שגיאה לא צפויה');
@@ -123,10 +125,26 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
   }
 
   if (campaigns.length === 0) {
+    if (connectionStatus === 'token_expired') {
+      return (
+        <div style={{ padding: 20, background: 'rgba(239,68,68,0.08)', borderRadius: 8, color: '#ef4444', textAlign: 'center' }}>
+          <strong>אסימון ה-Meta של {clientName || 'הלקוח'} פג תוקף.</strong><br />
+          יש לחבר מחדש את החשבון (הדבק System User Token חדש בהגדרות Meta Business).
+        </div>
+      );
+    }
+    if (connectionStatus === 'not_connected') {
+      return (
+        <div style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>
+          {clientName || 'הלקוח'} אינו מחובר ל-Meta.<br />
+          חבר את חשבון המודעות שלו ושייך אותו ללקוח כדי לראות קמפיינים.
+        </div>
+      );
+    }
     return (
       <div style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>
         לא נמצאו קמפיינים מסונכרנים עבור {clientName || 'הלקוח'}.<br />
-        ודא שהלקוח מחובר ל-Meta והרץ סנכרון.
+        החשבון מחובר — הרץ סנכרון (או המתן לאופטימייזר) כדי למשוך קמפיינים.
       </div>
     );
   }

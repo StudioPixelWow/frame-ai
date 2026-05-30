@@ -40,6 +40,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const targetClientId = body.clientId || null;
+    // SAFETY: only auto-create new ad sets/ads (which spend money) when explicitly
+    // requested. The daily cron sends an empty body → stays in safe mode.
+    const allowCreate = body.allowCreate === true;
 
     const sb = getSupabase();
     const results: { clientId: string; clientName: string; report: DailyReport; errors: string[] }[] = [];
@@ -145,6 +148,7 @@ export async function POST(req: NextRequest) {
           (ads || []) as Ad[],
           creds,
           previousCpls,
+          allowCreate,
         );
 
         // Generate report

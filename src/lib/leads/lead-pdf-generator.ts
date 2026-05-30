@@ -118,6 +118,29 @@ export function generateLeadResearchPdfHtml(options: PdfOptions): string {
        </div>`
     : '';
 
+  // ── Key findings strip ──
+  const checkedCats = (scores?.categories || []).filter((c: any) => c.checked !== false);
+  const sortedCats = [...checkedCats].sort((a: any, b: any) => b.score - a.score);
+  const strongestCat = sortedCats[0];
+  const weakestCat = sortedCats[sortedCats.length - 1];
+  const highlightItems: { label: string; value: string; color: string }[] = [
+    { label: 'דירוג כולל', value: `${overallScore}/100 · ${grade}`, color: scoreColor(overallScore) },
+    ...(strongestCat ? [{ label: 'החוזקה הבולטת', value: `${escapeHtml(strongestCat.categoryHe)} (${strongestCat.score})`, color: '#16a34a' }] : []),
+    ...(weakestCat ? [{ label: 'הפער הגדול ביותר', value: `${escapeHtml(weakestCat.categoryHe)} (${weakestCat.score})`, color: scoreColor(weakestCat.score) }] : []),
+    ...((seo.issues?.length) ? [{ label: 'בעיות שזוהו', value: `${seo.issues.length}`, color: '#f97316' }] : []),
+    ...((competitorAnalysis?.competitors?.length) ? [{ label: 'מתחרים אותרו', value: `${competitorAnalysis.competitors.length}`, color: '#00B5FE' }] : []),
+    ...(adsLibrary?.checked ? [{ label: 'פרסום ממומן', value: adsLibrary.isAdvertising ? `${adsLibrary.activeAdsCount} מודעות` : 'לא מפרסם', color: adsLibrary.isAdvertising ? '#16a34a' : '#6b7280' }] : []),
+  ];
+  const highlightsHtml = `
+    <div class="highlights">
+      ${highlightItems.map(h => `
+        <div class="hl-card" style="border-right:3px solid ${h.color}">
+          <div class="hl-label">${h.label}</div>
+          <div class="hl-value" style="color:${h.color}">${h.value}</div>
+        </div>
+      `).join('')}
+    </div>`;
+
   // ── Website analysis ──
   const techChecks: Array<[string, any]> = [
     ['HTTPS מאובטח', wf.isHttps], ['מותאם למובייל', wf.hasMobileViewport],
@@ -321,6 +344,10 @@ export function generateLeadResearchPdfHtml(options: PdfOptions): string {
     .score-grade { font-size: 22px; font-weight: 700; color: #1a1a2e; margin-top: 8px; }
     .score-label { font-size: 13px; color: #666; }
 
+    .highlights { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0; }
+    .hl-card { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; }
+    .hl-label { font-size: 11px; color: #6b7280; margin-bottom: 3px; }
+    .hl-value { font-size: 15px; font-weight: 800; }
     .cat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 16px 0; }
     .cat-card { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 8px; text-align: center; }
     .cat-name { font-size: 11px; color: #6b7280; margin-bottom: 4px; }
@@ -375,6 +402,7 @@ export function generateLeadResearchPdfHtml(options: PdfOptions): string {
       <div class="score-label">ציון דיגיטלי כולל מתוך 100${scores?.confidence != null ? ` · רמת ביטחון ${scores.confidence}%` : ''}</div>
     </div>
 
+    ${highlightsHtml}
     ${categoryScoresHtml}
 
     <div class="metrics-grid">

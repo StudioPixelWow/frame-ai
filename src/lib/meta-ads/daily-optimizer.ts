@@ -222,6 +222,7 @@ export async function runDailyOptimization(
   ads: Ad[],
   creds: MetaCredentials,
   previousCpls?: Record<string, number>,
+  allowCreate: boolean = false,
 ): Promise<DailyOptimizerResult> {
   const startTime = Date.now();
   const actions: OptimizationAction[] = [];
@@ -320,13 +321,27 @@ export async function runDailyOptimization(
       const newAudiences = generateNewAudiences(campaignAdSets, campaignAds);
       allNewAudiences.push(...newAudiences);
 
-      // 5. Generate new ad variations for top-performing ads
+      // 5. Generate new ad variations for top-performing ads.
+      // SAFETY: creating new ad sets/ads spends money. Only do it automatically
+      // when explicitly enabled; otherwise record the opportunity for approval.
       const topAds = [...campaignAds]
         .filter(a => a.leads > 0 && a.cpl > 0)
         .sort((a, b) => a.cpl - b.cpl)
         .slice(0, 3); // Top 3 ads
 
-      for (const topAd of topAds) {
+      if (!allowCreate && newAudiences.length > 0 && topAds.length > 0) {
+        actions.push({
+          type: 'new_audience',
+          objectId: campaign.id,
+          objectName: campaign.campaignName,
+          description: `${newAudiences.length} קהלים חדשים מומלצים ליצירה (ממתין לאישור — לא נוצר אוטומטית מטעמי בטיחות תקציב).`,
+          success: false,
+        });
+      }
+
+      // When auto-creation is disabled, the loop iterates over an empty list,
+      // so safe steps (pausing underperformers, emergency pause) still run.
+      for (const topAd of (allowCreate ? topAds : [])) {
         const signals: PerformanceSignals = {
           ctr: topAd.ctr || 0,
           cpl: topAd.cpl || 0,
