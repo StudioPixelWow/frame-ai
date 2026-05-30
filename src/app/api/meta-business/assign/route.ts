@@ -20,13 +20,27 @@ export async function POST(request: NextRequest) {
     // Unassign: clear meta fields from a SPECIFIC client (account may serve others).
     if (unassign || !clientId) {
       if (clientId) {
-        // Targeted unassign — clear only this client.
-        const { error } = await supabase
-          .from('clients')
-          .update({ meta_ad_account_id: null, meta_access_token: null, meta_connection_status: 'not_connected', updated_at: new Date().toISOString() })
-          .eq('id', clientId);
-        if (error) return NextResponse.json({ error: `שגיאה בביטול שיוך: ${error.message}` }, { status: 500 });
-        return NextResponse.json({ success: true, action: 'unassigned', clientId });
+        // Targeted unassign — remove THIS account from THIS client (many-to-many).
+        if (adAccountId) {
+          try {
+            await supabase.from('app_client_ad_accounts').delete().eq('client_id', clientId).eq('ad_account_id', adAccountId);
+          } catch { /* link table optional */ }
+        }
+        // If the removed account was the client's primary, pick a remaining one (or clear).
+        const { data: c } = await supabase.from('clients').select('meta_ad_account_id').eq('id', clientId).maybeSingle();
+        if (!adAccountId || (c as any)?.meta_ad_account_id === adAccountId) {
+          let nextPrimary: string | null = null;
+          try {
+            const { data: rest } = await supabase.from('app_client_ad_accounts').select('ad_account_id').eq('client_id', clientId).limit(1);
+            nextPrimary = (rest as any)?.[0]?.ad_account_id || null;
+          } catch { /* ignore */ }
+          await supabase.from('clients').update({
+            meta_ad_account_id: nextPrimary,
+            meta_connection_status: nextPrimary ? 'connected' : 'not_connected',
+            updated_at: new Date().toISOString(),
+          }).eq('id', clientId);
+        }
+        return NextResponse.json({ success: true, action: 'unassigned', clientId, adAccountId });
       }
       // No client id → clear all clients on this account (full reset).
       const { data: existingClients } = await supabase.from('clients').select('id').eq('meta_ad_account_id', adAccountId);
@@ -53,19 +67,24 @@ export async function POST(request: NextRequest) {
     // NOTE: we intentionally do NOT store a copy of the token on the client.
     // Operations resolve the token centrally (resolveMetaToken), so updating the
     // token in one place (Settings) propagates everywhere — no re-assigning needed.
-    const { error: updateError } = await supabase
-      .from('clients')
-      .update({
-        meta_ad_account_id: adAccountId,
-        meta_access_token: null,
-        meta_connection_status: 'connected',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', clientId);
+    // Add the account to the client's account list (many-to-many).
+    try {
+      await supabase.from('app_client_ad_accounts').upsert(
+        { id: `caa_${clientId}_${adAccountId}`, client_id: clientId, ad_account_id: adAccountId, account_name: body.accountName || null, assigned_at: new Date().toISOString() },
+        { onConflict: 'client_id,ad_account_id' },
+      );
+    } catch (e) {
+      return NextResponse.json({ error: `שגיאה בשיוך — ודא שטבלת app_client_ad_accounts קיימת: ${e instanceof Error ? e.message : ''}` }, { status: 500 });
+    }
 
-    if (updateError) {
-      console.error('[meta-business/assign] Update error:', updateError.message);
-      return NextResponse.json({ error: `שגיאה בעדכון לקוח: ${updateError.message}` }, { status: 500 });
+    // Keep a primary account on the client record for back-compat (only set if empty).
+    const { data: existing } = await supabase.from('clients').select('meta_ad_account_id').eq('id', clientId).maybeSingle();
+    if (!(existing as any)?.meta_ad_account_id) {
+      await supabase.from('clients').update({
+        meta_ad_account_id: adAccountId, meta_connection_status: 'connected', updated_at: new Date().toISOString(),
+      }).eq('id', clientId);
+    } else {
+      await supabase.from('clients').update({ meta_connection_status: 'connected', updated_at: new Date().toISOString() }).eq('id', clientId);
     }
 
     return NextResponse.json({ success: true, action: 'assigned', adAccountId, clientId });

@@ -77,23 +77,10 @@ export async function GET(request: NextRequest) {
       url = body.paging?.next || null;
     }
 
-    // Fetch client assignments
-    const { data: clients } = await supabase
-      .from('clients')
-      .select('id, name, meta_ad_account_id')
-      .not('meta_ad_account_id', 'is', null);
-
-    // One ad account can serve MANY clients → collect a list per account.
-    const assignmentMap = new Map<string, { clientId: string; clientName: string }[]>();
-    if (clients) {
-      for (const c of clients) {
-        if (c.meta_ad_account_id) {
-          const list = assignmentMap.get(c.meta_ad_account_id) || [];
-          list.push({ clientId: c.id, clientName: c.name || '' });
-          assignmentMap.set(c.meta_ad_account_id, list);
-        }
-      }
-    }
+    // One ad account ↔ many clients (and one client ↔ many accounts): read the
+    // many-to-many link table (with legacy single-field fallback).
+    const { getAllAccountAssignments } = await import('@/lib/meta-ads/client-accounts');
+    const assignmentMap = await getAllAccountAssignments();
 
     // Map results
     const accounts: AdAccountResult[] = allAccounts.map((acc) => {

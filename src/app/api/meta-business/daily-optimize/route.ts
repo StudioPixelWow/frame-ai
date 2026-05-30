@@ -105,13 +105,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Sync each relevant ad account ONCE per run (dedup across clients).
+    const { getClientAdAccounts } = await import('@/lib/meta-ads/client-accounts');
     const syncedAccounts = new Set<string>();
     for (const client of targets) {
       const c = client as any;
       const token = c.meta_access_token || c.metaAccessToken || systemToken || '';
       if (!token) continue;
-      const accts = new Set<string>();
-      if (c.meta_ad_account_id || c.metaAdAccountId) accts.add(c.meta_ad_account_id || c.metaAdAccountId);
+      const accts = new Set<string>(await getClientAdAccounts(c.id)); // all linked accounts
       const grp = assignsByClient.get(c.id);
       if (grp) for (const a of grp.adAccountIds) accts.add(a);
       for (const actId of accts) {

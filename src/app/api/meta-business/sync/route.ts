@@ -31,9 +31,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'אין אסימון גישה — חבר את Meta Business Manager' }, { status: 400 });
     }
 
-    // Collect ad accounts: dedicated + campaign-assigned.
-    const accounts = new Set<string>();
-    if (c.meta_ad_account_id || c.metaAdAccountId) accounts.add(c.meta_ad_account_id || c.metaAdAccountId);
+    // Collect ALL ad accounts for this client: many-to-many links + legacy primary
+    // + any campaign-assigned accounts.
+    const { getClientAdAccounts } = await import('@/lib/meta-ads/client-accounts');
+    const accounts = new Set<string>(await getClientAdAccounts(clientId));
     try {
       const { data: assigns } = await sb
         .from('app_meta_campaign_assignments')
