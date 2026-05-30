@@ -61,6 +61,9 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [action, setAction] = useState<string | null>(null); // 'sync' | 'optimize' | 'create'
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ name: '', objective: 'OUTCOME_LEADS', dailyBudget: '' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -113,6 +116,35 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
     manage(c, { dailyBudget: Math.round(shekels * 100) }, `התקציב עודכן ל-₪${fmt(shekels)}`);
   };
 
+  const runAction = async (kind: string, url: string, payload: Record<string, unknown>, okMsg: string) => {
+    setAction(kind);
+    setNotice(null);
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (!res.ok || data.success === false) throw new Error(data.error || 'הפעולה נכשלה');
+      setNotice(okMsg);
+      await load();
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'הפעולה נכשלה');
+    } finally {
+      setAction(null);
+    }
+  };
+
+  const doSync = () => runAction('sync', '/api/meta-business/sync', { clientId }, 'הסנכרון הושלם — הנתונים עודכנו');
+  const doOptimize = () => runAction('optimize', '/api/meta-business/daily-optimize', { clientId, allowCreate: true }, 'האופטימיזציה רצה (כולל יצירה)');
+  const doCreate = () => {
+    if (!form.name.trim()) { setNotice('יש להזין שם קמפיין'); return; }
+    runAction('create', '/api/meta-business/create-campaign', {
+      clientId, name: form.name.trim(), objective: form.objective,
+      dailyBudget: form.dailyBudget ? parseFloat(form.dailyBudget) : undefined,
+    }, 'הקמפיין נוצר (מושהה) — בנה לו Ad Set ומודעה כדי להפעיל').then(() => {
+      setShowCreate(false);
+      setForm({ name: '', objective: 'OUTCOME_LEADS', dailyBudget: '' });
+    });
+  };
+
   if (loading) return <div style={{ padding: 24, color: '#6b7280' }}>טוען קמפיינים...</div>;
 
   if (error) {
@@ -144,7 +176,13 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
     return (
       <div style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>
         לא נמצאו קמפיינים מסונכרנים עבור {clientName || 'הלקוח'}.<br />
-        החשבון מחובר — הרץ סנכרון (או המתן לאופטימייזר) כדי למשוך קמפיינים.
+        החשבון מחובר — לחץ &quot;סנכרן עכשיו&quot; כדי למשוך את הקמפיינים מ-Meta.
+        <div style={{ marginTop: 14 }}>
+          <button onClick={doSync} disabled={!!action} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: BRAND, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: action ? 0.6 : 1 }}>
+            {action === 'sync' ? 'מסנכרן...' : '🔄 סנכרן עכשיו'}
+          </button>
+        </div>
+        {notice && <div style={{ marginTop: 10, fontSize: 13, color: BRAND }}>{notice}</div>}
       </div>
     );
   }
@@ -154,6 +192,53 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
       {notice && (
         <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 8, background: 'rgba(0,181,254,0.1)', color: BRAND, fontSize: 13 }}>
           {notice}
+        </div>
+      )}
+
+      {connectionStatus === 'token_expired' && (
+        <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', color: '#ef4444', fontSize: 13, fontWeight: 600 }}>
+          ⚠️ אסימון ה-Meta פג תוקף — חבר מחדש בהגדרות כדי שהפעולות ימשיכו לעבוד.
+        </div>
+      )}
+
+      {/* Toolbar */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        <button onClick={doSync} disabled={!!action} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${BRAND}`, background: '#fff', color: BRAND, fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: action ? 0.6 : 1 }}>
+          {action === 'sync' ? 'מסנכרן...' : '🔄 סנכרן עכשיו'}
+        </button>
+        <button onClick={doOptimize} disabled={!!action} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #22c55e', background: '#fff', color: '#16a34a', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: action ? 0.6 : 1 }}>
+          {action === 'optimize' ? 'מריץ...' : '⚡ הרץ אופטימיזציה + יצירה'}
+        </button>
+        <button onClick={() => setShowCreate((s) => !s)} disabled={!!action} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border, #e5e7eb)', background: '#fff', color: 'var(--foreground, #1a1a2e)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+          ➕ צור קמפיין
+        </button>
+      </div>
+
+      {/* Create campaign form */}
+      {showCreate && (
+        <div style={{ marginBottom: 16, padding: 14, borderRadius: 8, border: '1px solid var(--border, #e5e7eb)', background: '#f8fafc', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'end' }}>
+          <div>
+            <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 3 }}>שם הקמפיין</div>
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="שם..." style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 13, minWidth: 200 }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 3 }}>מטרה</div>
+            <select value={form.objective} onChange={(e) => setForm({ ...form, objective: e.target.value })} style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 13 }}>
+              <option value="OUTCOME_LEADS">לידים</option>
+              <option value="OUTCOME_TRAFFIC">תנועה</option>
+              <option value="OUTCOME_SALES">מכירות</option>
+              <option value="OUTCOME_ENGAGEMENT">מעורבות</option>
+              <option value="OUTCOME_AWARENESS">מודעות</option>
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 3 }}>תקציב יומי (₪)</div>
+            <input value={form.dailyBudget} onChange={(e) => setForm({ ...form, dailyBudget: e.target.value })} placeholder="לדוגמה 100" type="number" style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 13, width: 120 }} />
+          </div>
+          <button onClick={doCreate} disabled={action === 'create'} style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: BRAND, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: action === 'create' ? 0.6 : 1 }}>
+            {action === 'create' ? 'יוצר...' : 'צור (מושהה)'}
+          </button>
+          <div style={{ fontSize: 11, color: '#6b7280', width: '100%' }}>הקמפיין ייווצר במצב מושהה. כדי להפעילו צריך להוסיף לו Ad Set ומודעה.</div>
         </div>
       )}
 
