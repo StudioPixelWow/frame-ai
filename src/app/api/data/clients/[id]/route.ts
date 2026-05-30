@@ -68,7 +68,8 @@ function toDbUpdate(body: Record<string, unknown>): Record<string, unknown> {
   set('notes', 'notes');
   set('businessField', 'business_field');
   set('clientType', 'client_type');
-  set('annualPaymentDate', 'annual_payment_date');
+  // Date column: empty string is invalid in Postgres — coerce to null.
+  if (body.annualPaymentDate !== undefined) out.annual_payment_date = body.annualPaymentDate || null;
   set('status', 'status');
   set('retainerAmount', 'retainer_amount');
   set('retainerDay', 'retainer_day');

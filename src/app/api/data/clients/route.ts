@@ -150,7 +150,7 @@ export async function POST(req: NextRequest) {
       notes:                 body.notes ?? '',
       business_field:        body.businessField ?? '',
       client_type:           body.clientType ?? 'marketing',
-      annual_payment_date:   body.annualPaymentDate ?? null,
+      annual_payment_date:   body.annualPaymentDate || null,
       status:                body.status ?? 'active',
       retainer_amount:       body.retainerAmount ?? 0,
       retainer_day:          body.retainerDay ?? 1,
