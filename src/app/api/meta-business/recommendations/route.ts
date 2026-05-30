@@ -268,12 +268,16 @@ export async function POST(req: NextRequest) {
     if (!token) return NextResponse.json({ error: 'אין אסימון גישה' }, { status: 400 });
     const creds = { accessToken: token, adAccountId };
 
+    // Helper: surface Meta's exact rejection reason instead of generic "Invalid parameter".
+    const metaErr = (r: any, fallback: string) =>
+      NextResponse.json({ error: `${fallback}: ${r?.error || 'שגיאה'}${r?.errorCode ? ` (קוד ${r.errorCode})` : ''}`, meta: r }, { status: 400 });
+
     // ── Shift budget: lower the laggard, raise the winner ──
     if (action.kind === 'shift_budget') {
       if (!action.fromMetaId || !action.toMetaId) return NextResponse.json({ error: 'חסרים מזהי קבוצות' }, { status: 400 });
       const r1 = await updateMetaAdSetBudget(creds, action.fromMetaId, action.newFromBudget || 0);
       const r2 = await updateMetaAdSetBudget(creds, action.toMetaId, action.newToBudget || 0);
-      if (!r1.success || !r2.success) return NextResponse.json({ error: r1.error || r2.error || 'עדכון תקציב נכשל' }, { status: 400 });
+      if (!r1.success || !r2.success) return metaErr(r1.success ? r2 : r1, 'עדכון תקציב נכשל');
       return NextResponse.json({ success: true });
     }
 
@@ -281,15 +285,22 @@ export async function POST(req: NextRequest) {
     if (action.kind === 'expand_audience') {
       if (!adAccountId) return NextResponse.json({ error: 'לא נמצא חשבון מודעות ללקוח' }, { status: 400 });
       if (!action.campaignMetaId) return NextResponse.json({ error: 'חסר מזהה קמפיין' }, { status: 400 });
+      // Lead-gen ad sets require a promoted_object (the page). Fetch the client's page.
+      let pageId = '';
+      if (clientId) {
+        const { data: cl } = await sb.from('clients').select('fb_page_id, meta_page_id').eq('id', clientId).maybeSingle();
+        pageId = (cl as any)?.fb_page_id || (cl as any)?.meta_page_id || '';
+      }
       const r = await createMetaAdSet(creds, {
         campaignId: action.campaignMetaId,
         name: action.newName || 'קהל מורחב',
-        status: 'PAUSED', // created paused — you activate when ready
-        dailyBudget: Math.round((action.dailyBudget || 50) * 100),
+        status: 'PAUSED',
+        dailyBudget: Math.max(100, Math.round((action.dailyBudget || 50) * 100)), // Meta min ~1₪/day
         billingEvent: 'IMPRESSIONS', optimizationGoal: 'LEAD_GENERATION',
         targeting: (action.targeting || { geo_locations: { countries: ['IL'] } }) as any,
-      });
-      if (!r.success) return NextResponse.json({ error: r.error || 'יצירת הקהל נכשלה' }, { status: 400 });
+        ...(pageId ? { promotedObject: { page_id: pageId } } : {}),
+      } as any);
+      if (!r.success) return metaErr(r, 'יצירת הקהל נכשלה');
       return NextResponse.json({ success: true, adSetId: r.metaId, note: 'נוצר קהל מורחב (מושהה) — הפעל כשמוכן' });
     }
 
@@ -305,7 +316,15 @@ export async function POST(req: NextRequest) {
         ctr: src.ctr || 0, cpl: src.cpl || 0, frequency: src.frequency || 0,
         impressions: src.impressions || 0, spend: src.spend || 0, leads: src.leads || 0,
       });
-      const pageId = src.metaPageId || '';
+      // Need a Page ID to build a creative — try the ad, then the client.
+      let pageId = src.metaPageId || '';
+      if (!pageId && clientId) {
+        const { data: cl } = await sb.from('clients').select('fb_page_id, meta_page_id').eq('id', clientId).maybeSingle();
+        pageId = (cl as any)?.fb_page_id || (cl as any)?.meta_page_id || '';
+      }
+      if (!pageId) {
+        return NextResponse.json({ error: 'לא ניתן ליצור מודעה — חסר דף עסקי מחובר ללקוח. חבר דף בכרטיס הלקוח (ערוצי פרסום) ונסה שוב.' }, { status: 400 });
+      }
       const r = await createMetaAd(creds, {
         adSetId: action.metaAdSetId,
         name: `${action.kind === 'ab_test' ? 'A/B' : 'רענון'} — ${variation.strategy}`,
@@ -320,7 +339,7 @@ export async function POST(req: NextRequest) {
           callToAction: variation.newCtaType || 'LEARN_MORE',
         },
       });
-      if (!r.success) return NextResponse.json({ error: r.error || 'יצירת המודעה נכשלה', note: pageId ? undefined : 'חסר Page ID — חבר דף עסקי ללקוח' }, { status: 400 });
+      if (!r.success) return metaErr(r, 'יצירת המודעה נכשלה');
       return NextResponse.json({ success: true, adId: r.metaId, variation: variation.explanation, note: 'נוצרה מודעה חדשה (מושהית) — הפעל כשמוכן' });
     }
 
@@ -367,13 +386,21 @@ export async function POST(req: NextRequest) {
         ctr: src.ctr || 0, cpl: src.cpl || 0, frequency: src.frequency || 0,
         impressions: src.impressions || 0, spend: src.spend || 0, leads: src.leads || 0,
       });
+      let pageId2 = src.metaPageId || '';
+      if (!pageId2 && clientId) {
+        const { data: cl } = await sb.from('clients').select('fb_page_id, meta_page_id').eq('id', clientId).maybeSingle();
+        pageId2 = (cl as any)?.fb_page_id || (cl as any)?.meta_page_id || '';
+      }
+      if (!pageId2) {
+        return NextResponse.json({ error: 'לא ניתן ליצור מודעה — חסר דף עסקי מחובר ללקוח. חבר דף בכרטיס הלקוח ונסה שוב.' }, { status: 400 });
+      }
       const r = await createMetaAd(creds, {
         adSetId: action.metaAdSetId,
         name: `${action.kind === 'ai_winner_clone' ? 'AI-Clone' : 'רענון-מונע'} — ${variation.strategy}`,
         status: 'PAUSED',
-        creative: { pageId: src.metaPageId || '', message: variation.newPrimaryText, headline: variation.newHeadline, description: variation.newDescription, linkUrl: src.ctaLink || '', imageUrl: src.mediaUrl || '', callToAction: variation.newCtaType || 'LEARN_MORE' },
+        creative: { pageId: pageId2, message: variation.newPrimaryText, headline: variation.newHeadline, description: variation.newDescription, linkUrl: src.ctaLink || '', imageUrl: src.mediaUrl || '', callToAction: variation.newCtaType || 'LEARN_MORE' },
       });
-      if (!r.success) return NextResponse.json({ error: r.error || 'יצירת המודעה נכשלה' }, { status: 400 });
+      if (!r.success) return metaErr(r, 'יצירת המודעה נכשלה');
       return NextResponse.json({ success: true, adId: r.metaId, variation: variation.explanation, note: 'נוצרה מודעה חדשה (מושהית)' });
     }
 
