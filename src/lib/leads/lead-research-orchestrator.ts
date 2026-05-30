@@ -392,6 +392,16 @@ async function runSocialScan(url: string, businessName: string, socialUrls?: Rec
       const likesMatch = html.match(/(\d[\d,\.]+)\s*(?:likes|people like|אנשים אוהבים)/i);
       if (likesMatch) meta.likes = likesMatch[1].replace(/,/g, '');
 
+      // Instagram og:description pattern: "1,234 Followers, 56 Following, 789 Posts"
+      const igStats = html.match(/([\d.,]+)\s*Followers?,\s*([\d.,]+)\s*Following,\s*([\d.,]+)\s*Posts/i);
+      if (igStats) {
+        if (!meta.followers) meta.followers = igStats[1].replace(/[.,]/g, '');
+        meta.posts = igStats[3].replace(/[.,]/g, '');
+      }
+      // Facebook "talking about this" — an engagement signal
+      const fbTalking = html.match(/([\d.,]+)\s*(?:talking about this|people talking about)/i);
+      if (fbTalking) meta.talkingAbout = fbTalking[1].replace(/[.,]/g, '');
+
       // Additional platform-specific extraction from JSON-LD / embedded data
       const jsonLdMatches = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
       for (const block of jsonLdMatches) {
@@ -438,6 +448,8 @@ async function runSocialScan(url: string, businessName: string, socialUrls?: Rec
       image: meta.ogImage || null,
       followers: meta.followers ? parseInt(meta.followers, 10) || meta.followers : null,
       likes: meta.likes ? parseInt(meta.likes, 10) || meta.likes : null,
+      posts: meta.posts ? parseInt(meta.posts, 10) || meta.posts : null,
+      talkingAbout: meta.talkingAbout ? parseInt(meta.talkingAbout, 10) || meta.talkingAbout : null,
     };
 
     result[platform.key] = platformData;
@@ -1402,26 +1414,35 @@ OG Image: ${wf.ogImage ? 'כן' : 'לא'}`;
     const platforms = ['facebook', 'instagram', 'linkedin', 'tiktok'];
     const socialData = platforms.map(p => {
       const d = social[p];
-      if (!d?.found) return `${p}: לא נמצא`;
-      return `${p}: נמצא | URL: ${d.url || '?'} | שם: ${d.name || '?'} | תיאור: ${(d.description || '').substring(0, 200)} | עוקבים: ${d.followers || '?'} | לייקים: ${d.likes || '?'}`;
+      if (!d?.found) return `${p}: לא נמצא פרופיל`;
+      const parts = [`${p}: נמצא`, `URL: ${d.url || '?'}`, `שם: ${d.name || '?'}`];
+      if (d.description) parts.push(`ביו/תיאור: ${String(d.description).substring(0, 300)}`);
+      if (d.followers != null) parts.push(`עוקבים: ${d.followers}`);
+      if (d.likes != null) parts.push(`לייקים: ${d.likes}`);
+      if (d.posts != null) parts.push(`מספר פוסטים: ${d.posts}`);
+      if (d.talkingAbout != null) parts.push(`"מדברים על זה": ${d.talkingAbout}`);
+      return parts.join(' | ');
     }).join('\n');
 
     const r = await generateWithAI(
-      `אתה מומחה שיווק ברשתות חברתיות של סטודיו פיקסל. נתח כל פלטפורמה לעומק.
+      `אתה אסטרטג סושיאל בכיר בסטודיו פיקסל. נתח את הנוכחות החברתית של העסק לעומק רב, ברמה של אודיט מקצועי שמוצג ללקוח.
+לכל פלטפורמה שנמצאה — נתח לעומק: גודל הקהל ביחס לתחום והאם הוא חזק/חלש, רמת המעורבות (יחס לייקים/עוקבים/"מדברים על זה"), עקביות וכמות הפרסום (לפי מספר הפוסטים), סוג התוכן שכנראה מתפרסם (לפי הביו והתיאור), טון ומיצוב המותג, ומה בולט לטובה ולרעה.
+לכל פלטפורמה תן 3-4 שיפורים קונקרטיים ומעשיים (לא כלליים) — מה לפרסם, באיזו תדירות, אילו פורמטים, ואיך להגדיל מעורבות.
+היה כן: אם פרופיל חלש (מעט עוקבים, מעט פוסטים, מעורבות נמוכה) — אמור זאת במפורש ותן ציון נמוך בהתאם. אל תנפח ציונים.
 החזר JSON: {
-  "overallAssessment": "2-3 פסקאות הערכה כללית של הנוכחות ברשתות",
+  "overallAssessment": "3-4 פסקאות הערכה כוללת — כמה הנוכחות החברתית חזקה/חלשה באמת, מול הפוטנציאל בתחום",
   "platformAnalyses": [
-    { "platform": "facebook", "analysis": "2-3 פסקאות ניתוח מעמיק — נראות, מסרים, תוכן, עוקבים, מעורבות, עקביות פרסום", "score": 0-100, "recommendations": ["המלצה 1", "המלצה 2"] },
-    { "platform": "instagram", "analysis": "...", "score": 0-100, "recommendations": [] },
-    { "platform": "tiktok", "analysis": "...", "score": 0-100, "recommendations": [] },
-    { "platform": "linkedin", "analysis": "...", "score": 0-100, "recommendations": [] }
+    { "platform": "facebook", "analysis": "3-4 פסקאות ניתוח מעמיק לפי ההנחיות", "score": 0-100, "contentThemes": ["נושא תוכן 1", "נושא 2"], "engagementLevel": "low|medium|high", "recommendations": ["שיפור ספציפי 1", "2", "3"] },
+    { "platform": "instagram", "analysis": "...", "score": 0-100, "contentThemes": [], "engagementLevel": "...", "recommendations": [] },
+    { "platform": "linkedin", "analysis": "...", "score": 0-100, "contentThemes": [], "engagementLevel": "...", "recommendations": [] },
+    { "platform": "tiktok", "analysis": "...", "score": 0-100, "contentThemes": [], "engagementLevel": "...", "recommendations": [] }
   ],
-  "contentStrategy": "2-3 פסקאות המלצות לאסטרטגיית תוכן",
-  "missingOpportunities": ["הזדמנות 1", "הזדמנות 2"]
+  "contentStrategy": "3-4 פסקאות אסטרטגיית תוכן מומלצת — נושאים, פורמטים, לוח פרסום",
+  "missingOpportunities": ["הזדמנות 1", "הזדמנות 2", "הזדמנות 3"]
 }
-כתוב בעברית. נתח גם פלטפורמות שלא נמצאו — הסבר למה הן חשובות. אל תמציא מספרים.`,
+כתוב בעברית. נתח גם פלטפורמות שלא נמצאו — הסבר את ההשלכה של היעדרן ולמה הן חשובות לתחום. בסס על הנתונים שסופקו, אל תמציא מספרים שלא ניתנו.`,
       `נתח את הרשתות החברתיות של "${data.leadName}" (${data.websiteUrl}):\n${socialData}`,
-      { temperature: 0.6, maxTokens: 2500 }
+      { temperature: 0.6, maxTokens: 3500 }
     );
     if (r.success && r.data) {
       result.socialDeepAnalysis = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;

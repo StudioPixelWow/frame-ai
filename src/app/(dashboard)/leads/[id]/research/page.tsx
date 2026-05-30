@@ -357,6 +357,35 @@ export default function LeadResearchPage() {
         </div>
       )}
 
+      {/* ═══ Key Findings ═══ */}
+      {scores.categories?.length > 0 && (() => {
+        const cats = [...scores.categories].sort((a: any, b: any) => b.score - a.score);
+        const strongest = cats[0];
+        const weakest = cats[cats.length - 1];
+        const issuesCount = (seo.issues || []).length;
+        const highlights = [
+          { label: "דירוג כולל", value: `${scores.overall}/100 · ${scores.grade}`, color: scoreColor(scores.overall) },
+          strongest && { label: "החוזקה הבולטת", value: `${strongest.categoryHe} (${strongest.score})`, color: "#22c55e" },
+          weakest && { label: "הפער הגדול ביותר", value: `${weakest.categoryHe} (${weakest.score})`, color: scoreColor(weakest.score) },
+          issuesCount > 0 && { label: "בעיות שזוהו", value: `${issuesCount}`, color: "#f97316" },
+          competitors.competitors?.length > 0 && { label: "מתחרים אותרו", value: `${competitors.competitors.length}`, color: BRAND },
+          adsLibrary?.checked && { label: "פרסום ממומן", value: adsLibrary.isAdvertising ? `${adsLibrary.activeAdsCount} מודעות` : "לא מפרסם", color: adsLibrary.isAdvertising ? "#22c55e" : "#6b7280" },
+        ].filter(Boolean) as { label: string; value: string; color: string }[];
+        return (
+          <div style={{ ...cardStyle, background: `linear-gradient(135deg, ${BRAND}08, transparent)` }}>
+            <div style={cardTitleStyle}>תובנות מפתח</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.75rem" }}>
+              {highlights.map((h, i) => (
+                <div key={i} style={{ padding: "0.75rem 1rem", borderRadius: 8, border: "1px solid var(--border)", borderRight: `3px solid ${h.color}`, background: "var(--surface)" }}>
+                  <div style={{ ...mutedText, fontSize: "0.75rem", marginBottom: "0.2rem" }}>{h.label}</div>
+                  <div style={{ fontSize: "0.95rem", fontWeight: 700, color: h.color }}>{h.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ═══ Scores Grid ═══ */}
       {scores.categories?.length > 0 && (
         <div
@@ -754,18 +783,37 @@ export default function LeadResearchPage() {
                     <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>
                       {platformNamesHe[pa.platform] || pa.platform}
                     </span>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
                       {live.followers != null && (
                         <span style={{ ...mutedText }}>עוקבים: {Number(live.followers).toLocaleString()}</span>
                       )}
-                      {live.likes != null && (
-                        <span style={{ ...mutedText }}>לייקים: {Number(live.likes).toLocaleString()}</span>
+                      {live.posts != null && (
+                        <span style={{ ...mutedText }}>פוסטים: {Number(live.posts).toLocaleString()}</span>
+                      )}
+                      {(live.likes != null || live.talkingAbout != null) && (
+                        <span style={{ ...mutedText }}>
+                          מעורבות: {Number(live.talkingAbout ?? live.likes).toLocaleString()}
+                        </span>
+                      )}
+                      {pa.engagementLevel && (
+                        <span style={{
+                          fontSize: "0.72rem", fontWeight: 600, padding: "0.1rem 0.5rem", borderRadius: 10,
+                          background: pa.engagementLevel === "high" ? "#22c55e20" : pa.engagementLevel === "medium" ? "#f9731620" : "#ef444420",
+                          color: pa.engagementLevel === "high" ? "#16a34a" : pa.engagementLevel === "medium" ? "#f97316" : "#ef4444",
+                        }}>
+                          מעורבות {pa.engagementLevel === "high" ? "גבוהה" : pa.engagementLevel === "medium" ? "בינונית" : "נמוכה"}
+                        </span>
                       )}
                       {pa.score != null && (
                         <span style={{ fontWeight: 700, color: scoreColor(pa.score) }}>{pa.score}/100</span>
                       )}
                     </div>
                   </div>
+                  {pa.contentThemes?.length > 0 && (
+                    <div style={{ ...mutedText, fontSize: "0.78rem", marginBottom: "0.4rem" }}>
+                      נושאי תוכן: {pa.contentThemes.join(" · ")}
+                    </div>
+                  )}
                   {pa.analysis && (
                     <p style={{ fontSize: "0.88rem", lineHeight: 1.7, margin: "0 0 0.5rem", color: "var(--foreground)" }}>
                       {pa.analysis}
@@ -1087,40 +1135,57 @@ export default function LeadResearchPage() {
 
       {/* ═══ AI Report (sections) ═══ */}
       {report?.sections?.length > 0 && (
-        <div style={cardStyle}>
-          <div style={cardTitleStyle}>דוח מחקר AI מלא</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-            {report.sections.map((section: any, si: number) => (
-              <div key={si}>
-                <h3
+        <div style={{ marginBottom: "1.5rem" }}>
+          <div style={{ ...cardTitleStyle, fontSize: "1.25rem", marginBottom: "1rem" }}>דוח מחקר AI מלא</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            {report.sections.map((section: any, si: number) => {
+              const blocks = (section.content || []).map((b: any) => (typeof b === "string" ? b : b?.text || ""));
+              return (
+                <div
+                  key={si}
                   style={{
-                    fontSize: "1rem",
-                    fontWeight: 700,
-                    marginBottom: "0.75rem",
-                    color: BRAND,
-                    borderBottom: `2px solid ${BRAND}30`,
-                    paddingBottom: "0.5rem",
+                    ...cardStyle,
+                    marginBottom: 0,
+                    borderRight: `4px solid ${BRAND}`,
+                    background: si % 2 === 0 ? "var(--surface)" : `${BRAND}04`,
                   }}
                 >
-                  {si + 1}. {section.titleHe || section.title}
-                </h3>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                  {(section.content || []).map((block: any, bi: number) => (
-                    <p
-                      key={bi}
+                  {/* Section header with numbered badge */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.85rem" }}>
+                    <span
                       style={{
-                        margin: 0,
-                        fontSize: "0.9rem",
-                        lineHeight: 1.7,
-                        color: "var(--foreground)",
+                        flexShrink: 0,
+                        width: 28, height: 28, borderRadius: "50%",
+                        background: BRAND, color: "#fff",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "0.85rem", fontWeight: 800,
                       }}
                     >
-                      {block.text || block}
-                    </p>
-                  ))}
+                      {si + 1}
+                    </span>
+                    <h3 style={{ fontSize: "1.05rem", fontWeight: 800, margin: 0, color: "var(--foreground)" }}>
+                      {section.titleHe || section.title}
+                    </h3>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.7rem" }}>
+                    {blocks.map((text: string, bi: number) => (
+                      <p
+                        key={bi}
+                        style={{
+                          margin: 0,
+                          fontSize: bi === 0 ? "0.96rem" : "0.9rem",
+                          lineHeight: 1.85,
+                          fontWeight: bi === 0 ? 600 : 400,
+                          color: bi === 0 ? "var(--foreground)" : "var(--foreground-muted)",
+                        }}
+                      >
+                        {text}
+                      </p>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
