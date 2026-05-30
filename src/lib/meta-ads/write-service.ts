@@ -522,6 +522,82 @@ export async function updateMetaAdSetBudget(
   return metaPost(`${API_BASE}/${metaAdSetId}`, creds.accessToken, { daily_budget: Math.round(dailyBudgetShekels * 100) });
 }
 
+/* ── Update Ad Set targeting / name / budget (generic) ── */
+export async function updateMetaAdSet(
+  creds: MetaCredentials,
+  metaAdSetId: string,
+  opts: { name?: string; dailyBudget?: number; targeting?: Record<string, unknown>; status?: 'ACTIVE' | 'PAUSED' },
+): Promise<MetaWriteResult> {
+  if (!creds.accessToken || !metaAdSetId) {
+    return { success: false, error: 'Missing access token or Meta ad set ID' };
+  }
+  const body: Record<string, unknown> = {};
+  if (opts.name !== undefined) body.name = opts.name;
+  if (opts.dailyBudget !== undefined) body.daily_budget = Math.round(opts.dailyBudget * 100); // ₪ → cents
+  if (opts.targeting !== undefined) body.targeting = opts.targeting;
+  if (opts.status !== undefined) body.status = opts.status;
+  if (Object.keys(body).length === 0) return { success: false, error: 'No fields to update' };
+  return metaPost(`${API_BASE}/${metaAdSetId}`, creds.accessToken, body);
+}
+
+/**
+ * Copy an existing ad set via Meta's native /copies endpoint.
+ *
+ * This is the ONLY reliable way to "expand a winning audience": the copy
+ * inherits the source ad set's objective, optimization_goal, billing_event,
+ * promoted_object and (with deepCopy) its ads/creatives — so it never hits
+ * "Invalid parameter (code 100)" the way creating an ad set from scratch does
+ * when the campaign objective isn't LEAD_GENERATION.
+ *
+ * Returns the new ad set's Meta ID in `metaId`.
+ */
+export async function copyMetaAdSet(
+  creds: MetaCredentials,
+  sourceAdSetId: string,
+  opts: { deepCopy?: boolean; statusOption?: 'PAUSED' | 'ACTIVE' | 'INHERITED_FROM_SOURCE'; renameSuffix?: string } = {},
+): Promise<MetaWriteResult> {
+  if (!creds.accessToken || !sourceAdSetId) {
+    return { success: false, error: 'Missing access token or source ad set ID' };
+  }
+  const body: Record<string, unknown> = {
+    deep_copy: opts.deepCopy ?? true,        // also copy the ads/creatives so it can run
+    status_option: opts.statusOption || 'PAUSED',
+  };
+  if (opts.renameSuffix) {
+    body.rename_options = { rename_suffix: opts.renameSuffix };
+  }
+  try {
+    await waitIfThrottled();
+    const url = `${API_BASE}/${sourceAdSetId}/copies`;
+    console.log(`[meta-write] POST ${url} (copy ad set)`);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, access_token: creds.accessToken }),
+      signal: AbortSignal.timeout(30000),
+    });
+    parseRateLimitHeader(res);
+    const data = await res.json().catch(() => ({})) as Record<string, unknown>;
+    console.log(`[meta-write] copy response status=${res.status}`, JSON.stringify(data).slice(0, 400));
+    if (!res.ok) {
+      const fbError = data?.error as Record<string, unknown> | undefined;
+      return {
+        success: false,
+        error: (fbError?.message as string) || `HTTP ${res.status}`,
+        errorCode: fbError?.code as number | undefined,
+        rawResponse: data,
+      };
+    }
+    // Meta returns { copied_adset_id } or { id } depending on version
+    const newId = (data.copied_adset_id || data.id || (data.ad_object_ids as any)?.[0]?.copied_id) as string | undefined;
+    return { success: true, metaId: newId, rawResponse: data };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[meta-write] copyMetaAdSet failed:', msg);
+    return { success: false, error: msg };
+  }
+}
+
 /* ── Pause / Resume Ad Set ── */
 
 export async function pauseMetaAdSet(

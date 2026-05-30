@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { campaigns as campaignsCol, adSets as adSetsCol, ads as adsCol } from '@/lib/db/collections';
 import { resolveMetaToken, getSystemMetaToken } from '@/lib/meta-ads/token';
 import { getSupabase } from '@/lib/db/store';
-import { updateMetaAdSetBudget, createMetaAdSet, createMetaAd } from '@/lib/meta-ads/write-service';
+import { updateMetaAdSetBudget, createMetaAd, copyMetaAdSet, updateMetaAdSet } from '@/lib/meta-ads/write-service';
 import { generateVariation } from '@/lib/optimization/variations';
 
 export const dynamic = 'force-dynamic';
@@ -281,27 +281,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    // ── Expand audience: duplicate the winning ad set with broader targeting ──
+    // ── Expand audience: COPY the winning ad set (inherits objective/optimization/
+    //    promoted_object/creatives), then broaden targeting on the copy. ──
+    //    This avoids "Invalid parameter (code 100)" that creating a fresh
+    //    LEAD_GENERATION ad set causes when the campaign isn't a lead campaign.
     if (action.kind === 'expand_audience') {
       if (!adAccountId) return NextResponse.json({ error: 'לא נמצא חשבון מודעות ללקוח' }, { status: 400 });
-      if (!action.campaignMetaId) return NextResponse.json({ error: 'חסר מזהה קמפיין' }, { status: 400 });
-      // Lead-gen ad sets require a promoted_object (the page). Fetch the client's page.
-      let pageId = '';
-      if (clientId) {
-        const { data: cl } = await sb.from('clients').select('fb_page_id, meta_page_id').eq('id', clientId).maybeSingle();
-        pageId = (cl as any)?.fb_page_id || (cl as any)?.meta_page_id || '';
+      if (!action.sourceMetaAdSetId) return NextResponse.json({ error: 'חסר מזהה קבוצת מודעות מקור' }, { status: 400 });
+
+      // 1) Duplicate the winning ad set (paused, deep copy so it carries its creatives).
+      const copy = await copyMetaAdSet(creds, action.sourceMetaAdSetId, {
+        deepCopy: true, statusOption: 'PAUSED', renameSuffix: ' — קהל מורחב',
+      });
+      if (!copy.success || !copy.metaId) return metaErr(copy, 'שכפול הקבוצה המנצחת נכשל');
+
+      // 2) Broaden the targeting + set name/budget on the new copy (best-effort).
+      let note = 'שוכפל קהל מנצח (מושהה) עם הרחבת טירגוט — הפעל כשמוכן';
+      const upd = await updateMetaAdSet(creds, copy.metaId, {
+        name: action.newName || undefined,
+        targeting: action.targeting,
+        dailyBudget: action.dailyBudget && action.dailyBudget > 0 ? Math.max(20, action.dailyBudget) : undefined,
+      });
+      if (!upd.success) {
+        note = `הקבוצה שוכפלה (מושהית) אך הרחבת הטירגוט נכשלה — הרחב ידנית. (${upd.error || ''})`;
       }
-      const r = await createMetaAdSet(creds, {
-        campaignId: action.campaignMetaId,
-        name: action.newName || 'קהל מורחב',
-        status: 'PAUSED',
-        dailyBudget: Math.max(100, Math.round((action.dailyBudget || 50) * 100)), // Meta min ~1₪/day
-        billingEvent: 'IMPRESSIONS', optimizationGoal: 'LEAD_GENERATION',
-        targeting: (action.targeting || { geo_locations: { countries: ['IL'] } }) as any,
-        ...(pageId ? { promotedObject: { page_id: pageId } } : {}),
-      } as any);
-      if (!r.success) return metaErr(r, 'יצירת הקהל נכשלה');
-      return NextResponse.json({ success: true, adSetId: r.metaId, note: 'נוצר קהל מורחב (מושהה) — הפעל כשמוכן' });
+      return NextResponse.json({ success: true, adSetId: copy.metaId, note });
     }
 
     // ── Refresh creative / A/B test: create a new ad variation ──
