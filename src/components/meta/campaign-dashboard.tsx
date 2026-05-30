@@ -143,7 +143,14 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
     setNotice(null);
     try {
       const res = await fetch('/api/meta-business/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId }) });
-      const data = await res.json();
+      // Guard against non-JSON responses (e.g. a 504 timeout returns an HTML error page)
+      const raw = await res.text();
+      let data: any = {};
+      try { data = raw ? JSON.parse(raw) : {}; } catch {
+        throw new Error(res.status === 504
+          ? 'הסנכרון ארך יותר מדי ונקטע (timeout). נסה שוב — אם זה חוזר, ייתכן שהחשבון גדול מאוד.'
+          : `שגיאת שרת (${res.status})`);
+      }
       if (!res.ok || data.success === false) throw new Error(data.error || 'הסנכרון נכשל');
       if ((data.campaignsSynced || 0) === 0) {
         const acc = (data.accountsChecked || []).join(', ');
