@@ -49,8 +49,10 @@ export async function GET(req: NextRequest) {
     ]);
 
     // 1) Campaigns from a dedicated account assigned to this client.
+    //    Exclude archived/completed (campaigns deleted/archived in Meta) so stale
+    //    history doesn't inflate the count or show as active.
     const byAccount = (allCampaigns as any[]).filter(
-      (c) => c.clientId === clientId && c.metaCampaignId,
+      (c) => c.clientId === clientId && c.metaCampaignId && c.status !== 'completed' && c.status !== 'archived',
     );
 
     // 2) Campaigns explicitly assigned to this client (shared-account / campaign-level).
