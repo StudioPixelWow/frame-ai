@@ -1074,6 +1074,24 @@ export default function ClientsPage() {
             </div>
           </div>
 
+          {/* Hosting clients — annual payment date (hosting-only) */}
+          {form.clientType === "hosting" && (
+            <div style={{ marginTop: "1rem" }}>
+              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
+                מועד תשלום שנתי
+              </label>
+              <input
+                type="date"
+                className="form-input ux-input"
+                value={form.annualPaymentDate}
+                onChange={(e) => setForm({ ...form, annualPaymentDate: e.target.value })}
+              />
+              <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", marginTop: "0.3rem" }}>
+                לקוחות אחסון אתרים משלמים פעם בשנה — בחר את מועד החיוב השנתי.
+              </div>
+            </div>
+          )}
+
           {/* Row 5: Retainer Amount and Status */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
             <div>
