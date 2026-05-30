@@ -53,6 +53,12 @@ function rowToClient(r: ClientRow) {
     metaAdAccountId:       (r.meta_ad_account_id as string) ?? '',
     metaConnectionStatus:  (r.meta_connection_status as string) ?? 'not_connected',
     metaLastSyncedAt:      (r.meta_last_synced_at as string) ?? null,
+    // Facebook Page + Instagram publishing
+    fbPageId:              (r.fb_page_id as string) ?? '',
+    fbPageName:            (r.fb_page_name as string) ?? '',
+    fbPagePicture:         (r.fb_page_picture as string) ?? '',
+    igUserId:              (r.ig_user_id as string) ?? '',
+    igUsername:            (r.ig_username as string) ?? '',
     // Extra fields — read + write
     websiteUrl:          (r.website as string) ?? '',
     facebookPageUrl:     (r.facebook as string) ?? '',

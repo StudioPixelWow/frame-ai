@@ -37,9 +37,9 @@ export async function POST(
       return NextResponse.json({ error: 'חסרים פרטי דף פייסבוק (pageId, pageAccessToken)' }, { status: 400 });
     }
 
-    // Validate the page access token by making a test call
+    // Validate the page token AND discover a linked Instagram business account.
     const testRes = await fetch(
-      `https://graph.facebook.com/v19.0/${pageId}?fields=id,name&access_token=${encodeURIComponent(pageAccessToken)}`,
+      `https://graph.facebook.com/v19.0/${pageId}?fields=id,name,instagram_business_account{id,username}&access_token=${encodeURIComponent(pageAccessToken)}`,
       { signal: AbortSignal.timeout(15000) },
     );
     const testData = await testRes.json();
@@ -51,14 +51,22 @@ export async function POST(
       );
     }
 
-    // Save to client record
+    const igAccount = testData.instagram_business_account;
+
+    // Save page details to DEDICATED columns (do NOT overwrite the ad-account token).
     const supabase = getSupabase();
     const updateData: Record<string, any> = {
+      fb_page_id: pageId,
+      fb_page_name: pageName || testData.name || '',
+      fb_page_access_token: pageAccessToken,
+      fb_page_picture: pictureUrl || '',
+      ig_user_id: igAccount?.id || null,
+      ig_username: igAccount?.username || null,
+      social_connected_at: new Date().toISOString(),
+      // Keep legacy fields populated for older readers (page id only, not token).
       facebook_page_id: pageId,
       facebook_page_name: pageName || testData.name || '',
       meta_page_id: pageId,
-      meta_access_token: pageAccessToken,
-      meta_connection_status: 'connected',
       updated_at: new Date().toISOString(),
     };
 
@@ -77,6 +85,7 @@ export async function POST(
       pageId,
       pageName: pageName || testData.name || '',
       pictureUrl: pictureUrl || '',
+      instagram: igAccount ? { id: igAccount.id, username: igAccount.username } : null,
     });
   } catch (err) {
     console.error('[facebook-pages/connect] Error:', err);
@@ -105,11 +114,15 @@ export async function DELETE(
     const { error: updateError } = await supabase
       .from('clients')
       .update({
+        fb_page_id: null,
+        fb_page_name: null,
+        fb_page_access_token: null,
+        fb_page_picture: null,
+        ig_user_id: null,
+        ig_username: null,
         facebook_page_id: '',
         facebook_page_name: '',
         meta_page_id: '',
-        meta_access_token: '',
-        meta_connection_status: 'not_connected',
         updated_at: new Date().toISOString(),
       })
       .eq('id', clientId);
