@@ -47,6 +47,8 @@ const modules = [
   { icon: "✅", title: "אישורים", desc: "מרכז אישורים לתוכן, וידאו ופרויקטים", route: "/approvals", color: "#ef4444", bg: "rgba(239,68,68,0.13)" },
   { icon: "🌐", title: "פורטל לקוח", desc: "גישת לקוחות לצפייה ואישור תוכן", route: "/client-portal", color: "#00B5FE", bg: "rgba(0,181,254,0.13)" },
   { icon: "📈", title: "דשבורד מנהלים", desc: "מרכז שליטה, התראות ותובנות AI", route: "/exec-dashboard", color: "#ec4899", bg: "rgba(236,72,153,0.13)" },
+  { icon: "🔍", title: "PIXEL SEO/GEO", desc: "קידום אורגני ונראות AI — סריקה, פערים ואוטופיילוט", route: "/seo-geo/dashboard", color: "#0ea5e9", bg: "rgba(14,165,233,0.13)" },
+  { icon: "📡", title: "קמפיינים Meta", desc: "ניהול, אופטימיזציה והמלצות לקמפיינים מסונכרנים", route: "/meta-campaigns", color: "#1877f2", bg: "rgba(24,119,242,0.13)" },
 ];
 
 const QUICK_ACTIONS = [
