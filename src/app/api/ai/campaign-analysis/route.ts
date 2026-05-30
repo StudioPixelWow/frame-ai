@@ -32,6 +32,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { generateWithAI, getClientKnowledgeContext } from "@/lib/ai/openai-client";
+import { campaigns as campaignsCol, adSets as adSetsCol, ads as adsCol } from "@/lib/db/collections";
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -126,10 +127,42 @@ export async function POST(req: NextRequest) {
     const goalName = GOAL_NAMES[campaign.campaignType || ""] || campaign.campaignType || "לא צוין";
     const statusName = STATUS_NAMES[campaign.status || ""] || campaign.status || "לא צוין";
 
-    const hasCreative = !!(campaign.linkedClientFileId || (campaign.externalMediaUrl && campaign.externalMediaUrl.length > 5));
-    const hasCopy = !!(campaign.caption && campaign.caption.trim().length > 5);
-    const hasHeadline = !!(campaign.notes && campaign.notes.includes("כותרת:"));
-    const hasTargeting = !!(campaign.objective && (campaign.objective.includes("מיקום:") || campaign.objective.includes("עניינים:")));
+    // ── Pull the campaign's SYNCED ad sets + ads from the DB ──────────────
+    // Meta-synced campaigns store creative on the ADS and targeting on the AD SETS,
+    // not on the campaign record. Checking the campaign fields alone produced false
+    // "missing creative/copy/targeting" findings for real, live campaigns.
+    let liveAds: any[] = [];
+    let liveAdSets: any[] = [];
+    let isSynced = false;
+    try {
+      const all = await campaignsCol.getAllAsync();
+      const localCampaign = (all as any[]).find(
+        (c) => c.id === body.campaignId || c.metaCampaignId === body.campaignId,
+      );
+      if (localCampaign) {
+        isSynced = !!localCampaign.metaCampaignId;
+        const [allAdSets, allAds] = await Promise.all([adSetsCol.getAllAsync(), adsCol.getAllAsync()]);
+        liveAdSets = (allAdSets as any[]).filter((s) => s.campaignId === localCampaign.id);
+        liveAds = (allAds as any[]).filter((a) => a.campaignId === localCampaign.id);
+      }
+    } catch { /* DB optional — fall back to campaign fields below */ }
+
+    // Derive REAL flags: from synced ads/adsets if available, else manual fields.
+    const adsHaveMedia = liveAds.some((a) => a.mediaUrl || a.thumbnailUrl);
+    const adsHaveCopy = liveAds.some((a) => (a.primaryText || '').trim().length > 3);
+    const adsHaveHeadline = liveAds.some((a) => (a.headline || '').trim().length > 1);
+    const adSetsHaveTargeting = liveAdSets.some((s) => s.targeting && Object.keys(s.targeting).length > 0);
+
+    const hasCreative = adsHaveMedia || !!(campaign.linkedClientFileId || (campaign.externalMediaUrl && campaign.externalMediaUrl.length > 5));
+    const hasCopy = adsHaveCopy || !!(campaign.caption && campaign.caption.trim().length > 5);
+    const hasHeadline = adsHaveHeadline || !!(campaign.notes && campaign.notes.includes("כותרת:"));
+    const hasTargeting = adSetsHaveTargeting || !!(campaign.objective && (campaign.objective.includes("מיקום:") || campaign.objective.includes("עניינים:")));
+
+    // Real performance totals from the synced ads (for the AI context).
+    const perf = liveAds.reduce((t, a) => ({
+      spend: t.spend + (a.spend || 0), leads: t.leads + (a.leads || 0),
+      impressions: t.impressions + (a.impressions || 0), clicks: t.clicks + (a.clicks || 0),
+    }), { spend: 0, leads: 0, impressions: 0, clicks: 0 });
 
     // Build campaign context for the AI
     const campaignContext = [
@@ -140,11 +173,19 @@ export async function POST(req: NextRequest) {
       `סטטוס: ${statusName}`,
       `תקציב: ${campaign.budget ? `₪${campaign.budget.toLocaleString()}` : "לא הוגדר"}`,
       `תאריכים: ${campaign.startDate || "לא הוגדר"} — ${campaign.endDate || "לא הוגדר"}`,
+      `מקור: ${isSynced ? `קמפיין מסונכרן מ-Meta (${liveAdSets.length} קבוצות מודעות, ${liveAds.length} מודעות פעילות)` : "קמפיין שנוצר במערכת"}`,
       `קריאייטיב: ${hasCreative ? "קיים" : "חסר"}`,
-      `טקסט ראשי: ${hasCopy ? "קיים" : "חסר"}${hasCopy ? ` ("${campaign.caption!.substring(0, 80)}...")` : ""}`,
+      `טקסט ראשי: ${hasCopy ? "קיים" : "חסר"}`,
       `כותרת: ${hasHeadline ? "קיימת" : "חסרה"}`,
       `טרגוט: ${hasTargeting ? "מוגדר" : "לא מוגדר"}`,
       `מטרת הקמפיין: ${campaign.objective || "לא הוגדרה"}`,
+      ...(isSynced ? [
+        "",
+        "ביצועים בפועל (מ-Meta):",
+        `  הוצאה: ₪${Math.round(perf.spend)} | לידים: ${perf.leads} | חשיפות: ${perf.impressions.toLocaleString()} | קליקים: ${perf.clicks}`,
+        `  CPL: ${perf.leads > 0 ? `₪${Math.round(perf.spend / perf.leads)}` : "—"} | CTR: ${perf.impressions > 0 ? `${((perf.clicks / perf.impressions) * 100).toFixed(2)}%` : "—"}`,
+        "חשוב: זהו קמפיין חי ופעיל ב-Meta — אל תטען שחסרים קריאייטיב/טקסט/טרגוט אלא אם צוין במפורש 'חסר' למעלה. התמקד באופטימיזציה התקפית (קהלים, קריאייטיב, תקציב) להגדלת לידים.",
+      ] : []),
       "",
       `ציון בריאות: ${healthScore}/100`,
       `פירוט: מבנה ${healthBreakdown.structure}/25 | קריאייטיב ${healthBreakdown.creative}/25 | טרגוט ${healthBreakdown.targeting}/20 | פעילות ${healthBreakdown.activity}/30`,
@@ -234,7 +275,7 @@ ${campaignContext}
     }
 
     if (!analysis) {
-      analysis = generateFallbackAnalysis(body);
+      analysis = generateFallbackAnalysis(body, { hasCreative, hasCopy, hasTargeting, hasHeadline, isSynced });
     }
 
     const latencyMs = Date.now() - t0;
@@ -251,19 +292,45 @@ ${campaignContext}
 /**
  * Deterministic fallback analysis when no AI API key is configured.
  */
-function generateFallbackAnalysis(body: AnalysisRequest): AnalysisResult {
+function generateFallbackAnalysis(
+  body: AnalysisRequest,
+  flags?: { hasCreative: boolean; hasCopy: boolean; hasTargeting: boolean; hasHeadline: boolean; isSynced: boolean },
+): AnalysisResult {
   const { campaign, healthScore, healthBreakdown, alerts, leadCount, wonLeadCount } = body;
   const issues: string[] = [];
   const opportunities: string[] = [];
   const actions: string[] = [];
 
-  const hasCreative = !!(campaign.linkedClientFileId || (campaign.externalMediaUrl && campaign.externalMediaUrl.length > 5));
-  const hasCopy = !!(campaign.caption && campaign.caption.trim().length > 5);
+  // Prefer the real (synced) flags computed in POST; fall back to manual fields.
+  const hasCreative = flags?.hasCreative ?? !!(campaign.linkedClientFileId || (campaign.externalMediaUrl && campaign.externalMediaUrl.length > 5));
+  const hasCopy = flags?.hasCopy ?? !!(campaign.caption && campaign.caption.trim().length > 5);
   const hasBudget = !!(campaign.budget && campaign.budget > 0);
-  const hasTargeting = !!(campaign.objective && (campaign.objective.includes("מיקום:") || campaign.objective.includes("עניינים:")));
-  const hasHeadline = !!(campaign.notes && campaign.notes.includes("כותרת:"));
+  const hasTargeting = flags?.hasTargeting ?? !!(campaign.objective && (campaign.objective.includes("מיקום:") || campaign.objective.includes("עניינים:")));
+  const hasHeadline = flags?.hasHeadline ?? !!(campaign.notes && campaign.notes.includes("כותרת:"));
+  const isSynced = flags?.isSynced ?? false;
 
-  // Issues
+  // Synced + live campaign with creative — pivot to OFFENSIVE growth, not "missing X".
+  if (isSynced && hasCreative) {
+    if (leadCount > 0) {
+      opportunities.push("הקמפיין פעיל ומביא לידים — הרחבת הקהל המנצח תגדיל נפח באותו CPL");
+      opportunities.push("בדיקת A/B על הקריאייטיב המנצח יכולה להוריד CPL נוסף");
+      actions.push("הרחב את הקהל של ה-Ad Set המנצח (Lookalike / קהל רחב)");
+      actions.push("הוסף וריאציית קריאייטיב חדשה לבדיקה מול המנצח");
+      actions.push("הסט תקציב מקבוצות יקרות לקבוצה המנצחת");
+    } else {
+      opportunities.push("הקמפיין חי אך עדיין ללא לידים — בדיקת קהל/קריאייטיב/דף נחיתה");
+      actions.push("בדוק שהטופס/דף הנחיתה עובד וש-CTA ברור");
+      actions.push("רענן את הקריאייטיב או הרחב את הקהל");
+    }
+    return {
+      summary: leadCount > 0
+        ? `הקמפיין "${campaign.campaignName || ''}" פעיל ומביא ${leadCount} לידים. מומלץ להרחיב את ההצלחה.`
+        : `הקמפיין "${campaign.campaignName || ''}" פעיל אך טרם הניב לידים — כדאי לייעל קהל/קריאייטיב.`,
+      issues: [], opportunities: opportunities.slice(0, 4), actions: actions.slice(0, 5),
+    };
+  }
+
+  // Issues (manual / incomplete campaigns only)
   if (!hasCreative) {
     issues.push("הקמפיין חסר קריאייטיב — ללא מדיה לא ניתן לייצר ביצועים בפלטפורמה");
   }
