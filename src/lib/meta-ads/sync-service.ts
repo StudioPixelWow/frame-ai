@@ -92,6 +92,7 @@ interface MetaAd {
     video_id?: string;
     thumbnail_url?: string;
     object_story_spec?: {
+      page_id?: string;
       link_data?: { message?: string; name?: string; call_to_action?: { type?: string; value?: { link?: string } }; image_hash?: string; picture?: string };
       video_data?: { message?: string; title?: string; call_to_action?: { type?: string; value?: { link?: string } }; image_url?: string; video_id?: string };
     };
@@ -469,6 +470,7 @@ export async function syncClientMetaAccount(
           startDate: mas.start_time || null,
           endDate: mas.end_time || null,
           metaAdSetId: mas.id,
+          metaPageId: (mas.promoted_object as any)?.page_id || undefined,
           lastSyncedAt: now,
         };
 
@@ -535,6 +537,7 @@ export async function syncClientMetaAccount(
             ctaType: creative.ctaType,
             ctaLink: creative.ctaLink,
             metaAdId: mad.id,
+            metaPageId: (creative as any).pageId || undefined,
             lastSyncedAt: now,
           };
 
@@ -708,6 +711,9 @@ function extractCreative(ad: MetaAd): {
 
   // Object story spec overrides
   const spec = creative.object_story_spec;
+  if (spec?.page_id) {
+    (result as any).pageId = spec.page_id;
+  }
   if (spec?.link_data) {
     result.primaryText = result.primaryText || spec.link_data.message || '';
     result.headline = result.headline || spec.link_data.name || '';

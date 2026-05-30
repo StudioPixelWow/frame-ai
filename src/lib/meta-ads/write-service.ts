@@ -522,6 +522,47 @@ export async function updateMetaAdSetBudget(
   return metaPost(`${API_BASE}/${metaAdSetId}`, creds.accessToken, { daily_budget: Math.round(dailyBudgetShekels * 100) });
 }
 
+/**
+ * Resolve a usable Page ID for an account WITHOUT requiring the client to have
+ * manually connected a page. Tries, in order:
+ *   1) the source ad set's promoted_object.page_id
+ *   2) the source ad's creative object_story_spec.page_id
+ *   3) the first page promotable from the ad account (/promote_pages)
+ * Returns '' if none found.
+ */
+export async function resolveMetaPageId(
+  creds: MetaCredentials,
+  opts: { adSetId?: string; adId?: string } = {},
+): Promise<string> {
+  const tok = creds.accessToken;
+  if (!tok) return '';
+  const getJson = async (url: string): Promise<any> => {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      return await res.json().catch(() => ({}));
+    } catch { return {}; }
+  };
+  // 1) ad set promoted_object
+  if (opts.adSetId) {
+    const d = await getJson(`${API_BASE}/${opts.adSetId}?fields=promoted_object&access_token=${tok}`);
+    const pid = d?.promoted_object?.page_id;
+    if (pid) return String(pid);
+  }
+  // 2) ad creative object_story_spec
+  if (opts.adId) {
+    const d = await getJson(`${API_BASE}/${opts.adId}?fields=creative{object_story_spec{page_id}}&access_token=${tok}`);
+    const pid = d?.creative?.object_story_spec?.page_id;
+    if (pid) return String(pid);
+  }
+  // 3) account promotable pages
+  if (creds.adAccountId) {
+    const d = await getJson(`${API_BASE}/${creds.adAccountId}/promote_pages?fields=id&limit=1&access_token=${tok}`);
+    const pid = d?.data?.[0]?.id;
+    if (pid) return String(pid);
+  }
+  return '';
+}
+
 /* ── Update Ad Set targeting / name / budget (generic) ── */
 export async function updateMetaAdSet(
   creds: MetaCredentials,

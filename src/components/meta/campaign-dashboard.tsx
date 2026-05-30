@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Fragment } from 'react';
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import AdPreview from './ad-preview';
 import CampaignCharts from './campaign-charts';
 import RecommendationsModal from './recommendations-modal';
@@ -99,6 +99,30 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
 
   useEffect(() => { if (clientId) load(); }, [clientId, load]);
 
+  // Auto-refresh: if the newest sync is stale (>30 min), pull fresh "today"
+  // metrics from Meta once in the background, then reload — so the dashboard
+  // shows near-live data instead of only the initial sync snapshot.
+  const autoSyncedRef = useRef(false);
+  useEffect(() => {
+    if (!clientId || loading || autoSyncedRef.current || campaigns.length === 0) return;
+    const newest = campaigns.reduce<number>((max, c) => {
+      const t = c.lastSyncedAt ? new Date(c.lastSyncedAt).getTime() : 0;
+      return t > max ? t : max;
+    }, 0);
+    const stale = !newest || (Date.now() - newest) > 30 * 60 * 1000;
+    if (!stale) return;
+    autoSyncedRef.current = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/meta-business/sync', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId, datePreset: 'today' }),
+        });
+        if (res.ok) await load();
+      } catch { /* silent — manual "סנכרן עכשיו" still available */ }
+    })();
+  }, [clientId, loading, campaigns, load]);
+
   const manage = async (c: CampaignSummary, payload: Record<string, unknown>, successMsg: string) => {
     setBusyId(c.id);
     setNotice(null);
@@ -147,11 +171,12 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
     }
   };
 
-  const doSync = async () => {
-    setAction('sync');
+  const doSync = async (presetOverride?: string) => {
+    const preset = presetOverride || datePreset;
+    setAction(presetOverride === 'maximum' ? 'fullsync' : 'sync');
     setNotice(null);
     try {
-      const res = await fetch('/api/meta-business/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, datePreset }) });
+      const res = await fetch('/api/meta-business/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, datePreset: preset }) });
       // Guard against non-JSON responses (e.g. a 504 timeout returns an HTML error page)
       const raw = await res.text();
       let data: any = {};
@@ -305,8 +330,11 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
           <option value="this_month">החודש</option>
           <option value="maximum">כל הזמן</option>
         </select>
-        <button onClick={doSync} disabled={!!action} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${BRAND}`, background: '#fff', color: BRAND, fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: action ? 0.6 : 1 }}>
+        <button onClick={() => doSync()} disabled={!!action} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${BRAND}`, background: '#fff', color: BRAND, fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: action ? 0.6 : 1 }}>
           {action === 'sync' ? 'מסנכרן...' : '🔄 סנכרן עכשיו'}
+        </button>
+        <button onClick={() => doSync('maximum')} disabled={!!action} title="משיכת כל הנתונים מ-Meta עד הרגע הנוכחי" style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: BRAND, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: action ? 0.6 : 1 }}>
+          {action === 'fullsync' ? 'מסנכרן הכל...' : '🔁 סנכרן הכל עכשיו'}
         </button>
         <button onClick={doOptimize} disabled={!!action} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #22c55e', background: '#fff', color: '#16a34a', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: action ? 0.6 : 1 }}>
           {action === 'optimize' ? 'מריץ...' : '⚡ הרץ אופטימיזציה + יצירה'}

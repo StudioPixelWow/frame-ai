@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { campaigns as campaignsCol, adSets as adSetsCol, ads as adsCol } from '@/lib/db/collections';
 import { resolveMetaToken, getSystemMetaToken } from '@/lib/meta-ads/token';
 import { getSupabase } from '@/lib/db/store';
-import { updateMetaAdSetBudget, createMetaAd, copyMetaAdSet, updateMetaAdSet } from '@/lib/meta-ads/write-service';
+import { updateMetaAdSetBudget, createMetaAd, copyMetaAdSet, updateMetaAdSet, resolveMetaPageId } from '@/lib/meta-ads/write-service';
 import { generateVariation } from '@/lib/optimization/variations';
 
 export const dynamic = 'force-dynamic';
@@ -320,14 +320,18 @@ export async function POST(req: NextRequest) {
         ctr: src.ctr || 0, cpl: src.cpl || 0, frequency: src.frequency || 0,
         impressions: src.impressions || 0, spend: src.spend || 0, leads: src.leads || 0,
       });
-      // Need a Page ID to build a creative — try the ad, then the client.
+      // Need a Page ID to build a creative. Resolve it automatically:
+      // synced ad → client record → live Meta (ad set / ad / account pages).
       let pageId = src.metaPageId || '';
       if (!pageId && clientId) {
         const { data: cl } = await sb.from('clients').select('fb_page_id, meta_page_id').eq('id', clientId).maybeSingle();
         pageId = (cl as any)?.fb_page_id || (cl as any)?.meta_page_id || '';
       }
       if (!pageId) {
-        return NextResponse.json({ error: 'לא ניתן ליצור מודעה — חסר דף עסקי מחובר ללקוח. חבר דף בכרטיס הלקוח (ערוצי פרסום) ונסה שוב.' }, { status: 400 });
+        pageId = await resolveMetaPageId(creds, { adSetId: action.metaAdSetId, adId: (src as any).metaAdId });
+      }
+      if (!pageId) {
+        return NextResponse.json({ error: 'לא ניתן ליצור מודעה — לא נמצא דף עסקי. חבר דף בכרטיס הלקוח (ערוצי פרסום) ונסה שוב.' }, { status: 400 });
       }
       const r = await createMetaAd(creds, {
         adSetId: action.metaAdSetId,
@@ -396,7 +400,10 @@ export async function POST(req: NextRequest) {
         pageId2 = (cl as any)?.fb_page_id || (cl as any)?.meta_page_id || '';
       }
       if (!pageId2) {
-        return NextResponse.json({ error: 'לא ניתן ליצור מודעה — חסר דף עסקי מחובר ללקוח. חבר דף בכרטיס הלקוח ונסה שוב.' }, { status: 400 });
+        pageId2 = await resolveMetaPageId(creds, { adSetId: action.metaAdSetId, adId: (src as any).metaAdId });
+      }
+      if (!pageId2) {
+        return NextResponse.json({ error: 'לא ניתן ליצור מודעה — לא נמצא דף עסקי. חבר דף בכרטיס הלקוח ונסה שוב.' }, { status: 400 });
       }
       const r = await createMetaAd(creds, {
         adSetId: action.metaAdSetId,
