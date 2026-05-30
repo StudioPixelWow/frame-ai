@@ -11,40 +11,29 @@ const supabase = createClient(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { adAccountId, clientId, accessToken } = body;
+    const { adAccountId, clientId, accessToken, unassign } = body;
 
     if (!adAccountId && !clientId) {
       return NextResponse.json({ error: 'חסר מזהה חשבון מודעות או מזהה לקוח' }, { status: 400 });
     }
 
-    // Unassign: clear meta fields from client
-    if (!clientId) {
-      // Find which client has this ad account and clear it
-      const { data: existingClients } = await supabase
-        .from('clients')
-        .select('id')
-        .eq('meta_ad_account_id', adAccountId);
-
-      if (existingClients && existingClients.length > 0) {
-        for (const c of existingClients) {
-          const { error: clearError } = await supabase
-            .from('clients')
-            .update({
-              meta_ad_account_id: null,
-              meta_access_token: null,
-              meta_connection_status: 'not_connected',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', c.id);
-
-          if (clearError) {
-            console.error('[meta-business/assign] Clear error:', clearError.message);
-            return NextResponse.json({ error: `שגיאה בביטול שיוך: ${clearError.message}` }, { status: 500 });
-          }
-        }
+    // Unassign: clear meta fields from a SPECIFIC client (account may serve others).
+    if (unassign || !clientId) {
+      if (clientId) {
+        // Targeted unassign — clear only this client.
+        const { error } = await supabase
+          .from('clients')
+          .update({ meta_ad_account_id: null, meta_access_token: null, meta_connection_status: 'not_connected', updated_at: new Date().toISOString() })
+          .eq('id', clientId);
+        if (error) return NextResponse.json({ error: `שגיאה בביטול שיוך: ${error.message}` }, { status: 500 });
+        return NextResponse.json({ success: true, action: 'unassigned', clientId });
       }
-
-      return NextResponse.json({ success: true, action: 'unassigned', adAccountId });
+      // No client id → clear all clients on this account (full reset).
+      const { data: existingClients } = await supabase.from('clients').select('id').eq('meta_ad_account_id', adAccountId);
+      for (const c of existingClients || []) {
+        await supabase.from('clients').update({ meta_ad_account_id: null, meta_access_token: null, meta_connection_status: 'not_connected', updated_at: new Date().toISOString() }).eq('id', c.id);
+      }
+      return NextResponse.json({ success: true, action: 'unassigned_all', adAccountId });
     }
 
     // Assign: get access token (from body or system token)
@@ -57,26 +46,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'חסר אסימון גישה — יש לחבר את Meta Business Manager תחילה' }, { status: 400 });
     }
 
-    // First, clear any other client that had this ad account
-    const { data: prevClients } = await supabase
-      .from('clients')
-      .select('id')
-      .eq('meta_ad_account_id', adAccountId)
-      .neq('id', clientId);
-
-    if (prevClients && prevClients.length > 0) {
-      for (const c of prevClients) {
-        await supabase
-          .from('clients')
-          .update({
-            meta_ad_account_id: null,
-            meta_access_token: null,
-            meta_connection_status: 'not_connected',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', c.id);
-      }
-    }
+    // NOTE: one ad account may serve MULTIPLE clients — we no longer clear other
+    // clients that share this account. Each client keeps its own assignment.
 
     // Assign the ad account to the target client.
     // NOTE: we intentionally do NOT store a copy of the token on the client.

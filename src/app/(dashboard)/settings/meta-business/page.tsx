@@ -17,6 +17,7 @@ interface AdAccount {
   timezone: string;
   assignedClientId: string | null;
   assignedClientName: string | null;
+  assignedClients?: { clientId: string; clientName: string }[];
 }
 
 interface ClientOption {
@@ -223,19 +224,19 @@ function MetaBusinessSettingsContent() {
     }
   };
 
-  // Assign account to client
-  const handleAssign = async (adAccountId: string, clientId: string | null) => {
+  // Assign / unassign account ↔ client. `unassign` clears one specific client.
+  const handleAssign = async (adAccountId: string, clientId: string | null, unassign = false) => {
     setAssigningId(adAccountId);
     setErrorMessage(null);
     try {
       const res = await fetch('/api/meta-business/assign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adAccountId, clientId: clientId || null }),
+        body: JSON.stringify({ adAccountId, clientId: clientId || null, unassign }),
       });
       const data = await res.json();
       if (data.success) {
-        setSuccessMessage(clientId ? 'חשבון שויך ללקוח בהצלחה' : 'שיוך בוטל בהצלחה');
+        setSuccessMessage(unassign ? 'שיוך בוטל בהצלחה' : 'חשבון שויך ללקוח בהצלחה');
         await fetchAccounts();
       } else {
         setErrorMessage(data.error || 'שגיאה בשיוך');
@@ -485,10 +486,15 @@ function AccountCard({
   account: AdAccount;
   clients: ClientOption[];
   assigning: boolean;
-  onAssign: (adAccountId: string, clientId: string | null) => void;
+  onAssign: (adAccountId: string, clientId: string | null, unassign?: boolean) => void;
 }) {
-  const [selectedClient, setSelectedClient] = useState<string>(account.assignedClientId || '');
-  const isAssigned = !!account.assignedClientId;
+  const [selectedClient, setSelectedClient] = useState<string>('');
+  const assignedClients = account.assignedClients && account.assignedClients.length > 0
+    ? account.assignedClients
+    : (account.assignedClientId ? [{ clientId: account.assignedClientId, clientName: account.assignedClientName || '' }] : []);
+  const isAssigned = assignedClients.length > 0;
+  const assignedIds = new Set(assignedClients.map((a) => a.clientId));
+  const availableClients = clients.filter((c) => !assignedIds.has(c.id));
 
   return (
     <div style={{
@@ -524,57 +530,44 @@ function AccountCard({
         {account.timezone && <span>{account.timezone}</span>}
       </div>
 
-      {/* Assignment */}
+      {/* Assignment — an ad account can serve MULTIPLE clients */}
       <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-        {isAssigned ? (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: 13 }}>
-              <span style={{ color: '#22c55e', fontWeight: 600 }}>משויך: </span>
-              <span>{account.assignedClientName}</span>
-            </div>
-            <button
-              onClick={() => onAssign(account.id, null)}
-              disabled={assigning}
-              style={{
-                padding: '4px 12px', borderRadius: 6, border: '1px solid rgba(239,68,68,0.3)',
-                background: 'rgba(239,68,68,0.1)', color: '#ef4444', fontSize: 12,
-                cursor: 'pointer', opacity: assigning ? 0.6 : 1,
-              }}
-            >
-              {assigning ? '...' : 'בטל שיוך'}
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <select
-              value={selectedClient}
-              onChange={(e) => setSelectedClient(e.target.value)}
-              style={{
-                flex: 1, padding: '6px 10px', borderRadius: 6,
-                border: '1px solid var(--border)', background: 'var(--background)',
-                color: 'var(--foreground)', fontSize: 13,
-              }}
-            >
-              <option value="">בחר לקוח...</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-            <button
-              onClick={() => { if (selectedClient) onAssign(account.id, selectedClient); }}
-              disabled={!selectedClient || assigning}
-              style={{
-                padding: '6px 14px', borderRadius: 6, border: 'none',
-                background: selectedClient ? '#1877f2' : '#6b7280',
-                color: '#fff', fontSize: 13, fontWeight: 600,
-                cursor: selectedClient ? 'pointer' : 'default',
-                opacity: assigning ? 0.6 : 1, whiteSpace: 'nowrap',
-              }}
-            >
-              {assigning ? '...' : 'שייך'}
-            </button>
+        {isAssigned && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+            {assignedClients.map((a) => (
+              <div key={a.clientId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
+                <span><span style={{ color: '#22c55e', fontWeight: 600 }}>✓ </span>{a.clientName}</span>
+                <button
+                  onClick={() => onAssign(account.id, a.clientId, true)}
+                  disabled={assigning}
+                  style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#ef4444', fontSize: 11, cursor: 'pointer', opacity: assigning ? 0.6 : 1 }}
+                >
+                  הסר
+                </button>
+              </div>
+            ))}
           </div>
         )}
+        {/* Always allow adding another client */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <select
+            value={selectedClient}
+            onChange={(e) => setSelectedClient(e.target.value)}
+            style={{ flex: 1, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', fontSize: 13 }}
+          >
+            <option value="">{isAssigned ? 'הוסף לקוח נוסף...' : 'בחר לקוח...'}</option>
+            {availableClients.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => { if (selectedClient) { onAssign(account.id, selectedClient); setSelectedClient(''); } }}
+            disabled={!selectedClient || assigning}
+            style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: selectedClient ? '#1877f2' : '#6b7280', color: '#fff', fontSize: 13, fontWeight: 600, cursor: selectedClient ? 'pointer' : 'default', opacity: assigning ? 0.6 : 1, whiteSpace: 'nowrap' }}
+          >
+            {assigning ? '...' : 'שייך'}
+          </button>
+        </div>
       </div>
     </div>
   );

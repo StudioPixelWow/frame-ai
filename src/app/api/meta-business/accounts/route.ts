@@ -83,18 +83,21 @@ export async function GET(request: NextRequest) {
       .select('id, name, meta_ad_account_id')
       .not('meta_ad_account_id', 'is', null);
 
-    const assignmentMap = new Map<string, { clientId: string; clientName: string }>();
+    // One ad account can serve MANY clients → collect a list per account.
+    const assignmentMap = new Map<string, { clientId: string; clientName: string }[]>();
     if (clients) {
       for (const c of clients) {
         if (c.meta_ad_account_id) {
-          assignmentMap.set(c.meta_ad_account_id, { clientId: c.id, clientName: c.name || '' });
+          const list = assignmentMap.get(c.meta_ad_account_id) || [];
+          list.push({ clientId: c.id, clientName: c.name || '' });
+          assignmentMap.set(c.meta_ad_account_id, list);
         }
       }
     }
 
     // Map results
     const accounts: AdAccountResult[] = allAccounts.map((acc) => {
-      const assignment = assignmentMap.get(acc.id);
+      const assigned = assignmentMap.get(acc.id) || [];
       return {
         id: acc.id,
         name: acc.name || acc.id,
@@ -103,9 +106,11 @@ export async function GET(request: NextRequest) {
         businessName: acc.business?.name || '',
         currency: acc.currency || '',
         timezone: acc.timezone_name || '',
-        assignedClientId: assignment?.clientId || null,
-        assignedClientName: assignment?.clientName || null,
-      };
+        // Backwards-compatible single fields (first client) + full list.
+        assignedClientId: assigned[0]?.clientId || null,
+        assignedClientName: assigned[0]?.clientName || null,
+        assignedClients: assigned,
+      } as any;
     });
 
     return NextResponse.json({
