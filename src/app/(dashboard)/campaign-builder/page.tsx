@@ -46,6 +46,7 @@ const SOCIAL_GOAL_OPTIONS: Array<{ value: CampaignType; label: string; descripti
   { value: "paid_social", label: "תנועה", description: "הפניית תנועה לאתר או דף נחיתה" },
   { value: "awareness", label: "מודעות", description: "חשיפה מקסימלית למותג או למוצר" },
   { value: "remarketing", label: "מכירות", description: "המרת לקוחות קיימים לרכישה" },
+  { value: "custom", label: "מעורבות — הודעות", description: "פתיחת שיחות ב-Messenger או WhatsApp" },
 ];
 
 const GOOGLE_GOAL_OPTIONS: Array<{ value: CampaignType; label: string; description: string }> = [
@@ -67,6 +68,11 @@ function getGoalOptionsForPlatform(platform: CampaignPlatform) {
   if (platform === 'google') return GOOGLE_GOAL_OPTIONS;
   if (platform === 'linkedin') return LINKEDIN_GOAL_OPTIONS;
   return SOCIAL_GOAL_OPTIONS;
+}
+
+/** The "engagement — messages" goal is the social 'custom' type on FB/IG. */
+function isMessagesGoal(data: { campaignType: CampaignType; platform: CampaignPlatform }): boolean {
+  return data.campaignType === 'custom' && (data.platform === 'facebook' || data.platform === 'instagram');
 }
 
 const AD_FORMAT_OPTIONS = [
@@ -145,6 +151,9 @@ interface WizardData {
   clientId: string;
   platform: CampaignPlatform;
   campaignType: CampaignType;
+  // Engagement-messages destination (only when campaignType is the messages goal)
+  messageDestination: "messenger" | "whatsapp" | "";
+  whatsappNumber: string;
   startDate: string;
   endDate: string;
   // Step 2 — Ad Set (audience + budget)
@@ -182,6 +191,8 @@ const INITIAL_DATA: WizardData = {
   clientId: "",
   platform: "facebook",
   campaignType: "lead_gen",
+  messageDestination: "",
+  whatsappNumber: "",
   startDate: "",
   endDate: "",
   adSetName: "",
@@ -212,12 +223,20 @@ const INITIAL_DATA: WizardData = {
 
 type StepErrors = Record<string, string>;
 
-function validateStep(step: number, data: WizardData): StepErrors {
+function validateStep(step: number, data: WizardData, selectedClient?: Client): StepErrors {
   const errors: StepErrors = {};
 
   if (step === 1) {
     if (!data.campaignName.trim()) errors.campaignName = "חובה להזין שם קמפיין";
     if (!data.clientId) errors.clientId = "חובה לבחור לקוח";
+    // Block creation if the client has no connected ad account (Meta/social platforms).
+    if (data.clientId && selectedClient && data.platform !== 'google' && data.platform !== 'linkedin') {
+      const acct = (selectedClient as any).metaAdAccountId || (selectedClient as any).meta_ad_account_id;
+      if (!acct) errors.clientId = "ללקוח אין חשבון מנהל מודעות מחובר — חבר חשבון לפני יצירת קמפיין";
+    }
+    // Messages goal requires a destination (and a number for WhatsApp).
+    if (data.messageDestination === "" && isMessagesGoal(data)) errors.objective = "בחר יעד הודעות (Messenger / WhatsApp)";
+    if (data.messageDestination === "whatsapp" && !data.whatsappNumber.trim()) errors.objective = "הזן מספר WhatsApp המחובר במנהל המודעות";
     if (!data.startDate) errors.startDate = "חובה לבחור תאריך התחלה";
   }
 
@@ -555,6 +574,38 @@ function Step1Basics({
               ))}
             </div>
           </div>
+
+          {/* Messages destination — only for the engagement-messages goal on FB/IG */}
+          {isMessagesGoal(data) && (
+            <div>
+              <FieldLabel label="יעד ההודעות" />
+              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                {([["messenger", "💬 Messenger"], ["whatsapp", "📱 WhatsApp"]] as const).map(([val, label]) => (
+                  <button key={val} type="button" onClick={() => onChange({ messageDestination: val })}
+                    style={{
+                      flex: 1, padding: "0.6rem", borderRadius: "0.5rem", cursor: "pointer", fontWeight: 700, fontSize: "0.8rem",
+                      border: `2px solid ${data.messageDestination === val ? "var(--accent)" : "var(--border)"}`,
+                      background: data.messageDestination === val ? "rgba(0,181,254,0.06)" : "var(--surface-raised)",
+                      color: "var(--foreground)",
+                    }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {data.messageDestination === "whatsapp" && (
+                <input
+                  value={data.whatsappNumber}
+                  onChange={(e) => onChange({ whatsappNumber: e.target.value })}
+                  placeholder="מספר WhatsApp המחובר במנהל המודעות (לדוגמה +9725...)"
+                  style={{ ...inputStyle, direction: "ltr", textAlign: "right" }}
+                />
+              )}
+              <div style={{ fontSize: "0.66rem", color: "var(--foreground-muted)", marginTop: "0.3rem" }}>
+                המודעה תפתח שיחה ישירה ב-{data.messageDestination === "whatsapp" ? "WhatsApp" : "Messenger"} בלחיצה.
+              </div>
+              <FieldError error={errors.objective} />
+            </div>
+          )}
 
           {/* Objective — free-text description */}
           <div>
@@ -2474,7 +2525,7 @@ export default function CampaignBuilderPage() {
 
   // Navigation
   const handleNext = useCallback(() => {
-    const stepErrors = validateStep(step, data);
+    const stepErrors = validateStep(step, data, selectedClient);
     if (Object.keys(stepErrors).length > 0) {
       setErrors(stepErrors);
       return;
@@ -2552,7 +2603,10 @@ export default function CampaignBuilderPage() {
       mediaType: "image" as CampaignMediaType,
       budget: typeof data.budget === "number" ? data.budget : 0,
       caption: "",
-      notes: "",
+      // Persist the messages destination so the publish step routes correctly.
+      notes: isMessagesGoal(data)
+        ? `יעד הודעות: ${data.messageDestination === 'whatsapp' ? `WhatsApp ${data.whatsappNumber}` : 'Messenger'}`
+        : "",
       startDate: data.startDate || null,
       endDate: data.endDate || null,
       linkedVideoProjectId: null as string | null,
@@ -2637,7 +2691,14 @@ export default function CampaignBuilderPage() {
 
   // Final submit — creates Campaign → AdSet → Ad(s)
   const handleSubmit = useCallback(async () => {
-    // Validate step 3 (ads) since step 4 is review-only
+    // Re-validate step 1 (incl. ad-account gate) + step 3 before creating.
+    const step1Errors = validateStep(1, data, selectedClient);
+    if (Object.keys(step1Errors).length > 0) {
+      setErrors(step1Errors);
+      setStep(1);
+      toast(step1Errors.clientId || "יש להשלים את פרטי הקמפיין", "error");
+      return;
+    }
     const step3Errors = validateStep(3, data);
     if (Object.keys(step3Errors).length > 0) {
       setErrors(step3Errors);
