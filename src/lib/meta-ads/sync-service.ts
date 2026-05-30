@@ -118,6 +118,9 @@ const API_BASE = 'https://graph.facebook.com/v19.0';
 const CAMPAIGN_FIELDS = 'id,name,objective,status,buying_type,daily_budget,lifetime_budget,start_time,stop_time,created_time,updated_time';
 const ADSET_FIELDS = 'id,campaign_id,name,status,targeting,daily_budget,lifetime_budget,optimization_goal,billing_event,promoted_object,start_time,end_time,created_time,updated_time';
 const AD_FIELDS = 'id,adset_id,campaign_id,name,status,creative{id,body,title,call_to_action_type,link_url,image_url,video_id,thumbnail_url,object_story_spec},created_time,updated_time';
+// Sync ONLY active items — pulling the full account history is huge and times out (504).
+const ACTIVE_STATUS = encodeURIComponent('["ACTIVE"]');
+const ACTIVE_INSIGHTS_FILTER = encodeURIComponent('[{"field":"ad.effective_status","operator":"IN","value":["ACTIVE"]}]');
 const INSIGHT_FIELDS = 'spend,impressions,reach,clicks,ctr,cpc,cpm,actions,cost_per_action_type,frequency';
 
 /* ── Helpers ── */
@@ -312,7 +315,7 @@ export async function syncClientMetaAccount(
 
   // ── 1. Fetch campaigns ──
   const campaignsRes = await metaFetch<MetaCampaign>(
-    `${API_BASE}/${actId}/campaigns?fields=${CAMPAIGN_FIELDS}&limit=100`,
+    `${API_BASE}/${actId}/campaigns?fields=${CAMPAIGN_FIELDS}&limit=100&effective_status=${ACTIVE_STATUS}`,
     accessToken,
   );
 
@@ -382,7 +385,7 @@ export async function syncClientMetaAccount(
 
   // ── 2. Fetch ad sets ──
   const adSetsRes = await metaFetch<MetaAdSet>(
-    `${API_BASE}/${actId}/adsets?fields=${ADSET_FIELDS}&limit=200`,
+    `${API_BASE}/${actId}/adsets?fields=${ADSET_FIELDS}&limit=200&effective_status=${ACTIVE_STATUS}`,
     accessToken,
   );
 
@@ -449,7 +452,7 @@ export async function syncClientMetaAccount(
 
     // ── 3. Fetch ads ──
     const adsRes = await metaFetch<MetaAd>(
-      `${API_BASE}/${actId}/ads?fields=${AD_FIELDS}&limit=200`,
+      `${API_BASE}/${actId}/ads?fields=${AD_FIELDS}&limit=200&effective_status=${ACTIVE_STATUS}`,
       accessToken,
     );
 
@@ -526,7 +529,7 @@ export async function syncClientMetaAccount(
     // ── 4. Fetch insights (performance data) ──
     try {
       const insightsRes = await metaFetch<MetaInsight>(
-        `${API_BASE}/${actId}/insights?fields=${INSIGHT_FIELDS}&level=ad&date_preset=last_30d&limit=500`,
+        `${API_BASE}/${actId}/insights?fields=${INSIGHT_FIELDS}&level=ad&date_preset=last_30d&limit=500&filtering=${ACTIVE_INSIGHTS_FILTER}`,
         accessToken,
       );
 
