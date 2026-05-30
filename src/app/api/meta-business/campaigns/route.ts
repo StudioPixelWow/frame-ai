@@ -97,6 +97,10 @@ export async function GET(req: NextRequest) {
       const clicks = cAds.reduce((s, a) => s + (a.clicks || 0), 0);
       const cpl = leads > 0 ? spend / leads : 0;
       const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+      // Budget can live at campaign level OR ad-set level (ABO). Fall back to
+      // summing ad-set budgets so the column isn't empty for ABO campaigns.
+      const adSetBudget = cAdSets.reduce((s, as: any) => s + (as.dailyBudget || as.budget || 0), 0);
+      const budget = c.budget || adSetBudget || 0;
 
       return {
         id: c.id,
@@ -104,7 +108,7 @@ export async function GET(req: NextRequest) {
         name: c.campaignName || c.name || '',
         status: c.status || 'unknown',
         objective: c.objective || '',
-        budget: c.budget || 0,
+        budget,
         spend,
         leads,
         cpl,

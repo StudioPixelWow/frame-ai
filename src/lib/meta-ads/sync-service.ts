@@ -121,7 +121,9 @@ const AD_FIELDS = 'id,adset_id,campaign_id,name,status,creative{id,body,title,ca
 // Sync ONLY active items — pulling the full account history is huge and times out (504).
 const ACTIVE_STATUS = encodeURIComponent('["ACTIVE"]');
 const ACTIVE_INSIGHTS_FILTER = encodeURIComponent('[{"field":"ad.effective_status","operator":"IN","value":["ACTIVE"]}]');
-const INSIGHT_FIELDS = 'spend,impressions,reach,clicks,ctr,cpc,cpm,actions,cost_per_action_type,frequency';
+// ad_id is REQUIRED to match an insight row back to a local ad — without it,
+// every insight was discarded and all metrics stayed 0.
+const INSIGHT_FIELDS = 'ad_id,ad_name,spend,impressions,reach,clicks,ctr,cpc,cpm,actions,cost_per_action_type,frequency';
 
 /* ── Helpers ── */
 
