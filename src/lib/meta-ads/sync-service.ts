@@ -218,6 +218,23 @@ function extractLeadsFromInsight(insight: MetaInsight): number {
   return leadAction ? parseInt(leadAction.value, 10) || 0 : 0;
 }
 
+/** Messaging conversations started (engagement-messages / WhatsApp campaigns). */
+function extractMessagesFromInsight(insight: MetaInsight): number {
+  if (!insight.actions) return 0;
+  const types = [
+    'onsite_conversion.messaging_conversation_started_7d',
+    'onsite_conversion.total_messaging_connection',
+    'messaging_conversation_started_7d',
+  ];
+  let total = 0;
+  for (const a of insight.actions) {
+    if (types.includes(a.action_type) || a.action_type.includes('messaging_conversation_started')) {
+      total += parseInt(a.value, 10) || 0;
+    }
+  }
+  return total;
+}
+
 function extractCostPerLead(insight: MetaInsight): number {
   if (!insight.cost_per_action_type) return 0;
   const cplAction = insight.cost_per_action_type.find(
@@ -577,6 +594,8 @@ export async function syncClientMetaAccount(
               clicks: parseInt(insight.clicks || '0', 10),
               spend: parseFloat(insight.spend || '0'),
               leads: extractLeadsFromInsight(insight),
+              // Messaging conversations stored in `conversions` (used for messages campaigns).
+              conversions: extractMessagesFromInsight(insight),
               ctr: parseFloat(insight.ctr || '0'),
               cpc: parseFloat(insight.cpc || '0'),
               cpm: parseFloat(insight.cpm || '0'),

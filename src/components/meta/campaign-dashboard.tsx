@@ -23,6 +23,9 @@ interface CampaignSummary {
   adSetsCount: number;
   adsCount: number;
   lastSyncedAt: string | null;
+  messages?: number;
+  costPerMessage?: number;
+  isMessages?: boolean;
 }
 
 interface Totals {
@@ -372,8 +375,8 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
               <th style={thStyle}>סטטוס</th>
               <th style={thStyle}>תקציב יומי</th>
               <th style={thStyle}>הוצאה</th>
-              <th style={thStyle}>לידים</th>
-              <th style={thStyle}>CPL</th>
+              <th style={thStyle}>לידים / הודעות</th>
+              <th style={thStyle}>עלות לליד / הודעה</th>
               <th style={thStyle}>CTR</th>
               <th style={thStyle}>Ad Sets / מודעות</th>
               <th style={thStyle}>פעולות</th>
@@ -391,8 +394,16 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
                 <td style={cellStyle}><span style={statusBadge(c.status)}>{isActive(c.status) ? 'פעיל' : 'מושהה'}</span></td>
                 <td style={cellStyle}>{c.budget ? `₪${fmt(c.budget)}` : '—'}</td>
                 <td style={cellStyle}>₪{fmt(c.spend)}</td>
-                <td style={cellStyle}>{fmt(c.leads)}</td>
-                <td style={{ ...cellStyle, fontWeight: 600 }}>{c.leads > 0 ? `₪${fmt(c.cpl, 1)}` : '—'}</td>
+                <td style={cellStyle}>
+                  {c.isMessages
+                    ? <>💬 {fmt(c.messages || 0)} <span style={{ fontSize: 10, color: '#9ca3af' }}>הודעות</span></>
+                    : fmt(c.leads)}
+                </td>
+                <td style={{ ...cellStyle, fontWeight: 600 }}>
+                  {c.isMessages
+                    ? ((c.messages || 0) > 0 ? `₪${fmt(c.costPerMessage || 0, 1)}` : '—')
+                    : (c.leads > 0 ? `₪${fmt(c.cpl, 1)}` : '—')}
+                </td>
                 <td style={cellStyle}>{fmt(c.ctr, 2)}%</td>
                 <td style={cellStyle}>{c.adSetsCount} / {c.adsCount}</td>
                 <td style={cellStyle}>

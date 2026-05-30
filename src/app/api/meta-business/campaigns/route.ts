@@ -93,10 +93,15 @@ export async function GET(req: NextRequest) {
       const cAdSets = (allAdSets as any[]).filter((as) => as.campaignId === c.id);
       const spend = cAds.reduce((s, a) => s + (a.spend || 0), 0);
       const leads = cAds.reduce((s, a) => s + (a.leads || 0), 0);
+      const messages = cAds.reduce((s, a) => s + (a.conversions || 0), 0);
       const impressions = cAds.reduce((s, a) => s + (a.impressions || 0), 0);
       const clicks = cAds.reduce((s, a) => s + (a.clicks || 0), 0);
       const cpl = leads > 0 ? spend / leads : 0;
+      const costPerMessage = messages > 0 ? spend / messages : 0;
       const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+      // Messages goal? (Meta objective contains ENGAGEMENT/MESSAGES, or messages recorded)
+      const obj = String(c.objective || '').toUpperCase();
+      const isMessages = obj.includes('MESSAGE') || obj.includes('ENGAGEMENT') || messages > 0;
       // Budget can live at campaign level OR ad-set level (ABO). Fall back to
       // summing ad-set budgets so the column isn't empty for ABO campaigns.
       const adSetBudget = cAdSets.reduce((s, as: any) => s + (as.dailyBudget || as.budget || 0), 0);
@@ -115,6 +120,9 @@ export async function GET(req: NextRequest) {
         ctr,
         impressions,
         clicks,
+        messages,
+        costPerMessage,
+        isMessages,
         adSetsCount: cAdSets.length,
         adsCount: cAds.length,
         lastSyncedAt: c.lastSyncedAt || null,
