@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 import { getSystemMetaToken } from '@/lib/meta-ads/token';
+import { campaigns as campaignsCol, adSets as adSetsCol, ads as adsCol } from '@/lib/db/collections';
 import { runDailyOptimization, generateDailyReport, type DailyOptimizerResult, type DailyReport } from '@/lib/meta-ads/daily-optimizer';
 import { syncClientMetaAccount } from '@/lib/meta-ads/sync-service';
 import type { Client, Campaign, AdSet, Ad } from '@/lib/db/schema';
@@ -67,57 +68,87 @@ export async function POST(req: NextRequest) {
     // token fall back to this, so updating the token in one place is enough.
     const systemToken = await getSystemMetaToken();
 
-    // A client is "connected" if it has an ad account AND a usable token
-    // (its own OR the central system token).
+    // A client is "connected" if it has a dedicated ad account AND a usable token.
     const connectedClients = clients.filter((c: any) =>
       (c.meta_connection_status === 'connected' || c.metaConnectionStatus === 'connected') &&
       (c.meta_ad_account_id || c.metaAdAccountId) &&
       (c.meta_access_token || c.metaAccessToken || systemToken)
     );
 
-    if (connectedClients.length === 0) {
-      return NextResponse.json({
-        error: 'אין לקוחות עם חיבור מטא פעיל',
-        clientsChecked: clients.length,
-      }, { status: 400 });
+    // Campaign-level assignments — a shared ad account serving many clients.
+    const assignsByClient = new Map<string, { adAccountIds: Set<string>; metaIds: Set<string> }>();
+    try {
+      const { data: allAssigns } = await sb.from('app_meta_campaign_assignments').select('*');
+      for (const a of (allAssigns || []) as any[]) {
+        if (!a.client_id || !a.meta_campaign_id) continue;
+        if (targetClientId && a.client_id !== targetClientId) continue;
+        if (!assignsByClient.has(a.client_id)) assignsByClient.set(a.client_id, { adAccountIds: new Set(), metaIds: new Set() });
+        const g = assignsByClient.get(a.client_id)!;
+        g.metaIds.add(a.meta_campaign_id);
+        if (a.ad_account_id) g.adAccountIds.add(a.ad_account_id);
+      }
+    } catch { /* assignments table may not exist yet */ }
+
+    // Targets = dedicated-account clients ∪ campaign-assignment clients.
+    const targetById = new Map<string, any>();
+    for (const c of connectedClients) targetById.set((c as any).id, c);
+    const extraIds = [...assignsByClient.keys()].filter((id) => !targetById.has(id));
+    if (extraIds.length > 0) {
+      const { data: extra } = await sb.from('clients').select('*').in('id', extraIds);
+      for (const c of (extra || []) as any[]) targetById.set(c.id, c);
+    }
+    const targets = [...targetById.values()];
+
+    if (targets.length === 0) {
+      return NextResponse.json({ error: 'אין לקוחות עם חיבור מטא פעיל', clientsChecked: clients.length }, { status: 400 });
     }
 
-    // Run optimization for each connected client
-    for (const client of connectedClients) {
+    // Sync each relevant ad account ONCE per run (dedup across clients).
+    const syncedAccounts = new Set<string>();
+    for (const client of targets) {
+      const c = client as any;
+      const token = c.meta_access_token || c.metaAccessToken || systemToken || '';
+      if (!token) continue;
+      const accts = new Set<string>();
+      if (c.meta_ad_account_id || c.metaAdAccountId) accts.add(c.meta_ad_account_id || c.metaAdAccountId);
+      const grp = assignsByClient.get(c.id);
+      if (grp) for (const a of grp.adAccountIds) accts.add(a);
+      for (const actId of accts) {
+        if (!actId || syncedAccounts.has(actId)) continue;
+        syncedAccounts.add(actId);
+        try { await syncClientMetaAccount(c.id, c.name || '', actId, token); }
+        catch (e) { console.warn('[daily-optimize] sync failed for', actId, e); }
+      }
+    }
+
+    // Load ALL synced data once from the correct app_* tables (matches sync + dashboard).
+    const [allCampaigns, allAdSets, allAds] = await Promise.all([
+      campaignsCol.getAllAsync(),
+      adSetsCol.getAllAsync(),
+      adsCol.getAllAsync(),
+    ]);
+
+    // Run optimization for each target client
+    for (const client of targets) {
       try {
         const c = client as any;
         const accessToken = c.meta_access_token || c.metaAccessToken || systemToken || '';
-        const adAccountId = c.meta_ad_account_id || c.metaAdAccountId || '';
+        const dedicatedAcct = c.meta_ad_account_id || c.metaAdAccountId || '';
+        const grp = assignsByClient.get(c.id);
+        if (!accessToken || (!dedicatedAcct && !grp)) continue;
 
-        if (!accessToken || !adAccountId) continue;
+        // Build this client's campaign subset from the preloaded synced data:
+        //  - dedicated account → campaigns owned by the client
+        //  - campaign assignment → campaigns whose Meta id is assigned to the client
+        const campaigns = (allCampaigns as any[]).filter((cm) =>
+          (dedicatedAcct && cm.clientId === c.id) ||
+          (grp && cm.metaCampaignId && grp.metaIds.has(cm.metaCampaignId))
+        );
+        const campIds = new Set(campaigns.map((cm) => cm.id));
+        const adSets = (allAdSets as any[]).filter((s) => campIds.has(s.campaignId));
+        const ads = (allAds as any[]).filter((a) => campIds.has(a.campaignId));
 
-        // Sync latest data from Meta FIRST — imports campaigns/adsets/ads
-        // that exist on Meta but weren't created through our system
-        try {
-          console.log(`[daily-optimize] Syncing Meta data for "${client.name}"...`);
-          await syncClientMetaAccount(client.id, client.name || '', adAccountId, accessToken);
-          console.log(`[daily-optimize] Sync complete for "${client.name}"`);
-        } catch (syncErr) {
-          console.warn(`[daily-optimize] Sync failed for "${client.name}", continuing with local data:`, syncErr);
-        }
-
-        // Load campaigns, adsets, ads for this client (now includes synced external campaigns)
-        const { data: campaigns } = await sb
-          .from('campaigns')
-          .select('*')
-          .eq('client_id', client.id);
-
-        const { data: adSets } = await sb
-          .from('ad_sets')
-          .select('*')
-          .eq('client_id', client.id);
-
-        const { data: ads } = await sb
-          .from('ads')
-          .select('*')
-          .eq('client_id', client.id);
-
-        const creds = { adAccountId, accessToken };
+        const creds = { adAccountId: dedicatedAcct || [...(grp?.adAccountIds || [])][0] || '', accessToken };
 
         // Load previous CPLs from the most recent persisted report — gives the
         // optimizer REAL history for trend calc (vs. the old synthetic fallback).
