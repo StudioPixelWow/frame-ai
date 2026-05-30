@@ -13,6 +13,7 @@ import { getSystemMetaToken } from '@/lib/meta-ads/token';
 import { campaigns as campaignsCol, adSets as adSetsCol, ads as adsCol } from '@/lib/db/collections';
 import { runDailyOptimization, generateDailyReport, type DailyOptimizerResult, type DailyReport } from '@/lib/meta-ads/daily-optimizer';
 import { syncClientMetaAccount } from '@/lib/meta-ads/sync-service';
+import { sendOptimizerAlert } from '@/lib/meta-ads/alerts';
 import type { Client, Campaign, AdSet, Ad } from '@/lib/db/schema';
 
 export const dynamic = 'force-dynamic';
@@ -186,6 +187,30 @@ export async function POST(req: NextRequest) {
           (adSets || []) as AdSet[],
           (ads || []) as Ad[],
         );
+
+        // ── Budget pacing (#7): 30-day spend vs ~monthly budget (daily×30) ──
+        const overspend: { campaignName: string; spend: number; monthlyBudget: number }[] = [];
+        for (const cm of campaigns) {
+          const cAds = ads.filter((a: any) => a.campaignId === cm.id);
+          const spend = cAds.reduce((s: number, a: any) => s + (a.spend || 0), 0);
+          const monthlyBudget = (cm.budget || 0) * 30;
+          if (monthlyBudget > 0 && spend > monthlyBudget * 1.2) {
+            overspend.push({ campaignName: cm.campaignName || cm.name || '', spend, monthlyBudget });
+          }
+        }
+        (report as any).overspend = overspend;
+
+        // ── Alert (#2): notify the agency on actions / CPL spike / overspend ──
+        try {
+          await sendOptimizerAlert({
+            clientName: c.name || '',
+            pausedCount: (report.summary.adsPaused || 0) + (report.summary.adSetsPaused || 0),
+            newAdsCreated: report.summary.newAdsCreated || 0,
+            cplTrend: report.summary.cplTrend,
+            cplDeltaPct: report.summary.cplDeltaPct || 0,
+            overspend,
+          });
+        } catch { /* alerts are best-effort */ }
 
         // Persist report to DB
         try {
