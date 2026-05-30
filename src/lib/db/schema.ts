@@ -91,6 +91,8 @@ export interface Client {
   gscRefreshToken: string;
   gscSiteUrl: string;
   gscConnectionStatus: 'connected' | 'not_connected' | 'token_expired' | 'error';
+  // Hosting clients pay once a year — annual payment date (ISO). Hosting-only.
+  annualPaymentDate?: string | null;
 }
 
 // AI Settings
