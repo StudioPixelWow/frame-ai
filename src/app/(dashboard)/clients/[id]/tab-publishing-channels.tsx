@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import type { Client } from "@/lib/db/schema";
 import { useToast } from "@/components/ui/toast";
+import PostPreview from "@/components/meta/post-preview";
 
 /* ── Types ── */
 
@@ -415,6 +416,23 @@ export default function TabPublishingChannels({ client }: { client: Client }) {
                 style={{ ...inputStyle, cursor: "pointer" }}
               />
             </div>
+
+            {/* Live preview */}
+            {(targetFb || targetIg) && (publishMessage || publishMediaUrl) && (
+              <div style={{ marginBottom: "0.85rem" }}>
+                <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.4rem" }}>תצוגה מקדימה</div>
+                <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+                  {targetFb && (
+                    <PostPreview network="facebook" kind={publishKind} pageName={connectedPageName}
+                      message={publishMessage} mediaUrl={publishMediaUrl} mediaType={publishMediaType} />
+                  )}
+                  {targetIg && (
+                    <PostPreview network="instagram" kind={publishKind} pageName={connectedPageName} igUsername={igUsername}
+                      message={publishMessage} mediaUrl={publishMediaUrl} mediaType={publishMediaType} />
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Publish result */}
             {publishResult && (
