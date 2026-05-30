@@ -1078,25 +1078,49 @@ export default function ClientsPage() {
           {form.clientType === "hosting" && (
             <div style={{ marginTop: "1rem" }}>
               <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
-                מועד תשלום שנתי
+                מועד תשלום שנתי (יום וחודש)
               </label>
-              <input
-                type="date"
-                className="form-input ux-input"
-                value={form.annualPaymentDate}
-                onChange={(e) => setForm({ ...form, annualPaymentDate: e.target.value })}
-              />
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                {/* Day */}
+                <select
+                  className="form-select"
+                  value={form.annualPaymentDate.split("-")[1] || ""}
+                  onChange={(e) => {
+                    const m = form.annualPaymentDate.split("-")[0] || "";
+                    setForm({ ...form, annualPaymentDate: `${m}-${e.target.value}` });
+                  }}
+                >
+                  <option value="">יום</option>
+                  {Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0")).map((d) => (
+                    <option key={d} value={d}>{Number(d)}</option>
+                  ))}
+                </select>
+                {/* Month */}
+                <select
+                  className="form-select"
+                  value={form.annualPaymentDate.split("-")[0] || ""}
+                  onChange={(e) => {
+                    const d = form.annualPaymentDate.split("-")[1] || "";
+                    setForm({ ...form, annualPaymentDate: `${e.target.value}-${d}` });
+                  }}
+                >
+                  <option value="">חודש</option>
+                  {["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"].map((name, i) => (
+                    <option key={i} value={String(i + 1).padStart(2, "0")}>{name}</option>
+                  ))}
+                </select>
+              </div>
               <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", marginTop: "0.3rem" }}>
-                לקוחות אחסון אתרים משלמים פעם בשנה — בחר את מועד החיוב השנתי.
+                לקוחות אחסון אתרים משלמים פעם בשנה — בחר את היום והחודש של החיוב השנתי (חוזר מדי שנה).
               </div>
             </div>
           )}
 
-          {/* Row 5: Retainer Amount and Status */}
+          {/* Row 5: Payment Amount and Status */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
             <div>
               <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.35rem" }}>
-                ריטיינר ₪
+                {form.clientType === "hosting" ? "תשלום שנתי ₪" : "ריטיינר ₪"}
               </label>
               <input
                 className="form-input ux-input"
