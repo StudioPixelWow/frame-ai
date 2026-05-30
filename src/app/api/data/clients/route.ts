@@ -49,6 +49,10 @@ function rowToClient(r: ClientRow) {
     convertedFromLead:  (r.converted_from_lead as string) ?? null,
     assignedManagerId:  (r.assigned_manager_id as string) ?? null,
     annualPaymentDate:  (r.annual_payment_date as string) ?? null,
+    // Meta connection (so UIs can show connected status / account)
+    metaAdAccountId:       (r.meta_ad_account_id as string) ?? '',
+    metaConnectionStatus:  (r.meta_connection_status as string) ?? 'not_connected',
+    metaLastSyncedAt:      (r.meta_last_synced_at as string) ?? null,
     // Extra fields — read + write
     websiteUrl:          (r.website as string) ?? '',
     facebookPageUrl:     (r.facebook as string) ?? '',
