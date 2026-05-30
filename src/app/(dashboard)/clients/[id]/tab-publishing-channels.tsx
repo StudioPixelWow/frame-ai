@@ -52,11 +52,12 @@ export default function TabPublishingChannels({ client }: { client: Client }) {
   const toast = useToast();
   const c = client as any;
 
-  // Connected page state (from client record)
-  const connectedPageId = c.facebookPageId || c.facebook_page_id || c.metaPageId || c.meta_page_id || "";
-  const connectedPageName = c.facebookPageName || c.facebook_page_name || "";
-  const connectionStatus = c.metaConnectionStatus || c.meta_connection_status || "not_connected";
-  const isConnected = !!connectedPageId && connectionStatus === "connected";
+  // Connected page state (from client record) — prefer the new dedicated fields.
+  const connectedPageId = c.fbPageId || c.fb_page_id || c.facebookPageId || c.facebook_page_id || "";
+  const connectedPageName = c.fbPageName || c.fb_page_name || c.facebookPageName || c.facebook_page_name || "";
+  const igUsername = c.igUsername || c.ig_username || "";
+  const hasInstagram = !!(c.igUserId || c.ig_user_id);
+  const isConnected = !!connectedPageId;
 
   // Page picker state
   const [showPicker, setShowPicker] = useState(false);
@@ -75,6 +76,11 @@ export default function TabPublishingChannels({ client }: { client: Client }) {
   const [publishMediaType, setPublishMediaType] = useState<"image" | "video">("image");
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<{ success: boolean; postId?: string; error?: string } | null>(null);
+  // New: kind (post/story), targets (fb/ig), scheduling
+  const [publishKind, setPublishKind] = useState<"post" | "story">("post");
+  const [targetFb, setTargetFb] = useState(true);
+  const [targetIg, setTargetIg] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState("");
 
   // Fetch available pages
   const handleFetchPages = useCallback(async () => {
@@ -158,12 +164,14 @@ export default function TabPublishingChannels({ client }: { client: Client }) {
     }
   }, [client.id, toast]);
 
-  // Publish content
+  // Publish / schedule content
   const handlePublish = useCallback(async () => {
     if (!publishMessage && !publishMediaUrl) {
-      toast("יש להזין טקסט או קישור למדיה", "error");
-      return;
+      toast("יש להזין טקסט או מדיה", "error"); return;
     }
+    if (!targetFb && !targetIg) { toast("בחר לפחות רשת אחת", "error"); return; }
+    if (publishKind === "story" && !publishMediaUrl) { toast("סטורי דורש מדיה", "error"); return; }
+    if (targetIg && !publishMediaUrl) { toast("אינסטגרם דורש מדיה", "error"); return; }
     setPublishing(true);
     setPublishResult(null);
     try {
@@ -171,18 +179,27 @@ export default function TabPublishingChannels({ client }: { client: Client }) {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getRoleHeaders() },
         body: JSON.stringify({
+          kind: publishKind,
           message: publishMessage,
           mediaUrl: publishMediaUrl || undefined,
           mediaType: publishMediaUrl ? publishMediaType : undefined,
+          targets: { facebook: targetFb, instagram: targetIg },
+          scheduledAt: scheduledAt || undefined,
         }),
       });
       const data = await res.json();
 
       if (data.success) {
-        setPublishResult({ success: true, postId: data.postId });
-        toast("הפוסט פורסם בהצלחה!", "success");
-        setPublishMessage("");
-        setPublishMediaUrl("");
+        if (data.scheduled) {
+          setPublishResult({ success: true });
+          toast("הפוסט תוזמן בהצלחה", "success");
+        } else {
+          const fb = data.outcome?.facebook, ig = data.outcome?.instagram;
+          const parts = [fb && (fb.ok ? "✓ פייסבוק" : "✗ פייסבוק"), ig && (ig.ok ? "✓ אינסטגרם" : "✗ אינסטגרם")].filter(Boolean);
+          setPublishResult({ success: true });
+          toast(`פורסם: ${parts.join(" · ")}`, "success");
+        }
+        setPublishMessage(""); setPublishMediaUrl(""); setScheduledAt("");
       } else {
         setPublishResult({ success: false, error: data.error });
         toast(data.error || "שגיאה בפרסום", "error");
@@ -193,7 +210,7 @@ export default function TabPublishingChannels({ client }: { client: Client }) {
     } finally {
       setPublishing(false);
     }
-  }, [client.id, publishMessage, publishMediaUrl, publishMediaType, toast]);
+  }, [client.id, publishKind, publishMessage, publishMediaUrl, publishMediaType, targetFb, targetIg, scheduledAt, toast]);
 
   return (
     <div style={{ direction: "rtl" }}>
@@ -317,6 +334,32 @@ export default function TabPublishingChannels({ client }: { client: Client }) {
               פרסם תוכן לדף {connectedPageName}
             </h4>
 
+            {/* Kind: post / story */}
+            <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
+              {(["post", "story"] as const).map((k) => (
+                <button key={k} type="button" onClick={() => setPublishKind(k)}
+                  style={{
+                    padding: "0.4rem 0.9rem", fontSize: "0.78rem", fontWeight: 600, borderRadius: "0.375rem", cursor: "pointer",
+                    border: `1px solid ${publishKind === k ? "#1877f2" : "var(--border)"}`,
+                    background: publishKind === k ? "#1877f2" : "transparent",
+                    color: publishKind === k ? "#fff" : "var(--foreground-muted)",
+                  }}>
+                  {k === "post" ? "📰 פוסט" : "⭕ סטורי"}
+                </button>
+              ))}
+            </div>
+
+            {/* Targets: facebook / instagram */}
+            <div style={{ display: "flex", gap: "1rem", marginBottom: "0.75rem", fontSize: "0.8rem" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.35rem", cursor: "pointer" }}>
+                <input type="checkbox" checked={targetFb} onChange={(e) => setTargetFb(e.target.checked)} /> פייסבוק
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.35rem", cursor: hasInstagram ? "pointer" : "not-allowed", opacity: hasInstagram ? 1 : 0.5 }}>
+                <input type="checkbox" checked={targetIg} disabled={!hasInstagram} onChange={(e) => setTargetIg(e.target.checked)} />
+                אינסטגרם {hasInstagram ? (igUsername ? `(@${igUsername})` : "") : "(לא מקושר)"}
+              </label>
+            </div>
+
             {/* Message */}
             <div style={{ marginBottom: "0.75rem" }}>
               <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.25rem" }}>
@@ -360,6 +403,19 @@ export default function TabPublishingChannels({ client }: { client: Client }) {
               </div>
             </div>
 
+            {/* Schedule (optional) */}
+            <div style={{ marginBottom: "0.75rem" }}>
+              <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.25rem" }}>
+                תזמון (אופציונלי — ריק = פרסום מיידי)
+              </label>
+              <input
+                type="datetime-local"
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+                style={{ ...inputStyle, cursor: "pointer" }}
+              />
+            </div>
+
             {/* Publish result */}
             {publishResult && (
               <div style={{
@@ -369,7 +425,7 @@ export default function TabPublishingChannels({ client }: { client: Client }) {
                 fontSize: "0.78rem", color: publishResult.success ? "#22c55e" : "#ef4444",
               }}>
                 {publishResult.success
-                  ? `✓ הפוסט פורסם בהצלחה (ID: ${publishResult.postId})`
+                  ? (scheduledAt ? "✓ התוכן תוזמן בהצלחה" : "✓ התוכן פורסם בהצלחה")
                   : `✗ ${publishResult.error}`}
               </div>
             )}
