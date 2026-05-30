@@ -119,6 +119,24 @@ export async function POST(req: NextRequest) {
 
         const creds = { adAccountId, accessToken };
 
+        // Load previous CPLs from the most recent persisted report — gives the
+        // optimizer REAL history for trend calc (vs. the old synthetic fallback).
+        const previousCpls: Record<string, number> = {};
+        try {
+          const { data: prevReports } = await sb
+            .from('app_meta_daily_reports')
+            .select('report_data, data, created_at')
+            .eq('client_id', client.id)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          const prev: any = prevReports?.[0]?.report_data || prevReports?.[0]?.data;
+          if (prev?.campaigns) {
+            for (const c of prev.campaigns) {
+              if (c.campaignId && c.cpl > 0) previousCpls[c.campaignId] = c.cpl;
+            }
+          }
+        } catch { /* no history yet — first run */ }
+
         // Run optimizer
         const optimizerResult = await runDailyOptimization(
           client as Client,
@@ -126,6 +144,7 @@ export async function POST(req: NextRequest) {
           (adSets || []) as AdSet[],
           (ads || []) as Ad[],
           creds,
+          previousCpls,
         );
 
         // Generate report

@@ -25,7 +25,7 @@ import {
   createMetaAdSet,
   createMetaAd,
   pauseMetaAd,
-  pauseMetaCampaign,
+  pauseMetaAdSet,
   type MetaCredentials,
   type MetaWriteResult,
   type CreateAdSetPayload,
@@ -178,16 +178,19 @@ function generateNewAudiences(
 function calculateCplTrend(
   campaign: Campaign,
   ads: Ad[],
+  previousCpls?: Record<string, number>,
 ): CplTrend {
   const campaignAds = ads.filter(a => a.campaignId === campaign.id);
   const totalSpend = campaignAds.reduce((s, a) => s + (a.spend || 0), 0);
   const totalLeads = campaignAds.reduce((s, a) => s + (a.leads || 0), 0);
   const cplToday = totalLeads > 0 ? totalSpend / totalLeads : 0;
 
-  // Estimate yesterday's CPL from performance delta
-  // In real implementation, this would query historical data
-  // For now, use the stored campaign-level data
-  const storedCpl = (campaign as any).lastCpl || cplToday;
+  // Real previous CPL from the last persisted daily report (passed in by the route).
+  // Falls back to any stored campaign value, then to today (no change) if no history.
+  const prior = previousCpls?.[campaign.id];
+  const storedCpl = (prior != null && prior > 0)
+    ? prior
+    : ((campaign as any).lastCpl || cplToday);
   const cplDelta = cplToday - storedCpl;
   const cplDeltaPct = storedCpl > 0 ? (cplDelta / storedCpl) * 100 : 0;
 
@@ -218,6 +221,7 @@ export async function runDailyOptimization(
   adSets: AdSet[],
   ads: Ad[],
   creds: MetaCredentials,
+  previousCpls?: Record<string, number>,
 ): Promise<DailyOptimizerResult> {
   const startTime = Date.now();
   const actions: OptimizationAction[] = [];
@@ -240,8 +244,8 @@ export async function runDailyOptimization(
       const campaignAdSets = adSets.filter(as => as.campaignId === campaign.id);
       const campaignAds = ads.filter(a => a.campaignId === campaign.id);
 
-      // 1. Calculate CPL trend
-      const cplTrend = calculateCplTrend(campaign, campaignAds);
+      // 1. Calculate CPL trend (vs. last persisted run — real history)
+      const cplTrend = calculateCplTrend(campaign, campaignAds, previousCpls);
       allCplTrends.push(cplTrend);
 
       // 2. Run optimization analysis
@@ -293,20 +297,18 @@ export async function runDailyOptimization(
 
           if (metaAdSetId && creds.accessToken) {
             try {
-              // Use the API to pause
-              const pauseRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/meta-business/adsets/${metaAdSetId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'PAUSED', accessToken: creds.accessToken }),
-              });
+              // Direct Graph API pause — no self-HTTP call (which depended on
+              // NEXT_PUBLIC_APP_URL and failed silently in the cron context).
+              const pauseResult = await pauseMetaAdSet(creds, metaAdSetId);
               actions.push({
                 type: 'pause_adset',
                 objectId: rec.objectId,
                 objectName: rec.objectName,
                 description: `השהיית סדרת מודעות: ${rec.reason}`,
-                success: pauseRes.ok,
+                metaResult: pauseResult,
+                success: pauseResult.success,
               });
-              if (pauseRes.ok) adSetsPaused++;
+              if (pauseResult.success) adSetsPaused++;
             } catch (e) {
               errors.push(`שגיאה בהשהיית אדסט ${rec.objectName}: ${e}`);
             }
@@ -438,14 +440,32 @@ export async function runDailyOptimization(
 
         if (worseAdSets.length > 0) {
           const worst = worseAdSets[0];
-          actions.push({
-            type: 'pause_adset',
-            objectId: worst.id,
-            objectName: worst.name,
-            description: `השהיית אוטומטית — CPL עולה ב-${Math.round(cplTrend.cplDeltaPct)}%. סדרת מודעות זו הכי יקרה.`,
-            success: true,
-          });
-          adSetsPaused++;
+          const worstMetaAdSetId = (worst as any)?.metaAdSetId;
+          if (worstMetaAdSetId && creds.accessToken) {
+            try {
+              // REAL Graph API pause (previously this branch reported success without acting).
+              const emResult = await pauseMetaAdSet(creds, worstMetaAdSetId);
+              actions.push({
+                type: 'pause_adset',
+                objectId: worst.id,
+                objectName: worst.name,
+                description: `השהיית אוטומטית — CPL עולה ב-${Math.round(cplTrend.cplDeltaPct)}%. סדרת מודעות זו הכי יקרה.`,
+                metaResult: emResult,
+                success: emResult.success,
+              });
+              if (emResult.success) adSetsPaused++;
+            } catch (e) {
+              errors.push(`שגיאה בהשהיית חירום ${worst.name}: ${e}`);
+            }
+          } else {
+            actions.push({
+              type: 'pause_adset',
+              objectId: worst.id,
+              objectName: worst.name,
+              description: `מומלץ להשהות (CPL עולה ב-${Math.round(cplTrend.cplDeltaPct)}%) — אין metaAdSetId, לא בוצע אוטומטית.`,
+              success: false,
+            });
+          }
         }
       }
     } catch (campaignError) {

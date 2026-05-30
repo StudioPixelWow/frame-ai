@@ -114,7 +114,7 @@ interface MetaInsight {
 
 /* ── Config ── */
 
-const API_BASE = 'https://graph.facebook.com/v18.0';
+const API_BASE = 'https://graph.facebook.com/v19.0';
 const CAMPAIGN_FIELDS = 'id,name,objective,status,buying_type,daily_budget,lifetime_budget,start_time,stop_time,created_time,updated_time';
 const ADSET_FIELDS = 'id,campaign_id,name,status,targeting,daily_budget,lifetime_budget,optimization_goal,billing_event,promoted_object,start_time,end_time,created_time,updated_time';
 const AD_FIELDS = 'id,adset_id,campaign_id,name,status,creative{id,body,title,call_to_action_type,link_url,image_url,video_id,thumbnail_url,object_story_spec},created_time,updated_time';

@@ -1,7 +1,7 @@
 /**
  * Daily Meta Ads Optimizer Cron
  *
- * Runs daily (06:00 UTC / 09:00 Israel) via Vercel cron.
+ * Runs twice daily (06:00 + 15:00 UTC / 09:00 + 18:00 Israel) via Vercel cron.
  * Directly calls the daily-optimize POST handler (no HTTP self-fetch):
  *   1. Sync latest data from Meta for all connected clients
  *   2. Analyze performance + CPL trends

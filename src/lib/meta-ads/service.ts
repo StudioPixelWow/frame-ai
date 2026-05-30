@@ -38,7 +38,7 @@ export interface MetaAdsConnectionStatus {
 
 /* ── Config ── */
 
-const API_BASE = 'https://graph.facebook.com/v18.0';
+const API_BASE = 'https://graph.facebook.com/v19.0';
 const FIELDS = 'ad_creative_body,ad_snapshot_url,page_name';
 
 function getAccessToken(): string | null {

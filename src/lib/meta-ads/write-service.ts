@@ -18,7 +18,7 @@
  *   - metaAccessToken  (long-lived token with ads_management permission)
  */
 
-const API_BASE = 'https://graph.facebook.com/v18.0';
+const API_BASE = 'https://graph.facebook.com/v19.0';
 
 /* ── Types ── */
 
@@ -437,6 +437,28 @@ export async function resumeMetaAd(
     return { success: false, error: 'Missing access token or Meta ad ID' };
   }
   return metaPost(`${API_BASE}/${metaAdId}`, creds.accessToken, { status: 'ACTIVE' });
+}
+
+/* ── Pause / Resume Ad Set ── */
+
+export async function pauseMetaAdSet(
+  creds: MetaCredentials,
+  metaAdSetId: string,
+): Promise<MetaWriteResult> {
+  if (!creds.accessToken || !metaAdSetId) {
+    return { success: false, error: 'Missing access token or Meta ad set ID' };
+  }
+  return metaPost(`${API_BASE}/${metaAdSetId}`, creds.accessToken, { status: 'PAUSED' });
+}
+
+export async function resumeMetaAdSet(
+  creds: MetaCredentials,
+  metaAdSetId: string,
+): Promise<MetaWriteResult> {
+  if (!creds.accessToken || !metaAdSetId) {
+    return { success: false, error: 'Missing access token or Meta ad set ID' };
+  }
+  return metaPost(`${API_BASE}/${metaAdSetId}`, creds.accessToken, { status: 'ACTIVE' });
 }
 
 /* ── Pause / Resume Campaign ── */
