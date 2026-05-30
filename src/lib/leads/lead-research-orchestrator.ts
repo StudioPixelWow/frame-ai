@@ -450,6 +450,91 @@ async function runSocialScan(url: string, businessName: string, socialUrls?: Rec
   return result;
 }
 
+// ── Shared helpers: commercial keywords + competitor filtering ──────────────
+
+// Social networks + directories/aggregators that are NOT real competitors.
+const NON_COMPETITOR_DOMAINS = [
+  'facebook.com', 'instagram.com', 'linkedin.com', 'tiktok.com', 'youtube.com',
+  'twitter.com', 'x.com', 'pinterest.com', 'wikipedia.org', 'yelp.com',
+  'waze.com', 'google.com', 'maps.google', 'b144.co.il', 'd.co.il', 'dapey',
+  'zap.co.il', 'easy.co.il', 'rest.co.il', 'mapa.co.il', 'gov.il', 'nadlan',
+  'yad2.co.il', 'org.il/wiki',
+];
+
+function brandTokensOf(businessName: string): string[] {
+  return (businessName || '')
+    .replace(/["'|\-–—]/g, ' ')
+    .split(/\s+/)
+    .map(t => t.trim())
+    .filter(t => t.length > 1);
+}
+
+function isNonCompetitor(hostname: string, title: string, ownDomain: string, brandTokens: string[]): boolean {
+  const h = (hostname || '').toLowerCase().replace(/^www\./, '');
+  if (!h) return true;
+  if (ownDomain && (h === ownDomain.replace(/^www\./, '') || h.includes(ownDomain.replace(/^www\./, '')))) return true;
+  if (NON_COMPETITOR_DOMAINS.some(d => h.includes(d))) return true;
+  // brand appears in the result title or domain → it's the client's own asset, not a competitor
+  const hay = `${h} ${(title || '').toLowerCase()}`;
+  if (brandTokens.length && brandTokens.every(t => hay.includes(t.toLowerCase()))) return true;
+  return false;
+}
+
+/**
+ * Derive 3-4 COMMERCIAL keywords (what prospects search — the business's services),
+ * explicitly excluding the firm/brand name. Uses AI when available, with a
+ * deterministic fallback so it always returns something usable.
+ */
+async function deriveCommercialKeywords(wf: any, businessName: string): Promise<string[]> {
+  const brandTokens = brandTokensOf(businessName);
+  const stripBrand = (s: string) => {
+    const tokens = s.replace(/["'|\-–—,:]/g, ' ').split(/\s+/).filter(t => t.length > 1);
+    return tokens.length > 0 && tokens.every(t => brandTokens.some(b => t.includes(b) || b.includes(t)));
+  };
+
+  // ── Try AI extraction ──
+  try {
+    const { generateWithAI } = await import('@/lib/ai/openai-client');
+    const ctx = [
+      `שם העסק: ${businessName}`,
+      `כותרת: ${wf?.title || ''}`,
+      `תיאור: ${wf?.description || ''}`,
+      `H1: ${wf?.h1 || ''}`,
+      `כותרות: ${(wf?.h2Headings || []).join(' | ')}`,
+    ].join('\n');
+    const r = await generateWithAI(
+      `אתה מומחה SEO. מהנתונים הבאים זהה 3-4 מילות מפתח מסחריות עיקריות שלקוחות פוטנציאליים מחפשים בגוגל — תחומי העיסוק/השירותים של העסק. אסור לכלול את שם העסק/המשרד עצמו. החזר JSON בלבד: {"keywords":["...","...","..."]}. בעברית.`,
+      ctx,
+      { temperature: 0.3, maxTokens: 300 },
+    );
+    if (r.success && r.data) {
+      const parsed: any = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+      const kws = (parsed?.keywords || [])
+        .map((k: any) => String(k).trim())
+        .filter((k: string) => k.length >= 3 && !stripBrand(k));
+      if (kws.length >= 2) return kws.slice(0, 4);
+    }
+  } catch (e: any) {
+    console.warn('[LeadResearch] AI keyword extraction failed, using fallback:', e?.message);
+  }
+
+  // ── Deterministic fallback ──
+  const candidates: string[] = [];
+  if (wf?.title) for (const seg of String(wf.title).split(/[|\-–—•·]/)) { const s = seg.trim(); if (s.length >= 4 && s.length <= 60) candidates.push(s); }
+  if (wf?.h1) candidates.push(String(wf.h1).trim());
+  for (const h2 of (wf?.h2Headings || [])) { const s = String(h2).trim(); if (s.length >= 4 && s.length <= 60) candidates.push(s); }
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const c of candidates) {
+    const key = c.toLowerCase();
+    if (seen.has(key) || stripBrand(c)) continue;
+    seen.add(key);
+    out.push(c);
+    if (out.length >= 4) break;
+  }
+  return out.length ? out : [businessName];
+}
+
 async function runGooglePresence(url: string, businessName: string, websiteFacts?: any): Promise<any> {
   // Self-contained: use Serper API if available, otherwise return basic info
   console.log('[LeadResearch] Stage 3: Google presence for', businessName);
@@ -472,56 +557,11 @@ async function runGooglePresence(url: string, businessName: string, websiteFacts
     let domain = url;
     try { domain = new URL(url).hostname; } catch {}
 
-    // ── Build COMMERCIAL keywords (the phrases prospects actually search) ──
-    // Ranking #1 for the business's own name is meaningless, so we extract
-    // service-intent phrases from the title/H1/H2s and exclude the brand name.
+    // ── COMMERCIAL keywords (AI-derived, brand name excluded) ──
+    // Ranking for the business's own name is meaningless; we check the
+    // business's SERVICES instead.
     const wf = websiteFacts || {};
-    const brandTokens = (businessName || '')
-      .split(/\s+/).map(t => t.trim()).filter(t => t.length > 1);
-    const isBrandOnly = (phrase: string) => {
-      const cleaned = phrase.replace(/[|\-–—,:]/g, ' ').trim();
-      if (!cleaned) return true;
-      // brand-only if every meaningful token is part of the business name
-      const tokens = cleaned.split(/\s+/).filter(t => t.length > 1);
-      return tokens.length > 0 && tokens.every(t => brandTokens.some(b => t.includes(b) || b.includes(t)));
-    };
-
-    const candidates: string[] = [];
-    // Split the title on separators — the non-brand segments are usually services
-    if (wf.title) {
-      for (const seg of String(wf.title).split(/[|\-–—•·]/)) {
-        const s = seg.trim();
-        if (s.length >= 4 && s.length <= 60) candidates.push(s);
-      }
-    }
-    if (wf.h1) candidates.push(String(wf.h1).trim());
-    for (const h2 of (wf.h2Headings || [])) {
-      const s = String(h2).trim();
-      if (s.length >= 4 && s.length <= 60) candidates.push(s);
-    }
-    if (wf.description) {
-      // first clause of the meta description
-      const firstClause = String(wf.description).split(/[.,–—|]/)[0]?.trim();
-      if (firstClause && firstClause.length >= 6 && firstClause.length <= 60) candidates.push(firstClause);
-    }
-
-    // Dedup, drop brand-only phrases, keep up to 4 commercial keywords
-    const seen = new Set<string>();
-    const keywords: string[] = [];
-    for (const c of candidates) {
-      const key = c.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      if (isBrandOnly(c)) continue;
-      keywords.push(c);
-      if (keywords.length >= 4) break;
-    }
-    // Fallback: if nothing commercial found, use description/h1 (still better than brand name)
-    if (keywords.length === 0) {
-      if (wf.description) keywords.push(String(wf.description).substring(0, 50));
-      else if (wf.h1) keywords.push(String(wf.h1));
-      else keywords.push(businessName);
-    }
+    const keywords = await deriveCommercialKeywords(wf, businessName);
 
     // Search for EACH keyword separately and report positions for each
     const keywordResults: any[] = [];
@@ -929,8 +969,10 @@ async function runGeoAnalysis(url: string, businessName: string, websiteFacts: a
   return { overallVisibility, platforms: results, checkedCount: checked.length };
 }
 
-async function runCompetitorAnalysis(url: string, websiteFacts: any): Promise<any> {
-  // Self-contained: use Serper to find competitors
+async function runCompetitorAnalysis(url: string, websiteFacts: any, keywords?: string[], businessName?: string): Promise<any> {
+  // Find REAL competitors: search by a COMMERCIAL query (a service the business
+  // offers), then exclude the client's own domain, its social profiles, and
+  // directories/aggregators — so the list is genuine competing businesses only.
   console.log('[LeadResearch] Stage 7: Competitor analysis');
   const serperKey = process.env.SERPER_API_KEY || process.env.SERP_API_KEY;
 
@@ -939,33 +981,97 @@ async function runCompetitorAnalysis(url: string, websiteFacts: any): Promise<an
   }
 
   try {
-    let domain = '';
-    try { domain = new URL(url).hostname; } catch {}
+    let ownDomain = '';
+    try { ownDomain = new URL(url).hostname.replace(/^www\./, ''); } catch {}
+    const brandTokens = brandTokensOf(businessName || websiteFacts.title || '');
+
+    // Use a commercial keyword (service intent), NOT the brand title.
+    const query = (keywords && keywords.length > 0)
+      ? keywords[0]
+      : (await deriveCommercialKeywords(websiteFacts, businessName || ''))[0];
 
     const res = await fetch('https://google.serper.dev/search', {
       method: 'POST',
       headers: { 'X-API-KEY': serperKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: websiteFacts.title, gl: 'il', hl: 'he', num: 10 }),
+      body: JSON.stringify({ q: query, gl: 'il', hl: 'he', num: 15 }),
     });
 
     if (!res.ok) return { competitors: [], marketPosition: 'unknown' };
 
     const data = await res.json();
-    const competitors = (data.organic || [])
-      .filter((r: any) => !r.link?.includes(domain))
-      .slice(0, 5)
-      .map((r: any, i: number) => ({
+    const competitors: any[] = [];
+    for (const r of (data.organic || [])) {
+      if (!r.link) continue;
+      let host = '';
+      try { host = new URL(r.link).hostname; } catch { continue; }
+      if (isNonCompetitor(host, r.title || '', ownDomain, brandTokens)) continue;
+      // de-dup by hostname
+      if (competitors.some(c => c.domain === host.replace(/^www\./, ''))) continue;
+      competitors.push({
         name: r.title,
-        domain: new URL(r.link).hostname,
-        position: i + 1,
-        strengths: [r.snippet?.substring(0, 100)],
+        domain: host.replace(/^www\./, ''),
+        position: competitors.length + 1,
+        strengths: r.snippet ? [r.snippet.substring(0, 120)] : [],
         weaknesses: [],
-      }));
+      });
+      if (competitors.length >= 5) break;
+    }
 
-    return { competitors, marketPosition: competitors.length > 3 ? 'competitive' : 'niche' };
+    return {
+      competitors,
+      searchQuery: query,
+      marketPosition: competitors.length > 3 ? 'competitive' : competitors.length > 0 ? 'niche' : 'unknown',
+    };
   } catch (e: any) {
     console.warn('[LeadResearch] Competitor analysis error:', e?.message);
     return { competitors: [], marketPosition: 'unknown' };
+  }
+}
+
+/**
+ * Scan the Meta Ad Library for the prospect's currently-active ads.
+ * Critical for high-spend prospects — shows whether (and how) they advertise.
+ * Uses META_ACCESS_TOKEN (Ads Library is public data; no per-client auth needed).
+ */
+async function runAdsLibraryScan(businessName: string, websiteFacts: any): Promise<any> {
+  console.log('[LeadResearch] Scanning Meta Ad Library for', businessName);
+  try {
+    const { searchAds } = await import('@/lib/meta-ads/service');
+    const terms = businessName || websiteFacts?.title || '';
+    if (!terms) return { checked: false, activeAdsCount: 0, ads: [] };
+
+    let ads: any[] = [];
+    try {
+      ads = await searchAds(terms, 15);
+    } catch (e: any) {
+      if (String(e?.message).includes('NO_TOKEN')) {
+        return { checked: false, activeAdsCount: 0, ads: [], note: 'אין META_ACCESS_TOKEN — לא ניתן לסרוק את ספריית המודעות' };
+      }
+      throw e;
+    }
+
+    // Prefer ads whose page name matches the business; fall back to all results.
+    const brandTokens = brandTokensOf(businessName || '');
+    const matched = (ads || []).filter((a: any) => {
+      const pn = (a.page_name || a.byline || '').toLowerCase();
+      return brandTokens.length === 0 || brandTokens.some(t => pn.includes(t.toLowerCase()));
+    });
+    const list = matched.length > 0 ? matched : (ads || []);
+
+    return {
+      checked: true,
+      activeAdsCount: list.length,
+      isAdvertising: list.length > 0,
+      ads: list.slice(0, 8).map((a: any) => ({
+        pageName: a.page_name || a.byline || '',
+        body: (a.ad_creative_body || a.ad_creative_bodies?.[0] || '').substring(0, 220),
+        platforms: a.publisher_platforms || [],
+        snapshotUrl: a.ad_snapshot_url || '',
+      })),
+    };
+  } catch (e: any) {
+    console.warn('[LeadResearch] Ads Library scan failed:', e?.message);
+    return { checked: false, activeAdsCount: 0, ads: [], error: e?.message };
   }
 }
 
@@ -989,11 +1095,46 @@ async function runScoring(data: {
   // Calculate category scores
   const seoScore = Math.round(((seo.technicalScore || 0) + (seo.contentScore || 0)) / 2);
 
+  // ── Social score by QUALITY, not just presence ──
+  // A profile that merely exists (but is weak — few followers, no engagement)
+  // should NOT score high. Score each platform by audience size; average them.
   const socialPlatforms = ['facebook', 'instagram', 'linkedin', 'tiktok'];
-  const socialFound = socialPlatforms.filter(p => social[p]?.found).length;
-  const socialScore = Math.round((socialFound / socialPlatforms.length) * 100);
+  const platformQuality = (p: any): number => {
+    if (!p?.found) return 0;
+    const followers = Number(p.followers) || Number(p.likes) || 0;
+    let s = 25; // exists but unproven
+    if (followers >= 50000) s = 95;
+    else if (followers >= 10000) s = 82;
+    else if (followers >= 3000) s = 68;
+    else if (followers >= 1000) s = 52;
+    else if (followers >= 300) s = 40;
+    else if (followers > 0) s = 30;
+    if (p.description) s += 5; // has a real bio/content
+    return Math.min(100, s);
+  };
+  const socialScore = Math.round(
+    socialPlatforms.reduce((sum, p) => sum + platformQuality(social[p]), 0) / socialPlatforms.length,
+  );
 
-  const googleScore = google?.found ? (google.organic?.position <= 3 ? 90 : google.organic?.position <= 10 ? 70 : 50) : 10;
+  // ── Google score by COMMERCIAL keyword performance, not brand-name ranking ──
+  // Ranking #1 for your own name is meaningless; we score by how well the site
+  // ranks for the commercial keywords that were checked.
+  const kwResults: any[] = google?.keywordResults || [];
+  let googleScore: number;
+  if (kwResults.length > 0) {
+    const perKw = kwResults.map((k: any) => {
+      if (!k.found || !k.position) return 5;
+      if (k.position <= 3) return 95;
+      if (k.position <= 10) return 70;
+      if (k.position <= 20) return 40;
+      return 20;
+    });
+    googleScore = Math.round(perKw.reduce((a: number, b: number) => a + b, 0) / perKw.length);
+    // Small bonus for a verified Google Business Profile / reviews
+    if (google?.localPack?.found) googleScore = Math.min(100, googleScore + 8);
+  } else {
+    googleScore = google?.localPack?.found ? 35 : 10;
+  }
 
   const aiScore = geo?.overallVisibility ?? 0;
 
@@ -1852,11 +1993,19 @@ async function runPipeline(researchId: string, options: StartResearchOptions) {
     // ── Stage 7: Competitor Analysis ──────────────────────────────────────
     await markStage('competitor_analysis', 'running');
     try {
-      competitorAnalysis = await runCompetitorAnalysis(url, websiteFacts);
+      competitorAnalysis = await runCompetitorAnalysis(url, websiteFacts, googlePresence?.checkedKeywords, options.leadName);
       await updateResearch(researchId, { competitorAnalysis } as any);
       await markStage('competitor_analysis', competitorAnalysis ? 'completed' : 'skipped');
     } catch (e: any) {
       await markStage('competitor_analysis', 'skipped', e?.message);
+    }
+
+    // ── Meta Ad Library scan (no formal stage — stored on the record) ──
+    try {
+      const adsLibrary = await runAdsLibraryScan(options.leadName, websiteFacts);
+      await updateResearch(researchId, { adsLibrary } as any);
+    } catch (e: any) {
+      console.warn('[LeadResearch] Ads Library scan error:', e?.message);
     }
 
     // ── Stage 8: Scoring ──────────────────────────────────────────────────

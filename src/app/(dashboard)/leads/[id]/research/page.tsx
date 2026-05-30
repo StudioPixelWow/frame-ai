@@ -214,6 +214,7 @@ export default function LeadResearchPage() {
   const deep = data.deepAnalysis || {};
   const socialDeep = deep.socialDeepAnalysis || null;
   const keywordResults = google.keywordResults || [];
+  const adsLibrary = data.adsLibrary || null;
   const pageSpeed = seo.pageSpeed || estimatePageSpeedClient(wf);
   const leadName = history[0]?.leadName || wf.title || "ליד";
   const websiteUrl = history[0]?.websiteUrl || "";
@@ -1043,6 +1044,45 @@ export default function LeadResearchPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {/* ═══ Meta Ad Library ═══ */}
+      {adsLibrary?.checked && (
+        <div style={cardStyle}>
+          <div style={cardTitleStyle}>פרסום ממומן — ספריית המודעות של Meta</div>
+          <div style={{ marginBottom: "1rem" }}>
+            {adsLibrary.isAdvertising ? (
+              <span style={{ fontWeight: 700, color: "#22c55e" }}>
+                ✓ נמצאו {adsLibrary.activeAdsCount} מודעות פעילות
+              </span>
+            ) : (
+              <span style={{ ...mutedText }}>לא נמצאו מודעות פעילות בספריית המודעות</span>
+            )}
+          </div>
+          {adsLibrary.ads?.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+              {adsLibrary.ads.map((ad: any, i: number) => (
+                <div key={i} style={{ padding: "0.75rem 1rem", borderRadius: 8, border: "1px solid var(--border)", background: `${BRAND}05` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.3rem" }}>
+                    <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>{ad.pageName || "—"}</span>
+                    {ad.platforms?.length > 0 && (
+                      <span style={{ ...mutedText, fontSize: "0.75rem" }}>{ad.platforms.join(", ")}</span>
+                    )}
+                  </div>
+                  {ad.body && <div style={{ ...mutedText, fontSize: "0.82rem", marginBottom: "0.3rem" }}>{ad.body}</div>}
+                  {ad.snapshotUrl && (
+                    <a href={ad.snapshotUrl} target="_blank" rel="noopener noreferrer" style={{ color: BRAND, fontSize: "0.75rem", textDecoration: "none" }}>
+                      צפה במודעה ↗
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {adsLibrary && !adsLibrary.checked && adsLibrary.note && (
+        <div style={{ ...cardStyle, ...mutedText }}>פרסום ממומן (Meta): {adsLibrary.note}</div>
       )}
 
       {/* ═══ AI Report (sections) ═══ */}

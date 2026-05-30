@@ -18,20 +18,12 @@ import {
   AreaChart,
   Area,
   LabelList,
-  Cell,
 } from "recharts";
 
 const BRAND = "#00B5FE";
 const TARGET = "#7c3aed";
 const GOOD = "#22c55e";
 const WARN = "#f97316";
-const BAD = "#ef4444";
-
-function scoreColor(score: number): string {
-  if (score >= 60) return GOOD;
-  if (score >= 40) return WARN;
-  return BAD;
-}
 
 const cardStyle: React.CSSProperties = {
   background: "var(--surface)",
@@ -67,7 +59,7 @@ interface ResearchChartsProps {
  *  4. ROI / organic-visibility potential — today vs potential (bars)
  *  5. Competitor positioning (horizontal bars, LTR domain labels = readable)
  */
-export default function ResearchCharts({ scores, competitors, google }: ResearchChartsProps) {
+export default function ResearchCharts({ scores, competitors }: ResearchChartsProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
@@ -124,24 +116,8 @@ export default function ResearchCharts({ scores, competitors, google }: Research
     { name: "ציון כולל", today: overall, potential: oTarget },
   ];
 
-  // ── 5. competitor positioning (use LTR domains as labels so RTL doesn't break) ──
-  const posToVisibility = (pos?: number) =>
-    pos && pos > 0 ? Math.max(10, Math.round(100 - (pos - 1) * 18)) : 15;
-  const leadDomain = (() => {
-    try { return new URL(google?.organic?.results?.[0]?.link || "").hostname; } catch { return "האתר שלך"; }
-  })();
-  const competitorData = [
-    {
-      name: "★ " + (leadDomain || "האתר שלך"),
-      value: googleCat?.score ?? (google?.organic?.position ? posToVisibility(google.organic.position) : overall),
-      isLead: true,
-    },
-    ...comps.slice(0, 5).map((c: any, i: number) => ({
-      name: c.domain || (c.name ? String(c.name).slice(0, 20) : `competitor ${i + 1}`),
-      value: posToVisibility(c.position),
-      isLead: false,
-    })),
-  ];
+  // (Competitor comparison is rendered as a readable TABLE on the page itself,
+  // not as a chart here — avoids RTL label-truncation and keeps domains legible.)
 
   if (!hasCategories && comps.length === 0) return null;
 
@@ -246,34 +222,6 @@ export default function ResearchCharts({ scores, competitors, google }: Research
         </>
       )}
 
-      {/* Competitor positioning */}
-      {comps.length > 0 && (
-        <div style={cardStyle}>
-          <div style={cardTitleStyle}>מפת מיצוב מול מתחרים</div>
-          <div style={{ ...mutedText, marginBottom: "1rem" }}>
-            מדד נראות משוער (0-100) לפי מיקום בחיפוש. ★ = האתר שלך. ערך גבוה = נראות טובה יותר.
-          </div>
-          <ResponsiveContainer width="100%" height={Math.max(180, competitorData.length * 46)}>
-            <BarChart data={competitorData} layout="vertical" margin={{ top: 4, right: 32, left: 8, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-              <XAxis type="number" domain={[0, 100]} tick={{ fill: "var(--foreground-muted)", fontSize: 11 }} />
-              <YAxis
-                type="category"
-                dataKey="name"
-                width={150}
-                tick={{ fill: "var(--foreground)", fontSize: 11 }}
-              />
-              <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--border)", opacity: 0.3 }} />
-              <Bar dataKey="value" name="נראות" radius={[0, 4, 4, 0]}>
-                <LabelList dataKey="value" position="right" style={{ fill: "var(--foreground-muted)", fontSize: 11 }} />
-                {competitorData.map((d, i) => (
-                  <Cell key={i} fill={d.isLead ? BRAND : scoreColor(d.value)} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
     </>
   );
 }

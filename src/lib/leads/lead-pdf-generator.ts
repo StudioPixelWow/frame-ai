@@ -20,6 +20,7 @@ export interface PdfOptions {
   quarterPlan: any;
   report: any;
   deepAnalysis?: any;
+  adsLibrary?: any;
 }
 
 function escapeHtml(text: string): string {
@@ -84,7 +85,7 @@ const ynColor = (v: any) => (v ? '#16a34a' : '#dc2626');
 
 export function generateLeadResearchPdfHtml(options: PdfOptions): string {
   const { leadName, websiteUrl, scores, websiteFacts, socialPresence, googlePresence,
-          seoAnalysis, geoAnalysis, competitorAnalysis, quarterPlan, report, deepAnalysis } = options;
+          seoAnalysis, geoAnalysis, competitorAnalysis, quarterPlan, report, deepAnalysis, adsLibrary } = options;
 
   const wf = websiteFacts || {};
   const seo = seoAnalysis || {};
@@ -232,6 +233,20 @@ export function generateLeadResearchPdfHtml(options: PdfOptions): string {
     </table>
   ` : '';
 
+  // ── Meta Ad Library ──
+  const adsLibraryHtml = adsLibrary?.checked ? `
+    <h2>פרסום ממומן — ספריית המודעות של Meta</h2>
+    <p>${adsLibrary.isAdvertising
+      ? `<strong style="color:#16a34a">נמצאו ${adsLibrary.activeAdsCount} מודעות פעילות.</strong>`
+      : '<span class="muted">לא נמצאו מודעות פעילות בספריית המודעות.</span>'}</p>
+    ${(adsLibrary.ads || []).map((ad: any) => `
+      <div class="sub-card">
+        <div class="sub-head">${escapeHtml(ad.pageName || '—')}${ad.platforms?.length ? ` <span class="muted small">${escapeHtml(ad.platforms.join(', '))}</span>` : ''}</div>
+        ${ad.body ? `<p class="muted">${escapeHtml(ad.body)}</p>` : ''}
+      </div>
+    `).join('')}
+  ` : '';
+
   // ── FULL AI narrative report (the core — was previously missing entirely) ──
   const reportHtml = report?.sections?.length ? `
     <div class="page-break"></div>
@@ -377,6 +392,7 @@ export function generateLeadResearchPdfHtml(options: PdfOptions): string {
     ${googleHtml}
     ${aiHtml}
     ${competitorHtml}
+    ${adsLibraryHtml}
 
     ${reportHtml}
     ${quarterHtml}

@@ -34,6 +34,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         quarterPlan: research.quarterPlan || {},
         report: research.report || {},
         deepAnalysis: (research as any).deepAnalysis || {},
+        adsLibrary: (research as any).adsLibrary || null,
       });
 
       return new NextResponse(html, {
