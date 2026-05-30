@@ -64,6 +64,7 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
   const [action, setAction] = useState<string | null>(null); // 'sync' | 'optimize' | 'create'
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: '', objective: 'OUTCOME_LEADS', dailyBudget: '' });
+  const [datePreset, setDatePreset] = useState<string>('today');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Record<string, { adSets: any[]; ads: any[] }>>({});
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
@@ -142,7 +143,7 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
     setAction('sync');
     setNotice(null);
     try {
-      const res = await fetch('/api/meta-business/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId }) });
+      const res = await fetch('/api/meta-business/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, datePreset }) });
       // Guard against non-JSON responses (e.g. a 504 timeout returns an HTML error page)
       const raw = await res.text();
       let data: any = {};
@@ -273,7 +274,19 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
       )}
 
       {/* Toolbar */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select
+          value={datePreset}
+          onChange={(e) => setDatePreset(e.target.value)}
+          title="טווח זמן לנתונים"
+          style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border, #e5e7eb)', fontSize: 13, background: '#fff' }}
+        >
+          <option value="today">היום</option>
+          <option value="last_7d">7 ימים אחרונים</option>
+          <option value="last_30d">30 יום אחרונים</option>
+          <option value="this_month">החודש</option>
+          <option value="maximum">כל הזמן</option>
+        </select>
         <button onClick={doSync} disabled={!!action} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${BRAND}`, background: '#fff', color: BRAND, fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: action ? 0.6 : 1 }}>
           {action === 'sync' ? 'מסנכרן...' : '🔄 סנכרן עכשיו'}
         </button>

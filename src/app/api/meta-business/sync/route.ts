@@ -17,6 +17,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const clientId = body.clientId;
+    const allowed = ['today', 'last_7d', 'last_30d', 'this_month', 'maximum'];
+    const datePreset = allowed.includes(body.datePreset) ? body.datePreset : 'today';
     if (!clientId) return NextResponse.json({ error: 'חסר מזהה לקוח' }, { status: 400 });
 
     const sb = getSupabase();
@@ -52,7 +54,7 @@ export async function POST(req: NextRequest) {
 
     for (const actId of accounts) {
       try {
-        const r = await syncClientMetaAccount(clientId, c.name || '', actId, token);
+        const r = await syncClientMetaAccount(clientId, c.name || '', actId, token, datePreset);
         perAccount.push({ account: actId, status: r.status, campaigns: r.campaigns?.synced || 0, message: r.message || '' });
         if (r.status === 'success') {
           synced++;

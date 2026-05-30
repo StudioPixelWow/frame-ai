@@ -286,11 +286,15 @@ export async function testMetaConnection(adAccountId: string, accessToken: strin
 
 /* ── Main Sync ── */
 
+// Allowed Meta date presets for insights.
+export type DatePreset = 'today' | 'last_7d' | 'last_30d' | 'this_month' | 'maximum';
+
 export async function syncClientMetaAccount(
   clientId: string,
   clientName: string,
   adAccountId: string,
   accessToken: string,
+  datePreset: DatePreset = 'today',
 ): Promise<SyncResult> {
   const now = new Date().toISOString();
   const errors: string[] = [];
@@ -529,7 +533,7 @@ export async function syncClientMetaAccount(
     // ── 4. Fetch insights (performance data) ──
     try {
       const insightsRes = await metaFetch<MetaInsight>(
-        `${API_BASE}/${actId}/insights?fields=${INSIGHT_FIELDS}&level=ad&date_preset=last_30d&limit=500&filtering=${ACTIVE_INSIGHTS_FILTER}`,
+        `${API_BASE}/${actId}/insights?fields=${INSIGHT_FIELDS}&level=ad&date_preset=${datePreset}&limit=500&filtering=${ACTIVE_INSIGHTS_FILTER}`,
         accessToken,
       );
 
