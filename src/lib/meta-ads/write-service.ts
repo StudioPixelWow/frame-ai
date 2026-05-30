@@ -183,6 +183,77 @@ async function waitIfThrottled(): Promise<boolean> {
   return false;
 }
 
+/* ── Audiences (Custom / Lookalike / Retargeting) ── */
+import crypto from 'crypto';
+
+const sha256 = (v: string) => crypto.createHash('sha256').update(v.trim().toLowerCase()).digest('hex');
+
+/** Create a Custom Audience from a list of lead emails/phones (hashed, GDPR-safe). */
+export async function createCustomAudienceFromLeads(
+  creds: MetaCredentials,
+  name: string,
+  contacts: { email?: string; phone?: string }[],
+): Promise<MetaWriteResult> {
+  if (!creds.adAccountId || !creds.accessToken) return { success: false, error: 'Missing credentials' };
+  // 1) create the (empty) audience
+  const created = await metaPost(`${API_BASE}/${creds.adAccountId}/customaudiences`, creds.accessToken, {
+    name, subtype: 'CUSTOM', customer_file_source: 'USER_PROVIDED_ONLY', description: 'Leads from PixelManage',
+  });
+  if (!created.success || !created.metaId) return created;
+
+  // 2) push hashed users (schema EMAIL_SHA256 / PHONE_SHA256)
+  const emails = contacts.filter(c => c.email).map(c => [sha256(c.email!)]);
+  const phones = contacts.filter(c => c.phone).map(c => [sha256(c.phone!.replace(/[^\d]/g, ''))]);
+  try {
+    if (emails.length) {
+      await fetch(`${API_BASE}/${created.metaId}/users`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payload: { schema: ['EMAIL_SHA256'], data: emails }, access_token: creds.accessToken }),
+      });
+    }
+    if (phones.length) {
+      await fetch(`${API_BASE}/${created.metaId}/users`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payload: { schema: ['PHONE_SHA256'], data: phones }, access_token: creds.accessToken }),
+      });
+    }
+  } catch (e) {
+    return { success: true, metaId: created.metaId, error: `הקהל נוצר אך העלאת אנשי קשר נכשלה: ${e instanceof Error ? e.message : ''}` };
+  }
+  return created;
+}
+
+/** Create a Lookalike audience from an existing source (custom) audience. */
+export async function createLookalikeAudience(
+  creds: MetaCredentials,
+  name: string,
+  sourceAudienceId: string,
+  ratio = 0.01, // 1%
+  country = 'IL',
+): Promise<MetaWriteResult> {
+  if (!creds.adAccountId || !creds.accessToken) return { success: false, error: 'Missing credentials' };
+  return metaPost(`${API_BASE}/${creds.adAccountId}/customaudiences`, creds.accessToken, {
+    name, subtype: 'LOOKALIKE', origin_audience_id: sourceAudienceId,
+    lookalike_spec: JSON.stringify({ ratio, country, type: 'similarity' }),
+  });
+}
+
+/** Create an engagement-based retargeting audience (page/IG engagers or video viewers). */
+export async function createEngagementAudience(
+  creds: MetaCredentials,
+  name: string,
+  pageId: string,
+  retentionDays = 365,
+): Promise<MetaWriteResult> {
+  if (!creds.adAccountId || !creds.accessToken) return { success: false, error: 'Missing credentials' };
+  return metaPost(`${API_BASE}/${creds.adAccountId}/customaudiences`, creds.accessToken, {
+    name, subtype: 'ENGAGEMENT',
+    rule: JSON.stringify({
+      inclusions: { operator: 'or', rules: [{ event_sources: [{ type: 'page', id: pageId }], retention_seconds: retentionDays * 86400, filter: { operator: 'and', filters: [{ field: 'event', operator: 'eq', value: 'page_engaged' }] } }] },
+    }),
+  });
+}
+
 /* ── Core fetch helper ── */
 
 async function metaPost(
