@@ -153,10 +153,14 @@ export async function POST(req: NextRequest) {
     const adsHaveHeadline = liveAds.some((a) => (a.headline || '').trim().length > 1);
     const adSetsHaveTargeting = liveAdSets.some((s) => s.targeting && Object.keys(s.targeting).length > 0);
 
-    const hasCreative = adsHaveMedia || !!(campaign.linkedClientFileId || (campaign.externalMediaUrl && campaign.externalMediaUrl.length > 5));
-    const hasCopy = adsHaveCopy || !!(campaign.caption && campaign.caption.trim().length > 5);
-    const hasHeadline = adsHaveHeadline || !!(campaign.notes && campaign.notes.includes("כותרת:"));
-    const hasTargeting = adSetsHaveTargeting || !!(campaign.objective && (campaign.objective.includes("מיקום:") || campaign.objective.includes("עניינים:")));
+    // A synced campaign with NO local ads means it just wasn't synced yet —
+    // do NOT report "missing creative/copy/targeting" (it's a data gap, not a real one).
+    const syncedButNoAds = isSynced && liveAds.length === 0;
+
+    const hasCreative = adsHaveMedia || syncedButNoAds || !!(campaign.linkedClientFileId || (campaign.externalMediaUrl && campaign.externalMediaUrl.length > 5));
+    const hasCopy = adsHaveCopy || syncedButNoAds || !!(campaign.caption && campaign.caption.trim().length > 5);
+    const hasHeadline = adsHaveHeadline || syncedButNoAds || !!(campaign.notes && campaign.notes.includes("כותרת:"));
+    const hasTargeting = adSetsHaveTargeting || syncedButNoAds || !!(campaign.objective && (campaign.objective.includes("מיקום:") || campaign.objective.includes("עניינים:")));
 
     // Real performance totals from the synced ads (for the AI context).
     const perf = liveAds.reduce((t, a) => ({
@@ -179,13 +183,19 @@ export async function POST(req: NextRequest) {
       `כותרת: ${hasHeadline ? "קיימת" : "חסרה"}`,
       `טרגוט: ${hasTargeting ? "מוגדר" : "לא מוגדר"}`,
       `מטרת הקמפיין: ${campaign.objective || "לא הוגדרה"}`,
-      ...(isSynced ? [
-        "",
-        "ביצועים בפועל (מ-Meta):",
-        `  הוצאה: ₪${Math.round(perf.spend)} | לידים: ${perf.leads} | חשיפות: ${perf.impressions.toLocaleString()} | קליקים: ${perf.clicks}`,
-        `  CPL: ${perf.leads > 0 ? `₪${Math.round(perf.spend / perf.leads)}` : "—"} | CTR: ${perf.impressions > 0 ? `${((perf.clicks / perf.impressions) * 100).toFixed(2)}%` : "—"}`,
-        "חשוב: זהו קמפיין חי ופעיל ב-Meta — אל תטען שחסרים קריאייטיב/טקסט/טרגוט אלא אם צוין במפורש 'חסר' למעלה. התמקד באופטימיזציה התקפית (קהלים, קריאייטיב, תקציב) להגדלת לידים.",
-      ] : []),
+      ...(isSynced ? (
+        syncedButNoAds ? [
+          "",
+          "הערה: זהו קמפיין חי שסונכרן מ-Meta, אך נתוני המודעות עדיין לא נמשכו למערכת.",
+          "אל תטען שחסרים קריאייטיב/טקסט/טרגוט — אלה קיימים ב-Meta. ההמלצה היחידה: להריץ סנכרון כדי למשוך את נתוני המודעות, ואז לנתח לעומק.",
+        ] : [
+          "",
+          "ביצועים בפועל (מ-Meta):",
+          `  הוצאה: ₪${Math.round(perf.spend)} | לידים: ${perf.leads} | חשיפות: ${perf.impressions.toLocaleString()} | קליקים: ${perf.clicks}`,
+          `  CPL: ${perf.leads > 0 ? `₪${Math.round(perf.spend / perf.leads)}` : "—"} | CTR: ${perf.impressions > 0 ? `${((perf.clicks / perf.impressions) * 100).toFixed(2)}%` : "—"}`,
+          "חשוב: זהו קמפיין חי ופעיל ב-Meta — אל תטען שחסרים קריאייטיב/טקסט/טרגוט אלא אם צוין במפורש 'חסר' למעלה. התמקד באופטימיזציה התקפית (קהלים, קריאייטיב, תקציב) להגדלת לידים.",
+        ]
+      ) : []),
       "",
       `ציון בריאות: ${healthScore}/100`,
       `פירוט: מבנה ${healthBreakdown.structure}/25 | קריאייטיב ${healthBreakdown.creative}/25 | טרגוט ${healthBreakdown.targeting}/20 | פעילות ${healthBreakdown.activity}/30`,
@@ -275,7 +285,16 @@ ${campaignContext}
     }
 
     if (!analysis) {
-      analysis = generateFallbackAnalysis(body, { hasCreative, hasCopy, hasTargeting, hasHeadline, isSynced });
+      if (syncedButNoAds) {
+        analysis = {
+          summary: `הקמפיין "${campaign.campaignName || ''}" חי ופעיל ב-Meta, אך נתוני המודעות עדיין לא סונכרנו למערכת.`,
+          issues: [],
+          opportunities: ["לאחר סנכרון נתוני המודעות נוכל להמליץ על הרחבת קהלים, רענון קריאייטיב והסטת תקציב"],
+          actions: ["הרץ סנכרון לקמפיין כדי למשוך את נתוני המודעות והביצועים", "לאחר הסנכרון — פתח שוב את הניתוח"],
+        };
+      } else {
+        analysis = generateFallbackAnalysis(body, { hasCreative, hasCopy, hasTargeting, hasHeadline, isSynced });
+      }
     }
 
     const latencyMs = Date.now() - t0;
