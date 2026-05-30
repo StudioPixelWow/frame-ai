@@ -7,7 +7,9 @@ const supabase = createClient(
 );
 
 export async function GET(request: NextRequest) {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  // Match the origin used when building the OAuth URL (must equal the redirect_uri
+  // sent to Meta, and be present in the app's Valid OAuth Redirect URIs allowlist).
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
 
   try {
     const code = request.nextUrl.searchParams.get('code');

@@ -14,7 +14,10 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    // Use the deployed origin so the redirect_uri matches the real domain.
+    // (Previously fell back to localhost when NEXT_PUBLIC_APP_URL was unset →
+    // produced an invalid localhost redirect on production.)
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
     const redirectUri = `${baseUrl}/api/auth/meta/callback`;
 
     const scopes = ['ads_management', 'ads_read', 'business_management'].join(',');
