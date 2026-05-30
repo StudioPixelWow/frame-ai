@@ -439,6 +439,18 @@ export async function resumeMetaAd(
   return metaPost(`${API_BASE}/${metaAdId}`, creds.accessToken, { status: 'ACTIVE' });
 }
 
+/* ── Update Ad Set daily budget (shekels → cents) ── */
+export async function updateMetaAdSetBudget(
+  creds: MetaCredentials,
+  metaAdSetId: string,
+  dailyBudgetShekels: number,
+): Promise<MetaWriteResult> {
+  if (!creds.accessToken || !metaAdSetId) {
+    return { success: false, error: 'Missing access token or Meta ad set ID' };
+  }
+  return metaPost(`${API_BASE}/${metaAdSetId}`, creds.accessToken, { daily_budget: Math.round(dailyBudgetShekels * 100) });
+}
+
 /* ── Pause / Resume Ad Set ── */
 
 export async function pauseMetaAdSet(

@@ -8,9 +8,12 @@ const sevLabel: Record<string, string> = { high: 'דחוף', medium: 'מומלץ
 
 interface Reco {
   id: string; severity: 'high' | 'medium' | 'low';
+  category?: 'audience' | 'creative' | 'budget' | 'ab_test';
   title: string; reason: string; expectedImpact: string;
-  apply: { kind: string; metaId: string; objectName: string; newDailyBudget?: number };
+  apply: { kind: string; objectName: string };
 }
+
+const CAT_LABEL: Record<string, string> = { audience: '🎯 קהל', creative: '🎨 קריאייטיב', budget: '💰 תקציב', ab_test: '🧪 בדיקת A/B' };
 
 /**
  * Modal listing optimization recommendations. Each has an "אשר ובצע" button that
@@ -59,7 +62,7 @@ export default function RecommendationsModal({ clientId, onClose }: { clientId: 
           <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>המלצות לייעול הקמפיינים</h2>
           <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: 22, cursor: 'pointer', color: '#6b7280' }}>×</button>
         </div>
-        <p style={{ color: '#6b7280', fontSize: 13, marginTop: 0 }}>לחיצה על &quot;אשר ובצע&quot; מבצעת את הפעולה אוטומטית ב-Meta.</p>
+        <p style={{ color: '#6b7280', fontSize: 13, marginTop: 0 }}>המלצות להגדלת לידים — הרחבת קהלים, רענון קריאייטיב, הסטת תקציב ובדיקות A/B. לחיצה על &quot;אשר ובצע&quot; יוצרת/מעדכנת ב-Meta (פריטים חדשים נוצרים מושהים).</p>
 
         {loading ? <div style={{ color: '#6b7280', padding: 16 }}>מנתח קמפיינים...</div>
           : error ? <div style={{ color: '#ef4444', padding: 12, background: 'rgba(239,68,68,0.08)', borderRadius: 8 }}>{error}</div>
@@ -71,7 +74,7 @@ export default function RecommendationsModal({ clientId, onClose }: { clientId: 
                 return (
                   <div key={r.id} style={{ border: '1px solid #e5e7eb', borderRight: `4px solid ${sevColor[r.severity]}`, borderRadius: 8, padding: 14, opacity: done ? 0.6 : 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontWeight: 700, fontSize: 14 }}>{r.title}</span>
+                      <span style={{ fontWeight: 700, fontSize: 14 }}>{r.category ? `${CAT_LABEL[r.category]} · ` : ''}{r.title}</span>
                       <span style={{ fontSize: 11, fontWeight: 700, color: sevColor[r.severity] }}>{sevLabel[r.severity]}</span>
                     </div>
                     <div style={{ fontSize: 12.5, color: '#4b5563', marginTop: 4 }}>{r.reason}</div>

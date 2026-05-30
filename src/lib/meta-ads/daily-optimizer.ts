@@ -24,8 +24,6 @@ import {
 import {
   createMetaAdSet,
   createMetaAd,
-  pauseMetaAd,
-  pauseMetaAdSet,
   type MetaCredentials,
   type MetaWriteResult,
   type CreateAdSetPayload,
@@ -253,69 +251,10 @@ export async function runDailyOptimization(
       const recs = analyzeCampaignFull(campaign, campaignAdSets, campaignAds);
       allRecommendations.push(...recs);
 
-      // 3. Find underperformers to pause
-      const highSeverityRecs = recs.filter(r => r.severity === 'high');
-
-      for (const rec of highSeverityRecs) {
-        // Auto-pause ads with budget waste or creative fatigue
-        if (
-          (rec.type === 'budget_waste' || rec.type === 'creative_fatigue') &&
-          rec.objectType === 'ad'
-        ) {
-          const ad = campaignAds.find(a => a.id === rec.objectId);
-          const metaAdId = (ad as any)?.metaAdId;
-
-          if (metaAdId && creds.accessToken) {
-            try {
-              const result = await pauseMetaAd(creds, metaAdId);
-              actions.push({
-                type: 'pause_ad',
-                objectId: rec.objectId,
-                objectName: rec.objectName,
-                description: `השהיית מודעה: ${rec.reason}`,
-                metaResult: result,
-                success: result.success,
-              });
-              if (result.success) adsPaused++;
-            } catch (e) {
-              errors.push(`שגיאה בהשהיית מודעה ${rec.objectName}: ${e}`);
-            }
-          } else {
-            actions.push({
-              type: 'pause_ad',
-              objectId: rec.objectId,
-              objectName: rec.objectName,
-              description: `מומלץ להשהות: ${rec.reason} (אין metaAdId — לא בוצע אוטומטית)`,
-              success: false,
-            });
-          }
-        }
-
-        // Pause adsets with high frequency (audience fatigue)
-        if (rec.type === 'audience_issue' && rec.objectType === 'adset') {
-          const adSet = campaignAdSets.find(as => as.id === rec.objectId);
-          const metaAdSetId = (adSet as any)?.metaAdSetId;
-
-          if (metaAdSetId && creds.accessToken) {
-            try {
-              // Direct Graph API pause — no self-HTTP call (which depended on
-              // NEXT_PUBLIC_APP_URL and failed silently in the cron context).
-              const pauseResult = await pauseMetaAdSet(creds, metaAdSetId);
-              actions.push({
-                type: 'pause_adset',
-                objectId: rec.objectId,
-                objectName: rec.objectName,
-                description: `השהיית סדרת מודעות: ${rec.reason}`,
-                metaResult: pauseResult,
-                success: pauseResult.success,
-              });
-              if (pauseResult.success) adSetsPaused++;
-            } catch (e) {
-              errors.push(`שגיאה בהשהיית אדסט ${rec.objectName}: ${e}`);
-            }
-          }
-        }
-      }
+      // 3. NO auto-pausing. This system is offensive (grow leads), not defensive.
+      // High-severity findings are recorded as recommendations only (allRecommendations
+      // above) — never executed automatically. Pausing/budget changes happen only via
+      // the "המלצות ייעול" approval flow.
 
       // 4. Generate new audiences from top performers
       const newAudiences = generateNewAudiences(campaignAdSets, campaignAds);
@@ -435,54 +374,8 @@ export async function runDailyOptimization(
         }
       }
 
-      // 7. If CPL is worsening, take emergency action
-      if (cplTrend.trend === 'worsening' && cplTrend.cplDeltaPct > 20) {
-        // Find worst-performing adset and pause it
-        const worseAdSets = campaignAdSets
-          .filter(as => {
-            const asAds = campaignAds.filter(a => a.adSetId === as.id);
-            const asCpl = asAds.reduce((s, a) => s + (a.spend || 0), 0) /
-              Math.max(asAds.reduce((s, a) => s + (a.leads || 0), 0), 1);
-            return asCpl > THRESHOLDS.cplBad;
-          })
-          .sort((a, b) => {
-            const aCpl = campaignAds.filter(ad => ad.adSetId === a.id).reduce((s, ad) => s + (ad.spend || 0), 0) /
-              Math.max(campaignAds.filter(ad => ad.adSetId === a.id).reduce((s, ad) => s + (ad.leads || 0), 0), 1);
-            const bCpl = campaignAds.filter(ad => ad.adSetId === b.id).reduce((s, ad) => s + (ad.spend || 0), 0) /
-              Math.max(campaignAds.filter(ad => ad.adSetId === b.id).reduce((s, ad) => s + (ad.leads || 0), 0), 1);
-            return bCpl - aCpl;
-          });
-
-        if (worseAdSets.length > 0) {
-          const worst = worseAdSets[0];
-          const worstMetaAdSetId = (worst as any)?.metaAdSetId;
-          if (worstMetaAdSetId && creds.accessToken) {
-            try {
-              // REAL Graph API pause (previously this branch reported success without acting).
-              const emResult = await pauseMetaAdSet(creds, worstMetaAdSetId);
-              actions.push({
-                type: 'pause_adset',
-                objectId: worst.id,
-                objectName: worst.name,
-                description: `השהיית אוטומטית — CPL עולה ב-${Math.round(cplTrend.cplDeltaPct)}%. סדרת מודעות זו הכי יקרה.`,
-                metaResult: emResult,
-                success: emResult.success,
-              });
-              if (emResult.success) adSetsPaused++;
-            } catch (e) {
-              errors.push(`שגיאה בהשהיית חירום ${worst.name}: ${e}`);
-            }
-          } else {
-            actions.push({
-              type: 'pause_adset',
-              objectId: worst.id,
-              objectName: worst.name,
-              description: `מומלץ להשהות (CPL עולה ב-${Math.round(cplTrend.cplDeltaPct)}%) — אין metaAdSetId, לא בוצע אוטומטית.`,
-              success: false,
-            });
-          }
-        }
-      }
+      // 7. NO emergency auto-pause. CPL spikes are surfaced as alerts/recommendations
+      // only — never auto-paused (this is an offensive growth system, not defensive).
     } catch (campaignError) {
       errors.push(`שגיאה בניתוח קמפיין "${campaign.campaignName}": ${campaignError}`);
     }
