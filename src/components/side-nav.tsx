@@ -203,6 +203,7 @@ const mainNavItems: NavItem[] = [
   { href: "/clients", label: "לקוחות", id: "nav-clients", icon: Icons.Clients, allowedRoles: ['admin', 'employee'] },
   { href: "/leads", label: "לידים", id: "nav-leads", icon: Icons.Leads, allowedRoles: ['admin'] },
   { href: "/campaigns", label: "קמפיינים", id: "nav-campaigns", icon: Icons.Campaigns, allowedRoles: ['admin', 'employee'] },
+  { href: "/meta-campaigns", label: "קמפיינים Meta", id: "nav-meta-campaigns", icon: Icons.Campaigns, allowedRoles: ['admin', 'employee'] },
   { href: "/tasks", label: "משימות", id: "nav-tasks", icon: Icons.Tasks, allowedRoles: ['admin', 'employee'] },
   { href: "/business-calendar", label: "יומן", id: "nav-biz-calendar", icon: Icons.Calendar, allowedRoles: ['admin', 'employee'] },
   { href: "/employees", label: "צוות", id: "nav-employees", icon: Icons.Team, allowedRoles: ['admin'] },

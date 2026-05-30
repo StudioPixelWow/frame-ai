@@ -483,6 +483,27 @@ export async function resumeMetaCampaign(
   return metaPost(`${API_BASE}/${metaCampaignId}`, creds.accessToken, { status: 'ACTIVE' });
 }
 
+/* ── Update Campaign (status / budget / name) ── */
+
+export async function updateMetaCampaign(
+  creds: MetaCredentials,
+  metaCampaignId: string,
+  opts: { status?: 'ACTIVE' | 'PAUSED'; dailyBudget?: number; lifetimeBudget?: number; name?: string },
+): Promise<MetaWriteResult> {
+  if (!creds.accessToken || !metaCampaignId) {
+    return { success: false, error: 'Missing access token or Meta campaign ID' };
+  }
+  const body: Record<string, unknown> = {};
+  if (opts.status !== undefined) body.status = opts.status;
+  if (opts.dailyBudget !== undefined) body.daily_budget = opts.dailyBudget; // cents
+  if (opts.lifetimeBudget !== undefined) body.lifetime_budget = opts.lifetimeBudget; // cents
+  if (opts.name !== undefined) body.name = opts.name;
+  if (Object.keys(body).length === 0) {
+    return { success: false, error: 'No fields to update' };
+  }
+  return metaPost(`${API_BASE}/${metaCampaignId}`, creds.accessToken, body);
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    Feature: IMAGE UPLOAD to Meta (/{ad-account-id}/adimages)
    ══════════════════════════════════════════════════════════════════════════ */
