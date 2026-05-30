@@ -138,7 +138,26 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
     }
   };
 
-  const doSync = () => runAction('sync', '/api/meta-business/sync', { clientId }, 'הסנכרון הושלם — הנתונים עודכנו');
+  const doSync = async () => {
+    setAction('sync');
+    setNotice(null);
+    try {
+      const res = await fetch('/api/meta-business/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId }) });
+      const data = await res.json();
+      if (!res.ok || data.success === false) throw new Error(data.error || 'הסנכרון נכשל');
+      if ((data.campaignsSynced || 0) === 0) {
+        const acc = (data.accountsChecked || []).join(', ');
+        setNotice(`הסנכרון רץ אך לא נמצאו קמפיינים. חשבונות שנבדקו: ${acc || '—'}. ייתכן שאין קמפיינים בחשבון, או שלטוקן אין הרשאת ads_read עליו.`);
+      } else {
+        setNotice(`✅ סונכרנו ${data.campaignsSynced} קמפיינים מ-${data.accountsSynced} חשבונות`);
+      }
+      await load();
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'הסנכרון נכשל');
+    } finally {
+      setAction(null);
+    }
+  };
   const doOptimize = () => runAction('optimize', '/api/meta-business/daily-optimize', { clientId, allowCreate: true }, 'האופטימיזציה רצה (כולל יצירה)');
   const doCreate = () => {
     if (!form.name.trim()) { setNotice('יש להזין שם קמפיין'); return; }

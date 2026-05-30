@@ -45,32 +45,43 @@ export async function POST(req: NextRequest) {
     }
 
     let synced = 0;
+    let campaignsSynced = 0;
     const errors: string[] = [];
     let tokenExpired = false;
+    const perAccount: { account: string; status: string; campaigns: number; message: string }[] = [];
+
     for (const actId of accounts) {
       try {
         const r = await syncClientMetaAccount(clientId, c.name || '', actId, token);
-        if (r.status === 'success' || r.status === 'partial') {
+        perAccount.push({ account: actId, status: r.status, campaigns: r.campaigns?.synced || 0, message: r.message || '' });
+        if (r.status === 'success') {
           synced++;
+          campaignsSynced += r.campaigns?.synced || 0;
         } else {
           if (r.status === 'token_expired') tokenExpired = true;
           errors.push(`${actId}: ${r.message || r.status}`);
         }
       } catch (e) {
+        perAccount.push({ account: actId, status: 'exception', campaigns: 0, message: e instanceof Error ? e.message : 'שגיאה' });
         errors.push(`${actId}: ${e instanceof Error ? e.message : 'שגיאה'}`);
       }
     }
 
+    // Full diagnostics — so the UI can show exactly what happened.
+    const accountsList = [...accounts];
     if (synced === 0) {
       return NextResponse.json({
         error: tokenExpired
           ? 'אסימון ה-Meta פג תוקף — חבר מחדש בהגדרות (עדיף System User token קבוע)'
-          : `הסנכרון נכשל: ${errors.join(' | ') || 'שגיאה לא ידועה'}`,
-        tokenExpired,
+          : `הסנכרון נכשל. חשבונות שנבדקו: ${accountsList.join(', ') || 'אין'}. ${errors.join(' | ') || 'אין פירוט'}`,
+        tokenExpired, accountsChecked: accountsList, perAccount,
       }, { status: 400 });
     }
 
-    return NextResponse.json({ success: true, accountsSynced: synced, errors, tokenExpired });
+    return NextResponse.json({
+      success: true, accountsSynced: synced, campaignsSynced,
+      accountsChecked: accountsList, perAccount, errors, tokenExpired,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'שגיאה לא צפויה';
     console.error('[meta-business/sync] error:', msg);
