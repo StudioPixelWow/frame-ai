@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, Fragment } from 'react';
+import AdPreview from './ad-preview';
 
 const BRAND = '#00B5FE';
 
@@ -68,6 +69,7 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Record<string, { adSets: any[]; ads: any[] }>>({});
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
+  const [previewAdId, setPreviewAdId] = useState<string | null>(null);
   const [showBuild, setShowBuild] = useState(false);
   const [building, setBuilding] = useState(false);
   const [build, setBuild] = useState({ adSetName: '', dailyBudget: '', pageId: '', message: '', headline: '', linkUrl: '', imageUrl: '' });
@@ -431,9 +433,24 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
                         ))}
                         <div style={{ fontWeight: 700, margin: '10px 0 4px' }}>מודעות ({detail[c.id].ads.length})</div>
                         {detail[c.id].ads.map((a) => (
-                          <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', borderBottom: '1px solid #eef0f3' }}>
-                            <span>{isActive(a.status) ? '🟢' : '⚪'} {a.name}</span>
-                            <span style={{ color: '#6b7280' }}>₪{fmt(a.spend)} · {fmt(a.leads)} לידים · CTR {fmt(a.ctr, 2)}%</span>
+                          <div key={a.id} style={{ borderBottom: '1px solid #eef0f3', padding: '4px 8px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                              <span>{isActive(a.status) ? '🟢' : '⚪'} {a.name}</span>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <span style={{ color: '#6b7280' }}>₪{fmt(a.spend)} · {fmt(a.leads)} לידים · CTR {fmt(a.ctr, 2)}%</span>
+                                <button
+                                  onClick={() => setPreviewAdId(previewAdId === a.id ? null : a.id)}
+                                  style={{ border: `1px solid ${BRAND}`, background: '#fff', color: BRAND, borderRadius: 6, fontSize: 11, fontWeight: 600, padding: '2px 8px', cursor: 'pointer' }}
+                                >
+                                  {previewAdId === a.id ? 'סגור תצוגה' : '👁️ תצוגה'}
+                                </button>
+                              </span>
+                            </div>
+                            {previewAdId === a.id && (
+                              <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0' }}>
+                                <AdPreview ad={a} pageName={clientName} />
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

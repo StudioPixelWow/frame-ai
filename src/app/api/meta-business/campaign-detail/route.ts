@@ -32,6 +32,15 @@ export async function GET(req: NextRequest) {
       id: a.id, name: a.name || '', status: a.status || 'unknown',
       spend: a.spend || 0, leads: a.leads || 0, cpl: a.cpl || (a.leads > 0 ? (a.spend || 0) / a.leads : 0),
       ctr: a.ctr || 0, impressions: a.impressions || 0,
+      // Creative — for the visual preview
+      creativeType: a.creativeType || 'image',
+      mediaUrl: a.mediaUrl || '',
+      thumbnailUrl: a.thumbnailUrl || '',
+      primaryText: a.primaryText || '',
+      headline: a.headline || '',
+      description: a.description || '',
+      ctaType: a.ctaType || '',
+      ctaLink: a.ctaLink || '',
     }));
 
     return NextResponse.json({ adSets: adSetSummaries, ads: adSummaries });
