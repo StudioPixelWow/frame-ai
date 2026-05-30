@@ -175,16 +175,31 @@ export async function POST(req: NextRequest) {
 
     console.log('[API] POST /api/data/clients payload:', JSON.stringify(insertRow));
 
-    const { data: inserted, error: insertErr } = await sb
+    let { data: inserted, error: insertErr } = await sb
       .from('clients')
       .insert(insertRow)
       .select('*')
       .single();
 
+    // Resilience: if the insert failed on a column that's missing or the wrong
+    // type in this DB (e.g. annual_payment_date is still DATE and we sent "MM-DD"),
+    // drop the optional column and retry so client creation never blocks.
+    if (insertErr) {
+      const msg = String((insertErr as any)?.message || '');
+      const optional = ['annual_payment_date', 'fb_page_id', 'ig_user_id'];
+      const offending = optional.find((col) => msg.includes(col)) ||
+        (/invalid input syntax for type date|column .* does not exist/i.test(msg) ? 'annual_payment_date' : null);
+      if (offending) {
+        console.warn(`[API] POST /api/data/clients retrying without "${offending}" (${msg})`);
+        delete (insertRow as any)[offending];
+        ({ data: inserted, error: insertErr } = await sb.from('clients').insert(insertRow).select('*').single());
+      }
+    }
+
     if (insertErr) {
       console.error('[API] POST /api/data/clients FAILED:', insertErr);
       return NextResponse.json(
-        { error: (insertErr as { message: string }).message ?? 'Insert failed' },
+        { error: (insertErr as { message: string }).message ?? 'Insert failed', detail: (insertErr as any)?.details ?? null },
         { status: 400 },
       );
     }
