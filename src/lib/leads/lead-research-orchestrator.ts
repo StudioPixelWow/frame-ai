@@ -685,9 +685,10 @@ async function runSeoAnalysis(url: string, websiteFacts: any): Promise<any> {
   if (!websiteFacts) return { technicalScore: 0, contentScore: 0, issues: [], contentGaps: [], pageSpeed: null, backlinks: null };
 
   const issues: string[] = [];
-  // Start from 100 and DEDUCT for every issue — realistic scoring (almost nobody gets 100)
-  let techScore = 100;
-  let contentScore = 100;
+  // Start below 100 and DEDUCT for every issue — realistic scoring. Even a flawless
+  // crawl tops out ~90; real-world SMB sites with gaps land in the 50s-60s.
+  let techScore = 90;
+  let contentScore = 90;
 
   // ══════════════════════════════════════════════════════════════
   // TECHNICAL SCORE — start 100, deduct per issue
@@ -698,9 +699,9 @@ async function runSeoAnalysis(url: string, websiteFacts: any): Promise<any> {
   if (!websiteFacts.hasMobileViewport) { techScore -= 20; issues.push('האתר לא מותאם למובייל — 70% מהגלישה ממובייל'); }
 
   // Important
-  if (!websiteFacts.hasSchemaMarkup) { techScore -= 12; issues.push('אין Schema Markup — גוגל לא מבין את מבנה התוכן'); }
+  if (!websiteFacts.hasSchemaMarkup) { techScore -= 14; issues.push('אין Schema Markup — גוגל לא מבין את מבנה התוכן'); }
   if (!websiteFacts.canonical) { techScore -= 8; issues.push('אין Canonical URL — עלול לגרום לתוכן כפול'); }
-  if (!websiteFacts.hasGoogleAnalytics) { techScore -= 8; issues.push('אין Google Analytics — אי אפשר למדוד תוצאות'); }
+  if (!websiteFacts.hasGoogleAnalytics) { techScore -= 10; issues.push('אין Google Analytics — אי אפשר למדוד תוצאות'); }
   if (!websiteFacts.hasGoogleTagManager) { techScore -= 5; issues.push('אין Google Tag Manager — ניהול תגיות לא מרכזי'); }
 
   // Performance
@@ -721,7 +722,7 @@ async function runSeoAnalysis(url: string, websiteFacts: any): Promise<any> {
   // Accessibility & Standards
   if (!websiteFacts.detectedLanguages?.length) { techScore -= 3; issues.push('אין הגדרת שפה ב-HTML — בעיית נגישות'); }
   if (!websiteFacts.hasWhatsApp && !websiteFacts.hasPhoneNumber && !websiteFacts.hasContactForm) {
-    techScore -= 5; issues.push('אין דרך יצירת קשר ברורה (טלפון/WhatsApp/טופס)');
+    techScore -= 10; issues.push('אין דרך יצירת קשר ברורה (טלפון/WhatsApp/טופס)');
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -739,7 +740,7 @@ async function runSeoAnalysis(url: string, websiteFacts: any): Promise<any> {
   else if (websiteFacts.description.length > 160) { contentScore -= 4; issues.push('Meta Description ארוך מדי — ייחתך בתוצאות החיפוש'); }
 
   // Headings structure
-  if (!websiteFacts.h1) { contentScore -= 12; issues.push('אין H1 — גוגל לא יודע מה נושא העמוד'); }
+  if (!websiteFacts.h1) { contentScore -= 14; issues.push('אין H1 — גוגל לא יודע מה נושא העמוד'); }
   const h2Count = (websiteFacts.h2Headings || []).length;
   if (h2Count === 0) { contentScore -= 10; issues.push('אין כותרות H2 כלל — מבנה תוכן שטוח'); }
   else if (h2Count < 3) { contentScore -= 5; issues.push('פחות מ-3 כותרות H2 — מבנה תוכן חלש'); }
@@ -747,24 +748,24 @@ async function runSeoAnalysis(url: string, websiteFacts: any): Promise<any> {
   // Content depth
   const wordCount = websiteFacts.wordCount || 0;
   if (wordCount < 100) { contentScore -= 15; issues.push('כמעט אין תוכן טקסטואלי — האתר ריק מבחינת SEO'); }
-  else if (wordCount < 300) { contentScore -= 10; issues.push('תוכן דל מאוד — פחות מ-300 מילים'); }
-  else if (wordCount < 500) { contentScore -= 5; issues.push('תוכן מועט — פחות מ-500 מילים'); }
+  else if (wordCount < 300) { contentScore -= 14; issues.push('תוכן דל מאוד — פחות מ-300 מילים'); }
+  else if (wordCount < 500) { contentScore -= 8; issues.push('תוכן מועט — פחות מ-500 מילים'); }
 
   // Visual & Media
-  if (!websiteFacts.ogImage) { contentScore -= 8; issues.push('אין תמונת OG — שיתוף ברשתות נראה ריק וחובבני'); }
+  if (!websiteFacts.ogImage) { contentScore -= 10; issues.push('אין תמונת OG — שיתוף ברשתות נראה ריק וחובבני'); }
   const imgCount = websiteFacts.imageCount || 0;
   if (imgCount === 0) { contentScore -= 8; issues.push('אין תמונות באתר כלל — אתר טקסטואלי בלבד'); }
   else if (imgCount < 3) { contentScore -= 4; issues.push('מעט תמונות — תוכן ויזואלי חלש'); }
 
   // Blog & Content Marketing
-  if (!websiteFacts.hasBlog) { contentScore -= 10; issues.push('אין בלוג / מגזין תוכן — מפספס הזדמנויות SEO ותנועה'); }
+  if (!websiteFacts.hasBlog) { contentScore -= 16; issues.push('אין בלוג / מגזין תוכן — מפספס הזדמנויות SEO ותנועה'); }
 
   // Engagement elements
-  if (!websiteFacts.hasContactForm) { contentScore -= 5; issues.push('אין טופס יצירת קשר — קשה להמיר מבקרים ללידים'); }
+  if (!websiteFacts.hasContactForm) { contentScore -= 12; issues.push('אין טופס יצירת קשר — קשה להמיר מבקרים ללידים'); }
 
   // E-E-A-T signals (deduct if missing)
-  if (!websiteFacts.hasPhoneNumber) { contentScore -= 3; issues.push('אין מספר טלפון גלוי — פוגע באמינות (E-E-A-T)'); }
-  if (!websiteFacts.hasWhatsApp) { contentScore -= 2; issues.push('אין WhatsApp — ערוץ תקשורת פופולרי חסר'); }
+  if (!websiteFacts.hasPhoneNumber) { contentScore -= 8; issues.push('אין מספר טלפון גלוי — פוגע באמינות (E-E-A-T)'); }
+  if (!websiteFacts.hasWhatsApp) { contentScore -= 4; issues.push('אין WhatsApp — ערוץ תקשורת פופולרי חסר'); }
 
   // ── PageSpeed Insights (real API) ──
   let pageSpeed: any = null;

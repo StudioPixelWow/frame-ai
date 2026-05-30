@@ -33,6 +33,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         salesOpportunities: research.salesOpportunities || [],
         quarterPlan: research.quarterPlan || {},
         report: research.report || {},
+        deepAnalysis: (research as any).deepAnalysis || {},
       });
 
       return new NextResponse(html, {
