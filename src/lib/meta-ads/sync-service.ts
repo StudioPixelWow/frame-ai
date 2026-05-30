@@ -29,6 +29,12 @@ export interface SyncResult {
   insightsUpdated: number;
   errors: string[];
   syncedAt: string;
+  diagnostics?: {
+    insightRowsFromMeta: number;   // how many insight rows Meta returned
+    insightRowsMatched: number;    // how many matched a local ad
+    insightError?: string;         // Meta error (e.g. permissions)
+    note?: string;
+  };
 }
 
 interface MetaCampaign {
@@ -533,11 +539,20 @@ export async function syncClientMetaAccount(
     }
 
     // ── 4. Fetch insights (performance data) ──
+    const diag = { insightRowsFromMeta: 0, insightRowsMatched: 0, insightError: undefined as string | undefined, note: undefined as string | undefined };
     try {
       const insightsRes = await metaFetch<MetaInsight>(
         `${API_BASE}/${actId}/insights?fields=${INSIGHT_FIELDS}&level=ad&date_preset=${datePreset}&limit=500&filtering=${ACTIVE_INSIGHTS_FILTER}`,
         accessToken,
       );
+
+      diag.insightRowsFromMeta = insightsRes.data.length;
+      if (insightsRes.error) {
+        diag.insightError = insightsRes.error;
+        errors.push(`Insights: ${insightsRes.error}`);
+      } else if (insightsRes.data.length === 0) {
+        diag.note = `אין נתוני insights בטווח "${datePreset}" — ייתכן שהקמפיינים לא הוציאו כסף בטווח זה.`;
+      }
 
       if (!insightsRes.error && insightsRes.data.length > 0) {
         console.log(`[meta-sync] Fetched ${insightsRes.data.length} insight rows from Meta`);
@@ -552,6 +567,7 @@ export async function syncClientMetaAccount(
           if (!insight.ad_id) continue;
           const localAd = adByMetaId.get(insight.ad_id) as Ad | undefined;
           if (!localAd) continue;
+          diag.insightRowsMatched++;
 
           try {
             await ads.updateAsync(localAd.id, {
@@ -572,10 +588,15 @@ export async function syncClientMetaAccount(
             errors.push(`Insight update for ad ${insight.ad_id}: ${err instanceof Error ? err.message : 'Unknown'}`);
           }
         }
+        if (diag.insightRowsMatched === 0 && diag.insightRowsFromMeta > 0) {
+          diag.note = `Meta החזיר ${diag.insightRowsFromMeta} שורות אך אף אחת לא הותאמה למודעה מסונכרנת — ייתכן שצריך לסנכרן שוב (המודעות נסרקו אחרי ה-insights).`;
+        }
       }
     } catch (err) {
-      errors.push(`Insights fetch error: ${err instanceof Error ? err.message : 'Unknown'}`);
+      diag.insightError = err instanceof Error ? err.message : 'Unknown';
+      errors.push(`Insights fetch error: ${diag.insightError}`);
     }
+    result.diagnostics = diag;
   }
 
   result.errors = errors;

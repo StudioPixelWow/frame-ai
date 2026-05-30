@@ -157,7 +157,17 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
         const acc = (data.accountsChecked || []).join(', ');
         setNotice(`הסנכרון רץ אך לא נמצאו קמפיינים. חשבונות שנבדקו: ${acc || '—'}. ייתכן שאין קמפיינים בחשבון, או שלטוקן אין הרשאת ads_read עליו.`);
       } else {
-        setNotice(`✅ סונכרנו ${data.campaignsSynced} קמפיינים מ-${data.accountsSynced} חשבונות`);
+        // Surface insight diagnostics so all-zero metrics are explained.
+        const pa = (data.perAccount || []).find((p: any) => p.diagnostics) || (data.perAccount || [])[0];
+        const d = pa?.diagnostics;
+        let extra = '';
+        if (d) {
+          if (d.insightError) extra = ` · ⚠️ insights: ${d.insightError} (ייתכן חוסר הרשאת קריאת נתונים)`;
+          else if (d.insightRowsFromMeta === 0) extra = ` · אין נתוני ביצועים בטווח שנבחר — נסה טווח רחב יותר`;
+          else if (d.insightRowsMatched === 0) extra = ` · ${d.insightRowsFromMeta} שורות נתונים חזרו אך לא הותאמו — לחץ סנכרן שוב`;
+          else extra = ` · ${pa.insightsUpdated} מודעות עודכנו בנתונים`;
+        }
+        setNotice(`✅ סונכרנו ${data.campaignsSynced} קמפיינים מ-${data.accountsSynced} חשבונות${extra}`);
       }
       await load();
     } catch (e) {

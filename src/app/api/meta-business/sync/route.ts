@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     for (const actId of accounts) {
       try {
         const r = await syncClientMetaAccount(clientId, c.name || '', actId, token, datePreset);
-        perAccount.push({ account: actId, status: r.status, campaigns: r.campaigns?.synced || 0, message: r.message || '' });
+        perAccount.push({ account: actId, status: r.status, campaigns: r.campaigns?.synced || 0, message: r.message || '', insightsUpdated: r.insightsUpdated || 0, diagnostics: r.diagnostics } as any);
         if (r.status === 'success') {
           synced++;
           campaignsSynced += r.campaigns?.synced || 0;
