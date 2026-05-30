@@ -126,7 +126,6 @@ const ADSET_FIELDS = 'id,campaign_id,name,status,targeting,daily_budget,lifetime
 const AD_FIELDS = 'id,adset_id,campaign_id,name,status,creative{id,body,title,call_to_action_type,link_url,image_url,video_id,thumbnail_url,object_story_spec},created_time,updated_time';
 // Sync ONLY active items — pulling the full account history is huge and times out (504).
 const ACTIVE_STATUS = encodeURIComponent('["ACTIVE"]');
-const ACTIVE_INSIGHTS_FILTER = encodeURIComponent('[{"field":"ad.effective_status","operator":"IN","value":["ACTIVE"]}]');
 // ad_id is REQUIRED to match an insight row back to a local ad — without it,
 // every insight was discarded and all metrics stayed 0.
 const INSIGHT_FIELDS = 'ad_id,ad_name,spend,impressions,reach,clicks,ctr,cpc,cpm,actions,cost_per_action_type,frequency';
@@ -541,8 +540,11 @@ export async function syncClientMetaAccount(
     // ── 4. Fetch insights (performance data) ──
     const diag = { insightRowsFromMeta: 0, insightRowsMatched: 0, insightError: undefined as string | undefined, note: undefined as string | undefined };
     try {
+      // No effective_status filtering on insights — that filter field is unreliable
+      // and can error out the whole call. We only apply metrics to ads we synced
+      // (which are already active), so account-level insights are safe.
       const insightsRes = await metaFetch<MetaInsight>(
-        `${API_BASE}/${actId}/insights?fields=${INSIGHT_FIELDS}&level=ad&date_preset=${datePreset}&limit=500&filtering=${ACTIVE_INSIGHTS_FILTER}`,
+        `${API_BASE}/${actId}/insights?fields=${INSIGHT_FIELDS}&level=ad&date_preset=${datePreset}&limit=500`,
         accessToken,
       );
 
