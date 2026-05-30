@@ -67,6 +67,9 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Record<string, { adSets: any[]; ads: any[] }>>({});
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
+  const [showBuild, setShowBuild] = useState(false);
+  const [building, setBuilding] = useState(false);
+  const [build, setBuild] = useState({ adSetName: '', dailyBudget: '', pageId: '', message: '', headline: '', linkUrl: '', imageUrl: '' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -158,6 +161,32 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
         const data = await res.json();
         if (res.ok) setDetail((prev) => ({ ...prev, [c.id]: { adSets: data.adSets || [], ads: data.ads || [] } }));
       } catch { /* ignore */ } finally { setDetailLoading(null); }
+    }
+  };
+
+  const doBuildAd = async (c: CampaignSummary) => {
+    if (!build.adSetName.trim() || !build.pageId.trim()) { setNotice('נדרשים שם Ad Set ו-Page ID'); return; }
+    setBuilding(true);
+    setNotice(null);
+    try {
+      const res = await fetch('/api/meta-business/build-ad', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId, campaignMetaId: c.metaCampaignId, adSetName: build.adSetName.trim(),
+          dailyBudget: build.dailyBudget ? parseFloat(build.dailyBudget) : undefined,
+          pageId: build.pageId.trim(), message: build.message, headline: build.headline,
+          linkUrl: build.linkUrl, imageUrl: build.imageUrl,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.success === false) throw new Error(data.error || 'הבנייה נכשלה');
+      setNotice('Ad Set + מודעה נוצרו (מושהים) — הרץ סנכרון כדי לראותם, והפעל כשתהיה מוכן');
+      setShowBuild(false);
+      setBuild({ adSetName: '', dailyBudget: '', pageId: '', message: '', headline: '', linkUrl: '', imageUrl: '' });
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'הבנייה נכשלה');
+    } finally {
+      setBuilding(false);
     }
   };
 
@@ -360,6 +389,25 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
                         ))}
                       </div>
                     )}
+
+                    {/* Build new Ad Set + Ad */}
+                    <div style={{ marginTop: 8 }}>
+                      <button onClick={() => setShowBuild((s) => !s)} style={{ padding: '5px 12px', borderRadius: 6, border: `1px solid ${BRAND}`, background: '#fff', color: BRAND, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                        ➕ בנה Ad Set + מודעה
+                      </button>
+                      {showBuild && (
+                        <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 6 }}>
+                          {([['adSetName', 'שם Ad Set'], ['dailyBudget', 'תקציב יומי ₪'], ['pageId', 'Page ID (חובה)'], ['message', 'טקסט מודעה'], ['headline', 'כותרת'], ['linkUrl', 'קישור יעד'], ['imageUrl', 'קישור תמונה']] as const).map(([k, ph]) => (
+                            <input key={k} value={(build as any)[k]} onChange={(e) => setBuild({ ...build, [k]: e.target.value })} placeholder={ph}
+                              style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }} />
+                          ))}
+                          <button onClick={() => doBuildAd(c)} disabled={building}
+                            style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: BRAND, color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', opacity: building ? 0.6 : 1 }}>
+                            {building ? 'בונה...' : 'צור (מושהה)'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )}
