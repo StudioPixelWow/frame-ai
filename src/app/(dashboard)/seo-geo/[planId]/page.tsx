@@ -366,6 +366,7 @@ export default function SeoPlanDetail() {
   const [selectedCalendarDay, setSelectedCalendarDay] = useState<any | null>(null);
   const [runningAutomation, setRunningAutomation] = useState(false);
   const [automationStatus, setAutomationStatus] = useState<string | null>(null);
+  const [autoRunLog, setAutoRunLog] = useState<{ title: string; status: "running" | "done" | "failed" | "skipped" }[]>([]);
   const [closingGaps, setClosingGaps] = useState(false);
   const [gapStatus, setGapStatus] = useState<string | null>(null);
   const [rescanning, setRescanning] = useState(false);
@@ -1987,8 +1988,12 @@ export default function SeoPlanDetail() {
                             let successCount = 0;
                             let failCount = 0;
                             let skippedCount = 0;
-                            for (const task of autoTasks) {
-                              setAutomationStatus(`מבצע: ${task.title?.slice(0, 40)}...`);
+                            // Seed the live log so the client sees the full plan for this run
+                            setAutoRunLog(autoTasks.map((t: any) => ({ title: t.title || "משימה", status: "running" as const })));
+                            for (let ti = 0; ti < autoTasks.length; ti++) {
+                              const task = autoTasks[ti];
+                              setAutomationStatus(`משימה ${ti + 1} מתוך ${autoTasks.length}: ${task.title?.slice(0, 50)}`);
+                              setAutoRunLog((prev) => prev.map((it, idx) => idx === ti ? { ...it, status: "running" } : it));
                               try {
                                 const res = await fetch(`/api/seo-geo-plans/${plan!.id}/execute-task`, {
                                   method: "POST",
@@ -2002,6 +2007,7 @@ export default function SeoPlanDetail() {
                                 const data = await res.json().catch(() => ({}));
                                 if (res.ok && (data.success || data.data?.success)) {
                                   successCount++;
+                                  setAutoRunLog((prev) => prev.map((it, idx) => idx === ti ? { ...it, status: "done" } : it));
                                   if (data.taskType === 'daily_seo_article') {
                                     console.log(`[AUTOMATION] ✅ Article written: "${task.title}" — type=${data.taskType}, pages=${data.pagesAffected}, changes=${data.changesCount}`);
                                   } else {
@@ -2010,12 +2016,14 @@ export default function SeoPlanDetail() {
                                 } else if (res.status === 400 && (data.error?.includes('לא ניתן לזהות') || data.error?.includes('סוג משימה'))) {
                                   // Task not automatable — skip silently, don't count as failure
                                   skippedCount++;
+                                  setAutoRunLog((prev) => prev.map((it, idx) => idx === ti ? { ...it, status: "skipped" } : it));
                                   console.log(`[AUTOMATION] Skipped non-automatable task: "${task.title}"`);
                                 } else {
                                   failCount++;
+                                  setAutoRunLog((prev) => prev.map((it, idx) => idx === ti ? { ...it, status: "failed" } : it));
                                   console.error(`[AUTOMATION] ❌ Task failed: "${task.title}" — status=${res.status}, error="${data.error || JSON.stringify(data).slice(0, 200)}"`);
                                 }
-                              } catch (e) { failCount++; console.error(`[AUTOMATION] Network error for task: "${task.title}"`, e); }
+                              } catch (e) { failCount++; setAutoRunLog((prev) => prev.map((it, idx) => idx === ti ? { ...it, status: "failed" } : it)); console.error(`[AUTOMATION] Network error for task: "${task.title}"`, e); }
                             }
                             const skipNote = skippedCount > 0 ? ` | ${skippedCount} ידניות` : "";
                             setAutomationStatus(`הושלם! ${successCount} הצליחו${failCount > 0 ? `, ${failCount} נכשלו` : ""}${skipNote}`);
@@ -2058,10 +2066,25 @@ export default function SeoPlanDetail() {
                       </button>
                       {automationStatus && (
                         <div style={{
-                          fontSize: 11, color: automationStatus.includes("הושלם") ? "#10b981" : automationStatus.includes("שגיאה") ? "#ef4444" : C.primary,
-                          fontWeight: 600, textAlign: "center", maxWidth: 220,
+                          fontSize: 13, color: automationStatus.includes("הושלם") ? "#10b981" : automationStatus.includes("שגיאה") ? "#ef4444" : C.primary,
+                          fontWeight: 700, textAlign: "center", maxWidth: 280,
                         }}>
                           {automationStatus}
+                        </div>
+                      )}
+                      {/* Live task log — shows the client exactly what the autopilot is doing */}
+                      {autoRunLog.length > 0 && (
+                        <div style={{ width: "100%", maxWidth: 320, marginTop: 6, display: "flex", flexDirection: "column", gap: 4, maxHeight: 220, overflowY: "auto" }}>
+                          {autoRunLog.map((it, idx) => {
+                            const icon = it.status === "done" ? "✅" : it.status === "failed" ? "❌" : it.status === "skipped" ? "⏭️" : "⏳";
+                            const color = it.status === "done" ? "#10b981" : it.status === "failed" ? "#ef4444" : it.status === "skipped" ? C.textMuted : C.primary;
+                            return (
+                              <div key={idx} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color, background: it.status === "running" ? `${C.primary}10` : "transparent", padding: "3px 6px", borderRadius: 6 }}>
+                                <span style={{ flexShrink: 0 }}>{icon}</span>
+                                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.title}</span>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>

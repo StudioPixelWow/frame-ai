@@ -38,6 +38,7 @@ interface AutonomousRunRecord {
   summary: string;
   nextDayFocus: string[];
   enabledModules?: string[];
+  moduleBreakdown?: { module: string; summary: string; actionsCount: number; success: boolean }[];
 }
 
 // ── POST — Trigger daily autonomous execution ──────────────────────────────
@@ -97,6 +98,16 @@ async function _POST(
       ...(enabledModules ? { enabledModules } as any : {}),
     });
 
+    // Per-module breakdown — exactly what each module did (shown to the client)
+    const moduleBreakdown = Object.values(result.moduleResults || {})
+      .filter((m: any) => m && m.executed)
+      .map((m: any) => ({
+        module: m.module,
+        summary: m.summary || '',
+        actionsCount: m.actionsCount || 0,
+        success: !!m.success,
+      }));
+
     // Build run record
     const phaseInfo = getPhaseForDay(day);
     const runRecord: AutonomousRunRecord = {
@@ -115,6 +126,7 @@ async function _POST(
       summary: result.summary,
       nextDayFocus: result.nextDayFocus,
       enabledModules,
+      moduleBreakdown,
     };
 
     // Append to plan.autonomousRuns
@@ -148,6 +160,7 @@ async function _POST(
         nextDayFocus: result.nextDayFocus,
         phase: phaseInfo,
         durationMs: result.durationMs,
+        moduleBreakdown,
       },
     });
   } catch (error) {
