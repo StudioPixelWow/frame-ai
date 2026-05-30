@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import CampaignDashboard from '@/components/meta/campaign-dashboard';
+import CampaignAssigner from '@/components/meta/campaign-assigner';
 
 const BRAND = '#00B5FE';
 
@@ -23,6 +24,7 @@ export default function MetaCampaignsPage() {
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [selected, setSelected] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<'dashboard' | 'assign'>('dashboard');
 
   useEffect(() => {
     (async () => {
@@ -65,24 +67,53 @@ export default function MetaCampaignsPage() {
         <div style={{ color: '#6b7280' }}>לא נמצאו לקוחות.</div>
       ) : (
         <>
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ fontSize: 13, fontWeight: 600, marginInlineEnd: 10 }}>בחר לקוח:</label>
-            <select
-              value={selected}
-              onChange={(e) => setSelected(e.target.value)}
-              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 14, minWidth: 240, background: '#fff' }}
-            >
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}{c.metaConnected ? ' ✓' : ' (לא מחובר)'}
-                </option>
-              ))}
-            </select>
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '1px solid #e5e7eb' }}>
+            {([['dashboard', 'דשבורד קמפיינים'], ['assign', 'שיוך קמפיינים ללקוחות']] as const).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setTab(id)}
+                style={{
+                  padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                  fontSize: 14, fontWeight: 700,
+                  color: tab === id ? BRAND : '#6b7280',
+                  borderBottom: tab === id ? `2px solid ${BRAND}` : '2px solid transparent',
+                }}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
-          {selected && (
+          {tab === 'dashboard' ? (
+            <>
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ fontSize: 13, fontWeight: 600, marginInlineEnd: 10 }}>בחר לקוח:</label>
+                <select
+                  value={selected}
+                  onChange={(e) => setSelected(e.target.value)}
+                  style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 14, minWidth: 240, background: '#fff' }}
+                >
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}{c.metaConnected ? ' ✓' : ' (לא מחובר)'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selected && (
+                <div style={{ background: 'var(--surface, #fff)', border: '1px solid var(--border, #e5e7eb)', borderRadius: 12, padding: 20 }}>
+                  <CampaignDashboard clientId={selected} clientName={selectedClient?.name} />
+                </div>
+              )}
+            </>
+          ) : (
             <div style={{ background: 'var(--surface, #fff)', border: '1px solid var(--border, #e5e7eb)', borderRadius: 12, padding: 20 }}>
-              <CampaignDashboard clientId={selected} clientName={selectedClient?.name} />
+              <p style={{ color: '#6b7280', fontSize: 13, marginTop: 0, marginBottom: 16 }}>
+                בחר חשבון מודעות, וראה את הקמפיינים שבתוכו. שייך כל קמפיין ללקוח — חשבון אחד יכול לשרת כמה לקוחות.
+              </p>
+              <CampaignAssigner clients={clients.map((c) => ({ id: c.id, name: c.name }))} />
             </div>
           )}
         </>

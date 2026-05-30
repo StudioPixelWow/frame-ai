@@ -45,9 +45,40 @@ export async function GET(req: NextRequest) {
       adsCol.getAllAsync(),
     ]);
 
-    const clientCampaigns = (allCampaigns as any[]).filter(
+    // 1) Campaigns from a dedicated account assigned to this client.
+    const byAccount = (allCampaigns as any[]).filter(
       (c) => c.clientId === clientId && c.metaCampaignId,
     );
+
+    // 2) Campaigns explicitly assigned to this client (shared-account / campaign-level).
+    let assignedRecords: any[] = [];
+    try {
+      const sb = getSupabase();
+      const { data: assigns } = await sb
+        .from('app_meta_campaign_assignments')
+        .select('meta_campaign_id, campaign_name')
+        .eq('client_id', clientId);
+      const assignedIds = new Set((assigns || []).map((a: any) => a.meta_campaign_id));
+      const nameById: Record<string, string> = {};
+      for (const a of (assigns || []) as any[]) nameById[a.meta_campaign_id] = a.campaign_name;
+
+      if (assignedIds.size > 0) {
+        const alreadyById = new Set(byAccount.map((c) => c.metaCampaignId));
+        for (const id of assignedIds) {
+          if (alreadyById.has(id)) continue;
+          // Find synced metrics for this campaign (synced by whoever owns the account)
+          const synced = (allCampaigns as any[]).find((c) => c.metaCampaignId === id);
+          if (synced) {
+            assignedRecords.push(synced);
+          } else {
+            // No synced data yet — stub so it still shows (run a sync for metrics)
+            assignedRecords.push({ id: `assign_${id}`, metaCampaignId: id, campaignName: nameById[id] || '', status: 'unknown', budget: 0, notSynced: true });
+          }
+        }
+      }
+    } catch { /* assignments table may not exist yet */ }
+
+    const clientCampaigns = [...byAccount, ...assignedRecords];
 
     // Surface connection status when there's nothing to show.
     const connectionStatus = clientCampaigns.length === 0
