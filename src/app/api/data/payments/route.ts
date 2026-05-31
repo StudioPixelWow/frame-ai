@@ -7,11 +7,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { payments } from '@/lib/db';
 import { ensureSeeded } from '@/lib/db/seed';
 import { persistenceLog } from '@/lib/db/persistence-logger';
-import { requireRole } from '@/lib/auth/api-guard';
+import { requireRole, getRequestRole } from '@/lib/auth/api-guard';
 
 export async function GET(req: NextRequest) {
-  const roleErr = requireRole(req, 'admin');
-  if (roleErr) return roleErr;
+  // Payments are admin-only data. Non-admins get an empty list (no 403 console spam,
+  // no data exposure) so pollers on shared pages don't flood errors.
+  if (getRequestRole(req) !== 'admin') return NextResponse.json([]);
 
   ensureSeeded();
   const log = persistenceLog('payments', 'select', '/api/data/payments', 'payments.json');

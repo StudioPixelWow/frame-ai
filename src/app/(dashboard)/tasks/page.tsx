@@ -257,17 +257,31 @@ export default function TasksPage() {
 
   const handleFileUpload = async () => {
     if (!selectedFile || !uploadingTaskId) return;
-
     try {
-      await update(uploadingTaskId, { status: "under_review" as Task["status"] });
-      toast("הקובץ הועלה והמשימה עברה לבדיקה", "success");
-      setSelectedFile(null);
-      setUploadingTaskId(null);
+      // 1) Upload the file to Supabase Storage (direct, no size limit).
+      const signRes = await fetch("/api/upload", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: `tasks/${Date.now()}_${selectedFile.name}`, contentType: selectedFile.type, fileSize: selectedFile.size }),
+      });
+      const sign = await signRes.json();
+      if (!signRes.ok || !sign.uploadUrl) throw new Error(sign.error || "קבלת כתובת העלאה נכשלה");
+      const putRes = await fetch(sign.uploadUrl, { method: "PUT", headers: { "Content-Type": selectedFile.type || "application/octet-stream" }, body: selectedFile });
+      if (!putRes.ok) throw new Error("ההעלאה נכשלה");
 
+      // 2) Persist the file ON the task (merged with existing) AND move to review —
+      //    so the file travels with the task through the whole approval flow.
+      const entry = `${selectedFile.name}|${sign.publicUrl}`;
+      const cur = [...(tasks || []), ...(employeeTasks || [])].find((x: any) => x.id === uploadingTaskId) as any;
+      const existing = Array.isArray(cur?.files) ? cur.files : [];
+      await update(uploadingTaskId, { files: [...existing, entry], status: "under_review" as Task["status"] });
+
+      toast("הקובץ הועלה ונשמר — המשימה עברה לבדיקה", "success");
       const fileInput = document.querySelector(`input[data-task="${uploadingTaskId}"]`) as HTMLInputElement;
       if (fileInput) fileInput.value = "";
-    } catch {
-      toast("שגיאה בהעלאת קובץ", "error");
+      setSelectedFile(null);
+      setUploadingTaskId(null);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "שגיאה בהעלאת קובץ", "error");
     }
   };
 
