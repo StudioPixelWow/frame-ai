@@ -295,7 +295,7 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
         לא נמצאו קמפיינים מסונכרנים עבור {clientName || 'הלקוח'}.<br />
         החשבון מחובר — לחץ &quot;סנכרן עכשיו&quot; כדי למשוך את הקמפיינים מ-Meta.
         <div style={{ marginTop: 14 }}>
-          <button onClick={doSync} disabled={!!action} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: BRAND, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: action ? 0.6 : 1 }}>
+          <button onClick={() => doSync()} disabled={!!action} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: BRAND, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: action ? 0.6 : 1 }}>
             {action === 'sync' ? 'מסנכרן...' : '🔄 סנכרן עכשיו'}
           </button>
         </div>
