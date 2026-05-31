@@ -514,6 +514,27 @@ export async function resumeMetaAd(
   return metaPost(`${API_BASE}/${metaAdId}`, creds.accessToken, { status: 'ACTIVE' });
 }
 
+/** Read an ad set's current daily_budget (in cents) straight from Meta — used to
+ *  VERIFY that a budget update actually took effect (not just returned HTTP 200). */
+export async function getMetaAdSetDailyBudget(
+  creds: MetaCredentials,
+  metaAdSetId: string,
+): Promise<number | null> {
+  if (!creds.accessToken || !metaAdSetId) return null;
+  try {
+    const res = await fetch(
+      `${API_BASE}/${metaAdSetId}?fields=daily_budget&access_token=${encodeURIComponent(creds.accessToken)}`,
+      { signal: AbortSignal.timeout(15000) },
+    );
+    const data = await res.json().catch(() => ({})) as Record<string, unknown>;
+    if (!res.ok) return null;
+    const db = data.daily_budget;
+    return db == null ? null : parseInt(String(db), 10);
+  } catch {
+    return null;
+  }
+}
+
 /* ── Update Ad Set daily budget (shekels → cents) ── */
 export async function updateMetaAdSetBudget(
   creds: MetaCredentials,

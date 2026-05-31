@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { campaigns as campaignsCol, adSets as adSetsCol, ads as adsCol } from '@/lib/db/collections';
 import { resolveMetaToken, getSystemMetaToken } from '@/lib/meta-ads/token';
 import { getSupabase } from '@/lib/db/store';
-import { updateMetaAdSetBudget, createMetaAd, copyMetaAdSet, updateMetaAdSet, resolveMetaPageId } from '@/lib/meta-ads/write-service';
+import { updateMetaAdSetBudget, createMetaAd, copyMetaAdSet, updateMetaAdSet, resolveMetaPageId, getMetaAdSetDailyBudget, verifyMetaEntity } from '@/lib/meta-ads/write-service';
 import { generateVariation } from '@/lib/optimization/variations';
 import { logMetaAction } from '@/lib/meta-ads/action-log';
 
@@ -305,8 +305,23 @@ export async function POST(req: NextRequest) {
       const r1 = await updateMetaAdSetBudget(creds, action.fromMetaId, action.newFromBudget || 0);
       const r2 = await updateMetaAdSetBudget(creds, action.toMetaId, action.newToBudget || 0);
       if (!r1.success || !r2.success) return await metaErr(r1.success ? r2 : r1, 'עדכון תקציב נכשל');
-      return await ok({ note: 'התקציב הוסט מהקבוצה החלשה למנצחת' }, {
-        detail: `הוסט תקציב: ₪${action.newFromBudget ?? '?'} → קבוצה חלשה, ₪${action.newToBudget ?? '?'} → קבוצה מנצחת`,
+
+      // VERIFY: read both budgets back from Meta and confirm they actually changed.
+      const wantFrom = Math.round((action.newFromBudget || 0) * 100);
+      const wantTo = Math.round((action.newToBudget || 0) * 100);
+      const [gotFrom, gotTo] = await Promise.all([
+        getMetaAdSetDailyBudget(creds, action.fromMetaId),
+        getMetaAdSetDailyBudget(creds, action.toMetaId),
+      ]);
+      const within = (a: number | null, b: number) => a != null && Math.abs(a - b) <= 1; // ±1 agora rounding
+      if (!within(gotFrom, wantFrom) || !within(gotTo, wantTo)) {
+        return await metaErr(
+          { error: `Meta אישרה את הבקשה אך הקריאה החוזרת לא תואמת — ייתכן תקציב ברמת קמפיין (CBO). התקבל ${gotFrom}/${gotTo} אגורות, ציפינו ${wantFrom}/${wantTo}` },
+          'עדכון התקציב לא אומת מול Meta',
+        );
+      }
+      return await ok({ note: 'התקציב הוסט מהקבוצה החלשה למנצחת (אומת מול Meta)' }, {
+        detail: `הוסט תקציב (מאומת): ₪${(gotFrom! / 100).toFixed(0)} → חלשה, ₪${(gotTo! / 100).toFixed(0)} → מנצחת`,
         objectType: 'adset',
       });
     }
@@ -337,8 +352,14 @@ export async function POST(req: NextRequest) {
       if (!upd.success) {
         notes.push(`הרחבת הטירגוט נכשלה — הרחב ידנית בלוח Meta. (${upd.error || ''})`);
       }
+      // VERIFY the new ad set actually exists in Meta.
+      const ver = await verifyMetaEntity(creds, 'adset', copy.metaId);
+      if (ver.success && !ver.exists) {
+        return await metaErr({ error: 'הקבוצה לא נמצאה ב-Meta לאחר היצירה' }, 'שכפול הקבוצה לא אומת');
+      }
+      notes.push(ver.exists ? `אומת ב-Meta (סטטוס ${ver.effectiveStatus || ver.status || 'PAUSED'} — מושהה, הפעל ידנית)` : 'נוצר; אימות מלא לא הושלם');
       return await ok({ adSetId: copy.metaId, note: notes.join(' · ') }, {
-        detail: `שוכפלה קבוצת המודעות המנצחת עם קהל מורחב (מושהית)`,
+        detail: `שוכפלה קבוצת המודעות המנצחת עם קהל מורחב (מושהית — דורש הפעלה ידנית)`,
         objectType: 'adset',
       });
     }
@@ -383,8 +404,12 @@ export async function POST(req: NextRequest) {
         },
       });
       if (!r.success) return await metaErr(r, 'יצירת המודעה נכשלה');
+      if (r.metaId) {
+        const ver = await verifyMetaEntity(creds, 'ad', r.metaId);
+        if (ver.success && !ver.exists) return await metaErr({ error: 'המודעה לא נמצאה ב-Meta לאחר היצירה' }, 'יצירת המודעה לא אומתה');
+      }
       return await ok({ adId: r.metaId, variation: variation.explanation, note: 'נוצרה מודעה חדשה (מושהית) — הפעל כשמוכן' }, {
-        detail: `נוצרה מודעה חדשה (${action.kind === 'ab_test' ? 'בדיקת A/B' : 'רענון'}): ${variation.strategy}`,
+        detail: `נוצרה מודעה חדשה ומאומתת (${action.kind === 'ab_test' ? 'בדיקת A/B' : 'רענון'}): ${variation.strategy} — מושהית, דורשת הפעלה ידנית`,
         objectType: 'ad',
       });
     }
@@ -454,8 +479,12 @@ export async function POST(req: NextRequest) {
         creative: { pageId: pageId2, message: variation.newPrimaryText, headline: variation.newHeadline, description: variation.newDescription, linkUrl: src.ctaLink || '', imageUrl: src.mediaUrl || '', callToAction: variation.newCtaType || 'LEARN_MORE' },
       });
       if (!r.success) return await metaErr(r, 'יצירת המודעה נכשלה');
+      if (r.metaId) {
+        const ver = await verifyMetaEntity(creds, 'ad', r.metaId);
+        if (ver.success && !ver.exists) return await metaErr({ error: 'המודעה לא נמצאה ב-Meta לאחר היצירה' }, 'יצירת המודעה לא אומתה');
+      }
       return await ok({ adId: r.metaId, variation: variation.explanation, note: 'נוצרה מודעה חדשה (מושהית)' }, {
-        detail: `נוצרה מודעה חדשה (${action.kind === 'ai_winner_clone' ? 'שכפול AI' : 'רענון מונע'}): ${variation.strategy}`,
+        detail: `נוצרה מודעה חדשה ומאומתת (${action.kind === 'ai_winner_clone' ? 'שכפול AI' : 'רענון מונע'}): ${variation.strategy} — מושהית, דורשת הפעלה ידנית`,
         objectType: 'ad',
       });
     }
