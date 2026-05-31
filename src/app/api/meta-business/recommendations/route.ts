@@ -262,8 +262,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { clientId, action } = body as { clientId?: string; action?: Reco['apply'] };
+    const { clientId, action, activate } = body as { clientId?: string; action?: Reco['apply']; activate?: boolean };
     if (!action?.kind) return NextResponse.json({ error: 'פעולה לא תקינה' }, { status: 400 });
+
+    // When activate=true, new objects go LIVE immediately (no manual un-pause).
+    const liveStatus: 'ACTIVE' | 'PAUSED' = activate ? 'ACTIVE' : 'PAUSED';
+    const liveWord = activate ? 'פעיל' : 'מושהה';
 
     const sb = getSupabase();
     let token: string | null = null;
@@ -334,19 +338,20 @@ export async function POST(req: NextRequest) {
       if (!adAccountId) return NextResponse.json({ error: 'לא נמצא חשבון מודעות ללקוח' }, { status: 400 });
       if (!action.sourceMetaAdSetId) return NextResponse.json({ error: 'חסר מזהה קבוצת מודעות מקור' }, { status: 400 });
 
-      // 1) Duplicate the winning ad set (paused, deep copy so it carries its
-      //    creatives; falls back to a shallow copy automatically if Meta rejects).
+      // 1) Duplicate the winning ad set (deep copy so it carries its creatives;
+      //    falls back to a shallow copy automatically if Meta rejects).
       const copy = await copyMetaAdSet(creds, action.sourceMetaAdSetId, {
-        deepCopy: true, statusOption: 'PAUSED',
+        deepCopy: true, statusOption: liveStatus,
       });
       if (!copy.success || !copy.metaId) return await metaErr(copy, 'שכפול הקבוצה המנצחת נכשל');
 
-      // 2) Broaden the targeting + set name/budget on the new copy (best-effort).
-      const notes: string[] = ['שוכפל קהל מנצח (מושהה) עם הרחבת טירגוט — הפעל כשמוכן'];
+      // 2) Broaden the targeting + set name/budget/status on the new copy (best-effort).
+      const notes: string[] = [`שוכפל קהל מנצח (${liveWord}) עם הרחבת טירגוט`];
       if (copy.error) notes.push(copy.error); // e.g. shallow-copy warning ("הוסף קריאייטיב")
       const upd = await updateMetaAdSet(creds, copy.metaId, {
         name: action.newName || undefined,
         targeting: action.targeting,
+        status: liveStatus,
         dailyBudget: action.dailyBudget && action.dailyBudget > 0 ? Math.max(20, action.dailyBudget) : undefined,
       });
       if (!upd.success) {
@@ -357,9 +362,9 @@ export async function POST(req: NextRequest) {
       if (ver.success && !ver.exists) {
         return await metaErr({ error: 'הקבוצה לא נמצאה ב-Meta לאחר היצירה' }, 'שכפול הקבוצה לא אומת');
       }
-      notes.push(ver.exists ? `אומת ב-Meta (סטטוס ${ver.effectiveStatus || ver.status || 'PAUSED'} — מושהה, הפעל ידנית)` : 'נוצר; אימות מלא לא הושלם');
+      notes.push(ver.exists ? `אומת ב-Meta (${liveWord})` : 'נוצר; אימות מלא לא הושלם');
       return await ok({ adSetId: copy.metaId, note: notes.join(' · ') }, {
-        detail: `שוכפלה קבוצת המודעות המנצחת עם קהל מורחב (מושהית — דורש הפעלה ידנית)`,
+        detail: `שוכפלה קבוצת המודעות המנצחת עם קהל מורחב (${liveWord})`,
         objectType: 'adset',
       });
     }
@@ -392,7 +397,7 @@ export async function POST(req: NextRequest) {
       const r = await createMetaAd(creds, {
         adSetId: action.metaAdSetId,
         name: `${action.kind === 'ab_test' ? 'A/B' : 'רענון'} — ${variation.strategy}`,
-        status: 'PAUSED',
+        status: liveStatus,
         creative: {
           pageId,
           message: variation.newPrimaryText,
@@ -408,8 +413,8 @@ export async function POST(req: NextRequest) {
         const ver = await verifyMetaEntity(creds, 'ad', r.metaId);
         if (ver.success && !ver.exists) return await metaErr({ error: 'המודעה לא נמצאה ב-Meta לאחר היצירה' }, 'יצירת המודעה לא אומתה');
       }
-      return await ok({ adId: r.metaId, variation: variation.explanation, note: 'נוצרה מודעה חדשה (מושהית) — הפעל כשמוכן' }, {
-        detail: `נוצרה מודעה חדשה ומאומתת (${action.kind === 'ab_test' ? 'בדיקת A/B' : 'רענון'}): ${variation.strategy} — מושהית, דורשת הפעלה ידנית`,
+      return await ok({ adId: r.metaId, variation: variation.explanation, note: `נוצרה מודעה חדשה (${liveWord})` }, {
+        detail: `נוצרה מודעה חדשה ומאומתת (${action.kind === 'ab_test' ? 'בדיקת A/B' : 'רענון'}): ${variation.strategy} — ${liveWord}`,
         objectType: 'ad',
       });
     }
@@ -475,7 +480,7 @@ export async function POST(req: NextRequest) {
       const r = await createMetaAd(creds, {
         adSetId: action.metaAdSetId,
         name: `${action.kind === 'ai_winner_clone' ? 'AI-Clone' : 'רענון-מונע'} — ${variation.strategy}`,
-        status: 'PAUSED',
+        status: liveStatus,
         creative: { pageId: pageId2, message: variation.newPrimaryText, headline: variation.newHeadline, description: variation.newDescription, linkUrl: src.ctaLink || '', imageUrl: src.mediaUrl || '', callToAction: variation.newCtaType || 'LEARN_MORE' },
       });
       if (!r.success) return await metaErr(r, 'יצירת המודעה נכשלה');
@@ -483,8 +488,8 @@ export async function POST(req: NextRequest) {
         const ver = await verifyMetaEntity(creds, 'ad', r.metaId);
         if (ver.success && !ver.exists) return await metaErr({ error: 'המודעה לא נמצאה ב-Meta לאחר היצירה' }, 'יצירת המודעה לא אומתה');
       }
-      return await ok({ adId: r.metaId, variation: variation.explanation, note: 'נוצרה מודעה חדשה (מושהית)' }, {
-        detail: `נוצרה מודעה חדשה ומאומתת (${action.kind === 'ai_winner_clone' ? 'שכפול AI' : 'רענון מונע'}): ${variation.strategy} — מושהית, דורשת הפעלה ידנית`,
+      return await ok({ adId: r.metaId, variation: variation.explanation, note: `נוצרה מודעה חדשה (${liveWord})` }, {
+        detail: `נוצרה מודעה חדשה ומאומתת (${action.kind === 'ai_winner_clone' ? 'שכפול AI' : 'רענון מונע'}): ${variation.strategy} — ${liveWord}`,
         objectType: 'ad',
       });
     }

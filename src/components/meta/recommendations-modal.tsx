@@ -25,6 +25,8 @@ export default function RecommendationsModal({ clientId, onClose }: { clientId: 
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
+  const [activate, setActivate] = useState(true);   // default: go live immediately
+  const [bulkRunning, setBulkRunning] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -40,19 +42,33 @@ export default function RecommendationsModal({ clientId, onClose }: { clientId: 
 
   useEffect(() => { load(); }, [load]);
 
-  const apply = async (r: Reco) => {
+  const apply = async (r: Reco): Promise<boolean> => {
     setBusyId(r.id);
     try {
       const res = await fetch('/api/meta-business/recommendations', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, action: r.apply }),
+        body: JSON.stringify({ clientId, action: r.apply, activate }),
       });
       const data = await res.json();
       if (!res.ok || data.success === false) throw new Error(data.error || 'הפעולה נכשלה');
       setDoneIds((prev) => new Set(prev).add(r.id));
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'הפעולה נכשלה');
+      return false;
     } finally { setBusyId(null); }
+  };
+
+  // Apply every pending recommendation in sequence — one click, fully automatic.
+  const applyAll = async () => {
+    setBulkRunning(true);
+    setError(null);
+    for (const r of recos) {
+      if (doneIds.has(r.id)) continue;
+      // eslint-disable-next-line no-await-in-loop
+      await apply(r);
+    }
+    setBulkRunning(false);
   };
 
   return (
@@ -62,7 +78,26 @@ export default function RecommendationsModal({ clientId, onClose }: { clientId: 
           <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>המלצות לייעול הקמפיינים</h2>
           <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: 22, cursor: 'pointer', color: '#6b7280' }}>×</button>
         </div>
-        <p style={{ color: '#6b7280', fontSize: 13, marginTop: 0 }}>המלצות להגדלת לידים — הרחבת קהלים, רענון קריאייטיב, הסטת תקציב ובדיקות A/B. לחיצה על &quot;אשר ובצע&quot; יוצרת/מעדכנת ב-Meta (פריטים חדשים נוצרים מושהים).</p>
+        <p style={{ color: '#6b7280', fontSize: 13, marginTop: 0 }}>המלצות להגדלת לידים — הרחבת קהלים, רענון קריאייטיב, הסטת תקציב ובדיקות A/B. כל פעולה מבוצעת ומאומתת מול Meta.</p>
+
+        {/* Automation controls */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }} title="כשמסומן — פריטים חדשים נוצרים פעילים (לא מושהים) ויוצאים לאוויר מיד">
+            <input type="checkbox" checked={activate} onChange={(e) => setActivate(e.target.checked)} />
+            🚀 הפעל מיד (לא מושהה)
+          </label>
+          {recos.length > 0 && (
+            <button onClick={applyAll} disabled={bulkRunning || !!busyId}
+              style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: (bulkRunning || busyId) ? 0.6 : 1 }}>
+              {bulkRunning ? 'מבצע הכל...' : '⚡ אשר ובצע הכל'}
+            </button>
+          )}
+        </div>
+        {activate && (
+          <div style={{ fontSize: 12, color: '#b45309', background: 'rgba(245,158,11,0.1)', borderRadius: 6, padding: '6px 10px', marginBottom: 12 }}>
+            ⚠️ פעילים מיד = הוצאה כספית מתחילה מיד עם האישור.
+          </div>
+        )}
 
         {loading ? <div style={{ color: '#6b7280', padding: 16 }}>מנתח קמפיינים...</div>
           : error ? <div style={{ color: '#ef4444', padding: 12, background: 'rgba(239,68,68,0.08)', borderRadius: 8 }}>{error}</div>
