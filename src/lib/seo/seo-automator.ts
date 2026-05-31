@@ -721,40 +721,59 @@ const executeInternalLinking: ExecutorFunction = async (context: AutomationConte
 
   try {
     const pages = await getPages(context.connection);
+    if (!pages.length) {
+      return { taskType: 'internal_linking', success: true, pagesAffected: 0, changes, executedAt: startTime };
+    }
 
-    // ניתוח דף אחד כדוגמה
-    const targetPage = pages[0];
+    // Candidate link targets = other pages on the site (title → URL).
+    const targets = pages.filter((p) => p.url && p.title).map((p) => ({ title: p.title || '', url: p.url || '' }));
 
-    if (targetPage) {
-      const pageContent = targetPage.content;
+    // Rotate which source pages we process each day so the whole site gets covered.
+    const dayIdx = new Date().getDate();
+    const sources = [pages[dayIdx % pages.length], pages[(dayIdx + 1) % pages.length]];
+    const seen = new Set<number | string>();
 
-      if (pageContent) {
-        const prompt = `
-עבור דף בנושא: "${targetPage.title || ''}"
-תוכן (בחירה): "${pageContent.substring(0, 500)}..."
+    for (const page of sources) {
+      if (!page || seen.has(page.id)) continue;
+      seen.add(page.id);
+      let content = page.content || '';
+      if (!content || content.length < 100) continue;
 
-הצע 3-5 קישורים פנימיים (Internal Links) שיכולים להשתלב בתוכן:
-1. תיאור המקום בתוכן שבו קישור מתאים
-2. טקסט הקישור (Anchor Text)
-3. הערות על מדוע זה טוב לSEO
+      const candidateList = targets
+        .filter((t) => t.url !== page.url)
+        .slice(0, 25)
+        .map((t, i) => `${i + 1}. ${t.title} => ${t.url}`)
+        .join('\n');
+      if (!candidateList) continue;
 
-תן רשימה מובנית.
-`;
+      const prompt = `תוכן הדף "${page.title || ''}":\n"""${content.replace(/<[^>]+>/g, ' ').substring(0, 1500)}"""\n\nדפים אחרים באתר (כותרת => URL):\n${candidateList}\n\nבחר 2-4 קישורים פנימיים טבעיים. לכל קישור בחר ביטוי עוגן (anchor) שמופיע **מילה-במילה** בתוכן הדף, ומפה אותו ל-URL הרלוונטי ביותר מהרשימה. החזר JSON בלבד, ללא טקסט נוסף: [{"anchor":"...","url":"..."}]`;
 
-        const suggestResult = await generateWithAI('אתה מומחה SEO. החזר את ההצעות בצורה מובנית.', prompt, { temperature: 0.7, maxTokens: 1000 });
-        const suggestions = (suggestResult.success && suggestResult.data) ? String(suggestResult.data) : '[לא ניתן לייצר הצעות]';
+      const r = await generateWithAI('אתה מומחה SEO לקישור פנימי. החזר JSON תקין בלבד.', prompt, { temperature: 0.3, maxTokens: 600 });
+      let links: Array<{ anchor?: string; url?: string }> = [];
+      try {
+        const m = String(r.data || '').match(/\[[\s\S]*\]/);
+        if (m) links = JSON.parse(m[0]);
+      } catch { /* bad JSON — skip this page */ }
 
-        const change: AutoTaskChange = {
-          pageId: targetPage.id,
-          pageTitle: targetPage.title || '',
-          pageUrl: targetPage.url || '',
-          field: 'internal_linking',
-          oldValue: '[בדיקה בוצעה]',
-          newValue: suggestions,
-          applied: false, // הצעות בלבד, לא עדכון אוטומטי
-        };
+      let inserted = 0;
+      for (const link of (Array.isArray(links) ? links : []).slice(0, 4)) {
+        const anchor = String(link.anchor || '').trim();
+        const url = String(link.url || '').trim();
+        if (!anchor || anchor.length < 3 || !/^https?:\/\//.test(url) || url === page.url) continue;
+        const idx = content.indexOf(anchor);
+        if (idx === -1) continue;                              // anchor must appear verbatim
+        const before = content.substring(Math.max(0, idx - 150), idx);
+        if (/<a\b[^>]*$/i.test(before) || /href=["'][^"']*$/i.test(before)) continue; // already inside a link/attr
+        content = `${content.substring(0, idx)}<a href="${url}">${anchor}</a>${content.substring(idx + anchor.length)}`;
+        inserted++;
+        changes.push({
+          pageId: page.id, pageTitle: page.title || '', pageUrl: page.url || '',
+          field: 'internal_link', oldValue: anchor, newValue: `${anchor} → ${url}`, applied: true,
+        });
+      }
 
-        changes.push(change);
+      if (inserted > 0) {
+        await updatePageContent(context.connection, page.id, content); // REAL apply to WordPress
         pagesAffected++;
       }
     }
