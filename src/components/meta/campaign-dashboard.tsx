@@ -71,6 +71,7 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: '', objective: 'OUTCOME_LEADS', dailyBudget: '' });
   const [datePreset, setDatePreset] = useState<string>('today');
+  const [showPaused, setShowPaused] = useState(false); // default: active campaigns only
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Record<string, { adSets: any[]; ads: any[] }>>({});
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
@@ -330,6 +331,10 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
           <option value="this_month">החודש</option>
           <option value="maximum">כל הזמן</option>
         </select>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--foreground, #1a1a2e)', cursor: 'pointer', userSelect: 'none' }} title="ברירת מחדל: רק קמפיינים פעילים">
+          <input type="checkbox" checked={showPaused} onChange={(e) => setShowPaused(e.target.checked)} />
+          הצג גם מושהים
+        </label>
         <button onClick={() => doSync()} disabled={!!action} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${BRAND}`, background: '#fff', color: BRAND, fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: action ? 0.6 : 1 }}>
           {action === 'sync' ? 'מסנכרן...' : '🔄 סנכרן עכשיו'}
         </button>
@@ -411,7 +416,7 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
             </tr>
           </thead>
           <tbody>
-            {campaigns.map((c) => (
+            {campaigns.filter((c) => showPaused || isActive(c.status)).map((c) => (
               <Fragment key={c.id}>
               <tr>
                 <td style={{ ...cellStyle, fontWeight: 600, maxWidth: 240, cursor: 'pointer' }} onClick={() => toggleDetail(c)}>
