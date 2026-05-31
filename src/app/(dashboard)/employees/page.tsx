@@ -88,6 +88,45 @@ export default function EmployeesPage() {
   const [formData, setFormData] = useState<FormData>(INITIAL_FORM);
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [credBusyId, setCredBusyId] = useState<string | null>(null);
+  const [credModal, setCredModal] = useState<{ email: string; password: string; name: string; existing?: boolean } | null>(null);
+
+  // Create a login account (email + password) for an employee, linked to their
+  // employee record so they get the employee dashboard (their tasks only).
+  const handleCreateLogin = async (employee: { id: string; name: string; email: string }) => {
+    if (!employee.email?.trim()) {
+      toast("לעובד אין אימייל — הוסף אימייל בכרטיס העובד תחילה", "error");
+      return;
+    }
+    setCredBusyId(employee.id);
+    try {
+      const res = await fetch("/api/auth/create-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: employee.email.trim(),
+          role: "employee",
+          displayName: employee.name,
+          linkedEmployeeId: employee.id,
+          // no password → server generates a strong one and returns it
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        setCredModal({ email: employee.email.trim(), password: "", name: employee.name, existing: true });
+        return;
+      }
+      if (!res.ok || !data.success) {
+        toast(data.error || "שגיאה ביצירת גישת התחברות", "error");
+        return;
+      }
+      setCredModal({ email: data.user?.email || employee.email, password: data.generatedPassword || "", name: employee.name });
+    } catch {
+      toast("שגיאה ביצירת גישת התחברות", "error");
+    } finally {
+      setCredBusyId(null);
+    }
+  };
 
   const taskStats = useMemo(() => {
     const stats: Record<string, { open: number; overdue: number; thisWeek: number; underReview: number }> = {};
@@ -626,6 +665,32 @@ export default function EmployeesPage() {
                   <button
                     onClick={(e) => {
                       e.preventDefault();
+                      handleCreateLogin(employee);
+                    }}
+                    disabled={credBusyId === employee.id}
+                    className="ux-btn"
+                    title="צור שם משתמש (אימייל) וסיסמה כדי שהעובד יוכל להתחבר"
+                    style={{
+                      flex: 1,
+                      padding: "0.5rem",
+                      borderRadius: "0.375rem",
+                      border: "1px solid var(--accent)",
+                      background: "transparent",
+                      color: "var(--accent)",
+                      cursor: "pointer",
+                      fontSize: "0.8rem",
+                      fontWeight: 600,
+                      transition: "all 150ms ease",
+                      opacity: credBusyId === employee.id ? 0.6 : 1,
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(0,181,254,0.1)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  >
+                    {credBusyId === employee.id ? "יוצר..." : "🔑 גישה"}
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
                       handleOpenDeleteConfirm(employee.id);
                     }}
                     className="ux-btn"
@@ -669,6 +734,49 @@ export default function EmployeesPage() {
           </p>
         </div>
       )}
+
+      {/* Login credentials modal */}
+      <Modal open={!!credModal} onClose={() => setCredModal(null)} title="גישת התחברות לעובד">
+        <div style={{ padding: "1.5rem", maxWidth: 460, direction: "rtl" }}>
+          {credModal?.existing ? (
+            <div style={{ fontSize: "0.9rem", color: "var(--foreground)", lineHeight: 1.7 }}>
+              לעובד <strong>{credModal?.name}</strong> כבר קיים חשבון התחברות עם האימייל הזה
+              (<span dir="ltr">{credModal?.email}</span>).<br />
+              אם שכח את הסיסמה — אפס אותה דרך דף "משתמשים".
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: "0.85rem", color: "var(--foreground-muted)", marginBottom: "1rem" }}>
+                נוצרה גישה ל־<strong style={{ color: "var(--foreground)" }}>{credModal?.name}</strong>. העבר לעובד את הפרטים הבאים —
+                <strong> הסיסמה מוצגת פעם אחת בלבד.</strong>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", fontWeight: 600 }}>שם משתמש (אימייל)</label>
+                  <div dir="ltr" style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "0.5rem", padding: "0.6rem 0.75rem", fontFamily: "monospace", fontSize: "0.9rem", textAlign: "left" }}>
+                    {credModal?.email}
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", fontWeight: 600 }}>סיסמה</label>
+                  <div dir="ltr" style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "0.5rem", padding: "0.6rem 0.75rem", fontFamily: "monospace", fontSize: "1rem", fontWeight: 700, textAlign: "left", letterSpacing: "0.05em" }}>
+                    {credModal?.password}
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    navigator.clipboard?.writeText(`אימייל: ${credModal?.email}\nסיסמה: ${credModal?.password}`);
+                    toast("הפרטים הועתקו", "success");
+                  }}
+                  style={{ marginTop: "0.5rem", padding: "0.55rem", borderRadius: "0.5rem", border: "none", background: "var(--accent)", color: "#fff", fontWeight: 600, fontSize: "0.85rem", cursor: "pointer" }}
+                >
+                  📋 העתק פרטי התחברות
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
 
       {/* Modal */}
       <Modal
