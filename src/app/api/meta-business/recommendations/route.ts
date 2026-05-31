@@ -25,15 +25,12 @@ const KIND_CATEGORY: Record<string, string> = {
   lookalike: 'audience', retargeting: 'audience', ai_winner_clone: 'creative', preventive_refresh: 'creative', dayparting: 'budget',
 };
 
-// IRON RULE: never change creatives (visuals/copy) and never change daily budgets.
-// These action kinds are therefore disabled — neither generated nor executed.
-const BLOCKED_KINDS = new Set([
-  'shift_budget',       // changes daily budget
-  'refresh_creative',   // creates/changes creative
-  'ab_test',            // creates new creative
-  'ai_winner_clone',    // creates new creative
-  'preventive_refresh', // creates new creative
-]);
+// IRON RULES (per client):
+//   1) NEVER change the visual — creative variations reuse the SAME image/video as
+//      the source ad and only change the TEXT (allowed, run as A/B tests).
+//   2) NEVER increase the TOTAL daily budget — budget may be REALLOCATED between ad
+//      sets (sum preserved) but the overall frame the client set must not rise.
+// No action kind is fully blocked; instead each is constrained below to honor these.
 
 export const dynamic = 'force-dynamic';
 
@@ -261,11 +258,9 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // IRON RULE: drop any recommendation that would change a creative or a daily budget.
-    const allowed = recos.filter((r) => !BLOCKED_KINDS.has(r.apply.kind));
     const order = { high: 0, medium: 1, low: 2 };
-    allowed.sort((a, b) => order[a.severity] - order[b.severity]);
-    return NextResponse.json({ recommendations: allowed, summary: { totalSpend, totalLeads, avgCpl } });
+    recos.sort((a, b) => order[a.severity] - order[b.severity]);
+    return NextResponse.json({ recommendations: recos, summary: { totalSpend, totalLeads, avgCpl } });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'שגיאה' }, { status: 500 });
   }
@@ -276,11 +271,6 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const { clientId, action, activate } = body as { clientId?: string; action?: Reco['apply']; activate?: boolean };
     if (!action?.kind) return NextResponse.json({ error: 'פעולה לא תקינה' }, { status: 400 });
-
-    // IRON RULE guard: refuse any action that would change a creative or daily budget.
-    if (BLOCKED_KINDS.has(action.kind)) {
-      return NextResponse.json({ error: 'הפעולה חסומה לפי כלל הברזל: המערכת לא משנה ויזואל ולא תקציב יומי. מותרות רק אופטימיזציות קהל.' }, { status: 400 });
-    }
 
     // When activate=true, new objects go LIVE immediately (no manual un-pause).
     const liveStatus: 'ACTIVE' | 'PAUSED' = activate ? 'ACTIVE' : 'PAUSED';
@@ -320,9 +310,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, note });
     };
 
-    // ── Shift budget: lower the laggard, raise the winner ──
+    // ── Shift budget: REALLOCATE between ad sets (total preserved, never raised) ──
     if (action.kind === 'shift_budget') {
       if (!action.fromMetaId || !action.toMetaId) return NextResponse.json({ error: 'חסרים מזהי קבוצות' }, { status: 400 });
+
+      // IRON RULE: the new total must not exceed the current total — reallocation only.
+      const [curFrom, curTo] = await Promise.all([
+        getMetaAdSetDailyBudget(creds, action.fromMetaId),
+        getMetaAdSetDailyBudget(creds, action.toMetaId),
+      ]);
+      const curTotalCents = (curFrom || 0) + (curTo || 0);
+      const wantTotalCents = Math.round((action.newFromBudget || 0) * 100) + Math.round((action.newToBudget || 0) * 100);
+      if (curTotalCents > 0 && wantTotalCents > curTotalCents + 1) {
+        return await metaErr(
+          { error: `הפעולה הייתה מעלה את סך התקציב היומי (מ-₪${(curTotalCents / 100).toFixed(0)} ל-₪${(wantTotalCents / 100).toFixed(0)}) — חסום לפי כלל הברזל. מותרת רק הזזה בין קבוצות.` },
+          'הסטת תקציב חסומה',
+        );
+      }
+
       const r1 = await updateMetaAdSetBudget(creds, action.fromMetaId, action.newFromBudget || 0);
       const r2 = await updateMetaAdSetBudget(creds, action.toMetaId, action.newToBudget || 0);
       if (!r1.success || !r2.success) return await metaErr(r1.success ? r2 : r1, 'עדכון תקציב נכשל');
@@ -355,6 +360,10 @@ export async function POST(req: NextRequest) {
       if (!adAccountId) return NextResponse.json({ error: 'לא נמצא חשבון מודעות ללקוח' }, { status: 400 });
       if (!action.sourceMetaAdSetId) return NextResponse.json({ error: 'חסר מזהה קבוצת מודעות מקור' }, { status: 400 });
 
+      // Read the source ad set's current daily budget BEFORE copying so we can keep
+      // the TOTAL constant (split it) instead of adding new spend.
+      const srcBudgetCents = await getMetaAdSetDailyBudget(creds, action.sourceMetaAdSetId);
+
       // 1) Duplicate the winning ad set (deep copy so it carries its creatives;
       //    falls back to a shallow copy automatically if Meta rejects).
       const copy = await copyMetaAdSet(creds, action.sourceMetaAdSetId, {
@@ -362,15 +371,28 @@ export async function POST(req: NextRequest) {
       });
       if (!copy.success || !copy.metaId) return await metaErr(copy, 'שכפול הקבוצה המנצחת נכשל');
 
-      // 2) Broaden the targeting + set name/budget/status on the new copy (best-effort).
       const notes: string[] = [`שוכפל קהל מנצח (${liveWord}) עם הרחבת טירגוט`];
       if (copy.error) notes.push(copy.error); // e.g. shallow-copy warning ("הוסף קריאייטיב")
-      // IRON RULE: do NOT set/modify daily budget — the copy inherits the source
-      // ad set's budget as-is. We only broaden the audience (targeting).
+
+      // IRON RULE: never increase the total daily budget. For an ABO ad set (it has
+      // its own budget), SPLIT it — the expanded copy gets half, the source keeps the
+      // rest, so the combined total equals the original. For CBO (no ad-set budget),
+      // the campaign budget governs both, so we leave budgets untouched.
+      let splitBudgetShekels: number | undefined;
+      if (srcBudgetCents && srcBudgetCents > 0) {
+        const half = Math.floor(srcBudgetCents / 2);
+        splitBudgetShekels = Math.max(1, Math.round(half / 100));
+        const sourceRemainShekels = Math.max(1, Math.round((srcBudgetCents - half) / 100));
+        await updateMetaAdSetBudget(creds, action.sourceMetaAdSetId, sourceRemainShekels); // reduce source
+        notes.push(`התקציב חולק: ₪${sourceRemainShekels} למקור · ₪${splitBudgetShekels} לקהל המורחב (סך הכל ללא שינוי)`);
+      }
+
+      // 2) Broaden the targeting + name + status (+ split budget for ABO) on the copy.
       const upd = await updateMetaAdSet(creds, copy.metaId, {
         name: action.newName || undefined,
         targeting: action.targeting,
         status: liveStatus,
+        dailyBudget: splitBudgetShekels,
       });
       if (!upd.success) {
         notes.push(`הרחבת הטירגוט נכשלה — הרחב ידנית בלוח Meta. (${upd.error || ''})`);
