@@ -82,10 +82,10 @@ export async function POST(req: NextRequest) {
           .insert({ id: userId, data: userData });
 
         if (retryError) {
-          return NextResponse.json({ error: 'שגיאה ביצירת המשתמש' }, { status: 500 });
+          return NextResponse.json({ error: `שגיאה ביצירת המשתמש: ${retryError.message}`, code: retryError.code, hint: 'ייתכן שטבלת app_users לא קיימת — צור אותה ב-Supabase' }, { status: 500 });
         }
       } else {
-        return NextResponse.json({ error: 'שגיאה ביצירת המשתמש' }, { status: 500 });
+        return NextResponse.json({ error: `שגיאה ביצירת המשתמש: ${error.message}`, code: error.code }, { status: 500 });
       }
     }
 
@@ -102,6 +102,7 @@ export async function POST(req: NextRequest) {
     }, { status: 201 });
   } catch (error) {
     console.error('[Auth/CreateUser] Error:', error);
-    return NextResponse.json({ error: 'שגיאה ביצירת המשתמש' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: `שגיאה ביצירת המשתמש: ${msg}` }, { status: 500 });
   }
 }
