@@ -399,8 +399,8 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {/* ── New command-center experience (primary) ── */}
-      <TasksCommandCenter onOpenTask={openEdit} />
+      {/* ── New execution-first workspace (primary) ── */}
+      <TasksCommandCenter onOpenTask={openEdit} onCompleteTask={(t) => { update(t.id, { status: "completed" }); fireConfetti(); }} />
 
       <button
         onClick={() => setShowWork(v => !v)}
