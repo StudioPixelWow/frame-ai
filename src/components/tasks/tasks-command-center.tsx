@@ -42,9 +42,9 @@ const daysBetween = (a: string, b: string) => Math.round((new Date(a).getTime() 
 
 export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onOpenTask: (task: AnyTask) => void; onCompleteTask?: (task: AnyTask) => void }) {
   const { role, employeeId } = useAuth();
-  const { data: tasks } = useTasks();
-  const { data: employeeTasks } = useEmployeeTasks();
-  const { data: employees } = useEmployees();
+  const { data: tasks = [] } = useTasks();
+  const { data: employeeTasks = [] } = useEmployeeTasks();
+  const { data: employees = [] } = useEmployees();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [justDone, setJustDone] = useState<Set<string>>(new Set());
   const [now, setNow] = useState(new Date());
