@@ -389,7 +389,15 @@ export default function SeoResultsPage() {
         {!gscConnected ? (
           <div style={{ textAlign: 'center', padding: '2rem' }}>
             <p style={{ color: COLORS.textMuted, marginBottom: 16 }}>Google Search Console לא מחובר</p>
-            <button style={buttonStyle} onClick={() => window.location.href = '/api/auth/gsc'}>
+            <button style={buttonStyle} onClick={async () => {
+              if (!selectedClient) { alert('בחר לקוח קודם'); return; }
+              try {
+                const res = await fetch(`/api/auth/gsc/url?clientId=${encodeURIComponent(selectedClient)}`);
+                const data = await res.json();
+                if (res.ok && data.url) { window.location.href = data.url; }
+                else { alert(data.error || 'חיבור GSC נכשל — ייתכן ש-GOOGLE_CLIENT_ID לא מוגדר'); }
+              } catch { alert('שגיאה בחיבור GSC'); }
+            }}>
               חיבור GSC
             </button>
           </div>
