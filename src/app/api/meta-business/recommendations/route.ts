@@ -162,11 +162,12 @@ export async function GET(req: NextRequest) {
       if (freq >= 4 || (a.impressions > 1000 && ctr > 0 && ctr < 0.8)) {
         recos.push({
           id: `refresh_${a.id}`, severity: 'medium', category: 'creative',
-          title: `רענון קריאייטיב: ${a.name}`,
-          reason: freq >= 4
-            ? `תדירות ${freq.toFixed(1)} — הקהל ראה את המודעה יותר מדי פעמים (שחיקה).`
-            : `CTR ${ctr.toFixed(2)}% נמוך — הקריאייטיב לא מושך מספיק.`,
-          expectedImpact: 'גרסה רעננה תחזיר CTR ותוריד CPL.',
+          title: `בדיקת A/B (טקסט חדש) לצד המודעה הקיימת: ${a.name}`,
+          reason: (freq >= 4
+            ? `תדירות ${freq.toFixed(1)} — הקהל ראה את המודעה יותר מדי פעמים (שחיקה). `
+            : `CTR ${ctr.toFixed(2)}% נמוך — כדאי לבחון מסר נוסף. `) +
+            'המודעה המקורית של הלקוח נשארת פעילה — נוספת לצידה גרסת טקסט חדשה (אותו ויזואל) כדי לבדוק מי מנצח.',
+          expectedImpact: 'בדיקת A/B אמיתית: הטקסט של הלקוח מול גרסה חדשה — שומרים את המנצח.',
           apply: { kind: 'refresh_creative', objectName: a.name, sourceAdId: a.id, metaAdSetId: (() => {
             const st = cAdSets.find((s) => s.id === a.adSetId); return (st as any)?.metaAdSetId;
           })() },
@@ -181,8 +182,8 @@ export async function GET(req: NextRequest) {
         recos.push({
           id: `abtest_${topAd.id}`, severity: 'low', category: 'ab_test',
           title: `בדיקת A/B למודעה מנצחת: ${topAd.name}`,
-          reason: `המודעה מצליחה — גרסת מתחרה (מסר/CTA שונה) עשויה לנצח אותה ולשפר עוד.`,
-          expectedImpact: 'מציאת זווית מנצחת חדשה והורדת CPL נוספת.',
+          reason: `המודעה מצליחה — המודעה המקורית של הלקוח נשארת פעילה, ולצידה נוספת גרסת מתחרה (מסר/CTA שונה, אותו ויזואל) כדי לבחון אם אפשר לשפר עוד.`,
+          expectedImpact: 'שתי הגרסאות רצות במקביל — שומרים את המנצחת ומורידים CPL.',
           apply: { kind: 'ab_test', objectName: topAd.name, sourceAdId: topAd.id, metaAdSetId: (w.s as any).metaAdSetId },
         });
       }
@@ -230,9 +231,9 @@ export async function GET(req: NextRequest) {
       const st = cAdSets.find((s) => s.id === bestAd.adSetId);
       recos.push({
         id: `aiwinner_${bestAd.id}`, severity: 'medium', category: 'creative',
-        title: `שכפול AI של המודעה המנצחת: ${bestAd.name}`,
-        reason: `מודעה זו מביאה לידים ב-₪${Math.round(bestAd.cpl)}. ה-AI ינתח למה היא עובדת וייצר עוד בסגנון הזה.`,
-        expectedImpact: 'הרחבת ההצלחה — עוד וריאציות בזווית המנצחת.',
+        title: `שכפול AI של המודעה המנצחת (טקסט נוסף לבדיקה): ${bestAd.name}`,
+        reason: `מודעה זו מביאה לידים ב-₪${Math.round(bestAd.cpl)}. המודעה המקורית נשארת פעילה — ה-AI מוסיף לצידה גרסת טקסט חדשה בסגנון המנצח (אותו ויזואל) לבדיקה.`,
+        expectedImpact: 'הרחבת ההצלחה כבדיקת A/B — שומרים את המנצחת.',
         apply: { kind: 'ai_winner_clone', objectName: bestAd.name, sourceAdId: bestAd.id, metaAdSetId: (st as any)?.metaAdSetId },
       });
     }
@@ -245,9 +246,9 @@ export async function GET(req: NextRequest) {
         const st = cAdSets.find((s) => s.id === a.adSetId);
         recos.push({
           id: `prevent_${a.id}`, severity: 'low', category: 'creative',
-          title: `רענון מונע: ${a.name}`,
-          reason: `תדירות ${f.toFixed(1)} ומטפסת. רענון עכשיו, לפני שתגיע ל-4 ותתחיל שחיקה.`,
-          expectedImpact: 'מניעת ירידת ביצועים לפני שהיא קורית.',
+          title: `רענון מונע (טקסט נוסף לבדיקה): ${a.name}`,
+          reason: `תדירות ${f.toFixed(1)} ומטפסת. המודעה המקורית נשארת פעילה — נוספת לצידה גרסת טקסט חדשה (אותו ויזואל) לבדיקה לפני שמגיעים לשחיקה.`,
+          expectedImpact: 'מניעת ירידת ביצועים — כבדיקת A/B שלא נוגעת במודעה הקיימת.',
           apply: { kind: 'preventive_refresh', objectName: a.name, sourceAdId: a.id, metaAdSetId: (st as any)?.metaAdSetId },
         });
       }
@@ -515,8 +516,8 @@ export async function POST(req: NextRequest) {
         const ver = await verifyMetaEntity(creds, 'ad', r.metaId);
         if (ver.success && !ver.exists) return await metaErr({ error: 'המודעה לא נמצאה ב-Meta לאחר היצירה' }, 'יצירת המודעה לא אומתה');
       }
-      return await ok({ adId: r.metaId, variation: variation.explanation, note: `נוצרה מודעה חדשה (${liveWord})` }, {
-        detail: `נוצרה מודעה חדשה ומאומתת (${action.kind === 'ab_test' ? 'בדיקת A/B' : 'רענון'}): ${variation.strategy} — ${liveWord}`,
+      return await ok({ adId: r.metaId, variation: variation.explanation, note: `נוספה גרסת טקסט חדשה (${liveWord}) — המודעה המקורית ממשיכה לרוץ לבדיקת A/B` }, {
+        detail: `בדיקת A/B: המודעה המקורית של הלקוח נשמרה, ונוספה לצידה גרסת טקסט חדשה (אותו ויזואל, ${liveWord}) — ${variation.strategy}`,
         objectType: 'ad',
       });
     }
@@ -623,8 +624,8 @@ export async function POST(req: NextRequest) {
         const ver = await verifyMetaEntity(creds, 'ad', r.metaId);
         if (ver.success && !ver.exists) return await metaErr({ error: 'המודעה לא נמצאה ב-Meta לאחר היצירה' }, 'יצירת המודעה לא אומתה');
       }
-      return await ok({ adId: r.metaId, variation: variation.explanation, note: `נוצרה מודעה חדשה (${liveWord})` }, {
-        detail: `נוצרה מודעה חדשה ומאומתת (${action.kind === 'ai_winner_clone' ? 'שכפול AI' : 'רענון מונע'}): ${variation.strategy} — ${liveWord}`,
+      return await ok({ adId: r.metaId, variation: variation.explanation, note: `נוספה גרסת טקסט חדשה (${liveWord}) — המודעה המקורית ממשיכה לרוץ לבדיקת A/B` }, {
+        detail: `בדיקת A/B: המודעה המקורית נשמרה, ונוספה לצידה גרסת טקסט חדשה (אותו ויזואל, ${liveWord}, ${action.kind === 'ai_winner_clone' ? 'שכפול AI' : 'רענון מונע'}) — ${variation.strategy}`,
         objectType: 'ad',
       });
     }
