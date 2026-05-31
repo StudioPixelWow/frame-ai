@@ -37,7 +37,7 @@ function rowToTask(r: Row) {
     dueDate: (r.due_date as string) ?? null,
     ganttItemId: (r.gantt_item_id as string) ?? null,
     tags: [] as string[],
-    files: [] as string[],
+    files: Array.isArray((r as any).files) ? (r as any).files : [],
     notes: (r.notes as string) ?? '',
     createdAt: (r.created_at as string) ?? '',
     updatedAt: (r.updated_at as string) ?? '',
@@ -78,6 +78,7 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
       out[dbKey] = nullable ? nullIfEmpty(body[k]) : body[k];
     }
   }
+  if (Array.isArray(body.files)) out.files = body.files; // persist attached files
   out.updated_at = new Date().toISOString();
   return out;
 }

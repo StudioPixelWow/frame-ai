@@ -25,6 +25,7 @@ const REQUIRED_COLUMNS = [
   { name: 'due_date',       def: 'TEXT' },
   { name: 'description',    def: "TEXT DEFAULT ''" },
   { name: 'gantt_item_id',  def: 'TEXT' },
+  { name: 'files',          def: "JSONB DEFAULT '[]'::jsonb" },
 ];
 
 /** Probe which columns actually exist in the table right now. */
