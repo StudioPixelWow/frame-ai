@@ -85,7 +85,7 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/meta-business/campaigns?clientId=${encodeURIComponent(clientId)}`);
+      const res = await fetch(`/api/meta-business/campaigns?clientId=${encodeURIComponent(clientId)}&datePreset=${encodeURIComponent(datePreset)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'שגיאה בטעינת קמפיינים');
       setCampaigns(data.campaigns || []);
@@ -96,7 +96,7 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
     } finally {
       setLoading(false);
     }
-  }, [clientId]);
+  }, [clientId, datePreset]);
 
   useEffect(() => { if (clientId) load(); }, [clientId, load]);
 

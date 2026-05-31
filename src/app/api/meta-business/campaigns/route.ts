@@ -9,9 +9,65 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { campaigns as campaignsCol, adSets as adSetsCol, ads as adsCol } from '@/lib/db/collections';
 import { getSupabase } from '@/lib/db/store';
-import { getSystemMetaToken } from '@/lib/meta-ads/token';
+import { getSystemMetaToken, resolveMetaToken } from '@/lib/meta-ads/token';
 
 export const dynamic = 'force-dynamic';
+
+const META_API = 'https://graph.facebook.com/v19.0';
+const ALLOWED_PRESETS = ['today', 'yesterday', 'last_7d', 'last_30d', 'this_month', 'last_month', 'maximum'];
+
+type LiveMetric = { spend: number; impressions: number; clicks: number; leads: number; messages: number };
+
+function num(v: unknown): number { const n = Number(v); return isNaN(n) ? 0 : n; }
+
+function leadsFromActions(actions: any[] = []): number {
+  const a = actions.find((x) => x.action_type === 'lead' || x.action_type === 'onsite_conversion.lead_grouped');
+  return a ? num(a.value) : 0;
+}
+function messagesFromActions(actions: any[] = []): number {
+  let t = 0;
+  for (const x of actions) {
+    if (typeof x.action_type === 'string' && x.action_type.includes('messaging_conversation_started')) t += num(x.value);
+  }
+  return t;
+}
+
+/**
+ * Fetch CAMPAIGN-level insights for a date range directly from Meta (fast — one
+ * call per account, no DB writes). Returns a map metaCampaignId → live metrics so
+ * the dashboard can show numbers that match the SELECTED range instead of the
+ * stale snapshot stored by the last full sync.
+ */
+async function fetchLiveCampaignMetrics(
+  token: string,
+  accountIds: string[],
+  datePreset: string,
+): Promise<Map<string, LiveMetric>> {
+  const out = new Map<string, LiveMetric>();
+  await Promise.all(
+    accountIds.map(async (actId) => {
+      try {
+        const url = `${META_API}/${actId}/insights?level=campaign&date_preset=${datePreset}` +
+          `&fields=campaign_id,spend,impressions,clicks,actions&limit=500&access_token=${encodeURIComponent(token)}`;
+        const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !Array.isArray(data?.data)) return;
+        for (const row of data.data) {
+          const id = row.campaign_id;
+          if (!id) continue;
+          out.set(id, {
+            spend: num(row.spend),
+            impressions: num(row.impressions),
+            clicks: num(row.clicks),
+            leads: leadsFromActions(row.actions),
+            messages: messagesFromActions(row.actions),
+          });
+        }
+      } catch { /* one bad account shouldn't break the rest */ }
+    }),
+  );
+  return out;
+}
 
 // Resolve the client's Meta connection status so the UI can distinguish
 // "not connected" / "token expired" from simply "no campaigns yet".
@@ -41,6 +97,8 @@ export async function GET(req: NextRequest) {
     if (!clientId) {
       return NextResponse.json({ error: 'חסר מזהה לקוח (clientId)' }, { status: 400 });
     }
+    const presetParam = req.nextUrl.searchParams.get('datePreset') || '';
+    const datePreset = ALLOWED_PRESETS.includes(presetParam) ? presetParam : '';
 
     const [allCampaigns, allAdSets, allAds] = await Promise.all([
       campaignsCol.getAllAsync(),
@@ -134,6 +192,45 @@ export async function GET(req: NextRequest) {
       };
     });
 
+    // ── LIVE OVERLAY ──────────────────────────────────────────────────────
+    // If a date range was requested, replace the stored snapshot numbers with
+    // campaign insights for THAT range pulled live from Meta. This makes the
+    // dashboard match the selected range instead of the last full-sync snapshot.
+    let liveApplied = false;
+    if (datePreset && summaries.length > 0) {
+      try {
+        const sb = getSupabase();
+        const { data: cl } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
+        const cRow = cl as any;
+        const token = await resolveMetaToken(cRow?.meta_access_token || cRow?.metaAccessToken);
+        if (token) {
+          const { getClientAdAccounts } = await import('@/lib/meta-ads/client-accounts');
+          const accts = new Set<string>(await getClientAdAccounts(clientId));
+          for (const c of clientCampaigns) if ((c as any).adAccountId) accts.add((c as any).adAccountId);
+          try {
+            const { data: asg } = await sb.from('app_meta_campaign_assignments').select('ad_account_id').eq('client_id', clientId);
+            for (const a of (asg || []) as any[]) if (a.ad_account_id) accts.add(a.ad_account_id);
+          } catch { /* optional */ }
+
+          if (accts.size > 0) {
+            const live = await fetchLiveCampaignMetrics(token, [...accts], datePreset);
+            if (live.size > 0) {
+              liveApplied = true;
+              for (const s of summaries) {
+                const m = s.metaCampaignId ? live.get(s.metaCampaignId) : undefined;
+                const v = m || { spend: 0, impressions: 0, clicks: 0, leads: 0, messages: 0 };
+                s.spend = v.spend; s.impressions = v.impressions; s.clicks = v.clicks;
+                s.leads = v.leads; s.messages = v.messages;
+                s.cpl = v.leads > 0 ? v.spend / v.leads : 0;
+                s.costPerMessage = v.messages > 0 ? v.spend / v.messages : 0;
+                s.ctr = v.impressions > 0 ? (v.clicks / v.impressions) * 100 : 0;
+              }
+            }
+          }
+        }
+      } catch { /* fall back to stored snapshot */ }
+    }
+
     // Sort by spend desc (most important first)
     summaries.sort((a, b) => b.spend - a.spend);
 
@@ -150,6 +247,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       campaigns: summaries,
       connectionStatus,
+      datePreset: datePreset || null,
+      liveApplied,
       totals: {
         ...totals,
         cpl: totals.leads > 0 ? totals.spend / totals.leads : 0,
