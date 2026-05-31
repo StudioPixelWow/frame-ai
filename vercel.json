@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/meta-sync-all",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/meta-auto-optimize",
