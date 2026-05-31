@@ -269,41 +269,34 @@ export async function POST(
     const isCurrentMonth = body.year === now.getFullYear() && body.month === (now.getMonth() + 1);
     const startDay = isCurrentMonth ? now.getDate() : 1;
 
-    // Read client scheduling preferences (defaults: 3 posts/week on Sun/Tue/Thu)
-    const clientPublishDays: number[] = (client as any).publishDays ?? [0, 2, 4];
-    const weeklyPostsCount: number = (client as any).weeklyPostsCount ?? 3;
+    // === Spread posts across the month ===
+    // Allowed days: Sunday(0)–Thursday(4). Friday(5)/Saturday(6) excluded.
+    // Preference: Monday(1) and Thursday(4) first. Holiday days are skipped.
+    const ALLOWED_DOW = [0, 1, 2, 3, 4];
+    const holidayDays = new Set(
+      getHolidaysForMonth(body.month, body.year).map((h: any) => h.approximateDay),
+    );
+    const dowOf = (d: number) => new Date(body.year, body.month - 1, d).getDay();
 
-    // Collect all publish-day dates in the month from startDay onward
-    const preferredDates: number[] = [];
+    // Group eligible days by week (from startDay onward).
+    const weekMap: Map<number, number[]> = new Map();
     for (let d = startDay; d <= totalDays; d++) {
-      const dow = new Date(body.year, body.month - 1, d).getDay();
-      if (clientPublishDays.includes(dow)) {
-        preferredDates.push(d);
-      }
+      if (!ALLOWED_DOW.includes(dowOf(d))) continue; // skip Fri/Sat
+      if (holidayDays.has(d)) continue;              // skip holidays
+      const wk = Math.ceil(d / 7);
+      if (!weekMap.has(wk)) weekMap.set(wk, []);
+      weekMap.get(wk)!.push(d);
     }
+    const weeks = Array.from(weekMap.keys()).sort((a, b) => a - b);
 
-    // Weekly distribution: group preferred dates by week, take weeklyPostsCount per week
-    const weeklyDistributed: number[] = [];
-    const weekBuckets: Map<number, number[]> = new Map();
-    for (const d of preferredDates) {
-      const weekNum = Math.ceil(d / 7);
-      if (!weekBuckets.has(weekNum)) weekBuckets.set(weekNum, []);
-      weekBuckets.get(weekNum)!.push(d);
-    }
-    for (const [, dates] of Array.from(weekBuckets.entries()).sort((a, b) => a[0] - b[0])) {
-      weeklyDistributed.push(...dates.slice(0, weeklyPostsCount));
-    }
-
-    // Fallback: if not enough distributed dates, fill with remaining days from startDay
-    const datePool = [...weeklyDistributed];
-    if (datePool.length < body.ideas.length) {
-      for (let d = startDay; d <= totalDays; d++) {
-        if (!datePool.includes(d)) {
-          datePool.push(d);
-        }
-        if (datePool.length >= body.ideas.length) break;
-      }
-    }
+    // Build the date pool spread across weeks: one Monday per week, then one
+    // Thursday per week, then the remaining Sun/Tue/Wed days — so posts land on
+    // Mon/Thu first and are distributed, not piled into one week.
+    const datePool: number[] = [];
+    const pushUnique = (d?: number) => { if (d != null && !datePool.includes(d)) datePool.push(d); };
+    for (const wk of weeks) pushUnique(weekMap.get(wk)!.find((d) => dowOf(d) === 1)); // Mondays
+    for (const wk of weeks) pushUnique(weekMap.get(wk)!.find((d) => dowOf(d) === 4)); // Thursdays
+    for (const wk of weeks) for (const d of weekMap.get(wk)!) pushUnique(d);          // the rest
 
     let dateIndex = 0;
 
@@ -331,8 +324,9 @@ export async function POST(
         latestResearch
       );
 
-      // Pick next date from the distributed pool sequentially
-      const dayInMonth = datePool[Math.min(dateIndex, datePool.length - 1)] || startDay;
+      // One post per date. Wrap around ONLY after every eligible day is used once,
+      // so posts are never all piled onto a single day.
+      const dayInMonth = datePool.length > 0 ? datePool[dateIndex % datePool.length] : startDay;
       dateIndex++;
       const itemDate = new Date(body.year, body.month - 1, dayInMonth).toISOString().split('T')[0];
 
