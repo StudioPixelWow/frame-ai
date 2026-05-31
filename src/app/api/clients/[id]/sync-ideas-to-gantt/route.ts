@@ -50,8 +50,8 @@ async function fetchClientFromSupabase(clientId: string): Promise<Client | null>
     retainerDay: data.retainer_day ?? 1,
     color: data.color ?? '#00B5FE',
     convertedFromLead: data.converted_from_lead ?? null,
-    weeklyPostsCount: data.weekly_posts_count ?? 3,
-    publishDays: data.publish_days ?? [0, 2, 4],
+    weeklyPostsCount: data.weekly_posts_count ?? 2,
+    publishDays: data.publish_days ?? [1, 4],
     createdAt: data.created_at ?? '',
     updatedAt: data.updated_at ?? '',
   } as unknown as Client;
@@ -289,14 +289,29 @@ export async function POST(
     }
     const weeks = Array.from(weekMap.keys()).sort((a, b) => a - b);
 
-    // Build the date pool spread across weeks: one Monday per week, then one
-    // Thursday per week, then the remaining Sun/Tue/Wed days — so posts land on
-    // Mon/Thu first and are distributed, not piled into one week.
-    const datePool: number[] = [];
-    const pushUnique = (d?: number) => { if (d != null && !datePool.includes(d)) datePool.push(d); };
-    for (const wk of weeks) pushUnique(weekMap.get(wk)!.find((d) => dowOf(d) === 1)); // Mondays
-    for (const wk of weeks) pushUnique(weekMap.get(wk)!.find((d) => dowOf(d) === 4)); // Thursdays
-    for (const wk of weeks) for (const d of weekMap.get(wk)!) pushUnique(d);          // the rest
+    // Client's weekly cadence — how many posts per week (default 2 → Mon + Thu).
+    const weeklyPostsCount: number = Math.max(1, (client as any).weeklyPostsCount ?? 2);
+
+    // Order a week's eligible days by preference: Monday, then Thursday, then the
+    // rest (Sun/Tue/Wed) in date order.
+    const orderWeek = (days: number[]): number[] => {
+      const mon = days.filter((d) => dowOf(d) === 1);
+      const thu = days.filter((d) => dowOf(d) === 4);
+      const rest = days.filter((d) => dowOf(d) !== 1 && dowOf(d) !== 4);
+      return [...mon, ...thu, ...rest];
+    };
+
+    // Build the pool WEEK BY WEEK, taking up to weeklyPostsCount days from each week
+    // (Mon/Thu preferred). Extra days per week go to an overflow list, used only if
+    // there are more posts than the weekly cadence allows across the whole month.
+    const primary: number[] = [];
+    const overflow: number[] = [];
+    for (const wk of weeks) {
+      const ordered = orderWeek(weekMap.get(wk)!);
+      primary.push(...ordered.slice(0, weeklyPostsCount));
+      overflow.push(...ordered.slice(weeklyPostsCount));
+    }
+    const datePool: number[] = [...primary, ...overflow];
 
     let dateIndex = 0;
 

@@ -65,8 +65,8 @@ export default function NewClientPage() {
     keyMarketingMessages: '',
     retainerAmount: 0,
     retainerDay: 1,
-    weeklyPostsCount: 3,
-    publishDays: [0, 2, 4], // Sun, Tue, Thu
+    weeklyPostsCount: 2,
+    publishDays: [1, 4], // Mon, Thu (preferred)
     assignedManagerId: null,
     portalEnabled: false,
     logoUrl: '',

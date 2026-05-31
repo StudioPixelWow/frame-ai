@@ -270,8 +270,8 @@ function ClientDetailContent() {
         keyMarketingMessages: client.keyMarketingMessages ?? '',
         retainerAmount: client.retainerAmount,
         retainerDay: client.retainerDay,
-        weeklyPostsCount: client.weeklyPostsCount ?? 3,
-        publishDays: client.publishDays ?? [0, 2, 4],
+        weeklyPostsCount: client.weeklyPostsCount ?? 2,
+        publishDays: client.publishDays ?? [1, 4],
         status: client.status,
         notes: client.notes,
         websiteUrl: client.websiteUrl ?? '',
@@ -1663,7 +1663,7 @@ function ClientDetailContent() {
                     type="number"
                     min="1"
                     max="7"
-                    value={editForm.weeklyPostsCount || 3}
+                    value={editForm.weeklyPostsCount || 2}
                     onChange={(e) => setEditForm({ ...editForm, weeklyPostsCount: Math.max(1, Number(e.target.value) || 1) })}
                     placeholder="3"
                   />
