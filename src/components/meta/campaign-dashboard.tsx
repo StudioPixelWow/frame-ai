@@ -101,6 +101,10 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
 
   useEffect(() => { if (clientId) load(); }, [clientId, load]);
 
+  // Date range changed → drop the cached drill-down so it refetches for the new range
+  // (keeps the ad-set/ad breakdown consistent with the campaign-level totals).
+  useEffect(() => { setDetail({}); setExpandedId(null); }, [datePreset]);
+
   // Auto-refresh: if the newest sync is stale (>30 min), pull fresh "today"
   // metrics from Meta once in the background, then reload — so the dashboard
   // shows near-live data instead of only the initial sync snapshot.
@@ -229,7 +233,7 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
     if (!detail[c.id]) {
       setDetailLoading(c.id);
       try {
-        const res = await fetch(`/api/meta-business/campaign-detail?campaignId=${encodeURIComponent(c.id)}`);
+        const res = await fetch(`/api/meta-business/campaign-detail?campaignId=${encodeURIComponent(c.id)}&datePreset=${encodeURIComponent(datePreset)}`);
         const data = await res.json();
         if (res.ok) setDetail((prev) => ({ ...prev, [c.id]: { adSets: data.adSets || [], ads: data.ads || [] } }));
       } catch { /* ignore */ } finally { setDetailLoading(null); }
