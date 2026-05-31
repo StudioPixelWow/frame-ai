@@ -1091,23 +1091,33 @@
 ───────────────────────────────────────────────────────────────────────────── */
 .tasks-page { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
 .tasks-header { display: flex; flex-direction: column; gap: 0.75rem; }
-.tasks-board { display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 1rem; }
-.tasks-col { min-width: 240px; flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 0.75rem; display: flex; flex-direction: column; }
-.tasks-col-header { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-.tasks-col-title { font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; gap: 0.4rem; }
-.tasks-col-count { font-size: 0.7rem; background: rgba(255,255,255,0.06); border-radius: 999px; padding: 0.1rem 0.45rem; color: var(--foreground-muted); }
-.tasks-col-body { flex: 1; padding: 0.5rem; min-height: 120px; display: flex; flex-direction: column; gap: 0.4rem; }
-.tasks-add-btn { width: 100%; padding: 0.5rem; background: none; border: none; color: var(--foreground-subtle); font-size: 0.75rem; cursor: pointer; text-align: center; border-top: 1px solid var(--border); }
-.tasks-add-btn:hover { color: var(--accent); background: rgba(0,181,254,0.05); }
-.task-card {
-  padding: 0.65rem 0.75rem; border-radius: 0.5rem; border: 1px solid var(--border);
-  background: var(--surface-raised); cursor: pointer; transition: all 150ms;
+/* ── Tasks board — modern, airy, experiential ── */
+.tasks-board { display: flex; gap: 1rem; overflow-x: auto; padding: 0.25rem 0.25rem 1.25rem; scroll-behavior: smooth; }
+.tasks-col {
+  min-width: 300px; width: 300px; flex: 0 0 auto;
+  background: linear-gradient(180deg, var(--surface) 0%, color-mix(in srgb, var(--surface) 92%, transparent) 100%);
+  border: 1px solid var(--border); border-radius: 1rem; display: flex; flex-direction: column;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
-.task-card:hover { border-color: var(--border-muted); transform: translateY(-1px); }
-.task-card-title { font-size: 0.78rem; font-weight: 600; color: var(--foreground); }
-.task-card-meta { font-size: 0.68rem; color: var(--foreground-muted); margin-top: 0.3rem; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
-.task-tag { font-size: 0.6rem; padding: 0.1rem 0.4rem; border-radius: 999px; background: rgba(255,255,255,0.06); color: var(--foreground-muted); border: 1px solid var(--border); }
-.task-priority-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.tasks-col-header { padding: 0.9rem 1.1rem 0.75rem; display: flex; align-items: center; justify-content: space-between; }
+.tasks-col-title { font-size: 0.92rem; font-weight: 800; display: flex; align-items: center; gap: 0.55rem; position: relative; padding-inline-start: 0.6rem; }
+.tasks-col-title::before { content: ""; position: absolute; inline-size: 4px; block-size: 1.05em; inset-inline-start: 0; border-radius: 4px; background: currentColor; opacity: 0.9; }
+.tasks-col-count { font-size: 0.72rem; font-weight: 700; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 999px; padding: 0.12rem 0.55rem; color: var(--foreground-muted); }
+.tasks-col-body { flex: 1; padding: 0.5rem 0.6rem; min-height: 80px; display: flex; flex-direction: column; gap: 0.55rem; }
+.tasks-add-btn { width: calc(100% - 1.2rem); margin: 0.4rem 0.6rem 0.7rem; padding: 0.6rem; background: var(--surface-raised); border: 1px dashed var(--border-muted); border-radius: 0.6rem; color: var(--foreground-muted); font-size: 0.8rem; font-weight: 600; cursor: pointer; text-align: center; transition: all 160ms ease; }
+.tasks-add-btn:hover { color: var(--accent); border-color: var(--accent); background: rgba(0,181,254,0.06); }
+.task-card {
+  position: relative; padding: 0.8rem 0.9rem 0.8rem 0.95rem; border-radius: 0.75rem; border: 1px solid var(--border);
+  background: var(--surface-raised); cursor: pointer; transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04); overflow: hidden;
+}
+.task-card::before { content: ""; position: absolute; inset-block: 0; inset-inline-end: 0; inline-size: 3px; background: transparent; transition: background 160ms ease; }
+.task-card:hover { transform: translateY(-3px); border-color: var(--accent); box-shadow: 0 10px 24px rgba(0,0,0,0.10); }
+.task-card:hover::before { background: var(--accent); }
+.task-card-title { font-size: 0.86rem; font-weight: 700; color: var(--foreground); line-height: 1.35; }
+.task-card-meta { font-size: 0.72rem; color: var(--foreground-muted); margin-top: 0.4rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.task-tag { font-size: 0.62rem; padding: 0.12rem 0.5rem; border-radius: 999px; background: rgba(0,181,254,0.08); color: var(--accent); border: 1px solid rgba(0,181,254,0.18); font-weight: 600; }
+.task-priority-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent); }
 
 /* ─────────────────────────────────────────────────────────────────────────────
    Calendar Page
