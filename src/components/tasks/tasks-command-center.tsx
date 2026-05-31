@@ -75,7 +75,9 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
   // Only tasks tied to a real client are shown — orphan "כללי" tasks are excluded everywhere.
   const hasClient = (t: AnyTask) => !!(t.clientName && String(t.clientName).trim() && String(t.clientName).trim() !== "כללי");
   const allMine = useMemo(() => [...(tasks || []), ...(employeeTasks || [])].filter((t) => mineFilter(t) && hasClient(t)), [tasks, employeeTasks, isEmployee, employeeId]);
-  const open = allMine.filter((t) => t.status !== "completed" && t.status !== "approved" && !justDone.has(t.id));
+  const open = allMine.filter((t) => t.status !== "completed" && t.status !== "approved" && t.status !== "under_review" && !justDone.has(t.id));
+  // Tasks employees submitted for review — the manager needs to approve / return these.
+  const pendingReview = allMine.filter((t) => t.status === "under_review" && !justDone.has(t.id));
 
   const score = (t: AnyTask): number => {
     let s = PRIO_WEIGHT[t.priority] ?? 5;
@@ -93,8 +95,8 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
       const c = map.get(key)!;
       c.total++;
       const done = t.status === "completed" || t.status === "approved";
-      if (done) { c.completed++; return; }
-      if (justDone.has(t.id)) { c.completed++; return; }
+      if (done || justDone.has(t.id)) { c.completed++; continue; }
+      if (t.status === "under_review") continue; // lives in the approvals section, not the client card
       c.open.push(t);
       if (t.dueDate && t.dueDate < today) c.overdue.push(t);
       else if (t.dueDate === today) c.dueToday.push(t);
@@ -114,8 +116,10 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
   const clientsAttention = clients.filter((c) => c.overdue.length > 0 || c.dueToday.length > 0).length;
 
   // Momentum
-  const completedDays = allMine.filter((t) => (t.status === "completed" || t.status === "approved") && (t.updatedAt || t.completedAt))
-    .map((t) => new Date(t.updatedAt || t.completedAt).toISOString().split("T")[0]);
+  const completedDays = allMine
+    .filter((t) => (t.status === "completed" || t.status === "approved") && (t.updatedAt || t.completedAt))
+    .map((t) => { const d = new Date(t.updatedAt || t.completedAt); return isNaN(d.getTime()) ? null : d.toISOString().split("T")[0]; })
+    .filter((d): d is string => !!d);
   const doneToday = completedDays.filter((d) => d === today).length + justDone.size;
   const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
   const doneWeek = allMine.filter((t) => (t.status === "completed" || t.status === "approved") && (t.updatedAt || t.completedAt) && new Date(t.updatedAt || t.completedAt) >= weekAgo).length;
@@ -204,6 +208,25 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
           </div>
         </div>
       </div>
+
+      {/* APPROVALS — tasks employees submitted for review */}
+      {pendingReview.length > 0 && (
+        <div>
+          <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#16a34a", letterSpacing: "0.05em", marginBottom: 12 }}>✅ ממתינות לאישור שלך ({pendingReview.length})</div>
+          <div style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 16, padding: "0.5rem" }}>
+            {pendingReview.map((t) => (
+              <div key={t.id} onClick={() => onOpenTask(t)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.7rem 0.9rem", cursor: "pointer", borderRadius: 10 }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+                <span style={{ fontSize: "1rem" }}>📤</span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: "0.92rem", fontWeight: 500, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
+                <span style={{ fontSize: "0.74rem", color: C.muted, whiteSpace: "nowrap" }}>{t.clientName || ""}{empName(t) ? ` · ${empName(t)}` : ""}</span>
+                <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#16a34a", whiteSpace: "nowrap" }}>בדוק ואשר ←</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* CLIENT WORKSPACE */}
       <div>
