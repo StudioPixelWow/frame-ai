@@ -11,6 +11,8 @@ const PUBLIC_ROUTES = [
   '/api/auth/seed',
   '/api/auth/me',
   '/client-portal',
+  '/privacy',        // public — Meta App privacy policy URL
+  '/data-deletion',  // public — Meta App data deletion URL
 ];
 
 // Routes that require admin role
