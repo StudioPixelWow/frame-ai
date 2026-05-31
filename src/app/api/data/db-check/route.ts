@@ -54,6 +54,11 @@ export async function GET() {
     keyRef,                                           // project ref embedded in the key
     urlHost: (() => { try { return new URL(url).host; } catch { return null; } })(),
     runtime: process.env.VERCEL ? 'vercel' : 'local',
+    // Google OAuth (for Search Console / Business Profile) — booleans only.
+    hasGoogleClientId: !!process.env.GOOGLE_CLIENT_ID,
+    hasGoogleClientSecret: !!process.env.GOOGLE_CLIENT_SECRET,
+    hasAppUrl: !!process.env.NEXT_PUBLIC_APP_URL,
+    appUrl: process.env.NEXT_PUBLIC_APP_URL || null,
   };
 
   // Raw REST probe — bypasses supabase-js so we see the real HTTP status.
