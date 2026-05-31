@@ -25,6 +25,16 @@ const KIND_CATEGORY: Record<string, string> = {
   lookalike: 'audience', retargeting: 'audience', ai_winner_clone: 'creative', preventive_refresh: 'creative', dayparting: 'budget',
 };
 
+// IRON RULE: never change creatives (visuals/copy) and never change daily budgets.
+// These action kinds are therefore disabled — neither generated nor executed.
+const BLOCKED_KINDS = new Set([
+  'shift_budget',       // changes daily budget
+  'refresh_creative',   // creates/changes creative
+  'ab_test',            // creates new creative
+  'ai_winner_clone',    // creates new creative
+  'preventive_refresh', // creates new creative
+]);
+
 export const dynamic = 'force-dynamic';
 
 const CPL_GOOD = 40;
@@ -251,9 +261,11 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // IRON RULE: drop any recommendation that would change a creative or a daily budget.
+    const allowed = recos.filter((r) => !BLOCKED_KINDS.has(r.apply.kind));
     const order = { high: 0, medium: 1, low: 2 };
-    recos.sort((a, b) => order[a.severity] - order[b.severity]);
-    return NextResponse.json({ recommendations: recos, summary: { totalSpend, totalLeads, avgCpl } });
+    allowed.sort((a, b) => order[a.severity] - order[b.severity]);
+    return NextResponse.json({ recommendations: allowed, summary: { totalSpend, totalLeads, avgCpl } });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'שגיאה' }, { status: 500 });
   }
@@ -264,6 +276,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const { clientId, action, activate } = body as { clientId?: string; action?: Reco['apply']; activate?: boolean };
     if (!action?.kind) return NextResponse.json({ error: 'פעולה לא תקינה' }, { status: 400 });
+
+    // IRON RULE guard: refuse any action that would change a creative or daily budget.
+    if (BLOCKED_KINDS.has(action.kind)) {
+      return NextResponse.json({ error: 'הפעולה חסומה לפי כלל הברזל: המערכת לא משנה ויזואל ולא תקציב יומי. מותרות רק אופטימיזציות קהל.' }, { status: 400 });
+    }
 
     // When activate=true, new objects go LIVE immediately (no manual un-pause).
     const liveStatus: 'ACTIVE' | 'PAUSED' = activate ? 'ACTIVE' : 'PAUSED';
@@ -348,11 +365,12 @@ export async function POST(req: NextRequest) {
       // 2) Broaden the targeting + set name/budget/status on the new copy (best-effort).
       const notes: string[] = [`שוכפל קהל מנצח (${liveWord}) עם הרחבת טירגוט`];
       if (copy.error) notes.push(copy.error); // e.g. shallow-copy warning ("הוסף קריאייטיב")
+      // IRON RULE: do NOT set/modify daily budget — the copy inherits the source
+      // ad set's budget as-is. We only broaden the audience (targeting).
       const upd = await updateMetaAdSet(creds, copy.metaId, {
         name: action.newName || undefined,
         targeting: action.targeting,
         status: liveStatus,
-        dailyBudget: action.dailyBudget && action.dailyBudget > 0 ? Math.max(20, action.dailyBudget) : undefined,
       });
       if (!upd.success) {
         notes.push(`הרחבת הטירגוט נכשלה — הרחב ידנית בלוח Meta. (${upd.error || ''})`);
