@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import AdPreview from './ad-preview';
 import CampaignCharts from './campaign-charts';
 import RecommendationsModal from './recommendations-modal';
+import ActionLogReport from './action-log-report';
 
 const BRAND = '#00B5FE';
 
@@ -552,6 +553,9 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
       <button onClick={load} style={{ marginTop: 14, padding: '8px 16px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
         רענן נתונים
       </button>
+
+      {/* Optimization action history — verifiable report for the client */}
+      <ActionLogReport clientId={clientId} />
     </div>
   );
 }

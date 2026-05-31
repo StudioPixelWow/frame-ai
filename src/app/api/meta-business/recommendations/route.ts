@@ -13,6 +13,17 @@ import { resolveMetaToken, getSystemMetaToken } from '@/lib/meta-ads/token';
 import { getSupabase } from '@/lib/db/store';
 import { updateMetaAdSetBudget, createMetaAd, copyMetaAdSet, updateMetaAdSet, resolveMetaPageId } from '@/lib/meta-ads/write-service';
 import { generateVariation } from '@/lib/optimization/variations';
+import { logMetaAction } from '@/lib/meta-ads/action-log';
+
+const KIND_LABELS: Record<string, string> = {
+  shift_budget: 'הסטת תקציב', expand_audience: 'הרחבת קהל מנצח', refresh_creative: 'רענון קריאייטיב',
+  ab_test: 'בדיקת A/B', lookalike: 'קהל Lookalike', retargeting: 'קהל Retargeting',
+  ai_winner_clone: 'שכפול AI של מנצח', preventive_refresh: 'רענון מונע', dayparting: 'תזמון לפי שעות',
+};
+const KIND_CATEGORY: Record<string, string> = {
+  shift_budget: 'budget', expand_audience: 'audience', refresh_creative: 'creative', ab_test: 'ab_test',
+  lookalike: 'audience', retargeting: 'audience', ai_winner_clone: 'creative', preventive_refresh: 'creative', dayparting: 'budget',
+};
 
 export const dynamic = 'force-dynamic';
 
@@ -268,17 +279,36 @@ export async function POST(req: NextRequest) {
     if (!token) return NextResponse.json({ error: 'אין אסימון גישה' }, { status: 400 });
     const creds = { accessToken: token, adAccountId };
 
-    // Helper: surface Meta's exact rejection reason instead of generic "Invalid parameter".
-    const metaErr = (r: any, fallback: string) =>
-      NextResponse.json({ error: `${fallback}: ${r?.error || 'שגיאה'}${r?.errorCode ? ` (קוד ${r.errorCode})` : ''}`, meta: r }, { status: 400 });
+    const actionTitle = `${KIND_LABELS[action.kind] || action.kind}${action.objectName ? `: ${action.objectName}` : ''}`;
+    const category = KIND_CATEGORY[action.kind] || undefined;
+
+    // Helpers that also write to the optimization action log so every attempt is
+    // recorded (for the client report) with Meta's real outcome.
+    const metaErr = async (r: any, fallback: string) => {
+      const msg = `${fallback}: ${r?.error || 'שגיאה'}${r?.errorCode ? ` (קוד ${r.errorCode})` : ''}`;
+      await logMetaAction({ clientId, actionKind: action.kind, category, title: actionTitle, status: 'failed', error: msg });
+      return NextResponse.json({ error: msg, meta: r }, { status: 400 });
+    };
+    const ok = async (extra: Record<string, unknown> = {}, opts: { detail?: string; objectType?: string } = {}) => {
+      const metaId = (extra.adSetId || extra.adId || extra.audienceId || null) as string | null;
+      await logMetaAction({ clientId, actionKind: action.kind, category, title: actionTitle, status: 'success', metaId, objectType: opts.objectType || null, detail: opts.detail || (extra.note as string) || null });
+      return NextResponse.json({ success: true, ...extra });
+    };
+    const infoOnly = async (note: string) => {
+      await logMetaAction({ clientId, actionKind: action.kind, category, title: actionTitle, status: 'info', detail: note });
+      return NextResponse.json({ success: true, note });
+    };
 
     // ── Shift budget: lower the laggard, raise the winner ──
     if (action.kind === 'shift_budget') {
       if (!action.fromMetaId || !action.toMetaId) return NextResponse.json({ error: 'חסרים מזהי קבוצות' }, { status: 400 });
       const r1 = await updateMetaAdSetBudget(creds, action.fromMetaId, action.newFromBudget || 0);
       const r2 = await updateMetaAdSetBudget(creds, action.toMetaId, action.newToBudget || 0);
-      if (!r1.success || !r2.success) return metaErr(r1.success ? r2 : r1, 'עדכון תקציב נכשל');
-      return NextResponse.json({ success: true });
+      if (!r1.success || !r2.success) return await metaErr(r1.success ? r2 : r1, 'עדכון תקציב נכשל');
+      return await ok({ note: 'התקציב הוסט מהקבוצה החלשה למנצחת' }, {
+        detail: `הוסט תקציב: ₪${action.newFromBudget ?? '?'} → קבוצה חלשה, ₪${action.newToBudget ?? '?'} → קבוצה מנצחת`,
+        objectType: 'adset',
+      });
     }
 
     // ── Expand audience: COPY the winning ad set (inherits objective/optimization/
@@ -294,7 +324,7 @@ export async function POST(req: NextRequest) {
       const copy = await copyMetaAdSet(creds, action.sourceMetaAdSetId, {
         deepCopy: true, statusOption: 'PAUSED',
       });
-      if (!copy.success || !copy.metaId) return metaErr(copy, 'שכפול הקבוצה המנצחת נכשל');
+      if (!copy.success || !copy.metaId) return await metaErr(copy, 'שכפול הקבוצה המנצחת נכשל');
 
       // 2) Broaden the targeting + set name/budget on the new copy (best-effort).
       const notes: string[] = ['שוכפל קהל מנצח (מושהה) עם הרחבת טירגוט — הפעל כשמוכן'];
@@ -307,7 +337,10 @@ export async function POST(req: NextRequest) {
       if (!upd.success) {
         notes.push(`הרחבת הטירגוט נכשלה — הרחב ידנית בלוח Meta. (${upd.error || ''})`);
       }
-      return NextResponse.json({ success: true, adSetId: copy.metaId, note: notes.join(' · ') });
+      return await ok({ adSetId: copy.metaId, note: notes.join(' · ') }, {
+        detail: `שוכפלה קבוצת המודעות המנצחת עם קהל מורחב (מושהית)`,
+        objectType: 'adset',
+      });
     }
 
     // ── Refresh creative / A/B test: create a new ad variation ──
@@ -349,13 +382,16 @@ export async function POST(req: NextRequest) {
           callToAction: variation.newCtaType || 'LEARN_MORE',
         },
       });
-      if (!r.success) return metaErr(r, 'יצירת המודעה נכשלה');
-      return NextResponse.json({ success: true, adId: r.metaId, variation: variation.explanation, note: 'נוצרה מודעה חדשה (מושהית) — הפעל כשמוכן' });
+      if (!r.success) return await metaErr(r, 'יצירת המודעה נכשלה');
+      return await ok({ adId: r.metaId, variation: variation.explanation, note: 'נוצרה מודעה חדשה (מושהית) — הפעל כשמוכן' }, {
+        detail: `נוצרה מודעה חדשה (${action.kind === 'ab_test' ? 'בדיקת A/B' : 'רענון'}): ${variation.strategy}`,
+        objectType: 'ad',
+      });
     }
 
     // ── Info-only (day-parting) — nothing to execute via API ──
     if (action.kind === 'dayparting' || action.infoOnly) {
-      return NextResponse.json({ success: true, note: 'המלצה לעיון — בצע ידנית בלוח הזמנים של הקמפיין' });
+      return await infoOnly('המלצה לעיון — בצע ידנית בלוח הזמנים של הקמפיין');
     }
 
     if (!adAccountId) return NextResponse.json({ error: 'לא נמצא חשבון מודעות ללקוח' }, { status: 400 });
@@ -371,10 +407,12 @@ export async function POST(req: NextRequest) {
       if (contacts.length < 100) return NextResponse.json({ error: `נדרשים 100+ לידים (יש ${contacts.length})` }, { status: 400 });
 
       const ca = await createCustomAudienceFromLeads(creds, `${action.audienceName || 'לידים'} (מקור)`, contacts);
-      if (!ca.success || !ca.metaId) return NextResponse.json({ error: ca.error || 'יצירת קהל המקור נכשלה' }, { status: 400 });
+      if (!ca.success || !ca.metaId) return await metaErr(ca, 'יצירת קהל המקור נכשלה');
       const lal = await createLookalikeAudience(creds, `Lookalike — ${action.audienceName || 'לידים'}`, ca.metaId);
-      if (!lal.success) return NextResponse.json({ error: lal.error || 'יצירת Lookalike נכשלה', sourceAudienceId: ca.metaId }, { status: 400 });
-      return NextResponse.json({ success: true, audienceId: lal.metaId, note: 'נוצר קהל Lookalike — שייך אותו ל-Ad Set חדש' });
+      if (!lal.success) return await metaErr(lal, 'יצירת Lookalike נכשלה');
+      return await ok({ audienceId: lal.metaId, note: 'נוצר קהל Lookalike — שייך אותו ל-Ad Set חדש' }, {
+        detail: `נבנה קהל Lookalike מ-${contacts.length} לידים`, objectType: 'audience',
+      });
     }
 
     // ── Retargeting: page engagement audience ──
@@ -382,8 +420,10 @@ export async function POST(req: NextRequest) {
       const { createEngagementAudience } = await import('@/lib/meta-ads/write-service');
       if (!action.pageId) return NextResponse.json({ error: 'חסר Page ID' }, { status: 400 });
       const r = await createEngagementAudience(creds, action.audienceName || 'מתעניינים בדף', action.pageId);
-      if (!r.success) return NextResponse.json({ error: r.error || 'יצירת קהל Retargeting נכשלה' }, { status: 400 });
-      return NextResponse.json({ success: true, audienceId: r.metaId, note: 'נוצר קהל Retargeting — שייך אותו ל-Ad Set חדש' });
+      if (!r.success) return await metaErr(r, 'יצירת קהל Retargeting נכשלה');
+      return await ok({ audienceId: r.metaId, note: 'נוצר קהל Retargeting — שייך אותו ל-Ad Set חדש' }, {
+        detail: 'נבנה קהל Retargeting ממתעניינים בדף', objectType: 'audience',
+      });
     }
 
     // ── AI winner clone / preventive refresh → same path as refresh_creative ──
@@ -413,8 +453,11 @@ export async function POST(req: NextRequest) {
         status: 'PAUSED',
         creative: { pageId: pageId2, message: variation.newPrimaryText, headline: variation.newHeadline, description: variation.newDescription, linkUrl: src.ctaLink || '', imageUrl: src.mediaUrl || '', callToAction: variation.newCtaType || 'LEARN_MORE' },
       });
-      if (!r.success) return metaErr(r, 'יצירת המודעה נכשלה');
-      return NextResponse.json({ success: true, adId: r.metaId, variation: variation.explanation, note: 'נוצרה מודעה חדשה (מושהית)' });
+      if (!r.success) return await metaErr(r, 'יצירת המודעה נכשלה');
+      return await ok({ adId: r.metaId, variation: variation.explanation, note: 'נוצרה מודעה חדשה (מושהית)' }, {
+        detail: `נוצרה מודעה חדשה (${action.kind === 'ai_winner_clone' ? 'שכפול AI' : 'רענון מונע'}): ${variation.strategy}`,
+        objectType: 'ad',
+      });
     }
 
     return NextResponse.json({ error: 'סוג פעולה לא נתמך' }, { status: 400 });

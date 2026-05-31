@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useCampaigns, useAdSets, useAds, useLeads } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import type { Client, Campaign, AdSet, Ad, Lead, CampaignStatus, AutoCampaignFinding } from "@/lib/db/schema";
+import ActionLogReport from "@/components/meta/action-log-report";
 import { getCampaignSummaryRec, RECOMMENDATION_TYPE_META, SEVERITY_META } from "@/lib/optimization/engine";
 import { FINDING_TYPE_META, SEVERITY_META as AUTO_SEVERITY_META } from "@/lib/optimization/auto-monitor-meta";
 
@@ -808,6 +809,7 @@ export default function TabCampaigns({ client }: { client: Client }) {
           {renderAutoRecommendations()}
           {renderFilters()}
           {renderCampaignList()}
+          <ActionLogReport clientId={client.id} />
         </>
       )}
       {view === "campaign" && renderCampaignDetail()}

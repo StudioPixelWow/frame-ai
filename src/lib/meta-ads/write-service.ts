@@ -286,9 +286,13 @@ async function metaPost(
 
     if (!res.ok) {
       const fbError = (data as Record<string, unknown>)?.error as Record<string, unknown> | undefined;
+      // error_user_msg / error_user_title carry Meta's human-readable reason — far
+      // more useful than the generic "Invalid parameter". Surface it when present.
+      const userMsg = (fbError?.error_user_msg as string) || (fbError?.error_user_title as string) || '';
+      const base = (fbError?.message as string) || `HTTP ${res.status}`;
       return {
         success: false,
-        error: (fbError?.message as string) || `HTTP ${res.status}`,
+        error: userMsg ? `${base} — ${userMsg}` : base,
         errorCode: fbError?.code as number | undefined,
         errorSubcode: fbError?.error_subcode as number | undefined,
         rawResponse: data as Record<string, unknown>,
