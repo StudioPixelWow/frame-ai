@@ -20,7 +20,19 @@ export async function GET(request: NextRequest) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
     const redirectUri = `${baseUrl}/api/auth/meta/callback`;
 
-    const scopes = ['ads_management', 'ads_read', 'business_management'].join(',');
+    // Full set so one user token can read AND create ads/creatives (needs the page),
+    // pull leads, and cover Instagram — across all ad accounts the user can access.
+    const scopes = [
+      'ads_management',
+      'ads_read',
+      'business_management',
+      'pages_show_list',
+      'pages_read_engagement',
+      'pages_manage_ads',
+      'leads_retrieval',
+      'instagram_basic',
+      'read_insights',
+    ].join(',');
 
     const state = JSON.stringify({ clientId });
     const stateEncoded = Buffer.from(state).toString('base64');
