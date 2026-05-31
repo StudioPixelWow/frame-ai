@@ -12,9 +12,21 @@
  *   Performance → elegant lightweight gamification (goal / week / today / streak)
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useTasks, useEmployeeTasks, useEmployees } from "@/lib/api/use-entity";
 import { useAuth } from "@/lib/auth/auth-context";
+
+/** Map a WMO weather code → emoji + short Hebrew label. */
+function weatherIcon(code: number): { icon: string; label: string } {
+  if (code === 0) return { icon: "☀️", label: "בהיר" };
+  if (code <= 3) return { icon: "⛅", label: "מעונן חלקית" };
+  if (code <= 48) return { icon: "🌫️", label: "ערפל" };
+  if (code <= 67) return { icon: "🌧️", label: "גשם" };
+  if (code <= 77) return { icon: "❄️", label: "שלג" };
+  if (code <= 82) return { icon: "🌦️", label: "ממטרים" };
+  if (code <= 99) return { icon: "⛈️", label: "סופות רעמים" };
+  return { icon: "🌤️", label: "" };
+}
 
 type AnyTask = any;
 
@@ -35,6 +47,25 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
   const { data: employees } = useEmployees();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [justDone, setJustDone] = useState<Set<string>>(new Set());
+  const [now, setNow] = useState(new Date());
+  const [weather, setWeather] = useState<{ temp: number; code: number } | null>(null);
+
+  // Live Israel-time clock.
+  useEffect(() => { const id = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(id); }, []);
+  // Weather for Kiryat Motzkin (Open-Meteo, free, no key). Refresh every 15 min.
+  useEffect(() => {
+    let cancel = false;
+    const load = () => fetch("https://api.open-meteo.com/v1/forecast?latitude=32.83&longitude=35.08&current=temperature_2m,weather_code&timezone=Asia%2FJerusalem")
+      .then((r) => r.json()).then((d) => { if (!cancel && d?.current) setWeather({ temp: Math.round(d.current.temperature_2m), code: d.current.weather_code }); })
+      .catch(() => {});
+    load();
+    const id = setInterval(load, 15 * 60 * 1000);
+    return () => { cancel = true; clearInterval(id); };
+  }, []);
+
+  const timeStr = new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit" }).format(now);
+  const dateStr = new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem", weekday: "long", day: "numeric", month: "long" }).format(now);
+  const wx = weather ? weatherIcon(weather.code) : null;
 
   const isEmployee = role === "employee";
   const today = todayStr();
@@ -124,6 +155,28 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
 
   return (
     <div dir="rtl" style={{ maxWidth: 880, margin: "0 auto", display: "flex", flexDirection: "column", gap: "2.25rem" }}>
+      {/* TOP BAR — Israel clock + Kiryat Motzkin weather */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, padding: "0.85rem 1.4rem" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+          <span style={{ fontSize: "1.65rem", fontWeight: 800, color: C.text, fontVariantNumeric: "tabular-nums", letterSpacing: "0.02em" }}>{timeStr}</span>
+          <span style={{ fontSize: "0.85rem", color: C.muted }}>{dateStr}</span>
+          <span style={{ fontSize: "0.68rem", color: C.muted, opacity: 0.7 }}>· שעון ישראל</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {wx ? (
+            <>
+              <span style={{ fontSize: "1.5rem", lineHeight: 1 }}>{wx.icon}</span>
+              <div style={{ lineHeight: 1.3 }}>
+                <div style={{ fontSize: "1.1rem", fontWeight: 700, color: C.text }}>{weather!.temp}°</div>
+                <div style={{ fontSize: "0.7rem", color: C.muted }}>קרית מוצקין · {wx.label}</div>
+              </div>
+            </>
+          ) : (
+            <span style={{ fontSize: "0.78rem", color: C.muted }}>טוען מזג אוויר…</span>
+          )}
+        </div>
+      </div>
+
       {/* HERO */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
         <div>
