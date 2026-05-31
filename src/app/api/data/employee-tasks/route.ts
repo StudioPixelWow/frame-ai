@@ -6,11 +6,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { employeeTasks } from '@/lib/db';
 import { ensureSeeded } from '@/lib/db/seed';
+import { getRequestRole, getRequestEmployeeId } from '@/lib/auth/api-guard';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   ensureSeeded();
   try {
     const tasks = await employeeTasks.getAllAsync();
+    // Privacy: an employee only sees their OWN tasks; admin/employee-manager see all.
+    const role = getRequestRole(req);
+    if (role === 'employee') {
+      const employeeId = getRequestEmployeeId(req);
+      const mine = (tasks as any[]).filter(
+        (t) => t.assignedEmployeeId === employeeId || t.employeeId === employeeId,
+      );
+      return NextResponse.json(mine);
+    }
     return NextResponse.json(tasks);
   } catch (error) {
     console.error('[employee-tasks GET] error:', error instanceof Error ? error.message : error);

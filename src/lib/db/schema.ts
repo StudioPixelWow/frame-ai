@@ -483,6 +483,7 @@ export interface Meeting {
   reminderDayBefore: boolean;
   reminderSameDay: boolean;
   status: MeetingStatus;
+  ownerEmployeeId?: string | null;  // creator — keeps the calendar private per-user
   createdAt: string;
   updatedAt: string;
 }
