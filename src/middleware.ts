@@ -23,6 +23,16 @@ const ADMIN_ROUTES = [
   '/settings',
 ];
 
+// Page-route prefixes an EMPLOYEE is allowed to open. Everything else (clients,
+// campaigns, accounting, projects, etc.) is admin-only — employees get redirected
+// to their dashboard. (APIs are not gated here; they have their own per-row scoping.)
+const EMPLOYEE_ALLOWED_PAGES = [
+  '/dashboard',
+  '/tasks',
+  '/business-calendar',
+  '/profile',
+];
+
 // Routes that require at least staff (admin or employee)
 const STAFF_ROUTES = [
   '/dashboard',
@@ -121,6 +131,18 @@ export function middleware(req: NextRequest) {
   // Client trying to access dashboard — redirect to portal
   if (role === 'client' && pathname === '/') {
     return NextResponse.redirect(new URL('/client-portal', req.url));
+  }
+
+  // Employees: restrict to their own area (dashboard/tasks/calendar/profile).
+  // Any other page → send them to the dashboard. APIs are untouched (skipped above
+  // for /api/data, and other APIs scope data per-employee themselves).
+  if (role === 'employee' && !pathname.startsWith('/api/')) {
+    const allowed = pathname === '/' || EMPLOYEE_ALLOWED_PAGES.some(
+      (p) => pathname === p || pathname.startsWith(p + '/'),
+    );
+    if (!allowed) {
+      return NextResponse.redirect(new URL('/dashboard', req.url));
+    }
   }
 
   return NextResponse.next();
