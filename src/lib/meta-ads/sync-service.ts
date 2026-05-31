@@ -125,9 +125,10 @@ const API_BASE = 'https://graph.facebook.com/v19.0';
 const CAMPAIGN_FIELDS = 'id,name,objective,status,buying_type,daily_budget,lifetime_budget,start_time,stop_time,created_time,updated_time';
 const ADSET_FIELDS = 'id,campaign_id,name,status,targeting,daily_budget,lifetime_budget,optimization_goal,billing_event,promoted_object,start_time,end_time,created_time,updated_time';
 const AD_FIELDS = 'id,adset_id,campaign_id,name,status,creative{id,body,title,call_to_action_type,link_url,image_url,video_id,thumbnail_url,object_story_spec},created_time,updated_time';
-// Sync ACTIVE + PAUSED (current campaigns) — excludes archived/deleted history so
-// it stays fast (no 504) but still reflects pauses made in Meta.
-const ACTIVE_STATUS = encodeURIComponent('["ACTIVE","PAUSED"]');
+// Sync ACTIVE campaigns/ad sets/ads ONLY — keeps the sync light and fast (no 504)
+// and matches the dashboard which shows active campaigns. Anything paused/archived
+// in Meta is not pulled; the reconciliation pass below clears it from the view.
+const ACTIVE_STATUS = encodeURIComponent('["ACTIVE"]');
 // ad_id is REQUIRED to match an insight row back to a local ad — without it,
 // every insight was discarded and all metrics stayed 0.
 const INSIGHT_FIELDS = 'ad_id,ad_name,spend,impressions,reach,clicks,ctr,cpc,cpm,actions,cost_per_action_type,frequency';
@@ -413,18 +414,22 @@ export async function syncClientMetaAccount(
     }
   }
 
-  // ── Reconcile: local campaigns of THIS account no longer returned by Meta
-  // (archived/deleted in Meta) → mark archived so stale "פעיל" rows clear out. ──
+  // ── Reconcile: local campaigns of THIS account no longer ACTIVE in Meta
+  // (paused/archived/deleted) → mark completed so they drop out of the active view.
+  // Done concurrently so a backlog of newly-paused campaigns doesn't slow the sync. ──
   try {
     const returnedIds = new Set(campaignsRes.data.map((mc) => mc.id));
-    for (const [metaId, local] of localByMetaId.entries()) {
+    const toComplete = [...localByMetaId.entries()].filter(([metaId, local]) => {
       const lc = local as any;
-      // Only reconcile campaigns tied to this ad account, and not already archived.
-      if (lc.adAccountId && lc.adAccountId !== actId) continue;
-      if (!returnedIds.has(metaId) && lc.status !== 'completed' && lc.status !== 'archived') {
-        await campaigns.updateAsync(lc.id, { status: 'completed' as any, lastSyncedAt: now });
-      }
-    }
+      if (lc.adAccountId && lc.adAccountId !== actId) return false;
+      return !returnedIds.has(metaId) && lc.status !== 'completed' && lc.status !== 'archived';
+    });
+    await Promise.all(
+      toComplete.map(([, local]) =>
+        campaigns.updateAsync((local as any).id, { status: 'completed' as any, lastSyncedAt: now })
+          .catch(() => null),
+      ),
+    );
   } catch (e) {
     errors.push(`Reconcile error: ${e instanceof Error ? e.message : 'Unknown'}`);
   }
