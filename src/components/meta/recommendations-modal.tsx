@@ -27,6 +27,7 @@ export default function RecommendationsModal({ clientId, onClose }: { clientId: 
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
   const [activate, setActivate] = useState(true);   // default: go live immediately
   const [bulkRunning, setBulkRunning] = useState(false);
+  const [errById, setErrById] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -52,9 +53,11 @@ export default function RecommendationsModal({ clientId, onClose }: { clientId: 
       const data = await res.json();
       if (!res.ok || data.success === false) throw new Error(data.error || 'הפעולה נכשלה');
       setDoneIds((prev) => new Set(prev).add(r.id));
+      setErrById((prev) => { const n = { ...prev }; delete n[r.id]; return n; });
       return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'הפעולה נכשלה');
+      const msg = e instanceof Error ? e.message : 'הפעולה נכשלה';
+      setErrById((prev) => ({ ...prev, [r.id]: msg }));   // show the real reason on THIS card
       return false;
     } finally { setBusyId(null); }
   };
@@ -114,13 +117,18 @@ export default function RecommendationsModal({ clientId, onClose }: { clientId: 
                     </div>
                     <div style={{ fontSize: 12.5, color: '#4b5563', marginTop: 4 }}>{r.reason}</div>
                     <div style={{ fontSize: 12.5, color: '#16a34a', marginTop: 2 }}>💡 {r.expectedImpact}</div>
+                    {errById[r.id] && (
+                      <div style={{ marginTop: 8, fontSize: 12, color: '#dc2626', background: 'rgba(239,68,68,0.08)', borderRadius: 6, padding: '6px 10px' }}>
+                        ❌ {errById[r.id]}
+                      </div>
+                    )}
                     <div style={{ marginTop: 10 }}>
                       {done ? (
                         <span style={{ color: '#16a34a', fontWeight: 700, fontSize: 13 }}>✅ בוצע</span>
                       ) : (
                         <button onClick={() => apply(r)} disabled={busyId === r.id}
                           style={{ background: BRAND, color: '#fff', border: 'none', borderRadius: 8, padding: '7px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: busyId === r.id ? 0.6 : 1 }}>
-                          {busyId === r.id ? 'מבצע...' : '✓ אשר ובצע'}
+                          {busyId === r.id ? 'מבצע...' : (errById[r.id] ? '↻ נסה שוב' : '✓ אשר ובצע')}
                         </button>
                       )}
                     </div>
