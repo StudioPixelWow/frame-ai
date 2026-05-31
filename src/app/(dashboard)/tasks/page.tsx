@@ -57,6 +57,7 @@ export default function TasksPage() {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadingTaskId, setUploadingTaskId] = useState<string | null>(null);
+  const [fileUploading, setFileUploading] = useState(false);
   const [showReviewNotes, setShowReviewNotes] = useState(false);
   const [reviewNotes, setReviewNotes] = useState("");
   const [autoAssignmentNote, setAutoAssignmentNote] = useState("");
@@ -205,13 +206,39 @@ export default function TasksPage() {
     }
   };
 
-  const handleAddFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAddFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const newFiles = [...form.files, file.name];
-      setForm({ ...form, files: newFiles });
-      toast(`קובץ ${file.name} נוסף`, "success");
+    if (!file) return;
+    setFileUploading(true);
+    try {
+      // 1) Signed upload URL (direct to Supabase Storage — no Vercel size limit).
+      const signRes = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: `tasks/${Date.now()}_${file.name}`, contentType: file.type, fileSize: file.size }),
+      });
+      const sign = await signRes.json();
+      if (!signRes.ok || !sign.uploadUrl) throw new Error(sign.error || "קבלת כתובת העלאה נכשלה");
+      // 2) Upload the file itself.
+      const putRes = await fetch(sign.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
+      if (!putRes.ok) throw new Error("ההעלאה נכשלה");
+      // 3) Store "name|url" so it persists in the DB and can be downloaded.
+      const entry = `${file.name}|${sign.publicUrl}`;
+      setForm((f) => ({ ...f, files: [...f.files, entry] }));
+      toast(`הקובץ "${file.name}" הועלה ונשמר`, "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "שגיאת העלאה", "error");
+    } finally {
+      setFileUploading(false);
+      e.target.value = "";
     }
+  };
+
+  // Split a stored file entry "name|url" → { name, url }. Old entries (name only) → no url.
+  const parseFile = (entry: string): { name: string; url: string | null } => {
+    const i = entry.indexOf("|");
+    if (i === -1) return { name: entry, url: null };
+    return { name: entry.slice(0, i), url: entry.slice(i + 1) };
   };
 
   const handleRemoveFile = (index: number) => {
@@ -1250,6 +1277,7 @@ export default function TasksPage() {
                     type="file"
                     accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
                     onChange={handleAddFile}
+                    disabled={fileUploading}
                     className="ux-input"
                     style={{
                       fontSize: "0.7rem",
@@ -1259,22 +1287,35 @@ export default function TasksPage() {
                       borderRadius: "0.375rem",
                       color: "var(--foreground)",
                       flex: 1,
+                      opacity: fileUploading ? 0.6 : 1,
                     }}
                   />
                 </div>
+                {fileUploading && (
+                  <div style={{ fontSize: "0.7rem", color: "var(--accent)", marginBottom: "0.4rem" }}>⏳ מעלה קובץ...</div>
+                )}
                 {form.files.length > 0 && (
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                    {form.files.map((file, idx) => (
-                      <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.4rem", background: "var(--surface)", borderRadius: "0.375rem", fontSize: "0.7rem" }}>
-                        <span>📄 {file}</span>
-                        <button
-                          onClick={() => handleRemoveFile(idx)}
-                          style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: "0.6rem" }}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
+                    {form.files.map((file, idx) => {
+                      const { name, url } = parseFile(file);
+                      return (
+                        <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.4rem", background: "var(--surface)", borderRadius: "0.375rem", fontSize: "0.7rem" }}>
+                          {url ? (
+                            <a href={url} target="_blank" rel="noopener noreferrer" download style={{ color: "var(--accent)", textDecoration: "none" }}>
+                              📥 {name}
+                            </a>
+                          ) : (
+                            <span>📄 {name}</span>
+                          )}
+                          <button
+                            onClick={() => handleRemoveFile(idx)}
+                            style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: "0.6rem" }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
