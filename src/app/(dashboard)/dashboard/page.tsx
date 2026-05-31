@@ -157,133 +157,110 @@ function EmployeeDashboard({ employeeId }: { employeeId: string }) {
   );
   const allMyTaskCount = myGlobalTasks.length + myEmployeeTasks.length;
 
-  // Overdue tasks
+  // Group all my tasks by urgency for a clean, calm layout.
   const today = new Date().toISOString().split("T")[0];
-  const overdueGlobal = myGlobalTasks.filter(t => t.dueDate && t.dueDate < today);
-  const overdueEmployee = myEmployeeTasks.filter(t => t.dueDate && t.dueDate < today);
-  const overdueCount = overdueGlobal.length + overdueEmployee.length;
+  const myTasks = [...myGlobalTasks, ...myEmployeeTasks];
+  const byDate = (a: any, b: any) => {
+    const da = a.dueDate || "9999-99-99"; const db = b.dueDate || "9999-99-99";
+    return da < db ? -1 : da > db ? 1 : 0;
+  };
+  const overdue = myTasks.filter(t => t.dueDate && t.dueDate < today).sort(byDate);
+  const todayList = myTasks.filter(t => t.dueDate && t.dueDate === today).sort(byDate);
+  const upcoming = myTasks.filter(t => !t.dueDate || t.dueDate > today).sort(byDate);
+  const overdueCount = overdue.length;
+  const todayTaskCount = todayList.length;
 
-  // Today tasks
-  const todayGlobal = myGlobalTasks.filter(t => t.dueDate && t.dueDate === today);
-  const todayEmployee = myEmployeeTasks.filter(t => t.dueDate && t.dueDate === today);
-  const todayTaskCount = todayGlobal.length + todayEmployee.length;
+  const STATUS_LABEL: Record<string, string> = { new: "חדש", in_progress: "בביצוע", under_review: "בביקורת", returned: "הוחזר", pending: "ממתין" };
+  const PRIO_COLOR: Record<string, string> = { urgent: "#ef4444", high: "#f97316", medium: "#fbbf24", low: "#22c55e" };
+
+  const renderTask = (task: any) => {
+    const overdueRow = task.dueDate && task.dueDate < today;
+    return (
+      <Link key={task.id} href="/tasks" style={{
+        textDecoration: "none", display: "flex", alignItems: "center", gap: "0.85rem",
+        padding: "0.85rem 1rem", background: "var(--surface-raised)", border: "1px solid var(--border)",
+        borderRadius: "0.6rem", direction: "rtl", transition: "all 150ms ease",
+      }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)"; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}
+      >
+        <span style={{ width: 9, height: 9, borderRadius: "50%", background: PRIO_COLOR[task.priority] || "#94a3b8", flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.title}</div>
+          <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", marginTop: 2 }}>
+            {task.clientName || "כללי"}
+          </div>
+        </div>
+        <span style={{ fontSize: "0.65rem", fontWeight: 600, padding: "0.2rem 0.6rem", borderRadius: 999, background: "var(--surface)", color: "var(--foreground-muted)", whiteSpace: "nowrap" }}>
+          {STATUS_LABEL[task.status] || task.status}
+        </span>
+        {task.dueDate && (
+          <span style={{ fontSize: "0.7rem", fontWeight: 700, whiteSpace: "nowrap", color: overdueRow ? "#ef4444" : "var(--foreground-muted)", minWidth: 54, textAlign: "left" }}>
+            {new Date(task.dueDate).toLocaleDateString("he-IL", { day: "numeric", month: "short" })}
+          </span>
+        )}
+      </Link>
+    );
+  };
+
+  const Section = ({ title, color, items }: { title: string; color: string; items: any[] }) => (
+    items.length === 0 ? null : (
+      <div style={{ marginBottom: "1.5rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: "0.6rem", direction: "rtl" }}>
+          <span style={{ width: 4, height: 16, borderRadius: 2, background: color }} />
+          <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--foreground)" }}>{title}</span>
+          <span style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>({items.length})</span>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          {items.map(renderTask)}
+        </div>
+      </div>
+    )
+  );
 
   return (
     <div className="mhd-root">
-      <div className="mhd-content stagger-in">
+      <div className="mhd-content stagger-in" style={{ maxWidth: 860, margin: "0 auto" }}>
         {/* ═══ HERO ═══ */}
-        <div className="mhd-header ux-hero-enter">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.75rem", direction: "rtl", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <div className="mhd-greeting">
-              {greeting}, <span className="mhd-greeting-name">{employeeName}</span> 👋
+            <div style={{ fontSize: "1.6rem", fontWeight: 800, color: "var(--foreground)" }}>
+              {greeting}, {employeeName} 👋
             </div>
-            <div className="mhd-greeting-sub">המשימות שלך — הנה מה שצריך את תשומת הלב שלך</div>
+            <div style={{ fontSize: "0.9rem", color: "var(--foreground-muted)", marginTop: 4 }}>
+              {overdueCount > 0 ? `יש ${overdueCount} משימות שדורשות טיפול` : todayTaskCount > 0 ? `${todayTaskCount} משימות להיום` : "אין משימות דחופות — יום נעים!"}
+            </div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.75rem" }}>
-            <div className="mhd-date-badge">📅 {dateLabel}</div>
-          </div>
+          <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 999, padding: "0.4rem 0.9rem" }}>📅 {dateLabel}</div>
         </div>
 
-        {/* ═══ KPI ROW (tasks only) ═══ */}
-        <div>
-          <div className="mhd-section-label">סקירה מהירה</div>
-          <PremiumStatGrid
-            items={[
-              { icon: "📋", value: Number(allMyTaskCount) || 0, label: "משימות פתוחות", color: "#2dd4bf" },
-              { icon: "🔴", value: Number(overdueCount) || 0, label: "באיחור", color: "#ef4444" },
-              { icon: "📅", value: Number(todayTaskCount) || 0, label: "משימות היום", color: "#38bdf8" },
-            ]}
-            columns={3}
-            variant="light"
-          />
+        {/* ═══ 3 CLEAN STATS ═══ */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.75rem", marginBottom: "1.75rem", direction: "rtl" }}>
+          {[
+            { value: allMyTaskCount, label: "משימות פתוחות", color: "#2dd4bf" },
+            { value: overdueCount, label: "באיחור", color: "#ef4444" },
+            { value: todayTaskCount, label: "להיום", color: "#38bdf8" },
+          ].map((s) => (
+            <div key={s.label} style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1rem", textAlign: "center" }}>
+              <div style={{ fontSize: "1.8rem", fontWeight: 800, color: s.color }}>{s.value}</div>
+              <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", marginTop: 2 }}>{s.label}</div>
+            </div>
+          ))}
         </div>
 
-        {/* ═══ URGENT: OVERDUE TASKS ═══ */}
-        {overdueCount > 0 && (
-          <div style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)", borderRadius: "0.75rem", padding: "1.25rem", direction: "rtl" }}>
-            <div style={{ fontSize: "0.875rem", fontWeight: 600, marginBottom: "0.75rem", color: "#ef4444" }}>
-              🚨 משימות באיחור
-            </div>
-            <Link href="/tasks" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem", display: "inline-block", minWidth: 150 }}>
-              <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>דורשות טיפול</div>
-              <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ef4444" }}>{overdueCount}</div>
-            </Link>
+        {/* ═══ TASKS, GROUPED — calm and clear ═══ */}
+        {allMyTaskCount === 0 ? (
+          <div style={{ textAlign: "center", padding: "3rem 1.5rem", color: "var(--foreground-muted)", background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem" }}>
+            <div style={{ fontSize: "2.5rem", marginBottom: "0.75rem" }}>✨</div>
+            <div style={{ fontSize: "0.95rem", fontWeight: 600 }}>אין משימות פתוחות — כל הכבוד!</div>
           </div>
+        ) : (
+          <>
+            <Section title="🔴 באיחור" color="#ef4444" items={overdue} />
+            <Section title="📅 להיום" color="#38bdf8" items={todayList} />
+            <Section title="📋 הקרובות" color="#2dd4bf" items={upcoming} />
+          </>
         )}
-
-        {/* ═══ TODAY'S TASKS ═══ */}
-        {(todayGlobal.length > 0 || todayEmployee.length > 0) && (
-          <div>
-            <div className="mhd-section-label">📅 משימות להיום</div>
-            <div className="premium-card" style={{ direction: "rtl" }}>
-              {todayGlobal.map(t => (
-                <TimelineItem key={t.id} icon="📋" title={t.title} subtitle={t.clientName || "כללי"} time="היום" color="#2dd4bf" />
-              ))}
-              {todayEmployee.map(t => (
-                <TimelineItem key={t.id} icon="✅" title={t.title} subtitle={t.clientName || "כללי"} time="היום" color="#38bdf8" />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ═══ ALL OPEN TASKS ═══ */}
-        <div>
-          <div className="mhd-section-label">📋 משימות פתוחות ({allMyTaskCount})</div>
-          {allMyTaskCount === 0 ? (
-            <div className="premium-card" style={{ textAlign: "center", padding: "2rem", color: "var(--foreground-muted)", fontSize: "0.85rem" }}>
-              אין משימות פתוחות — כל הכבוד! ✨
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              {[...myGlobalTasks, ...myEmployeeTasks]
-                .sort((a, b) => {
-                  const po: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
-                  return (po[a.priority] ?? 9) - (po[b.priority] ?? 9);
-                })
-                .slice(0, 20)
-                .map(task => {
-                  const priorityColor: Record<string, string> = { urgent: "#ef4444", high: "#f97316", medium: "#fbbf24", low: "#22c55e" };
-                  const statusLabel: Record<string, string> = { new: "חדש", in_progress: "בביצוע", under_review: "בביקורת", returned: "הוחזר" };
-                  return (
-                    <Link key={task.id} href="/tasks" className="premium-card ux-stagger-item" style={{ textDecoration: "none", padding: "0.75rem 1rem", display: "flex", alignItems: "center", gap: "0.75rem", direction: "rtl" }}>
-                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: priorityColor[task.priority] || "#6b7280", flexShrink: 0 }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: "0.82rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.title}</div>
-                        <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>
-                          {task.clientName || "כללי"} • {statusLabel[task.status] || task.status}
-                        </div>
-                      </div>
-                      {task.dueDate && (
-                        <div style={{
-                          fontSize: "0.65rem", fontWeight: 600, whiteSpace: "nowrap",
-                          color: task.dueDate < today ? "#ef4444" : "var(--foreground-muted)",
-                        }}>
-                          {new Date(task.dueDate!).toLocaleDateString("he-IL", { day: "numeric", month: "short" })}
-                        </div>
-                      )}
-                    </Link>
-                  );
-                })}
-            </div>
-          )}
-        </div>
-
-        {/* ═══ QUICK ACTIONS (tasks only) ═══ */}
-        <div>
-          <div className="mhd-section-label">פעולות מהירות</div>
-          <div className="ux-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: "0.75rem" }}>
-            {[
-              { icon: "📅", label: "המשימות שלי", route: "/tasks", color: "#2dd4bf" },
-              { icon: "📆", label: "יומן", route: "/business-calendar", color: "#f97316" },
-              { icon: "👤", label: "הפרופיל שלי", route: "/profile", color: "#38bdf8" },
-            ].map(a => (
-              <Link key={a.label} href={a.route} className="quick-action-btn ux-light-sweep">
-                <span className="quick-action-icon" style={{ filter: `drop-shadow(0 2px 8px ${a.color}60)` }}>{a.icon}</span>
-                <span className="quick-action-label">{a.label}</span>
-              </Link>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );
