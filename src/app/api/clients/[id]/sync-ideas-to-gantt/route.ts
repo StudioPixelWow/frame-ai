@@ -313,6 +313,15 @@ export async function POST(
     }
     const datePool: number[] = [...primary, ...overflow];
 
+    // Days already taken by existing items this month — so spreading works even when
+    // the UI sends ideas ONE PER REQUEST (each request must avoid days already used).
+    const occupiedDays = new Set<number>();
+    for (const item of existingGanttItems) {
+      if (!item.date) continue;
+      const d = new Date(item.date).getDate();
+      if (!isNaN(d)) occupiedDays.add(d);
+    }
+
     let dateIndex = 0;
 
     for (let i = 0; i < body.ideas.length; i++) {
@@ -339,9 +348,20 @@ export async function POST(
         latestResearch
       );
 
-      // One post per date. Wrap around ONLY after every eligible day is used once,
-      // so posts are never all piled onto a single day.
-      const dayInMonth = datePool.length > 0 ? datePool[dateIndex % datePool.length] : startDay;
+      // Pick the next FREE preferred day (one that isn't already taken this month).
+      // This is what makes spreading work even when the UI posts ideas one-by-one.
+      let dayInMonth = startDay;
+      if (datePool.length > 0) {
+        // First pass: a preferred day that's still free.
+        const free = datePool.find((d) => !occupiedDays.has(d));
+        if (free != null) {
+          dayInMonth = free;
+        } else {
+          // Every preferred day is taken → wrap through the pool (second post per day).
+          dayInMonth = datePool[dateIndex % datePool.length];
+        }
+      }
+      occupiedDays.add(dayInMonth); // reserve it (also covers multi-idea requests)
       dateIndex++;
       const itemDate = new Date(body.year, body.month - 1, dayInMonth).toISOString().split('T')[0];
 
