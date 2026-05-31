@@ -78,6 +78,13 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
   const open = allMine.filter((t) => t.status !== "completed" && t.status !== "approved" && t.status !== "under_review" && !justDone.has(t.id));
   // Tasks employees submitted for review — the manager needs to approve / return these.
   const pendingReview = allMine.filter((t) => t.status === "under_review" && !justDone.has(t.id));
+  // Returned for rework — needs the assignee's attention.
+  const returnedTasks = allMine.filter((t) => t.status === "returned" && !justDone.has(t.id));
+  // Approved by the manager (Tal) — positive feedback / recently closed.
+  const approvedRecent = allMine
+    .filter((t) => t.status === "approved" || t.status === "completed")
+    .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
+    .slice(0, 8);
 
   // Status breakdown (manager view): in-progress / awaiting approval / in rework / approved.
   const statusStrip = [
@@ -104,7 +111,7 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
       c.total++;
       const done = t.status === "completed" || t.status === "approved";
       if (done || justDone.has(t.id)) { c.completed++; continue; }
-      if (t.status === "under_review") continue; // lives in the approvals section, not the client card
+      if (t.status === "under_review" || t.status === "returned") continue; // shown in their own sections
       c.open.push(t);
       if (t.dueDate && t.dueDate < today) c.overdue.push(t);
       else if (t.dueDate === today) c.dueToday.push(t);
@@ -251,6 +258,25 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
         </div>
       )}
 
+      {/* RETURNED FOR REWORK — needs attention */}
+      {returnedTasks.length > 0 && (
+        <div>
+          <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#d97706", letterSpacing: "0.05em", marginBottom: 12 }}>🔧 הוחזרו לתיקון ({returnedTasks.length})</div>
+          <div style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 16, padding: "0.5rem" }}>
+            {returnedTasks.map((t) => (
+              <div key={t.id} onClick={() => onOpenTask(t)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.7rem 0.9rem", cursor: "pointer", borderRadius: 10 }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+                <span style={{ fontSize: "1rem" }}>🔧</span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: "0.92rem", fontWeight: 500, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
+                <span style={{ fontSize: "0.74rem", color: C.muted, whiteSpace: "nowrap" }}>{t.clientName || ""}</span>
+                <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#d97706", whiteSpace: "nowrap" }}>תקן ושלח שוב ←</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* CLIENT WORKSPACE */}
       <div>
         <div style={{ fontSize: "0.78rem", fontWeight: 700, color: C.muted, letterSpacing: "0.05em", marginBottom: 12 }}>מרחב לקוחות</div>
@@ -317,6 +343,22 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* APPROVED BY MANAGER */}
+      {approvedRecent.length > 0 && (
+        <div>
+          <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#16a34a", letterSpacing: "0.05em", marginBottom: 10 }}>✅ אושרו ע״י המנהל</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {approvedRecent.map((t) => (
+              <div key={t.id} onClick={() => onOpenTask(t)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.6rem 0.9rem", cursor: "pointer", borderRadius: 10, background: C.surface, border: `1px solid ${C.border}`, opacity: 0.85 }}>
+                <span style={{ fontSize: "0.95rem" }}>✅</span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: "0.86rem", color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: "line-through", textDecorationColor: "var(--border)" }}>{t.title}</span>
+                <span style={{ fontSize: "0.72rem", color: C.muted, whiteSpace: "nowrap" }}>{t.clientName || ""}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
