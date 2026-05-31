@@ -217,10 +217,10 @@ function EmployeeDashboard({ employeeId }: { employeeId: string }) {
             <div className="mhd-section-label">📅 משימות להיום</div>
             <div className="premium-card" style={{ direction: "rtl" }}>
               {todayGlobal.map(t => (
-                <TimelineItem key={t.id} icon="📋" title={t.title} subtitle="" time="היום" color="#2dd4bf" />
+                <TimelineItem key={t.id} icon="📋" title={t.title} subtitle={t.clientName || "כללי"} time="היום" color="#2dd4bf" />
               ))}
               {todayEmployee.map(t => (
-                <TimelineItem key={t.id} icon="✅" title={t.title} subtitle="" time="היום" color="#38bdf8" />
+                <TimelineItem key={t.id} icon="✅" title={t.title} subtitle={t.clientName || "כללי"} time="היום" color="#38bdf8" />
               ))}
             </div>
           </div>
@@ -250,7 +250,7 @@ function EmployeeDashboard({ employeeId }: { employeeId: string }) {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: "0.82rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.title}</div>
                         <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>
-                          {statusLabel[task.status] || task.status}
+                          {task.clientName || "כללי"} • {statusLabel[task.status] || task.status}
                         </div>
                       </div>
                       {task.dueDate && (
