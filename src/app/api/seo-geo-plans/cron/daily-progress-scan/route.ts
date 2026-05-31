@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { seoPlans } from '@/lib/db';
 import { queryPlatform, isPlatformAvailable, type PlatformId } from '@/lib/seo/platform-apis';
 import { updatePlanSafe, logActivity } from '@/lib/seo/api-helpers';
+import { getSupabase } from '@/lib/db/store';
+import { getSearchAnalytics } from '@/lib/seo/gsc-real-service';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -202,6 +204,39 @@ async function processDailySnapshot(plan: any) {
   const todayDate = new Date().toISOString().split('T')[0];
   console.log(`[SEO-DAILY-SCAN] מעבד תוכנית ${planId} — ${businessName} (${clientKeywords.length}/${totalKeywords} מילות מפתח)`);
 
+  // === REAL Google rankings from Search Console (free, accurate) ===
+  // If the client connected GSC, use real average positions per query instead of
+  // unreliable SERP scraping. Build a keyword→position map once for the plan.
+  let gscRankMap: Map<string, number> | null = null;
+  let gscConnected = false;
+  try {
+    const clientId = (plan as any).clientId || (plan as any).client_id;
+    if (clientId) {
+      const sb = getSupabase();
+      const { data: cl } = await sb
+        .from('clients')
+        .select('gsc_refresh_token, gsc_site_url, gsc_connection_status')
+        .eq('id', clientId)
+        .maybeSingle();
+      const c = cl as any;
+      if (c?.gsc_refresh_token && c?.gsc_site_url && c.gsc_connection_status !== 'token_expired') {
+        const end = new Date();
+        const start = new Date();
+        start.setDate(start.getDate() - 28); // 28-day window = stable average position
+        const fmt = (d: Date) => d.toISOString().split('T')[0];
+        const res = await getSearchAnalytics(c.gsc_refresh_token, c.gsc_site_url, fmt(start), fmt(end), ['query']);
+        gscRankMap = new Map();
+        for (const row of (res.rows || [])) {
+          if (row.query) gscRankMap.set(row.query.trim().toLowerCase(), Math.round(row.position));
+        }
+        gscConnected = true;
+        console.log(`[SEO-DAILY-SCAN] ✅ GSC real data: ${gscRankMap.size} queries for ${businessName}`);
+      }
+    }
+  } catch (e) {
+    console.warn('[SEO-DAILY-SCAN] GSC fetch failed:', e instanceof Error ? e.message : e);
+  }
+
   const keywordRanks: KeywordRank[] = [];
   const aiVisibility: DailySnapshot['aiVisibility'] = {
     totalQueries: 0,
@@ -223,9 +258,18 @@ async function processDailySnapshot(plan: any) {
 
     console.log(`[SEO-DAILY-SCAN] בודק מילת מפתח ${i + 1}/${clientKeywords.length}: "${keyword}"`);
 
-    // --- Google SEO rank ---
+    // --- Google SEO rank --- (prefer REAL GSC data; fall back to SERP lookup)
     let googleRank: number | null = null;
-    if (isPlatformAvailable('google_seo')) {
+    const gscPos = gscConnected ? gscRankMap?.get(keyword.trim().toLowerCase()) : undefined;
+    if (gscPos != null) {
+      // Real average position from Search Console.
+      googleRank = gscPos;
+      aiVisibility.byPlatform['google_seo'].found += 1;
+      aiVisibility.byPlatform['google_seo'].total += 1;
+    } else if (gscConnected) {
+      // GSC connected but no impressions for this keyword yet → not ranking in range.
+      aiVisibility.byPlatform['google_seo'].total += 1;
+    } else if (isPlatformAvailable('google_seo')) {
       try {
         const googleResult = await queryPlatform('google_seo', keyword, businessName, targetDomain);
         if (googleResult.found && googleResult.position) {
