@@ -75,6 +75,22 @@ interface Reco {
   };
 }
 
+/** Meta creatives require a destination link. Resolve one: source ad's link →
+ *  client website → the Facebook page URL — so the 'link is required' error never
+ *  blocks creating a text-variation ad. */
+async function resolveCreativeLink(sb: any, clientId: string | undefined, srcLink: string | undefined, pageId: string): Promise<string> {
+  if (srcLink && /^https?:\/\//i.test(srcLink)) return srcLink;
+  if (clientId) {
+    try {
+      const { data: cl } = await sb.from('clients').select('website').eq('id', clientId).maybeSingle();
+      const site = (cl as any)?.website;
+      if (site && /^https?:\/\//i.test(site)) return site;
+      if (site) return `https://${String(site).replace(/^\/+/, '')}`;
+    } catch { /* ignore */ }
+  }
+  return `https://www.facebook.com/${pageId}`;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const clientId = req.nextUrl.searchParams.get('clientId');
@@ -497,6 +513,8 @@ export async function POST(req: NextRequest) {
       if (!pageId) {
         return NextResponse.json({ error: 'לא ניתן ליצור מודעה — לא נמצא דף עסקי. חבר דף בכרטיס הלקוח (ערוצי פרסום) ונסה שוב.' }, { status: 400 });
       }
+      // Meta requires a link on the creative — fall back to client website, then page.
+      const linkUrl1 = await resolveCreativeLink(sb, clientId, src.ctaLink, pageId);
       const r = await createMetaAd(creds, {
         adSetId: action.metaAdSetId,
         name: `${action.kind === 'ab_test' ? 'A/B' : 'רענון'} — ${variation.strategy}`,
@@ -506,7 +524,7 @@ export async function POST(req: NextRequest) {
           message: variation.newPrimaryText,
           headline: variation.newHeadline,
           description: variation.newDescription,
-          linkUrl: src.ctaLink || '',
+          linkUrl: linkUrl1,
           imageUrl: src.mediaUrl || '',
           callToAction: variation.newCtaType || 'LEARN_MORE',
         },
@@ -613,11 +631,12 @@ export async function POST(req: NextRequest) {
       if (!pageId2) {
         return NextResponse.json({ error: 'לא ניתן ליצור מודעה — לא נמצא דף עסקי. חבר דף בכרטיס הלקוח ונסה שוב.' }, { status: 400 });
       }
+      const linkUrl2 = await resolveCreativeLink(sb, clientId, src.ctaLink, pageId2);
       const r = await createMetaAd(creds, {
         adSetId: action.metaAdSetId,
         name: `${action.kind === 'ai_winner_clone' ? 'AI-Clone' : 'רענון-מונע'} — ${variation.strategy}`,
         status: liveStatus,
-        creative: { pageId: pageId2, message: variation.newPrimaryText, headline: variation.newHeadline, description: variation.newDescription, linkUrl: src.ctaLink || '', imageUrl: src.mediaUrl || '', callToAction: variation.newCtaType || 'LEARN_MORE' },
+        creative: { pageId: pageId2, message: variation.newPrimaryText, headline: variation.newHeadline, description: variation.newDescription, linkUrl: linkUrl2, imageUrl: src.mediaUrl || '', callToAction: variation.newCtaType || 'LEARN_MORE' },
       });
       if (!r.success) return await metaErr(r, 'יצירת המודעה נכשלה');
       if (r.metaId) {
