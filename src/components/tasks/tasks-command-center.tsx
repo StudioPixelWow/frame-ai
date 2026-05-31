@@ -79,6 +79,14 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
   // Tasks employees submitted for review — the manager needs to approve / return these.
   const pendingReview = allMine.filter((t) => t.status === "under_review" && !justDone.has(t.id));
 
+  // Status breakdown (manager view): in-progress / awaiting approval / in rework / approved.
+  const statusStrip = [
+    { key: "in_progress", label: "בעבודה", color: "#3b82f6", count: allMine.filter((t) => t.status === "in_progress").length },
+    { key: "under_review", label: "ממתינות לאישור", color: "#16a34a", count: pendingReview.length },
+    { key: "returned", label: "בתיקון", color: "#f59e0b", count: allMine.filter((t) => t.status === "returned").length },
+    { key: "approved", label: "אושרו", color: "#8b5cf6", count: allMine.filter((t) => t.status === "approved" || t.status === "completed").length },
+  ];
+
   const score = (t: AnyTask): number => {
     let s = PRIO_WEIGHT[t.priority] ?? 5;
     if (t.dueDate) { if (t.dueDate < today) s += 100 + Math.min(daysBetween(today, t.dueDate) * 5, 60); else if (t.dueDate === today) s += 60; }
@@ -208,6 +216,21 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
           </div>
         </div>
       </div>
+
+      {/* STATUS BREAKDOWN — manager view */}
+      {!isEmployee && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+          {statusStrip.map((s) => (
+            <div key={s.key} style={{ display: "flex", alignItems: "center", gap: 10, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "0.9rem 1.1rem" }}>
+              <span style={{ width: 10, height: 10, borderRadius: "50%", background: s.color, flexShrink: 0 }} />
+              <div style={{ lineHeight: 1.2 }}>
+                <div style={{ fontSize: "1.4rem", fontWeight: 800, color: C.text }}>{s.count}</div>
+                <div style={{ fontSize: "0.74rem", color: C.muted }}>{s.label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* APPROVALS — tasks employees submitted for review */}
       {pendingReview.length > 0 && (
