@@ -34,20 +34,55 @@ export async function GET() {
     'https://uaruggdabeyiuppcvbbi.supabase.co';
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
+  // Decode the JWT "role" claim (NOT secret — it's public in every anon key).
+  // This tells us if the value in SUPABASE_SERVICE_ROLE_KEY is actually the
+  // service_role key, or the anon key pasted by mistake (which is subject to RLS).
+  let keyRole: string | null = null;
+  let keyRef: string | null = null;
+  try {
+    const payload = JSON.parse(Buffer.from(key.split('.')[1] || '', 'base64').toString('utf8'));
+    keyRole = payload?.role ?? null;
+    keyRef = payload?.ref ?? null;
+  } catch { /* not a JWT */ }
+
   const env = {
     hasNextPublicUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
     hasSupabaseUrl: !!process.env.SUPABASE_URL,
     hasServiceRoleKey: !!key,
     serviceRoleKeyLength: key.length,                 // length only, never the value
+    keyRole,                                          // 'service_role' expected — 'anon' = WRONG KEY
+    keyRef,                                           // project ref embedded in the key
     urlHost: (() => { try { return new URL(url).host; } catch { return null; } })(),
     runtime: process.env.VERCEL ? 'vercel' : 'local',
   };
+
+  // Raw REST probe — bypasses supabase-js so we see the real HTTP status.
+  let rawProbe: any = null;
+  try {
+    const t0 = Date.now();
+    const res = await fetch(`${url}/rest/v1/clients?select=id&limit=1`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(8000),
+    });
+    const body = (await res.text().catch(() => '')).slice(0, 200);
+    rawProbe = { status: res.status, ms: Date.now() - t0, body };
+  } catch (e) {
+    rawProbe = { status: null, error: e instanceof Error ? e.message : 'error' };
+  }
 
   if (!key) {
     return NextResponse.json({
       ok: false,
       diagnosis: 'SUPABASE_SERVICE_ROLE_KEY חסר ב-Vercel — זו הסיבה ל-500 על כל ה-endpoints. הוסף אותו ב-Settings → Environment Variables ועשה Redeploy.',
       env,
+    }, { status: 200 });
+  }
+
+  if (keyRole && keyRole !== 'service_role') {
+    return NextResponse.json({
+      ok: false,
+      diagnosis: `המפתח ב-SUPABASE_SERVICE_ROLE_KEY הוא מסוג "${keyRole}", לא service_role! זו הסיבה — הוא כפוף ל-RLS והבקשות נתקעות. החלף ל-service_role (Supabase → Settings → API → service_role secret) ב-Vercel ועשה Redeploy.`,
+      env, rawProbe,
     }, { status: 200 });
   }
 
@@ -74,6 +109,7 @@ export async function GET() {
     ok: checks.every((c) => c.ok),
     diagnosis,
     env,
+    rawProbe,
     checks,
   }, { status: 200 });
 }
