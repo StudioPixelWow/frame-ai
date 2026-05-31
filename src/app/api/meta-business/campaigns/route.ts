@@ -101,9 +101,12 @@ export async function GET(req: NextRequest) {
       const cpl = leads > 0 ? spend / leads : 0;
       const costPerMessage = messages > 0 ? spend / messages : 0;
       const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
-      // Messages goal? (Meta objective contains ENGAGEMENT/MESSAGES, or messages recorded)
+      // Messages vs leads is decided by the campaign OBJECTIVE, never by whether a
+      // stray messaging action was recorded — otherwise a LEAD campaign that logged
+      // one message would wrongly display as a messages campaign.
       const obj = String(c.objective || '').toUpperCase();
-      const isMessages = obj.includes('MESSAGE') || obj.includes('ENGAGEMENT') || messages > 0;
+      const isLeadObjective = obj.includes('LEAD');
+      const isMessages = !isLeadObjective && (obj.includes('MESSAGE') || obj.includes('ENGAGEMENT'));
       // Budget can live at campaign level OR ad-set level (ABO). Fall back to
       // summing ad-set budgets so the column isn't empty for ABO campaigns.
       const adSetBudget = cAdSets.reduce((s, as: any) => s + (as.dailyBudget || as.budget || 0), 0);

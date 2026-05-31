@@ -303,6 +303,18 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
     );
   }
 
+  // Campaigns actually shown (active-only unless "show paused" is on) + matching totals.
+  const visibleCampaigns = campaigns.filter((c) => showPaused || isActive(c.status));
+  const viewTotals = {
+    count: visibleCampaigns.length,
+    spend: visibleCampaigns.reduce((s, c) => s + (c.spend || 0), 0),
+    leads: visibleCampaigns.reduce((s, c) => s + (c.leads || 0), 0),
+    impressions: visibleCampaigns.reduce((s, c) => s + (c.impressions || 0), 0),
+    clicks: visibleCampaigns.reduce((s, c) => s + (c.clicks || 0), 0),
+    get cpl() { return this.leads > 0 ? this.spend / this.leads : 0; },
+    get ctr() { return this.impressions > 0 ? (this.clicks / this.impressions) * 100 : 0; },
+  };
+
   return (
     <div dir="rtl">
       {notice && (
@@ -386,11 +398,11 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
       {totals && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 16 }}>
           {[
-            { label: 'קמפיינים', value: fmt(totals.count) },
-            { label: 'הוצאה', value: `₪${fmt(totals.spend)}` },
-            { label: 'לידים', value: fmt(totals.leads) },
-            { label: 'CPL ממוצע', value: `₪${fmt(totals.cpl, 1)}` },
-            { label: 'CTR ממוצע', value: `${fmt(totals.ctr, 2)}%` },
+            { label: 'קמפיינים', value: fmt(viewTotals.count) },
+            { label: 'הוצאה', value: `₪${fmt(viewTotals.spend)}` },
+            { label: 'לידים', value: fmt(viewTotals.leads) },
+            { label: 'CPL ממוצע', value: `₪${fmt(viewTotals.cpl, 1)}` },
+            { label: 'CTR ממוצע', value: `${fmt(viewTotals.ctr, 2)}%` },
           ].map((m) => (
             <div key={m.label} style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 800, color: BRAND }}>{m.value}</div>
@@ -416,7 +428,7 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
             </tr>
           </thead>
           <tbody>
-            {campaigns.filter((c) => showPaused || isActive(c.status)).map((c) => (
+            {visibleCampaigns.map((c) => (
               <Fragment key={c.id}>
               <tr>
                 <td style={{ ...cellStyle, fontWeight: 600, maxWidth: 240, cursor: 'pointer' }} onClick={() => toggleDetail(c)}>

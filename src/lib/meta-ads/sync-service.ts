@@ -660,9 +660,11 @@ function mapObjective(objective: string): Campaign['campaignType'] {
 }
 
 function parseBudget(daily?: string, lifetime?: string): number {
-  // Meta API returns budget in cents
+  // Meta API returns budget in cents. The dashboard shows a DAILY budget column,
+  // so return the daily amount as-is (do NOT multiply to a monthly estimate).
+  // Lifetime-budget campaigns have no daily figure — return the total in shekels.
+  if (daily) return parseInt(daily, 10) / 100;
   if (lifetime) return parseInt(lifetime, 10) / 100;
-  if (daily) return (parseInt(daily, 10) / 100) * 30; // estimate monthly
   return 0;
 }
 
