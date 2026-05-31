@@ -289,23 +289,25 @@ export async function POST(req: NextRequest) {
       if (!adAccountId) return NextResponse.json({ error: 'לא נמצא חשבון מודעות ללקוח' }, { status: 400 });
       if (!action.sourceMetaAdSetId) return NextResponse.json({ error: 'חסר מזהה קבוצת מודעות מקור' }, { status: 400 });
 
-      // 1) Duplicate the winning ad set (paused, deep copy so it carries its creatives).
+      // 1) Duplicate the winning ad set (paused, deep copy so it carries its
+      //    creatives; falls back to a shallow copy automatically if Meta rejects).
       const copy = await copyMetaAdSet(creds, action.sourceMetaAdSetId, {
-        deepCopy: true, statusOption: 'PAUSED', renameSuffix: ' — קהל מורחב',
+        deepCopy: true, statusOption: 'PAUSED',
       });
       if (!copy.success || !copy.metaId) return metaErr(copy, 'שכפול הקבוצה המנצחת נכשל');
 
       // 2) Broaden the targeting + set name/budget on the new copy (best-effort).
-      let note = 'שוכפל קהל מנצח (מושהה) עם הרחבת טירגוט — הפעל כשמוכן';
+      const notes: string[] = ['שוכפל קהל מנצח (מושהה) עם הרחבת טירגוט — הפעל כשמוכן'];
+      if (copy.error) notes.push(copy.error); // e.g. shallow-copy warning ("הוסף קריאייטיב")
       const upd = await updateMetaAdSet(creds, copy.metaId, {
         name: action.newName || undefined,
         targeting: action.targeting,
         dailyBudget: action.dailyBudget && action.dailyBudget > 0 ? Math.max(20, action.dailyBudget) : undefined,
       });
       if (!upd.success) {
-        note = `הקבוצה שוכפלה (מושהית) אך הרחבת הטירגוט נכשלה — הרחב ידנית. (${upd.error || ''})`;
+        notes.push(`הרחבת הטירגוט נכשלה — הרחב ידנית בלוח Meta. (${upd.error || ''})`);
       }
-      return NextResponse.json({ success: true, adSetId: copy.metaId, note });
+      return NextResponse.json({ success: true, adSetId: copy.metaId, note: notes.join(' · ') });
     }
 
     // ── Refresh creative / A/B test: create a new ad variation ──

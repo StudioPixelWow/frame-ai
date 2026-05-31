@@ -600,43 +600,60 @@ export async function copyMetaAdSet(
   if (!creds.accessToken || !sourceAdSetId) {
     return { success: false, error: 'Missing access token or source ad set ID' };
   }
-  const body: Record<string, unknown> = {
-    deep_copy: opts.deepCopy ?? true,        // also copy the ads/creatives so it can run
-    status_option: opts.statusOption || 'PAUSED',
-  };
-  if (opts.renameSuffix) {
-    body.rename_options = { rename_suffix: opts.renameSuffix };
-  }
-  try {
-    await waitIfThrottled();
-    const url = `${API_BASE}/${sourceAdSetId}/copies`;
-    console.log(`[meta-write] POST ${url} (copy ad set)`);
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...body, access_token: creds.accessToken }),
-      signal: AbortSignal.timeout(30000),
-    });
-    parseRateLimitHeader(res);
-    const data = await res.json().catch(() => ({})) as Record<string, unknown>;
-    console.log(`[meta-write] copy response status=${res.status}`, JSON.stringify(data).slice(0, 400));
-    if (!res.ok) {
-      const fbError = data?.error as Record<string, unknown> | undefined;
-      return {
-        success: false,
-        error: (fbError?.message as string) || `HTTP ${res.status}`,
-        errorCode: fbError?.code as number | undefined,
-        rawResponse: data,
-      };
+
+  const url = `${API_BASE}/${sourceAdSetId}/copies`;
+
+  // One attempt. NOTE: rename_options is intentionally omitted (it must be a
+  // JSON-encoded string for /copies and is a common code-100 cause) — we rename
+  // the copy afterwards via updateMetaAdSet. status_option PAUSED keeps it safe.
+  const attempt = async (deepCopy: boolean): Promise<MetaWriteResult> => {
+    try {
+      await waitIfThrottled();
+      console.log(`[meta-write] POST ${url} (copy ad set, deep_copy=${deepCopy})`);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deep_copy: deepCopy,
+          status_option: opts.statusOption || 'PAUSED',
+          access_token: creds.accessToken,
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+      parseRateLimitHeader(res);
+      const data = await res.json().catch(() => ({})) as Record<string, unknown>;
+      console.log(`[meta-write] copy response status=${res.status}`, JSON.stringify(data).slice(0, 500));
+      if (!res.ok) {
+        const fbError = (data?.error || {}) as Record<string, unknown>;
+        // error_user_msg is the human-readable reason — far more useful than "Invalid parameter".
+        const detail = (fbError.error_user_msg as string) || (fbError.error_user_title as string) || '';
+        const base = (fbError.message as string) || `HTTP ${res.status}`;
+        return {
+          success: false,
+          error: detail ? `${base} — ${detail}` : base,
+          errorCode: fbError.code as number | undefined,
+          errorSubcode: fbError.error_subcode as number | undefined,
+          rawResponse: data,
+        };
+      }
+      const newId = (data.copied_adset_id || data.id || (data.ad_object_ids as any)?.[0]?.copied_id) as string | undefined;
+      return { success: true, metaId: newId, rawResponse: data };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
     }
-    // Meta returns { copied_adset_id } or { id } depending on version
-    const newId = (data.copied_adset_id || data.id || (data.ad_object_ids as any)?.[0]?.copied_id) as string | undefined;
-    return { success: true, metaId: newId, rawResponse: data };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[meta-write] copyMetaAdSet failed:', msg);
-    return { success: false, error: msg };
+  };
+
+  // Try the requested (deep) copy first; if Meta rejects it, fall back to a
+  // shallow copy (ad set structure only) so the user at least gets the expanded
+  // audience to attach creatives to, instead of a hard failure.
+  let r = await attempt(opts.deepCopy ?? true);
+  if (!r.success && (opts.deepCopy ?? true)) {
+    console.warn('[meta-write] deep copy failed, retrying shallow copy:', r.error);
+    const shallow = await attempt(false);
+    if (shallow.success) return { ...shallow, error: 'הקבוצה שוכפלה ללא מודעות — הוסף קריאייטיב לקבוצה החדשה' };
+    r = r.error && r.error.length > (shallow.error?.length || 0) ? r : shallow; // keep the more detailed error
   }
+  return r;
 }
 
 /* ── Pause / Resume Ad Set ── */
