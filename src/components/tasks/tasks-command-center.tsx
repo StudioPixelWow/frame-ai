@@ -72,7 +72,9 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
   const employeeName = employees.find((e) => e.id === employeeId)?.name?.split(" ")[0] || "";
 
   const mineFilter = (t: AnyTask) => !isEmployee || (Array.isArray(t.assigneeIds) && t.assigneeIds.includes(employeeId)) || t.assignedEmployeeId === employeeId;
-  const allMine = useMemo(() => [...(tasks || []), ...(employeeTasks || [])].filter(mineFilter), [tasks, employeeTasks, isEmployee, employeeId]);
+  // Only tasks tied to a real client are shown — orphan "כללי" tasks are excluded everywhere.
+  const hasClient = (t: AnyTask) => !!(t.clientName && String(t.clientName).trim() && String(t.clientName).trim() !== "כללי");
+  const allMine = useMemo(() => [...(tasks || []), ...(employeeTasks || [])].filter((t) => mineFilter(t) && hasClient(t)), [tasks, employeeTasks, isEmployee, employeeId]);
   const open = allMine.filter((t) => t.status !== "completed" && t.status !== "approved" && !justDone.has(t.id));
 
   const score = (t: AnyTask): number => {
