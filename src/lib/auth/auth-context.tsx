@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 
 export type AppRole = 'admin' | 'employee' | 'client';
@@ -16,6 +16,8 @@ interface AuthContextType {
   // Role
   role: AppRole;
   setRole: (role: AppRole) => void;
+  accountRole: AppRole;        // the REAL role from the session — cannot be changed client-side
+  canImpersonate: boolean;     // only true for real admins (may switch role for testing)
   isAdmin: boolean;
   isEmployee: boolean;
   isClient: boolean;
@@ -38,6 +40,8 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRoleState] = useState<AppRole>('admin');
+  const [accountRole, setAccountRole] = useState<AppRole>('admin'); // verified, server-truth
+  const accountRoleRef = useRef<AppRole>('admin');
   const [clientId, setClientIdState] = useState<string | null>(null);
   const [employeeId, setEmployeeIdState] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -76,7 +80,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(data => {
         if (data.authenticated && data.user) {
           const u = data.user;
-          setRoleState(u.role || 'admin');
+          const realRole = (u.role || 'admin') as AppRole;
+          accountRoleRef.current = realRole;
+          setAccountRole(realRole);
+          // Non-admins are LOCKED to their account role (no client-side escalation).
+          // A real admin keeps any role they may have switched to (impersonation).
+          setRoleState(realRole !== 'admin' ? realRole : (localStorage.getItem('frameai_role') as AppRole) || realRole);
           setUserId(u.userId || null);
           setEmail(u.email || null);
           setClientIdState(u.clientId || null);
@@ -107,6 +116,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setRole = useCallback((r: AppRole) => {
+    // SECURITY: only a real admin may switch/impersonate roles. Employees & clients
+    // are locked to their account role — no client-side escalation.
+    if (accountRoleRef.current !== 'admin') return;
     setRoleState(r);
     try {
       localStorage.setItem('frameai_role', r);
@@ -160,7 +172,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await fetch('/api/auth/me', { credentials: 'include' });
       const data = await res.json();
       if (data.authenticated && data.user) {
-        setRoleState(data.user.role);
+        const realRole = (data.user.role || 'admin') as AppRole;
+        accountRoleRef.current = realRole;
+        setAccountRole(realRole);
+        if (realRole !== 'admin') setRoleState(realRole);
+        else setRoleState(data.user.role);
         setUserId(data.user.userId);
         setEmail(data.user.email);
         setClientIdState(data.user.clientId || null);
@@ -182,6 +198,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading,
     role,
     setRole,
+    accountRole,
+    canImpersonate: accountRole === 'admin',
     isAdmin,
     isEmployee,
     isClient,

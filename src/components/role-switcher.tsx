@@ -13,7 +13,7 @@ const ROLES: { value: AppRole; label: string; icon: string; color: string }[] = 
 ];
 
 export function RoleSwitcher() {
-  const { role, setRole, employeeId, setEmployeeId, clientId, setClientId } = useAuth();
+  const { role, setRole, employeeId, setEmployeeId, clientId, setClientId, canImpersonate } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [clients, setClients] = useState<ClientItem[]>([]);
@@ -83,6 +83,10 @@ export function RoleSwitcher() {
   const cliName = clients.find(c => c.id === clientId)?.name;
   const subLabel = role === 'employee' && empName ? ` (${empName})` :
                    role === 'client' && cliName ? ` (${cliName})` : '';
+
+  // SECURITY: only real admins may see/use the role switcher. Employees & clients
+  // are locked to their own role and cannot impersonate / navigate to admin areas.
+  if (!canImpersonate) return null;
 
   return (
     <div ref={ref} style={{ position: 'relative', direction: 'rtl' }}>

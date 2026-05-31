@@ -29,8 +29,15 @@ const PRIORITIES = [
 
 export default function TasksPage() {
   const { data: tasks, loading, create, update, remove } = useTasks();
-  const { data: employeeTasks, loading: employeeTasksLoading } = useEmployeeTasks();
+  const { data: employeeTasks, loading: employeeTasksLoading, update: updateEmployeeTask } = useEmployeeTasks();
   const { data: employees } = useEmployees();
+
+  // Source-aware update: tasks may come from the `tasks` table OR the `employee-tasks`
+  // collection (UUID ids). Route the update to the correct endpoint so it doesn't 404.
+  const updateAny = useCallback((id: string, patch: any) => {
+    const isEmp = (employeeTasks || []).some((t: any) => t.id === id);
+    return isEmp ? updateEmployeeTask(id, patch) : update(id, patch);
+  }, [employeeTasks, updateEmployeeTask, update]);
   const TEAM_MEMBERS = ["טל זטלמן", "מאיה זטלמן", "נועם בוברין", "מיכאלה"];
   const teamEmployees = useMemo(() => (employees || []).filter(e => TEAM_MEMBERS.includes(e.name)), [employees]);
   const { data: clients } = useClients();
@@ -137,7 +144,7 @@ export default function TasksPage() {
     };
     try {
       if (editingTask) {
-        await update(editingTask.id, payload);
+        await updateAny(editingTask.id, payload);
         toast("המשימה עודכנה", "success");
       } else {
         await create(payload);
@@ -151,13 +158,13 @@ export default function TasksPage() {
   };
 
   const handleStatusChange = async (taskId: string, newStatus: Task["status"]) => {
-    await update(taskId, { status: newStatus });
+    await updateAny(taskId, { status: newStatus });
   };
 
   const handleSendForReview = async () => {
     if (!editingTask) return;
     try {
-      await update(editingTask.id, { status: "under_review" });
+      await updateAny(editingTask.id, { status: "under_review" });
       toast("המשימה נשלחה לבדיקה", "success");
       setEditingTask({ ...editingTask, status: "under_review" });
       setForm(prev => ({ ...prev, status: "under_review" }));
@@ -172,7 +179,7 @@ export default function TasksPage() {
       return;
     }
     try {
-      await update(editingTask.id, { status: "returned", notes: reviewNotes });
+      await updateAny(editingTask.id, { status: "returned", notes: reviewNotes });
       toast("המשימה הוחזרה לעובד", "success");
       setEditingTask({ ...editingTask, status: "returned", notes: reviewNotes } as any);
       setForm(prev => ({ ...prev, status: "returned", notes: reviewNotes }));
@@ -186,7 +193,7 @@ export default function TasksPage() {
   const handleApproveTask = async () => {
     if (!editingTask) return;
     try {
-      await update(editingTask.id, { status: "approved" });
+      await updateAny(editingTask.id, { status: "approved" });
       toast("המשימה אושרה", "success");
       setEditingTask({ ...editingTask, status: "approved" });
       setForm(prev => ({ ...prev, status: "approved" }));
@@ -198,7 +205,7 @@ export default function TasksPage() {
   const handleMarkCompleted = async () => {
     if (!editingTask) return;
     try {
-      await update(editingTask.id, { status: "completed" });
+      await updateAny(editingTask.id, { status: "completed" });
       toast("המשימה הושלמה", "success");
       fireConfetti(35);
       setEditingTask({ ...editingTask, status: "completed" });
@@ -273,7 +280,7 @@ export default function TasksPage() {
       const entry = `${selectedFile.name}|${sign.publicUrl}`;
       const cur = [...(tasks || []), ...(employeeTasks || [])].find((x: any) => x.id === uploadingTaskId) as any;
       const existing = Array.isArray(cur?.files) ? cur.files : [];
-      await update(uploadingTaskId, { files: [...existing, entry], status: "under_review" as Task["status"] });
+      await updateAny(uploadingTaskId, { files: [...existing, entry], status: "under_review" as Task["status"] });
 
       toast("הקובץ הועלה ונשמר — המשימה עברה לבדיקה", "success");
       const fileInput = document.querySelector(`input[data-task="${uploadingTaskId}"]`) as HTMLInputElement;
@@ -414,7 +421,7 @@ export default function TasksPage() {
       </div>
 
       {/* ── New execution-first workspace (primary) ── */}
-      <TasksCommandCenter onOpenTask={openEdit} onCompleteTask={(t) => { update(t.id, { status: "completed" }); fireConfetti(); }} />
+      <TasksCommandCenter onOpenTask={openEdit} onCompleteTask={(t) => { updateAny(t.id, { status: "completed" }); fireConfetti(); }} />
 
       <button
         onClick={() => setShowWork(v => !v)}
@@ -1192,7 +1199,7 @@ export default function TasksPage() {
                 onClick={async () => {
                   if (!editingTask) return;
                   try {
-                    await update(editingTask.id, { status: "under_review" });
+                    await updateAny(editingTask.id, { status: "under_review" });
                     toast("המשימה נשלחה לבדיקה מחדש", "success");
                     setEditingTask({ ...editingTask, status: "under_review" });
                     setForm(prev => ({ ...prev, status: "under_review" }));
