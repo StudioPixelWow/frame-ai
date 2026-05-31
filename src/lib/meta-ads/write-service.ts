@@ -535,6 +535,52 @@ export async function getMetaAdSetDailyBudget(
   }
 }
 
+/** Read an ad set's current targeting object from Meta (so we can merge, not clobber). */
+export async function getMetaAdSetTargeting(
+  creds: MetaCredentials,
+  metaAdSetId: string,
+): Promise<Record<string, unknown> | null> {
+  if (!creds.accessToken || !metaAdSetId) return null;
+  try {
+    const res = await fetch(
+      `${API_BASE}/${metaAdSetId}?fields=targeting&access_token=${encodeURIComponent(creds.accessToken)}`,
+      { signal: AbortSignal.timeout(15000) },
+    );
+    const data = await res.json().catch(() => ({})) as Record<string, unknown>;
+    if (!res.ok) return null;
+    return (data.targeting as Record<string, unknown>) || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Expand an ad set's PLACEMENTS to Facebook + Instagram (all positions incl.
+ * feed/story/reels) without touching its audience targeting, budget or creative.
+ * Reads the live targeting, removes manual placement restrictions, and writes back.
+ */
+export async function expandMetaAdSetPlacements(
+  creds: MetaCredentials,
+  metaAdSetId: string,
+): Promise<MetaWriteResult> {
+  if (!creds.accessToken || !metaAdSetId) return { success: false, error: 'Missing access token or ad set ID' };
+  const current = await getMetaAdSetTargeting(creds, metaAdSetId);
+  if (!current) return { success: false, error: 'לא ניתן לקרוא את הטירגוט הנוכחי' };
+
+  // Keep audience targeting (age/geo/interests) — only broaden placements.
+  const next: Record<string, unknown> = { ...current };
+  next.publisher_platforms = ['facebook', 'instagram'];
+  // Remove manual position/device limits so Meta auto-distributes across all
+  // FB+IG positions (feed, stories, reels, explore, etc.).
+  delete next.facebook_positions;
+  delete next.instagram_positions;
+  delete next.audience_network_positions;
+  delete next.messenger_positions;
+  delete next.device_platforms;
+
+  return metaPost(`${API_BASE}/${metaAdSetId}`, creds.accessToken, { targeting: next });
+}
+
 /* ── Update Ad Set daily budget (shekels → cents) ── */
 export async function updateMetaAdSetBudget(
   creds: MetaCredentials,

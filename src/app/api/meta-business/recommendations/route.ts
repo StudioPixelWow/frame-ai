@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { campaigns as campaignsCol, adSets as adSetsCol, ads as adsCol } from '@/lib/db/collections';
 import { resolveMetaToken, getSystemMetaToken } from '@/lib/meta-ads/token';
 import { getSupabase } from '@/lib/db/store';
-import { updateMetaAdSetBudget, createMetaAd, copyMetaAdSet, updateMetaAdSet, resolveMetaPageId, getMetaAdSetDailyBudget, verifyMetaEntity } from '@/lib/meta-ads/write-service';
+import { updateMetaAdSetBudget, createMetaAd, copyMetaAdSet, updateMetaAdSet, resolveMetaPageId, getMetaAdSetDailyBudget, verifyMetaEntity, expandMetaAdSetPlacements } from '@/lib/meta-ads/write-service';
 import { generateVariation } from '@/lib/optimization/variations';
 import { logMetaAction } from '@/lib/meta-ads/action-log';
 
@@ -19,10 +19,12 @@ const KIND_LABELS: Record<string, string> = {
   shift_budget: 'הסטת תקציב', expand_audience: 'הרחבת קהל מנצח', refresh_creative: 'רענון קריאייטיב',
   ab_test: 'בדיקת A/B', lookalike: 'קהל Lookalike', retargeting: 'קהל Retargeting',
   ai_winner_clone: 'שכפול AI של מנצח', preventive_refresh: 'רענון מונע', dayparting: 'תזמון לפי שעות',
+  expand_placements: 'הרחבת מיקומים',
 };
 const KIND_CATEGORY: Record<string, string> = {
   shift_budget: 'budget', expand_audience: 'audience', refresh_creative: 'creative', ab_test: 'ab_test',
   lookalike: 'audience', retargeting: 'audience', ai_winner_clone: 'creative', preventive_refresh: 'creative', dayparting: 'budget',
+  expand_placements: 'audience',
 };
 
 // IRON RULES (per client):
@@ -47,7 +49,8 @@ type ApplyKind =
   | 'retargeting'       // build a page-engagement retargeting audience
   | 'ai_winner_clone'   // AI-analyzed clone of the best creative
   | 'dayparting'        // info-only: shift budget toward best hours
-  | 'preventive_refresh'; // refresh creative BEFORE fatigue hits
+  | 'preventive_refresh' // refresh creative BEFORE fatigue hits
+  | 'expand_placements'; // broaden placements to FB+IG (no visual/budget change)
 
 interface Reco {
   id: string;
@@ -243,6 +246,24 @@ export async function GET(req: NextRequest) {
           reason: `תדירות ${f.toFixed(1)} ומטפסת. רענון עכשיו, לפני שתגיע ל-4 ותתחיל שחיקה.`,
           expectedImpact: 'מניעת ירידת ביצועים לפני שהיא קורית.',
           apply: { kind: 'preventive_refresh', objectName: a.name, sourceAdId: a.id, metaAdSetId: (st as any)?.metaAdSetId },
+        });
+      }
+    }
+
+    // ── J) EXPAND PLACEMENTS — ad sets restricted to a single platform ──
+    for (const x of setStats) {
+      const sa = x.s as any;
+      if (!sa.metaAdSetId) continue;
+      const plats: string[] = Array.isArray(sa.placements) ? sa.placements : [];
+      const known = ['facebook', 'instagram', 'audience_network', 'messenger'];
+      const isPlatformList = plats.some((p) => known.includes(p));
+      if (isPlatformList && !plats.includes('instagram')) {
+        recos.push({
+          id: `placements_${x.s.id}`, severity: 'medium', category: 'audience',
+          title: `הרחבת מיקומים: ${x.s.name}`,
+          reason: `הקבוצה מוגבלת למיקומים (${plats.join(', ')}). הרחבה לפייסבוק+אינסטגרם (פיד/סטורי/רילס) פותחת עוד מלאי זול.`,
+          expectedImpact: 'יותר חשיפות זולות ועוד לידים — ללא שינוי ויזואל או תקציב.',
+          apply: { kind: 'expand_placements', objectName: x.s.name, metaAdSetId: sa.metaAdSetId },
         });
       }
     }
@@ -456,6 +477,17 @@ export async function POST(req: NextRequest) {
       return await ok({ adId: r.metaId, variation: variation.explanation, note: `נוצרה מודעה חדשה (${liveWord})` }, {
         detail: `נוצרה מודעה חדשה ומאומתת (${action.kind === 'ab_test' ? 'בדיקת A/B' : 'רענון'}): ${variation.strategy} — ${liveWord}`,
         objectType: 'ad',
+      });
+    }
+
+    // ── Expand placements: broaden to FB+IG (no visual/budget change) ──
+    if (action.kind === 'expand_placements') {
+      if (!action.metaAdSetId) return NextResponse.json({ error: 'חסר מזהה Ad Set' }, { status: 400 });
+      const r = await expandMetaAdSetPlacements(creds, action.metaAdSetId);
+      if (!r.success) return await metaErr(r, 'הרחבת מיקומים נכשלה');
+      return await ok({ adSetId: action.metaAdSetId, note: 'המיקומים הורחבו לפייסבוק + אינסטגרם (פיד/סטורי/רילס)' }, {
+        detail: 'הורחבו מיקומים לפייסבוק+אינסטגרם — ללא שינוי ויזואל או תקציב',
+        objectType: 'adset',
       });
     }
 
