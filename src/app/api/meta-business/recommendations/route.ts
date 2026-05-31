@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { campaigns as campaignsCol, adSets as adSetsCol, ads as adsCol } from '@/lib/db/collections';
 import { resolveMetaToken, getSystemMetaToken } from '@/lib/meta-ads/token';
 import { getSupabase } from '@/lib/db/store';
-import { updateMetaAdSetBudget, createMetaAd, copyMetaAdSet, updateMetaAdSet, resolveMetaPageId, getMetaAdSetDailyBudget, verifyMetaEntity, expandMetaAdSetPlacements } from '@/lib/meta-ads/write-service';
+import { updateMetaAdSetBudget, createMetaAd, copyMetaAdSet, updateMetaAdSet, resolveMetaPageId, getMetaAdSetDailyBudget, verifyMetaEntity, expandMetaAdSetPlacements, listMetaCustomAudiences, setMetaAdSetAudiences } from '@/lib/meta-ads/write-service';
 import { generateVariation } from '@/lib/optimization/variations';
 import { logMetaAction } from '@/lib/meta-ads/action-log';
 
@@ -19,12 +19,12 @@ const KIND_LABELS: Record<string, string> = {
   shift_budget: 'הסטת תקציב', expand_audience: 'הרחבת קהל מנצח', refresh_creative: 'רענון קריאייטיב',
   ab_test: 'בדיקת A/B', lookalike: 'קהל Lookalike', retargeting: 'קהל Retargeting',
   ai_winner_clone: 'שכפול AI של מנצח', preventive_refresh: 'רענון מונע', dayparting: 'תזמון לפי שעות',
-  expand_placements: 'הרחבת מיקומים',
+  expand_placements: 'הרחבת מיקומים', add_audience: 'הוספת קהל קיים', exclude_audience: 'החרגת קהל',
 };
 const KIND_CATEGORY: Record<string, string> = {
   shift_budget: 'budget', expand_audience: 'audience', refresh_creative: 'creative', ab_test: 'ab_test',
   lookalike: 'audience', retargeting: 'audience', ai_winner_clone: 'creative', preventive_refresh: 'creative', dayparting: 'budget',
-  expand_placements: 'audience',
+  expand_placements: 'audience', add_audience: 'audience', exclude_audience: 'audience',
 };
 
 // IRON RULES (per client):
@@ -50,7 +50,9 @@ type ApplyKind =
   | 'ai_winner_clone'   // AI-analyzed clone of the best creative
   | 'dayparting'        // info-only: shift budget toward best hours
   | 'preventive_refresh' // refresh creative BEFORE fatigue hits
-  | 'expand_placements'; // broaden placements to FB+IG (no visual/budget change)
+  | 'expand_placements'  // broaden placements to FB+IG (no visual/budget change)
+  | 'add_audience'       // attach an existing saved audience to a winning ad set
+  | 'exclude_audience';  // exclude an existing audience (e.g. past converters)
 
 interface Reco {
   id: string;
@@ -68,6 +70,7 @@ interface Reco {
     sourceAdId?: string; metaAdSetId?: string;
     pageId?: string;            // for retargeting
     audienceName?: string;      // for lookalike/retargeting
+    audienceId?: string;        // existing saved audience to add/exclude
     infoOnly?: boolean;         // dayparting = advice, no API action
   };
 }
@@ -247,6 +250,44 @@ export async function GET(req: NextRequest) {
           expectedImpact: 'מניעת ירידת ביצועים לפני שהיא קורית.',
           apply: { kind: 'preventive_refresh', objectName: a.name, sourceAdId: a.id, metaAdSetId: (st as any)?.metaAdSetId },
         });
+      }
+    }
+
+    // ── K) AUDIENCE MANAGEMENT — add existing saved audiences to winners, and
+    //    exclude past converters so budget isn't wasted on people who already converted. ──
+    if (winners.length > 0) {
+      const token = await resolveMetaToken(client?.meta_access_token || client?.metaAccessToken);
+      const adAccountId = client?.meta_ad_account_id || client?.metaAdAccountId || '';
+      if (token && adAccountId) {
+        const saved = await listMetaCustomAudiences({ accessToken: token, adAccountId });
+        const topWinner = winners[0];
+        const winMeta = (topWinner.s as any).metaAdSetId;
+
+        // ADD a Lookalike (or large custom) audience to the winning ad set for volume.
+        const lookalike = saved
+          .filter((a) => a.subtype === 'LOOKALIKE' && a.approximateCount > 1000)
+          .sort((a, b) => b.approximateCount - a.approximateCount)[0];
+        if (winMeta && lookalike) {
+          recos.push({
+            id: `addaud_${topWinner.s.id}_${lookalike.id}`, severity: 'medium', category: 'audience',
+            title: `הוספת קהל קיים למנצח: ${lookalike.name}`,
+            reason: `לקבוצה המנצחת "${topWinner.s.name}" אפשר לצרף קהל קיים (${lookalike.name}, ~${lookalike.approximateCount.toLocaleString()} אנשים) להגדלת נפח לידים.`,
+            expectedImpact: 'יותר לידים מקהל איכותי קיים — ללא שינוי ויזואל/תקציב.',
+            apply: { kind: 'add_audience', objectName: topWinner.s.name, metaAdSetId: winMeta, audienceId: lookalike.id, audienceName: lookalike.name },
+          });
+        }
+
+        // EXCLUDE a converters/leads audience so we don't pay to reach past converters.
+        const converters = saved.find((a) => a.subtype === 'CUSTOM' && /ליד|lead|רכש|convert|קונה|לקוח|purchase|buyer/i.test(a.name));
+        if (winMeta && converters) {
+          recos.push({
+            id: `exclaud_${topWinner.s.id}_${converters.id}`, severity: 'medium', category: 'audience',
+            title: `החרגת קהל שכבר המיר: ${converters.name}`,
+            reason: `החרגת "${converters.name}" מהקבוצה המנצחת מונעת בזבוז תקציב על מי שכבר ליד/לקוח — התקציב מתרכז בקהל חדש.`,
+            expectedImpact: 'CPL נמוך יותר — אותו כסף מגיע לקהל שעוד לא המיר.',
+            apply: { kind: 'exclude_audience', objectName: topWinner.s.name, metaAdSetId: winMeta, audienceId: converters.id, audienceName: converters.name },
+          });
+        }
       }
     }
 
@@ -487,6 +528,28 @@ export async function POST(req: NextRequest) {
       if (!r.success) return await metaErr(r, 'הרחבת מיקומים נכשלה');
       return await ok({ adSetId: action.metaAdSetId, note: 'המיקומים הורחבו לפייסבוק + אינסטגרם (פיד/סטורי/רילס)' }, {
         detail: 'הורחבו מיקומים לפייסבוק+אינסטגרם — ללא שינוי ויזואל או תקציב',
+        objectType: 'adset',
+      });
+    }
+
+    // ── Add an existing saved audience to an ad set (include) ──
+    if (action.kind === 'add_audience') {
+      if (!action.metaAdSetId || !action.audienceId) return NextResponse.json({ error: 'חסר מזהה Ad Set או קהל' }, { status: 400 });
+      const r = await setMetaAdSetAudiences(creds, action.metaAdSetId, { include: [action.audienceId] });
+      if (!r.success) return await metaErr(r, 'הוספת הקהל נכשלה');
+      return await ok({ adSetId: action.metaAdSetId, note: `הקהל "${action.audienceName || ''}" נוסף לקבוצה` }, {
+        detail: `נוסף קהל קיים "${action.audienceName || action.audienceId}" — ללא שינוי ויזואל/תקציב`,
+        objectType: 'adset',
+      });
+    }
+
+    // ── Exclude an existing audience from an ad set (e.g. past converters) ──
+    if (action.kind === 'exclude_audience') {
+      if (!action.metaAdSetId || !action.audienceId) return NextResponse.json({ error: 'חסר מזהה Ad Set או קהל' }, { status: 400 });
+      const r = await setMetaAdSetAudiences(creds, action.metaAdSetId, { exclude: [action.audienceId] });
+      if (!r.success) return await metaErr(r, 'החרגת הקהל נכשלה');
+      return await ok({ adSetId: action.metaAdSetId, note: `הקהל "${action.audienceName || ''}" הוחרג מהקבוצה` }, {
+        detail: `הוחרג קהל "${action.audienceName || action.audienceId}" (מי שכבר המיר) — ללא שינוי ויזואל/תקציב`,
         objectType: 'adset',
       });
     }

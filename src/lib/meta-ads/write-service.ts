@@ -581,6 +581,55 @@ export async function expandMetaAdSetPlacements(
   return metaPost(`${API_BASE}/${metaAdSetId}`, creds.accessToken, { targeting: next });
 }
 
+/** List the ad account's existing saved audiences (Custom + Lookalike). */
+export async function listMetaCustomAudiences(
+  creds: MetaCredentials,
+): Promise<Array<{ id: string; name: string; subtype: string; approximateCount: number }>> {
+  if (!creds.adAccountId || !creds.accessToken) return [];
+  try {
+    const res = await fetch(
+      `${API_BASE}/${creds.adAccountId}/customaudiences?fields=id,name,subtype,approximate_count_lower_bound&limit=200&access_token=${encodeURIComponent(creds.accessToken)}`,
+      { signal: AbortSignal.timeout(15000) },
+    );
+    const data = await res.json().catch(() => ({})) as Record<string, unknown>;
+    if (!res.ok || !Array.isArray(data.data)) return [];
+    return (data.data as any[]).map((a) => ({
+      id: String(a.id),
+      name: a.name || '',
+      subtype: a.subtype || 'CUSTOM',
+      approximateCount: Number(a.approximate_count_lower_bound) || 0,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Add include/exclude saved audiences to an ad set WITHOUT touching its other
+ * targeting, budget or creative. Merges into the live targeting's
+ * custom_audiences / excluded_custom_audiences and writes back.
+ */
+export async function setMetaAdSetAudiences(
+  creds: MetaCredentials,
+  metaAdSetId: string,
+  opts: { include?: string[]; exclude?: string[] },
+): Promise<MetaWriteResult> {
+  if (!creds.accessToken || !metaAdSetId) return { success: false, error: 'Missing access token or ad set ID' };
+  const current = await getMetaAdSetTargeting(creds, metaAdSetId);
+  if (!current) return { success: false, error: 'לא ניתן לקרוא את הטירגוט הנוכחי' };
+
+  const next: Record<string, unknown> = { ...current };
+  const mergeIds = (existing: unknown, add: string[]): Array<{ id: string }> => {
+    const cur = Array.isArray(existing) ? (existing as any[]).map((e) => String(e.id)) : [];
+    const set = new Set([...cur, ...add]);
+    return [...set].map((id) => ({ id }));
+  };
+  if (opts.include?.length) next.custom_audiences = mergeIds(current.custom_audiences, opts.include);
+  if (opts.exclude?.length) next.excluded_custom_audiences = mergeIds(current.excluded_custom_audiences, opts.exclude);
+
+  return metaPost(`${API_BASE}/${metaAdSetId}`, creds.accessToken, { targeting: next });
+}
+
 /* ── Update Ad Set daily budget (shekels → cents) ── */
 export async function updateMetaAdSetBudget(
   creds: MetaCredentials,
