@@ -7,6 +7,7 @@ import { useTasks, useEmployees, useClients, useEmployeeTasks } from "@/lib/api/
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import { SmartHint } from "@/components/ui/smart-hint";
+import TasksCommandCenter from "@/components/tasks/tasks-command-center";
 import type { Task } from "@/lib/db/schema";
 import { fireConfetti } from "@/lib/confetti";
 
@@ -40,6 +41,7 @@ export default function TasksPage() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [defaultStatus, setDefaultStatus] = useState<Task["status"]>("new");
   const [viewMode, setViewMode] = useState<'board' | 'by_employee'>('board');
+  const [showWork, setShowWork] = useState(false); // Kanban is a secondary, collapsible view
   const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
   const [filterEmployee, setFilterEmployee] = useState("");
   const [filterClient, setFilterClient] = useState("");
@@ -397,6 +399,17 @@ export default function TasksPage() {
         </div>
       </div>
 
+      {/* ── New command-center experience (primary) ── */}
+      <TasksCommandCenter onOpenTask={openEdit} />
+
+      <button
+        onClick={() => setShowWork(v => !v)}
+        style={{ margin: "2rem auto 1.25rem", display: "block", padding: "0.7rem 1.5rem", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface-raised)", color: "var(--foreground)", fontWeight: 600, fontSize: "0.85rem", cursor: "pointer" }}
+      >
+        {showWork ? "▲ הסתר לוח עבודה מלא" : "▼ פתח לוח עבודה מלא (קנבן)"}
+      </button>
+
+      {showWork && (<>
       {/* View Mode Toggle */}
       <div style={{ marginBottom: "1rem", display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ display: "flex", border: "1px solid var(--border)", borderRadius: "0.5rem", overflow: "hidden" }}>
@@ -1110,6 +1123,7 @@ export default function TasksPage() {
           )}
         </>
       )}
+      </>)}
 
       {/* Task Modal */}
       <Modal open={modalOpen} onClose={() => { setModalOpen(false); setReviewNotes(""); setShowReviewNotes(false); }} title={editingTask ? `עריכת משימה — ${COLUMNS.find(c => c.id === form.status)?.label || ''}` : "משימה חדשה"} footer={
