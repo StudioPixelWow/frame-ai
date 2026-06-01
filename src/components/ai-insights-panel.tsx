@@ -267,13 +267,11 @@ export function generateInsights(data: {
 
 /** Render grouped insight cards */
 export function AIInsightsPanel({ insights, compact }: InsightPanelProps) {
-  const grouped = useMemo(() => {
-    const groups: Record<string, AIInsight[]> = {};
-    insights.forEach(i => {
-      if (!groups[i.category]) groups[i.category] = [];
-      groups[i.category].push(i);
-    });
-    return groups;
+  // One responsive card wall — sorted by category priority. (Hook must run before
+  // any early return to satisfy the rules of hooks.)
+  const ordered = useMemo(() => {
+    const order = ['hot', 'action', 'warning', 'opportunity'];
+    return [...insights].sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
   }, [insights]);
 
   if (insights.length === 0) return null;
@@ -301,50 +299,32 @@ export function AIInsightsPanel({ insights, compact }: InsightPanelProps) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {(['hot', 'action', 'warning', 'opportunity'] as const).map(cat => {
-        const items = grouped[cat];
-        if (!items || items.length === 0) return null;
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem', alignItems: 'stretch' }}>
+      {ordered.map(insight => {
+        const color = CATEGORY_COLORS[insight.category] || 'var(--accent)';
         return (
-          <div key={cat}>
-            <div style={{
-              fontSize: '0.8125rem',
-              fontWeight: 700,
-              color: CATEGORY_COLORS[cat],
-              marginBottom: '0.75rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-            }}>
-              <div style={{
-                width: 8, height: 8, borderRadius: '50%',
-                background: CATEGORY_COLORS[cat],
-                boxShadow: `0 0 8px ${CATEGORY_COLORS[cat]}60`,
-              }} />
-              {CATEGORY_LABELS[cat]}
+          <div key={insight.id} className="insight-card" data-priority={insight.priority}
+            style={{ display: 'flex', flexDirection: 'column', borderTop: `3px solid ${color}`, height: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: '0.6rem' }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, boxShadow: `0 0 8px ${color}60` }} />
+              <span style={{ fontSize: '0.68rem', fontWeight: 700, color, letterSpacing: '0.03em' }}>{CATEGORY_LABELS[insight.category]}</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.75rem' }}>
-              {items.map(insight => (
-                <div key={insight.id} className="insight-card" data-priority={insight.priority} style={{ display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', flex: 1 }}>
-                    <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>{insight.icon}</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--foreground)', marginBottom: '0.35rem' }}>
-                        {insight.title}
-                      </div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--foreground-muted)', lineHeight: 1.6 }}>
-                        {insight.description}
-                      </div>
-                    </div>
-                  </div>
-                  {insight.actionText && insight.actionHref && (
-                    <Link href={insight.actionHref} style={{ display: 'inline-block', marginTop: '0.75rem', fontSize: '0.75rem', fontWeight: 700, color: CATEGORY_COLORS[insight.category] || 'var(--accent)', textDecoration: 'none' }}>
-                      {insight.actionText} ←
-                    </Link>
-                  )}
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', flex: 1 }}>
+              <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>{insight.icon}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--foreground)', marginBottom: '0.35rem' }}>
+                  {insight.title}
                 </div>
-              ))}
+                <div style={{ fontSize: '0.8rem', color: 'var(--foreground-muted)', lineHeight: 1.6 }}>
+                  {insight.description}
+                </div>
+              </div>
             </div>
+            {insight.actionText && insight.actionHref && (
+              <Link href={insight.actionHref} style={{ display: 'inline-block', marginTop: '0.85rem', fontSize: '0.75rem', fontWeight: 700, color, textDecoration: 'none' }}>
+                {insight.actionText} ←
+              </Link>
+            )}
           </div>
         );
       })}
