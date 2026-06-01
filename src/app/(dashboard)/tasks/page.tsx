@@ -1249,6 +1249,24 @@ export default function TasksPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxHeight: "60vh", overflowY: "auto" }}>
           {!showReviewNotes ? (
             <>
+              {/* HERO — title + graphic text, made to stand out far more than the rest */}
+              {(() => {
+                const desc = form.description || "";
+                const m = desc.match(/טקסט לגרפיקה[:\s]*([\s\S]*?)(?:\n\n|🖼️|💬|📅|🎉|🔬|$)/);
+                const gtext = m ? m[1].trim() : "";
+                return (
+                  <div style={{ background: "linear-gradient(135deg, #eff6ff 0%, #f0fdfa 100%)", border: "1px solid #bae6fd", borderRadius: 18, padding: "1.2rem 1.35rem", marginBottom: "0.4rem", boxShadow: "0 2px 10px rgba(2,132,199,0.08)" }}>
+                    <div style={{ fontSize: "0.7rem", fontWeight: 800, color: "#0369a1", letterSpacing: "0.05em", marginBottom: 6 }}>כותרת</div>
+                    <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--foreground, #0f172a)", lineHeight: 1.25 }}>{form.title || "—"}</div>
+                    {gtext && (
+                      <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px dashed #bae6fd" }}>
+                        <div style={{ fontSize: "0.8rem", fontWeight: 800, color: "#0369a1", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>✍️ טקסט לגרפיקה</div>
+                        <div style={{ fontSize: "1.1rem", fontWeight: 600, color: "var(--foreground, #0f172a)", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{gtext}</div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               <div>
                 <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>כותרת *</label>
                 <input className="form-input ux-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="כותרת המשימה" />
