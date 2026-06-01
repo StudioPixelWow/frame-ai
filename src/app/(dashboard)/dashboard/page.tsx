@@ -134,12 +134,38 @@ function TimelineItem({ icon, title, subtitle, time, color }: {
    tasks, projects, and content. No financial data or admin metrics.
    ══════════════════════════════════════════════════════════════════════════════ */
 
+function weatherEmoji(code: number): string {
+  if (code === 0) return "☀️";
+  if (code <= 2) return "🌤️";
+  if (code === 3) return "☁️";
+  if (code <= 48) return "🌫️";
+  if (code <= 67) return "🌧️";
+  if (code <= 77) return "🌨️";
+  if (code <= 82) return "🌦️";
+  if (code <= 99) return "⛈️";
+  return "🌡️";
+}
+
 function EmployeeDashboard({ employeeId }: { employeeId: string }) {
   const greeting = getGreeting();
   const dateLabel = getDateLabel();
   const { data: employees } = useEmployees();
   const { data: tasks } = useTasks();
   const { data: employeeTasks } = useEmployeeTasks();
+
+  // Live Israel clock + Kiryat Motzkin weather for the welcome band.
+  const [now, setNow] = useState(new Date());
+  const [weather, setWeather] = useState<{ temp: number; code: number } | null>(null);
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30000);
+    let cancel = false;
+    fetch("https://api.open-meteo.com/v1/forecast?latitude=32.83&longitude=35.08&current=temperature_2m,weather_code")
+      .then((r) => r.json())
+      .then((d) => { if (!cancel && d?.current) setWeather({ temp: Math.round(d.current.temperature_2m), code: d.current.weather_code }); })
+      .catch(() => {});
+    return () => { cancel = true; clearInterval(t); };
+  }, []);
+  const timeStr = new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit" }).format(now);
 
   const employee = employees.find(e => e.id === employeeId);
   const employeeName = employee?.name || "עובד";
@@ -236,17 +262,50 @@ function EmployeeDashboard({ employeeId }: { employeeId: string }) {
   return (
     <div className="mhd-root">
       <div className="mhd-content stagger-in" style={{ maxWidth: 860, margin: "0 auto" }}>
-        {/* ═══ HERO ═══ */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.75rem", direction: "rtl", flexWrap: "wrap", gap: 12 }}>
-          <div>
-            <div style={{ fontSize: "1.6rem", fontWeight: 800, color: "var(--foreground)" }}>
-              {greeting}, {employeeName} 👋
+        {/* ═══ JOYFUL WELCOME BAND ═══ */}
+        <div style={{
+          position: "relative", overflow: "hidden", marginBottom: "1.75rem", borderRadius: 24,
+          padding: "1.6rem 1.9rem",
+          background: "linear-gradient(120deg, #00B5FE 0%, #2dd4bf 55%, #6366f1 110%)",
+          boxShadow: "0 14px 40px rgba(0,181,254,0.28)", direction: "rtl",
+        }}>
+          {/* decorative bubbles */}
+          <div style={{ position: "absolute", top: -40, insetInlineStart: -30, width: 160, height: 160, borderRadius: "50%", background: "rgba(255,255,255,0.12)" }} />
+          <div style={{ position: "absolute", bottom: -60, insetInlineStart: 90, width: 130, height: 130, borderRadius: "50%", background: "rgba(255,255,255,0.08)" }} />
+          <div style={{ position: "relative", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
+            {/* logo + greeting */}
+            <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
+              <div style={{ width: 58, height: 58, borderRadius: 16, background: "rgba(255,255,255,0.92)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 6px 18px rgba(0,0,0,0.12)" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="https://s-pixel.co.il/wp-content/uploads/2026/04/Asset-1.png" alt="PixelManageAI" style={{ height: 34, width: "auto" }} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: "1.7rem", fontWeight: 800, color: "#fff", lineHeight: 1.2, textShadow: "0 1px 8px rgba(0,0,0,0.12)" }}>
+                  {greeting}, {employeeName} 👋
+                </div>
+                <div style={{ fontSize: "0.92rem", color: "rgba(255,255,255,0.92)", marginTop: 5 }}>
+                  {overdueCount > 0 ? `יש ${overdueCount} משימות שמחכות לך — אתה על זה! 💪` : todayTaskCount > 0 ? `${todayTaskCount} משימות להיום — קדימה לעבודה! ✨` : "אין משימות דחופות — שיהיה יום מעולה! ☕"}
+                </div>
+              </div>
             </div>
-            <div style={{ fontSize: "0.9rem", color: "var(--foreground-muted)", marginTop: 4 }}>
-              {overdueCount > 0 ? `יש ${overdueCount} משימות שדורשות טיפול` : todayTaskCount > 0 ? `${todayTaskCount} משימות להיום` : "אין משימות דחופות — יום נעים!"}
+            {/* clock + weather + date */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", background: "rgba(255,255,255,0.18)", backdropFilter: "blur(6px)", borderRadius: 16, padding: "0.5rem 1rem", minWidth: 86 }}>
+                <span style={{ fontSize: "1.5rem", fontWeight: 800, color: "#fff", fontVariantNumeric: "tabular-nums", letterSpacing: "0.02em", lineHeight: 1 }}>{timeStr}</span>
+                <span style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.85)", marginTop: 3 }}>שעון ישראל</span>
+              </div>
+              {weather && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.18)", backdropFilter: "blur(6px)", borderRadius: 16, padding: "0.5rem 0.9rem" }}>
+                  <span style={{ fontSize: "1.4rem" }}>{weatherEmoji(weather.code)}</span>
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <span style={{ fontSize: "1.05rem", fontWeight: 700, color: "#fff", lineHeight: 1 }}>{weather.temp}°</span>
+                    <span style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.85)", marginTop: 3 }}>קרית מוצקין</span>
+                  </div>
+                </div>
+              )}
+              <div style={{ fontSize: "0.75rem", color: "#fff", background: "rgba(255,255,255,0.18)", borderRadius: 999, padding: "0.45rem 0.9rem", whiteSpace: "nowrap" }}>📅 {dateLabel}</div>
             </div>
           </div>
-          <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 999, padding: "0.4rem 0.9rem" }}>📅 {dateLabel}</div>
         </div>
 
         {/* ═══ 3 CLEAN STATS ═══ */}
