@@ -12,6 +12,7 @@ import {
   useClientNotifications,
 } from '@/lib/api/use-entity';
 import { useMemo, useState, useCallback, useEffect, Suspense } from 'react';
+import WelcomeBand from '@/components/ui/welcome-band';
 
 /* ═══════════════════════════════════════════════
    CSS — Apple-level micro-interactions
@@ -220,6 +221,14 @@ function DashboardContentInner() {
     <div style={{ direction: 'rtl', maxWidth: '900px', margin: '0 auto', position: 'relative' }}>
       <style>{STYLES}</style>
 
+      {/* ═══ UNIFIED WELCOME BAND ═══ */}
+      <div style={{ marginTop: '1.5rem', marginBottom: '0.5rem' }}>
+        <WelcomeBand
+          name={client.contactPerson || client.name}
+          subtitle={`${activeCampaigns.length} קמפיינים פעילים · ${kpis.totalLeads} לידים`}
+        />
+      </div>
+
       {/* ══════════════════════════════════════
           HERO HEADER
           ══════════════════════════════════════ */}
@@ -300,11 +309,11 @@ function DashboardContentInner() {
             }}>{initials}</div>
           )}
           <div>
-            <h1 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-              שלום, {client.contactPerson || client.name}
+            <h1 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+              {client.company || client.name}
             </h1>
             <p style={{ fontSize: '0.85rem', color: 'var(--foreground-muted)', margin: '0.2rem 0 0 0' }}>
-              {client.company || client.name}
+              סקירת הפעילות שלך
             </p>
           </div>
         </div>
