@@ -75,7 +75,25 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
   const mineFilter = (t: AnyTask) => !isEmployee || (Array.isArray(t.assigneeIds) && t.assigneeIds.includes(employeeId)) || t.assignedEmployeeId === employeeId;
   // Only tasks tied to a real client are shown — orphan "כללי" tasks are excluded everywhere.
   const hasClient = (t: AnyTask) => !!(t.clientName && String(t.clientName).trim() && String(t.clientName).trim() !== "כללי");
-  const allMine = useMemo(() => [...(tasks || []), ...(employeeTasks || [])].filter((t) => mineFilter(t) && hasClient(t)), [tasks, employeeTasks, isEmployee, employeeId]);
+  // Merge both task sources, de-duplicating logical duplicates. A task can exist
+  // in both the global `tasks` table and the `employee-tasks` channel (gantt content
+  // and client-tab tasks create both). Employee-tasks come FIRST so they win the
+  // dedup — that's the row the assignee filter (assignedEmployeeId) matches.
+  const dedupKey = (t: AnyTask) =>
+    t.ganttItemId ? `g:${t.ganttItemId}` : `k:${String(t.clientName || "").trim()}|${String(t.title || "").trim()}|${t.dueDate || ""}`;
+  const allMine = useMemo(() => {
+    const merged = [...(employeeTasks || []), ...(tasks || [])];
+    const seen = new Set<string>();
+    const unique: AnyTask[] = [];
+    for (const t of merged) {
+      const k = dedupKey(t);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      unique.push(t);
+    }
+    return unique.filter((t) => mineFilter(t) && hasClient(t));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, employeeTasks, isEmployee, employeeId]);
   const open = allMine.filter((t) => t.status !== "completed" && t.status !== "approved" && t.status !== "under_review" && !justDone.has(t.id));
   // Tasks employees submitted for review — the manager needs to approve / return these.
   const pendingReview = allMine.filter((t) => t.status === "under_review" && !justDone.has(t.id));

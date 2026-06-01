@@ -159,7 +159,22 @@ function EmployeeDashboard({ employeeId }: { employeeId: string }) {
 
   // Group all my tasks by urgency for a clean, calm layout.
   const today = new Date().toISOString().split("T")[0];
-  const myTasks = [...myGlobalTasks, ...myEmployeeTasks];
+  // De-duplicate: a task may exist in both stores (gantt + client-tab create both).
+  // Employee-tasks win the dedup so the assignedEmployeeId match is preserved.
+  const dedupKey = (t: any) =>
+    t.ganttItemId ? `g:${t.ganttItemId}` : `k:${String(t.clientName || "").trim()}|${String(t.title || "").trim()}|${t.dueDate || ""}`;
+  const myTasks = (() => {
+    const merged = [...myEmployeeTasks, ...myGlobalTasks];
+    const seen = new Set<string>();
+    const unique: any[] = [];
+    for (const t of merged) {
+      const k = dedupKey(t);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      unique.push(t);
+    }
+    return unique;
+  })();
   const byDate = (a: any, b: any) => {
     const da = a.dueDate || "9999-99-99"; const db = b.dueDate || "9999-99-99";
     return da < db ? -1 : da > db ? 1 : 0;

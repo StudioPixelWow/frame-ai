@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useClients, useEmployees, useClientGanttItems, useClientTasks, useTasks, useClientFiles, useSocialPosts, usePayments, useProjectPayments, useCampaigns, useLeads } from "@/lib/api/use-entity";
+import { useClients, useEmployees, useClientGanttItems, useClientTasks, useTasks, useEmployeeTasks, useClientFiles, useSocialPosts, usePayments, useProjectPayments, useCampaigns, useLeads } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import type { Client, Employee } from "@/lib/db/schema";
 import TabOverview from "./tab-overview";
@@ -2865,6 +2865,10 @@ function TabTasks({ client, employees }: TabTasksProps) {
 
   // Use global tasks store — single source of truth
   const { data: allTasks, create: createTask } = useTasks();
+  // Employee-tasks store — this is the channel an employee's task board reads
+  // (filtered by assignedEmployeeId). Gantt content tasks use the same channel,
+  // which is why they appear for the assignee.
+  const { create: createEmployeeTask } = useEmployeeTasks();
   const clientTasks = (allTasks || []).filter((t: any) => t.clientId === client.id);
 
   // Helper: get task type from tags array
@@ -2939,6 +2943,31 @@ function TabTasks({ client, employees }: TabTasksProps) {
 
     try {
       await createTask(newTask as any);
+
+      // Mirror to the employee-tasks channel so the assignee actually sees it on
+      // their task board — exactly like content tasks coming from the gantt.
+      // Both rows share clientName|title|dueDate so the board/dashboard dedup
+      // collapses them into a single card.
+      if (formAssignee) {
+        try {
+          await createEmployeeTask({
+            title: formTitle,
+            description: formDescription,
+            clientId: client.id,
+            clientName: client.name,
+            status: formStatus,
+            priority: formPriority,
+            assignedEmployeeId: formAssignee,
+            dueDate: formDueDate || null,
+            projectId: null,
+            files: [],
+            notes: "",
+          } as any);
+        } catch (empErr) {
+          console.warn("[ClientTasks] Failed to mirror to employee-tasks (non-critical):", empErr);
+        }
+      }
+
       setFormTitle("");
       setFormDescription("");
       setFormType("general");
