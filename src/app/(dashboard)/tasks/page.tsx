@@ -38,6 +38,14 @@ export default function TasksPage() {
     const isEmp = (employeeTasks || []).some((t: any) => t.id === id);
     return isEmp ? updateEmployeeTask(id, patch) : update(id, patch);
   }, [employeeTasks, updateEmployeeTask, update]);
+
+  // Celebration popup shown when an employee submits a task.
+  const [celebrateMsg, setCelebrateMsg] = useState<string | null>(null);
+  const celebrate = useCallback((msg: string) => {
+    try { fireConfetti(); } catch { /* noop */ }
+    setCelebrateMsg(msg);
+    setTimeout(() => setCelebrateMsg(null), 3800);
+  }, []);
   const TEAM_MEMBERS = ["טל זטלמן", "מאיה זטלמן", "נועם בוברין", "מיכאלה"];
   const teamEmployees = useMemo(() => (employees || []).filter(e => TEAM_MEMBERS.includes(e.name)), [employees]);
   const { data: clients } = useClients();
@@ -165,7 +173,8 @@ export default function TasksPage() {
     if (!editingTask) return;
     try {
       await updateAny(editingTask.id, { status: "under_review" });
-      toast("המשימה נשלחה לבדיקה", "success");
+      setModalOpen(false);
+      celebrate("מעולה! המשימה הוגשה, נמשיך למשימה הבאה! 🎉");
       setEditingTask({ ...editingTask, status: "under_review" });
       setForm(prev => ({ ...prev, status: "under_review" }));
     } catch {
@@ -282,7 +291,7 @@ export default function TasksPage() {
       const existing = Array.isArray(cur?.files) ? cur.files : [];
       await updateAny(uploadingTaskId, { files: [...existing, entry], status: "under_review" as Task["status"] });
 
-      toast("הקובץ הועלה ונשמר — המשימה עברה לבדיקה", "success");
+      celebrate("מעולה! המשימה הוגשה, נמשיך למשימה הבאה! 🎉");
       const fileInput = document.querySelector(`input[data-task="${uploadingTaskId}"]`) as HTMLInputElement;
       if (fileInput) fileInput.value = "";
       setSelectedFile(null);
@@ -1145,6 +1154,17 @@ export default function TasksPage() {
         </>
       )}
       </>)}
+
+      {/* Celebration popup (employee submitted a task) */}
+      {celebrateMsg && (
+        <div onClick={() => setCelebrateMsg(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 4000 }}>
+          <div dir="rtl" style={{ background: "var(--surface-raised, #fff)", borderRadius: 22, padding: "2.5rem 2.75rem", textAlign: "center", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
+            <div style={{ fontSize: "3.5rem", marginBottom: 12 }}>🎉</div>
+            <div style={{ fontSize: "1.35rem", fontWeight: 800, color: "var(--foreground)" }}>{celebrateMsg}</div>
+            <button onClick={() => setCelebrateMsg(null)} style={{ marginTop: 20, padding: "0.6rem 1.6rem", borderRadius: 12, border: "none", background: "var(--accent, #00B5FE)", color: "#fff", fontWeight: 700, fontSize: "0.9rem", cursor: "pointer" }}>סבבה!</button>
+          </div>
+        </div>
+      )}
 
       {/* Task Modal */}
       <Modal open={modalOpen} onClose={() => { setModalOpen(false); setReviewNotes(""); setShowReviewNotes(false); }} title={editingTask ? `עריכת משימה — ${COLUMNS.find(c => c.id === form.status)?.label || ''}` : "משימה חדשה"} footer={

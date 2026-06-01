@@ -12,9 +12,10 @@
  *   Performance → elegant lightweight gamification (goal / week / today / streak)
  */
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useTasks, useEmployeeTasks, useEmployees } from "@/lib/api/use-entity";
 import { useAuth } from "@/lib/auth/auth-context";
+import { fireConfetti } from "@/lib/confetti";
 
 /** Map a WMO weather code → emoji + short Hebrew label. */
 function weatherIcon(code: number): { icon: string; label: string } {
@@ -85,6 +86,28 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
     .filter((t) => t.status === "approved" || t.status === "completed")
     .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
     .slice(0, 8);
+
+  // Live popups for the employee: a task newly returned for fixing, or newly approved.
+  // Detected via the normal polling refetch (no push needed).
+  const seenReturned = useRef<Set<string>>(new Set());
+  const seenApproved = useRef<Set<string>>(new Set());
+  const firstLoad = useRef(true);
+  const [notice, setNotice] = useState<{ kind: "returned" | "approved"; title: string } | null>(null);
+  const returnedIds = returnedTasks.map((t) => t.id).join(",");
+  const approvedIds = approvedRecent.map((t) => t.id).join(",");
+  useEffect(() => {
+    const r = new Set(returnedTasks.map((t) => t.id));
+    const a = new Set(approvedRecent.map((t) => t.id));
+    if (firstLoad.current) { seenReturned.current = r; seenApproved.current = a; firstLoad.current = false; return; }
+    if (isEmployee) {
+      const newR = returnedTasks.find((t) => !seenReturned.current.has(t.id));
+      const newA = approvedRecent.find((t) => !seenApproved.current.has(t.id));
+      if (newR) setNotice({ kind: "returned", title: newR.title });
+      else if (newA) { setNotice({ kind: "approved", title: newA.title }); try { fireConfetti(); } catch { /* noop */ } }
+    }
+    seenReturned.current = r; seenApproved.current = a;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [returnedIds, approvedIds, isEmployee]);
 
   // Status breakdown (manager view): in-progress / awaiting approval / in rework / approved.
   const statusStrip = [
@@ -176,6 +199,23 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
 
   return (
     <div dir="rtl" style={{ maxWidth: 880, margin: "0 auto", display: "flex", flexDirection: "column", gap: "2.25rem" }}>
+      {/* Live popup: returned for fixing / approved by manager */}
+      {notice && (
+        <div onClick={() => setNotice(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 4000 }}>
+          <div style={{ background: "var(--surface-raised, #fff)", borderRadius: 22, padding: "2.5rem 2.75rem", textAlign: "center", maxWidth: 440, boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
+            <div style={{ fontSize: "3.5rem", marginBottom: 12 }}>{notice.kind === "approved" ? "🎉" : "🔧"}</div>
+            <div style={{ fontSize: "1.3rem", fontWeight: 800, color: C.text, lineHeight: 1.4 }}>
+              {notice.kind === "approved"
+                ? <>יש לנו את זה! «{notice.title}» הושלמה ואושרה!</>
+                : <>תיקון חדש נכנס: «{notice.title}»</>}
+            </div>
+            <button onClick={() => setNotice(null)} style={{ marginTop: 20, padding: "0.6rem 1.6rem", borderRadius: 12, border: "none", background: notice.kind === "approved" ? "#16a34a" : "#f59e0b", color: "#fff", fontWeight: 700, fontSize: "0.9rem", cursor: "pointer" }}>
+              {notice.kind === "approved" ? "מעולה!" : "מטפל בזה"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* TOP BAR — Israel clock + Kiryat Motzkin weather */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, padding: "0.85rem 1.4rem" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
