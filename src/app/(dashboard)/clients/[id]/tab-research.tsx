@@ -96,6 +96,7 @@ export default function TabResearch({ client }: TabResearchProps) {
   const [isSyncingToGantt, setIsSyncingToGantt] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState<string | null>(null);
   const [isGeneratingIdeas, setIsGeneratingIdeas] = useState(false);
+  const [generatingCategory, setGeneratingCategory] = useState<string | null>(null);
 
   const messages = [
     'מנתח את העסק...',
@@ -346,6 +347,33 @@ export default function TabResearch({ client }: TabResearchProps) {
       alert(err instanceof Error ? err.message : 'שגיאה ביצירת רעיונות');
     } finally {
       setIsGeneratingIdeas(false);
+    }
+  };
+
+  // ---- Generate N MORE ideas of a specific category (append, keeps existing) ----
+  const handleGenerateMore = async (category: string, count = 6) => {
+    if (generatingCategory) return;
+    setGeneratingCategory(category);
+    setSyncSuccess(null);
+    try {
+      const res = await fetch('/api/ai/generate-content-ideas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: client.id, addCategory: category, addCount: count }),
+      });
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        throw new Error(result.error || 'Failed to generate more ideas');
+      }
+      setResearch(result.data);
+      const label = IDEA_CATEGORY_LABELS[category]?.label || category;
+      setSyncSuccess(`✨ נוספו ${count} רעיונות מסוג "${label}"`);
+      setTimeout(() => setSyncSuccess(null), 3500);
+    } catch (err) {
+      console.error('[Research UI] Generate-more error:', err);
+      alert(err instanceof Error ? err.message : 'שגיאה ביצירת רעיונות נוספים');
+    } finally {
+      setGeneratingCategory(null);
     }
   };
 
@@ -968,6 +996,42 @@ export default function TabResearch({ client }: TabResearchProps) {
                 )}
               </div>
             </div>
+
+            {/* Generate MORE by category — keeps existing ideas, adds more of one type */}
+            {research?.contentIdeas25 && research.contentIdeas25.length > 0 && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap',
+                padding: '0.6rem 0.75rem', marginBottom: '1rem', borderRadius: '0.5rem',
+                background: 'var(--surface)', border: '1px solid var(--border)',
+              }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--foreground-muted)', marginInlineEnd: '0.25rem' }}>
+                  ✨ ייצר עוד מסוג:
+                </span>
+                {Object.entries(IDEA_CATEGORY_LABELS).map(([key, info]) => {
+                  const busy = generatingCategory === key;
+                  const anyBusy = !!generatingCategory;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => handleGenerateMore(key)}
+                      disabled={anyBusy}
+                      title={`הוסף 6 רעיונות מסוג ${info.label}`}
+                      style={{
+                        fontSize: '0.72rem', fontWeight: 600, padding: '0.28rem 0.7rem',
+                        borderRadius: '9999px', cursor: anyBusy ? 'not-allowed' : 'pointer',
+                        border: `1px solid ${info.color}55`,
+                        background: busy ? info.color : `${info.color}12`,
+                        color: busy ? '#fff' : info.color,
+                        opacity: anyBusy && !busy ? 0.45 : 1,
+                        transition: 'all 150ms ease',
+                      }}
+                    >
+                      {busy ? '⏳ מייצר…' : `+ ${info.label}`}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Success feedback */}
             {syncSuccess && (

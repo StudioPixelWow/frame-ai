@@ -342,32 +342,18 @@ export default function ExecutivePage() {
       (c: any) => c.status === "active"
     ).length;
 
-    // Monthly revenue
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-    let monthlyRevenue = 0;
-
-    // Sum paid payments this month
-    payments.forEach((p: any) => {
-      if (p.status === "paid") {
-        const payDate = new Date(p.dueDate || p.createdAt || now);
-        if (payDate >= monthStart && payDate <= monthEnd) {
-          monthlyRevenue += p.amount || 0;
-        }
-      }
-    });
-
-    // Sum paid project payments this month
-    projectPayments.forEach((p: any) => {
-      if (p.status === "paid" || p.isPaid === true) {
-        const payDate = new Date(p.dueDate || p.createdAt || now);
-        if (payDate >= monthStart && payDate <= monthEnd) {
-          monthlyRevenue += p.amount || 0;
-        }
-      }
-    });
+    // Monthly revenue = recurring monthly income (the "אחזקה"/retainer column).
+    // Sum the monthly retainer of every active client — this is the agency's
+    // recurring monthly income, exactly what the client-health table lists.
+    const isLiveClient = (c: any) => {
+      const s = c.status;
+      return s !== "inactive" && s !== "archived" && s !== "lost" && s !== "churned";
+    };
+    const monthlyRevenue = clients.reduce((sum: number, c: any) => {
+      if (!isLiveClient(c)) return sum;
+      const retainer = Number(c.retainerAmount ?? c.retainer_amount ?? 0) || 0;
+      return sum + retainer;
+    }, 0);
 
     // Open tasks count
     const openTasksCount = tasks.filter(
@@ -598,7 +584,7 @@ export default function ExecutivePage() {
           />
           <KPICard
             label="הכנסה חודשית"
-            value={`₪${(kpis.monthlyRevenue / 1000).toFixed(0)}K`}
+            value={`₪${kpis.monthlyRevenue.toLocaleString("he-IL")}`}
             icon="💰"
           />
           <KPICard

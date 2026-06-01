@@ -20,11 +20,22 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { clientId, keepIdeaIds } = body as { clientId?: string; keepIdeaIds?: string[] };
+    const { clientId, keepIdeaIds, addCategory, addCount } = body as {
+      clientId?: string; keepIdeaIds?: string[]; addCategory?: string; addCount?: number;
+    };
 
     if (!clientId) {
       return NextResponse.json({ error: 'Missing clientId' }, { status: 400 });
     }
+
+    // Append-mode: generate N more ideas of ONE specific category and add them
+    // to the existing list (keeps everything already there). Categories the UI uses.
+    const CATEGORY_LABELS_HE: Record<string, string> = {
+      weakness: 'חולשה', opportunity: 'הזדמנות', audience: 'קהל', competitor: 'מתחרה',
+      trend: 'טרנד', seasonal: 'עונתי', brand: 'מותג', engagement: 'אינטראקציה',
+    };
+    const appendMode = !!addCategory && Object.prototype.hasOwnProperty.call(CATEGORY_LABELS_HE, addCategory);
+    const lockCategory = appendMode ? (addCategory as string) : null;
 
     // keepIdeaIds: array of idea IDs the user selected to keep
     const idsToKeep = new Set(Array.isArray(keepIdeaIds) ? keepIdeaIds : []);
@@ -138,10 +149,17 @@ export async function POST(req: NextRequest) {
 
     // Preserve kept ideas from the existing research (must be before prompts)
     const existingIdeas = research.contentIdeas25 || [];
-    const keptIdeas = idsToKeep.size > 0
-      ? existingIdeas.filter((i: any) => idsToKeep.has(i.id))
-      : [];
-    const neededCount = 25 - keptIdeas.length;
+    // Append-mode keeps ALL existing ideas and adds `addCount` of one category.
+    const keptIdeas = appendMode
+      ? existingIdeas
+      : (idsToKeep.size > 0 ? existingIdeas.filter((i: any) => idsToKeep.has(i.id)) : []);
+    const neededCount = appendMode
+      ? Math.min(Math.max(Number(addCount) || 6, 1), 12)
+      : 25 - keptIdeas.length;
+
+    const categoryRule = lockCategory
+      ? `כל הרעיונות חייבים להיות מקטגוריה אחת בלבד: "${CATEGORY_LABELS_HE[lockCategory]}" (category = "${lockCategory}"). אסור לייצר רעיונות מקטגוריה אחרת.`
+      : `מגוון קטגוריות: weakness, opportunity, audience, competitor, trend, seasonal, brand, engagement.`;
 
     const systemPrompt = `אתה אסטרטג תוכן ישראלי ברמה הגבוהה ביותר.
 אתה מקבל מידע על עסק וחקר לקוח שכבר בוצע, ואתה צריך לייצר בדיוק ${neededCount} רעיונות תוכן אסטרטגיים.
@@ -150,7 +168,7 @@ export async function POST(req: NextRequest) {
 1. בדיוק ${neededCount} רעיונות — לא יותר ולא פחות.
 2. כל רעיון הוא כיוון אסטרטגי, לא פוסט מוגמר.
 3. כל רעיון חייב להיות ספציפי לעסק הזה — לא גנרי.
-4. מגוון קטגוריות: weakness, opportunity, audience, competitor, trend, seasonal, brand, engagement.
+4. ${categoryRule}
 5. עברית בלבד.
 6. החזר JSON תקין בלבד — בלי markdown, בלי backticks, בלי הסברים.
 7. כל רעיון בקטגוריות seasonal ו-trend חייב להתייחס לתקופה הנוכחית בלבד — ${hebrewMonths[currentMonth - 1]} ${currentYear} והחודשים הקרובים. אסור בשום אופן להתייחס לחגים שעברו, לעונות שלא רלוונטיות, או לשנים קודמות.
@@ -178,7 +196,7 @@ ${client.keyMarketingMessages || '(לא הוגדר)'}
 ]
 
 חובה: בדיוק ${neededCount} פריטים. id מ-new_1 עד new_${neededCount}.
-קטגוריות אפשריות: weakness, opportunity, audience, competitor, trend, seasonal, brand, engagement.
+${lockCategory ? `חובה: category של כל פריט = "${lockCategory}" (כל הרעיונות מקטגוריית "${CATEGORY_LABELS_HE[lockCategory]}").` : 'קטגוריות אפשריות: weakness, opportunity, audience, competitor, trend, seasonal, brand, engagement.'}
 חשוב: רעיונות עונתיים חייבים להתבסס על התקופה הנוכחית והחגים הקרובים שמפורטים למעלה. אסור להתייחס לפסח, ראש השנה, או כל חג שלא מופיע ברשימת החגים הקרובים.
 ${keptIdeas.length > 0 ? `\nחשוב: הרעיונות הבאים כבר נבחרו ונשמרים — אל תייצר רעיונות דומים או זהים:\n${keptIdeas.map((i: any) => `- ${i.title}`).join('\n')}` : ''}`;
 
@@ -230,7 +248,7 @@ ${keptIdeas.length > 0 ? `\nחשוב: הרעיונות הבאים כבר נבח�
           id: item.id || `new_${idx + 1}`,
           title: item.title || `רעיון ${idx + 1}`,
           explanation: item.explanation || '',
-          category: item.category || 'brand',
+          category: lockCategory || item.category || 'brand',
         }));
         console.log(`[GenerateIdeas] ✅ Attempt ${attempt + 1}: got ${ideas.length} new ideas (needed ${neededCount})`);
         break;
@@ -246,11 +264,16 @@ ${keptIdeas.length > 0 ? `\nחשוב: הרעיונות הבאים כבר נבח�
         id: `new_${idx}`,
         title: `רעיון תוכן ${idx} — ${client.businessField}`,
         explanation: `זווית תוכן נוספת שמתמקדת בערך הייחודי של ${client.name}`,
-        category: ['weakness', 'opportunity', 'audience', 'competitor', 'trend', 'seasonal', 'brand', 'engagement'][idx % 8],
+        category: lockCategory || ['weakness', 'opportunity', 'audience', 'competitor', 'trend', 'seasonal', 'brand', 'engagement'][idx % 8],
       });
     }
 
-    // Merge kept ideas + new ideas, then re-index to idea_1..idea_25
+    // Append-mode: if the AI produced no new ideas, leave the list untouched.
+    if (appendMode && ideas.length === 0) {
+      return NextResponse.json({ error: 'לא הצלחנו לייצר רעיונות נוספים כרגע, נסה שוב' }, { status: 502 });
+    }
+
+    // Merge kept ideas + new ideas, then re-index to idea_1..idea_N
     const mergedIdeas = [...keptIdeas, ...ideas].map((idea: any, idx: number) => ({
       ...idea,
       id: `idea_${idx + 1}`,
