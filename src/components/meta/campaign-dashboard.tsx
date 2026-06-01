@@ -343,6 +343,7 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
           style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border, #e5e7eb)', fontSize: 13, background: '#fff' }}
         >
           <option value="today">היום</option>
+          <option value="yesterday">אתמול</option>
           <option value="last_7d">7 ימים אחרונים</option>
           <option value="last_30d">30 יום אחרונים</option>
           <option value="this_month">החודש</option>
