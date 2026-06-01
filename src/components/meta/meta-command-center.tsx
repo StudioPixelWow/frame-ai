@@ -99,8 +99,8 @@ export default function MetaCommandCenter({ onOpenClient }: { onOpenClient: (id:
         <div style={{ padding: 48, textAlign: 'center', color: '#9ca3af' }}>טוען נתונים…</div>
       ) : !data?.hasData ? (
         <div style={{ padding: 40, textAlign: 'center', color: '#6b7280', background: 'var(--surface,#f8fafc)', borderRadius: 16, border: '1px dashed var(--border,#e5e7eb)' }}>
-          עדיין אין דוחות יומיים מצטברים. הם נוצרים בכל הרצת אופטימייזר (ידנית או בקרון).<br />
-          הנתונים החיים זמינים בכרטיס הלקוח — לחץ על לקוח כדי לסנכרן ולראות.
+          לא נמצאו לקוחות מחוברים ל-Meta עם קמפיינים מסונכרנים.<br />
+          חבר חשבון מודעות ושייך אותו ללקוח, או הרץ סנכרון — ואז הלקוחות יופיעו כאן.
         </div>
       ) : (
         <>
@@ -121,7 +121,8 @@ export default function MetaCommandCenter({ onOpenClient }: { onOpenClient: (id:
             ))}
           </div>
 
-          {/* ── Global performance chart ── */}
+          {/* ── Global performance chart (only when we have daily history) ── */}
+          {data.series.length > 1 && (
           <div style={{ background: 'var(--surface-raised,#fff)', borderRadius: 20, padding: '1.4rem 1.5rem', border: '1px solid var(--border,#eef1f5)', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--foreground,#0f172a)' }}>ביצועים — 30 הימים האחרונים</div>
@@ -159,6 +160,7 @@ export default function MetaCommandCenter({ onOpenClient }: { onOpenClient: (id:
               </AreaChart>
             </ResponsiveContainer>
           </div>
+          )}
 
           {/* ── AI Insights + Attention (two columns) ── */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
