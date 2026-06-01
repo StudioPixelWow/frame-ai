@@ -12,6 +12,7 @@ import { getSupabase } from '@/lib/db/store';
 import { getSystemMetaToken, resolveMetaToken } from '@/lib/meta-ads/token';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 const META_API = 'https://graph.facebook.com/v19.0';
 const ALLOWED_PRESETS = ['today', 'yesterday', 'last_7d', 'last_30d', 'this_month', 'last_month', 'maximum'];
@@ -49,7 +50,7 @@ async function fetchLiveCampaignMetrics(
       try {
         const url = `${META_API}/${actId}/insights?level=campaign&${dateParam}` +
           `&fields=campaign_id,spend,impressions,clicks,actions&limit=500&access_token=${encodeURIComponent(token)}`;
-        const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !Array.isArray(data?.data)) return;
         for (const row of data.data) {
@@ -104,6 +105,10 @@ export async function GET(req: NextRequest) {
     const toParam = req.nextUrl.searchParams.get('to');
     const isYmd = (s: string | null) => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
     const useTimeRange = isYmd(fromParam) && isYmd(toParam);
+    // live=0 → skip the (slow) live Meta overlay and return the synced snapshot
+    // instantly. The UI loads the snapshot first for an immediate open, then
+    // re-requests with the overlay to refresh the numbers.
+    const skipLive = req.nextUrl.searchParams.get('live') === '0';
     const dateParam = useTimeRange
       ? `time_range[since]=${fromParam}&time_range[until]=${toParam}`
       : (datePreset ? `date_preset=${datePreset}` : '');
@@ -205,7 +210,7 @@ export async function GET(req: NextRequest) {
     // campaign insights for THAT range pulled live from Meta. This makes the
     // dashboard match the selected range instead of the last full-sync snapshot.
     let liveApplied = false;
-    if ((datePreset || useTimeRange) && summaries.length > 0) {
+    if (!skipLive && (datePreset || useTimeRange) && summaries.length > 0) {
       try {
         const sb = getSupabase();
         const { data: cl } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();

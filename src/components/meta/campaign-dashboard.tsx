@@ -77,17 +77,35 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    const extra = range.preset === 'custom' && range.from && range.to ? `&from=${range.from}&to=${range.to}` : '';
+    const base = `/api/meta-business/campaigns?clientId=${encodeURIComponent(clientId)}&datePreset=${encodeURIComponent(datePreset)}${extra}`;
     try {
-      const extra = range.preset === 'custom' && range.from && range.to ? `&from=${range.from}&to=${range.to}` : '';
-      const res = await fetch(`/api/meta-business/campaigns?clientId=${encodeURIComponent(clientId)}&datePreset=${encodeURIComponent(datePreset)}${extra}`);
+      // 1) Snapshot-first — returns instantly (no live Meta call) so the client
+      //    opens immediately with its active campaigns.
+      const res = await fetch(`${base}&live=0`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'שגיאה בטעינת קמפיינים');
       setCampaigns(data.campaigns || []);
       setConnectionStatus(data.connectionStatus || "connected");
       setTotals(data.totals || null);
+      setLoading(false);
+
+      // 2) Live refresh in the background — updates numbers for the selected
+      //    range. Best-effort: if Meta is slow / times out, the snapshot stays.
+      if (datePreset || (range.preset === 'custom' && range.from && range.to)) {
+        try {
+          const liveRes = await fetch(base);
+          if (liveRes.ok) {
+            const live = await liveRes.json();
+            if (Array.isArray(live.campaigns) && live.campaigns.length > 0) {
+              setCampaigns(live.campaigns);
+              setTotals(live.totals || null);
+            }
+          }
+        } catch { /* keep snapshot */ }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'שגיאה לא צפויה');
-    } finally {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

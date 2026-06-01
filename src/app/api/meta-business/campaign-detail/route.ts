@@ -10,6 +10,7 @@ import { getSupabase } from '@/lib/db/store';
 import { resolveMetaToken } from '@/lib/meta-ads/token';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 const META_API = 'https://graph.facebook.com/v19.0';
 const ALLOWED_PRESETS = ['today', 'yesterday', 'last_7d', 'last_30d', 'this_month', 'last_month', 'maximum'];
