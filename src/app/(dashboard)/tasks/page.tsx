@@ -10,6 +10,7 @@ import { SmartHint } from "@/components/ui/smart-hint";
 import TasksCommandCenter from "@/components/tasks/tasks-command-center";
 import type { Task } from "@/lib/db/schema";
 import { fireConfetti } from "@/lib/confetti";
+import { useAuth } from "@/lib/auth/auth-context";
 
 const COLUMNS = [
   { id: "new", label: "חדש", color: "#3b82f6" },
@@ -28,6 +29,7 @@ const PRIORITIES = [
 ] as const;
 
 export default function TasksPage() {
+  const { isEmployee } = useAuth();
   const { data: tasks, loading, create, update, remove } = useTasks();
   const { data: employeeTasks, loading: employeeTasksLoading, update: updateEmployeeTask } = useEmployeeTasks();
   const { data: employees } = useEmployees();
@@ -291,7 +293,8 @@ export default function TasksPage() {
       const existing = Array.isArray(cur?.files) ? cur.files : [];
       await updateAny(uploadingTaskId, { files: [...existing, entry], status: "under_review" as Task["status"] });
 
-      celebrate("מעולה! המשימה הוגשה, נמשיך למשימה הבאה! 🎉");
+      setModalOpen(false);
+      celebrate("מעולה! המשימה הוגשה לבדיקת המנהל! 🎉");
       const fileInput = document.querySelector(`input[data-task="${uploadingTaskId}"]`) as HTMLInputElement;
       if (fileInput) fileInput.value = "";
       setSelectedFile(null);
@@ -1170,7 +1173,7 @@ export default function TasksPage() {
       <Modal open={modalOpen} onClose={() => { setModalOpen(false); setReviewNotes(""); setShowReviewNotes(false); }} title={editingTask ? `עריכת משימה — ${COLUMNS.find(c => c.id === form.status)?.label || ''}` : "משימה חדשה"} footer={
         <div style={{ display: "flex", gap: "0.5rem", justifyContent: "space-between", flexWrap: "wrap" }}>
           <div>
-            {editingTask && (
+            {!isEmployee && editingTask && (
               <button className="mod-btn-ghost ux-btn" style={{ color: "#f87171", borderColor: "rgba(248,113,113,0.3)", fontSize: "0.75rem" }} onClick={async () => {
                 await remove(editingTask.id);
                 setModalOpen(false);
@@ -1186,7 +1189,7 @@ export default function TasksPage() {
                 שלח לבדיקה
               </button>
             )}
-            {editingTask && form.status === "under_review" && !showReviewNotes && (
+            {!isEmployee && editingTask && form.status === "under_review" && !showReviewNotes && (
               <>
                 <button
                   className="mod-btn-ghost ux-btn"
@@ -1204,7 +1207,7 @@ export default function TasksPage() {
                 </button>
               </>
             )}
-            {editingTask && form.status === "approved" && !showReviewNotes && (
+            {!isEmployee && editingTask && form.status === "approved" && !showReviewNotes && (
               <button
                 className="mod-btn-primary ux-btn ux-btn-glow"
                 onClick={handleMarkCompleted}
@@ -1233,7 +1236,7 @@ export default function TasksPage() {
               </button>
             )}
             <button className="mod-btn-ghost ux-btn" onClick={() => { setModalOpen(false); setReviewNotes(""); setShowReviewNotes(false); }}>ביטול</button>
-            {!showReviewNotes && (
+            {!isEmployee && !showReviewNotes && (
               <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={handleSave}>
                 {editingTask ? "שמור" : "צור משימה"}
               </button>
@@ -1267,9 +1270,35 @@ export default function TasksPage() {
                   </div>
                 );
               })()}
+
+              {/* EMPLOYEE: upload-for-review is the ONLY action — no status changes, no "complete" */}
+              {isEmployee && editingTask && (
+                <div style={{ background: "linear-gradient(135deg, #ecfdf5 0%, #eff6ff 100%)", border: "1px solid #a7f3d0", borderRadius: 16, padding: "1.1rem 1.25rem" }}>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "#047857", marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>📎 העלה קובץ לבדיקת המנהל</div>
+                  <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", marginBottom: 10 }}>העלאת הקובץ תעביר את המשימה אוטומטית לסטטוס “בבדיקה” ותשלח אותה למנהל.</div>
+                  <input
+                    type="file"
+                    accept="image/*,video/*,.pdf,.doc,.docx"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) { setSelectedFile(f); setUploadingTaskId(editingTask.id); } }}
+                    style={{ fontSize: "0.78rem", padding: "0.4rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, width: "100%", boxSizing: "border-box" }}
+                  />
+                  {selectedFile && uploadingTaskId === editingTask.id && (
+                    <div style={{ fontSize: "0.75rem", color: "#047857", marginTop: 8, wordBreak: "break-word" }}>✓ {selectedFile.name}</div>
+                  )}
+                  <button
+                    onClick={handleFileUpload}
+                    disabled={!selectedFile || uploadingTaskId !== editingTask.id}
+                    className="mod-btn-primary ux-btn ux-btn-glow"
+                    style={{ marginTop: 12, width: "100%", background: "#10b981", fontWeight: 800, fontSize: "0.85rem", padding: "0.6rem", opacity: (!selectedFile || uploadingTaskId !== editingTask.id) ? 0.55 : 1 }}
+                  >
+                    📤 העלה ושלח לבדיקה
+                  </button>
+                </div>
+              )}
+
               <div>
                 <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>כותרת *</label>
-                <input className="form-input ux-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="כותרת המשימה" />
+                <input className="form-input ux-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="כותרת המשימה" disabled={isEmployee} />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
                 <div>

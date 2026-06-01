@@ -213,9 +213,12 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
     <div key={t.id} onClick={(e) => { e.stopPropagation(); onOpenTask(t); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.55rem 0.5rem", cursor: "pointer", borderRadius: 8 }}
       onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface)"; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
-      <button onClick={(e) => complete(e, t)} aria-label="הושלם" style={{ width: 18, height: 18, borderRadius: "50%", border: `1.5px solid ${C.border}`, background: "transparent", cursor: "pointer", flexShrink: 0, color: "#22c55e", fontSize: 11 }}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#22c55e"; (e.currentTarget as HTMLElement).textContent = "✓"; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = C.border; (e.currentTarget as HTMLElement).textContent = ""; }}></button>
+      {/* Employees don't mark complete — they upload a file for review (in the task modal). */}
+      {!isEmployee && (
+        <button onClick={(e) => complete(e, t)} aria-label="הושלם" style={{ width: 18, height: 18, borderRadius: "50%", border: `1.5px solid ${C.border}`, background: "transparent", cursor: "pointer", flexShrink: 0, color: "#22c55e", fontSize: 11 }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#22c55e"; (e.currentTarget as HTMLElement).textContent = "✓"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = C.border; (e.currentTarget as HTMLElement).textContent = ""; }}></button>
+      )}
       <span style={{ width: 7, height: 7, borderRadius: "50%", background: PRIO_COLOR[t.priority] || "#94a3b8", flexShrink: 0 }} />
       <span style={{ flex: 1, minWidth: 0, fontSize: "0.88rem", color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
       <span style={{ fontSize: "0.72rem", fontWeight: 600, color: accent, whiteSpace: "nowrap" }}>{t.dueDate && t.dueDate < today ? `${daysBetween(today, t.dueDate)}ד׳ איחור` : "היום"}</span>
@@ -304,10 +307,12 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
         </div>
       )}
 
-      {/* APPROVALS — tasks employees submitted for review */}
+      {/* IN REVIEW — manager: awaiting your approval · employee: currently with the manager */}
       {pendingReview.length > 0 && (
         <div>
-          <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#16a34a", letterSpacing: "0.05em", marginBottom: 12 }}>✅ ממתינות לאישור שלך ({pendingReview.length})</div>
+          <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#16a34a", letterSpacing: "0.05em", marginBottom: 12 }}>
+            {isEmployee ? `🔍 בבדיקת המנהל (${pendingReview.length})` : `✅ ממתינות לאישור שלך (${pendingReview.length})`}
+          </div>
           <div style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 16, padding: "0.5rem" }}>
             {pendingReview.map((t) => (
               <div key={t.id} onClick={() => onOpenTask(t)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.7rem 0.9rem", cursor: "pointer", borderRadius: 10 }}
@@ -315,8 +320,8 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
                 onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
                 <span style={{ fontSize: "1rem" }}>📤</span>
                 <span style={{ flex: 1, minWidth: 0, fontSize: "0.92rem", fontWeight: 500, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
-                <span style={{ fontSize: "0.74rem", color: C.muted, whiteSpace: "nowrap" }}>{t.clientName || ""}{empName(t) ? ` · ${empName(t)}` : ""}</span>
-                <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#16a34a", whiteSpace: "nowrap" }}>בדוק ואשר ←</span>
+                <span style={{ fontSize: "0.74rem", color: C.muted, whiteSpace: "nowrap" }}>{t.clientName || ""}{!isEmployee && empName(t) ? ` · ${empName(t)}` : ""}</span>
+                <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#16a34a", whiteSpace: "nowrap" }}>{isEmployee ? "ממתין לאישור" : "בדוק ואשר ←"}</span>
               </div>
             ))}
           </div>
