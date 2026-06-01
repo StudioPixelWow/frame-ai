@@ -198,6 +198,13 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
 
   const complete = (e: React.MouseEvent, t: AnyTask) => { e.stopPropagation(); setJustDone((p) => new Set(p).add(t.id)); onCompleteTask?.(t); };
 
+  // Resolve a task's assignee display name (manager view: who submitted it).
+  const empName = (t: AnyTask): string => {
+    const id = (Array.isArray(t.assigneeIds) && t.assigneeIds[0]) || t.assignedEmployeeId || t.assigneeId;
+    if (!id) return "";
+    return employees.find((e) => e.id === id)?.name || "";
+  };
+
   const C = { text: "var(--foreground)", muted: "var(--foreground-muted)", surface: "var(--surface-raised)", page: "var(--surface)", border: "var(--border)", accent: "var(--accent, #00B5FE)" };
   const ring = (val: number, max: number) => { const r = 34, circ = 2 * Math.PI * r, pct = Math.min(1, max ? val / max : 0); return { r, circ, off: circ * (1 - pct) }; };
   const rg = ring(doneToday, DAILY_TARGET);

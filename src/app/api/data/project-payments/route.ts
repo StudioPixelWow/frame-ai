@@ -137,9 +137,10 @@ async function ensureTable(sb: ReturnType<typeof getSupabase>) {
 
 /* ── GET ─────────────────────────────────────────────── */
 export async function GET(req: NextRequest) {
-  // Financial data — admin only
+  // Financial data — admin only. Non-admins get an empty list (no 403 console spam,
+  // no data exposure) so pollers on shared pages don't flood errors.
   const roleErr = requireRole(req, 'admin');
-  if (roleErr) return roleErr;
+  if (roleErr) return NextResponse.json([]);
 
   try {
     const sb = getSupabase();
