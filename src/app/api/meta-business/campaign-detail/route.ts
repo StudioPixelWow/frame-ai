@@ -25,6 +25,13 @@ export async function GET(req: NextRequest) {
     if (!campaignId) return NextResponse.json({ error: 'חסר מזהה קמפיין' }, { status: 400 });
     const presetParam = req.nextUrl.searchParams.get('datePreset') || '';
     const datePreset = ALLOWED_PRESETS.includes(presetParam) ? presetParam : '';
+    const fromParam = req.nextUrl.searchParams.get('from');
+    const toParam = req.nextUrl.searchParams.get('to');
+    const isYmd = (s: string | null) => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const useTimeRange = isYmd(fromParam) && isYmd(toParam);
+    const dateParam = useTimeRange
+      ? `time_range[since]=${fromParam}&time_range[until]=${toParam}`
+      : (datePreset ? `date_preset=${datePreset}` : '');
 
     const [allAdSets, allAds, allCampaigns] = await Promise.all([
       adSetsCol.getAllAsync(), adsCol.getAllAsync(), campaignsCol.getAllAsync(),
@@ -36,13 +43,13 @@ export async function GET(req: NextRequest) {
     // LIVE OVERLAY: pull per-ad insights for the selected range from Meta so the
     // drill-down matches the (live) campaign-level totals instead of a stale snapshot.
     const liveByAdId = new Map<string, { spend: number; leads: number; impressions: number; clicks: number }>();
-    if (datePreset && campaign?.metaCampaignId && campaign?.clientId) {
+    if ((datePreset || useTimeRange) && campaign?.metaCampaignId && campaign?.clientId) {
       try {
         const sb = getSupabase();
         const { data: cl } = await sb.from('clients').select('meta_access_token, metaAccessToken').eq('id', campaign.clientId).maybeSingle();
         const token = await resolveMetaToken((cl as any)?.meta_access_token || (cl as any)?.metaAccessToken);
         if (token) {
-          const url = `${META_API}/${campaign.metaCampaignId}/insights?level=ad&date_preset=${datePreset}` +
+          const url = `${META_API}/${campaign.metaCampaignId}/insights?level=ad&${dateParam}` +
             `&fields=ad_id,spend,impressions,clicks,actions&limit=500&access_token=${encodeURIComponent(token)}`;
           const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
           const data = await res.json().catch(() => ({}));

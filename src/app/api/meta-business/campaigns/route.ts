@@ -41,13 +41,13 @@ function messagesFromActions(actions: any[] = []): number {
 async function fetchLiveCampaignMetrics(
   token: string,
   accountIds: string[],
-  datePreset: string,
+  dateParam: string,
 ): Promise<Map<string, LiveMetric>> {
   const out = new Map<string, LiveMetric>();
   await Promise.all(
     accountIds.map(async (actId) => {
       try {
-        const url = `${META_API}/${actId}/insights?level=campaign&date_preset=${datePreset}` +
+        const url = `${META_API}/${actId}/insights?level=campaign&${dateParam}` +
           `&fields=campaign_id,spend,impressions,clicks,actions&limit=500&access_token=${encodeURIComponent(token)}`;
         const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
         const data = await res.json().catch(() => ({}));
@@ -99,6 +99,14 @@ export async function GET(req: NextRequest) {
     }
     const presetParam = req.nextUrl.searchParams.get('datePreset') || '';
     const datePreset = ALLOWED_PRESETS.includes(presetParam) ? presetParam : '';
+    // Custom range → Meta time_range overlay (overrides date_preset when valid).
+    const fromParam = req.nextUrl.searchParams.get('from');
+    const toParam = req.nextUrl.searchParams.get('to');
+    const isYmd = (s: string | null) => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const useTimeRange = isYmd(fromParam) && isYmd(toParam);
+    const dateParam = useTimeRange
+      ? `time_range[since]=${fromParam}&time_range[until]=${toParam}`
+      : (datePreset ? `date_preset=${datePreset}` : '');
 
     const [allCampaigns, allAdSets, allAds] = await Promise.all([
       campaignsCol.getAllAsync(),
@@ -197,7 +205,7 @@ export async function GET(req: NextRequest) {
     // campaign insights for THAT range pulled live from Meta. This makes the
     // dashboard match the selected range instead of the last full-sync snapshot.
     let liveApplied = false;
-    if (datePreset && summaries.length > 0) {
+    if ((datePreset || useTimeRange) && summaries.length > 0) {
       try {
         const sb = getSupabase();
         const { data: cl } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
@@ -213,7 +221,7 @@ export async function GET(req: NextRequest) {
           } catch { /* optional */ }
 
           if (accts.size > 0) {
-            const live = await fetchLiveCampaignMetrics(token, [...accts], datePreset);
+            const live = await fetchLiveCampaignMetrics(token, [...accts], dateParam);
             if (live.size > 0) {
               liveApplied = true;
               for (const s of summaries) {

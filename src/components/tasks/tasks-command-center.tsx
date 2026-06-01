@@ -216,7 +216,7 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
   );
 
   return (
-    <div dir="rtl" style={{ maxWidth: 880, margin: "0 auto", display: "flex", flexDirection: "column", gap: "2.25rem" }}>
+    <div dir="rtl" style={{ width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "2.25rem" }}>
       {/* Live popup: returned for fixing / approved by manager */}
       {notice && (
         <div onClick={() => setNotice(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 4000 }}>
@@ -344,7 +344,7 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
             <div style={{ fontSize: "0.95rem", fontWeight: 600, color: C.text }}>אין עבודה פתוחה — הכל תחת שליטה</div>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))", gap: 16, alignItems: "start" }}>
             {clients.map((c) => {
               const isOpen = expanded === c.name;
               const prioKey = (Object.keys(PRIO_RANK).find((k) => PRIO_RANK[k] === c.topPrio)) || "low";

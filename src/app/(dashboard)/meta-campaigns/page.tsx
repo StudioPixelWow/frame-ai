@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import CampaignDashboard from '@/components/meta/campaign-dashboard';
 import CampaignAssigner from '@/components/meta/campaign-assigner';
 import CampaignReports from '@/components/meta/campaign-reports';
+import MetaCommandCenter from '@/components/meta/meta-command-center';
 
 const BRAND = '#00B5FE';
 
@@ -26,6 +27,8 @@ export default function MetaCampaignsPage() {
   const [selected, setSelected] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'dashboard' | 'assign' | 'reports'>('dashboard');
+  // Command-center drill-in: null = overview, else the client whose live dashboard is open.
+  const [drill, setDrill] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -53,10 +56,8 @@ export default function MetaCampaignsPage() {
     })();
   }, []);
 
-  const selectedClient = clients.find((c) => c.id === selected);
-
   return (
-    <div dir="rtl" style={{ maxWidth: 1100, margin: '0 auto', padding: '2rem 1.5rem 4rem', color: 'var(--foreground, #1a1a2e)' }}>
+    <div dir="rtl" style={{ maxWidth: 1320, margin: '0 auto', padding: '2rem 1.75rem 4rem', color: 'var(--foreground, #1a1a2e)' }}>
       <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>קמפיינים — Meta Ads</h1>
       <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 24 }}>
         ניהול ובקרה של הקמפיינים הסרוקים מתוך Meta Business Manager — השהיה, הפעלה, ועדכון תקציב.
@@ -69,11 +70,11 @@ export default function MetaCampaignsPage() {
       ) : (
         <>
           {/* Tabs */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '1px solid #e5e7eb' }}>
-            {([['dashboard', 'דשבורד קמפיינים'], ['reports', 'דוחות יומיים'], ['assign', 'שיוך קמפיינים ללקוחות']] as const).map(([id, label]) => (
+          <div style={{ display: 'flex', gap: 8, marginBottom: 24, borderBottom: '1px solid #e5e7eb' }}>
+            {([['dashboard', 'מרכז פיקוד'], ['reports', 'דוחות יומיים'], ['assign', 'שיוך קמפיינים ללקוחות']] as const).map(([id, label]) => (
               <button
                 key={id}
-                onClick={() => setTab(id)}
+                onClick={() => { setTab(id); setDrill(null); }}
                 style={{
                   padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer',
                   fontSize: 14, fontWeight: 700,
@@ -93,7 +94,23 @@ export default function MetaCampaignsPage() {
               </p>
               <CampaignAssigner clients={clients.map((c) => ({ id: c.id, name: c.name }))} />
             </div>
+          ) : tab === 'dashboard' ? (
+            drill ? (
+              <div>
+                <button
+                  onClick={() => setDrill(null)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 18, padding: '7px 14px', borderRadius: 10, border: '1px solid var(--border,#e5e7eb)', background: 'var(--surface-raised,#fff)', color: BRAND, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  → חזרה למרכז הפיקוד
+                </button>
+                <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 16 }}>{drill.name}</h2>
+                <CampaignDashboard clientId={drill.id} clientName={drill.name} />
+              </div>
+            ) : (
+              <MetaCommandCenter onOpenClient={(id, name) => setDrill({ id, name })} />
+            )
           ) : (
+            // reports tab — keep a client selector
             <>
               <div style={{ marginBottom: 20 }}>
                 <label style={{ fontSize: 13, fontWeight: 600, marginInlineEnd: 10 }}>בחר לקוח:</label>
@@ -109,12 +126,9 @@ export default function MetaCampaignsPage() {
                   ))}
                 </select>
               </div>
-
               {selected && (
                 <div style={{ background: 'var(--surface, #fff)', border: '1px solid var(--border, #e5e7eb)', borderRadius: 12, padding: 20 }}>
-                  {tab === 'dashboard'
-                    ? <CampaignDashboard clientId={selected} clientName={selectedClient?.name} />
-                    : <CampaignReports clientId={selected} />}
+                  <CampaignReports clientId={selected} />
                 </div>
               )}
             </>

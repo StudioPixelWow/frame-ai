@@ -1089,7 +1089,7 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    Tasks Page
 ───────────────────────────────────────────────────────────────────────────── */
-.tasks-page { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
+.tasks-page { max-width: 1400px; margin: 0 auto; padding: 2rem 1.75rem; display: flex; flex-direction: column; gap: 1.25rem; }
 .tasks-header { display: flex; flex-direction: column; gap: 0.75rem; }
 /* ── Tasks board — modern, airy, experiential ── */
 .tasks-board { display: flex; gap: 1rem; overflow-x: auto; padding: 0.25rem 0.25rem 1.25rem; scroll-behavior: smooth; }

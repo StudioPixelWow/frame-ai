@@ -1,12 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import AdPreview from './ad-preview';
 import CampaignCharts from './campaign-charts';
 import RecommendationsModal from './recommendations-modal';
 import ActionLogReport from './action-log-report';
+import DateRangeSegment, { type DateRangeValue } from './date-range-segment';
 
 const BRAND = '#00B5FE';
+const GREEN = '#16a34a';
+const AMBER = '#f59e0b';
+const REDC = '#ef4444';
 
 interface CampaignSummary {
   id: string;
@@ -44,22 +49,6 @@ const fmt = (n: number, d = 0) =>
 
 const isActive = (s: string) => /active|in_progress/i.test(s);
 
-function statusBadge(status: string): React.CSSProperties {
-  const active = isActive(status);
-  return {
-    display: 'inline-block',
-    padding: '2px 10px',
-    borderRadius: 9999,
-    fontSize: 12,
-    fontWeight: 600,
-    background: active ? 'rgba(34,197,94,0.15)' : 'rgba(107,114,128,0.15)',
-    color: active ? '#16a34a' : '#6b7280',
-  };
-}
-
-const cellStyle: React.CSSProperties = { padding: '10px 12px', fontSize: 13, borderBottom: '1px solid var(--border, #e5e7eb)', verticalAlign: 'middle' };
-const thStyle: React.CSSProperties = { ...cellStyle, textAlign: 'right', color: '#6b7280', fontWeight: 600, fontSize: 12, background: '#f0f9ff' };
-
 export default function CampaignDashboard({ clientId, clientName }: { clientId: string; clientName?: string }) {
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<string>("connected");
@@ -71,7 +60,10 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
   const [action, setAction] = useState<string | null>(null); // 'sync' | 'optimize' | 'create'
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: '', objective: 'OUTCOME_LEADS', dailyBudget: '' });
-  const [datePreset, setDatePreset] = useState<string>('today');
+  const [range, setRange] = useState<DateRangeValue>({ preset: 'today' });
+  const datePreset = range.preset;
+  const [trend, setTrend] = useState<{ date: string; leads: number; spend: number; cpl: number }[]>([]);
+  const [chartMetric, setChartMetric] = useState<'leads' | 'spend' | 'cpl'>('leads');
   const [showPaused, setShowPaused] = useState(false); // default: active campaigns only
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Record<string, { adSets: any[]; ads: any[] }>>({});
@@ -86,7 +78,8 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/meta-business/campaigns?clientId=${encodeURIComponent(clientId)}&datePreset=${encodeURIComponent(datePreset)}`);
+      const extra = range.preset === 'custom' && range.from && range.to ? `&from=${range.from}&to=${range.to}` : '';
+      const res = await fetch(`/api/meta-business/campaigns?clientId=${encodeURIComponent(clientId)}&datePreset=${encodeURIComponent(datePreset)}${extra}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'שגיאה בטעינת קמפיינים');
       setCampaigns(data.campaigns || []);
@@ -97,9 +90,31 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
     } finally {
       setLoading(false);
     }
-  }, [clientId, datePreset]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, datePreset, range.from, range.to]);
 
   useEffect(() => { if (clientId) load(); }, [clientId, load]);
+
+  // Per-client performance trend (persisted daily reports — real history).
+  useEffect(() => {
+    if (!clientId) return;
+    let cancel = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/meta-business/daily-reports?clientId=${encodeURIComponent(clientId)}&limit=30`);
+        const reports = await res.json();
+        if (cancel || !Array.isArray(reports)) return;
+        const chrono = [...reports].reverse();
+        setTrend(chrono.map((r: any) => ({
+          date: (r.date || '').slice(5),
+          leads: r.summary?.totalLeads || 0,
+          spend: Math.round(r.summary?.totalSpend || 0),
+          cpl: Math.round((r.summary?.avgCpl || 0) * 10) / 10,
+        })));
+      } catch { /* ignore */ }
+    })();
+    return () => { cancel = true; };
+  }, [clientId]);
 
   // Date range changed → drop the cached drill-down so it refetches for the new range
   // (keeps the ad-set/ad breakdown consistent with the campaign-level totals).
@@ -159,6 +174,16 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
     const shekels = parseFloat(input);
     if (isNaN(shekels) || shekels <= 0) { setNotice('סכום לא תקין'); return; }
     manage(c, { dailyBudget: Math.round(shekels * 100) }, `התקציב עודכן ל-₪${fmt(shekels)}`);
+  };
+
+  const duplicateCampaign = (c: CampaignSummary) => {
+    if (!window.confirm(`לשכפל את "${c.name}"? ייווצר קמפיין חדש מושהה עם אותה מטרה ותקציב — תצטרך להוסיף לו Ad Set ומודעה.`)) return;
+    runAction('create', '/api/meta-business/create-campaign', {
+      clientId,
+      name: `${c.name} (עותק)`,
+      objective: c.objective || 'OUTCOME_LEADS',
+      dailyBudget: c.budget || undefined,
+    }, `שוכפל "${c.name}" (מושהה) — בנה לו Ad Set ומודעה כדי להפעיל`);
   };
 
   const runAction = async (kind: string, url: string, payload: Record<string, unknown>, okMsg: string) => {
@@ -233,7 +258,8 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
     if (!detail[c.id]) {
       setDetailLoading(c.id);
       try {
-        const res = await fetch(`/api/meta-business/campaign-detail?campaignId=${encodeURIComponent(c.id)}&datePreset=${encodeURIComponent(datePreset)}`);
+        const extra = range.preset === 'custom' && range.from && range.to ? `&from=${range.from}&to=${range.to}` : '';
+        const res = await fetch(`/api/meta-business/campaign-detail?campaignId=${encodeURIComponent(c.id)}&datePreset=${encodeURIComponent(datePreset)}${extra}`);
         const data = await res.json();
         if (res.ok) setDetail((prev) => ({ ...prev, [c.id]: { adSets: data.adSets || [], ads: data.ads || [] } }));
       } catch { /* ignore */ } finally { setDetailLoading(null); }
@@ -334,21 +360,13 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
         </div>
       )}
 
+      {/* Date range */}
+      <div style={{ marginBottom: 14 }}>
+        <DateRangeSegment value={range} onChange={setRange} />
+      </div>
+
       {/* Toolbar */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-        <select
-          value={datePreset}
-          onChange={(e) => setDatePreset(e.target.value)}
-          title="טווח זמן לנתונים"
-          style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border, #e5e7eb)', fontSize: 13, background: '#fff' }}
-        >
-          <option value="today">היום</option>
-          <option value="yesterday">אתמול</option>
-          <option value="last_7d">7 ימים אחרונים</option>
-          <option value="last_30d">30 יום אחרונים</option>
-          <option value="this_month">החודש</option>
-          <option value="maximum">כל הזמן</option>
-        </select>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--foreground, #1a1a2e)', cursor: 'pointer', userSelect: 'none' }} title="ברירת מחדל: רק קמפיינים פעילים">
           <input type="checkbox" checked={showPaused} onChange={(e) => setShowPaused(e.target.checked)} />
           הצג גם מושהים
@@ -400,164 +418,176 @@ export default function CampaignDashboard({ clientId, clientName }: { clientId: 
         </div>
       )}
 
-      {/* Totals */}
+      {/* Client header KPIs */}
       {totals && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 18 }}>
           {[
-            { label: 'קמפיינים', value: fmt(viewTotals.count) },
-            { label: 'הוצאה', value: `₪${fmt(viewTotals.spend)}` },
-            { label: 'לידים', value: fmt(viewTotals.leads) },
-            { label: 'CPL ממוצע', value: `₪${fmt(viewTotals.cpl, 1)}` },
-            { label: 'CTR ממוצע', value: `${fmt(viewTotals.ctr, 2)}%` },
+            { label: 'קמפיינים', value: fmt(viewTotals.count), tint: '#6366f1' },
+            { label: 'הוצאה', value: `₪${fmt(viewTotals.spend)}`, tint: '#0ea5e9' },
+            { label: 'לידים', value: fmt(viewTotals.leads), tint: GREEN },
+            { label: 'CPL ממוצע', value: `₪${fmt(viewTotals.cpl, 1)}`, tint: AMBER },
+            { label: 'CTR ממוצע', value: `${fmt(viewTotals.ctr, 2)}%`, tint: '#ec4899' },
           ].map((m) => (
-            <div key={m.label} style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, textAlign: 'center' }}>
-              <div style={{ fontSize: 20, fontWeight: 800, color: BRAND }}>{m.value}</div>
-              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{m.label}</div>
+            <div key={m.label} style={{ background: 'var(--surface-raised,#fff)', border: '1px solid var(--border,#eef1f5)', borderRadius: 16, padding: '1.1rem 1.2rem', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: m.tint }} /></div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--foreground,#0f172a)', marginTop: 6, letterSpacing: '-0.02em' }}>{m.value}</div>
+              <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{m.label}</div>
             </div>
           ))}
         </div>
       )}
 
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={thStyle}>קמפיין</th>
-              <th style={thStyle}>סטטוס</th>
-              <th style={thStyle}>תקציב יומי</th>
-              <th style={thStyle}>הוצאה</th>
-              <th style={thStyle}>לידים / הודעות</th>
-              <th style={thStyle}>עלות לליד / הודעה</th>
-              <th style={thStyle}>CTR</th>
-              <th style={thStyle}>Ad Sets / מודעות</th>
-              <th style={thStyle}>פעולות</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleCampaigns.map((c) => (
-              <Fragment key={c.id}>
-              <tr>
-                <td style={{ ...cellStyle, fontWeight: 600, maxWidth: 240, cursor: 'pointer' }} onClick={() => toggleDetail(c)}>
-                  <span style={{ color: BRAND, marginInlineEnd: 4 }}>{expandedId === c.id ? '▾' : '▸'}</span>
-                  {c.name}
-                  {c.objective && <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>{c.objective}</div>}
-                </td>
-                <td style={cellStyle}><span style={statusBadge(c.status)}>{isActive(c.status) ? 'פעיל' : 'מושהה'}</span></td>
-                <td style={cellStyle}>{c.budget ? `₪${fmt(c.budget)}` : '—'}</td>
-                <td style={cellStyle}>₪{fmt(c.spend)}</td>
-                <td style={cellStyle}>
-                  {c.isMessages
-                    ? <>💬 {fmt(c.messages || 0)} <span style={{ fontSize: 10, color: '#9ca3af' }}>הודעות</span></>
-                    : fmt(c.leads)}
-                </td>
-                <td style={{ ...cellStyle, fontWeight: 600 }}>
-                  {c.isMessages
-                    ? ((c.messages || 0) > 0 ? `₪${fmt(c.costPerMessage || 0, 1)}` : '—')
-                    : (c.leads > 0 ? `₪${fmt(c.cpl, 1)}` : '—')}
-                </td>
-                <td style={cellStyle}>{fmt(c.ctr, 2)}%</td>
-                <td style={cellStyle}>{c.adSetsCount} / {c.adsCount}</td>
-                <td style={cellStyle}>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button
-                      onClick={() => toggleStatus(c)}
-                      disabled={busyId === c.id}
-                      style={{
-                        padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                        border: '1px solid', borderColor: isActive(c.status) ? '#ef4444' : '#22c55e',
-                        color: isActive(c.status) ? '#ef4444' : '#16a34a', background: 'transparent',
-                        opacity: busyId === c.id ? 0.5 : 1,
-                      }}
-                    >
-                      {isActive(c.status) ? 'השהה' : 'הפעל'}
-                    </button>
-                    <button
-                      onClick={() => editBudget(c)}
-                      disabled={busyId === c.id}
-                      style={{
-                        padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                        border: `1px solid ${BRAND}`, color: BRAND, background: 'transparent',
-                        opacity: busyId === c.id ? 0.5 : 1,
-                      }}
-                    >
-                      תקציב
-                    </button>
-                  </div>
-                </td>
-              </tr>
-              {expandedId === c.id && (
-                <tr>
-                  <td colSpan={9} style={{ padding: '0 12px 12px', background: '#f8fafc' }}>
-                    {detailLoading === c.id ? (
-                      <div style={{ padding: 12, color: '#6b7280', fontSize: 12 }}>טוען פירוט...</div>
-                    ) : !detail[c.id] || (detail[c.id].adSets.length === 0 && detail[c.id].ads.length === 0) ? (
-                      <div style={{ padding: 12, color: '#6b7280', fontSize: 12 }}>אין נתוני Ad Sets/מודעות מסונכרנים — הרץ סנכרון.</div>
-                    ) : (
-                      <div style={{ padding: '10px 4px', fontSize: 12 }}>
-                        <div style={{ fontWeight: 700, margin: '4px 0' }}>Ad Sets ({detail[c.id].adSets.length})</div>
-                        {detail[c.id].adSets.map((s) => (
-                          <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', borderBottom: '1px solid #eef0f3' }}>
-                            <span>{isActive(s.status) ? '🟢' : '⚪'} {s.name}</span>
-                            <span style={{ color: '#6b7280' }}>₪{fmt(s.spend)} · {fmt(s.leads)} לידים · CPL ₪{fmt(s.cpl, 1)} · {s.adsCount} מודעות</span>
-                          </div>
-                        ))}
-                        <CampaignCharts rows={detail[c.id].adSets.map((s) => ({ name: s.name, leads: s.leads, cpl: s.cpl, spend: s.spend }))} />
+      {/* Client performance chart */}
+      {trend.length > 1 && (
+        <div style={{ background: 'var(--surface-raised,#fff)', borderRadius: 18, padding: '1.3rem 1.4rem', border: '1px solid var(--border,#eef1f5)', boxShadow: '0 1px 3px rgba(15,23,42,0.04)', marginBottom: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--foreground,#0f172a)' }}>מגמת ביצועים</div>
+            <div style={{ display: 'inline-flex', gap: 2, padding: 4, borderRadius: 11, background: 'var(--surface,#f1f5f9)', border: '1px solid var(--border,#e5e7eb)' }}>
+              {(['leads', 'spend', 'cpl'] as const).map((m) => {
+                const lbl = { leads: 'לידים', spend: 'הוצאה', cpl: 'CPL' }[m];
+                const active = chartMetric === m;
+                return (
+                  <button key={m} onClick={() => setChartMetric(m)} style={{ padding: '0.3rem 0.8rem', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 8, cursor: 'pointer', background: active ? '#fff' : 'transparent', color: active ? BRAND : '#6b7280', boxShadow: active ? '0 1px 3px rgba(0,0,0,0.12)' : 'none' }}>{lbl}</button>
+                );
+              })}
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={trend} margin={{ top: 8, right: 8, left: -14, bottom: 0 }}>
+              <defs>
+                <linearGradient id="cdFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={chartMetric === 'cpl' ? REDC : chartMetric === 'spend' ? '#6366f1' : BRAND} stopOpacity={0.32} />
+                  <stop offset="100%" stopColor={chartMetric === 'cpl' ? REDC : chartMetric === 'spend' ? '#6366f1' : BRAND} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} axisLine={false} width={44} />
+              <Tooltip contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, fontSize: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }} />
+              <Area type="monotone" dataKey={chartMetric} stroke={chartMetric === 'cpl' ? REDC : chartMetric === 'spend' ? '#6366f1' : BRAND} strokeWidth={2.5} fill="url(#cdFill)" dot={false} activeDot={{ r: 4 }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
-                        <div style={{ fontWeight: 700, margin: '10px 0 4px' }}>מודעות ({detail[c.id].ads.length})</div>
-                        {detail[c.id].ads.map((a) => (
-                          <div key={a.id} style={{ borderBottom: '1px solid #eef0f3', padding: '4px 8px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                              <span>{isActive(a.status) ? '🟢' : '⚪'} {a.name}</span>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <span style={{ color: '#6b7280' }}>₪{fmt(a.spend)} · {fmt(a.leads)} לידים · CTR {fmt(a.ctr, 2)}%</span>
-                                <button
-                                  onClick={() => setPreviewAdId(previewAdId === a.id ? null : a.id)}
-                                  style={{ border: `1px solid ${BRAND}`, background: '#fff', color: BRAND, borderRadius: 6, fontSize: 11, fontWeight: 600, padding: '2px 8px', cursor: 'pointer' }}
-                                >
-                                  {previewAdId === a.id ? 'סגור תצוגה' : '👁️ תצוגה'}
-                                </button>
-                              </span>
-                            </div>
-                            {previewAdId === a.id && (
-                              <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0' }}>
-                                <AdPreview ad={a} pageName={clientName} />
-                              </div>
-                            )}
+      {/* Campaign cards */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--foreground,#0f172a)' }}>קמפיינים ({visibleCampaigns.length})</div>
+        <button onClick={load} style={{ padding: '6px 14px', borderRadius: 9, border: '1px solid var(--border,#e5e7eb)', background: 'var(--surface-raised,#fff)', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: '#6b7280' }}>↻ רענן</button>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {visibleCampaigns.map((c) => {
+          const expanded = expandedId === c.id;
+          const active = isActive(c.status);
+          const metrics = [
+            { l: 'תקציב יומי', v: c.budget ? `₪${fmt(c.budget)}` : '—' },
+            { l: 'הוצאה', v: `₪${fmt(c.spend)}` },
+            { l: c.isMessages ? 'הודעות' : 'לידים', v: c.isMessages ? `💬 ${fmt(c.messages || 0)}` : fmt(c.leads) },
+            { l: c.isMessages ? 'עלות/הודעה' : 'CPL', v: c.isMessages ? ((c.messages || 0) > 0 ? `₪${fmt(c.costPerMessage || 0, 1)}` : '—') : (c.leads > 0 ? `₪${fmt(c.cpl, 1)}` : '—') },
+            { l: 'CTR', v: `${fmt(c.ctr, 2)}%` },
+            { l: 'Ad Sets / מודעות', v: `${c.adSetsCount} / ${c.adsCount}` },
+          ];
+          return (
+            <div key={c.id} style={{ background: 'var(--surface-raised,#fff)', borderRadius: 18, border: '1px solid var(--border,#eef1f5)', boxShadow: '0 1px 3px rgba(15,23,42,0.04)', overflow: 'hidden' }}>
+              <div style={{ padding: '1.15rem 1.35rem' }}>
+                {/* card header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--foreground,#0f172a)' }}>{c.name}</div>
+                    {c.objective && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{c.objective}</div>}
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, whiteSpace: 'nowrap', color: active ? GREEN : '#6b7280', background: active ? 'rgba(22,163,74,0.12)' : 'rgba(107,114,128,0.12)' }}>
+                    {active ? '● פעיל' : '○ מושהה'}
+                  </span>
+                </div>
+                {/* metrics */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))', gap: 12, marginBottom: 14 }}>
+                  {metrics.map((m) => (
+                    <div key={m.l}>
+                      <div style={{ fontSize: 10.5, color: '#9ca3af' }}>{m.l}</div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--foreground,#0f172a)', marginTop: 2 }}>{m.v}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* quick actions */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button onClick={() => toggleStatus(c)} disabled={busyId === c.id} style={{ padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: `1px solid ${active ? REDC : GREEN}`, color: active ? REDC : GREEN, background: 'transparent', opacity: busyId === c.id ? 0.5 : 1 }}>
+                    {active ? '⏸ השהה' : '▶ הפעל'}
+                  </button>
+                  <button onClick={() => editBudget(c)} disabled={busyId === c.id} style={{ padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: `1px solid ${BRAND}`, color: BRAND, background: 'transparent', opacity: busyId === c.id ? 0.5 : 1 }}>
+                    💰 תקציב
+                  </button>
+                  <button onClick={() => duplicateCampaign(c)} disabled={!!action} style={{ padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--border,#e5e7eb)', color: '#6b7280', background: 'transparent' }}>
+                    ⧉ שכפל
+                  </button>
+                  <button onClick={() => toggleDetail(c)} style={{ padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--border,#e5e7eb)', color: 'var(--foreground,#0f172a)', background: 'transparent', marginInlineStart: 'auto' }}>
+                    {expanded ? '▴ סגור פירוט' : '▾ פרטים'}
+                  </button>
+                </div>
+              </div>
+
+              {/* expandable detail — ad sets / ads / build (full functionality preserved) */}
+              {expanded && (
+                <div style={{ padding: '0 1.35rem 1.2rem', borderTop: '1px solid var(--border,#eef1f5)', background: 'var(--surface,#f8fafc)' }}>
+                  {detailLoading === c.id ? (
+                    <div style={{ padding: 14, color: '#6b7280', fontSize: 12 }}>טוען פירוט...</div>
+                  ) : !detail[c.id] || (detail[c.id].adSets.length === 0 && detail[c.id].ads.length === 0) ? (
+                    <div style={{ padding: 14, color: '#6b7280', fontSize: 12 }}>אין נתוני Ad Sets/מודעות מסונכרנים — הרץ סנכרון.</div>
+                  ) : (
+                    <div style={{ padding: '12px 4px', fontSize: 12 }}>
+                      <div style={{ fontWeight: 700, margin: '4px 0' }}>Ad Sets ({detail[c.id].adSets.length})</div>
+                      {detail[c.id].adSets.map((s) => (
+                        <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 8px', borderBottom: '1px solid #eef0f3' }}>
+                          <span>{isActive(s.status) ? '🟢' : '⚪'} {s.name}</span>
+                          <span style={{ color: '#6b7280' }}>₪{fmt(s.spend)} · {fmt(s.leads)} לידים · CPL ₪{fmt(s.cpl, 1)} · {s.adsCount} מודעות</span>
+                        </div>
+                      ))}
+                      <CampaignCharts rows={detail[c.id].adSets.map((s) => ({ name: s.name, leads: s.leads, cpl: s.cpl, spend: s.spend }))} />
+
+                      <div style={{ fontWeight: 700, margin: '10px 0 4px' }}>מודעות ({detail[c.id].ads.length})</div>
+                      {detail[c.id].ads.map((a) => (
+                        <div key={a.id} style={{ borderBottom: '1px solid #eef0f3', padding: '5px 8px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                            <span>{isActive(a.status) ? '🟢' : '⚪'} {a.name}</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <span style={{ color: '#6b7280' }}>₪{fmt(a.spend)} · {fmt(a.leads)} לידים · CTR {fmt(a.ctr, 2)}%</span>
+                              <button onClick={() => setPreviewAdId(previewAdId === a.id ? null : a.id)} style={{ border: `1px solid ${BRAND}`, background: '#fff', color: BRAND, borderRadius: 6, fontSize: 11, fontWeight: 600, padding: '2px 8px', cursor: 'pointer' }}>
+                                {previewAdId === a.id ? 'סגור תצוגה' : '👁️ תצוגה'}
+                              </button>
+                            </span>
                           </div>
+                          {previewAdId === a.id && (
+                            <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0' }}>
+                              <AdPreview ad={a} pageName={clientName} />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Build new Ad Set + Ad */}
+                  <div style={{ marginTop: 8 }}>
+                    <button onClick={() => setShowBuild((s) => !s)} style={{ padding: '5px 12px', borderRadius: 8, border: `1px solid ${BRAND}`, background: '#fff', color: BRAND, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                      ➕ בנה Ad Set + מודעה
+                    </button>
+                    {showBuild && (
+                      <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 6 }}>
+                        {([['adSetName', 'שם Ad Set'], ['dailyBudget', 'תקציב יומי ₪'], ['pageId', 'Page ID (חובה)'], ['message', 'טקסט מודעה'], ['headline', 'כותרת'], ['linkUrl', 'קישור יעד'], ['imageUrl', 'קישור תמונה']] as const).map(([k, ph]) => (
+                          <input key={k} value={(build as any)[k]} onChange={(e) => setBuild({ ...build, [k]: e.target.value })} placeholder={ph} style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }} />
                         ))}
+                        <button onClick={() => doBuildAd(c)} disabled={building} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: BRAND, color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', opacity: building ? 0.6 : 1 }}>
+                          {building ? 'בונה...' : 'צור (מושהה)'}
+                        </button>
                       </div>
                     )}
-
-                    {/* Build new Ad Set + Ad */}
-                    <div style={{ marginTop: 8 }}>
-                      <button onClick={() => setShowBuild((s) => !s)} style={{ padding: '5px 12px', borderRadius: 6, border: `1px solid ${BRAND}`, background: '#fff', color: BRAND, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
-                        ➕ בנה Ad Set + מודעה
-                      </button>
-                      {showBuild && (
-                        <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 6 }}>
-                          {([['adSetName', 'שם Ad Set'], ['dailyBudget', 'תקציב יומי ₪'], ['pageId', 'Page ID (חובה)'], ['message', 'טקסט מודעה'], ['headline', 'כותרת'], ['linkUrl', 'קישור יעד'], ['imageUrl', 'קישור תמונה']] as const).map(([k, ph]) => (
-                            <input key={k} value={(build as any)[k]} onChange={(e) => setBuild({ ...build, [k]: e.target.value })} placeholder={ph}
-                              style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12 }} />
-                          ))}
-                          <button onClick={() => doBuildAd(c)} disabled={building}
-                            style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: BRAND, color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', opacity: building ? 0.6 : 1 }}>
-                            {building ? 'בונה...' : 'צור (מושהה)'}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                  </div>
+                </div>
               )}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
+            </div>
+          );
+        })}
       </div>
-
-      <button onClick={load} style={{ marginTop: 14, padding: '8px 16px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-        רענן נתונים
-      </button>
 
       {/* Optimization action history — verifiable report for the client */}
       <ActionLogReport clientId={clientId} />
