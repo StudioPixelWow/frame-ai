@@ -26,6 +26,7 @@ import { SkeletonKPIRow, SkeletonGrid } from "@/components/ui/skeleton";
 import { AIInsightsPanel, generateInsights } from "@/components/ai-insights-panel";
 import SmartWeeklyCalendar from "@/components/ui/SmartWeeklyCalendar";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
+import WelcomeBand from "@/components/ui/welcome-band";
 import { useAuth } from "@/lib/auth/auth-context";
 import { generateWeeklyTrends, generateClientContentIdeas, type SmartTrend, type ContentIdea } from "@/lib/ai/smart-trends";
 import { PremiumKpiCard, PremiumStatGrid, BRAND } from '@/components/charts';
@@ -60,22 +61,6 @@ const QUICK_ACTIONS = [
   { icon: "📊", label: "דוחות חודשיים", route: "__monthly_reports__", color: "#00B5FE" },
 ];
 
-function getGreeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 5) return "לילה טוב";
-  if (hour < 12) return "בוקר טוב";
-  if (hour < 17) return "צהריים טובים";
-  return "ערב טוב";
-}
-
-function getDateLabel(): string {
-  return new Date().toLocaleDateString("he-IL", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", minimumFractionDigits: 0 }).format(amount);
@@ -88,20 +73,20 @@ function SummaryPane({ title, icon, color, rows, href, linkText }: {
   href: string; linkText: string;
 }) {
   return (
-    <div className="premium-card" style={{ direction: "rtl", padding: "1.25rem 1.25rem" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
-        <span style={{ fontSize: "1.125rem" }}>{icon}</span>
-        <span style={{ fontSize: "0.875rem", fontWeight: 700, color }}>{title}</span>
+    <div className="premium-card" style={{ direction: "rtl", padding: "1.4rem 1.4rem", height: "100%", display: "flex", flexDirection: "column", boxSizing: "border-box" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1.1rem", paddingBottom: "0.85rem", borderBottom: "1px solid var(--border)" }}>
+        <span style={{ fontSize: "1.05rem", width: 30, height: 30, borderRadius: 9, background: `${color}1a`, display: "flex", alignItems: "center", justifyContent: "center" }}>{icon}</span>
+        <span style={{ fontSize: "0.9rem", fontWeight: 700, color }}>{title}</span>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.7rem", flex: 1 }}>
         {rows.map((r) => (
-          <div key={r.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div key={r.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: "0.8rem", color: "var(--foreground-muted)" }}>{r.label}</span>
-            <span style={{ fontSize: "1rem", fontWeight: 700, color: r.color || "var(--foreground)" }}>{r.value}</span>
+            <span style={{ fontSize: "1.05rem", fontWeight: 800, color: r.color || "var(--foreground)", whiteSpace: "nowrap" }}>{r.value}</span>
           </div>
         ))}
       </div>
-      <Link href={href} style={{ display: "inline-block", marginTop: "0.75rem", fontSize: "0.75rem", color, textDecoration: "none", fontWeight: 600 }}>
+      <Link href={href} style={{ display: "inline-block", marginTop: "1rem", paddingTop: "0.85rem", borderTop: "1px solid var(--border)", fontSize: "0.78rem", color, textDecoration: "none", fontWeight: 700 }}>
         {linkText} ←
       </Link>
     </div>
@@ -134,38 +119,10 @@ function TimelineItem({ icon, title, subtitle, time, color }: {
    tasks, projects, and content. No financial data or admin metrics.
    ══════════════════════════════════════════════════════════════════════════════ */
 
-function weatherEmoji(code: number): string {
-  if (code === 0) return "☀️";
-  if (code <= 2) return "🌤️";
-  if (code === 3) return "☁️";
-  if (code <= 48) return "🌫️";
-  if (code <= 67) return "🌧️";
-  if (code <= 77) return "🌨️";
-  if (code <= 82) return "🌦️";
-  if (code <= 99) return "⛈️";
-  return "🌡️";
-}
-
 function EmployeeDashboard({ employeeId }: { employeeId: string }) {
-  const greeting = getGreeting();
-  const dateLabel = getDateLabel();
   const { data: employees } = useEmployees();
   const { data: tasks } = useTasks();
   const { data: employeeTasks } = useEmployeeTasks();
-
-  // Live Israel clock + Kiryat Motzkin weather for the welcome band.
-  const [now, setNow] = useState(new Date());
-  const [weather, setWeather] = useState<{ temp: number; code: number } | null>(null);
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 30000);
-    let cancel = false;
-    fetch("https://api.open-meteo.com/v1/forecast?latitude=32.83&longitude=35.08&current=temperature_2m,weather_code")
-      .then((r) => r.json())
-      .then((d) => { if (!cancel && d?.current) setWeather({ temp: Math.round(d.current.temperature_2m), code: d.current.weather_code }); })
-      .catch(() => {});
-    return () => { cancel = true; clearInterval(t); };
-  }, []);
-  const timeStr = new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit" }).format(now);
 
   const employee = employees.find(e => e.id === employeeId);
   const employeeName = employee?.name || "עובד";
@@ -262,50 +219,12 @@ function EmployeeDashboard({ employeeId }: { employeeId: string }) {
   return (
     <div className="mhd-root">
       <div className="mhd-content stagger-in" style={{ maxWidth: 860, margin: "0 auto" }}>
-        {/* ═══ JOYFUL WELCOME BAND ═══ */}
-        <div style={{
-          position: "relative", overflow: "hidden", marginBottom: "1.75rem", borderRadius: 24,
-          padding: "1.6rem 1.9rem",
-          background: "linear-gradient(120deg, #00B5FE 0%, #2dd4bf 55%, #6366f1 110%)",
-          boxShadow: "0 14px 40px rgba(0,181,254,0.28)", direction: "rtl",
-        }}>
-          {/* decorative bubbles */}
-          <div style={{ position: "absolute", top: -40, insetInlineStart: -30, width: 160, height: 160, borderRadius: "50%", background: "rgba(255,255,255,0.12)" }} />
-          <div style={{ position: "absolute", bottom: -60, insetInlineStart: 90, width: 130, height: 130, borderRadius: "50%", background: "rgba(255,255,255,0.08)" }} />
-          <div style={{ position: "relative", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
-            {/* logo + greeting */}
-            <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
-              <div style={{ width: 58, height: 58, borderRadius: 16, background: "rgba(255,255,255,0.92)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 6px 18px rgba(0,0,0,0.12)" }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="https://s-pixel.co.il/wp-content/uploads/2026/04/Asset-1.png" alt="PixelManageAI" style={{ height: 34, width: "auto" }} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: "1.7rem", fontWeight: 800, color: "#fff", lineHeight: 1.2, textShadow: "0 1px 8px rgba(0,0,0,0.12)" }}>
-                  {greeting}, {employeeName} 👋
-                </div>
-                <div style={{ fontSize: "0.92rem", color: "rgba(255,255,255,0.92)", marginTop: 5 }}>
-                  {overdueCount > 0 ? `יש ${overdueCount} משימות שמחכות לך — אתה על זה! 💪` : todayTaskCount > 0 ? `${todayTaskCount} משימות להיום — קדימה לעבודה! ✨` : "אין משימות דחופות — שיהיה יום מעולה! ☕"}
-                </div>
-              </div>
-            </div>
-            {/* clock + weather + date */}
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", background: "rgba(255,255,255,0.18)", backdropFilter: "blur(6px)", borderRadius: 16, padding: "0.5rem 1rem", minWidth: 86 }}>
-                <span style={{ fontSize: "1.5rem", fontWeight: 800, color: "#fff", fontVariantNumeric: "tabular-nums", letterSpacing: "0.02em", lineHeight: 1 }}>{timeStr}</span>
-                <span style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.85)", marginTop: 3 }}>שעון ישראל</span>
-              </div>
-              {weather && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.18)", backdropFilter: "blur(6px)", borderRadius: 16, padding: "0.5rem 0.9rem" }}>
-                  <span style={{ fontSize: "1.4rem" }}>{weatherEmoji(weather.code)}</span>
-                  <div style={{ display: "flex", flexDirection: "column" }}>
-                    <span style={{ fontSize: "1.05rem", fontWeight: 700, color: "#fff", lineHeight: 1 }}>{weather.temp}°</span>
-                    <span style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.85)", marginTop: 3 }}>קרית מוצקין</span>
-                  </div>
-                </div>
-              )}
-              <div style={{ fontSize: "0.75rem", color: "#fff", background: "rgba(255,255,255,0.18)", borderRadius: 999, padding: "0.45rem 0.9rem", whiteSpace: "nowrap" }}>📅 {dateLabel}</div>
-            </div>
-          </div>
+        {/* ═══ UNIFIED WELCOME BAND ═══ */}
+        <div style={{ marginBottom: "1.75rem" }}>
+          <WelcomeBand
+            name={employeeName}
+            subtitle={overdueCount > 0 ? `יש ${overdueCount} משימות שמחכות לך — אתה על זה! 💪` : todayTaskCount > 0 ? `${todayTaskCount} משימות להיום — קדימה לעבודה! ✨` : "אין משימות דחופות — שיהיה יום מעולה! ☕"}
+          />
         </div>
 
         {/* ═══ 3 CLEAN STATS ═══ */}
@@ -356,9 +275,6 @@ export default function DashboardPage() {
 }
 
 function AdminDashboard() {
-  const greeting = getGreeting();
-  const dateLabel = getDateLabel();
-
   const { data: rawClients, loading: cL } = useClients();
   const { data: rawTasks, loading: tL } = useTasks();
   const { data: rawPayments, loading: pL } = usePayments();
@@ -537,13 +453,15 @@ function AdminDashboard() {
   return (
     <div className="mhd-root">
       <div className="mhd-content stagger-in">
+        {/* ═══ UNIFIED WELCOME BAND ═══ */}
+        <div style={{ marginBottom: "1.5rem" }}>
+          <WelcomeBand name="טל" subtitle="מרכז פיקוד Studio Pixel — סקירת ביצועים בזמן אמת" />
+        </div>
+
         {/* ═══ 1. HERO SECTION ═══ */}
         <div className="mhd-header ux-hero-enter">
           <div>
-            <div className="mhd-greeting">
-              {greeting}, <span className="mhd-greeting-name">טל</span> 👋
-            </div>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", marginTop: "0.25rem" }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
               <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e", animation: "pulse 2s infinite" }} />
               <span style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", fontWeight: 600 }}>מערכת AI פעילה</span>
             </div>
@@ -552,7 +470,6 @@ function AdminDashboard() {
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.75rem" }}>
-            <div className="mhd-date-badge">📅 {dateLabel}</div>
             {!isLoading && analytics && (
               <div className="mhd-stats-row">
                 <Link href="/clients" className="mhd-stat" style={{ textDecoration: "none" }}>
@@ -737,7 +654,7 @@ function AdminDashboard() {
             <SkeletonGrid count={4} columns="repeat(auto-fit, minmax(280px, 1fr))" />
           ) : analytics ? (
             <div className="ux-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
-              <SmartTooltip content="סיכום כל הנתונים הכלכליים — הכנסות, חובות וגביות צפויות" detail="לחץ לפרטים מלאים" trend={analytics.revenue > 0 ? "up" : "neutral"} placement="bottom">
+              <SmartTooltip content="סיכום כל הנתונים הכלכליים — הכנסות, חובות וגביות צפויות" detail="לחץ לפרטים מלאים" trend={analytics.revenue > 0 ? "up" : "neutral"} placement="bottom" style={{ display: "flex", width: "100%" }}>
                 <SummaryPane title="סיכום כלכלי" icon="💰" color="#10b981" href="/accounting" linkText="צפה בפרטים"
                   rows={[
                     { label: "הכנסה החודש", value: formatCurrency(analytics.revenue), color: "#10b981" },
@@ -747,7 +664,7 @@ function AdminDashboard() {
                   ]}
                 />
               </SmartTooltip>
-              <SmartTooltip content="לקוחות שדורשים תשומת לב — חסרי תוכנית תוכן או מנהל מטפל" recommendation={analytics.clientsMissingGantt > 0 ? "הוסף תוכנית לגאנט ללקוחות חסרי תוכנית" : undefined} placement="bottom">
+              <SmartTooltip content="לקוחות שדורשים תשומת לב — חסרי תוכנית תוכן או מנהל מטפל" recommendation={analytics.clientsMissingGantt > 0 ? "הוסף תוכנית לגאנט ללקוחות חסרי תוכנית" : undefined} placement="bottom" style={{ display: "flex", width: "100%" }}>
                 <SummaryPane title="בריאות לקוחות" icon="👥" color="#38bdf8" href="/clients" linkText="צפה בלקוחות"
                   rows={[
                     { label: "ללא תוכנית", value: analytics.clientsMissingGantt, color: "#f59e0b" },
@@ -755,7 +672,7 @@ function AdminDashboard() {
                   ]}
                 />
               </SmartTooltip>
-              <SmartTooltip content="מצב הלידים בצנרת — לידים פתוחים ולידים שהומרו ללקוחות" trend={analytics.wonLeads > 0 ? "up" : "neutral"} delta={analytics.wonLeads > 0 ? `${analytics.wonLeads} סגירות` : undefined} placement="bottom">
+              <SmartTooltip content="מצב הלידים בצנרת — לידים פתוחים ולידים שהומרו ללקוחות" trend={analytics.wonLeads > 0 ? "up" : "neutral"} delta={analytics.wonLeads > 0 ? `${analytics.wonLeads} סגירות` : undefined} placement="bottom" style={{ display: "flex", width: "100%" }}>
                 <SummaryPane title="סקירת לידים" icon="🎯" color="#34d399" href="/leads" linkText="צפה בלידים"
                   rows={[
                     { label: "לידים פעילים", value: analytics.activeLeads, color: "#34d399" },
