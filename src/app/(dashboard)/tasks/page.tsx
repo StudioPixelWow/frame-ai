@@ -1271,6 +1271,50 @@ export default function TasksPage() {
                 );
               })()}
 
+              {/* קבצים לשימוש בעיצוב — design assets, shown right under the graphic text */}
+              <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "0.9rem 1rem" }}>
+                <label style={{ fontSize: "0.8rem", fontWeight: 800, color: "#0369a1", marginBottom: "0.6rem", display: "flex", alignItems: "center", gap: 6 }}>🎨 קבצים לשימוש בעיצוב</label>
+                {/* Managers can attach design assets; employees view/download only. */}
+                {!isEmployee && (
+                  <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                    <input
+                      type="file"
+                      accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
+                      onChange={handleAddFile}
+                      disabled={fileUploading}
+                      className="ux-input"
+                      style={{ fontSize: "0.7rem", padding: "0.4rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "0.375rem", color: "var(--foreground)", flex: 1, opacity: fileUploading ? 0.6 : 1 }}
+                    />
+                  </div>
+                )}
+                {fileUploading && (
+                  <div style={{ fontSize: "0.7rem", color: "var(--accent)", marginBottom: "0.4rem" }}>⏳ מעלה קובץ...</div>
+                )}
+                {form.files.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                    {form.files.map((file, idx) => {
+                      const { name, url } = parseFile(file);
+                      return (
+                        <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.45rem 0.55rem", background: "var(--surface)", borderRadius: "0.375rem", fontSize: "0.78rem" }}>
+                          {url ? (
+                            <a href={url} target="_blank" rel="noopener noreferrer" download style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 600 }}>
+                              📥 {name}
+                            </a>
+                          ) : (
+                            <span>📄 {name}</span>
+                          )}
+                          {!isEmployee && (
+                            <button onClick={() => handleRemoveFile(idx)} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: "0.7rem" }}>✕</button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>אין קבצים מצורפים למשימה.</div>
+                )}
+              </div>
+
               {/* EMPLOYEE: upload-for-review is the ONLY action — no status changes, no "complete" */}
               {isEmployee && editingTask && (
                 <div style={{ background: "linear-gradient(135deg, #ecfdf5 0%, #eff6ff 100%)", border: "1px solid #a7f3d0", borderRadius: 16, padding: "1.1rem 1.25rem" }}>
@@ -1369,57 +1413,6 @@ export default function TasksPage() {
                     </div>
                   )}
                 </div>
-              </div>
-
-              {/* File Upload Section */}
-              <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.5rem", padding: "0.75rem" }}>
-                <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.5rem" }}>קבצים</label>
-                <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
-                  <input
-                    type="file"
-                    accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
-                    onChange={handleAddFile}
-                    disabled={fileUploading}
-                    className="ux-input"
-                    style={{
-                      fontSize: "0.7rem",
-                      padding: "0.4rem",
-                      background: "var(--surface)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "0.375rem",
-                      color: "var(--foreground)",
-                      flex: 1,
-                      opacity: fileUploading ? 0.6 : 1,
-                    }}
-                  />
-                </div>
-                {fileUploading && (
-                  <div style={{ fontSize: "0.7rem", color: "var(--accent)", marginBottom: "0.4rem" }}>⏳ מעלה קובץ...</div>
-                )}
-                {form.files.length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                    {form.files.map((file, idx) => {
-                      const { name, url } = parseFile(file);
-                      return (
-                        <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.4rem", background: "var(--surface)", borderRadius: "0.375rem", fontSize: "0.7rem" }}>
-                          {url ? (
-                            <a href={url} target="_blank" rel="noopener noreferrer" download style={{ color: "var(--accent)", textDecoration: "none" }}>
-                              📥 {name}
-                            </a>
-                          ) : (
-                            <span>📄 {name}</span>
-                          )}
-                          <button
-                            onClick={() => handleRemoveFile(idx)}
-                            style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: "0.6rem" }}
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
 
               {/* Notes Section */}
