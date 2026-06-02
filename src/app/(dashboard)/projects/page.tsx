@@ -635,6 +635,21 @@ function ProjectVideoCard({
           >
             👁 צפייה
           </Link>
+          <Link
+            href={`/projects/new?projectId=${p.id}`}
+            onClick={(e) => e.stopPropagation()}
+            title="ערוך מחדש — כל ההגדרות נשמרו"
+            style={{
+              flex: 1, padding: "0.375rem 0.5rem", fontSize: "0.6875rem", fontWeight: 600,
+              background: "rgba(0,181,254,0.1)", color: "#00B5FE", border: "1px solid rgba(0,181,254,0.3)",
+              borderRadius: 6, cursor: "pointer", textDecoration: "none", textAlign: "center",
+              transition: "background 150ms",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(0,181,254,0.18)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(0,181,254,0.1)"; }}
+          >
+            ✏️ ערוך
+          </Link>
           <button
             onClick={(e) => {
               e.preventDefault();

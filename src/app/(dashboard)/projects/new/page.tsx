@@ -859,7 +859,9 @@ function NewProjectWizard() {
   }
   const toast = useToast();
   const { data: clients, create: createClient } = useClients();
-  const { create: createProject, update: updateProject } = useProjects();
+  const { data: projects, create: createProject, update: updateProject } = useProjects();
+  // When re-editing an existing project (?projectId=...), this holds its id so save() updates instead of creating.
+  const editingProjectIdRef = useRef<string | null>(null);
 
   const [step, setStep] = useState(0);
   const [isPodcastClip, setIsPodcastClip] = useState(false);
@@ -941,6 +943,27 @@ function NewProjectWizard() {
       })();
     }
   }, [searchParams, patch]);
+
+  // ─── RE-EDIT: load an existing project (?projectId=...) and restore ALL its
+  // saved settings so the user can change things that didn't come out well. ───
+  const editInitRef = useRef(false);
+  useEffect(() => {
+    if (editInitRef.current) return;
+    const pid = searchParams.get("projectId");
+    if (!pid || !Array.isArray(projects) || projects.length === 0) return;
+    const proj = projects.find((p: any) => p.id === pid) as any;
+    if (!proj) return;
+    editInitRef.current = true;
+    const ws = proj.wizardState || {};
+    editingProjectIdRef.current = pid;
+    // wizardState keys mirror WizardData keys — restore everything that was saved.
+    setData((d) => ({ ...d, ...ws, title: ws.title || proj.name || d.title, clientId: ws.clientId || proj.clientId || d.clientId }));
+    // Land on the caption-design step so adjustments are immediate; the video is
+    // already uploaded/finalized so earlier pipeline steps are skipped.
+    const target = STEPS.findIndex((s) => s.id === "substyle");
+    if (target >= 0) setStep(target);
+    console.log(`[Wizard] Re-edit mode: restored project ${pid} → landing on caption design`);
+  }, [searchParams, projects]);
 
   // ─── Persistent Preview & Edit State ───
   const [showPreview, setShowPreview] = useState(false);
@@ -1456,7 +1479,9 @@ function NewProjectWizard() {
 
       // Save project to database
       // PIPELINE: sourceVideoKey MUST be finalPreEditVideoId — never original
-      const savedProject = await createProject({
+      const savedProject = await (editingProjectIdRef.current
+        ? (o: any) => updateProject(editingProjectIdRef.current as string, o)
+        : createProject)({
         name: data.title, clientId: data.clientId, clientName,
         status: "approved", format: data.format, preset: data.preset,
         durationSec: videoDurationSec,
