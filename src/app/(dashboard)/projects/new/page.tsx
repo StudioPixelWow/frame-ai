@@ -859,7 +859,7 @@ function NewProjectWizard() {
   }
   const toast = useToast();
   const { data: clients, create: createClient } = useClients();
-  const { data: projects, create: createProject, update: updateProject } = useProjects();
+  const { create: createProject, update: updateProject } = useProjects();
   // When re-editing an existing project (?projectId=...), this holds its id so save() updates instead of creating.
   const editingProjectIdRef = useRef<string | null>(null);
 
@@ -950,20 +950,35 @@ function NewProjectWizard() {
   useEffect(() => {
     if (editInitRef.current) return;
     const pid = searchParams.get("projectId");
-    if (!pid || !Array.isArray(projects) || projects.length === 0) return;
-    const proj = projects.find((p: any) => p.id === pid) as any;
-    if (!proj) return;
+    if (!pid) return;
     editInitRef.current = true;
-    const ws = proj.wizardState || {};
     editingProjectIdRef.current = pid;
-    // wizardState keys mirror WizardData keys — restore everything that was saved.
-    setData((d) => ({ ...d, ...ws, title: ws.title || proj.name || d.title, clientId: ws.clientId || proj.clientId || d.clientId }));
-    // Land on the caption-design step so adjustments are immediate; the video is
-    // already uploaded/finalized so earlier pipeline steps are skipped.
-    const target = STEPS.findIndex((s) => s.id === "substyle");
-    if (target >= 0) setStep(target);
-    console.log(`[Wizard] Re-edit mode: restored project ${pid} → landing on caption design`);
-  }, [searchParams, projects]);
+    (async () => {
+      try {
+        // Fetch the project directly by id (don't rely on the in-memory list,
+        // which may be filtered/paginated and miss this project).
+        const res = await fetch(`/api/data/projects/${encodeURIComponent(pid)}`);
+        if (!res.ok) { console.warn("[Wizard] Re-edit: project fetch failed", res.status); return; }
+        const proj = await res.json();
+        const ws = (proj?.wizardState || {}) as Record<string, any>;
+        setData((d) => ({
+          ...d,
+          ...ws,
+          title: ws.title || proj?.name || d.title,
+          clientId: ws.clientId || proj?.clientId || d.clientId,
+          // Guarantee a playable video source + segments even if wizardState is sparse.
+          uploadedVideoUrl: ws.uploadedVideoUrl || ws.videoUrl || proj?.sourceVideoKey || proj?.videoUrl || d.uploadedVideoUrl,
+          videoUrl: ws.videoUrl || ws.uploadedVideoUrl || proj?.videoUrl || proj?.sourceVideoKey || d.videoUrl,
+          segments: Array.isArray(ws.segments) && ws.segments.length ? ws.segments : (Array.isArray(proj?.segments) ? proj.segments : d.segments),
+        }));
+        const target = STEPS.findIndex((s) => s.id === "substyle");
+        if (target >= 0) setStep(target);
+        console.log(`[Wizard] Re-edit mode: restored project ${pid} → caption design step`);
+      } catch (e) {
+        console.error("[Wizard] Re-edit restore failed:", e);
+      }
+    })();
+  }, [searchParams]);
 
   // ─── Persistent Preview & Edit State ───
   const [showPreview, setShowPreview] = useState(false);
@@ -1803,7 +1818,7 @@ function NewProjectWizard() {
       case "transcript":  return data.subtitleMode === "auto"
         ? <StepTranscriptReview data={data} patch={patch} videoSrc={originalVideoSource} />
         : <StepManualSubtitles data={data} patch={patch} videoSrc={originalVideoSource} />;
-      case "substyle":    return <StepSubStyle data={data} patch={patch} videoSrc={originalVideoSource} />;
+      case "substyle":    return <StepSubStyle data={data} patch={patch} videoSrc={originalVideoSource} isReEdit={!!editingProjectIdRef.current} />;
       case "aiHighlight": return <StepAiHighlight data={data} patch={patch} videoSrc={originalVideoSource} />;
       case "aidirection": return <StepAiDirection data={data} patch={patch} />;
       case "cleanup":     return <StepCleanup data={data} patch={patch} videoSrc={originalVideoSource} />;
@@ -3890,7 +3905,48 @@ function StepFinalize({ data, patch }: { data: WizardData; patch: (p: Partial<Wi
    STEP 4 — Subtitle Style
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function StepSubStyle({ data, patch, videoSrc: parentVideoSrc }: { data: WizardData; patch: (p: Partial<WizardData>) => void; videoSrc?: string }) {
+// ─── Per-client caption-style presets ───────────────────────────────────────
+// Saved locally per client so a whole batch of videos for the same client keeps
+// one consistent caption design. Stored by clientId; survives across sessions.
+const CAPTION_STYLE_KEYS = [
+  "subtitleFont", "subtitleFontWeight", "subtitleFontSize", "subtitleColor", "subtitleHighlightColor",
+  "subtitleOutlineEnabled", "subtitleOutlineColor", "subtitleOutlineThickness", "subtitleShadow",
+  "subtitleBg", "subtitleBgColor", "subtitleBgOpacity", "subtitleAlign", "subtitlePosition",
+  "subtitleManualY", "subtitleAnimation", "subtitleLineBreak", "highlightMode", "highlightIntensity",
+] as const;
+
+function captionPresetKey(clientId: string) { return `frameai_caption_style_${clientId}`; }
+
+function saveClientCaptionStyle(clientId: string, data: WizardData): boolean {
+  if (!clientId) return false;
+  try {
+    const style: Record<string, unknown> = {};
+    for (const k of CAPTION_STYLE_KEYS) style[k] = (data as any)[k];
+    localStorage.setItem(captionPresetKey(clientId), JSON.stringify(style));
+    return true;
+  } catch { return false; }
+}
+
+function loadClientCaptionStyle(clientId: string): Partial<WizardData> | null {
+  if (!clientId) return null;
+  try {
+    const raw = localStorage.getItem(captionPresetKey(clientId));
+    return raw ? (JSON.parse(raw) as Partial<WizardData>) : null;
+  } catch { return null; }
+}
+
+function StepSubStyle({ data, patch, videoSrc: parentVideoSrc, isReEdit }: { data: WizardData; patch: (p: Partial<WizardData>) => void; videoSrc?: string; isReEdit?: boolean }) {
+  // Auto-apply the client's saved caption style for NEW videos (not when re-editing,
+  // where the video's own saved style must win). Runs once per client.
+  const appliedClientStyleRef = useRef(false);
+  const [presetMsg, setPresetMsg] = useState("");
+  useEffect(() => {
+    if (isReEdit || appliedClientStyleRef.current || !data.clientId) return;
+    const preset = loadClientCaptionStyle(data.clientId);
+    if (preset) { appliedClientStyleRef.current = true; patch(preset); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.clientId, isReEdit]);
+  const hasClientPreset = typeof window !== "undefined" && !!data.clientId && !!loadClientCaptionStyle(data.clientId);
   const filteredFonts = data.language && data.language !== "auto"
     ? GOOGLE_FONTS.filter((f) => f.languages.includes(data.language))
     : GOOGLE_FONTS;
@@ -4253,6 +4309,27 @@ function StepSubStyle({ data, patch, videoSrc: parentVideoSrc }: { data: WizardD
 
         {/* ─── Right: Controls Panel ─── */}
         <div className="substyle-controls-col">
+          {/* Per-client caption-style preset — keep a whole batch consistent */}
+          {data.clientId && data.clientId !== "podcast-clip" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12, padding: "0.6rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10 }}>
+              <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--foreground-muted)" }}>🎨 עיצוב כתוביות ללקוח:</span>
+              <button
+                onClick={() => { const ok = saveClientCaptionStyle(data.clientId, data); setPresetMsg(ok ? "✓ העיצוב נשמר ללקוח — יוחל אוטומטית על סרטונים חדשים" : "שמירה נכשלה"); setTimeout(() => setPresetMsg(""), 3000); }}
+                style={{ fontSize: "0.72rem", fontWeight: 700, padding: "0.35rem 0.8rem", borderRadius: 8, border: "none", background: "#00B5FE", color: "#fff", cursor: "pointer" }}
+              >
+                💾 שמור כברירת מחדל
+              </button>
+              {hasClientPreset && (
+                <button
+                  onClick={() => { const p = loadClientCaptionStyle(data.clientId); if (p) { patch(p); setPresetMsg("✓ הוחל עיצוב הלקוח"); setTimeout(() => setPresetMsg(""), 3000); } }}
+                  style={{ fontSize: "0.72rem", fontWeight: 600, padding: "0.35rem 0.8rem", borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--foreground)", cursor: "pointer" }}
+                >
+                  ↺ טען עיצוב הלקוח
+                </button>
+              )}
+              {presetMsg && <span style={{ fontSize: "0.68rem", color: "#16a34a", fontWeight: 600 }}>{presetMsg}</span>}
+            </div>
+          )}
           {/* Tab navigation */}
           <div className="substyle-tabs">
             {([
