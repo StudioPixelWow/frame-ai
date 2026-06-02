@@ -220,7 +220,7 @@ export interface CreativeInstructions {
    Render Configuration
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export type SmartPresetId = "viral" | "sales" | "bold" | "storytelling" | "authority" | "casual" | "educational";
+export type SmartPresetId = "clean" | "viral" | "sales" | "bold" | "storytelling" | "authority" | "casual" | "educational";
 
 export interface SmartPreset {
   id: SmartPresetId;
@@ -235,6 +235,17 @@ export interface SmartPreset {
 }
 
 export const SMART_PRESETS: SmartPreset[] = [
+  {
+    id: "clean",
+    name: "Clean",
+    nameHe: "נקי — ללא אפקטים",
+    description: "ללא זום, ללא מעברים, ללא תיקון צבע — רק הוידאו והכתוביות שלך",
+    pacing: "moderate",
+    colorGrading: "neutral",
+    jumpCutAggression: 0,
+    zoomBehavior: { enabled: false, onSpeech: 1.0, onTransition: 1.0, speed: "slow" },
+    subtitleStyle: { fontSize: 38, fontWeight: 700, animation: "none" },
+  },
   {
     id: "viral",
     name: "Viral",

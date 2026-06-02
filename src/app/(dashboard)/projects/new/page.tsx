@@ -259,7 +259,7 @@ const INITIAL: WizardData = {
   cleanupFillers: false, cleanupSilence: false,
   cleanupIntensity: "medium", cleanupRemovedSegments: [], cleanupPreviewMode: "original",
   exportApproved: false,
-  preset: "viral",
+  preset: "clean",
   exportQuality: "premium" as "standard" | "premium" | "max",
   aiEditMode: "",
   aiDirectionNotes: "",
@@ -3981,6 +3981,21 @@ function StepSubStyle({ data, patch, videoSrc: parentVideoSrc, isReEdit }: { dat
   const [currentTime, setCurrentTime] = useState(0);
   const [animPhase, setAnimPhase] = useState(0); // 0-1 for animation preview
 
+  // Measure the preview frame width → caption font scales EXACTLY like the export
+  // (export renders at full font size on a `exportWidth`-px canvas).
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [frameW, setFrameW] = useState(0);
+  useEffect(() => {
+    const el = frameRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => { const w = entries[0]?.contentRect?.width; if (w) setFrameW(w); });
+    ro.observe(el);
+    setFrameW(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+  const exportWidth = data.format === "16:9" ? 1920 : 1080;
+  const capScale = frameW > 0 ? frameW / exportWidth : 0.5;
+
   useEffect(() => { loadGoogleFont(data.subtitleFont); }, [data.subtitleFont]);
 
   // Track video time for subtitle sync
@@ -4033,27 +4048,28 @@ function StepSubStyle({ data, patch, videoSrc: parentVideoSrc, isReEdit }: { dat
       textAlign: data.subtitleAlign || "center",
       fontFamily: `"${data.subtitleFont}", sans-serif`,
       fontWeight: data.subtitleFontWeight || 700,
-      fontSize: `${Math.max(12, (data.subtitleFontSize || 36) * 0.5)}px`,
+      fontSize: `${(data.subtitleFontSize || 36) * capScale}px`,
+      letterSpacing: "0.02em",
       color: data.subtitleColor || "#FFFFFF",
       direction: "rtl",
-      lineHeight: 1.4,
+      lineHeight: 1.3,
       pointerEvents: "none",
       zIndex: 10,
       transition: "all 200ms ease",
     };
 
-    // Position
+    // Position — identical to the export SubtitleLayer (top 8% / center 50% / bottom 11% / manual).
     if (data.subtitlePosition === "top") { style.top = "8%"; }
     else if (data.subtitlePosition === "center") { style.top = "50%"; style.transform = "translateY(-50%)"; }
     else if (data.subtitlePosition === "manual") { style.top = `${Math.max(5, Math.min(95, data.subtitleManualY ?? 75))}%`; style.transform = "translateY(-50%)"; }
-    else { style.bottom = "8%"; }
+    else { style.bottom = "11%"; }
 
     // Outline — outer stroke via multi-directional text-shadow (never shrinks the fill)
     {
       const shadowParts: string[] = [];
 
       if (data.subtitleOutlineEnabled) {
-        const t = data.subtitleOutlineThickness || 1;
+        const t = (data.subtitleOutlineThickness || 1) * capScale;
         const c = data.subtitleOutlineColor || "#000000";
         // 8-direction outline + 4 diagonal half-steps for a smooth contour
         const offsets = [
@@ -4088,7 +4104,7 @@ function StepSubStyle({ data, patch, videoSrc: parentVideoSrc, isReEdit }: { dat
     return style;
   }, [data.subtitleFont, data.subtitleFontWeight, data.subtitleFontSize, data.subtitleColor,
     data.subtitleAlign, data.subtitlePosition, data.subtitleManualY, data.subtitleOutlineEnabled, data.subtitleOutlineColor,
-    data.subtitleOutlineThickness, data.subtitleShadow, data.subtitleAnimation, animPhase]);
+    data.subtitleOutlineThickness, data.subtitleShadow, data.subtitleAnimation, animPhase, capScale]);
 
   // Build background style for subtitle text
   const subtitleBgStyle = useMemo((): React.CSSProperties | undefined => {
@@ -4225,7 +4241,7 @@ function StepSubStyle({ data, patch, videoSrc: parentVideoSrc, isReEdit }: { dat
             {activeSegment && <span style={{ fontSize: "0.65rem", color: "#22c55e", fontWeight: 600 }}>● כתובית פעילה</span>}
           </div>
 
-          <div style={{
+          <div ref={frameRef} style={{
             position: "relative",
             width: isPortrait ? "min(100%, 340px)" : "100%",
             aspectRatio: cssAspectRatio,
