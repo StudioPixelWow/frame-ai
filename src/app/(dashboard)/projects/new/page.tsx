@@ -398,6 +398,7 @@ const MUSIC_CATEGORIES = [
 ];
 
 const SMART_PRESETS_UI = [
+  { id: "clean",       label: "נקי — ללא אפקטים", icon: "🧼", desc: "בלי זום, בלי מעברים, בלי תיקון צבע — רק וידאו וכתוביות" },
   { id: "viral",       label: "ויראלי",     icon: "🔥", desc: "קצב מהיר, אנרגטי, מותאם לרשתות" },
   { id: "sales",       label: "מכירות",     icon: "💰", desc: "CTA חזק, מסרים ברורים" },
   { id: "authority",   label: "סמכות",      icon: "👔", desc: "מקצועי, מדויק, אמין" },
