@@ -189,10 +189,25 @@ export const UnifiedEditedPreviewPlayer = forwardRef<UnifiedPreviewHandle, Unifi
   const [currentTime, setCurrentTime] = useState(0);
   const [videoReady, setVideoReady] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  // Measured pixel width of the preview frame — used to scale captions 1:1 with the export.
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [frameW, setFrameW] = useState(0);
 
   const hasVideo = !!videoSrc;
   const formatDims = FORMAT_DIMENSIONS[format] || FORMAT_DIMENSIONS["9:16"];
   const aspectRatio = formatDims.width / formatDims.height;
+
+  useEffect(() => {
+    const el = frameRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect?.width;
+      if (w && w > 0) setFrameW(w);
+    });
+    ro.observe(el);
+    setFrameW(el.clientWidth);
+    return () => ro.disconnect();
+  }, [hasVideo]);
 
   /* ── Imperative handle for parent control ── */
   useImperativeHandle(ref, () => ({
@@ -397,10 +412,14 @@ export const UnifiedEditedPreviewPlayer = forwardRef<UnifiedPreviewHandle, Unifi
     });
   }, [ss]);
 
-  /* ── Scaled subtitle style for preview ── */
-  const scaleFactor = compact ? 0.5 : 0.75;
-  const scaledFontSize = Math.max(ss.subtitleFontSize * scaleFactor, 11);
-  const scaledOutline = Math.max(ss.subtitleOutlineThickness * scaleFactor, 1);
+  /* ── Scaled subtitle style for preview — EXACT 1:1 with export ──
+     The export renders captions at the full font size on a formatDims.width-wide
+     canvas (e.g. 1080px). The preview frame is `frameW` px wide, so we scale by
+     frameW / formatDims.width. This makes the preview font size + position match
+     the final exported video pixel-for-pixel. */
+  const scaleFactor = frameW > 0 ? frameW / formatDims.width : (compact ? 0.5 : 0.75);
+  const scaledFontSize = ss.subtitleFontSize * scaleFactor;
+  const scaledOutline = ss.subtitleOutlineThickness * scaleFactor;
 
   const previewSubStyle = useMemo<React.CSSProperties>(() => {
     const style: React.CSSProperties = {
@@ -410,6 +429,7 @@ export const UnifiedEditedPreviewPlayer = forwardRef<UnifiedPreviewHandle, Unifi
       color: ss.subtitleColor,
       textAlign: ss.subtitleAlign,
       lineHeight: 1.3,
+      letterSpacing: "0.02em",
       direction: "rtl",
       whiteSpace: "pre-line",
     };
@@ -459,7 +479,7 @@ export const UnifiedEditedPreviewPlayer = forwardRef<UnifiedPreviewHandle, Unifi
 
       {/* Player with all layers */}
       {hasVideo && (
-        <div style={{
+        <div ref={frameRef} style={{
           position: "relative",
           width: "100%",
           maxWidth: containerMaxWidth,
@@ -632,10 +652,14 @@ export const UnifiedEditedPreviewPlayer = forwardRef<UnifiedPreviewHandle, Unifi
           {activeSeg && activeSeg.text && (
             <div style={{
               position: "absolute", left: 0, right: 0, zIndex: 10, pointerEvents: "none",
-              bottom: ss.subtitlePosition === "top" ? "auto" : ss.subtitlePosition === "center" ? "40%" : ss.subtitlePosition === "manual" ? "auto" : "8%",
-              top: ss.subtitlePosition === "top" ? "8%" : ss.subtitlePosition === "manual" ? `${Math.max(5, Math.min(95, ss.subtitleManualY ?? 75))}%` : "auto",
-              transform: ss.subtitlePosition === "manual" ? "translateY(-50%)" : undefined,
-              display: "flex", justifyContent: "center", padding: "0 8%",
+              // Positions match the export SubtitleLayer exactly: top 8% / center 50% / bottom 11% / manual manualY%.
+              bottom: (ss.subtitlePosition === "top" || ss.subtitlePosition === "center" || ss.subtitlePosition === "manual") ? "auto" : "11%",
+              top: ss.subtitlePosition === "top" ? "8%"
+                : ss.subtitlePosition === "center" ? "50%"
+                : ss.subtitlePosition === "manual" ? `${Math.max(5, Math.min(95, ss.subtitleManualY ?? 75))}%`
+                : "auto",
+              transform: (ss.subtitlePosition === "center" || ss.subtitlePosition === "manual") ? "translateY(-50%)" : undefined,
+              display: "flex", justifyContent: "center", padding: "0 5%",
             }}>
               <div style={previewSubStyle}>
                 {formatSubtitleText(activeSeg.text).map((line, li) => (

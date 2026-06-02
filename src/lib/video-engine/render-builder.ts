@@ -151,7 +151,11 @@ export function buildRenderPayload(projectId: string, ws: WizardState): RenderPa
       },
       zoom: presetConfig?.zoomBehavior ?? { enabled: false, onSpeech: 1.0, onTransition: 1.0, speed: "slow" },
       framing: { enabled: true, faceDetection: true, keepSubjectCentered: true, cropForVertical: ws.format === "9:16" },
-      colorGrading: quality.colorGrading,
+      // Color grading is an EFFECT — only apply a look when premium mode is on.
+      // A clean render keeps the original footage (neutral, identity grade).
+      colorGrading: ws.premiumMode === true
+        ? quality.colorGrading
+        : { preset: "neutral", contrast: 100, saturation: 100, temperature: 0 },
       scenePlan: [],
       cleanup: {
         fillersEnabled: ws.cleanupFillers,
@@ -191,16 +195,18 @@ export function buildRenderPayload(projectId: string, ws: WizardState): RenderPa
     },
 
     premiumOutput: {
-      enabled: ws.premiumMode !== false,
+      // Every premium enhancement is OFF unless the user explicitly enabled premium.
+      // This guarantees "no effects unless requested" — a clean captioned cut.
+      enabled: ws.premiumMode === true,
       level: ws.premiumLevel || "premium",
-      smartPacing: true,
+      smartPacing: ws.premiumMode === true,
       audioLayering: ws.musicEnabled,
-      visualStructure: true,
+      visualStructure: ws.premiumMode === true,
       brollEnhancement: ws.brollEnabled,
-      subtitleEnhancement: true,
+      subtitleEnhancement: ws.premiumMode === true,
       motionEffects: false, // Disabled by default — causes unwanted zoom bump
-      colorCorrection: true,
-      autoFill: ws.premiumMode !== false,
+      colorCorrection: ws.premiumMode === true,
+      autoFill: ws.premiumMode === true,
     },
 
     metadata: {

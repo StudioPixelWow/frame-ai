@@ -263,8 +263,9 @@ const INITIAL: WizardData = {
   exportQuality: "premium" as "standard" | "premium" | "max",
   aiEditMode: "",
   aiDirectionNotes: "",
-  transitionStyle: "fade",
-  premiumMode: true,
+  // Default to a CLEAN render — no transitions/effects unless the user opts in.
+  transitionStyle: "cut",
+  premiumMode: false,
   premiumLevel: "premium",
   effects: [],
   effectsApproved: false,
