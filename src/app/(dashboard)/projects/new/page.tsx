@@ -4566,6 +4566,33 @@ function StepTranscriptReview({ data, patch, videoSrc: parentVideoSrc }: { data:
       let effectiveDur = data.trimMode === "clip" ? (data.trimEnd - data.trimStart) : dur;
       let offsetSec = data.trimMode === "clip" ? data.trimStart : 0;
 
+      // ─── LARGE FILE → extract a compact audio track in the browser ───
+      // Whisper caps at 25MB. If the local video is bigger, decode its audio and
+      // upload a small mono WAV instead (only the audio is needed for transcription).
+      let audioUploadUrl = "";
+      if (!data.pipelineFinalized && data.videoFile && data.videoFile.size > 24 * 1024 * 1024) {
+        try {
+          console.log(`[runTranscription] Large file (${(data.videoFile.size / 1048576).toFixed(1)}MB) — extracting audio in browser...`);
+          const { extractAudioWav } = await import("@/lib/video/client-audio-extract");
+          const wav = await extractAudioWav(data.videoFile);
+          console.log(`[runTranscription] Extracted audio: ${(wav.size / 1048576).toFixed(1)}MB WAV`);
+          const initRes = await fetch("/api/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileName: `transcribe/${Date.now()}_audio.wav`, contentType: "audio/wav", fileSize: wav.size }),
+          });
+          if (initRes.ok) {
+            const { uploadUrl, publicUrl } = await initRes.json();
+            if (uploadUrl) {
+              const put = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": "audio/wav" }, body: wav });
+              if (put.ok) { audioUploadUrl = publicUrl; console.log("[runTranscription] ✅ Audio uploaded for transcription"); }
+            }
+          }
+        } catch (e) {
+          console.warn("[runTranscription] Browser audio extraction failed — will try the original file:", e);
+        }
+      }
+
       // CRITICAL: If pipeline is finalized, transcribe the PROCESSED video
       // (which already includes hook + trim + crop). Offset must be 0 because
       // the processed video timeline starts at 0, not at the original trim point.
@@ -4574,6 +4601,10 @@ function StepTranscriptReview({ data, patch, videoSrc: parentVideoSrc }: { data:
         offsetSec = 0; // processed video starts at 0
         effectiveDur = dur > 0 ? dur : 60; // use actual video duration (fallback 60s if unavailable)
         console.log("[runTranscription] Using PROCESSED video (finalPreEditVideoId):", transcriptionUrl.substring(0, 80));
+      } else if (audioUploadUrl) {
+        // Extracted audio (large-file path) — transcribe the compact WAV.
+        transcriptionUrl = audioUploadUrl;
+        console.log("[runTranscription] Using extracted audio for transcription");
       } else if (data.uploadedVideoUrl) {
         // Best case: StepUpload already uploaded the video — reuse that URL
         transcriptionUrl = data.uploadedVideoUrl;

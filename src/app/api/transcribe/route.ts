@@ -11,10 +11,50 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiKeys, getApiKeyStatus } from "@/lib/db/api-keys";
 import { DATA_DIR as FRAMEAI_DATA_DIR } from "@/lib/db/paths";
 import { getSupabase } from "@/lib/db/store";
+import { spawn } from "child_process";
+import { writeFile, readFile, unlink } from "fs/promises";
+import os from "os";
+import path from "path";
+import ffmpegStatic from "ffmpeg-static";
 
 // ── Force Node.js runtime for filesystem access ──
 export const runtime = "nodejs";
 export const maxDuration = 120; // transcription can take up to 2 minutes
+
+const WHISPER_MAX_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Extract + compress the audio track to a small mono MP3 (16kHz, 64kbps) using the
+ * bundled static ffmpeg. A long video becomes a few MB of audio — well under
+ * Whisper's 25MB limit — and Whisper only needs the audio anyway. Returns null if
+ * ffmpeg isn't available or fails (caller falls back to the original behaviour).
+ */
+async function extractCompressedAudio(buffer: Buffer, ext: string): Promise<Buffer | null> {
+  const ffmpegPath = ffmpegStatic as unknown as string | null;
+  if (!ffmpegPath) { console.warn("[whisper] ffmpeg-static path unavailable — cannot compress"); return null; }
+  const id = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const inPath = path.join(os.tmpdir(), `tx_in_${id}${ext || ".bin"}`);
+  const outPath = path.join(os.tmpdir(), `tx_out_${id}.mp3`);
+  try {
+    await writeFile(inPath, buffer);
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(ffmpegPath, ["-i", inPath, "-vn", "-ac", "1", "-ar", "16000", "-b:a", "64k", "-y", outPath]);
+      let err = "";
+      proc.stderr.on("data", (d) => { err += d.toString(); });
+      proc.on("error", reject);
+      proc.on("close", (code) => code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}: ${err.slice(-300)}`)));
+    });
+    const out = await readFile(outPath);
+    console.log(`[whisper] Compressed audio: ${(buffer.length / 1048576).toFixed(1)}MB → ${(out.length / 1048576).toFixed(1)}MB`);
+    return out;
+  } catch (e) {
+    console.warn(`[whisper] Audio compression failed: ${e instanceof Error ? e.message : e}`);
+    return null;
+  } finally {
+    unlink(inPath).catch(() => {});
+    unlink(outPath).catch(() => {});
+  }
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Types
@@ -142,18 +182,33 @@ async function whisperTranscribe(
 
   if (!dl.size) return { segments: [], error: "Empty file" };
 
-  // Whisper limit is 25 MB
-  if (dl.size > 25 * 1024 * 1024) {
-    return { segments: [], error: `File too large for Whisper: ${(dl.size / 1048576).toFixed(1)}MB (max 25MB)` };
-  }
-
   // Detect extension from URL
   const urlPath = new URL(audioUrl).pathname;
-  const ext = (urlPath.match(/\.\w+$/) || [".mp4"])[0].toLowerCase();
-  console.log(`[whisper] Sending file: ${(dl.size / 1024).toFixed(0)}KB ${ext} type=${dl.contentType}`);
+  let ext = (urlPath.match(/\.\w+$/) || [".mp4"])[0].toLowerCase();
+  let sendBuffer = dl.buffer;
+  let sendType = dl.contentType || mime(urlPath);
+
+  // Whisper limit is 25 MB. If we're over it, extract + compress the audio with
+  // ffmpeg so a large video/audio file fits (Whisper only needs the audio track).
+  if (dl.size > WHISPER_MAX_BYTES) {
+    console.log(`[whisper] File ${(dl.size / 1048576).toFixed(1)}MB > 25MB — compressing audio with ffmpeg...`);
+    const compressed = await extractCompressedAudio(dl.buffer, ext);
+    if (compressed && compressed.length > 0 && compressed.length <= WHISPER_MAX_BYTES) {
+      sendBuffer = compressed;
+      sendType = "audio/mpeg";
+      ext = ".mp3";
+    } else if (compressed && compressed.length > WHISPER_MAX_BYTES) {
+      return { segments: [], error: `הקובץ ארוך מדי גם לאחר דחיסה (${(compressed.length / 1048576).toFixed(1)}MB). חתוך את הקליפ או הוסף מפתח AssemblyAI בהגדרות (תומך בקבצים גדולים).` };
+    } else {
+      // ffmpeg unavailable / failed — can't shrink it for Whisper.
+      return { segments: [], error: `הקובץ גדול מ-25MB (${(dl.size / 1048576).toFixed(1)}MB) — מגבלת Whisper. הוסף מפתח AssemblyAI בהגדרות (תומך בקבצים גדולים) או העלה קליפ קצר/קל יותר.` };
+    }
+  }
+
+  console.log(`[whisper] Sending file: ${(sendBuffer.length / 1024).toFixed(0)}KB ${ext} type=${sendType}`);
 
   const fd = new FormData();
-  fd.append("file", new Blob([new Uint8Array(dl.buffer)], { type: dl.contentType || mime(urlPath) }), `audio${ext}`);
+  fd.append("file", new Blob([new Uint8Array(sendBuffer)], { type: sendType }), `audio${ext}`);
   fd.append("model", "whisper-1");
   fd.append("language", whisperLang(lang));
   fd.append("response_format", "verbose_json");
