@@ -3915,38 +3915,61 @@ const CAPTION_STYLE_KEYS = [
   "subtitleManualY", "subtitleAnimation", "subtitleLineBreak", "highlightMode", "highlightIntensity",
 ] as const;
 
-function captionPresetKey(clientId: string) { return `frameai_caption_style_${clientId}`; }
+/** Collect just the caption-style fields from the wizard state. */
+function pickCaptionStyle(data: WizardData): Record<string, unknown> {
+  const style: Record<string, unknown> = {};
+  for (const k of CAPTION_STYLE_KEYS) style[k] = (data as any)[k];
+  return style;
+}
 
-function saveClientCaptionStyle(clientId: string, data: WizardData): boolean {
+/** Save the client's default caption style on the SERVER (shared across devices). */
+async function saveClientCaptionStyle(clientId: string, data: WizardData): Promise<boolean> {
   if (!clientId) return false;
   try {
-    const style: Record<string, unknown> = {};
-    for (const k of CAPTION_STYLE_KEYS) style[k] = (data as any)[k];
-    localStorage.setItem(captionPresetKey(clientId), JSON.stringify(style));
-    return true;
+    const res = await fetch(`/api/clients/${encodeURIComponent(clientId)}/caption-style`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ style: pickCaptionStyle(data) }),
+    });
+    return res.ok;
   } catch { return false; }
 }
 
-function loadClientCaptionStyle(clientId: string): Partial<WizardData> | null {
+/** Load the client's default caption style from the SERVER. */
+async function loadClientCaptionStyle(clientId: string): Promise<Partial<WizardData> | null> {
   if (!clientId) return null;
   try {
-    const raw = localStorage.getItem(captionPresetKey(clientId));
-    return raw ? (JSON.parse(raw) as Partial<WizardData>) : null;
+    const res = await fetch(`/api/clients/${encodeURIComponent(clientId)}/caption-style`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.style && typeof json.style === "object" ? (json.style as Partial<WizardData>) : null;
   } catch { return null; }
 }
 
 function StepSubStyle({ data, patch, videoSrc: parentVideoSrc, isReEdit }: { data: WizardData; patch: (p: Partial<WizardData>) => void; videoSrc?: string; isReEdit?: boolean }) {
-  // Auto-apply the client's saved caption style for NEW videos (not when re-editing,
-  // where the video's own saved style must win). Runs once per client.
+  // The client's saved default caption style (from the server), and whether we've
+  // auto-applied it. Auto-apply happens only for NEW videos (re-edit keeps the
+  // video's own saved style).
   const appliedClientStyleRef = useRef(false);
   const [presetMsg, setPresetMsg] = useState("");
+  const [clientPreset, setClientPreset] = useState<Partial<WizardData> | null>(null);
   useEffect(() => {
-    if (isReEdit || appliedClientStyleRef.current || !data.clientId) return;
-    const preset = loadClientCaptionStyle(data.clientId);
-    if (preset) { appliedClientStyleRef.current = true; patch(preset); }
+    if (!data.clientId || data.clientId === "podcast-clip") { setClientPreset(null); return; }
+    let cancel = false;
+    (async () => {
+      const preset = await loadClientCaptionStyle(data.clientId);
+      if (cancel) return;
+      setClientPreset(preset);
+      // Auto-apply once for new videos.
+      if (preset && !isReEdit && !appliedClientStyleRef.current) {
+        appliedClientStyleRef.current = true;
+        patch(preset);
+      }
+    })();
+    return () => { cancel = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.clientId, isReEdit]);
-  const hasClientPreset = typeof window !== "undefined" && !!data.clientId && !!loadClientCaptionStyle(data.clientId);
+  const hasClientPreset = !!clientPreset;
   const filteredFonts = data.language && data.language !== "auto"
     ? GOOGLE_FONTS.filter((f) => f.languages.includes(data.language))
     : GOOGLE_FONTS;
@@ -4314,14 +4337,14 @@ function StepSubStyle({ data, patch, videoSrc: parentVideoSrc, isReEdit }: { dat
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12, padding: "0.6rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10 }}>
               <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--foreground-muted)" }}>🎨 עיצוב כתוביות ללקוח:</span>
               <button
-                onClick={() => { const ok = saveClientCaptionStyle(data.clientId, data); setPresetMsg(ok ? "✓ העיצוב נשמר ללקוח — יוחל אוטומטית על סרטונים חדשים" : "שמירה נכשלה"); setTimeout(() => setPresetMsg(""), 3000); }}
+                onClick={async () => { const ok = await saveClientCaptionStyle(data.clientId, data); if (ok) setClientPreset(pickCaptionStyle(data) as Partial<WizardData>); setPresetMsg(ok ? "✓ העיצוב נשמר ללקוח — יוחל אוטומטית על סרטונים חדשים" : "שמירה נכשלה"); setTimeout(() => setPresetMsg(""), 3000); }}
                 style={{ fontSize: "0.72rem", fontWeight: 700, padding: "0.35rem 0.8rem", borderRadius: 8, border: "none", background: "#00B5FE", color: "#fff", cursor: "pointer" }}
               >
                 💾 שמור כברירת מחדל
               </button>
               {hasClientPreset && (
                 <button
-                  onClick={() => { const p = loadClientCaptionStyle(data.clientId); if (p) { patch(p); setPresetMsg("✓ הוחל עיצוב הלקוח"); setTimeout(() => setPresetMsg(""), 3000); } }}
+                  onClick={() => { if (clientPreset) { patch(clientPreset); setPresetMsg("✓ הוחל עיצוב הלקוח"); setTimeout(() => setPresetMsg(""), 3000); } }}
                   style={{ fontSize: "0.72rem", fontWeight: 600, padding: "0.35rem 0.8rem", borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--foreground)", cursor: "pointer" }}
                 >
                   ↺ טען עיצוב הלקוח
