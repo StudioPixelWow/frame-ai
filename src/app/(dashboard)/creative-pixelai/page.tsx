@@ -1,0 +1,624 @@
+"use client";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Creative PixelAI — adapt an existing creative (usually square) to ad formats
+ * (Story 1080×1920, Feed 4:5 1080×1350, Square 1080×1080) WITHOUT touching the
+ * original pixels: no redraw, no text changes, no stretching, no AI generation.
+ * OpenAI is used for analysis/decisions only; execution is pure canvas.
+ */
+
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useClients } from "@/lib/api/use-entity";
+import { useToast } from "@/components/ui/toast";
+import {
+  FORMATS, type FormatId, type FormatSpec, type ScaleMode, type BackgroundType, type AdaptationOptions,
+  renderAdaptation, validateAdaptation, extractDominantColors, canvasToBlob, loadImage,
+} from "@/lib/creative-pixelai/adapter";
+
+const BRAND = "#00B5FE";
+const MAX_FILE_MB = 25;
+
+function roleHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const h: Record<string, string> = {};
+  const role = localStorage.getItem("frameai_role"); if (role) h["x-app-role"] = role;
+  const uid = localStorage.getItem("frameai_user_id"); if (uid) h["x-app-user-id"] = uid;
+  const eid = localStorage.getItem("frameai_employee_id"); if (eid) h["x-app-employee-id"] = eid;
+  return h;
+}
+
+/** Upload a blob through the system's existing signed-URL pipeline. */
+async function uploadBlob(blob: Blob, path: string, contentType: string): Promise<string> {
+  const init = await fetch("/api/upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fileName: path, contentType, fileSize: blob.size }),
+  });
+  if (!init.ok) throw new Error("קבלת כתובת העלאה נכשלה");
+  const { uploadUrl, publicUrl } = await init.json();
+  if (!uploadUrl) throw new Error("שרת לא החזיר כתובת העלאה");
+  const put = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": contentType }, body: blob });
+  if (!put.ok) throw new Error("ההעלאה לאחסון נכשלה");
+  return publicUrl as string;
+}
+
+/** Downscaled JPEG data-URL for the OpenAI vision call (analysis only). */
+function toAnalysisDataUrl(img: HTMLImageElement, maxDim = 1024): string {
+  const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement("canvas");
+  c.width = Math.round(img.naturalWidth * scale);
+  c.height = Math.round(img.naturalHeight * scale);
+  c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.85);
+}
+
+const BG_OPTIONS: { id: BackgroundType; label: string }[] = [
+  { id: "blurred", label: "תמונה מטושטשת" },
+  { id: "dominant_color", label: "צבע דומיננטי" },
+  { id: "dark_gradient", label: "גרדיאנט כהה" },
+  { id: "light_gradient", label: "גרדיאנט בהיר" },
+  { id: "brand_color", label: "צבע מותג" },
+  { id: "custom_image", label: "רקע מותאם (העלאה)" },
+];
+
+const MODE_OPTIONS: { id: ScaleMode; label: string; desc: string }[] = [
+  { id: "auto", label: "Auto", desc: "לפי המלצת ה-AI" },
+  { id: "fit", label: "Fit Full Creative", desc: "כל הקריאייטיב נראה, אפס חיתוך" },
+  { id: "premium_center", label: "Premium Center", desc: "ממורכז עם נוכחות פרימיום" },
+  { id: "fill_safe", label: "Fill Safe", desc: "ממלא יותר — רק אם בטוח" },
+  { id: "top_focus", label: "Top Focus", desc: "מוצמד לחלק העליון" },
+  { id: "bottom_focus", label: "Bottom Focus", desc: "מוצמד לחלק התחתון" },
+  { id: "manual", label: "Manual", desc: "שליטה ידנית בגודל ומיקום" },
+];
+
+interface HistoryRow {
+  id: string;
+  original_file_name: string | null;
+  selected_formats: string[];
+  status: string;
+  created_at: string;
+  outputs: { id: string; output_format: string; output_asset_url: string }[];
+}
+
+export default function CreativePixelAIPage() {
+  const toast = useToast();
+  const { data: clients } = useClients();
+
+  /* ── Source creative ── */
+  const [img, setImg] = useState<HTMLImageElement | null>(null);
+  const [fileName, setFileName] = useState("");
+  const [mimeType, setMimeType] = useState("image/png");
+  const [originalBlob, setOriginalBlob] = useState<Blob | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  /* ── Options ── */
+  const [selectedFormats, setSelectedFormats] = useState<FormatId[]>(["story", "feed_4_5", "square"]);
+  const [scaleMode, setScaleMode] = useState<ScaleMode>("auto");
+  const [background, setBackground] = useState<BackgroundType>("blurred");
+  const [brandColor, setBrandColor] = useState(BRAND);
+  const [customBg, setCustomBg] = useState<HTMLImageElement | null>(null);
+  const [padding, setPadding] = useState(80);
+  const [blurAmount, setBlurAmount] = useState(45);
+  const [brightness, setBrightness] = useState(0.75);
+  const [verticalOffset, setVerticalOffset] = useState(0);
+  const [manualScale, setManualScale] = useState(1);
+  const [shadow, setShadow] = useState(true);
+  const [rounded, setRounded] = useState(true);
+
+  /* ── AI analysis ── */
+  const [analysis, setAnalysis] = useState<any>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+
+  /* ── Preview / export / save ── */
+  const [activeFormat, setActiveFormat] = useState<FormatId>("story");
+  const [showBefore, setShowBefore] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveClientId, setSaveClientId] = useState("");
+  const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
+  const [renderTick, setRenderTick] = useState(0);
+
+  /* ── History ── */
+  const [history, setHistory] = useState<HistoryRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+  const dominantColors = useMemo(() => (img ? extractDominantColors(img, 3) : []), [img]);
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch("/api/creative-pixelai/adaptations", { headers: roleHeaders() });
+      const json = await res.json();
+      setHistory(Array.isArray(json.adaptations) ? json.adaptations : []);
+    } catch { setHistory([]); }
+    finally { setHistoryLoading(false); }
+  }, []);
+  useEffect(() => { loadHistory(); }, [loadHistory]);
+
+  /* ── Upload handling ── */
+  const handleFile = useCallback(async (file: File) => {
+    if (!/^image\/(png|jpe?g|webp)$/i.test(file.type)) { toast("פורמט לא נתמך — רק JPG / PNG / WEBP", "error"); return; }
+    if (file.size > MAX_FILE_MB * 1024 * 1024) { toast(`קובץ גדול מדי (מקסימום ${MAX_FILE_MB}MB)`, "error"); return; }
+    try {
+      const url = URL.createObjectURL(file);
+      const image = await loadImage(url);
+      setImg(image);
+      setFileName(file.name);
+      setMimeType(file.type);
+      setOriginalBlob(file);
+      setAnalysis(null);
+      // Auto-analyze (decisions only — never generation).
+      runAnalysis(image);
+    } catch {
+      toast("טעינת התמונה נכשלה", "error");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const runAnalysis = useCallback(async (image: HTMLImageElement) => {
+    setAnalyzing(true);
+    try {
+      const dataUrl = toAnalysisDataUrl(image);
+      const res = await fetch("/api/creative-pixelai/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: dataUrl, width: image.naturalWidth, height: image.naturalHeight }),
+      });
+      const json = await res.json();
+      const a = json.analysis;
+      setAnalysis(a || null);
+      if (a) {
+        // Apply AI recommendations as starting point (user can override).
+        if (a.riskLevel === "high") {
+          setScaleMode("fit");
+          setPadding(Math.max(100, a.recommendedPadding || 100));
+          toast("⚠️ זוהה סיכון גבוה לחיתוך — הופעל מצב Fit מלא עם padding מוגדל", "info");
+        } else {
+          setPadding(a.recommendedPadding || 80);
+        }
+        if (a.recommendedBackground) setBackground(a.recommendedBackground);
+      }
+    } catch {
+      toast("הניתוח נכשל — ממשיכים במצב בטוח", "error");
+    } finally { setAnalyzing(false); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ── Build options per format ── */
+  const optionsFor = useCallback((format: FormatSpec): AdaptationOptions => ({
+    format, scaleMode, background, brandColor, customBgImage: customBg,
+    padding, blurAmount, brightness, verticalOffset, manualScale,
+    shadow, roundedCorners: rounded,
+    dominantColors: analysis?.dominantColors?.length ? analysis.dominantColors : dominantColors,
+    riskLevel: analysis?.riskLevel || "medium",
+  }), [scaleMode, background, brandColor, customBg, padding, blurAmount, brightness, verticalOffset, manualScale, shadow, rounded, analysis, dominantColors]);
+
+  /* ── Render previews whenever anything changes ── */
+  useEffect(() => {
+    if (!img) return;
+    for (const f of FORMATS) {
+      if (!selectedFormats.includes(f.id)) continue;
+      const canvas = canvasRefs.current[f.id];
+      if (!canvas) continue;
+      try { renderAdaptation(canvas, img, optionsFor(f)); } catch { /* canvas not ready */ }
+    }
+  }, [img, selectedFormats, optionsFor, renderTick]);
+
+  /* ── Export ── */
+  const renderFullRes = useCallback(async (f: FormatSpec, type: "image/png" | "image/jpeg") => {
+    if (!img) throw new Error("אין תמונה");
+    const canvas = document.createElement("canvas");
+    const layout = renderAdaptation(canvas, img, optionsFor(f));
+    const v = validateAdaptation(img.naturalWidth, img.naturalHeight, layout, optionsFor(f));
+    if (!v.ok) throw new Error(v.problems.join(" · "));
+    if (canvas.width !== f.width || canvas.height !== f.height) throw new Error("מידות הפלט שגויות");
+    return canvasToBlob(canvas, type, 0.95);
+  }, [img, optionsFor]);
+
+  const download = (blob: Blob, name: string) => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  };
+
+  const exportOne = async (type: "image/png" | "image/jpeg") => {
+    const f = FORMATS.find((x) => x.id === activeFormat)!;
+    setExporting(true);
+    try {
+      const blob = await renderFullRes(f, type);
+      download(blob, `${baseName()}_${f.id}.${type === "image/png" ? "png" : "jpg"}`);
+      toast("✓ הקובץ ירד", "success");
+    } catch (e) { toast(e instanceof Error ? e.message : "הייצוא נכשל", "error"); }
+    finally { setExporting(false); }
+  };
+
+  const exportZip = async () => {
+    if (!img) return;
+    setExporting(true);
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      for (const f of FORMATS) {
+        if (!selectedFormats.includes(f.id)) continue;
+        const blob = await renderFullRes(f, "image/png");
+        zip.file(`${baseName()}_${f.id}.png`, blob);
+      }
+      const out = await zip.generateAsync({ type: "blob" });
+      download(out, `${baseName()}_all-formats.zip`);
+      toast("✓ ZIP ירד עם כל הפורמטים", "success");
+    } catch (e) { toast(e instanceof Error ? e.message : "יצירת ה-ZIP נכשלה", "error"); }
+    finally { setExporting(false); }
+  };
+
+  const baseName = () => (fileName || "creative").replace(/\.[^.]+$/, "");
+
+  /* ── Save to campaign assets (Supabase) ── */
+  const saveToAssets = async () => {
+    if (!img || !originalBlob) return;
+    setSaving(true);
+    try {
+      const stamp = Date.now();
+      // 1) original (locked source)
+      const origUrl = await uploadBlob(originalBlob, `creative-assets/originals/${stamp}_${fileName || "original.png"}`, mimeType);
+      // 2) each format output
+      const outputs: any[] = [];
+      for (const f of FORMATS) {
+        if (!selectedFormats.includes(f.id)) continue;
+        const blob = await renderFullRes(f, "image/png");
+        const url = await uploadBlob(blob, `creative-assets/adaptations/${stamp}/${f.id}.png`, "image/png");
+        outputs.push({
+          format: f.id, width: f.width, height: f.height, url,
+          backgroundType: background, placement: scaleMode, scaleMode,
+          padding, blurAmount, brightness, exportType: "png",
+        });
+      }
+      // 3) persist
+      const res = await fetch("/api/creative-pixelai/adaptations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...roleHeaders() },
+        body: JSON.stringify({
+          originalAssetUrl: origUrl, originalFileName: fileName,
+          originalWidth: img.naturalWidth, originalHeight: img.naturalHeight,
+          originalMimeType: mimeType, clientId: saveClientId || null,
+          analysis, selectedFormats, status: "completed", outputs,
+        }),
+      });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || "השמירה נכשלה"); }
+      toast("✓ נשמר לנכסי הקמפיין", "success");
+      loadHistory();
+    } catch (e) { toast(e instanceof Error ? e.message : "השמירה נכשלה", "error"); }
+    finally { setSaving(false); }
+  };
+
+  const deleteAdaptation = async (id: string) => {
+    if (!confirm("למחוק את ההתאמה הזו?")) return;
+    try {
+      const res = await fetch(`/api/creative-pixelai/adaptations/${id}`, { method: "DELETE", headers: roleHeaders() });
+      if (!res.ok) throw new Error();
+      setHistory((h) => h.filter((r) => r.id !== id));
+      toast("נמחק", "info");
+    } catch { toast("המחיקה נכשלה", "error"); }
+  };
+
+  const downloadHistoryZip = async (row: HistoryRow) => {
+    try {
+      const res = await fetch("/api/creative-pixelai/export-zip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          zipName: row.original_file_name || "creative",
+          files: row.outputs.map((o) => ({ name: `${o.output_format}.png`, url: o.output_asset_url })),
+        }),
+      });
+      if (!res.ok) throw new Error();
+      download(await res.blob(), `${(row.original_file_name || "creative").replace(/\.[^.]+$/, "")}_formats.zip`);
+    } catch { toast("הורדת ה-ZIP נכשלה", "error"); }
+  };
+
+  const riskColor = analysis?.riskLevel === "high" ? "#ef4444" : analysis?.riskLevel === "medium" ? "#f59e0b" : "#16a34a";
+
+  /* ═══════════════════════════ JSX ═══════════════════════════ */
+  return (
+    <div dir="rtl" style={{ maxWidth: 1320, margin: "0 auto", padding: "2rem 1.75rem 4rem" }}>
+      {/* Header */}
+      <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6, color: "var(--foreground)" }}>🎨 Creative PixelAI</h1>
+      <p style={{ color: "var(--foreground-muted)", fontSize: 14, marginBottom: 24 }}>
+        התאמת קריאייטיבים לכל פורמט פרסום — בלי לגעת בפיקסל אחד של העיצוב המקורי. ה-AI מנתח וממליץ; הביצוע הוא עיבוד תמונה נקי.
+      </p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.2fr)", gap: 20, alignItems: "start" }}>
+        {/* ─── LEFT: controls ─── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* 1. Upload */}
+          <div className="premium-card" style={{ padding: "1.25rem" }}>
+            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10, color: "var(--foreground)" }}>1 · העלאת קריאייטיב</div>
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f); }}
+              onClick={() => document.getElementById("cpai-file-input")?.click()}
+              style={{
+                border: `2px dashed ${dragging ? BRAND : "var(--border)"}`,
+                borderRadius: 12, padding: img ? "0.75rem" : "2rem", textAlign: "center", cursor: "pointer",
+                background: dragging ? "rgba(0,181,254,0.05)" : "var(--surface)",
+                transition: "all 150ms ease",
+              }}
+            >
+              {img ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "right" }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={img.src} alt="" style={{ width: 64, height: 64, objectFit: "contain", borderRadius: 8, background: "#0002" }} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fileName}</div>
+                    <div style={{ fontSize: 11.5, color: "var(--foreground-muted)" }}>{img.naturalWidth}×{img.naturalHeight}px · לחץ להחלפה</div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>🖼️</div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--foreground)" }}>גרור תמונה לכאן או לחץ להעלאה</div>
+                  <div style={{ fontSize: 11.5, color: "var(--foreground-muted)", marginTop: 4 }}>JPG · PNG · WEBP · עד {MAX_FILE_MB}MB</div>
+                </>
+              )}
+            </div>
+            <input id="cpai-file-input" type="file" accept="image/png,image/jpeg,image/webp" style={{ display: "none" }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.currentTarget.value = ""; }} />
+          </div>
+
+          {/* 2. Formats */}
+          <div className="premium-card" style={{ padding: "1.25rem" }}>
+            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10, color: "var(--foreground)" }}>2 · פורמטים</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {FORMATS.map((f) => {
+                const on = selectedFormats.includes(f.id);
+                return (
+                  <label key={f.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.55rem 0.75rem", borderRadius: 10, border: `1px solid ${on ? BRAND : "var(--border)"}`, background: on ? "rgba(0,181,254,0.06)" : "transparent", cursor: "pointer" }}>
+                    <input type="checkbox" checked={on} onChange={() => {
+                      setSelectedFormats((prev) => on ? prev.filter((x) => x !== f.id) : [...prev, f.id]);
+                      if (!on) setActiveFormat(f.id);
+                    }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--foreground)" }}>{f.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 3. Mode */}
+          <div className="premium-card" style={{ padding: "1.25rem" }}>
+            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10, color: "var(--foreground)" }}>3 · מצב התאמה</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {MODE_OPTIONS.map((m) => (
+                <button key={m.id} onClick={() => setScaleMode(m.id)} title={m.desc}
+                  style={{
+                    padding: "0.5rem 0.6rem", borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "right",
+                    border: `1px solid ${scaleMode === m.id ? BRAND : "var(--border)"}`,
+                    background: scaleMode === m.id ? "rgba(0,181,254,0.08)" : "transparent",
+                    color: scaleMode === m.id ? BRAND : "var(--foreground)",
+                  }}>
+                  {m.label}
+                  <div style={{ fontSize: 10, fontWeight: 400, color: "var(--foreground-muted)", marginTop: 2 }}>{m.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 4. Background */}
+          <div className="premium-card" style={{ padding: "1.25rem" }}>
+            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10, color: "var(--foreground)" }}>4 · רקע</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {BG_OPTIONS.map((b) => (
+                <button key={b.id} onClick={() => setBackground(b.id)}
+                  style={{
+                    padding: "0.5rem 0.6rem", borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    border: `1px solid ${background === b.id ? BRAND : "var(--border)"}`,
+                    background: background === b.id ? "rgba(0,181,254,0.08)" : "transparent",
+                    color: background === b.id ? BRAND : "var(--foreground)",
+                  }}>{b.label}</button>
+              ))}
+            </div>
+            {background === "brand_color" && (
+              <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 12, color: "var(--foreground-muted)" }}>צבע:</span>
+                <input type="color" value={brandColor} onChange={(e) => setBrandColor(e.target.value)} style={{ width: 42, height: 28, border: "none", background: "transparent", cursor: "pointer" }} />
+                {dominantColors.map((c) => (
+                  <button key={c} onClick={() => setBrandColor(c)} title={c} style={{ width: 22, height: 22, borderRadius: 6, background: c, border: "1px solid var(--border)", cursor: "pointer" }} />
+                ))}
+              </div>
+            )}
+            {background === "custom_image" && (
+              <div style={{ marginTop: 10 }}>
+                <input type="file" accept="image/*" className="ux-input" style={{ fontSize: 12 }}
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0]; if (!f) return;
+                    try { setCustomBg(await loadImage(URL.createObjectURL(f))); } catch { toast("טעינת הרקע נכשלה", "error"); }
+                  }} />
+              </div>
+            )}
+          </div>
+
+          {/* 5. Controls */}
+          <div className="premium-card" style={{ padding: "1.25rem" }}>
+            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, color: "var(--foreground)" }}>5 · כוונון עדין</div>
+            {([
+              { label: `Padding · ${padding}px`, min: 0, max: 200, step: 4, val: padding, set: (v: number) => setPadding(v) },
+              { label: `טשטוש רקע · ${blurAmount}px`, min: 10, max: 80, step: 2, val: blurAmount, set: (v: number) => setBlurAmount(v) },
+              { label: `בהירות רקע · ${Math.round(brightness * 100)}%`, min: 40, max: 120, step: 5, val: Math.round(brightness * 100), set: (v: number) => setBrightness(v / 100) },
+              { label: `מיקום אנכי · ${verticalOffset > 0 ? "+" : ""}${Math.round(verticalOffset * 100)}`, min: -100, max: 100, step: 5, val: Math.round(verticalOffset * 100), set: (v: number) => setVerticalOffset(v / 100) },
+            ] as const).map((s) => (
+              <div key={s.label} style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11.5, color: "var(--foreground-muted)", marginBottom: 4 }}>{s.label}</div>
+                <input type="range" min={s.min} max={s.max} step={s.step} value={s.val} onChange={(e) => s.set(Number(e.target.value))} style={{ width: "100%" }} />
+              </div>
+            ))}
+            {scaleMode === "manual" && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11.5, color: "var(--foreground-muted)", marginBottom: 4 }}>גודל ידני · ×{manualScale.toFixed(2)}</div>
+                <input type="range" min={50} max={150} step={5} value={Math.round(manualScale * 100)} onChange={(e) => setManualScale(Number(e.target.value) / 100)} style={{ width: "100%" }} />
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 16, marginTop: 4 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--foreground)", cursor: "pointer" }}>
+                <input type="checkbox" checked={shadow} onChange={(e) => setShadow(e.target.checked)} /> צל
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--foreground)", cursor: "pointer" }}>
+                <input type="checkbox" checked={rounded} onChange={(e) => setRounded(e.target.checked)} /> פינות מעוגלות
+              </label>
+              <button onClick={() => setRenderTick((t) => t + 1)} style={{ marginInlineStart: "auto", fontSize: 11.5, fontWeight: 700, color: BRAND, background: "none", border: "none", cursor: "pointer" }}>↺ רענן וריאציה</button>
+            </div>
+          </div>
+
+          {/* 6. AI Analysis */}
+          <div className="premium-card" style={{ padding: "1.25rem" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "var(--foreground)" }}>🧠 ניתוח AI</div>
+              {img && (
+                <button onClick={() => runAnalysis(img)} disabled={analyzing}
+                  style={{ fontSize: 11.5, fontWeight: 700, color: BRAND, background: "none", border: `1px solid ${BRAND}40`, borderRadius: 8, padding: "0.25rem 0.7rem", cursor: "pointer", opacity: analyzing ? 0.6 : 1 }}>
+                  {analyzing ? "מנתח…" : "נתח מחדש"}
+                </button>
+              )}
+            </div>
+            {!img ? (
+              <div style={{ fontSize: 12.5, color: "var(--foreground-muted)" }}>העלה תמונה כדי לקבל ניתוח</div>
+            ) : analyzing ? (
+              <div style={{ fontSize: 12.5, color: BRAND }}>⏳ מנתח את הקריאייטיב…</div>
+            ) : analysis ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12.5 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ color: "var(--foreground-muted)" }}>רמת סיכון:</span>
+                  <span style={{ fontWeight: 800, color: riskColor }}>
+                    {analysis.riskLevel === "high" ? "גבוהה 🔴" : analysis.riskLevel === "medium" ? "בינונית 🟠" : "נמוכה 🟢"}
+                  </span>
+                </div>
+                <div style={{ color: "var(--foreground)" }}>📝 אזורי טקסט חשובים: <b>{analysis.importantTextAreas?.length ?? 0}</b> · לוגו: <b>{analysis.logoAreas?.length ?? 0}</b></div>
+                <div style={{ color: "var(--foreground)" }}>
+                  {analysis.hasPhoneNumber && "📞 טלפון · "}{analysis.hasPrice && "💰 מחיר · "}{analysis.hasCTA && "👆 CTA"}
+                  {!analysis.hasPhoneNumber && !analysis.hasPrice && !analysis.hasCTA && "ללא טלפון/מחיר/CTA מזוהים"}
+                </div>
+                <div style={{ color: "var(--foreground-muted)" }}>המלצה: {analysis.recommendedScaleMode} · רקע {analysis.recommendedBackground} · padding {analysis.recommendedPadding}px</div>
+                {analysis.warnings?.length > 0 && (
+                  <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 8, padding: "0.5rem 0.7rem" }}>
+                    {analysis.warnings.map((w: string, i: number) => (
+                      <div key={i} style={{ color: "#b45309", fontSize: 11.5 }}>⚠️ {w}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12.5, color: "var(--foreground-muted)" }}>אין ניתוח עדיין</div>
+            )}
+          </div>
+        </div>
+
+        {/* ─── RIGHT: preview + export ─── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, position: "sticky", top: 16 }}>
+          <div className="premium-card" style={{ padding: "1.25rem" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "var(--foreground)" }}>תצוגה מקדימה</div>
+              <div style={{ display: "inline-flex", gap: 2, padding: 3, borderRadius: 10, background: "var(--surface)", border: "1px solid var(--border)" }}>
+                {FORMATS.filter((f) => selectedFormats.includes(f.id)).map((f) => (
+                  <button key={f.id} onClick={() => setActiveFormat(f.id)}
+                    style={{ padding: "0.3rem 0.7rem", fontSize: 11.5, fontWeight: 700, border: "none", borderRadius: 8, cursor: "pointer", background: activeFormat === f.id ? "var(--surface-raised)" : "transparent", color: activeFormat === f.id ? BRAND : "var(--foreground-muted)", boxShadow: activeFormat === f.id ? "0 1px 3px rgba(0,0,0,0.15)" : "none" }}>
+                    {f.id === "story" ? "Story" : f.id === "feed_4_5" ? "4:5" : "Square"}
+                  </button>
+                ))}
+                {img && (
+                  <button onClick={() => setShowBefore((v) => !v)}
+                    style={{ padding: "0.3rem 0.7rem", fontSize: 11.5, fontWeight: 700, border: "none", borderRadius: 8, cursor: "pointer", background: showBefore ? "var(--surface-raised)" : "transparent", color: showBefore ? "#f59e0b" : "var(--foreground-muted)" }}>
+                    {showBefore ? "אחרי ←" : "לפני"}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {!img ? (
+              <div style={{ textAlign: "center", padding: "4rem 1rem", color: "var(--foreground-muted)" }}>
+                <div style={{ fontSize: 36, marginBottom: 10 }}>🎨</div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>אין קריאייטיבים עדיין</div>
+                <div style={{ fontSize: 12.5, marginTop: 4 }}>העלה תמונה כדי להתחיל</div>
+              </div>
+            ) : showBefore ? (
+              <div style={{ display: "flex", justifyContent: "center", background: "var(--surface)", borderRadius: 12, padding: 12 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={img.src} alt="מקור" style={{ maxWidth: "100%", maxHeight: 480, objectFit: "contain", borderRadius: 8 }} />
+              </div>
+            ) : (
+              <div style={{ display: "flex", justifyContent: "center", background: "var(--surface)", borderRadius: 12, padding: 12 }}>
+                {FORMATS.map((f) => (
+                  <canvas
+                    key={f.id}
+                    ref={(el) => { canvasRefs.current[f.id] = el; }}
+                    style={{
+                      display: selectedFormats.includes(f.id) && activeFormat === f.id ? "block" : "none",
+                      maxWidth: "100%", maxHeight: 520, borderRadius: 10,
+                      aspectRatio: `${f.width} / ${f.height}`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 8. Export */}
+          <div className="premium-card" style={{ padding: "1.25rem" }}>
+            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, color: "var(--foreground)" }}>ייצוא ושמירה</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button className="mod-btn-primary ux-btn" disabled={!img || exporting} onClick={() => exportOne("image/png")} style={{ fontSize: 12.5, opacity: !img || exporting ? 0.5 : 1 }}>
+                ⬇ PNG ({activeFormat === "story" ? "Story" : activeFormat === "feed_4_5" ? "4:5" : "Square"})
+              </button>
+              <button className="mod-btn-ghost ux-btn" disabled={!img || exporting} onClick={() => exportOne("image/jpeg")} style={{ fontSize: 12.5, opacity: !img || exporting ? 0.5 : 1 }}>
+                ⬇ JPG
+              </button>
+              <button className="mod-btn-ghost ux-btn" disabled={!img || exporting || selectedFormats.length === 0} onClick={exportZip} style={{ fontSize: 12.5, opacity: !img || exporting ? 0.5 : 1 }}>
+                {exporting ? "⏳ מייצא…" : "📦 הכל כ-ZIP"}
+              </button>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 14, flexWrap: "wrap" }}>
+              <select className="form-select ux-input" value={saveClientId} onChange={(e) => setSaveClientId(e.target.value)} style={{ fontSize: 12.5, minWidth: 170 }}>
+                <option value="">ללא שיוך לקוח</option>
+                {(clients || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <button className="mod-btn-primary ux-btn ux-btn-glow" disabled={!img || saving} onClick={saveToAssets} style={{ fontSize: 12.5, background: "#10b981", opacity: !img || saving ? 0.5 : 1 }}>
+                {saving ? "⏳ שומר נכסים…" : "💾 שמור לנכסי קמפיין"}
+              </button>
+            </div>
+          </div>
+
+          {/* History */}
+          <div className="premium-card" style={{ padding: "1.25rem" }}>
+            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, color: "var(--foreground)" }}>היסטוריה</div>
+            {historyLoading ? (
+              <div style={{ fontSize: 12.5, color: "var(--foreground-muted)" }}>⏳ טוען…</div>
+            ) : history.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: "var(--foreground-muted)" }}>לא נוצרו פורמטים עדיין</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {history.slice(0, 12).map((row) => (
+                  <div key={row.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.55rem 0.7rem", borderRadius: 10, background: "var(--surface)", border: "1px solid var(--border)" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.original_file_name || "קריאייטיב"}</div>
+                      <div style={{ fontSize: 10.5, color: "var(--foreground-muted)" }}>
+                        {new Date(row.created_at).toLocaleDateString("he-IL")} · {(row.selected_formats || []).join(", ")} · {row.status === "completed" ? "✓ הושלם" : row.status}
+                      </div>
+                    </div>
+                    {row.outputs?.[0] && (
+                      <a href={row.outputs[0].output_asset_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11.5, fontWeight: 700, color: BRAND, textDecoration: "none" }}>פתח</a>
+                    )}
+                    <button onClick={() => downloadHistoryZip(row)} style={{ fontSize: 11.5, fontWeight: 700, color: "var(--foreground)", background: "none", border: "1px solid var(--border)", borderRadius: 7, padding: "0.2rem 0.6rem", cursor: "pointer" }}>⬇ ZIP</button>
+                    <button onClick={() => deleteAdaptation(row.id)} style={{ fontSize: 11.5, color: "#f87171", background: "none", border: "none", cursor: "pointer" }}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

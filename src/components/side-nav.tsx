@@ -204,6 +204,7 @@ const mainNavItems: NavItem[] = [
   { href: "/leads", label: "לידים", id: "nav-leads", icon: Icons.Leads, allowedRoles: ['admin'] },
   { href: "/campaigns", label: "קמפיינים", id: "nav-campaigns", icon: Icons.Campaigns, allowedRoles: ['admin'] },
   { href: "/meta-campaigns", label: "קמפיינים Meta", id: "nav-meta-campaigns", icon: Icons.Campaigns, allowedRoles: ['admin'] },
+  { href: "/creative-pixelai", label: "Creative PixelAI", id: "nav-creative-pixelai", icon: Icons.Projects, allowedRoles: ['admin', 'employee'] },
   { href: "/tasks", label: "משימות", id: "nav-tasks", icon: Icons.Tasks, allowedRoles: ['admin', 'employee'] },
   { href: "/business-calendar", label: "יומן", id: "nav-biz-calendar", icon: Icons.Calendar, allowedRoles: ['admin', 'employee'] },
   { href: "/employees", label: "צוות", id: "nav-employees", icon: Icons.Team, allowedRoles: ['admin'] },
