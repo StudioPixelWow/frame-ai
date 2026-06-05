@@ -321,9 +321,9 @@ export default function CreativePixelAIPage() {
       let composite: { gx: number; gy: number; gw: number; gh: number } | null = null;
 
       if (aiMode === "redesign") {
-        // FULL REDESIGN — send the original itself (high resolution preserves text
-        // fidelity together with input_fidelity:high on the server).
-        const maxDim = 2048;
+        // FULL REDESIGN — 1536px keeps text crisp for the model while staying fast
+        // enough to fit the serverless time budget.
+        const maxDim = 1536;
         const ds = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
         const c = document.createElement("canvas");
         c.width = Math.round(img.naturalWidth * ds);

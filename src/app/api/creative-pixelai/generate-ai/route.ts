@@ -64,7 +64,9 @@ export async function POST(req: NextRequest) {
       fd.append("image", new Blob([new Uint8Array(buf)], { type: "image/png" }), "input.png");
       fd.append("prompt", genPrompt);
       fd.append("size", GEN_SIZE[format]);
-      fd.append("quality", "high");
+      // "medium" is 2-3x faster than "high" and still excellent for social —
+      // critical to stay inside the serverless time budget.
+      fd.append("quality", "medium");
       fd.append("n", "1");
       if (withFidelity) fd.append("input_fidelity", "high");
       return fd;
@@ -112,6 +114,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ image: `data:image/png;base64,${outB64}` });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
+    if (/abort|timeout/i.test(msg)) {
+      return NextResponse.json({
+        error: "היצירה ארכה יותר מדי וההמתנה נקטעה. נסה שוב (לרוב מהיר יותר). אם זה חוזר — ב-Vercel: Settings → Functions → הפעל Fluid Compute / הגדל Max Duration.",
+      }, { status: 504 });
+    }
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
