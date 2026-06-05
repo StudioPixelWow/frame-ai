@@ -38,6 +38,7 @@ function rowToTask(r: Row) {
     ganttItemId: (r.gantt_item_id as string) ?? null,
     tags: [] as string[],
     contentType: ((r as any).content_type as string) ?? null,
+    adaptations: (r as any).adaptations ?? null,
     files: Array.isArray((r as any).files) ? (r as any).files : [],
     notes: (r.notes as string) ?? '',
     createdAt: (r.created_at as string) ?? '',
@@ -81,6 +82,7 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
     }
   }
   if (Array.isArray(body.files)) out.files = body.files; // persist attached files
+  if (body.adaptations && typeof body.adaptations === 'object') out.adaptations = body.adaptations;
   out.updated_at = new Date().toISOString();
   return out;
 }

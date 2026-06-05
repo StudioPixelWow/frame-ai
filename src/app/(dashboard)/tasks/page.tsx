@@ -11,6 +11,8 @@ import TasksCommandCenter from "@/components/tasks/tasks-command-center";
 import type { Task } from "@/lib/db/schema";
 import { fireConfetti } from "@/lib/confetti";
 import { useAuth } from "@/lib/auth/auth-context";
+import { loadImage } from "@/lib/creative-pixelai/adapter";
+import { aiAdaptImageToFormat } from "@/lib/creative-pixelai/ai-adapt";
 
 const COLUMNS = [
   { id: "new", label: "חדש", color: "#3b82f6" },
@@ -140,6 +142,7 @@ export default function TasksPage() {
       notes: (task as any).notes || '',
       contentType: ((task as any).contentType as "" | "post" | "story" | "reel") || "",
     });
+    setTaskAdaptations(((task as any).adaptations as Record<string, string>) || null);
     setModalOpen(true);
   };
 
@@ -304,6 +307,57 @@ export default function TasksPage() {
     } catch (err) {
       toast(err instanceof Error ? err.message : "שגיאה בהעלאת קובץ", "error");
     }
+  };
+
+  /* ── AI size adaptations for approved content tasks ──
+     Takes the task's attached creative, runs Creative PixelAI (redesign) for
+     Square / 4:5 / Story, uploads the results and saves them INTO the task. */
+  const [adaptingSizes, setAdaptingSizes] = useState<string | null>(null);
+  const [taskAdaptations, setTaskAdaptations] = useState<Record<string, string> | null>(null);
+
+  const handleAdaptSizes = async () => {
+    if (!editingTask) return;
+    // First attached image = the approved creative.
+    const parseEntry = (f: string) => { const i = f.indexOf("|"); return i === -1 ? { name: f, url: "" } : { name: f.slice(0, i), url: f.slice(i + 1) }; };
+    const imgEntry = (form.files || []).map(parseEntry).find((e) => e.url && /\.(png|jpe?g|webp)(\?|$)/i.test(e.url));
+    if (!imgEntry) { toast("אין קובץ תמונה מצורף למשימה", "error"); return; }
+    try {
+      setAdaptingSizes("טוען את הקריאייטיב…");
+      const img = await loadImage(imgEntry.url);
+      const formats: Array<{ id: "square" | "feed_4_5" | "story"; label: string; fileName: string }> = [
+        { id: "square", label: "Square", fileName: "Square-1080x1080.png" },
+        { id: "feed_4_5", label: "4:5", fileName: "Feed-1080x1350.png" },
+        { id: "story", label: "Story", fileName: "Story-1080x1920.png" },
+      ];
+      const urls: Record<string, string> = {};
+      const newFileEntries: string[] = [];
+      for (let i = 0; i < formats.length; i++) {
+        const f = formats[i];
+        setAdaptingSizes(`יוצר ${i + 1}/3 — ${f.label}…`);
+        const blob = await aiAdaptImageToFormat(img, f.id);
+        // upload through the system pipeline
+        const init = await fetch("/api/upload", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileName: `creative-assets/tasks/${editingTask.id}/${Date.now()}_${f.fileName}`, contentType: "image/png", fileSize: blob.size }),
+        });
+        if (!init.ok) throw new Error("קבלת כתובת העלאה נכשלה");
+        const { uploadUrl, publicUrl } = await init.json();
+        const put = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": "image/png" }, body: blob });
+        if (!put.ok) throw new Error("העלאת התוצר נכשלה");
+        urls[f.id] = publicUrl;
+        newFileEntries.push(`🎨 ${f.fileName}|${publicUrl}`);
+      }
+      setAdaptingSizes("שומר למשימה…");
+      const adaptations = { ...urls, createdAt: new Date().toISOString() };
+      const mergedFiles = [...(form.files || []), ...newFileEntries];
+      await updateAny(editingTask.id, { adaptations, files: mergedFiles } as any);
+      setForm((prev) => ({ ...prev, files: mergedFiles }));
+      setTaskAdaptations(urls);
+      toast("✓ נוצרו 3 גרסאות (Square / 4:5 / Story) ונשמרו במשימה", "success");
+      try { fireConfetti(); } catch { /* noop */ }
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "ההתאמה נכשלה", "error");
+    } finally { setAdaptingSizes(null); }
   };
 
   // Calculate today's date for task filtering
@@ -1329,6 +1383,34 @@ export default function TasksPage() {
                   <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>אין קבצים מצורפים למשימה.</div>
                 )}
               </div>
+
+              {/* MANAGER: AI size adaptations — turn the approved creative into Square/4:5/Story, saved INTO the task */}
+              {!isEmployee && editingTask && (
+                <div style={{ background: "linear-gradient(135deg, #f0f9ff 0%, #faf5ff 100%)", border: "1px solid #ddd6fe", borderRadius: 16, padding: "1rem 1.1rem" }}>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "#7c3aed", marginBottom: 4 }}>🎨 התאמות גדלים — Creative PixelAI</div>
+                  <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", marginBottom: 10 }}>
+                    לוקח את הקריאייטיב המצורף ויוצר אוטומטית גרסאות Square / 4:5 / Story — נשמרות בתוך המשימה.
+                  </div>
+                  {taskAdaptations && (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                      {([["square", "⬜ Square"], ["feed_4_5", "📐 4:5"], ["story", "📱 Story"]] as const).map(([k, label]) => taskAdaptations[k] && (
+                        <a key={k} href={taskAdaptations[k]} target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize: "0.72rem", fontWeight: 700, color: "#7c3aed", background: "rgba(124,58,237,0.1)", border: "1px solid rgba(124,58,237,0.3)", borderRadius: 8, padding: "0.3rem 0.7rem", textDecoration: "none" }}>
+                          {label} ⬇
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    onClick={handleAdaptSizes}
+                    disabled={!!adaptingSizes}
+                    className="mod-btn-primary ux-btn"
+                    style={{ width: "100%", fontSize: "0.8rem", fontWeight: 800, background: "#7c3aed", opacity: adaptingSizes ? 0.7 : 1 }}
+                  >
+                    {adaptingSizes ? `⏳ ${adaptingSizes}` : taskAdaptations ? "🔄 צור מחדש את כל הגרסאות" : "🚀 צור גרסאות Square / 4:5 / Story"}
+                  </button>
+                </div>
+              )}
 
               {/* EMPLOYEE: upload-for-review is the ONLY action — no status changes, no "complete" */}
               {isEmployee && editingTask && (

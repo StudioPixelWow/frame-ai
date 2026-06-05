@@ -58,6 +58,7 @@ function rowToTask(r: Row) {
     ganttItemId: (r.gantt_item_id as string) ?? null,
     tags: [] as string[],                      // no DB column yet — return empty
     contentType: ((r as any).content_type as string) ?? null,  // 'post' | 'story' | 'reel'
+    adaptations: (r as any).adaptations ?? null,                // AI size adaptations { story, feed_4_5, square }
     files: Array.isArray((r as any).files) ? (r as any).files : [],  // persisted JSONB array
     notes: (r.notes as string) ?? '',
     createdAt: (r.created_at as string) ?? '',
@@ -109,6 +110,7 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
   if (ganttItemId) row.gantt_item_id = ganttItemId;
   if (Array.isArray(body.files)) row.files = body.files; // attached files (name|url)
   if (nullIfEmpty(body.contentType)) row.content_type = body.contentType; // 'post'|'story'|'reel'
+  if (body.adaptations && typeof body.adaptations === 'object') row.adaptations = body.adaptations;
   return row;
 }
 

@@ -27,6 +27,7 @@ const REQUIRED_COLUMNS = [
   { name: 'gantt_item_id',  def: 'TEXT' },
   { name: 'files',          def: "JSONB DEFAULT '[]'::jsonb" },
   { name: 'content_type',   def: 'TEXT' }, // 'post' | 'story' | 'reel' — content-type of the task
+  { name: 'adaptations',    def: 'JSONB' }, // { story, feed_4_5, square, createdAt } — AI size adaptations
 ];
 
 /** Probe which columns actually exist in the table right now. */
