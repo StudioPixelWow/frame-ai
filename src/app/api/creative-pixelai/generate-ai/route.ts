@@ -43,12 +43,11 @@ export async function POST(req: NextRequest) {
     const styleExtra = prompt && prompt.trim() ? ` Style guidance: ${prompt.trim()}.` : "";
 
     const genPrompt = mode === "redesign"
-      // FULL REDESIGN — the AI rebuilds the ad natively for the target format.
-      ? `Redesign this exact advertisement as ${FORMAT_DESC[format]}, like a professional graphic designer adapting it. ` +
-        `Recreate the SAME ad: copy ALL the text EXACTLY character-for-character (it is in Hebrew — preserve every word, number, price, phone number and punctuation precisely, right-to-left), ` +
-        `keep the same logos, the same brand colors, the same fonts look, and the same photography subject. ` +
-        `Extend the photography to fill the ENTIRE frame edge-to-edge (full bleed), and re-arrange the layout elegantly for the new aspect ratio — bigger, bolder, premium real-estate advertising quality. ` +
-        `Keep all text and logos within the central safe area (away from the outer 12% of the edges). Do not invent new text or elements.` + styleExtra
+      // FULL REDESIGN — simple, ChatGPT-style instruction. input_fidelity:high does
+      // the heavy lifting of preserving text/logos from the source image.
+      ? `תתאים את המודעה הזאת בדיוק לפורמט ${format === "story" ? "סטורי אנכי 9:16" : format === "feed_4_5" ? "פיד אנכי 4:5" : "ריבועי 1:1"}. ` +
+        `זו אותה מודעה — שמור אחד-לאחד על כל הטקסטים, המספרים, המחירים, הלוגואים, הצבעים והפונטים בדיוק כפי שהם. ` +
+        `הרחב את הצילום ופרוס את האלמנטים מחדש כך שימלאו את כל הפורמט בצורה מקצועית ויפה. אל תוסיף טקסט או אלמנט חדש.` + styleExtra
       // OUTPAINT (1:1) — the original spans the full width; fill ONLY the missing
       // strips above/below so the result reads as one native full-bleed design.
       : "Seamlessly extend this advertisement vertically to fill the transparent strips above and below it. " +
@@ -59,20 +58,38 @@ export async function POST(req: NextRequest) {
         "Do NOT modify the existing artwork pixels — only fill the empty transparent areas." +
         (prompt && prompt.trim() ? ` Style guidance: ${prompt.trim()}.` : "");
 
-    const fd = new FormData();
-    fd.append("model", "gpt-image-1");
-    fd.append("image", new Blob([new Uint8Array(buf)], { type: "image/png" }), "input.png");
-    fd.append("prompt", genPrompt);
-    fd.append("size", GEN_SIZE[format]);
-    fd.append("quality", "high");
-    fd.append("n", "1");
+    const buildForm = (withFidelity: boolean) => {
+      const fd = new FormData();
+      fd.append("model", "gpt-image-1");
+      fd.append("image", new Blob([new Uint8Array(buf)], { type: "image/png" }), "input.png");
+      fd.append("prompt", genPrompt);
+      fd.append("size", GEN_SIZE[format]);
+      fd.append("quality", "high");
+      fd.append("n", "1");
+      // The key to ChatGPT-grade text/logo preservation when redesigning:
+      if (withFidelity) fd.append("input_fidelity", "high");
+      return fd;
+    };
 
-    const res = await fetch("https://api.openai.com/v1/images/edits", {
+    let res = await fetch("https://api.openai.com/v1/images/edits", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}` },
-      body: fd,
+      body: buildForm(true),
       signal: AbortSignal.timeout(110000),
     });
+
+    // Older API revisions may reject input_fidelity — retry once without it.
+    if (res.status === 400) {
+      const errText = await res.clone().text();
+      if (errText.includes("input_fidelity")) {
+        res = await fetch("https://api.openai.com/v1/images/edits", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}` },
+          body: buildForm(false),
+          signal: AbortSignal.timeout(110000),
+        });
+      }
+    }
 
     if (!res.ok) {
       const t = await res.text();

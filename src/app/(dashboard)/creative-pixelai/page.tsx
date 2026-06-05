@@ -131,7 +131,7 @@ export default function CreativePixelAIPage() {
 
   /* ── Engine: clean canvas vs AI background generation (outpainting) ── */
   const [engine, setEngine] = useState<"canvas" | "ai">("ai");
-  const [aiMode, setAiMode] = useState<"redesign" | "outpaint">("outpaint");
+  const [aiMode, setAiMode] = useState<"redesign" | "outpaint">("redesign");
   const [aiResults, setAiResults] = useState<Record<string, string>>({});       // formatId → dataURL
   const [aiGenerating, setAiGenerating] = useState<string | null>(null);        // formatId in progress
   const [aiStylePrompt, setAiStylePrompt] = useState("");
@@ -321,9 +321,9 @@ export default function CreativePixelAIPage() {
       let composite: { gx: number; gy: number; gw: number; gh: number } | null = null;
 
       if (aiMode === "redesign") {
-        // FULL REDESIGN — send the original itself; the AI rebuilds the whole ad
-        // natively for the target format (full bleed, re-laid-out).
-        const maxDim = 1536;
+        // FULL REDESIGN — send the original itself (high resolution preserves text
+        // fidelity together with input_fidelity:high on the server).
+        const maxDim = 2048;
         const ds = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
         const c = document.createElement("canvas");
         c.width = Math.round(img.naturalWidth * ds);
@@ -536,20 +536,20 @@ export default function CreativePixelAIPage() {
             {engine === "ai" && (
               <div style={{ marginTop: 12 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                  <button onClick={() => setAiMode("redesign")}
+                    style={{ padding: "0.5rem", borderRadius: 10, fontSize: 11.5, fontWeight: 700, cursor: "pointer", textAlign: "right", border: `1px solid ${aiMode === "redesign" ? BRAND : "var(--border)"}`, background: aiMode === "redesign" ? "rgba(0,181,254,0.08)" : "transparent", color: aiMode === "redesign" ? BRAND : "var(--foreground)" }}>
+                    🎨 עיצוב מלא לפורמט
+                    <div style={{ fontSize: 9.5, fontWeight: 400, color: "var(--foreground-muted)", marginTop: 2 }}>ה-AI פורס את המודעה מחדש על כל הפריים — נאמנות גבוהה לטקסט ולוגו</div>
+                  </button>
                   <button onClick={() => setAiMode("outpaint")}
                     style={{ padding: "0.5rem", borderRadius: 10, fontSize: 11.5, fontWeight: 700, cursor: "pointer", textAlign: "right", border: `1px solid ${aiMode === "outpaint" ? BRAND : "var(--border)"}`, background: aiMode === "outpaint" ? "rgba(0,181,254,0.08)" : "transparent", color: aiMode === "outpaint" ? BRAND : "var(--foreground)" }}>
-                    🎨 עיצוב מלא · 1:1
-                    <div style={{ fontSize: 9.5, fontWeight: 400, color: "var(--foreground-muted)", marginTop: 2 }}>המקור נמתח לכל הרוחב; ה-AI משלים רק למעלה/למטה — אפס שינוי בטקסט</div>
-                  </button>
-                  <button onClick={() => setAiMode("redesign")}
-                    style={{ padding: "0.5rem", borderRadius: 10, fontSize: 11.5, fontWeight: 700, cursor: "pointer", textAlign: "right", border: `1px solid ${aiMode === "redesign" ? "#f59e0b" : "var(--border)"}`, background: aiMode === "redesign" ? "rgba(245,158,11,0.08)" : "transparent", color: aiMode === "redesign" ? "#b45309" : "var(--foreground)" }}>
-                    🧪 עיצוב מחדש (ניסיוני)
-                    <div style={{ fontSize: 9.5, fontWeight: 400, color: "var(--foreground-muted)", marginTop: 2 }}>ה-AI בונה הכל מחדש — עלול לשבש טקסטים</div>
+                    🔒 הרחבה 1:1
+                    <div style={{ fontSize: 9.5, fontWeight: 400, color: "var(--foreground-muted)", marginTop: 2 }}>המקור נעול פיקסל-פרפקט; ה-AI רק משלים למעלה/למטה</div>
                   </button>
                 </div>
                 {aiMode === "redesign" && (
-                  <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, padding: "0.45rem 0.65rem", fontSize: 10.5, color: "#dc2626", marginBottom: 8 }}>
-                    ⚠️ במצב הזה ה-AI מייצר גם את הטקסטים ועלול לשבש עברית, מחירים ולוגו — לא מתאים לפרסום בלי הגהה קפדנית. למצב מדויק 1:1 השתמש ב"עיצוב מלא".
+                  <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 8, padding: "0.45rem 0.65rem", fontSize: 10.5, color: "#b45309", marginBottom: 8 }}>
+                    💡 הטקסטים נשמרים בנאמנות גבוהה — בכל זאת הגיה מחירים וטלפונים לפני פרסום. שיבוש? צור שוב או עבור ל"הרחבה 1:1".
                   </div>
                 )}
                 <input className="form-input ux-input" value={aiStylePrompt} onChange={(e) => setAiStylePrompt(e.target.value)}
