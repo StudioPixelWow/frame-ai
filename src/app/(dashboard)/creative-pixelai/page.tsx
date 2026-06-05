@@ -388,10 +388,17 @@ export default function CreativePixelAIPage() {
     } finally { setAiGenerating(null); }
   }, [img, scaleMode, aiStylePrompt, aiMode, aiHighQuality, toast]);
 
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number; current: string } | null>(null);
   const generateAllAI = async () => {
-    for (const f of FORMATS) {
-      if (selectedFormats.includes(f.id)) await generateAIFor(f.id);
+    const targets = FORMATS.filter((f) => selectedFormats.includes(f.id));
+    if (targets.length === 0) return;
+    setBulkProgress({ done: 0, total: targets.length, current: targets[0].label });
+    for (let i = 0; i < targets.length; i++) {
+      setBulkProgress({ done: i, total: targets.length, current: targets[i].label });
+      await generateAIFor(targets[i].id);
     }
+    setBulkProgress(null);
+    toast(`✓ נוצרו כל ${targets.length} המידות — מוכן לייצוא`, "success");
   };
 
   /** Output blob for export/save — AI result when in AI mode, else clean canvas render. */
@@ -559,16 +566,17 @@ export default function CreativePixelAIPage() {
                   <input type="checkbox" checked={aiHighQuality} onChange={(e) => setAiHighQuality(e.target.checked)} />
                   💎 איכות מקסימלית (איטי יותר — אם נקטע, הפעל Fluid Compute ב-Vercel)
                 </label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button className="mod-btn-primary ux-btn" disabled={!img || !!aiGenerating} onClick={() => generateAIFor(activeFormat)}
-                    style={{ flex: 1, fontSize: 12.5, opacity: !img || aiGenerating ? 0.5 : 1 }}>
-                    {aiGenerating ? `⏳ יוצר ${aiGenerating}…` : `✨ צור ${activeFormat === "story" ? "Story" : activeFormat === "feed_4_5" ? "4:5" : "Square"}`}
-                  </button>
-                  <button className="mod-btn-ghost ux-btn" disabled={!img || !!aiGenerating} onClick={generateAllAI}
-                    style={{ fontSize: 12.5, opacity: !img || aiGenerating ? 0.5 : 1 }}>
-                    צור הכל
-                  </button>
-                </div>
+                {/* Primary: adapt to ALL sizes automatically */}
+                <button className="mod-btn-primary ux-btn ux-btn-glow" disabled={!img || !!aiGenerating} onClick={generateAllAI}
+                  style={{ width: "100%", fontSize: 14, fontWeight: 800, padding: "0.75rem", marginBottom: 8, opacity: !img || aiGenerating ? 0.6 : 1 }}>
+                  {bulkProgress
+                    ? `⏳ יוצר ${bulkProgress.done + 1}/${bulkProgress.total} — ${bulkProgress.current}`
+                    : `🚀 התאם לכל המידות (${selectedFormats.length})`}
+                </button>
+                <button className="mod-btn-ghost ux-btn" disabled={!img || !!aiGenerating} onClick={() => generateAIFor(activeFormat)}
+                  style={{ width: "100%", fontSize: 12, opacity: !img || aiGenerating ? 0.5 : 1 }}>
+                  {aiGenerating && !bulkProgress ? `⏳ יוצר…` : `או רק ${activeFormat === "story" ? "Story" : activeFormat === "feed_4_5" ? "4:5" : "Square"} ✨`}
+                </button>
                 <div style={{ fontSize: 10, color: "var(--foreground-muted)", marginTop: 6 }}>
                   ⚡ כ-20-40 שניות לפורמט · הטקסט, המחיר והלוגו מוגנים — מודבקים מהמקור, לא מג׳ונרטים
                 </div>
