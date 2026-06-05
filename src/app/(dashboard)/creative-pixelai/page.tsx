@@ -124,6 +124,11 @@ export default function CreativePixelAIPage() {
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
+  /* ── AI refine-by-note (iterative feedback loop) ── */
+  const [refineNote, setRefineNote] = useState("");
+  const [refining, setRefining] = useState(false);
+  const [refineLog, setRefineLog] = useState<{ note: string; explanation: string }[]>([]);
+
   const dominantColors = useMemo(() => (img ? extractDominantColors(img, 3) : []), [img]);
 
   const loadHistory = useCallback(async () => {
@@ -292,6 +297,40 @@ export default function CreativePixelAIPage() {
       loadHistory();
     } catch (e) { toast(e instanceof Error ? e.message : "השמירה נכשלה", "error"); }
     finally { setSaving(false); }
+  };
+
+  /* ── Refine by note: AI maps Hebrew feedback → parameter changes, re-render is instant ── */
+  const applyRefine = async () => {
+    if (!refineNote.trim() || !img) return;
+    setRefining(true);
+    try {
+      const res = await fetch("/api/creative-pixelai/refine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          note: refineNote.trim(),
+          currentSettings: { scaleMode, background, padding, blurAmount, brightness, verticalOffset, manualScale, shadow, roundedCorners: rounded },
+          analysis,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "התיקון נכשל");
+      const s = json.settings || {};
+      if (s.scaleMode) setScaleMode(s.scaleMode);
+      if (s.background) setBackground(s.background);
+      if (typeof s.padding === "number") setPadding(s.padding);
+      if (typeof s.blurAmount === "number") setBlurAmount(s.blurAmount);
+      if (typeof s.brightness === "number") setBrightness(s.brightness);
+      if (typeof s.verticalOffset === "number") setVerticalOffset(s.verticalOffset);
+      if (typeof s.manualScale === "number") { setManualScale(s.manualScale); if (!s.scaleMode) setScaleMode("manual"); }
+      if (typeof s.shadow === "boolean") setShadow(s.shadow);
+      if (typeof s.roundedCorners === "boolean") setRounded(s.roundedCorners);
+      setRefineLog((l) => [{ note: refineNote.trim(), explanation: json.explanation || "עודכן" }, ...l].slice(0, 5));
+      setRefineNote("");
+      toast(`✓ ${json.explanation || "עודכן לפי ההערה"}`, "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "התיקון נכשל", "error");
+    } finally { setRefining(false); }
   };
 
   const deleteAdaptation = async (id: string) => {
@@ -560,6 +599,38 @@ export default function CreativePixelAIPage() {
                       aspectRatio: `${f.width} / ${f.height}`,
                     }}
                   />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 7.5 AI refine-by-note — iterate on the result instead of starting over */}
+          <div className="premium-card" style={{ padding: "1.25rem" }}>
+            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4, color: "var(--foreground)" }}>🛠 תיקון לפי הערה</div>
+            <div style={{ fontSize: 11.5, color: "var(--foreground-muted)", marginBottom: 10 }}>
+              כתוב מה לא טוב בתוצאה (״גדול מדי״, ״תוריד למטה״, ״רקע כהה יותר״…) — ה-AI יכוון את ההגדרות והתצוגה תתעדכן מיד. העיצוב המקורי לא נגוע.
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                className="form-input ux-input"
+                value={refineNote}
+                onChange={(e) => setRefineNote(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") applyRefine(); }}
+                placeholder="למשל: הקריאייטיב קטן מדי והרקע בהיר מדי"
+                style={{ flex: 1, fontSize: 13 }}
+                disabled={!img || refining}
+              />
+              <button className="mod-btn-primary ux-btn" onClick={applyRefine} disabled={!img || refining || !refineNote.trim()}
+                style={{ fontSize: 12.5, whiteSpace: "nowrap", opacity: !img || refining || !refineNote.trim() ? 0.5 : 1 }}>
+                {refining ? "⏳ מתקן…" : "תקן ✨"}
+              </button>
+            </div>
+            {refineLog.length > 0 && (
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
+                {refineLog.map((r, i) => (
+                  <div key={i} style={{ fontSize: 11, color: "var(--foreground-muted)", background: "var(--surface)", borderRadius: 8, padding: "0.4rem 0.6rem" }}>
+                    <span style={{ fontWeight: 700, color: "var(--foreground)" }}>"{r.note}"</span> ← {r.explanation}
+                  </div>
                 ))}
               </div>
             )}
