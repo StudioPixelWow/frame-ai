@@ -150,6 +150,37 @@ export async function POST(req: NextRequest) {
       savedOutputs = outRows || [];
     }
 
+    // ── Client linkage: surface the whole adaptation as a "project" inside the
+    // client's Files tab (one record per output + the original), so a manual run
+    // saved with a client shows up on the client card automatically. ──
+    if (clientId && Array.isArray(outputs) && outputs.length > 0) {
+      try {
+        const { clientFiles } = await import("@/lib/db/collections");
+        const projectName = `Creative PixelAI · ${originalFileName || "קריאייטיב"} · ${new Date().toLocaleDateString("he-IL")}`;
+        const FORMAT_LABEL: Record<string, string> = { story: "Story 1080x1920", feed_4_5: "Feed 1080x1350", square: "Square 1080x1080" };
+        const fileRows = [
+          { fileName: `${projectName} — מקור`, fileUrl: originalAssetUrl },
+          ...outputs.map((o: any) => ({ fileName: `${projectName} — ${FORMAT_LABEL[o.format] || o.format}`, fileUrl: o.url })),
+        ];
+        for (const fr of fileRows) {
+          await clientFiles.createAsync({
+            clientId,
+            fileName: fr.fileName,
+            fileUrl: fr.fileUrl,
+            fileType: "image",
+            category: "social_media",
+            fileSize: 0,
+            linkedTaskId: null,
+            linkedGanttItemId: null,
+            uploadedBy: uid,
+            notes: `פרויקט Creative PixelAI (התאמת גדלים אוטומטית) · ${ (inserted as any).id }`,
+          } as any);
+        }
+      } catch (e) {
+        console.warn("[creative-pixelai] client-files linkage failed:", e instanceof Error ? e.message : e);
+      }
+    }
+
     return NextResponse.json({ adaptation: { ...(inserted as any), outputs: savedOutputs } }, { status: 201 });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
