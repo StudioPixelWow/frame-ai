@@ -49,13 +49,15 @@ export async function POST(req: NextRequest) {
         `keep the same logos, the same brand colors, the same fonts look, and the same photography subject. ` +
         `Extend the photography to fill the ENTIRE frame edge-to-edge (full bleed), and re-arrange the layout elegantly for the new aspect ratio — bigger, bolder, premium real-estate advertising quality. ` +
         `Keep all text and logos within the central safe area (away from the outer 12% of the edges). Do not invent new text or elements.` + styleExtra
-      // OUTPAINT — fill transparent surroundings only, original stays locked.
-      : (prompt && prompt.trim()) ||
-        "Extend the advertisement's background to fill the entire transparent area naturally and seamlessly. " +
-        "Continue the existing scenery, lighting, colors and atmosphere of the artwork (sky, buildings, environment, textures). " +
-        "Premium, clean, modern advertising look. " +
+      // OUTPAINT (1:1) — the original spans the full width; fill ONLY the missing
+      // strips above/below so the result reads as one native full-bleed design.
+      : "Seamlessly extend this advertisement vertically to fill the transparent strips above and below it. " +
+        "Above: continue the photograph naturally (sky, architecture, lighting — exactly matching perspective and tones). " +
+        "Below: continue the design panel exactly — same solid colors, same gradient, as if the panel simply continues. " +
+        "The result must look like ONE single full-bleed design with invisible seams. " +
         "STRICT: do NOT add any text, letters, numbers, logos, watermarks, people or new graphic elements. " +
-        "Do NOT modify the existing artwork pixels — only fill the empty transparent areas around it.";
+        "Do NOT modify the existing artwork pixels — only fill the empty transparent areas." +
+        (prompt && prompt.trim() ? ` Style guidance: ${prompt.trim()}.` : "");
 
     const fd = new FormData();
     fd.append("model", "gpt-image-1");

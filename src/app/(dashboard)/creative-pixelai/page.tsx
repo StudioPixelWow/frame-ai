@@ -131,7 +131,7 @@ export default function CreativePixelAIPage() {
 
   /* ── Engine: clean canvas vs AI background generation (outpainting) ── */
   const [engine, setEngine] = useState<"canvas" | "ai">("ai");
-  const [aiMode, setAiMode] = useState<"redesign" | "outpaint">("redesign");
+  const [aiMode, setAiMode] = useState<"redesign" | "outpaint">("outpaint");
   const [aiResults, setAiResults] = useState<Record<string, string>>({});       // formatId → dataURL
   const [aiGenerating, setAiGenerating] = useState<string | null>(null);        // formatId in progress
   const [aiStylePrompt, setAiStylePrompt] = useState("");
@@ -333,12 +333,18 @@ export default function CreativePixelAIPage() {
         cx.drawImage(img, 0, 0, c.width, c.height);
         inputDataUrl = c.toDataURL("image/png");
       } else {
-        // OUTPAINT — original FIT-placed on transparent canvas; AI fills surroundings.
-        const pad = Math.round(genW * 0.07);
-        const fitScale = Math.min((genW - pad * 2) / img.naturalWidth, (genH - pad * 2) / img.naturalHeight);
-        const gw = img.naturalWidth * fitScale, gh = img.naturalHeight * fitScale;
+        // FULL-WIDTH 1:1 — the original spans the ENTIRE width (edge-to-edge, looks
+        // native/full-bleed); the AI only completes the missing strips above/below
+        // (sky/architecture up, design panel colors down). ZERO text/logo changes.
+        let fullScale = genW / img.naturalWidth;
+        if (img.naturalHeight * fullScale > genH) fullScale = genH / img.naturalHeight; // never clip the original
+        const gw = img.naturalWidth * fullScale;
+        const gh = img.naturalHeight * fullScale;
         const gx = (genW - gw) / 2;
-        const gy = scaleMode === "top_focus" ? pad : scaleMode === "bottom_focus" ? genH - pad - gh : (genH - gh) / 2;
+        const freeH = Math.max(0, genH - gh);
+        const gy = scaleMode === "top_focus" ? 0
+          : scaleMode === "bottom_focus" ? freeH
+          : Math.round(freeH * 0.45); // slightly above center — sky extension reads better on top
         composite = { gx, gy, gw, gh };
         const genCanvas = document.createElement("canvas");
         genCanvas.width = genW; genCanvas.height = genH;
@@ -530,20 +536,20 @@ export default function CreativePixelAIPage() {
             {engine === "ai" && (
               <div style={{ marginTop: 12 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
-                  <button onClick={() => setAiMode("redesign")}
-                    style={{ padding: "0.5rem", borderRadius: 10, fontSize: 11.5, fontWeight: 700, cursor: "pointer", textAlign: "right", border: `1px solid ${aiMode === "redesign" ? BRAND : "var(--border)"}`, background: aiMode === "redesign" ? "rgba(0,181,254,0.08)" : "transparent", color: aiMode === "redesign" ? BRAND : "var(--foreground)" }}>
-                    🎨 עיצוב מחדש מלא
-                    <div style={{ fontSize: 9.5, fontWeight: 400, color: "var(--foreground-muted)", marginTop: 2 }}>ה-AI בונה את המודעה מחדש לפורמט — full bleed</div>
-                  </button>
                   <button onClick={() => setAiMode("outpaint")}
                     style={{ padding: "0.5rem", borderRadius: 10, fontSize: 11.5, fontWeight: 700, cursor: "pointer", textAlign: "right", border: `1px solid ${aiMode === "outpaint" ? BRAND : "var(--border)"}`, background: aiMode === "outpaint" ? "rgba(0,181,254,0.08)" : "transparent", color: aiMode === "outpaint" ? BRAND : "var(--foreground)" }}>
-                    🖼 הרחבת רקע
-                    <div style={{ fontSize: 9.5, fontWeight: 400, color: "var(--foreground-muted)", marginTop: 2 }}>המקור נשאר נעול; ה-AI ממשיך את הסביבה</div>
+                    🎨 עיצוב מלא · 1:1
+                    <div style={{ fontSize: 9.5, fontWeight: 400, color: "var(--foreground-muted)", marginTop: 2 }}>המקור נמתח לכל הרוחב; ה-AI משלים רק למעלה/למטה — אפס שינוי בטקסט</div>
+                  </button>
+                  <button onClick={() => setAiMode("redesign")}
+                    style={{ padding: "0.5rem", borderRadius: 10, fontSize: 11.5, fontWeight: 700, cursor: "pointer", textAlign: "right", border: `1px solid ${aiMode === "redesign" ? "#f59e0b" : "var(--border)"}`, background: aiMode === "redesign" ? "rgba(245,158,11,0.08)" : "transparent", color: aiMode === "redesign" ? "#b45309" : "var(--foreground)" }}>
+                    🧪 עיצוב מחדש (ניסיוני)
+                    <div style={{ fontSize: 9.5, fontWeight: 400, color: "var(--foreground-muted)", marginTop: 2 }}>ה-AI בונה הכל מחדש — עלול לשבש טקסטים</div>
                   </button>
                 </div>
                 {aiMode === "redesign" && (
-                  <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 8, padding: "0.45rem 0.65rem", fontSize: 10.5, color: "#b45309", marginBottom: 8 }}>
-                    ⚠️ בעיצוב מחדש ה-AI מייצר גם את הטקסטים — חובה להגיה מחירים, טלפונים ושמות לפני פרסום. אם יש שגיאה, צור שוב או עבור ל"הרחבת רקע".
+                  <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, padding: "0.45rem 0.65rem", fontSize: 10.5, color: "#dc2626", marginBottom: 8 }}>
+                    ⚠️ במצב הזה ה-AI מייצר גם את הטקסטים ועלול לשבש עברית, מחירים ולוגו — לא מתאים לפרסום בלי הגהה קפדנית. למצב מדויק 1:1 השתמש ב"עיצוב מלא".
                   </div>
                 )}
                 <input className="form-input ux-input" value={aiStylePrompt} onChange={(e) => setAiStylePrompt(e.target.value)}
