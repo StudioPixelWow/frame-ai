@@ -109,23 +109,30 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
   // Detected via the normal polling refetch (no push needed).
   const seenReturned = useRef<Set<string>>(new Set());
   const seenApproved = useRef<Set<string>>(new Set());
+  const seenReview = useRef<Set<string>>(new Set());
   const firstLoad = useRef(true);
-  const [notice, setNotice] = useState<{ kind: "returned" | "approved"; title: string } | null>(null);
+  const [notice, setNotice] = useState<{ kind: "returned" | "approved" | "review"; title: string } | null>(null);
   const returnedIds = returnedTasks.map((t) => t.id).join(",");
   const approvedIds = approvedRecent.map((t) => t.id).join(",");
+  const reviewIds = pendingReview.map((t) => t.id).join(",");
   useEffect(() => {
     const r = new Set(returnedTasks.map((t) => t.id));
     const a = new Set(approvedRecent.map((t) => t.id));
-    if (firstLoad.current) { seenReturned.current = r; seenApproved.current = a; firstLoad.current = false; return; }
+    const rv = new Set(pendingReview.map((t) => t.id));
+    if (firstLoad.current) { seenReturned.current = r; seenApproved.current = a; seenReview.current = rv; firstLoad.current = false; return; }
     if (isEmployee) {
       const newR = returnedTasks.find((t) => !seenReturned.current.has(t.id));
       const newA = approvedRecent.find((t) => !seenApproved.current.has(t.id));
       if (newR) setNotice({ kind: "returned", title: newR.title });
       else if (newA) { setNotice({ kind: "approved", title: newA.title }); try { fireConfetti(); } catch { /* noop */ } }
+    } else {
+      // MANAGER: a new task just arrived for review → popup immediately.
+      const newRv = pendingReview.find((t) => !seenReview.current.has(t.id));
+      if (newRv) setNotice({ kind: "review", title: newRv.title });
     }
-    seenReturned.current = r; seenApproved.current = a;
+    seenReturned.current = r; seenApproved.current = a; seenReview.current = rv;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [returnedIds, approvedIds, isEmployee]);
+  }, [returnedIds, approvedIds, reviewIds, isEmployee]);
 
   // Status breakdown (manager view): in-progress / awaiting approval / in rework / approved.
   const statusStrip = [
@@ -238,14 +245,16 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
       {notice && (
         <div onClick={() => setNotice(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 4000 }}>
           <div style={{ background: "var(--surface-raised, #fff)", borderRadius: 22, padding: "2.5rem 2.75rem", textAlign: "center", maxWidth: 440, boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
-            <div style={{ fontSize: "3.5rem", marginBottom: 12 }}>{notice.kind === "approved" ? "🎉" : "🔧"}</div>
+            <div style={{ fontSize: "3.5rem", marginBottom: 12 }}>{notice.kind === "approved" ? "🎉" : notice.kind === "review" ? "📤" : "🔧"}</div>
             <div style={{ fontSize: "1.3rem", fontWeight: 800, color: C.text, lineHeight: 1.4 }}>
               {notice.kind === "approved"
                 ? <>יש לנו את זה! «{notice.title}» הושלמה ואושרה!</>
+                : notice.kind === "review"
+                ? <>משימה חדשה ממתינה לבדיקה: «{notice.title}»</>
                 : <>תיקון חדש נכנס: «{notice.title}»</>}
             </div>
-            <button onClick={() => setNotice(null)} style={{ marginTop: 20, padding: "0.6rem 1.6rem", borderRadius: 12, border: "none", background: notice.kind === "approved" ? "#16a34a" : "#f59e0b", color: "#fff", fontWeight: 700, fontSize: "0.9rem", cursor: "pointer" }}>
-              {notice.kind === "approved" ? "מעולה!" : "מטפל בזה"}
+            <button onClick={() => setNotice(null)} style={{ marginTop: 20, padding: "0.6rem 1.6rem", borderRadius: 12, border: "none", background: notice.kind === "approved" ? "#16a34a" : notice.kind === "review" ? "#00B5FE" : "#f59e0b", color: "#fff", fontWeight: 700, fontSize: "0.9rem", cursor: "pointer" }}>
+              {notice.kind === "approved" ? "מעולה!" : notice.kind === "review" ? "אבדוק עכשיו" : "מטפל בזה"}
             </button>
           </div>
         </div>

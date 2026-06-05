@@ -622,10 +622,11 @@ export interface User {
 // Approval
 export interface Approval {
   id: string;
-  type: 'video' | 'post' | 'gantt' | 'design' | 'milestone';
+  type: 'video' | 'post' | 'gantt' | 'design' | 'milestone' | 'task';
   title: string;
   clientName: string;
   status: 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'needs_changes';
+  taskId?: string;   // linked task (employee submitted a task for review)
   createdAt: string;
   updatedAt: string;
 }

@@ -43,6 +43,17 @@ export async function PUT(
       return NextResponse.json({ error: 'Employee task not found' }, { status: 404 });
     }
 
+    // ── Review sync: approvals screen + manager email ──
+    try {
+      if (body.status === 'under_review' && before?.status !== 'under_review') {
+        const { onTaskSentForReview } = await import('@/lib/tasks/review-sync');
+        await onTaskSentForReview({ id, title: (updated as EmployeeTask).title, clientName: (updated as any).clientName });
+      } else if ((body.status === 'approved' || body.status === 'returned') && before?.status === 'under_review') {
+        const { onTaskReviewResolved } = await import('@/lib/tasks/review-sync');
+        await onTaskReviewResolved(id, body.status === 'approved' ? 'approved' : 'returned');
+      }
+    } catch (e) { console.warn('[employee-tasks PUT] review-sync failed:', e instanceof Error ? e.message : e); }
+
     // ── Reverse sync: Task status → update linked gantt item ──
     const task = updated as EmployeeTask;
     if (task.ganttItemId && task.status !== before?.status) {

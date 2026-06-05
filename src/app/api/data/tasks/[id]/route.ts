@@ -133,6 +133,17 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 
     const result = rowToTask(data as unknown as Row);
 
+    // ── Review sync: approvals screen + manager email ──
+    try {
+      if (body.status === 'under_review') {
+        const { onTaskSentForReview } = await import('@/lib/tasks/review-sync');
+        await onTaskSentForReview({ id, title: result.title, clientName: result.clientName });
+      } else if (body.status === 'approved' || body.status === 'returned') {
+        const { onTaskReviewResolved } = await import('@/lib/tasks/review-sync');
+        await onTaskReviewResolved(id, body.status === 'approved' ? 'approved' : 'returned');
+      }
+    } catch (e) { console.warn('[tasks PUT] review-sync failed:', e instanceof Error ? e.message : e); }
+
     // ── Cross-sync: approved/completed → gantt item + employee task ──
     const newStatus = result.status;
     if (newStatus === 'approved' || newStatus === 'completed') {
