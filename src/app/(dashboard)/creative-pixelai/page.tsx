@@ -130,7 +130,8 @@ export default function CreativePixelAIPage() {
   const [refineLog, setRefineLog] = useState<{ note: string; explanation: string }[]>([]);
 
   /* ── Engine: clean canvas vs AI background generation (outpainting) ── */
-  const [engine, setEngine] = useState<"canvas" | "ai">("canvas");
+  const [engine, setEngine] = useState<"canvas" | "ai">("ai");
+  const [aiMode, setAiMode] = useState<"redesign" | "outpaint">("redesign");
   const [aiResults, setAiResults] = useState<Record<string, string>>({});       // formatId → dataURL
   const [aiGenerating, setAiGenerating] = useState<string | null>(null);        // formatId in progress
   const [aiStylePrompt, setAiStylePrompt] = useState("");
@@ -313,52 +314,72 @@ export default function CreativePixelAIPage() {
     const f = FORMATS.find((x) => x.id === formatId)!;
     setAiGenerating(formatId);
     try {
-      // 1) Build the generation input: original FIT-placed on a transparent canvas
-      //    at gpt-image-1's supported size for this format.
       const genW = 1024;
       const genH = formatId === "square" ? 1024 : 1536;
-      const pad = Math.round(genW * 0.07);
-      const fitScale = Math.min((genW - pad * 2) / img.naturalWidth, (genH - pad * 2) / img.naturalHeight);
-      const gw = img.naturalWidth * fitScale, gh = img.naturalHeight * fitScale;
-      const gx = (genW - gw) / 2;
-      const gy = scaleMode === "top_focus" ? pad : scaleMode === "bottom_focus" ? genH - pad - gh : (genH - gh) / 2;
 
-      const genCanvas = document.createElement("canvas");
-      genCanvas.width = genW; genCanvas.height = genH;
-      const gctx = genCanvas.getContext("2d")!;
-      gctx.clearRect(0, 0, genW, genH); // transparent = areas for the AI to fill
-      gctx.imageSmoothingQuality = "high";
-      gctx.drawImage(img, gx, gy, gw, gh);
+      let inputDataUrl: string;
+      let composite: { gx: number; gy: number; gw: number; gh: number } | null = null;
 
-      // 2) Ask the server to outpaint the transparent surroundings.
+      if (aiMode === "redesign") {
+        // FULL REDESIGN — send the original itself; the AI rebuilds the whole ad
+        // natively for the target format (full bleed, re-laid-out).
+        const maxDim = 1536;
+        const ds = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.naturalWidth * ds);
+        c.height = Math.round(img.naturalHeight * ds);
+        const cx = c.getContext("2d")!;
+        cx.imageSmoothingQuality = "high";
+        cx.drawImage(img, 0, 0, c.width, c.height);
+        inputDataUrl = c.toDataURL("image/png");
+      } else {
+        // OUTPAINT — original FIT-placed on transparent canvas; AI fills surroundings.
+        const pad = Math.round(genW * 0.07);
+        const fitScale = Math.min((genW - pad * 2) / img.naturalWidth, (genH - pad * 2) / img.naturalHeight);
+        const gw = img.naturalWidth * fitScale, gh = img.naturalHeight * fitScale;
+        const gx = (genW - gw) / 2;
+        const gy = scaleMode === "top_focus" ? pad : scaleMode === "bottom_focus" ? genH - pad - gh : (genH - gh) / 2;
+        composite = { gx, gy, gw, gh };
+        const genCanvas = document.createElement("canvas");
+        genCanvas.width = genW; genCanvas.height = genH;
+        const gctx = genCanvas.getContext("2d")!;
+        gctx.clearRect(0, 0, genW, genH);
+        gctx.imageSmoothingQuality = "high";
+        gctx.drawImage(img, gx, gy, gw, gh);
+        inputDataUrl = genCanvas.toDataURL("image/png");
+      }
+
       const res = await fetch("/api/creative-pixelai/generate-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imagePng: genCanvas.toDataURL("image/png"), format: formatId, prompt: aiStylePrompt.trim() || undefined }),
+        body: JSON.stringify({ imagePng: inputDataUrl, format: formatId, mode: aiMode, prompt: aiStylePrompt.trim() || undefined }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "היצירה נכשלה");
       const genImg = await loadImage(json.image);
 
-      // 3) Compose the FINAL canvas at the exact ad size: generated image cover-scaled,
-      //    then the ORIGINAL pasted back at its mapped position (uniform scale only).
+      // Compose the FINAL canvas at the exact ad size (cover-scale the generation).
       const fin = document.createElement("canvas");
       fin.width = f.width; fin.height = f.height;
       const fctx = fin.getContext("2d")!;
       fctx.imageSmoothingQuality = "high";
-      const s = Math.max(f.width / genW, f.height / genH);
-      const ox = (f.width - genW * s) / 2, oy = (f.height - genH * s) / 2;
-      fctx.drawImage(genImg, ox, oy, genW * s, genH * s);
-      // pixel-perfect original on top — guaranteed intact text/logo/price
-      fctx.drawImage(img, gx * s + ox, gy * s + oy, gw * s, gh * s);
+      const s = Math.max(f.width / genImg.naturalWidth, f.height / genImg.naturalHeight);
+      const ox = (f.width - genImg.naturalWidth * s) / 2, oy = (f.height - genImg.naturalHeight * s) / 2;
+      fctx.drawImage(genImg, ox, oy, genImg.naturalWidth * s, genImg.naturalHeight * s);
+      if (composite) {
+        // Outpaint mode: paste the ORIGINAL back pixel-perfect over its region.
+        const s2 = Math.max(f.width / genW, f.height / genH);
+        const ox2 = (f.width - genW * s2) / 2, oy2 = (f.height - genH * s2) / 2;
+        fctx.drawImage(img, composite.gx * s2 + ox2, composite.gy * s2 + oy2, composite.gw * s2, composite.gh * s2);
+      }
 
       setAiResults((r) => ({ ...r, [formatId]: fin.toDataURL("image/png") }));
       setActiveFormat(formatId);
-      toast(`✓ נוצר ${f.label}`, "success");
+      toast(aiMode === "redesign" ? `✓ נוצר ${f.label} — חובה להגיה את הטקסטים!` : `✓ נוצר ${f.label}`, "success");
     } catch (e) {
       toast(e instanceof Error ? e.message : "היצירה נכשלה", "error");
     } finally { setAiGenerating(null); }
-  }, [img, scaleMode, aiStylePrompt, toast]);
+  }, [img, scaleMode, aiStylePrompt, aiMode, toast]);
 
   const generateAllAI = async () => {
     for (const f of FORMATS) {
@@ -508,6 +529,23 @@ export default function CreativePixelAIPage() {
             </div>
             {engine === "ai" && (
               <div style={{ marginTop: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                  <button onClick={() => setAiMode("redesign")}
+                    style={{ padding: "0.5rem", borderRadius: 10, fontSize: 11.5, fontWeight: 700, cursor: "pointer", textAlign: "right", border: `1px solid ${aiMode === "redesign" ? BRAND : "var(--border)"}`, background: aiMode === "redesign" ? "rgba(0,181,254,0.08)" : "transparent", color: aiMode === "redesign" ? BRAND : "var(--foreground)" }}>
+                    🎨 עיצוב מחדש מלא
+                    <div style={{ fontSize: 9.5, fontWeight: 400, color: "var(--foreground-muted)", marginTop: 2 }}>ה-AI בונה את המודעה מחדש לפורמט — full bleed</div>
+                  </button>
+                  <button onClick={() => setAiMode("outpaint")}
+                    style={{ padding: "0.5rem", borderRadius: 10, fontSize: 11.5, fontWeight: 700, cursor: "pointer", textAlign: "right", border: `1px solid ${aiMode === "outpaint" ? BRAND : "var(--border)"}`, background: aiMode === "outpaint" ? "rgba(0,181,254,0.08)" : "transparent", color: aiMode === "outpaint" ? BRAND : "var(--foreground)" }}>
+                    🖼 הרחבת רקע
+                    <div style={{ fontSize: 9.5, fontWeight: 400, color: "var(--foreground-muted)", marginTop: 2 }}>המקור נשאר נעול; ה-AI ממשיך את הסביבה</div>
+                  </button>
+                </div>
+                {aiMode === "redesign" && (
+                  <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 8, padding: "0.45rem 0.65rem", fontSize: 10.5, color: "#b45309", marginBottom: 8 }}>
+                    ⚠️ בעיצוב מחדש ה-AI מייצר גם את הטקסטים — חובה להגיה מחירים, טלפונים ושמות לפני פרסום. אם יש שגיאה, צור שוב או עבור ל"הרחבת רקע".
+                  </div>
+                )}
                 <input className="form-input ux-input" value={aiStylePrompt} onChange={(e) => setAiStylePrompt(e.target.value)}
                   placeholder="סגנון (אופציונלי): למשל ׳שמיים כחולים, אווירת יוקרה׳" style={{ fontSize: 12, marginBottom: 8 }} />
                 <div style={{ display: "flex", gap: 8 }}>

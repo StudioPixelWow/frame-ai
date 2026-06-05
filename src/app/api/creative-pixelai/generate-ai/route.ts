@@ -21,9 +21,15 @@ const GEN_SIZE: Record<string, string> = {
   square: "1024x1024",
 };
 
+const FORMAT_DESC: Record<string, string> = {
+  story: "a vertical 9:16 Instagram Story (1080x1920)",
+  feed_4_5: "a vertical 4:5 Instagram/Facebook feed post (1080x1350)",
+  square: "a square 1:1 post (1080x1080)",
+};
+
 export async function POST(req: NextRequest) {
   try {
-    const { imagePng, format, prompt } = (await req.json()) as { imagePng?: string; format?: string; prompt?: string };
+    const { imagePng, format, prompt, mode } = (await req.json()) as { imagePng?: string; format?: string; prompt?: string; mode?: string };
     if (!imagePng || !format || !GEN_SIZE[format]) {
       return NextResponse.json({ error: "imagePng + valid format required" }, { status: 400 });
     }
@@ -34,12 +40,22 @@ export async function POST(req: NextRequest) {
     const buf = Buffer.from(b64, "base64");
     if (buf.length > 20 * 1024 * 1024) return NextResponse.json({ error: "תמונה גדולה מדי" }, { status: 400 });
 
-    const genPrompt = (prompt && prompt.trim()) ||
-      "Extend the advertisement's background to fill the entire transparent area naturally and seamlessly. " +
-      "Continue the existing scenery, lighting, colors and atmosphere of the artwork (sky, buildings, environment, textures). " +
-      "Premium, clean, modern advertising look. " +
-      "STRICT: do NOT add any text, letters, numbers, logos, watermarks, people or new graphic elements. " +
-      "Do NOT modify the existing artwork pixels — only fill the empty transparent areas around it.";
+    const styleExtra = prompt && prompt.trim() ? ` Style guidance: ${prompt.trim()}.` : "";
+
+    const genPrompt = mode === "redesign"
+      // FULL REDESIGN — the AI rebuilds the ad natively for the target format.
+      ? `Redesign this exact advertisement as ${FORMAT_DESC[format]}, like a professional graphic designer adapting it. ` +
+        `Recreate the SAME ad: copy ALL the text EXACTLY character-for-character (it is in Hebrew — preserve every word, number, price, phone number and punctuation precisely, right-to-left), ` +
+        `keep the same logos, the same brand colors, the same fonts look, and the same photography subject. ` +
+        `Extend the photography to fill the ENTIRE frame edge-to-edge (full bleed), and re-arrange the layout elegantly for the new aspect ratio — bigger, bolder, premium real-estate advertising quality. ` +
+        `Keep all text and logos within the central safe area (away from the outer 12% of the edges). Do not invent new text or elements.` + styleExtra
+      // OUTPAINT — fill transparent surroundings only, original stays locked.
+      : (prompt && prompt.trim()) ||
+        "Extend the advertisement's background to fill the entire transparent area naturally and seamlessly. " +
+        "Continue the existing scenery, lighting, colors and atmosphere of the artwork (sky, buildings, environment, textures). " +
+        "Premium, clean, modern advertising look. " +
+        "STRICT: do NOT add any text, letters, numbers, logos, watermarks, people or new graphic elements. " +
+        "Do NOT modify the existing artwork pixels — only fill the empty transparent areas around it.";
 
     const fd = new FormData();
     fd.append("model", "gpt-image-1");
