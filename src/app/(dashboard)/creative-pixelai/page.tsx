@@ -129,6 +129,12 @@ export default function CreativePixelAIPage() {
   const [refining, setRefining] = useState(false);
   const [refineLog, setRefineLog] = useState<{ note: string; explanation: string }[]>([]);
 
+  /* ── Engine: clean canvas vs AI background generation (outpainting) ── */
+  const [engine, setEngine] = useState<"canvas" | "ai">("canvas");
+  const [aiResults, setAiResults] = useState<Record<string, string>>({});       // formatId → dataURL
+  const [aiGenerating, setAiGenerating] = useState<string | null>(null);        // formatId in progress
+  const [aiStylePrompt, setAiStylePrompt] = useState("");
+
   const dominantColors = useMemo(() => (img ? extractDominantColors(img, 3) : []), [img]);
 
   const loadHistory = useCallback(async () => {
@@ -234,7 +240,7 @@ export default function CreativePixelAIPage() {
     const f = FORMATS.find((x) => x.id === activeFormat)!;
     setExporting(true);
     try {
-      const blob = await renderFullRes(f, type);
+      const blob = await getOutputBlob(f, type);
       download(blob, `${baseName()}_${f.id}.${type === "image/png" ? "png" : "jpg"}`);
       toast("✓ הקובץ ירד", "success");
     } catch (e) { toast(e instanceof Error ? e.message : "הייצוא נכשל", "error"); }
@@ -249,7 +255,7 @@ export default function CreativePixelAIPage() {
       const zip = new JSZip();
       for (const f of FORMATS) {
         if (!selectedFormats.includes(f.id)) continue;
-        const blob = await renderFullRes(f, "image/png");
+        const blob = await getOutputBlob(f, "image/png");
         zip.file(`${baseName()}_${f.id}.png`, blob);
       }
       const out = await zip.generateAsync({ type: "blob" });
@@ -273,7 +279,7 @@ export default function CreativePixelAIPage() {
       const outputs: any[] = [];
       for (const f of FORMATS) {
         if (!selectedFormats.includes(f.id)) continue;
-        const blob = await renderFullRes(f, "image/png");
+        const blob = await getOutputBlob(f, "image/png");
         const url = await uploadBlob(blob, `creative-assets/adaptations/${stamp}/${f.id}.png`, "image/png");
         outputs.push({
           format: f.id, width: f.width, height: f.height, url,
@@ -298,6 +304,82 @@ export default function CreativePixelAIPage() {
     } catch (e) { toast(e instanceof Error ? e.message : "השמירה נכשלה", "error"); }
     finally { setSaving(false); }
   };
+
+  /* ── AI GENERATION (outpainting): the model fills the surroundings at full ad
+     size; the ORIGINAL creative is composited back on top pixel-perfect, so
+     text / price / phone / logo can never be corrupted. ── */
+  const generateAIFor = useCallback(async (formatId: FormatId) => {
+    if (!img) return;
+    const f = FORMATS.find((x) => x.id === formatId)!;
+    setAiGenerating(formatId);
+    try {
+      // 1) Build the generation input: original FIT-placed on a transparent canvas
+      //    at gpt-image-1's supported size for this format.
+      const genW = 1024;
+      const genH = formatId === "square" ? 1024 : 1536;
+      const pad = Math.round(genW * 0.07);
+      const fitScale = Math.min((genW - pad * 2) / img.naturalWidth, (genH - pad * 2) / img.naturalHeight);
+      const gw = img.naturalWidth * fitScale, gh = img.naturalHeight * fitScale;
+      const gx = (genW - gw) / 2;
+      const gy = scaleMode === "top_focus" ? pad : scaleMode === "bottom_focus" ? genH - pad - gh : (genH - gh) / 2;
+
+      const genCanvas = document.createElement("canvas");
+      genCanvas.width = genW; genCanvas.height = genH;
+      const gctx = genCanvas.getContext("2d")!;
+      gctx.clearRect(0, 0, genW, genH); // transparent = areas for the AI to fill
+      gctx.imageSmoothingQuality = "high";
+      gctx.drawImage(img, gx, gy, gw, gh);
+
+      // 2) Ask the server to outpaint the transparent surroundings.
+      const res = await fetch("/api/creative-pixelai/generate-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imagePng: genCanvas.toDataURL("image/png"), format: formatId, prompt: aiStylePrompt.trim() || undefined }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "היצירה נכשלה");
+      const genImg = await loadImage(json.image);
+
+      // 3) Compose the FINAL canvas at the exact ad size: generated image cover-scaled,
+      //    then the ORIGINAL pasted back at its mapped position (uniform scale only).
+      const fin = document.createElement("canvas");
+      fin.width = f.width; fin.height = f.height;
+      const fctx = fin.getContext("2d")!;
+      fctx.imageSmoothingQuality = "high";
+      const s = Math.max(f.width / genW, f.height / genH);
+      const ox = (f.width - genW * s) / 2, oy = (f.height - genH * s) / 2;
+      fctx.drawImage(genImg, ox, oy, genW * s, genH * s);
+      // pixel-perfect original on top — guaranteed intact text/logo/price
+      fctx.drawImage(img, gx * s + ox, gy * s + oy, gw * s, gh * s);
+
+      setAiResults((r) => ({ ...r, [formatId]: fin.toDataURL("image/png") }));
+      setActiveFormat(formatId);
+      toast(`✓ נוצר ${f.label}`, "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "היצירה נכשלה", "error");
+    } finally { setAiGenerating(null); }
+  }, [img, scaleMode, aiStylePrompt, toast]);
+
+  const generateAllAI = async () => {
+    for (const f of FORMATS) {
+      if (selectedFormats.includes(f.id)) await generateAIFor(f.id);
+    }
+  };
+
+  /** Output blob for export/save — AI result when in AI mode, else clean canvas render. */
+  const getOutputBlob = useCallback(async (f: FormatSpec, type: "image/png" | "image/jpeg"): Promise<Blob> => {
+    if (engine === "ai") {
+      const dataUrl = aiResults[f.id];
+      if (!dataUrl) throw new Error(`עדיין לא נוצר ${f.label} ב-AI — לחץ "צור"`);
+      const srcImg = await loadImage(dataUrl);
+      const c = document.createElement("canvas");
+      c.width = f.width; c.height = f.height;
+      c.getContext("2d")!.drawImage(srcImg, 0, 0, f.width, f.height);
+      return canvasToBlob(c, type, 0.95);
+    }
+    return renderFullRes(f, type);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, aiResults]);
 
   /* ── Refine by note: AI maps Hebrew feedback → parameter changes, re-render is instant ── */
   const applyRefine = async () => {
@@ -407,6 +489,42 @@ export default function CreativePixelAIPage() {
             </div>
             <input id="cpai-file-input" type="file" accept="image/png,image/jpeg,image/webp" style={{ display: "none" }}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.currentTarget.value = ""; }} />
+          </div>
+
+          {/* 1.5 Engine */}
+          <div className="premium-card" style={{ padding: "1.25rem" }}>
+            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10, color: "var(--foreground)" }}>מנוע יצירה</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <button onClick={() => setEngine("ai")}
+                style={{ padding: "0.6rem", borderRadius: 10, fontSize: 12.5, fontWeight: 700, cursor: "pointer", textAlign: "right", border: `1px solid ${engine === "ai" ? BRAND : "var(--border)"}`, background: engine === "ai" ? "rgba(0,181,254,0.08)" : "transparent", color: engine === "ai" ? BRAND : "var(--foreground)" }}>
+                ✨ יצירת AI
+                <div style={{ fontSize: 10, fontWeight: 400, color: "var(--foreground-muted)", marginTop: 2 }}>הרקע נוצר מחדש במידות המלאות; המקור מודבק חזרה פיקסל-פרפקט</div>
+              </button>
+              <button onClick={() => setEngine("canvas")}
+                style={{ padding: "0.6rem", borderRadius: 10, fontSize: 12.5, fontWeight: 700, cursor: "pointer", textAlign: "right", border: `1px solid ${engine === "canvas" ? BRAND : "var(--border)"}`, background: engine === "canvas" ? "rgba(0,181,254,0.08)" : "transparent", color: engine === "canvas" ? BRAND : "var(--foreground)" }}>
+                🧼 עיבוד נקי
+                <div style={{ fontSize: 10, fontWeight: 400, color: "var(--foreground-muted)", marginTop: 2 }}>רקע טשטוש/גרדיאנט — מיידי וחינמי</div>
+              </button>
+            </div>
+            {engine === "ai" && (
+              <div style={{ marginTop: 12 }}>
+                <input className="form-input ux-input" value={aiStylePrompt} onChange={(e) => setAiStylePrompt(e.target.value)}
+                  placeholder="סגנון (אופציונלי): למשל ׳שמיים כחולים, אווירת יוקרה׳" style={{ fontSize: 12, marginBottom: 8 }} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="mod-btn-primary ux-btn" disabled={!img || !!aiGenerating} onClick={() => generateAIFor(activeFormat)}
+                    style={{ flex: 1, fontSize: 12.5, opacity: !img || aiGenerating ? 0.5 : 1 }}>
+                    {aiGenerating ? `⏳ יוצר ${aiGenerating}…` : `✨ צור ${activeFormat === "story" ? "Story" : activeFormat === "feed_4_5" ? "4:5" : "Square"}`}
+                  </button>
+                  <button className="mod-btn-ghost ux-btn" disabled={!img || !!aiGenerating} onClick={generateAllAI}
+                    style={{ fontSize: 12.5, opacity: !img || aiGenerating ? 0.5 : 1 }}>
+                    צור הכל
+                  </button>
+                </div>
+                <div style={{ fontSize: 10, color: "var(--foreground-muted)", marginTop: 6 }}>
+                  ⚡ כ-20-40 שניות לפורמט · הטקסט, המחיר והלוגו מוגנים — מודבקים מהמקור, לא מג׳ונרטים
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 2. Formats */}
@@ -586,6 +704,19 @@ export default function CreativePixelAIPage() {
               <div style={{ display: "flex", justifyContent: "center", background: "var(--surface)", borderRadius: 12, padding: 12 }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={img.src} alt="מקור" style={{ maxWidth: "100%", maxHeight: 480, objectFit: "contain", borderRadius: 8 }} />
+              </div>
+            ) : engine === "ai" ? (
+              <div style={{ display: "flex", justifyContent: "center", background: "var(--surface)", borderRadius: 12, padding: 12, minHeight: 200, alignItems: "center" }}>
+                {aiGenerating === activeFormat ? (
+                  <div style={{ textAlign: "center", color: BRAND, fontSize: 13, fontWeight: 700 }}>⏳ ה-AI יוצר את הרקע במידות המלאות…<div style={{ fontSize: 11, color: "var(--foreground-muted)", marginTop: 6 }}>20-40 שניות</div></div>
+                ) : aiResults[activeFormat] ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={aiResults[activeFormat]} alt="" style={{ maxWidth: "100%", maxHeight: 520, borderRadius: 10 }} />
+                ) : (
+                  <div style={{ textAlign: "center", color: "var(--foreground-muted)", fontSize: 13 }}>
+                    עוד לא נוצר {activeFormat === "story" ? "Story" : activeFormat === "feed_4_5" ? "4:5" : "Square"} — לחץ "✨ צור" במנוע היצירה
+                  </div>
+                )}
               </div>
             ) : (
               <div style={{ display: "flex", justifyContent: "center", background: "var(--surface)", borderRadius: 12, padding: 12 }}>
