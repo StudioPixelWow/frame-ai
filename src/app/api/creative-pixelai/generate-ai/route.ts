@@ -57,6 +57,9 @@ export async function POST(req: NextRequest) {
     if (!imagePng || !format || !GEN_SIZE[format]) {
       return NextResponse.json({ error: "imagePng + valid format required" }, { status: 400 });
     }
+    if (mode === "edit" && !(prompt || "").trim()) {
+      return NextResponse.json({ error: "כתוב מה לתקן" }, { status: 400 });
+    }
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "OpenAI לא מוגדר" }, { status: 503 });
 
@@ -74,7 +77,13 @@ export async function POST(req: NextRequest) {
     const safeMargin = format === "square" ? "" :
       " חשוב מאוד: השאר את כל הטקסטים והלוגואים במרכז הקומפוזיציה — לפחות 12% רווח ריק מהשוליים הימני והשמאלי ומהקצה העליון והתחתון, כי הקצוות ייחתכו מעט בהתאמת הפורמט.";
 
-    const genPrompt = mode === "redesign"
+    const genPrompt = mode === "edit"
+      // TARGETED EDIT of an existing generated version — ChatGPT-style iteration.
+      // The user's note arrives in `prompt`; everything else must stay identical.
+      ? `בצע את התיקון הבא על העיצוב: "${(prompt || "").trim()}". ` +
+        `שמור על כל שאר העיצוב בדיוק כפי שהוא — אותם טקסטים אות-באות, אותם מספרים ומחירים, אותם לוגואים, אותם צבעים ואותה פריסה. ` +
+        `שנה אך ורק את מה שהתבקש בתיקון.`
+      : mode === "redesign"
       ? `תתאים את המודעה הזאת בדיוק לפורמט ${format === "story" ? "סטורי אנכי 9:16" : format === "feed_4_5" ? "פיד אנכי 4:5" : "ריבועי 1:1"}. ` +
         `זו אותה מודעה — שמור אחד-לאחד על כל הטקסטים, המספרים, המחירים, הלוגואים, הצבעים והפונטים בדיוק כפי שהם. ` +
         `הרחב את הצילום ופרוס את האלמנטים מחדש כך שימלאו את כל הפורמט בצורה מקצועית ויפה. אל תוסיף טקסט או אלמנט חדש.` +

@@ -416,9 +416,62 @@ export default function CreativePixelAIPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine, aiResults]);
 
+  /* ── Per-version AI fix: send the CURRENT generated version back for a targeted
+     edit per the user's note (ChatGPT-style iteration). Previous kept for undo. ── */
+  const prevAiResultRef = useRef<Record<string, string>>({});
+  const aiFixVersion = async () => {
+    const current = aiResults[activeFormat];
+    if (!current || !refineNote.trim()) return;
+    setRefining(true);
+    try {
+      // Downscale the current version for the edit call.
+      const curImg = await loadImage(current);
+      const maxDim = 1536;
+      const ds = Math.min(1, maxDim / Math.max(curImg.naturalWidth, curImg.naturalHeight));
+      const c = document.createElement("canvas");
+      c.width = Math.round(curImg.naturalWidth * ds);
+      c.height = Math.round(curImg.naturalHeight * ds);
+      c.getContext("2d")!.drawImage(curImg, 0, 0, c.width, c.height);
+
+      const res = await fetch("/api/creative-pixelai/generate-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imagePng: c.toDataURL("image/png"), format: activeFormat, mode: "edit", quality: aiHighQuality ? "high" : "medium", prompt: refineNote.trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "התיקון נכשל");
+      const genImg = await loadImage(json.image);
+      const f = FORMATS.find((x) => x.id === activeFormat)!;
+      const fin = document.createElement("canvas");
+      fin.width = f.width; fin.height = f.height;
+      const fctx = fin.getContext("2d")!;
+      fctx.imageSmoothingQuality = "high";
+      const s = Math.max(f.width / genImg.naturalWidth, f.height / genImg.naturalHeight);
+      fctx.drawImage(genImg, (f.width - genImg.naturalWidth * s) / 2, (f.height - genImg.naturalHeight * s) / 2, genImg.naturalWidth * s, genImg.naturalHeight * s);
+
+      prevAiResultRef.current[activeFormat] = current; // keep for undo
+      setAiResults((r) => ({ ...r, [activeFormat]: fin.toDataURL("image/png") }));
+      setRefineLog((l) => [{ note: refineNote.trim(), explanation: `תוקן בגרסת ${activeFormat === "story" ? "Story" : activeFormat === "feed_4_5" ? "4:5" : "Square"}` }, ...l].slice(0, 5));
+      setRefineNote("");
+      toast("✓ הגרסה תוקנה לפי ההערה — אפשר לבטל אם לא מתאים", "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "התיקון נכשל", "error");
+    } finally { setRefining(false); }
+  };
+
+  const undoAiFix = () => {
+    const prev = prevAiResultRef.current[activeFormat];
+    if (!prev) return;
+    setAiResults((r) => ({ ...r, [activeFormat]: prev }));
+    delete prevAiResultRef.current[activeFormat];
+    toast("↩ הוחזרה הגרסה הקודמת", "info");
+  };
+
   /* ── Refine by note: AI maps Hebrew feedback → parameter changes, re-render is instant ── */
   const applyRefine = async () => {
     if (!refineNote.trim() || !img) return;
+    // In AI mode with a generated version on screen — fix THAT version.
+    if (engine === "ai" && aiResults[activeFormat]) { await aiFixVersion(); return; }
     setRefining(true);
     try {
       const res = await fetch("/api/creative-pixelai/refine", {
@@ -794,25 +847,44 @@ export default function CreativePixelAIPage() {
 
           {/* 7.5 AI refine-by-note — iterate on the result instead of starting over */}
           <div className="premium-card" style={{ padding: "1.25rem" }}>
-            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4, color: "var(--foreground)" }}>🛠 תיקון לפי הערה</div>
-            <div style={{ fontSize: 11.5, color: "var(--foreground-muted)", marginBottom: 10 }}>
-              כתוב מה לא טוב בתוצאה (״גדול מדי״, ״תוריד למטה״, ״רקע כהה יותר״…) — ה-AI יכוון את ההגדרות והתצוגה תתעדכן מיד. העיצוב המקורי לא נגוע.
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
-                className="form-input ux-input"
-                value={refineNote}
-                onChange={(e) => setRefineNote(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") applyRefine(); }}
-                placeholder="למשל: הקריאייטיב קטן מדי והרקע בהיר מדי"
-                style={{ flex: 1, fontSize: 13 }}
-                disabled={!img || refining}
-              />
-              <button className="mod-btn-primary ux-btn" onClick={applyRefine} disabled={!img || refining || !refineNote.trim()}
-                style={{ fontSize: 12.5, whiteSpace: "nowrap", opacity: !img || refining || !refineNote.trim() ? 0.5 : 1 }}>
-                {refining ? "⏳ מתקן…" : "תקן ✨"}
-              </button>
-            </div>
+            {(() => {
+              const aiFixMode = engine === "ai" && !!aiResults[activeFormat];
+              const fLabel = activeFormat === "story" ? "Story" : activeFormat === "feed_4_5" ? "4:5" : "Square";
+              const canUndo = aiFixMode && !!prevAiResultRef.current[activeFormat];
+              return (
+                <>
+                  <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4, color: "var(--foreground)" }}>
+                    {aiFixMode ? `✨ תיקון הגרסה הנוכחית (${fLabel})` : "🛠 תיקון לפי הערה"}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "var(--foreground-muted)", marginBottom: 10 }}>
+                    {aiFixMode
+                      ? "כתוב מה לשנות בגרסה הזו (״השמיים כהים מדי״, ״הגדל את המחיר״, ״תוריד את העץ משמאל״…) — הגרסה תיווצר מחדש מתוקנת, כל השאר נשאר זהה."
+                      : "כתוב מה לא טוב בתוצאה (״גדול מדי״, ״תוריד למטה״, ״רקע כהה יותר״…) — ה-AI יכוון את ההגדרות והתצוגה תתעדכן מיד."}
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      className="form-input ux-input"
+                      value={refineNote}
+                      onChange={(e) => setRefineNote(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") applyRefine(); }}
+                      placeholder={aiFixMode ? "למשל: הצללה חזקה מדי על הבניין, תבהיר את השמיים" : "למשל: הקריאייטיב קטן מדי והרקע בהיר מדי"}
+                      style={{ flex: 1, fontSize: 13 }}
+                      disabled={!img || refining}
+                    />
+                    <button className="mod-btn-primary ux-btn" onClick={applyRefine} disabled={!img || refining || !refineNote.trim()}
+                      style={{ fontSize: 12.5, whiteSpace: "nowrap", opacity: !img || refining || !refineNote.trim() ? 0.5 : 1 }}>
+                      {refining ? "⏳ מתקן…" : aiFixMode ? `תקן ${fLabel} ✨` : "תקן ✨"}
+                    </button>
+                    {canUndo && (
+                      <button className="mod-btn-ghost ux-btn" onClick={undoAiFix} disabled={refining}
+                        style={{ fontSize: 12.5, whiteSpace: "nowrap" }} title="החזר את הגרסה שלפני התיקון">
+                        ↩ בטל
+                      </button>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
             {refineLog.length > 0 && (
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
                 {refineLog.map((r, i) => (
