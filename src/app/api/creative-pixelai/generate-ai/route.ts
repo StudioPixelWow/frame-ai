@@ -58,36 +58,38 @@ export async function POST(req: NextRequest) {
         "Do NOT modify the existing artwork pixels — only fill the empty transparent areas." +
         (prompt && prompt.trim() ? ` Style guidance: ${prompt.trim()}.` : "");
 
-    const buildForm = (withFidelity: boolean) => {
+    const buildForm = (model: string, withFidelity: boolean) => {
       const fd = new FormData();
-      fd.append("model", "gpt-image-1");
+      fd.append("model", model);
       fd.append("image", new Blob([new Uint8Array(buf)], { type: "image/png" }), "input.png");
       fd.append("prompt", genPrompt);
       fd.append("size", GEN_SIZE[format]);
       fd.append("quality", "high");
       fd.append("n", "1");
-      // The key to ChatGPT-grade text/logo preservation when redesigning:
       if (withFidelity) fd.append("input_fidelity", "high");
       return fd;
     };
 
-    let res = await fetch("https://api.openai.com/v1/images/edits", {
+    const callEdits = (form: FormData) => fetch("https://api.openai.com/v1/images/edits", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}` },
-      body: buildForm(true),
+      body: form,
       signal: AbortSignal.timeout(110000),
     });
 
-    // Older API revisions may reject input_fidelity — retry once without it.
-    if (res.status === 400) {
+    // GPT Image 2 — the model behind ChatGPT Images 2.0 (~99% character-level text
+    // accuracy; always processes image inputs at maximum fidelity). Fall back to
+    // gpt-image-1 (+input_fidelity) if the account doesn't have access yet.
+    let res = await callEdits(buildForm("gpt-image-2", false));
+    if (!res.ok && (res.status === 400 || res.status === 403 || res.status === 404)) {
       const errText = await res.clone().text();
-      if (errText.includes("input_fidelity")) {
-        res = await fetch("https://api.openai.com/v1/images/edits", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${apiKey}` },
-          body: buildForm(false),
-          signal: AbortSignal.timeout(110000),
-        });
+      if (/model|not found|does not exist|access/i.test(errText)) {
+        console.warn("[generate-ai] gpt-image-2 unavailable — falling back to gpt-image-1");
+        res = await callEdits(buildForm("gpt-image-1", true));
+        if (res.status === 400) {
+          const t2 = await res.clone().text();
+          if (t2.includes("input_fidelity")) res = await callEdits(buildForm("gpt-image-1", false));
+        }
       }
     }
 
