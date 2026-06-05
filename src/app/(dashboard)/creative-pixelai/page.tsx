@@ -135,6 +135,7 @@ export default function CreativePixelAIPage() {
   const [aiResults, setAiResults] = useState<Record<string, string>>({});       // formatId → dataURL
   const [aiGenerating, setAiGenerating] = useState<string | null>(null);        // formatId in progress
   const [aiStylePrompt, setAiStylePrompt] = useState("");
+  const [aiHighQuality, setAiHighQuality] = useState(false);
 
   const dominantColors = useMemo(() => (img ? extractDominantColors(img, 3) : []), [img]);
 
@@ -358,7 +359,7 @@ export default function CreativePixelAIPage() {
       const res = await fetch("/api/creative-pixelai/generate-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imagePng: inputDataUrl, format: formatId, mode: aiMode, prompt: aiStylePrompt.trim() || undefined }),
+        body: JSON.stringify({ imagePng: inputDataUrl, format: formatId, mode: aiMode, quality: aiHighQuality ? "high" : "medium", prompt: aiStylePrompt.trim() || undefined }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "היצירה נכשלה");
@@ -385,7 +386,7 @@ export default function CreativePixelAIPage() {
     } catch (e) {
       toast(e instanceof Error ? e.message : "היצירה נכשלה", "error");
     } finally { setAiGenerating(null); }
-  }, [img, scaleMode, aiStylePrompt, aiMode, toast]);
+  }, [img, scaleMode, aiStylePrompt, aiMode, aiHighQuality, toast]);
 
   const generateAllAI = async () => {
     for (const f of FORMATS) {
@@ -554,6 +555,10 @@ export default function CreativePixelAIPage() {
                 )}
                 <input className="form-input ux-input" value={aiStylePrompt} onChange={(e) => setAiStylePrompt(e.target.value)}
                   placeholder="סגנון (אופציונלי): למשל ׳שמיים כחולים, אווירת יוקרה׳" style={{ fontSize: 12, marginBottom: 8 }} />
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--foreground)", cursor: "pointer", marginBottom: 8 }}>
+                  <input type="checkbox" checked={aiHighQuality} onChange={(e) => setAiHighQuality(e.target.checked)} />
+                  💎 איכות מקסימלית (איטי יותר — אם נקטע, הפעל Fluid Compute ב-Vercel)
+                </label>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button className="mod-btn-primary ux-btn" disabled={!img || !!aiGenerating} onClick={() => generateAIFor(activeFormat)}
                     style={{ flex: 1, fontSize: 12.5, opacity: !img || aiGenerating ? 0.5 : 1 }}>

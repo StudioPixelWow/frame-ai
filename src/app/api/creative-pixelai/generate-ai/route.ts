@@ -27,9 +27,33 @@ const FORMAT_DESC: Record<string, string> = {
   square: "a square 1:1 post (1080x1080)",
 };
 
+/** Transcribe ALL text in the ad — feeding exact text via the PROMPT renders far
+ *  more accurately than asking the model to copy text from pixels. */
+async function transcribeAdText(apiKey: string, imageDataUrl: string): Promise<string> {
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        temperature: 0,
+        max_tokens: 500,
+        messages: [
+          { role: "system", content: "תמלל את כל הטקסטים שמופיעים במודעה, שורה-שורה, בדיוק תו-בתו (עברית RTL, מספרים, סימנים). החזר רק את הטקסטים, כל פריט בשורה משלו. אל תוסיף הסברים." },
+          { role: "user", content: [{ type: "image_url", image_url: { url: imageDataUrl, detail: "high" } }] },
+        ],
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) return "";
+    const data = await res.json();
+    return (data?.choices?.[0]?.message?.content || "").trim();
+  } catch { return ""; }
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { imagePng, format, prompt, mode } = (await req.json()) as { imagePng?: string; format?: string; prompt?: string; mode?: string };
+    const { imagePng, format, prompt, mode, quality } = (await req.json()) as { imagePng?: string; format?: string; prompt?: string; mode?: string; quality?: string };
     if (!imagePng || !format || !GEN_SIZE[format]) {
       return NextResponse.json({ error: "imagePng + valid format required" }, { status: 400 });
     }
@@ -42,12 +66,20 @@ export async function POST(req: NextRequest) {
 
     const styleExtra = prompt && prompt.trim() ? ` Style guidance: ${prompt.trim()}.` : "";
 
+    // For redesign: transcribe the exact ad texts first and feed them in the prompt —
+    // dramatically improves Hebrew text fidelity in the generated result.
+    const adTexts = mode === "redesign" ? await transcribeAdText(apiKey, imagePng) : "";
+
+    // Side crop happens when adapting 2:3 output to 9:16/4:5 — keep content safe.
+    const safeMargin = format === "square" ? "" :
+      " חשוב מאוד: השאר את כל הטקסטים והלוגואים במרכז הקומפוזיציה — לפחות 12% רווח ריק מהשוליים הימני והשמאלי ומהקצה העליון והתחתון, כי הקצוות ייחתכו מעט בהתאמת הפורמט.";
+
     const genPrompt = mode === "redesign"
-      // FULL REDESIGN — simple, ChatGPT-style instruction. input_fidelity:high does
-      // the heavy lifting of preserving text/logos from the source image.
       ? `תתאים את המודעה הזאת בדיוק לפורמט ${format === "story" ? "סטורי אנכי 9:16" : format === "feed_4_5" ? "פיד אנכי 4:5" : "ריבועי 1:1"}. ` +
         `זו אותה מודעה — שמור אחד-לאחד על כל הטקסטים, המספרים, המחירים, הלוגואים, הצבעים והפונטים בדיוק כפי שהם. ` +
-        `הרחב את הצילום ופרוס את האלמנטים מחדש כך שימלאו את כל הפורמט בצורה מקצועית ויפה. אל תוסיף טקסט או אלמנט חדש.` + styleExtra
+        `הרחב את הצילום ופרוס את האלמנטים מחדש כך שימלאו את כל הפורמט בצורה מקצועית ויפה. אל תוסיף טקסט או אלמנט חדש.` +
+        (adTexts ? `\n\nאלו הטקסטים המדויקים במודעה — העתק אותם אות-באות, בדיוק כך:\n${adTexts}` : "") +
+        safeMargin + styleExtra
       // OUTPAINT (1:1) — the original spans the full width; fill ONLY the missing
       // strips above/below so the result reads as one native full-bleed design.
       : "Seamlessly extend this advertisement vertically to fill the transparent strips above and below it. " +
@@ -64,9 +96,9 @@ export async function POST(req: NextRequest) {
       fd.append("image", new Blob([new Uint8Array(buf)], { type: "image/png" }), "input.png");
       fd.append("prompt", genPrompt);
       fd.append("size", GEN_SIZE[format]);
-      // "medium" is 2-3x faster than "high" and still excellent for social —
-      // critical to stay inside the serverless time budget.
-      fd.append("quality", "medium");
+      // "medium" is 2-3x faster than "high" — default keeps us inside the
+      // serverless time budget; "high" available via the UI toggle.
+      fd.append("quality", quality === "high" ? "high" : "medium");
       fd.append("n", "1");
       if (withFidelity) fd.append("input_fidelity", "high");
       return fd;
