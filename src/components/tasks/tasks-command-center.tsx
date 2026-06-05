@@ -220,6 +220,13 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
           onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = C.border; (e.currentTarget as HTMLElement).textContent = ""; }}></button>
       )}
       <span style={{ width: 7, height: 7, borderRadius: "50%", background: PRIO_COLOR[t.priority] || "#94a3b8", flexShrink: 0 }} />
+      {t.contentType && (
+        <span style={{ fontSize: "0.62rem", fontWeight: 800, padding: "1px 7px", borderRadius: 999, whiteSpace: "nowrap", flexShrink: 0,
+          color: t.contentType === "reel" ? "#db2777" : t.contentType === "story" ? "#7c3aed" : "#0369a1",
+          background: t.contentType === "reel" ? "rgba(219,39,119,0.12)" : t.contentType === "story" ? "rgba(124,58,237,0.12)" : "rgba(2,132,199,0.12)" }}>
+          {t.contentType === "reel" ? "🎬 רילס" : t.contentType === "story" ? "📱 סטורי" : "🖼️ פוסט"}
+        </span>
+      )}
       <span style={{ flex: 1, minWidth: 0, fontSize: "0.88rem", color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
       <span style={{ fontSize: "0.72rem", fontWeight: 600, color: accent, whiteSpace: "nowrap" }}>{t.dueDate && t.dueDate < today ? `${daysBetween(today, t.dueDate)}ד׳ איחור` : "היום"}</span>
     </div>

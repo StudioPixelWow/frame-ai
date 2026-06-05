@@ -57,6 +57,7 @@ function rowToTask(r: Row) {
     dueDate: (r.due_date as string) ?? null,
     ganttItemId: (r.gantt_item_id as string) ?? null,
     tags: [] as string[],                      // no DB column yet — return empty
+    contentType: ((r as any).content_type as string) ?? null,  // 'post' | 'story' | 'reel'
     files: Array.isArray((r as any).files) ? (r as any).files : [],  // persisted JSONB array
     notes: (r.notes as string) ?? '',
     createdAt: (r.created_at as string) ?? '',
@@ -107,6 +108,7 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
   if (dueDate) row.due_date = dueDate;
   if (ganttItemId) row.gantt_item_id = ganttItemId;
   if (Array.isArray(body.files)) row.files = body.files; // attached files (name|url)
+  if (nullIfEmpty(body.contentType)) row.content_type = body.contentType; // 'post'|'story'|'reel'
   return row;
 }
 

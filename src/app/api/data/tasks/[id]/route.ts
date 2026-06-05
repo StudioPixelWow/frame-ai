@@ -37,6 +37,7 @@ function rowToTask(r: Row) {
     dueDate: (r.due_date as string) ?? null,
     ganttItemId: (r.gantt_item_id as string) ?? null,
     tags: [] as string[],
+    contentType: ((r as any).content_type as string) ?? null,
     files: Array.isArray((r as any).files) ? (r as any).files : [],
     notes: (r.notes as string) ?? '',
     createdAt: (r.created_at as string) ?? '',
@@ -68,6 +69,7 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
     ['businessProjectId', 'business_project_id', true],  // FK → public.business_projects
     ['milestoneId', 'milestone_id', true],
     ['ganttItemId', 'gantt_item_id', true],
+    ['contentType', 'content_type', true],
   ];
   // Support assigneeIds array → assignee_id (first entry)
   if (Array.isArray(body.assigneeIds) && body.assigneeIds.length > 0 && body.assigneeId === undefined) {

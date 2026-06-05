@@ -72,6 +72,7 @@ export default function TasksPage() {
     assigneeIds: [] as string[],
     files: [] as string[],
     notes: "",
+    contentType: "" as "" | "post" | "story" | "reel",
   });
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -104,7 +105,7 @@ export default function TasksPage() {
   const openCreate = (status: Task["status"] = "new") => {
     setEditingTask(null);
     setDefaultStatus(status);
-    setForm({ title: "", description: "", status, priority: "medium", clientId: "", clientName: "", dueDate: "", tags: "", assigneeIds: [], files: [], notes: "" });
+    setForm({ title: "", description: "", status, priority: "medium", clientId: "", clientName: "", dueDate: "", tags: "", assigneeIds: [], files: [], notes: "", contentType: "" });
     setModalOpen(true);
   };
 
@@ -137,6 +138,7 @@ export default function TasksPage() {
       assigneeIds,
       files: Array.isArray((task as any).files) ? (task as any).files : [],
       notes: (task as any).notes || '',
+      contentType: ((task as any).contentType as "" | "post" | "story" | "reel") || "",
     });
     setModalOpen(true);
   };
@@ -1257,8 +1259,21 @@ export default function TasksPage() {
                 const desc = form.description || "";
                 const m = desc.match(/טקסט לגרפיקה[:\s]*([\s\S]*?)(?:\n\n|🖼️|💬|📅|🎉|🔬|$)/);
                 const gtext = m ? m[1].trim() : "";
+                const CT: Record<string, { label: string; icon: string; color: string; bg: string }> = {
+                  post: { label: "פוסט", icon: "🖼️", color: "#0369a1", bg: "rgba(2,132,199,0.12)" },
+                  story: { label: "סטורי", icon: "📱", color: "#7c3aed", bg: "rgba(124,58,237,0.12)" },
+                  reel: { label: "רילס", icon: "🎬", color: "#db2777", bg: "rgba(219,39,119,0.12)" },
+                };
+                const ct = form.contentType ? CT[form.contentType] : null;
                 return (
                   <div style={{ background: "linear-gradient(135deg, #eff6ff 0%, #f0fdfa 100%)", border: "1px solid #bae6fd", borderRadius: 18, padding: "1.2rem 1.35rem", marginBottom: "0.4rem", boxShadow: "0 2px 10px rgba(2,132,199,0.08)" }}>
+                    {/* CONTENT TYPE — big, first thing the employee sees */}
+                    {ct && (
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: ct.bg, border: `2px solid ${ct.color}55`, borderRadius: 12, padding: "0.45rem 1rem", marginBottom: 12 }}>
+                        <span style={{ fontSize: "1.5rem", lineHeight: 1 }}>{ct.icon}</span>
+                        <span style={{ fontSize: "1.15rem", fontWeight: 800, color: ct.color }}>סוג תוכן: {ct.label}</span>
+                      </div>
+                    )}
                     <div style={{ fontSize: "0.7rem", fontWeight: 800, color: "#0369a1", letterSpacing: "0.05em", marginBottom: 6 }}>כותרת</div>
                     <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--foreground, #0f172a)", lineHeight: 1.25 }}>{form.title || "—"}</div>
                     {gtext && (
@@ -1344,7 +1359,7 @@ export default function TasksPage() {
                 <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>כותרת *</label>
                 <input className="form-input ux-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="כותרת המשימה" disabled={isEmployee} />
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem" }}>
                 <div>
                   <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>סטטוס</label>
                   <select className="form-select ux-input ux-chip" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as Task["status"] })}>
@@ -1355,6 +1370,15 @@ export default function TasksPage() {
                   <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>עדיפות</label>
                   <select className="form-select ux-input ux-chip" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as Task["priority"] })}>
                     {PRIORITIES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>סוג תוכן</label>
+                  <select className="form-select ux-input ux-chip" value={form.contentType} onChange={(e) => setForm({ ...form, contentType: e.target.value as "" | "post" | "story" | "reel" })} disabled={isEmployee}>
+                    <option value="">ללא</option>
+                    <option value="post">🖼️ פוסט</option>
+                    <option value="story">📱 סטורי</option>
+                    <option value="reel">🎬 רילס</option>
                   </select>
                 </div>
               </div>

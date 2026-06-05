@@ -26,6 +26,7 @@ const REQUIRED_COLUMNS = [
   { name: 'description',    def: "TEXT DEFAULT ''" },
   { name: 'gantt_item_id',  def: 'TEXT' },
   { name: 'files',          def: "JSONB DEFAULT '[]'::jsonb" },
+  { name: 'content_type',   def: 'TEXT' }, // 'post' | 'story' | 'reel' — content-type of the task
 ];
 
 /** Probe which columns actually exist in the table right now. */

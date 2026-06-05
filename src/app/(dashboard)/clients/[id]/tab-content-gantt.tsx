@@ -541,6 +541,9 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
         ganttItem.researchSource && `🔬 מקור מחקרי: ${ganttItem.researchSource}${ganttItem.researchReason ? ' — ' + ganttItem.researchReason : ''}`,
       ].filter(Boolean).join('\n\n');
 
+      // Content type — shown BIG at the top of the task for the employee.
+      const contentType = ganttItem.format === 'reel' ? 'reel' : ganttItem.format === 'story' ? 'story' : 'post';
+
       // === Save to Employee Tasks store ===
       await createEmployeeTask({
         title: ganttItem.title || 'משימה מגאנט',
@@ -553,6 +556,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
         priority: 'medium',
         assignedEmployeeId: assigneeId,
         projectId: null,
+        contentType,
         files: ganttItem.attachedFiles || [],
         notes: ganttItem.internalNotes || '',
       } as any);
@@ -569,6 +573,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
           status: 'new',
           priority: 'medium',
           ganttItemId: ganttItem.id,
+          contentType,
         } as any);
       } catch (globalErr) {
         console.warn('[SendToTask] Failed to create global task (non-critical):', globalErr);
