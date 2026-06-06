@@ -59,7 +59,8 @@ function rowToTask(r: Row) {
     tags: [] as string[],                      // no DB column yet — return empty
     contentType: ((r as any).content_type as string) ?? null,  // 'post' | 'story' | 'reel'
     adaptations: (r as any).adaptations ?? null,                // AI size adaptations { story, feed_4_5, square }
-    files: Array.isArray((r as any).files) ? (r as any).files : [],  // persisted JSONB array
+    files: Array.isArray((r as any).files) ? (r as any).files : [],  // reference/helper files
+    submittedFiles: Array.isArray((r as any).submitted_files) ? (r as any).submitted_files : [], // employee submission
     notes: (r.notes as string) ?? '',
     createdAt: (r.created_at as string) ?? '',
     updatedAt: (r.updated_at as string) ?? '',

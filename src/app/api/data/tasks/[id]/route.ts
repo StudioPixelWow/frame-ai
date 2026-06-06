@@ -40,6 +40,7 @@ function rowToTask(r: Row) {
     contentType: ((r as any).content_type as string) ?? null,
     adaptations: (r as any).adaptations ?? null,
     files: Array.isArray((r as any).files) ? (r as any).files : [],
+    submittedFiles: Array.isArray((r as any).submitted_files) ? (r as any).submitted_files : [],
     notes: (r.notes as string) ?? '',
     createdAt: (r.created_at as string) ?? '',
     updatedAt: (r.updated_at as string) ?? '',
@@ -81,7 +82,8 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
       out[dbKey] = nullable ? nullIfEmpty(body[k]) : body[k];
     }
   }
-  if (Array.isArray(body.files)) out.files = body.files; // persist attached files
+  if (Array.isArray(body.files)) out.files = body.files; // reference/helper files
+  if (Array.isArray(body.submittedFiles)) out.submitted_files = body.submittedFiles; // employee submission
   if (body.adaptations && typeof body.adaptations === 'object') out.adaptations = body.adaptations;
   out.updated_at = new Date().toISOString();
   return out;

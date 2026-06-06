@@ -73,6 +73,7 @@ export default function TasksPage() {
     clientName: "", dueDate: "", tags: "",
     assigneeIds: [] as string[],
     files: [] as string[],
+    submittedFiles: [] as string[],
     notes: "",
     contentType: "" as "" | "post" | "story" | "reel",
   });
@@ -107,7 +108,7 @@ export default function TasksPage() {
   const openCreate = (status: Task["status"] = "new") => {
     setEditingTask(null);
     setDefaultStatus(status);
-    setForm({ title: "", description: "", status, priority: "medium", clientId: "", clientName: "", dueDate: "", tags: "", assigneeIds: [], files: [], notes: "", contentType: "" });
+    setForm({ title: "", description: "", status, priority: "medium", clientId: "", clientName: "", dueDate: "", tags: "", assigneeIds: [], files: [], submittedFiles: [], notes: "", contentType: "" });
     setModalOpen(true);
   };
 
@@ -139,6 +140,7 @@ export default function TasksPage() {
       tags: tags.join(', '),
       assigneeIds,
       files: Array.isArray((task as any).files) ? (task as any).files : [],
+      submittedFiles: Array.isArray((task as any).submittedFiles) ? (task as any).submittedFiles : [],
       notes: (task as any).notes || '',
       contentType: ((task as any).contentType as "" | "post" | "story" | "reel") || "",
     });
@@ -149,8 +151,9 @@ export default function TasksPage() {
   const handleSave = async () => {
     if (!form.title.trim()) { toast("כותרת המשימה היא שדה חובה", "error"); return; }
     const client = clients.find((c) => c.id === form.clientId);
+    const { submittedFiles: _omitSubmitted, ...formRest } = form; // never clobber the employee's submission from the manager form
     const payload = {
-      ...form,
+      ...formRest,
       clientName: client?.name || form.clientName,
       dueDate: form.dueDate || null,
       tags: form.tags ? form.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
@@ -291,12 +294,13 @@ export default function TasksPage() {
       const putRes = await fetch(sign.uploadUrl, { method: "PUT", headers: { "Content-Type": selectedFile.type || "application/octet-stream" }, body: selectedFile });
       if (!putRes.ok) throw new Error("ההעלאה נכשלה");
 
-      // 2) Persist the file ON the task (merged with existing) AND move to review —
-      //    so the file travels with the task through the whole approval flow.
+      // 2) Persist the file ON the task as a SUBMITTED file (separate from the
+      //    reference/helper files added at creation) AND move to review — so the
+      //    employee's deliverable travels through the approval flow on its own field.
       const entry = `${selectedFile.name}|${sign.publicUrl}`;
       const cur = [...(tasks || []), ...(employeeTasks || [])].find((x: any) => x.id === uploadingTaskId) as any;
-      const existing = Array.isArray(cur?.files) ? cur.files : [];
-      await updateAny(uploadingTaskId, { files: [...existing, entry], status: "under_review" as Task["status"] });
+      const existing = Array.isArray(cur?.submittedFiles) ? cur.submittedFiles : [];
+      await updateAny(uploadingTaskId, { submittedFiles: [...existing, entry], status: "under_review" as Task["status"] });
 
       setModalOpen(false);
       celebrate("מעולה! המשימה הוגשה לבדיקת המנהל! 🎉");
@@ -1340,9 +1344,12 @@ export default function TasksPage() {
                 );
               })()}
 
-              {/* קבצים לשימוש בעיצוב — design assets, shown right under the graphic text */}
+              {/* קבצי עזר / רפרנס — design assets the MANAGER attaches for the employee to use */}
               <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "0.9rem 1rem" }}>
-                <label style={{ fontSize: "0.8rem", fontWeight: 800, color: "#0369a1", marginBottom: "0.6rem", display: "flex", alignItems: "center", gap: 6 }}>🎨 קבצים לשימוש בעיצוב</label>
+                <label style={{ fontSize: "0.8rem", fontWeight: 800, color: "#0369a1", marginBottom: "0.2rem", display: "flex", alignItems: "center", gap: 6 }}>🎨 קבצי עזר ורפרנס למשימה</label>
+                <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)", marginBottom: "0.6rem" }}>
+                  {isEmployee ? "קבצים שהמנהל צירף לעזרה — לצפייה והורדה בלבד (לא קבצי ההגשה)." : "צרף כאן חומרי עזר / רפרנס שיעזרו לעובד בהכנת המשימה."}
+                </div>
                 {/* Managers can attach design assets; employees view/download only. */}
                 {!isEmployee && (
                   <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
@@ -1414,9 +1421,22 @@ export default function TasksPage() {
 
               {/* EMPLOYEE: upload-for-review is the ONLY action — no status changes, no "complete" */}
               {isEmployee && editingTask && (
-                <div style={{ background: "linear-gradient(135deg, #ecfdf5 0%, #eff6ff 100%)", border: "1px solid #a7f3d0", borderRadius: 16, padding: "1.1rem 1.25rem" }}>
-                  <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "#047857", marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>📎 העלה קובץ לבדיקת המנהל</div>
-                  <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", marginBottom: 10 }}>העלאת הקובץ תעביר את המשימה אוטומטית לסטטוס “בבדיקה” ותשלח אותה למנהל.</div>
+                <div style={{ background: "linear-gradient(135deg, #ecfdf5 0%, #eff6ff 100%)", border: "2px solid #34d399", borderRadius: 16, padding: "1.1rem 1.25rem" }}>
+                  <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#047857", marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>📤 הגשת קובץ לאישור המנהל</div>
+                  <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", marginBottom: 10 }}>כאן מעלים את התוצר המוגמר. ההעלאה תעביר את המשימה אוטומטית לסטטוס “בבדיקה” ותשלח אותה למנהל. (לא להתבלבל עם קבצי העזר למעלה.)</div>
+                  {form.submittedFiles.length > 0 && (
+                    <div style={{ marginBottom: 10, display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                      <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#047857" }}>כבר הוגשו:</div>
+                      {form.submittedFiles.map((file, idx) => {
+                        const { name, url } = parseFile(file);
+                        return (
+                          <div key={idx} style={{ padding: "0.4rem 0.55rem", background: "var(--surface)", borderRadius: 8, fontSize: "0.76rem" }}>
+                            {url ? <a href={url} target="_blank" rel="noopener noreferrer" download style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}>📥 {name}</a> : <span>📄 {name}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   <input
                     type="file"
                     accept="image/*,video/*,.pdf,.doc,.docx"

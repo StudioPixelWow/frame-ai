@@ -77,23 +77,28 @@ export default function ApprovalsPage() {
   const [showReturnBox, setShowReturnBox] = useState(false);
   const [processing, setProcessing] = useState<string>('');
 
+  // The employee's submission lives in `submittedFiles` (separate from the
+  // reference/helper `files`). Legacy tasks may still have it in `files`.
+  const submittedOf = (t: any): string[] =>
+    Array.isArray(t?.submittedFiles) && t.submittedFiles.length ? t.submittedFiles
+    : (Array.isArray(t?.files) ? t.files : []);
+
   // Mirror split: a content task can live as BOTH a tsk_ record and an
-  // employee-task. The employee may have uploaded the file to the sibling.
-  // If the given task has no files, find a sibling (same gantt item, or same
-  // client+title) that HAS files and merge them in so the work always shows.
+  // employee-task. The employee may have submitted on the sibling. If the given
+  // task has no submission, find a sibling (same gantt item, or same client+title)
+  // that DOES, and merge its submitted files in so the work always shows.
   const mergeSiblingFiles = useCallback((primary: any): any => {
     if (!primary) return primary;
-    const hasFiles = (t: any) => Array.isArray(t?.files) && t.files.length > 0;
-    if (hasFiles(primary)) return primary;
+    if (submittedOf(primary).length > 0) return primary;
     const all = [...(employeeTasks || []), ...(tasks || [])];
     const sib = all.find((t: any) =>
-      t.id !== primary.id && hasFiles(t) && (
+      t.id !== primary.id && submittedOf(t).length > 0 && (
         (primary.ganttItemId && t.ganttItemId === primary.ganttItemId) ||
         (String(t.title || '').trim() === String(primary.title || '').trim() &&
          String(t.clientName || '').trim() === String(primary.clientName || '').trim())
       )
     );
-    return sib ? { ...primary, files: sib.files, adaptations: primary.adaptations || sib.adaptations } : primary;
+    return sib ? { ...primary, submittedFiles: submittedOf(sib), adaptations: primary.adaptations || sib.adaptations } : primary;
   }, [tasks, employeeTasks]);
 
   const findTask = useCallback((taskId: string): any => {
@@ -146,8 +151,8 @@ export default function ApprovalsPage() {
       if (taskId) await updateAnyTask(taskId, { status: 'approved' });
       fireConfetti(30);
 
-      // Auto size-adaptation on the first attached image.
-      const files: string[] = Array.isArray(task?.files) ? task.files : [];
+      // Auto size-adaptation on the first SUBMITTED image.
+      const files: string[] = submittedOf(task);
       const imgEntry = files.map(parseFileEntry).find((e) => isImageUrl(e.url));
       if (taskId && imgEntry) {
         const img = await loadImage(imgEntry.url);
@@ -171,7 +176,10 @@ export default function ApprovalsPage() {
         }
         if (Object.keys(urls).length > 0) {
           setProcessing('שומר למשימה…');
-          await updateAnyTask(taskId, { adaptations: { ...urls, createdAt: new Date().toISOString() }, files: [...files, ...newFiles] });
+          // Adapted outputs are deliverable assets → save in adaptations + append
+          // to the reference files (NOT the employee's submitted files).
+          const refFiles: string[] = Array.isArray(task?.files) ? task.files : [];
+          await updateAnyTask(taskId, { adaptations: { ...urls, createdAt: new Date().toISOString() }, files: [...refFiles, ...newFiles] });
         }
       }
       toast(imgEntry ? '✓ אושר — והגרפיקה הותאמה לכל הגדלים ונשמרה במשימה' : '✓ אושר', 'success');
@@ -718,7 +726,7 @@ export default function ApprovalsPage() {
                 {(() => {
                   const t = detail.task;
                   const ct = t.contentType ? ({ post: '🖼️ פוסט', story: '📱 סטורי', reel: '🎬 רילס' } as any)[t.contentType] : null;
-                  const files: string[] = Array.isArray(t.files) ? t.files : [];
+                  const files: string[] = submittedOf(t);
                   const images = files.map(parseFileEntry).filter((e) => isImageUrl(e.url));
                   const others = files.map(parseFileEntry).filter((e) => !isImageUrl(e.url));
                   return (

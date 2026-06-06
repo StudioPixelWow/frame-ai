@@ -25,7 +25,8 @@ const REQUIRED_COLUMNS = [
   { name: 'due_date',       def: 'TEXT' },
   { name: 'description',    def: "TEXT DEFAULT ''" },
   { name: 'gantt_item_id',  def: 'TEXT' },
-  { name: 'files',          def: "JSONB DEFAULT '[]'::jsonb" },
+  { name: 'files',          def: "JSONB DEFAULT '[]'::jsonb" }, // reference/helper files (added at task creation)
+  { name: 'submitted_files', def: "JSONB DEFAULT '[]'::jsonb" }, // files the employee uploaded for review
   { name: 'content_type',   def: 'TEXT' }, // 'post' | 'story' | 'reel' — content-type of the task
   { name: 'adaptations',    def: 'JSONB' }, // { story, feed_4_5, square, createdAt } — AI size adaptations
 ];
