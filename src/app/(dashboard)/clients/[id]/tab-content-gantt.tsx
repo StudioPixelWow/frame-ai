@@ -264,13 +264,51 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
       if (prev[item.id]) return prev; // already loaded/loading
       (async () => {
         try {
-          const res = await fetch('/api/data/client-files');
-          if (!res.ok) return;
-          const all = await res.json();
-          const linked = (Array.isArray(all) ? all : [])
-            .filter((f: any) => f.linkedGanttItemId === item.id && f.fileUrl)
-            .map((f: any) => ({ name: f.fileName || (f.fileUrl.split('/').pop() || 'קובץ').split('?')[0], url: f.fileUrl }));
-          setDeliverablesMap(p => ({ ...p, [item.id]: linked }));
+          const out: { name: string; url: string }[] = [];
+          const seen = new Set<string>();
+          const add = (name: string, url: string) => {
+            if (!url || seen.has(url)) return;
+            seen.add(url);
+            out.push({ name: (name || '').replace(/^🎨\s*/, '') || (url.split('/').pop() || 'קובץ').split('?')[0], url });
+          };
+          const parseEntry = (e: string) => { const i = e.indexOf('|'); return i === -1 ? { name: '', url: e } : { name: e.slice(0, i), url: e.slice(i + 1) }; };
+
+          // 1) Client Files linked to this gantt item.
+          try {
+            const res = await fetch('/api/data/client-files');
+            if (res.ok) {
+              const all = await res.json();
+              (Array.isArray(all) ? all : [])
+                .filter((f: any) => f.linkedGanttItemId === item.id && f.fileUrl)
+                .forEach((f: any) => add(f.fileName, f.fileUrl));
+            }
+          } catch { /* ignore */ }
+
+          // 2) Tasks linked to this gantt item — submitted files + adapted sizes.
+          const role = typeof window !== 'undefined' ? (localStorage.getItem('app_role') || 'admin') : 'admin';
+          for (const ep of ['employee-tasks', 'tasks']) {
+            try {
+              const r = await fetch(`/api/data/${ep}`, { headers: { 'x-app-role': role } });
+              if (!r.ok) continue;
+              const list = await r.json();
+              (Array.isArray(list) ? list : [])
+                .filter((t: any) => t.ganttItemId === item.id)
+                .forEach((t: any) => {
+                  // Submitted deliverable(s).
+                  (Array.isArray(t.submittedFiles) ? t.submittedFiles : [])
+                    .forEach((e: string) => { const { name, url } = parseEntry(e); add(name, url); });
+                  // Adapted sizes (also live in files with a 🎨 prefix).
+                  (Array.isArray(t.files) ? t.files : [])
+                    .filter((e: string) => e.startsWith('🎨'))
+                    .forEach((e: string) => { const { name, url } = parseEntry(e); add(name, url); });
+                  if (t.adaptations && typeof t.adaptations === 'object') {
+                    Object.entries(t.adaptations).forEach(([k, v]) => { if (k !== 'createdAt' && typeof v === 'string') add(k, v as string); });
+                  }
+                });
+            } catch { /* ignore */ }
+          }
+
+          setDeliverablesMap(p => ({ ...p, [item.id]: out }));
         } catch { /* silent */ }
       })();
       return { ...prev, [item.id]: [] };
