@@ -29,6 +29,79 @@ export default function UgcPage() {
   const [pkg, setPkg] = useState<Pkg | null>(null);
   const [active, setActive] = useState(0);
   const [err, setErr] = useState('');
+  // Product-link scrape
+  const [productUrl, setProductUrl] = useState('');
+  const [scraping, setScraping] = useState(false);
+  // HeyGen render (reuses the existing avatars/voices/generate/status integration)
+  const [avatars, setAvatars] = useState<any[]>([]);
+  const [voices, setVoices] = useState<any[]>([]);
+  const [avatarId, setAvatarId] = useState('');
+  const [voiceId, setVoiceId] = useState('');
+  const [heygenReady, setHeygenReady] = useState<boolean | null>(null);
+  const [rendering, setRendering] = useState(false);
+  const [video, setVideo] = useState<{ status: string; url?: string } | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [av, vo] = await Promise.all([
+          fetch('/api/data/heygen/avatars').then((r) => r.ok ? r.json() : []),
+          fetch('/api/data/heygen/voices').then((r) => r.ok ? r.json() : []),
+        ]);
+        const avList = Array.isArray(av) ? av : [];
+        const voList = Array.isArray(vo) ? vo : [];
+        setAvatars(avList); setVoices(voList);
+        setHeygenReady(avList.length > 0);
+        // Default to a Hebrew voice if present.
+        const he = voList.find((v: any) => /he|hebrew|עברית/i.test(`${v.language || ''} ${v.name || ''}`));
+        if (he) setVoiceId(he.voice_id || he.id || '');
+        if (avList[0]) setAvatarId(avList[0].avatar_id || avList[0].id || '');
+      } catch { setHeygenReady(false); }
+    })();
+  }, []);
+
+  const scrapeProduct = async () => {
+    if (!productUrl.trim()) return;
+    setScraping(true); setErr('');
+    try {
+      const r = await fetch('/api/ugc/scrape-product', { method: 'POST', headers: H(), body: JSON.stringify({ url: productUrl.trim() }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'שגיאה');
+      const p = j.prefill || {};
+      setForm((f) => ({
+        ...f,
+        businessName: p.businessName || f.businessName,
+        businessType: ['נדל״ן', 'מסעדה', 'חנות', 'קליניקה', 'שירות', 'לוגיסטיקה', 'אולם', 'אחר'].includes(p.businessType) ? p.businessType : f.businessType,
+        sellingPoints: p.sellingPoints || f.sellingPoints,
+        targetAudience: p.targetAudience || f.targetAudience,
+        existingAssets: (j.images || []).slice(0, 3).join(', ') || f.existingAssets,
+      }));
+      setMsg(`✓ נשאבו פרטי המוצר מהקישור${j.images?.length ? ` (${j.images.length} תמונות)` : ''}.`);
+    } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה בשאיבה'); }
+    finally { setScraping(false); }
+  };
+
+  const renderVideo = async () => {
+    const v = pkg?.variations[active];
+    if (!v) return;
+    if (!avatarId || !voiceId) { setErr('בחר דמות וקול'); return; }
+    setRendering(true); setVideo({ status: 'pending' }); setErr('');
+    try {
+      const gen = await fetch('/api/data/heygen/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ avatarId, voiceId, script: v.fullScript, dimension: { width: 1080, height: 1920 } }) });
+      const gj = await gen.json();
+      if (!gen.ok || !gj.videoId) throw new Error(gj.error || 'יצירת הווידאו נכשלה');
+      const videoId = gj.videoId;
+      // Poll status (up to ~5 min).
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 5000));
+        const st = await fetch(`/api/data/heygen/status?videoId=${videoId}`).then((r) => r.json());
+        if (st.status === 'completed' && st.videoUrl) { setVideo({ status: 'completed', url: st.videoUrl }); break; }
+        if (st.status === 'failed') { setVideo({ status: 'failed' }); throw new Error(st.error || 'הרינדור נכשל'); }
+        setVideo({ status: st.status || 'processing' });
+      }
+    } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה ברינדור'); }
+    finally { setRendering(false); }
+  };
 
   const loadProjects = async () => {
     try { const r = await fetch('/api/ugc/projects', { headers: H() }); const j = await r.json(); setProjects(j.projects || []); } catch {}
@@ -116,6 +189,13 @@ export default function UgcPage() {
       {/* Brief */}
       <div style={card}>
         <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 12 }}>בריף קצר</div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={lbl}>🔗 הדבק קישור מוצר/דף נחיתה — ונמלא את הבריף אוטומטית</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input className="form-input ux-input" value={productUrl} onChange={(e) => setProductUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') scrapeProduct(); }} placeholder="https://…" style={{ flex: 1 }} dir="ltr" />
+            <button className="mod-btn-ghost ux-btn" onClick={scrapeProduct} disabled={scraping || !productUrl.trim()} style={{ fontSize: 13, whiteSpace: 'nowrap', opacity: scraping || !productUrl.trim() ? 0.5 : 1 }}>{scraping ? '⏳ שואב…' : '↧ שאב פרטים'}</button>
+          </div>
+        </div>
         <div style={{ marginBottom: 12 }}>
           <label style={lbl}>🔗 שייך ללקוח (ימלא את הבריף וישתמש בכל הידע עליו)</label>
           <select className="form-select ux-input" value={clientId} onChange={(e) => pickClient(e.target.value)} style={{ width: '100%' }}>
@@ -214,6 +294,41 @@ export default function UgcPage() {
                 )}
 
                 <Section title="📣 CTA" text={v.cta} onCopy={copy} />
+
+                {/* ── Render a real talking-avatar video (reuses the existing HeyGen integration) ── */}
+                <div style={{ fontSize: 13.5, fontWeight: 800, margin: '16px 0 8px' }}>🎬 הפקת וידאו עם דמות מדברת (HeyGen)</div>
+                {heygenReady === false ? (
+                  <div style={{ fontSize: 12, color: '#b45309', background: 'rgba(245,158,11,0.08)', borderRadius: 10, padding: '0.7rem 0.9rem' }}>
+                    HeyGen לא מחובר (חסר HEYGEN_API_KEY) — התסריט והפרומפטים מוכנים; להפקת וידאו אוטומטית הוסף מפתח HeyGen.
+                  </div>
+                ) : (
+                  <div style={{ border: '1px solid var(--border,#eee)', borderRadius: 12, padding: '0.8rem 0.9rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                      <div>
+                        <label style={lbl}>דמות</label>
+                        <select className="form-select ux-input" value={avatarId} onChange={(e) => setAvatarId(e.target.value)} style={{ width: '100%' }}>
+                          {avatars.map((a: any) => <option key={a.avatar_id || a.id} value={a.avatar_id || a.id}>{a.avatar_name || a.name || a.avatar_id}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={lbl}>קול (עברית מומלץ)</label>
+                        <select className="form-select ux-input" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} style={{ width: '100%' }}>
+                          {voices.map((vo: any) => <option key={vo.voice_id || vo.id} value={vo.voice_id || vo.id}>{(vo.name || vo.voice_id)}{vo.language ? ` · ${vo.language}` : ''}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={renderVideo} disabled={rendering || heygenReady === null}
+                      style={{ width: '100%', fontSize: 13.5, fontWeight: 800, padding: '0.7rem', opacity: rendering ? 0.6 : 1 }}>
+                      {rendering ? `⏳ מפיק וידאו… (${video?.status || 'pending'})` : '🎬 הפק וידאו מהתסריט הזה'}
+                    </button>
+                    {video?.status === 'completed' && video.url && (
+                      <div style={{ marginTop: 10 }}>
+                        <video src={video.url} controls style={{ width: '100%', maxHeight: 480, borderRadius: 10, background: '#000' }} />
+                        <a href={video.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, color: BRAND, fontWeight: 700, display: 'inline-block', marginTop: 6 }}>⬇ הורד וידאו</a>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div style={{ fontSize: 13.5, fontWeight: 800, margin: '14px 0 8px' }}>🤖 פרומפטים לכלי AI</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
