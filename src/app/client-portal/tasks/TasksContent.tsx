@@ -28,7 +28,10 @@ function Inner() {
       try {
         const r = await fetch('/api/data/tasks', { headers: { 'x-app-role': 'client', 'x-app-client-id': clientId } });
         const d = await r.json();
-        const list = (Array.isArray(d) ? d : []).filter((t: any) => t.clientId === clientId);
+        // ONLY tasks the client submitted via the portal (carry the portal marker
+        // in notes) — NOT content tasks from the gantt, which also have client_id.
+        const list = (Array.isArray(d) ? d : []).filter((t: any) =>
+          t.clientId === clientId && String(t.notes || '').includes('מהלקוח דרך הפורטל'));
         list.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
         setTasks(list);
       } catch {} finally { setLoading(false); }
