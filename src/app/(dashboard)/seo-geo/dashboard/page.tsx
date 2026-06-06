@@ -596,6 +596,40 @@ export default function SeoGeoDashboard() {
                         >
                           🔎 סרוק GEO
                         </button>
+                        <button
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const kw = prompt('ביטוי מטרה למאמר GEO (השאר ריק כדי להשתמש במילת המפתח הראשונה):') ?? '';
+                            const btn = e.currentTarget as HTMLButtonElement;
+                            const orig = btn.textContent;
+                            btn.disabled = true; btn.textContent = '⏳ כותב…';
+                            try {
+                              const res = await fetch('/api/seo-geo-plans/geo-content', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' },
+                                body: JSON.stringify({ planId: plan.id, keyword: kw.trim() || undefined, publish: true }),
+                              });
+                              const j = await res.json();
+                              if (!res.ok) throw new Error(j.error || 'שגיאה');
+                              if (j.published?.link || j.published?.id) {
+                                alert(`✅ נוצר מאמר GEO ופורסם כטיוטה בוורדפרס: "${j.article?.title}". בדוק ואשר לפרסום.`);
+                              } else {
+                                try { await navigator.clipboard.writeText(j.article?.html || ''); } catch {}
+                                alert(`✅ נוצר מאמר GEO: "${j.article?.title}".${j.wpConnected ? '' : ' (וורדפרס לא מחובר)'} ה-HTML הועתק ללוח — הדבק באתר.`);
+                              }
+                            } catch (err) {
+                              alert(err instanceof Error ? err.message : 'שגיאה ביצירת התוכן');
+                            } finally { btn.disabled = false; btn.textContent = orig; }
+                          }}
+                          style={{
+                            flex: 1, padding: '6px 0', borderRadius: 8, border: `1px solid ${COLORS.emerald}40`,
+                            background: `${COLORS.emerald}12`, color: COLORS.emerald,
+                            fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+                          }}
+                        >
+                          ✍️ תוכן GEO
+                        </button>
                         {plan.status === 'active' && (
                           <button
                             onClick={async (e) => {
