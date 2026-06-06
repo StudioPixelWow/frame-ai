@@ -76,10 +76,15 @@ export async function POST(req: NextRequest) {
     // dramatically improves Hebrew text fidelity in the generated result.
     const adTexts = mode === "redesign" ? await transcribeAdText(apiKey, imagePng) : "";
 
-    // The generation is cover-cropped into the exact output ratio, so keep all
-    // content well inside a safe zone — strong, explicit instruction.
-    const safeMargin = format === "square" ? "" :
-      " קריטי: כל הטקסטים, המחירים, הטלפונים והלוגואים חייבים להישאר במרכז המסגרת עם שוליים ריקים של לפחות 15% מכל צד (ימין, שמאל, מעלה, מטה). אסור ששום טקסט ייגע בקצה — הקצוות ייחתכו בהתאמה לפורמט הסופי.";
+    // The generation is cover-cropped into the exact output ratio. Tell the model
+    // to keep big EMPTY background margins on the axis that gets cropped, so no
+    // text/logo is ever lost. 4:5 crops the sides → demand 20% side margins.
+    const safeMargin =
+      format === "feed_4_5"
+        ? " קריטי ביותר: השאר רצועת רקע ריקה (בלי טקסט, בלי לוגו) ברוחב 20% בצד ימין וברוחב 20% בצד שמאל של המסגרת. כל הטקסטים, המחירים והלוגואים חייבים להיות אך ורק ב-60% המרכזיים. הצדדים ייחתכו — אסור ששום טקסט יהיה שם."
+        : format === "story"
+        ? " קריטי: השאר שוליי רקע ריקים של 12% בצד ימין ובצד שמאל; כל הטקסטים והלוגואים במרכז בלבד. הצדדים ייחתכו מעט."
+        : "";
 
     const genPrompt = mode === "edit"
       // TARGETED EDIT of an existing generated version — ChatGPT-style iteration.
@@ -156,7 +161,25 @@ export async function POST(req: NextRequest) {
     const outB64 = data?.data?.[0]?.b64_json;
     if (!outB64) return NextResponse.json({ error: "לא התקבלה תמונה מ-OpenAI — נסה שוב" }, { status: 502 });
 
-    return NextResponse.json({ image: `data:image/png;base64,${outB64}` });
+    const resultImage = `data:image/png;base64,${outB64}`;
+
+    // ── Text-fidelity verification (redesign): read the generated text and compare
+    // to the original. Flags invented / changed / missing text so nothing wrong
+    // reaches publication unnoticed. (outpaint mode is pixel-perfect — no check.) ──
+    let textCheck: { ok: boolean; missing: string[]; original: string; generated: string } | null = null;
+    if (mode === "redesign" && adTexts) {
+      const generated = await transcribeAdText(apiKey, resultImage);
+      if (generated) {
+        const norm = (s: string) => s.replace(/[\s‏‎.,'"׳״!?|/\\\-–—()]/g, "").toLowerCase();
+        const genNorm = norm(generated);
+        const missing = adTexts
+          .split("\n").map((l) => l.trim()).filter((l) => norm(l).length >= 3)
+          .filter((line) => !genNorm.includes(norm(line)));
+        textCheck = { ok: missing.length === 0, missing: missing.slice(0, 12), original: adTexts, generated };
+      }
+    }
+
+    return NextResponse.json({ image: resultImage, textCheck });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     if (/abort|timeout/i.test(msg)) {

@@ -136,6 +136,7 @@ export default function CreativePixelAIPage() {
   const [aiGenerating, setAiGenerating] = useState<string | null>(null);        // formatId in progress
   const [aiStylePrompt, setAiStylePrompt] = useState("");
   const [aiHighQuality, setAiHighQuality] = useState(false);
+  const [aiTextWarn, setAiTextWarn] = useState<Record<string, string[]>>({}); // formatId → missing/changed text lines
 
   const dominantColors = useMemo(() => (img ? extractDominantColors(img, 3) : []), [img]);
 
@@ -382,7 +383,13 @@ export default function CreativePixelAIPage() {
 
       setAiResults((r) => ({ ...r, [formatId]: fin.toDataURL("image/png") }));
       setActiveFormat(formatId);
-      toast(aiMode === "redesign" ? `✓ נוצר ${f.label} — חובה להגיה את הטקסטים!` : `✓ נוצר ${f.label}`, "success");
+      // Surface AI text-fidelity check (redesign mode).
+      if (json.textCheck && !json.textCheck.ok && Array.isArray(json.textCheck.missing) && json.textCheck.missing.length) {
+        setAiTextWarn((w) => ({ ...w, [formatId]: json.textCheck.missing }));
+      } else {
+        setAiTextWarn((w) => { const n = { ...w }; delete n[formatId]; return n; });
+      }
+      toast(aiMode === "redesign" ? `✓ נוצר ${f.label} — בדוק התאמת טקסט` : `✓ נוצר ${f.label}`, "success");
     } catch (e) {
       toast(e instanceof Error ? e.message : "היצירה נכשלה", "error");
     } finally { setAiGenerating(null); }
@@ -820,8 +827,17 @@ export default function CreativePixelAIPage() {
                 {aiGenerating === activeFormat ? (
                   <div style={{ textAlign: "center", color: BRAND, fontSize: 13, fontWeight: 700 }}>⏳ ה-AI יוצר את הרקע במידות המלאות…<div style={{ fontSize: 11, color: "var(--foreground-muted)", marginTop: 6 }}>20-40 שניות</div></div>
                 ) : aiResults[activeFormat] ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={aiResults[activeFormat]} alt="" style={{ maxWidth: "100%", maxHeight: 520, borderRadius: 10 }} />
+                  <div style={{ width: "100%" }}>
+                    {aiTextWarn[activeFormat]?.length > 0 && (
+                      <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, padding: "0.6rem 0.8rem", marginBottom: 10, fontSize: 12 }}>
+                        <div style={{ fontWeight: 800, color: "#dc2626", marginBottom: 4 }}>⚠️ ייתכן שיבוש טקסט — הטקסטים הבאים לא זוהו זהים למקור:</div>
+                        <div style={{ color: "#b45309", lineHeight: 1.6 }}>{aiTextWarn[activeFormat].map((t, i) => <div key={i}>• {t}</div>)}</div>
+                        <div style={{ color: "var(--foreground-muted)", marginTop: 6 }}>תקן עם ההערה למטה, צור שוב, או השתמש ב-🔒 הרחבה 1:1 לנאמנות מוחלטת.</div>
+                      </div>
+                    )}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={aiResults[activeFormat]} alt="" style={{ maxWidth: "100%", maxHeight: 480, borderRadius: 10, display: "block", margin: "0 auto" }} />
+                  </div>
                 ) : (
                   <div style={{ textAlign: "center", color: "var(--foreground-muted)", fontSize: 13 }}>
                     עוד לא נוצר {activeFormat === "story" ? "Story" : activeFormat === "feed_4_5" ? "4:5" : "Square"} — לחץ "✨ צור" במנוע היצירה
