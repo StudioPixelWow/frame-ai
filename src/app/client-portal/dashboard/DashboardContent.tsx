@@ -13,6 +13,7 @@ import {
 } from '@/lib/api/use-entity';
 import { useMemo, useState, useCallback, useEffect, Suspense } from 'react';
 import WelcomeBand from '@/components/ui/welcome-band';
+import PortalHighlights from './PortalHighlights';
 
 /* ═══════════════════════════════════════════════
    CSS — Apple-level micro-interactions
@@ -227,6 +228,11 @@ function DashboardContentInner() {
           name={client.contactPerson || client.name}
           subtitle={`${activeCampaigns.length} קמפיינים פעילים · ${kpis.totalLeads} לידים`}
         />
+      </div>
+
+      {/* ═══ MONTHLY CONTENT CALENDAR + SITE/SOCIAL PREVIEW + CONTACT ═══ */}
+      <div style={{ marginBottom: '1rem' }}>
+        <PortalHighlights client={client} clientId={clientId || ''} />
       </div>
 
       {/* ══════════════════════════════════════

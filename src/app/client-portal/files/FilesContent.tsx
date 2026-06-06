@@ -213,6 +213,16 @@ function FilesContentInner() {
                 elem.style.transform = 'translateY(0)';
               }}
             >
+              {/* Thumbnail preview for images/videos */}
+              {file.fileUrl && (file.fileType === 'image' || /\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(file.fileUrl)) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={file.fileUrl} alt={file.fileName} loading="lazy"
+                  style={{ width: '100%', height: 150, objectFit: 'cover', borderRadius: '0.5rem', background: 'var(--surface-raised)' }} />
+              ) : file.fileUrl && (file.fileType === 'video' || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(file.fileUrl)) ? (
+                <video src={file.fileUrl} muted playsInline preload="metadata"
+                  style={{ width: '100%', height: 150, objectFit: 'cover', borderRadius: '0.5rem', background: '#000' }} />
+              ) : null}
+
               {/* File Icon and Type */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <div
@@ -255,7 +265,7 @@ function FilesContentInner() {
                       margin: 0,
                     }}
                   >
-                    {formatFileSize(file.fileSize)}
+                    {file.fileSize > 0 ? formatFileSize(file.fileSize) : 'לחץ לפתיחה'}
                   </p>
                 </div>
               </div>
