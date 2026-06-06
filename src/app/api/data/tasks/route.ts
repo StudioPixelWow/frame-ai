@@ -140,21 +140,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Client: read-only, only tasks on their projects
+    // Client: read-only — tasks directly on their account (client_id) OR on their projects.
     if (role === 'client') {
       const clientId = getRequestClientId(req);
-      if (clientId) {
-        // Get client's project IDs, then filter tasks
-        const { data: projRows } = await sb.from('business_projects').select('id').eq('client_id', clientId);
-        const projIds = (projRows ?? []).map((p: any) => p.id as string);
-        if (projIds.length > 0) {
-          q = q.in('business_project_id', projIds);
-        } else {
-          return NextResponse.json([]);
-        }
-      } else {
-        return NextResponse.json([]);
-      }
+      if (!clientId) return NextResponse.json([]);
+      const { data: projRows } = await sb.from('business_projects').select('id').eq('client_id', clientId);
+      const projIds = (projRows ?? []).map((p: any) => p.id as string);
+      const ors = [`client_id.eq.${clientId}`];
+      if (projIds.length > 0) ors.push(`business_project_id.in.(${projIds.join(',')})`);
+      q = q.or(ors.join(','));
     }
 
     const { data: rows, error } = await q;

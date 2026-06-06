@@ -150,6 +150,7 @@ function LayoutContentInner({ children }: { children: React.ReactNode }) {
             }}>
               {[
                 { label: 'דשבורד', href: '/client-portal/dashboard' },
+                { label: 'המשימות שלי', href: '/client-portal/tasks' },
                 { label: 'פעילות', href: '/client-portal/timeline' },
                 { label: 'אישורים', href: '/client-portal/approvals' },
                 { label: 'דוחות', href: '/client-portal/reports' },
