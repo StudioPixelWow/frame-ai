@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { employeeTasks } from '@/lib/db';
 import { getSupabase } from '@/lib/db/store';
+import { ensureTaskColumns } from '@/lib/db/ensure-task-columns';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,20 +42,33 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     const fileList: string[] = Array.isArray(files) ? files : [];
     const sb = getSupabase();
+    const errors: string[] = [];
+
+    // Make sure the optional columns exist before inserting.
+    let presentCols: Set<string> | null = null;
+    try { presentCols = await ensureTaskColumns(); } catch { /* fall back to core columns */ }
 
     // 1) GLOBAL task (the `tasks` table) — this is what the client card "משימות"
     //    tab and the manager board read. Without this it appears nowhere.
     const taskId = `tsk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
     const taskRow: Record<string, unknown> = {
       id: taskId, title: title.trim(), description: description || '',
-      status: 'new', priority: 'medium', client_id: clientId, client_name: clientName,
-      notes: `נשלח מהלקוח דרך הפורטל · סוג: ${typeLabel}`,
+      status: 'new', priority: 'medium', client_id: clientId,
       created_at: now, updated_at: now,
     };
+    // Only set columns confirmed present (avoids "column does not exist" → silent fail).
+    const has = (c: string) => !presentCols || presentCols.has(c);
+    if (clientName && has('client_name')) taskRow.client_name = clientName;
+    if (has('notes')) taskRow.notes = `נשלח מהלקוח דרך הפורטל · סוג: ${typeLabel}`;
     if (assigneeId) taskRow.assignee_id = assigneeId;
-    if (dueDate) taskRow.due_date = dueDate;
-    if (fileList.length) taskRow.files = fileList;
-    try { await sb.from('tasks').insert(taskRow); } catch (e) { console.warn('[portal task] tasks insert:', e instanceof Error ? e.message : e); }
+    if (dueDate && has('due_date')) taskRow.due_date = dueDate;
+    if (fileList.length && has('files')) taskRow.files = fileList;
+
+    const { error: taskErr } = await sb.from('tasks').insert(taskRow);
+    if (taskErr) {
+      errors.push(`tasks: ${taskErr.message}`);
+      console.error('[portal task] tasks insert failed:', taskErr.message);
+    }
 
     // 2) Mirror to employee-tasks so the responsible employee sees it on their board.
     let created: any = { id: taskId };
@@ -68,7 +82,12 @@ export async function POST(req: NextRequest) {
         notes: `נשלח מהלקוח דרך הפורטל · סוג: ${typeLabel}`,
         createdAt: now, updatedAt: now,
       } as any);
-    } catch (e) { console.warn('[portal task] employee-task mirror:', e instanceof Error ? e.message : e); }
+    } catch (e) { errors.push(`employee-task: ${e instanceof Error ? e.message : e}`); console.error('[portal task] employee-task mirror failed:', e); }
+
+    // If NOTHING persisted, fail loudly so the client knows it wasn't saved.
+    if (taskErr && errors.length >= 2) {
+      return NextResponse.json({ error: `המשימה לא נשמרה: ${errors.join(' · ')}` }, { status: 500 });
+    }
 
     // Email the system manager.
     try {
@@ -98,7 +117,7 @@ export async function POST(req: NextRequest) {
       console.warn('[portal task-request] email failed:', e instanceof Error ? e.message : e);
     }
 
-    return NextResponse.json({ success: true, task: created });
+    return NextResponse.json({ success: true, task: created, warnings: errors.length ? errors : undefined });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status: 500 });
   }
