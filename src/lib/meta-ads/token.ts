@@ -35,3 +35,27 @@ export async function resolveMetaToken(clientToken?: string | null): Promise<str
   if (clientToken) return clientToken;
   return getSystemMetaToken();
 }
+
+/**
+ * Optimizer write mode:
+ *   'recommend' (default) — compute changes and queue them for approval, NO Meta writes.
+ *   'auto'                — apply changes directly to Meta.
+ * Stored in app_settings key 'meta_write_mode'. Default 'recommend' so nothing is
+ * pushed to Meta until the account is verified/enabled by the user.
+ */
+export async function getMetaWriteMode(): Promise<'recommend' | 'auto'> {
+  try {
+    const sb = getSupabase();
+    const { data } = await sb.from('app_settings').select('value').eq('key', 'meta_write_mode').maybeSingle();
+    const v: any = data?.value;
+    const mode = typeof v === 'string' ? v : v?.mode;
+    return mode === 'auto' ? 'auto' : 'recommend';
+  } catch {
+    return 'recommend';
+  }
+}
+
+export async function setMetaWriteMode(mode: 'recommend' | 'auto'): Promise<void> {
+  const sb = getSupabase();
+  await sb.from('app_settings').upsert({ key: 'meta_write_mode', value: { mode } }, { onConflict: 'key' });
+}

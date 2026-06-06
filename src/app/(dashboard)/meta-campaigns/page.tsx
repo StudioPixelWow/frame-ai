@@ -7,6 +7,7 @@ import CampaignDashboard from '@/components/meta/campaign-dashboard';
 import CampaignAssigner from '@/components/meta/campaign-assigner';
 import CampaignReports from '@/components/meta/campaign-reports';
 import MetaCommandCenter from '@/components/meta/meta-command-center';
+import MetaDiagnostic from '@/components/meta/meta-diagnostic';
 
 const BRAND = '#00B5FE';
 
@@ -69,6 +70,9 @@ export default function MetaCampaignsPage() {
         <div style={{ color: '#6b7280' }}>לא נמצאו לקוחות.</div>
       ) : (
         <>
+          {/* Connection diagnostic — reveals exactly what blocks optimization */}
+          <MetaDiagnostic clientId={drill?.id || selected || undefined} />
+
           {/* Tabs */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 24, borderBottom: '1px solid #e5e7eb' }}>
             {([['dashboard', 'מרכז פיקוד'], ['reports', 'דוחות יומיים'], ['assign', 'שיוך קמפיינים ללקוחות']] as const).map(([id, label]) => (

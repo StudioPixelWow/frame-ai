@@ -15,7 +15,7 @@
 import { getSupabase } from '@/lib/db/store';
 import crypto from 'crypto';
 
-export type ActionStatus = 'success' | 'failed' | 'info';
+export type ActionStatus = 'success' | 'failed' | 'info' | 'recommended';
 
 export interface MetaActionLogEntry {
   clientId?: string | null;

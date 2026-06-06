@@ -18,12 +18,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/db/store';
 import { campaigns as campaignsCol, adSets as adSetsCol, ads as adsCol } from '@/lib/db/collections';
-import { resolveMetaToken } from '@/lib/meta-ads/token';
+import { resolveMetaToken, getMetaWriteMode } from '@/lib/meta-ads/token';
 import { getClientAdAccounts } from '@/lib/meta-ads/client-accounts';
 import {
   updateMetaAdSetBudget, getMetaAdSetDailyBudget, copyMetaAdSet, updateMetaAdSet, verifyMetaEntity,
 } from '@/lib/meta-ads/write-service';
 import { logMetaAction } from '@/lib/meta-ads/action-log';
+import { campaignActions } from '@/lib/db/collections';
+
+/** Queue a recommended change for human approval (recommend mode — no Meta write). */
+async function queueRecommendation(opts: {
+  clientId: string; clientName: string; type: 'increase_budget' | 'decrease_budget' | 'test_new_audience' | 'mark_for_review';
+  title: string; description: string; previewBefore: string; previewAfter: string;
+  campaignId?: string; campaignName?: string; adSetId?: string; payload?: Record<string, unknown>;
+}) {
+  try {
+    await campaignActions.createAsync({
+      type: opts.type, title: opts.title, objectType: 'adset', objectId: opts.adSetId || '',
+      objectName: opts.title, campaignId: opts.campaignId || '', campaignName: opts.campaignName || '',
+      adSetId: opts.adSetId || null, adId: null, clientId: opts.clientId, clientName: opts.clientName,
+      recommendationId: null, payload: opts.payload || {}, status: 'approval_required',
+      sourceRecommendationId: null, sourceRecommendationType: 'auto_optimizer',
+      description: opts.description, previewBefore: opts.previewBefore, previewAfter: opts.previewAfter,
+      createdBy: 'auto_optimizer', approvedBy: null, approvedAt: null, rejectionReason: null,
+      executedAt: null, failedReason: null,
+    } as any);
+  } catch { /* best-effort */ }
+}
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -43,6 +64,8 @@ export async function GET(req: NextRequest) {
 
   try {
     const sb = getSupabase();
+    const writeMode = await getMetaWriteMode(); // 'recommend' (default) | 'auto'
+    const recommend = writeMode !== 'auto';
     const { data: clients } = await sb.from('clients').select('*');
     const rows = (clients || []) as any[];
 
@@ -53,6 +76,7 @@ export async function GET(req: NextRequest) {
     let clientsTouched = 0;
     let budgetShifts = 0;
     let audienceExpansions = 0;
+    let recommendationsQueued = 0;
     const perClient: any[] = [];
 
     for (const c of rows) {
@@ -102,7 +126,20 @@ export async function GET(req: NextRequest) {
           const move = Math.round(lag.dailyBudget * 0.4);
           const newLag = Math.max(20, lag.dailyBudget - move);
           const newWin = win.dailyBudget + move;
-          // Reallocation keeps the sum constant (lag-move + win+move) — never raises total.
+          // ── RECOMMEND MODE: queue for approval instead of writing to Meta ──
+          if (recommend) {
+            await queueRecommendation({
+              clientId: c.id, clientName: c.name || c.id, type: 'mark_for_review',
+              title: `הסטת תקציב מומלצת: ${lag.s.name} → ${win.s.name}`,
+              description: `העבר ₪${move}/יום מקבוצה חלשה (CPL ₪${Math.round(lag.cpl)}) למנצחת (CPL ₪${Math.round(win.cpl)}). סך התקציב ללא שינוי.`,
+              previewBefore: `${lag.s.name}: ₪${lag.dailyBudget}/יום · ${win.s.name}: ₪${win.dailyBudget}/יום`,
+              previewAfter: `${lag.s.name}: ₪${newLag}/יום · ${win.s.name}: ₪${newWin}/יום`,
+              adSetId: win.s.id, payload: { kind: 'shift_budget', lagMeta, winMeta, newLag, newWin },
+            });
+            await logMetaAction({ clientId: c.id, actionKind: 'shift_budget', category: 'budget', title: `המלצה: הסטת תקציב ${lag.s.name} → ${win.s.name}`, status: 'recommended', objectType: 'adset', detail: `מומלץ להעביר ₪${move}/יום לקבוצה המנצחת — ממתין לאישור`, actor: 'cron' });
+            didShift = true; recommendationsQueued++;
+          } else {
+          // ── AUTO MODE: reallocation keeps the sum constant — never raises total ──
           try {
             const r1 = await updateMetaAdSetBudget(creds, lagMeta, newLag);
             const r2 = await updateMetaAdSetBudget(creds, winMeta, newWin);
@@ -118,6 +155,7 @@ export async function GET(req: NextRequest) {
             });
             if (okShift) { didShift = true; budgetShifts++; }
           } catch { /* logged best-effort */ }
+          }
         }
       }
 
@@ -126,6 +164,19 @@ export async function GET(req: NextRequest) {
         const win = winners[0];
         const winMeta = (win.s as any).metaAdSetId;
         if (winMeta) {
+          // ── RECOMMEND MODE: queue expansion suggestion, no Meta write ──
+          if (recommend) {
+            await queueRecommendation({
+              clientId: c.id, clientName: c.name || c.id, type: 'test_new_audience',
+              title: `הרחבת קהל מומלצת: ${win.s.name}`,
+              description: `שכפל את הקבוצה המנצחת (CPL ₪${Math.round(win.cpl)}) לקהל רחב יותר (גיל ±, ללא תחומי עניין צרים) וחלק את התקציב — סך הכל ללא שינוי.`,
+              previewBefore: `קבוצה אחת מנצחת: ${win.s.name}`,
+              previewAfter: `${win.s.name} + עותק עם קהל מורחב (תקציב מחולק)`,
+              adSetId: win.s.id, payload: { kind: 'expand_audience', winMeta },
+            });
+            await logMetaAction({ clientId: c.id, actionKind: 'expand_audience', category: 'audience', title: `המלצה: הרחבת קהל מנצח ${win.s.name}`, status: 'recommended', objectType: 'adset', detail: 'מומלץ לשכפל לקהל רחב יותר — ממתין לאישור', actor: 'cron' });
+            didExpand = true; recommendationsQueued++;
+          } else {
           try {
             const srcBudgetCents = await getMetaAdSetDailyBudget(creds, winMeta);
             const copy = await copyMetaAdSet(creds, winMeta, { deepCopy: true, statusOption: 'ACTIVE' });
@@ -160,6 +211,7 @@ export async function GET(req: NextRequest) {
               if (okExp) { didExpand = true; audienceExpansions++; }
             }
           } catch { /* logged best-effort */ }
+          }
         }
       }
 
@@ -170,7 +222,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
-      success: true, clientsTouched, budgetShifts, audienceExpansions,
+      success: true, mode: writeMode, clientsTouched, budgetShifts, audienceExpansions, recommendationsQueued,
       durationMs: Date.now() - start, perClient,
     });
   } catch (err) {
