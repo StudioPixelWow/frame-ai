@@ -77,16 +77,15 @@ export default function ApprovalsPage() {
   const [showReturnBox, setShowReturnBox] = useState(false);
   const [processing, setProcessing] = useState<string>('');
 
-  const findTask = useCallback((taskId: string): any => {
-    const all = [...(employeeTasks || []), ...(tasks || [])];
-    const primary = all.find((t: any) => t.id === taskId);
-    if (!primary) return null;
+  // Mirror split: a content task can live as BOTH a tsk_ record and an
+  // employee-task. The employee may have uploaded the file to the sibling.
+  // If the given task has no files, find a sibling (same gantt item, or same
+  // client+title) that HAS files and merge them in so the work always shows.
+  const mergeSiblingFiles = useCallback((primary: any): any => {
+    if (!primary) return primary;
     const hasFiles = (t: any) => Array.isArray(t?.files) && t.files.length > 0;
     if (hasFiles(primary)) return primary;
-    // Mirror split: a content task can live as BOTH a tsk_ record and an
-    // employee-task. The employee may have uploaded the file to the sibling.
-    // Find a sibling (same gantt item, or same client+title) that HAS files and
-    // merge its files/adaptations so the submitted work always shows.
+    const all = [...(employeeTasks || []), ...(tasks || [])];
     const sib = all.find((t: any) =>
       t.id !== primary.id && hasFiles(t) && (
         (primary.ganttItemId && t.ganttItemId === primary.ganttItemId) ||
@@ -97,18 +96,42 @@ export default function ApprovalsPage() {
     return sib ? { ...primary, files: sib.files, adaptations: primary.adaptations || sib.adaptations } : primary;
   }, [tasks, employeeTasks]);
 
+  const findTask = useCallback((taskId: string): any => {
+    const primary = [...(employeeTasks || []), ...(tasks || [])].find((t: any) => t.id === taskId);
+    return primary ? mergeSiblingFiles(primary) : null;
+  }, [tasks, employeeTasks, mergeSiblingFiles]);
+
+  // Fetch the linked task fresh by id (in-memory lists can be stale or scoped).
+  // Tries both stores, then merges in any sibling file.
+  const fetchTaskById = useCallback(async (taskId: string): Promise<any> => {
+    for (const ep of ['employee-tasks', 'tasks']) {
+      try {
+        const r = await fetch(`/api/data/${ep}/${taskId}`);
+        if (r.ok) {
+          const j = await r.json();
+          if (j && j.id) return mergeSiblingFiles(j);
+        }
+      } catch { /* try next */ }
+    }
+    return null;
+  }, [mergeSiblingFiles]);
+
   // Source-aware task update (employee-tasks UUID vs tasks tsk_).
   const updateAnyTask = useCallback((id: string, patch: any) => {
     const isEmp = (employeeTasks || []).some((t: any) => t.id === id);
     return isEmp ? updateEmployeeTask(id, patch) : updateTask(id, patch);
   }, [employeeTasks, updateEmployeeTask, updateTask]);
 
-  const openTaskApproval = (approval: Approval) => {
+  const openTaskApproval = async (approval: Approval) => {
     const taskId = (approval as any).taskId;
     if (!taskId) { openEditModal(approval); return; }
-    setDetail({ approval, task: findTask(taskId) });
     setShowReturnBox(false);
     setReturnNotes('');
+    setDetail({ approval, task: findTask(taskId) }); // optimistic from memory
+    // Always refresh from the API — the in-memory list may be stale or scoped,
+    // and the just-uploaded file may not be in it yet.
+    const fresh = await fetchTaskById(taskId);
+    if (fresh) setDetail((d) => (d && d.approval.id === approval.id ? { ...d, task: fresh } : d));
   };
 
   // APPROVE: mark approved → auto-adapt the attached graphic to all sizes →
