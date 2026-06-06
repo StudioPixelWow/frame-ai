@@ -565,6 +565,37 @@ export default function SeoGeoDashboard() {
                         >
                           ▶ הרץ עכשיו
                         </button>
+                        <button
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const btn = e.currentTarget as HTMLButtonElement;
+                            const orig = btn.textContent;
+                            btn.disabled = true; btn.textContent = '⏳ סורק…';
+                            try {
+                              const res = await fetch('/api/seo-geo-plans/geo-scan', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' },
+                                body: JSON.stringify({ planId: plan.id }),
+                              });
+                              const j = await res.json();
+                              if (!res.ok) throw new Error(j.error || 'שגיאה');
+                              const r = j.result || {};
+                              const found = r.aiVisibility?.totalFound ?? 0;
+                              const total = r.aiVisibility?.totalQueries ?? 0;
+                              alert(`סריקת GEO הושלמה — המותג צוטט ב-${found}/${total} בדיקות AI. רענן לעדכון הציון.`);
+                            } catch (err) {
+                              alert(err instanceof Error ? err.message : 'שגיאה בסריקה');
+                            } finally { btn.disabled = false; btn.textContent = orig; }
+                          }}
+                          style={{
+                            flex: 1, padding: '6px 0', borderRadius: 8, border: `1px solid ${COLORS.blue || '#3b82f6'}40`,
+                            background: `${COLORS.blue || '#3b82f6'}12`, color: COLORS.blue || '#3b82f6',
+                            fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+                          }}
+                        >
+                          🔎 סרוק GEO
+                        </button>
                         {plan.status === 'active' && (
                           <button
                             onClick={async (e) => {

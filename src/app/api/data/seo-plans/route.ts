@@ -31,10 +31,34 @@ export async function GET(req: NextRequest) {
           { column: 'data->>status', op: 'in', value: ['draft', 'scanning', 'scanned', 'visibility_done', 'plan_generated', 'active', 'completed'] },
         ]);
 
+    // Fallback: derive scores from the latest daily snapshot when top-level
+    // scores weren't persisted (older scans), so the dashboard shows real data.
+    const AI_PLATFORMS = ['chatgpt', 'gemini', 'perplexity', 'claude', 'google_ai_overview'];
+    const plans = (data as any[]).map((p) => {
+      const snaps = Array.isArray(p.dailySnapshots) ? p.dailySnapshots : [];
+      const last = snaps.length ? snaps[snaps.length - 1] : null;
+      let visibilityScore = p.visibilityScore || 0;
+      let geoScore = p.geoScore || 0;
+      if (last?.aiVisibility) {
+        if (!visibilityScore && last.aiVisibility.totalQueries > 0) {
+          visibilityScore = Math.round((last.aiVisibility.totalFound / last.aiVisibility.totalQueries) * 100);
+        }
+        if (!geoScore) {
+          const ai = AI_PLATFORMS.reduce((acc: any, pl: string) => {
+            const b = last.aiVisibility.byPlatform?.[pl];
+            if (b) { acc.found += b.found; acc.total += b.total; }
+            return acc;
+          }, { found: 0, total: 0 });
+          if (ai.total > 0) geoScore = Math.round((ai.found / ai.total) * 100);
+        }
+      }
+      return { ...p, visibilityScore, geoScore };
+    });
+
     return NextResponse.json({
       success: true,
-      plans: data,
-      count: data.length,
+      plans,
+      count: plans.length,
     });
   } catch (error) {
     console.warn('[API] GET /api/data/seo-plans failed, returning empty:', error instanceof Error ? error.message : error);

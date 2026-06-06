@@ -178,7 +178,7 @@ function calculateTechnicalScore(plan: any): number {
   return score;
 }
 
-async function processDailySnapshot(plan: any) {
+export async function processDailySnapshot(plan: any) {
   const planId = plan.id;
   let targetDomain = (plan as any).websiteUrl || (plan as any).url || (plan as any).domain || '';
   // Normalize — add protocol if missing so URL parsing works downstream
@@ -354,8 +354,21 @@ async function processDailySnapshot(plan: any) {
   // Append snapshot to dailySnapshots array
   const dailySnapshots = [...((plan as any).dailySnapshots || []), snapshot];
 
-  // Save updates
-  await updatePlanSafe(planId, { dailySnapshots, clientKeywords });
+  // GEO score = AI-platform citation rate (ChatGPT/Gemini/Perplexity/Claude/AI Overview),
+  // EXCLUDING plain Google SEO — this is the "are we in the AI answers" number.
+  const aiOnly = AI_PLATFORMS.reduce((acc, p) => {
+    const b = aiVisibility.byPlatform[p];
+    if (b) { acc.found += b.found; acc.total += b.total; }
+    return acc;
+  }, { found: 0, total: 0 });
+  const geoScore = aiOnly.total > 0 ? Math.round((aiOnly.found / aiOnly.total) * 100) : 0;
+
+  // Save updates — PERSIST top-level scores so the dashboard reflects real data.
+  await updatePlanSafe(planId, {
+    dailySnapshots, clientKeywords,
+    visibilityScore, overallScore, technicalScore, geoScore,
+    geoScannedAt: new Date().toISOString(),
+  } as any);
 
   logActivity(planId, 'daily_progress_scan', {
     date: todayDate,
