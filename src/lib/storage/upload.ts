@@ -60,8 +60,17 @@ const BUCKET = "project-files";
 /** Default max file size: 100 MB. */
 const MAX_SIZE = 100 * 1024 * 1024;
 
-const RETRY_DELAYS_MS = [2000, 4000, 6000]; // exponential backoff: 2s, 4s, 6s
-const MAX_ATTEMPTS = 3;
+const RETRY_DELAYS_MS = [1500, 3000, 4000]; // backoff
+const MAX_ATTEMPTS = 2; // keep total within the function's maxDuration budget
+
+/** Race a promise against a timeout so a hung Supabase call can't run until the
+ *  gateway 504s — it fails fast with a clear error instead. */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)),
+  ]);
+}
 
 /* ── Bucket verification (no creation) ──────────────────────────────────── */
 
@@ -79,7 +88,7 @@ async function verifyBucket(): Promise<void> {
   const tag = `[storage:verifyBucket]`;
 
   try {
-    const { data: buckets, error: listErr } = await sb.storage.listBuckets();
+    const { data: buckets, error: listErr } = await withTimeout(sb.storage.listBuckets(), 6000, 'listBuckets');
 
     if (listErr) {
       console.warn(`${tag} ⚠️ listBuckets failed: ${listErr.message} — proceeding anyway`);
@@ -159,9 +168,10 @@ export async function getSignedUploadUrl(opts: {
     console.log(`${attemptTag} Creating signed upload URL for bucket="${BUCKET}"...`);
 
     try {
-      const { data, error } = await sb.storage
-        .from(BUCKET)
-        .createSignedUploadUrl(storagePath);
+      const { data, error } = await withTimeout(
+        sb.storage.from(BUCKET).createSignedUploadUrl(storagePath),
+        9000, 'createSignedUploadUrl',
+      );
 
       if (!error && data?.signedUrl && data?.token) {
         const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(storagePath);
@@ -192,11 +202,9 @@ export async function getSignedUploadUrl(opts: {
     }
 
     if (attempt < MAX_ATTEMPTS) {
-      const delay = RETRY_DELAYS_MS[attempt - 1] || 4000;
+      const delay = RETRY_DELAYS_MS[attempt - 1] || 3000;
       console.log(`${attemptTag} Retrying in ${delay}ms...`);
-      _bucketVerified = false; // re-verify on retry
       await new Promise((r) => setTimeout(r, delay));
-      await verifyBucket();
     }
   }
 
