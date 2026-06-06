@@ -40,24 +40,35 @@ export async function POST(req: NextRequest) {
     const typeLabel = TYPE_LABELS[type] || type || 'אחר';
     const now = new Date().toISOString();
     const fileList: string[] = Array.isArray(files) ? files : [];
+    const sb = getSupabase();
 
-    const created = await employeeTasks.createAsync({
-      title: title.trim(),
-      description: description || '',
-      assignedEmployeeId: assigneeId || null,
-      clientId,
-      clientName,
-      projectId: null,
-      ganttItemId: null,
-      dueDate: dueDate || null,
-      status: 'new',
-      priority: 'medium',
-      files: fileList,                 // reference files the client attached
-      tags: [`בקשת לקוח`, typeLabel],
+    // 1) GLOBAL task (the `tasks` table) — this is what the client card "משימות"
+    //    tab and the manager board read. Without this it appears nowhere.
+    const taskId = `tsk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    const taskRow: Record<string, unknown> = {
+      id: taskId, title: title.trim(), description: description || '',
+      status: 'new', priority: 'medium', client_id: clientId, client_name: clientName,
       notes: `נשלח מהלקוח דרך הפורטל · סוג: ${typeLabel}`,
-      createdAt: now,
-      updatedAt: now,
-    } as any);
+      created_at: now, updated_at: now,
+    };
+    if (assigneeId) taskRow.assignee_id = assigneeId;
+    if (dueDate) taskRow.due_date = dueDate;
+    if (fileList.length) taskRow.files = fileList;
+    try { await sb.from('tasks').insert(taskRow); } catch (e) { console.warn('[portal task] tasks insert:', e instanceof Error ? e.message : e); }
+
+    // 2) Mirror to employee-tasks so the responsible employee sees it on their board.
+    let created: any = { id: taskId };
+    try {
+      created = await employeeTasks.createAsync({
+        title: title.trim(), description: description || '',
+        assignedEmployeeId: assigneeId || null, clientId, clientName,
+        projectId: null, ganttItemId: null, dueDate: dueDate || null,
+        status: 'new', priority: 'medium', files: fileList,
+        tags: ['בקשת לקוח', typeLabel],
+        notes: `נשלח מהלקוח דרך הפורטל · סוג: ${typeLabel}`,
+        createdAt: now, updatedAt: now,
+      } as any);
+    } catch (e) { console.warn('[portal task] employee-task mirror:', e instanceof Error ? e.message : e); }
 
     // Email the system manager.
     try {
