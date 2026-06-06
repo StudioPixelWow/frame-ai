@@ -163,6 +163,13 @@ export default function UgcPage() {
     } catch { /* ignore */ }
   };
 
+  // Deep-link: /ugc?clientId=… → auto-select the client once the list loads.
+  useEffect(() => {
+    if (!clients.length || clientId) return;
+    try { const q = new URLSearchParams(window.location.search).get('clientId'); if (q) pickClient(q); } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clients.length]);
+
   const generate = async () => {
     if (!form.businessName.trim()) { setErr('שם העסק נדרש'); return; }
     setErr(''); setPkg(null); setBusy('יוצר פרויקט…');

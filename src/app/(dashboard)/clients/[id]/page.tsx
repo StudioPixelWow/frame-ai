@@ -1034,6 +1034,17 @@ function ClientDetailContent() {
                 </button>
                 <button
                   className="mod-btn-ghost"
+                  style={{
+                    fontSize: "0.875rem", padding: "0.5rem 1.125rem",
+                    display: "inline-flex", alignItems: "center", gap: "0.375rem",
+                    color: "#a855f7", borderColor: "rgba(168,85,247,0.3)", background: "rgba(168,85,247,0.06)",
+                  }}
+                  onClick={() => router.push(`/ugc?clientId=${clientId}`)}
+                >
+                  🎬 צור UGC
+                </button>
+                <button
+                  className="mod-btn-ghost"
                   disabled={reportGenerating}
                   style={{
                     fontSize: "0.875rem",
