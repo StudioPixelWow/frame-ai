@@ -1230,10 +1230,11 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                   key={item.id}
                   style={{
                     padding: "1rem",
-                    border: itemIsProtected ? `1px solid ${protectionBadge?.color || "#22c55e"}40` : "1px solid var(--border)",
+                    // Outer color gestures to the workflow STAGE (e.g. approved → green).
+                    border: `1px solid ${(GANTT_STATUS_COLORS[item.status]?.color || 'var(--border)')}${GANTT_STATUS_COLORS[item.status] ? '55' : ''}`,
                     borderRadius: "0.5rem",
-                    borderLeft: `4px solid ${item.holidayTag ? "#f59e0b" : (ITEM_TYPE_CONFIG[item.itemType]?.color || "#6b7280")}`,
-                    background: editingItemId === item.id ? "var(--accent-muted)" : item.holidayTag ? "rgba(245, 158, 11, 0.06)" : itemIsProtected ? `${protectionBadge?.color || "#22c55e"}08` : "transparent",
+                    borderRight: `5px solid ${GANTT_STATUS_COLORS[item.status]?.color || ITEM_TYPE_CONFIG[item.itemType]?.color || "#6b7280"}`,
+                    background: editingItemId === item.id ? "var(--accent-muted)" : (GANTT_STATUS_COLORS[item.status] ? `${GANTT_STATUS_COLORS[item.status].color}0d` : item.holidayTag ? "rgba(245, 158, 11, 0.06)" : "transparent"),
                     position: "relative",
                   }}
                 >
@@ -2430,12 +2431,13 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                           onClick={() => setEditingItemId(item.id)}
                           style={{
                             padding: "0.75rem",
-                            border: "1px solid var(--border)",
+                            // Outer color gestures to the workflow STAGE (approved → green).
+                            border: `1px solid ${(GANTT_STATUS_COLORS[item.status]?.color || 'var(--border)')}${GANTT_STATUS_COLORS[item.status] ? '55' : ''}`,
                             borderRadius: "0.5rem",
-                            background: "var(--surface-raised)",
+                            background: GANTT_STATUS_COLORS[item.status] ? `${GANTT_STATUS_COLORS[item.status].color}0d` : "var(--surface-raised)",
                             cursor: "pointer",
                             transition: "all 150ms",
-                            borderLeft: `3px solid ${ITEM_TYPE_CONFIG[item.itemType]?.color || "#6b7280"}`,
+                            borderRight: `4px solid ${GANTT_STATUS_COLORS[item.status]?.color || ITEM_TYPE_CONFIG[item.itemType]?.color || "#6b7280"}`,
                           }}
                           onMouseEnter={(e) => {
                             (e.currentTarget as HTMLElement).style.boxShadow = "0 0 16px rgba(240, 255, 2, 0.35), 0 0 4px rgba(240, 255, 2, 0.25)";
@@ -2818,6 +2820,39 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                   </div>
                 </div>
               )}
+
+              {/* Approved / attached files — preview the content's deliverables */}
+              {(() => {
+                const raw = [ ...((selectedItem as any).imageUrls || []), ...((selectedItem as any).attachedFiles || []) ];
+                const parse = (e: string) => { const i = e.indexOf('|'); return i === -1 ? { name: (e.split('/').pop() || e).split('?')[0], url: e } : { name: e.slice(0, i), url: e.slice(i + 1) }; };
+                const seen = new Set<string>();
+                const entries = raw.map(parse).filter((f) => f.url && !seen.has(f.url) && seen.add(f.url));
+                if (entries.length === 0) return null;
+                const isImg = (u: string) => /\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(u);
+                const images = entries.filter((e) => isImg(e.url));
+                const others = entries.filter((e) => !isImg(e.url));
+                const approved = selectedItem.status === 'approved';
+                return (
+                  <div style={{ marginTop: "0.9rem", padding: "0.85rem", borderRadius: "0.75rem", border: `1px solid ${approved ? 'rgba(34,197,94,0.4)' : 'var(--border)'}`, background: approved ? 'rgba(34,197,94,0.06)' : 'var(--surface)' }}>
+                    <div style={{ fontWeight: 700, fontSize: "0.8rem", color: approved ? '#16a34a' : 'var(--foreground)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {approved ? '✅ קבצי התוכן המאושר' : '📎 קבצים מצורפים'} ({entries.length})
+                    </div>
+                    {images.length > 0 && (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8, marginBottom: others.length ? 8 : 0 }}>
+                        {images.map((im, i) => (
+                          <a key={i} href={im.url} target="_blank" rel="noopener noreferrer" title={im.name} style={{ display: "block", borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)" }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={im.url} alt={im.name} style={{ width: "100%", height: 120, objectFit: "cover", display: "block" }} />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    {others.map((o, i) => (
+                      <a key={i} href={o.url} target="_blank" rel="noopener noreferrer" style={{ display: "block", fontSize: "0.78rem", color: "var(--accent)", fontWeight: 600, padding: "0.25rem 0" }}>📥 {o.name.replace(/^🎨\s*/, '')}</a>
+                    ))}
+                  </div>
+                );
+              })()}
 
               {/* Action Buttons */}
               <div style={{
