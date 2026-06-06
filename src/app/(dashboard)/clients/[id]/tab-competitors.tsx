@@ -59,6 +59,10 @@ export default function TabCompetitors({ clientId }: { clientId: string }) {
     finally { setScanning(false); }
   };
 
+  // Keyword/topic search → opens the public Ad Library (works for IL commercial, free).
+  const [topic, setTopic] = useState('');
+  const libLink = (q: string, c = country) => `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&media_type=all&country=${c}&q=${encodeURIComponent(q)}&search_type=keyword_unordered`;
+
   const isNew = (a: Ad) => (Date.now() - new Date(a.first_seen).getTime()) < 1000 * 60 * 60 * 24 * 3; // 3 days
   const shownAds = ads.filter((a) => filter === 'all' || a.competitor_id === filter);
   const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '1.1rem 1.25rem', marginBottom: 16 };
@@ -93,6 +97,19 @@ export default function TabCompetitors({ clientId }: { clientId: string }) {
           </button>
         </div>
         {msg && <div style={{ fontSize: 12, marginTop: 10, color: msg.startsWith('✓') ? '#16a34a' : '#b45309' }}>{msg}</div>}
+
+        {/* Keyword / topic search — opens the public Ad Library (free, shows IL commercial ads) */}
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+          <label style={lbl}>🔍 חיפוש לפי מילת מפתח / נושא במודעות (פותח את ספריית המודעות)</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input className="form-input ux-input" value={topic} onChange={(e) => setTopic(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && topic.trim()) window.open(libLink(topic.trim()), '_blank'); }} placeholder="למשל: דירות למכירה, מבצע קיץ, השתלת שיניים…" style={{ flex: 1 }} />
+            <a href={topic.trim() ? libLink(topic.trim()) : '#'} target="_blank" rel="noopener noreferrer" onClick={(e) => { if (!topic.trim()) e.preventDefault(); }}
+              className="mod-btn-primary ux-btn" style={{ fontSize: 13, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', opacity: topic.trim() ? 1 : 0.5, textDecoration: 'none' }}>
+              🔎 חפש בספרייה ↗
+            </a>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--foreground-muted)', marginTop: 5 }}>חיפוש לפי מילות מפתח דרך ה-API של Meta חסום לישראל — לכן זה נפתח באתר ספריית המודעות שמציג את כל המודעות המסחריות. לחקר אוטומטי בתוך המערכת נדרש ספק חיצוני.</div>
+        </div>
       </div>
 
       {/* Competitors list */}
