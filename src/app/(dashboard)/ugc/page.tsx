@@ -219,8 +219,27 @@ export default function UgcPage() {
 
   return (
     <div dir="rtl" style={{ maxWidth: 1100, margin: '0 auto', padding: '2rem 1.5rem 4rem', color: 'var(--foreground,#111)' }}>
-      <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4 }}>🎬 UGC Business Video Generator</h1>
-      <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 22 }}>חבילת הפקה מלאה לסרטון UGC עסקי 9:16 — תסריט, סטוריבורד, שוטים, כתוביות, קריינות, פרומפטים ל-AI ו-3 וריאציות.</p>
+      <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4, color: 'var(--foreground)' }}>🎬 UGC Business Video Generator</h1>
+      <p style={{ color: 'var(--foreground-muted,#6b7280)', fontSize: 14, marginBottom: 18 }}>חבילת הפקה מלאה לסרטון UGC עסקי 9:16 — מקישור מוצר או מהלקוח ועד וידאו אמיתי עם דמות מדברת.</p>
+
+      {/* Process stepper — always shows where you are and what's next (no surprises) */}
+      {(() => {
+        const steps = ['בריף', 'תסריט (3 וריאציות)', 'סטוריבורד + תמונות', 'וידאו מוכן'];
+        const cur = video?.status === 'completed' ? 3 : (sceneImages[pkg?.variations[active]?.id || ''] || []).some(Boolean) ? 2 : pkg ? 1 : 0;
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 22, flexWrap: 'wrap' }}>
+            {steps.map((s, i) => (
+              <div key={s} style={{ display: 'flex', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 26, height: 26, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, background: i < cur ? '#22c55e' : i === cur ? BRAND : 'var(--surface-raised,#eef)', color: i <= cur ? '#fff' : 'var(--foreground-muted,#999)', border: i <= cur ? 'none' : '1px solid var(--border,#e5e7eb)' }}>{i < cur ? '✓' : i + 1}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: i === cur ? 800 : 600, color: i === cur ? BRAND : 'var(--foreground-muted,#888)' }}>{s}</span>
+                </div>
+                {i < steps.length - 1 && <span style={{ width: 28, height: 2, background: i < cur ? '#22c55e' : 'var(--border,#e5e7eb)', margin: '0 8px' }} />}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Brief */}
       <div style={card}>

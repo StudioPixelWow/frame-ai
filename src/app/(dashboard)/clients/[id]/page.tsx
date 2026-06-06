@@ -349,7 +349,13 @@ function ClientDetailContent() {
   }, [client, reportGenerating, toast]);
 
   // ── UGC Video Handlers ──
-  const openUgcModal = useCallback(async () => {
+  // Every UGC entry point now routes to the NEW UGC Business Video Generator,
+  // pre-selecting this client. The legacy in-card modal is retired.
+  const openUgcModal = useCallback(() => {
+    router.push(`/ugc?clientId=${clientId}`);
+  }, [router, clientId]);
+
+  const _legacyOpenUgcModal = useCallback(async () => {
     setUgcModalOpen(true);
     setUgcAvatarId("");
     setUgcVoiceId("");
