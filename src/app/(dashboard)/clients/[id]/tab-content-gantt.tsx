@@ -257,6 +257,26 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
   const [expandedRefIds, setExpandedRefIds] = useState<Set<string>>(new Set());
   const [itemRefsMap, setItemRefsMap] = useState<Record<string, ReferenceItem[]>>({});
 
+  // Approved deliverable files linked to a gantt item (from the client Files tab).
+  const [deliverablesMap, setDeliverablesMap] = useState<Record<string, { name: string; url: string }[]>>({});
+  const loadDeliverablesForItem = useCallback(async (item: ClientGanttItem) => {
+    setDeliverablesMap(prev => {
+      if (prev[item.id]) return prev; // already loaded/loading
+      (async () => {
+        try {
+          const res = await fetch('/api/data/client-files');
+          if (!res.ok) return;
+          const all = await res.json();
+          const linked = (Array.isArray(all) ? all : [])
+            .filter((f: any) => f.linkedGanttItemId === item.id && f.fileUrl)
+            .map((f: any) => ({ name: f.fileName || (f.fileUrl.split('/').pop() || 'קובץ').split('?')[0], url: f.fileUrl }));
+          setDeliverablesMap(p => ({ ...p, [item.id]: linked }));
+        } catch { /* silent */ }
+      })();
+      return { ...prev, [item.id]: [] };
+    });
+  }, []);
+
   /** Load references for a gantt item */
   const loadReferencesForItem = useCallback(async (item: ClientGanttItem) => {
     // Use functional state check to avoid itemRefsMap in deps (prevents infinite loop)
@@ -2580,6 +2600,9 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
         if (!itemRefsMap[selectedItem.id]) {
           loadReferencesForItem(selectedItem);
         }
+        if (!deliverablesMap[selectedItem.id]) {
+          loadDeliverablesForItem(selectedItem);
+        }
         const refs = itemRefsMap[selectedItem.id] || [];
         const statusInfo = GANTT_STATUS_COLORS[selectedItem.status] || GANTT_STATUS_COLORS.draft;
         const typeInfo = ITEM_TYPE_CONFIG[selectedItem.itemType] || ITEM_TYPE_CONFIG.social_post;
@@ -2823,12 +2846,14 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                 </div>
               )}
 
-              {/* Approved / attached files — preview the content's deliverables */}
+              {/* Approved / attached files — preview the content's deliverables
+                  (from the gantt item itself + any client files linked to it) */}
               {(() => {
                 const raw = [ ...((selectedItem as any).imageUrls || []), ...((selectedItem as any).attachedFiles || []) ];
                 const parse = (e: string) => { const i = e.indexOf('|'); return i === -1 ? { name: (e.split('/').pop() || e).split('?')[0], url: e } : { name: e.slice(0, i), url: e.slice(i + 1) }; };
                 const seen = new Set<string>();
-                const entries = raw.map(parse).filter((f) => f.url && !seen.has(f.url) && seen.add(f.url));
+                const entries = [...raw.map(parse), ...(deliverablesMap[selectedItem.id] || [])]
+                  .filter((f) => f.url && !seen.has(f.url) && seen.add(f.url));
                 if (entries.length === 0) return null;
                 const isImg = (u: string) => /\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(u);
                 const images = entries.filter((e) => isImg(e.url));
