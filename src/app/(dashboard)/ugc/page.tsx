@@ -29,6 +29,7 @@ export default function UgcPage() {
   const [pkg, setPkg] = useState<Pkg | null>(null);
   const [active, setActive] = useState(0);
   const [err, setErr] = useState('');
+  const [msg, setMsg] = useState('');
   // Product-link scrape
   const [productUrl, setProductUrl] = useState('');
   const [scraping, setScraping] = useState(false);
@@ -284,6 +285,7 @@ export default function UgcPage() {
         </div>
 
         {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12, fontWeight: 600 }}>{err}</div>}
+        {msg && <div style={{ color: '#16a34a', fontSize: 13, marginTop: 10, fontWeight: 600 }}>{msg}</div>}
         <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={generate} disabled={!!busy}
           style={{ marginTop: 16, width: '100%', fontSize: 15, fontWeight: 800, padding: '0.8rem', opacity: busy ? 0.7 : 1 }}>
           {busy || '✨ צור חבילת הפקה (3 וריאציות)'}
