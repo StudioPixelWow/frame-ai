@@ -17,6 +17,7 @@ import TabActivity from "./tab-activity";
 import TabIntegrations from "./tab-integrations";
 import TabInsights from "./tab-insights";
 import TabContentGantt from "./tab-content-gantt";
+import TabCompetitors from "./tab-competitors";
 import TabLeads from "./tab-leads";
 import TabCreativeDNA from "./tab-creative-dna";
 import TabResearch from "./tab-research";
@@ -99,13 +100,14 @@ const GANTT_STATUS_COLORS: Record<string, { label: string; color: string }> = {
   none: { label: "לא יוצר", color: "#9ca3af" },
 };
 
-type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "campaigns" | "seo" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos" | "automations" | "integrations" | "growth" | "daily-report" | "publishing-channels";
+type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "campaigns" | "seo" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos" | "automations" | "integrations" | "growth" | "daily-report" | "publishing-channels" | "competitors";
 
 const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "overview", label: "סקירה" },
   { id: "content", label: "תוכן וגאנט" },
   { id: "videos", label: "סרטונים" },
   { id: "research", label: "חקור לקוח" },
+  { id: "competitors", label: "חקר מתחרים" },
   { id: "dna", label: "DNA יצירתי" },
   { id: "tasks", label: "משימות" },
   { id: "leads", label: "לידים", showFor: "all" },
@@ -1246,6 +1248,8 @@ function ClientDetailContent() {
           }
           // Hide portal management tab from employees (admin-only)
           if (tab.id === "portal" && userRole === 'employee') shouldShow = false;
+          // Competitor research — manager (admin) only
+          if (tab.id === "competitors") shouldShow = userRole === 'admin';
           // "overview", "tasks", "files", "activity" show for all types and roles
 
           return (
@@ -1317,6 +1321,9 @@ function ClientDetailContent() {
         )}
         {activeTab === "research" && (
           <TabResearch client={client} employees={employees || []} />
+        )}
+        {activeTab === "competitors" && (
+          <TabCompetitors clientId={client.id} />
         )}
         {activeTab === "videos" && (
           <TabVideos client={client} employees={employees || []} />
