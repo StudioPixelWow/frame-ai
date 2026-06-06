@@ -102,10 +102,12 @@ export async function GET(req: NextRequest) {
     const [allCampaigns, allAdSets, allAds] = await Promise.all([
       campaignsCol.getAllAsync(), adSetsCol.getAllAsync(), adsCol.getAllAsync(),
     ]);
-    const cCampaigns = (allCampaigns as any[]).filter((c) => c.clientId === clientId && c.metaCampaignId);
+    // ACTIVE ONLY — never recommend/optimize against paused/archived campaigns,
+    // ad sets, or ads (they may carry historical spend that would mislead the engine).
+    const cCampaigns = (allCampaigns as any[]).filter((c) => c.clientId === clientId && c.metaCampaignId && (c.status === 'active' || c.status === 'in_progress'));
     const campIds = new Set(cCampaigns.map((c) => c.id));
-    const cAdSets = (allAdSets as any[]).filter((s) => campIds.has(s.campaignId));
-    const cAds = (allAds as any[]).filter((a) => campIds.has(a.campaignId));
+    const cAdSets = (allAdSets as any[]).filter((s) => campIds.has(s.campaignId) && s.status === 'active');
+    const cAds = (allAds as any[]).filter((a) => campIds.has(a.campaignId) && a.status === 'active');
 
     const totalLeads = cAds.reduce((s, a) => s + (a.leads || 0), 0);
     const totalSpend = cAds.reduce((s, a) => s + (a.spend || 0), 0);

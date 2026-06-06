@@ -91,11 +91,12 @@ export async function GET(req: NextRequest) {
       const adAccountId = [...accounts][0];
       const creds = { accessToken: token, adAccountId };
 
-      // Performance per ad set (this client only).
-      const cCampaigns = (allCampaigns as any[]).filter((x) => x.clientId === c.id && x.metaCampaignId);
+      // Performance per ad set (this client only) — ACTIVE ONLY. Never act on
+      // paused/archived campaigns, ad sets, or ads.
+      const cCampaigns = (allCampaigns as any[]).filter((x) => x.clientId === c.id && x.metaCampaignId && (x.status === 'active' || x.status === 'in_progress'));
       const campIds = new Set(cCampaigns.map((x) => x.id));
-      const cAdSets = (allAdSets as any[]).filter((s) => campIds.has(s.campaignId));
-      const cAds = (allAds as any[]).filter((a) => campIds.has(a.campaignId));
+      const cAdSets = (allAdSets as any[]).filter((s) => campIds.has(s.campaignId) && s.status === 'active');
+      const cAds = (allAds as any[]).filter((a) => campIds.has(a.campaignId) && a.status === 'active');
       if (cAdSets.length === 0) continue;
 
       const totalLeads = cAds.reduce((s, a) => s + (a.leads || 0), 0);
