@@ -1419,11 +1419,13 @@ export default function TasksPage() {
                 </div>
               )}
 
-              {/* EMPLOYEE: upload-for-review is the ONLY action — no status changes, no "complete" */}
-              {isEmployee && editingTask && (
-                <div style={{ background: "linear-gradient(135deg, #ecfdf5 0%, #eff6ff 100%)", border: "2px solid #34d399", borderRadius: 16, padding: "1.1rem 1.25rem" }}>
-                  <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "#047857", marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>📤 הגשת קובץ לאישור המנהל</div>
-                  <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", marginBottom: 10 }}>כאן מעלים את התוצר המוגמר. ההעלאה תעביר את המשימה אוטומטית לסטטוס “בבדיקה” ותשלח אותה למנהל. (לא להתבלבל עם קבצי העזר למעלה.)</div>
+              {/* SUBMISSION — the deliverable upload. Shown to everyone working the
+                  task (employee primarily), visually loud so it's never confused
+                  with the reference/helper files above. */}
+              {editingTask && (
+                <div style={{ background: "linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)", border: "3px solid #10b981", borderRadius: 18, padding: "1.25rem 1.4rem", boxShadow: "0 4px 18px rgba(16,185,129,0.18)" }}>
+                  <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#047857", marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>📤 הגשת התוצר לאישור המנהל</div>
+                  <div style={{ fontSize: "0.76rem", color: "#065f46", marginBottom: 12, fontWeight: 600 }}>⬅ כאן מעלים את הקובץ המוגמר של המשימה. ההעלאה תעביר את המשימה אוטומטית ל״בבדיקה״ ותשלח אותה לאישור. <b>זה לא קבצי העזר למעלה.</b></div>
                   {form.submittedFiles.length > 0 && (
                     <div style={{ marginBottom: 10, display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                       <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#047857" }}>כבר הוגשו:</div>

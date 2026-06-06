@@ -139,8 +139,24 @@ export default function ApprovalsPage() {
     if (fresh) setDetail((d) => (d && d.approval.id === approval.id ? { ...d, task: fresh } : d));
   };
 
-  // APPROVE: mark approved → auto-adapt the attached graphic to all sizes →
-  // save the adaptations back into the task.
+  // All task records (both stores) that represent the SAME logical task — by
+  // gantt link or client+title — so an approval propagates to every mirror.
+  const relatedTaskIds = useCallback((task: any): string[] => {
+    const all = [...(employeeTasks || []), ...(tasks || [])];
+    const ids = new Set<string>();
+    if (task?.id) ids.add(task.id);
+    for (const t of all) {
+      const sameGantt = task?.ganttItemId && t.ganttItemId === task.ganttItemId;
+      const sameKey = String(t.title || '').trim() === String(task?.title || '').trim() &&
+        String(t.clientName || '').trim() === String(task?.clientName || '').trim();
+      if (sameGantt || sameKey) ids.add(t.id);
+    }
+    return [...ids];
+  }, [tasks, employeeTasks]);
+
+  // APPROVE: mark approved across every mirror task → auto-adapt the submitted
+  // graphic to all sizes → write the deliverables into the task, the linked
+  // gantt item ("ready for publishing"), and the client's Files tab.
   const approveTaskFlow = async () => {
     if (!detail) return;
     const { approval, task } = detail;
@@ -148,12 +164,16 @@ export default function ApprovalsPage() {
     try {
       setProcessing('מאשר…');
       await update(approval.id, { status: 'approved' });
-      if (taskId) await updateAnyTask(taskId, { status: 'approved' });
+      // Update EVERY mirror record so the board reflects it everywhere.
+      const ids = relatedTaskIds(task);
+      for (const id of ids) { try { await updateAnyTask(id, { status: 'approved' }); } catch { /* keep going */ } }
       fireConfetti(30);
 
       // Auto size-adaptation on the first SUBMITTED image.
       const files: string[] = submittedOf(task);
       const imgEntry = files.map(parseFileEntry).find((e) => isImageUrl(e.url));
+      const urls: Record<string, string> = {};
+      const newFiles: string[] = [];
       if (taskId && imgEntry) {
         const img = await loadImage(imgEntry.url);
         const formats: Array<{ id: 'square' | 'feed_4_5' | 'story'; file: string }> = [
@@ -161,8 +181,6 @@ export default function ApprovalsPage() {
           { id: 'feed_4_5', file: 'Feed-1080x1350.png' },
           { id: 'story', file: 'Story-1080x1920.png' },
         ];
-        const urls: Record<string, string> = {};
-        const newFiles: string[] = [];
         for (let i = 0; i < formats.length; i++) {
           setProcessing(`מתאים גדלים ${i + 1}/3…`);
           const blob = await aiAdaptImageToFormat(img, formats[i].id);
@@ -176,13 +194,60 @@ export default function ApprovalsPage() {
         }
         if (Object.keys(urls).length > 0) {
           setProcessing('שומר למשימה…');
-          // Adapted outputs are deliverable assets → save in adaptations + append
-          // to the reference files (NOT the employee's submitted files).
-          const refFiles: string[] = Array.isArray(task?.files) ? task.files : [];
-          await updateAnyTask(taskId, { adaptations: { ...urls, createdAt: new Date().toISOString() }, files: [...refFiles, ...newFiles] });
+          // Save adaptations + append deliverables to reference files on every mirror.
+          for (const id of ids) {
+            try {
+              const rec = [...(employeeTasks || []), ...(tasks || [])].find((t: any) => t.id === id);
+              const refFiles: string[] = Array.isArray(rec?.files) ? rec.files : (Array.isArray(task?.files) ? task.files : []);
+              await updateAnyTask(id, { adaptations: { ...urls, createdAt: new Date().toISOString() }, files: [...refFiles, ...newFiles] });
+            } catch { /* keep going */ }
+          }
         }
       }
-      toast(imgEntry ? '✓ אושר — והגרפיקה הותאמה לכל הגדלים ונשמרה במשימה' : '✓ אושר', 'success');
+
+      // The full deliverable set = submitted files + adapted sizes (plain URLs).
+      const deliverableEntries = [...files, ...newFiles];
+      const deliverableUrls = deliverableEntries.map(parseFileEntry).map((e) => e.url).filter(Boolean);
+      const imageUrls = deliverableEntries.map(parseFileEntry).filter((e) => isImageUrl(e.url)).map((e) => e.url);
+
+      // 1) Linked gantt item → "מאושר / מוכן לפרסום" with the files.
+      if (task?.ganttItemId && deliverableUrls.length) {
+        setProcessing('מעדכן בגאנט התוכן…');
+        try {
+          await fetch(`/api/data/client-gantt-items/${task.ganttItemId}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'approved', attachedFiles: deliverableUrls, imageUrls }),
+          });
+        } catch { /* best-effort */ }
+      }
+
+      // 2) Client Files tab → save the approved deliverables (deduped by URL).
+      if (task?.clientId && deliverableEntries.length) {
+        setProcessing('שומר בקבצי הלקוח…');
+        for (const entry of deliverableEntries) {
+          const { name, url } = parseFileEntry(entry);
+          if (!url) continue;
+          try {
+            await fetch('/api/data/client-files', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                clientId: task.clientId,
+                fileName: `${task.title || 'תוכן מאושר'} — ${name.replace(/^🎨\s*/, '')}`,
+                fileUrl: url,
+                fileType: isImageUrl(url) ? 'image' : 'other',
+                category: 'approved_final',
+                fileSize: 0,
+                linkedTaskId: taskId || null,
+                linkedGanttItemId: task.ganttItemId || null,
+                uploadedBy: null,
+                notes: `תוכן מאושר ב-${new Date().toLocaleDateString('he-IL')}`,
+              }),
+            });
+          } catch { /* best-effort */ }
+        }
+      }
+
+      toast(imgEntry ? '✓ אושר — הותאם לכל הגדלים, עודכן בגאנט ובקבצי הלקוח' : '✓ אושר ועודכן', 'success');
       setDetail(null);
     } catch (e) {
       toast(e instanceof Error ? e.message : 'שגיאה באישור', 'error');
@@ -196,7 +261,8 @@ export default function ApprovalsPage() {
     try {
       setProcessing('מחזיר לתיקון…');
       await update(approval.id, { status: 'needs_changes' });
-      if (taskId) await updateAnyTask(taskId, { status: 'returned', notes: returnNotes.trim() });
+      const ids = relatedTaskIds(detail.task || { id: taskId });
+      for (const id of ids) { try { await updateAnyTask(id, { status: 'returned', notes: returnNotes.trim() }); } catch { /* keep going */ } }
       toast('הוחזר לעובד לסבב תיקון', 'info');
       setDetail(null);
     } catch (e) {
