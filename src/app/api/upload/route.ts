@@ -22,6 +22,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSignedUploadUrl } from "@/lib/storage/upload";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+// The signed-URL helper retries up to 3× with 2s/4s/6s backoff (~12s). Give the
+// function enough budget so it isn't killed mid-retry (which surfaced as a 500).
+export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   const t0 = Date.now();

@@ -28,15 +28,17 @@ export default function PortalTaskRequest({ clientId }: { clientId: string }) {
   const addFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploading(true);
+    setUploading(true); setMsg('');
     try {
-      const sign = await fetch('/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fileName: `portal-requests/${Date.now()}_${file.name}`, contentType: file.type, fileSize: file.size }) });
-      const s = await sign.json();
-      if (!sign.ok || !s.uploadUrl) throw new Error('העלאה נכשלה');
+      const sign = await fetch('/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fileName: file.name, contentType: file.type, fileSize: file.size }) });
+      const s = await sign.json().catch(() => ({}));
+      if (!sign.ok || !s.uploadUrl) throw new Error(s.error || `שרת ההעלאה החזיר שגיאה (${sign.status})`);
       const put = await fetch(s.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
-      if (!put.ok) throw new Error('העלאה נכשלה');
+      if (!put.ok) throw new Error(`העלאת הקובץ נכשלה (${put.status})`);
       setFiles((f) => [...f, `${file.name}|${s.publicUrl}`]);
-    } catch { setMsg('שגיאה בהעלאת הקובץ'); } finally { setUploading(false); e.target.value = ''; }
+    } catch (err) {
+      setMsg(`⚠️ ${err instanceof Error ? err.message : 'שגיאה בהעלאת הקובץ'} — אפשר לשלוח את הבקשה גם בלי הקובץ ולצרף אותו בהמשך.`);
+    } finally { setUploading(false); e.target.value = ''; }
   };
 
   const send = async () => {
