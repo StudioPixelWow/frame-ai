@@ -61,9 +61,16 @@ export default function PortalHighlights({ client, clientId }: { client: any; cl
     { url: client.youtubeUrl, label: 'יוטיוב', emoji: '▶️', color: '#FF0000' },
   ].filter((s) => s.url);
 
-  let siteUrl = client.websiteUrl || '';
-  if (siteUrl && !/^https?:\/\//.test(siteUrl)) siteUrl = `https://${siteUrl}`;
-  const shot = siteUrl ? `https://s.wp.com/mshots/v1/${encodeURIComponent(siteUrl)}?w=900&h=560` : '';
+  const full = (u: string) => (u && !/^https?:\/\//.test(u) ? `https://${u}` : u);
+  const igUser = (() => { const m = full(client.instagramProfileUrl || '').match(/instagram\.com\/([^/?#]+)/); return m ? m[1] : ''; })();
+  const ttUser = (() => { const m = full(client.tiktokProfileUrl || '').match(/tiktok\.com\/@?([^/?#]+)/); return m ? m[1].replace(/^@/, '') : ''; })();
+  // Live feeds present → split the preview into a section per network + site.
+  const feeds = [
+    client.websiteUrl ? { key: 'site', label: '🌐 אתר', color: '#0066FF', src: full(client.websiteUrl) } : null,
+    igUser ? { key: 'ig', label: `📷 Instagram — @${igUser}`, color: '#E4405F', src: `https://www.instagram.com/${igUser}/embed` } : null,
+    client.facebookPageUrl ? { key: 'fb', label: 'f Facebook', color: '#1877F2', src: `https://www.facebook.com/plugins/page.php?href=${encodeURIComponent(full(client.facebookPageUrl))}&tabs=timeline&width=340&height=480&small_header=true&adapt_container_width=true&hide_cover=false&show_facepile=false` } : null,
+    ttUser ? { key: 'tt', label: `🎵 TikTok — @${ttUser}`, color: '#000', src: `https://www.tiktok.com/embed/@${ttUser}` } : null,
+  ].filter(Boolean) as { key: string; label: string; color: string; src: string }[];
 
   const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: '1rem', padding: '1.1rem 1.25rem', marginBottom: '1rem' };
 
@@ -111,15 +118,21 @@ export default function PortalHighlights({ client, clientId }: { client: any; cl
         </div>
       </div>
 
-      {/* ── Website + social preview ── */}
-      {(siteUrl || socials.length > 0) && (
+      {/* ── Live website + social previews (split per network) ── */}
+      {(feeds.length > 0 || socials.length > 0) && (
         <div style={card}>
           <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--foreground)', marginBottom: 12 }}>🔎 האתר והרשתות שלך</div>
-          {siteUrl && (
-            <a href={siteUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.08)', marginBottom: 12 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={shot} alt={siteUrl} style={{ width: '100%', display: 'block', background: '#f3f4f6', minHeight: 160, objectFit: 'cover' }} loading="lazy" />
-            </a>
+          {feeds.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${feeds.length === 1 ? 320 : 280}px, 1fr))`, gap: 14, marginBottom: socials.length ? 12 : 0 }}>
+              {feeds.map((f) => (
+                <div key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: f.color }}>{f.label}</div>
+                  <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.08)', background: '#fafafa' }}>
+                    <iframe src={f.src} width="100%" height={460} style={{ border: 'none', display: 'block' }} loading="lazy" title={f.label} sandbox="allow-scripts allow-same-origin allow-popups allow-forms" />
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
           {socials.length > 0 && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
