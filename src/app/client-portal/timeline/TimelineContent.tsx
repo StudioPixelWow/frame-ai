@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, Suspense } from 'react';
+import { useState, useMemo, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useActivities, useCampaigns, useApprovals, useAds } from '@/lib/api/use-entity';
 
@@ -23,6 +23,8 @@ function formatRelative(dateStr: string): string {
   if (days < 7) return `לפני ${days} ימים`;
   return formatDate(dateStr);
 }
+
+const norm = (s: string) => (s || '').toLowerCase().replace(/\s+/g, '_');
 
 type FilterRange = '7' | '30' | 'all';
 
@@ -49,13 +51,28 @@ const EVENT_META: Record<string, { icon: string; label: string; color: string }>
 
 function TimelineContentInner() {
   const searchParams = useSearchParams();
-  const clientId = searchParams.get('clientId');
+  const clientId = searchParams.get('clientId')
+    || (typeof window !== 'undefined' ? (localStorage.getItem('portal_client_id') || localStorage.getItem('frameai_client_id')) : '')
+    || '';
   const [filter, setFilter] = useState<FilterRange>('30');
 
   const { data: activities } = useActivities();
   const { data: campaigns } = useCampaigns();
   const { data: approvals } = useApprovals();
   const { data: allAds } = useAds();
+
+  // Client-submitted task requests (their completion is real work done FOR the client).
+  const [myTasks, setMyTasks] = useState<any[]>([]);
+  useEffect(() => {
+    if (!clientId) return;
+    (async () => {
+      try {
+        const r = await fetch(`/api/portal/my-tasks?clientId=${encodeURIComponent(clientId)}`);
+        const d = await r.json();
+        setMyTasks(Array.isArray(d.tasks) ? d.tasks : []);
+      } catch { /* ignore */ }
+    })();
+  }, [clientId]);
 
   // Build unified timeline from multiple sources
   const timelineEvents = useMemo(() => {
@@ -109,12 +126,39 @@ function TimelineContentInner() {
       });
     }
 
+    // Client-submitted tasks — show submission and completion as real activity.
+    for (const t of myTasks) {
+      const st = norm(t.status);
+      if (st === 'completed' || st === 'approved') {
+        events.push({
+          id: `task-done-${t.id}`,
+          type: 'content_published',
+          title: `המשימה "${t.title}" הושלמה ✓`,
+          description: (t.deliverableFiles?.length ? `${t.deliverableFiles.length} קבצים מוכנים לצפייה` : 'התוצר מוכן'),
+          date: t.completedAt || t.createdAt || new Date().toISOString(),
+          icon: '✅',
+          color: '#22c55e',
+        });
+      } else if (t.createdAt) {
+        const meta = EVENT_META.default;
+        events.push({
+          id: `task-new-${t.id}`,
+          type: 'recommendation',
+          title: `בקשת משימה: "${t.title}" התקבלה`,
+          description: 'הצוות מטפל בבקשה',
+          date: t.createdAt,
+          icon: '📥',
+          color: meta.color,
+        });
+      }
+    }
+
     // Deduplicate by ID
     const seen = new Set<string>();
     return events
       .filter(e => { if (seen.has(e.id)) return false; seen.add(e.id); return true; })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [activities, campaigns, approvals, clientId]);
+  }, [activities, campaigns, approvals, clientId, myTasks]);
 
   // Filter by date range
   const filteredEvents = useMemo(() => {

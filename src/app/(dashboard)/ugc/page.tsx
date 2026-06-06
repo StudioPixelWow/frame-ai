@@ -43,6 +43,7 @@ export default function UgcPage() {
   const [video, setVideo] = useState<{ status: string; url?: string } | null>(null);
   const [sceneImages, setSceneImages] = useState<Record<string, string[]>>({}); // variationId → [dataURL per shot]
   const [scenesBusy, setScenesBusy] = useState(false);
+  const [presenterApproved, setPresenterApproved] = useState(false);
   const [productImages, setProductImages] = useState<string[]>([]); // scraped product images (visual reference)
   const [scenePrompt, setScenePrompt] = useState<Record<string, string>>({}); // `${vid}:${i}` → edited prompt
   const [sceneBusyKey, setSceneBusyKey] = useState<string>('');
@@ -98,6 +99,7 @@ export default function UgcPage() {
   // Generate one scene image for a shot — uses the chosen avatar likeness + product.
   const genOneScene = async (v: any, i: number) => {
     const s = v.shots[i]; if (!s) return;
+    if (heygenReady !== false && !presenterApproved) { setErr('בחר ואשר דמות וקול (שלב 2) לפני יצירת תמונות הסטוריבורד'); return; }
     const key = `${v.id}:${i}`;
     setSceneBusyKey(key); setErr('');
     try {
@@ -250,8 +252,12 @@ export default function UgcPage() {
 
       {/* Process stepper — always shows where you are and what's next (no surprises) */}
       {(() => {
-        const steps = ['בריף', 'תסריט (3 וריאציות)', 'סטוריבורד + תמונות', 'וידאו מוכן'];
-        const cur = video?.status === 'completed' ? 3 : (sceneImages[pkg?.variations[active]?.id || ''] || []).some(Boolean) ? 2 : pkg ? 1 : 0;
+        const steps = ['בריף', 'דמות + קול', 'תסריט (3 וריאציות)', 'סטוריבורד + תמונות', 'וידאו מוכן'];
+        const cur = video?.status === 'completed' ? 4
+          : (sceneImages[pkg?.variations[active]?.id || ''] || []).some(Boolean) ? 3
+          : pkg ? 2
+          : presenterApproved ? 1
+          : 0;
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 22, flexWrap: 'wrap' }}>
             {steps.map((s, i) => (
@@ -316,6 +322,52 @@ export default function UgcPage() {
           {busy || '✨ צור חבילת הפקה (3 וריאציות)'}
         </button>
       </div>
+
+      {/* ── Step 2: Presenter (avatar + voice) — chosen & approved BEFORE the storyboard
+            so the scene images use this presenter's likeness ── */}
+      {heygenReady !== false && (
+        <div style={{ ...card, border: presenterApproved ? '2px solid #22c55e' : `1px solid var(--border,#e5e7eb)` }}>
+          <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>🧑‍🎤 שלב 2 · בחירת דמות וקול</div>
+          <div style={{ fontSize: 12, color: 'var(--foreground-muted,#6b7280)', marginBottom: 12 }}>בחר את הפרזנטור והקול (עברית), שמע ותראה תצוגה מקדימה, ואשר — תמונות הסטוריבורד ייווצרו לפי הדמות הזו.</div>
+          {(() => {
+            const av = avatars.find((a: any) => (a.avatar_id || a.id) === avatarId);
+            const avImg = av?.preview_image_url || av?.preview_image || av?.image_url;
+            const avVid = av?.preview_video_url || av?.preview_video;
+            const vo = voices.find((x: any) => (x.voice_id || x.id) === voiceId);
+            const sample = vo?.preview_audio || vo?.sample || vo?.preview_url;
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'start' }}>
+                <div>
+                  <label style={lbl}>דמות</label>
+                  <select className="form-select ux-input" value={avatarId} onChange={(e) => { setAvatarId(e.target.value); setPresenterApproved(false); }} style={{ width: '100%' }}>
+                    {avatars.map((a: any) => <option key={a.avatar_id || a.id} value={a.avatar_id || a.id}>{a.avatar_name || a.name || a.avatar_id}</option>)}
+                  </select>
+                  <div style={{ marginTop: 8, borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border,#eee)', background: 'var(--surface-raised,#fafafa)', aspectRatio: '3/4', maxWidth: 160 }}>
+                    {avVid ? <video src={avVid} muted loop autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : avImg ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={avImg} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: 11, color: '#999' }}>אין תצוגה</div>}
+                  </div>
+                </div>
+                <div>
+                  <label style={lbl}>קול (עברית בלבד)</label>
+                  <select className="form-select ux-input" value={voiceId} onChange={(e) => { setVoiceId(e.target.value); setPresenterApproved(false); }} style={{ width: '100%' }}>
+                    {voices.map((x: any) => <option key={x.voice_id || x.id} value={x.voice_id || x.id}>{(x.name || x.voice_id)}{x.gender ? ` · ${x.gender}` : ''}</option>)}
+                  </select>
+                  <button type="button" onClick={() => { if (sample) { try { new Audio(sample).play(); } catch {} } }} disabled={!sample}
+                    style={{ marginTop: 8, width: '100%', padding: '0.5rem', borderRadius: 8, border: `1px solid ${sample ? BRAND : 'var(--border,#e5e7eb)'}`, background: sample ? 'rgba(0,181,254,0.08)' : 'transparent', color: sample ? BRAND : '#999', fontWeight: 700, fontSize: 12.5, cursor: sample ? 'pointer' : 'default' }}>
+                    {sample ? '▶ השמע דוגמת קול' : 'אין דוגמת קול'}
+                  </button>
+                  {voices.length === 0 && <div style={{ fontSize: 11, color: '#b45309', marginTop: 6 }}>לא נמצאו קולות בעברית בחשבון HeyGen.</div>}
+                </div>
+              </div>
+            );
+          })()}
+          <button onClick={() => setPresenterApproved(true)} disabled={!avatarId || !voiceId}
+            style={{ marginTop: 14, width: '100%', padding: '0.7rem', borderRadius: 10, border: 'none', background: presenterApproved ? '#22c55e' : BRAND, color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', opacity: (!avatarId || !voiceId) ? 0.5 : 1 }}>
+            {presenterApproved ? '✓ הדמות אושרה — אפשר ליצור סטוריבורד' : '✓ אשר דמות והמשך'}
+          </button>
+        </div>
+      )}
 
       {/* Result */}
       {pkg && (
@@ -417,42 +469,18 @@ export default function UgcPage() {
                     {(() => {
                       const av = avatars.find((a: any) => (a.avatar_id || a.id) === avatarId);
                       const avImg = av?.preview_image_url || av?.preview_image || av?.image_url;
-                      const avVid = av?.preview_video_url || av?.preview_video;
                       const vo = voices.find((x: any) => (x.voice_id || x.id) === voiceId);
-                      const sample = vo?.preview_audio || vo?.sample || vo?.preview_url;
                       return (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10, alignItems: 'start' }}>
-                          <div>
-                            <label style={lbl}>דמות</label>
-                            <select className="form-select ux-input" value={avatarId} onChange={(e) => setAvatarId(e.target.value)} style={{ width: '100%' }}>
-                              {avatars.map((a: any) => <option key={a.avatar_id || a.id} value={a.avatar_id || a.id}>{a.avatar_name || a.name || a.avatar_id}</option>)}
-                            </select>
-                            {/* Avatar preview — see before you confirm */}
-                            <div style={{ marginTop: 8, borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border,#eee)', background: 'var(--surface-raised,#fafafa)', aspectRatio: '3/4', maxWidth: 150 }}>
-                              {avVid
-                                ? <video src={avVid} muted loop autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                                : avImg
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  ? <img src={avImg} alt={av?.avatar_name || ''} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                                  : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: 11, color: '#999' }}>אין תצוגה</div>}
-                            </div>
-                          </div>
-                          <div>
-                            <label style={lbl}>קול (עברית בלבד)</label>
-                            <select className="form-select ux-input" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} style={{ width: '100%' }}>
-                              {voices.map((x: any) => <option key={x.voice_id || x.id} value={x.voice_id || x.id}>{(x.name || x.voice_id)}{x.gender ? ` · ${x.gender}` : ''}</option>)}
-                            </select>
-                            {/* Voice preview — hear before you confirm */}
-                            <button type="button" onClick={() => { if (sample) { try { new Audio(sample).play(); } catch {} } }} disabled={!sample}
-                              style={{ marginTop: 8, width: '100%', padding: '0.5rem', borderRadius: 8, border: `1px solid ${sample ? BRAND : 'var(--border,#e5e7eb)'}`, background: sample ? 'rgba(0,181,254,0.08)' : 'transparent', color: sample ? BRAND : '#999', fontWeight: 700, fontSize: 12.5, cursor: sample ? 'pointer' : 'default' }}>
-                              {sample ? '▶ השמע דוגמת קול' : 'אין דוגמת קול'}
-                            </button>
-                            {voices.length === 0 && <div style={{ fontSize: 11, color: '#b45309', marginTop: 6 }}>לא נמצאו קולות בעברית בחשבון HeyGen.</div>}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                          {avImg && /* eslint-disable-next-line @next/next/no-img-element */ <img src={avImg} alt="" style={{ width: 40, height: 52, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border,#eee)' }} />}
+                          <div style={{ fontSize: 12.5, color: 'var(--foreground-muted,#6b7280)' }}>
+                            דמות: <b style={{ color: 'var(--foreground)' }}>{av?.avatar_name || av?.name || '—'}</b> · קול: <b style={{ color: 'var(--foreground)' }}>{vo?.name || '—'}</b>
+                            <div style={{ fontSize: 11, marginTop: 2 }}>לשינוי — חזור לשלב 2 (דמות + קול) למעלה.</div>
                           </div>
                         </div>
                       );
                     })()}
-                    <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={renderVideo} disabled={rendering || heygenReady === null}
+                    <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={renderVideo} disabled={rendering || heygenReady === null || !presenterApproved}
                       style={{ width: '100%', fontSize: 13.5, fontWeight: 800, padding: '0.7rem', opacity: rendering ? 0.6 : 1 }}>
                       {rendering ? `⏳ מפיק וידאו… (${video?.status || 'pending'})` : '🎬 הפק וידאו מהתסריט הזה'}
                     </button>

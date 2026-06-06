@@ -176,6 +176,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
         if (match) {
           const empUpdate: Record<string, unknown> = { status: newStatus };
           if (body.files) empUpdate.files = body.files;
+          // Propagate the approved deliverable so the client portal shows it.
+          if (Array.isArray(body.submittedFiles)) empUpdate.submittedFiles = body.submittedFiles;
+          else if (Array.isArray(result.submittedFiles) && result.submittedFiles.length) empUpdate.submittedFiles = result.submittedFiles;
           await employeeTasks.updateAsync(match.id, empUpdate);
           console.log(`[Global→EmpTask Sync] Employee task ${match.id} → ${newStatus}`);
 
