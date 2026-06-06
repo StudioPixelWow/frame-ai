@@ -534,8 +534,37 @@ export default function SeoGeoDashboard() {
                         </div>
                       </div>
 
-                      {/* Action buttons — stop / delete */}
+                      {/* Action buttons — run now / stop / delete */}
                       <div style={{ display: 'flex', gap: 8, marginTop: 12, borderTop: '1px solid #e5e7eb', paddingTop: 12 }}>
+                        <button
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const btn = e.currentTarget as HTMLButtonElement;
+                            const orig = btn.textContent;
+                            btn.disabled = true; btn.textContent = '⏳ מריץ…';
+                            try {
+                              const res = await fetch('/api/seo-geo-plans/run-now', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' },
+                                body: JSON.stringify({ planId: plan.id }),
+                              });
+                              const j = await res.json();
+                              if (!res.ok) throw new Error(j.error || 'שגיאה');
+                              const r = (j.results || [])[0] || {};
+                              alert(r.tasksExecuted != null ? `הורצו ${r.tasksExecuted} משימות (${r.tasksSuccessful || 0} הצליחו). רענן לעדכון.` : 'ההרצה הסתיימה. רענן לעדכון.');
+                            } catch (err) {
+                              alert(err instanceof Error ? err.message : 'שגיאה בהרצה');
+                            } finally { btn.disabled = false; btn.textContent = orig; }
+                          }}
+                          style={{
+                            flex: 1, padding: '6px 0', borderRadius: 8, border: `1px solid ${COLORS.green}40`,
+                            background: `${COLORS.green}12`, color: COLORS.green,
+                            fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+                          }}
+                        >
+                          ▶ הרץ עכשיו
+                        </button>
                         {plan.status === 'active' && (
                           <button
                             onClick={async (e) => {
