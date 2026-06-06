@@ -45,9 +45,10 @@ export async function POST(req: NextRequest) {
 החזר {"oneLine":"משפט אחד שמתאר את העסק","about":"2-3 משפטים על מה העסק מציע ולמי"}`,
         { temperature: 0.3, maxTokens: 400 },
       );
-      const j = JSON.parse(out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1));
-      if (j.oneLine) summary = j.oneLine;
-      if (j.about) about = j.about;
+      let j: any = (out as any)?.success ? (out as any).data : {};
+      if (typeof j === 'string') j = JSON.parse(j.slice(j.indexOf('{'), j.lastIndexOf('}') + 1));
+      if (j?.oneLine) summary = j.oneLine;
+      if (j?.about) about = j.about;
     } catch { /* fallback to defaults */ }
 
     // ── Build llms.txt ──

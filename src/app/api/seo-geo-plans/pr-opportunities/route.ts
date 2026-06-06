@@ -47,8 +47,10 @@ export async function POST(req: NextRequest) {
 
     let data: any = {};
     try {
-      const out = await generateWithAI(system, user, { temperature: 0.6, maxTokens: 1800 });
-      data = JSON.parse(out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1));
+      const out: any = await generateWithAI(system, user, { temperature: 0.6, maxTokens: 1800 });
+      data = out?.success ? out.data : {};
+      if (typeof data === 'string') data = JSON.parse(data.slice(data.indexOf('{'), data.lastIndexOf('}') + 1));
+      if (!data || typeof data !== 'object') throw new Error('parse');
     } catch (e) {
       return NextResponse.json({ error: 'יצירת ההמלצות נכשלה — נסה שוב' }, { status: 502 });
     }

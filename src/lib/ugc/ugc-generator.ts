@@ -128,13 +128,14 @@ ${styleHint ? `- סגנון: ${styleHint}` : ''}${knowledgeBlock}
 }
 דרישות: כל וריאציה 5-7 שוטים שמסתכמים ל-${brief.duration} שניות, וו חזק ב-3 שניות, כתוביות קצרות (2-5 מילים), CTA ברור. שוטים מתוך: Selfie intro, Walk and talk, Entrance shot, Pointing to feature, Wide interior shot, Detail close-up, Before/after, Product/service demonstration, Reaction shot, CTA selfie ending. פרומפטים לכלים — תמציתיים וקונקרטיים, פרומפטי וידאו באנגלית, 9:16 vertical, handheld/selfie, natural movement.`;
 
-  const raw = await generateWithAI(system, user, { temperature: 0.7, maxTokens: 7000 });
-  let parsed: any = {};
-  try {
-    parsed = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
-  } catch {
-    throw new Error('יצירת התסריט נכשלה — נסה שוב');
+  // generateWithAI returns { success, data } — data is already-parsed JSON (or raw string).
+  const res: any = await generateWithAI(system, user, { temperature: 0.7, maxTokens: 7000 });
+  if (!res?.success) throw new Error(res?.error || 'יצירת התסריט נכשלה — נסה שוב');
+  let parsed: any = res.data;
+  if (typeof parsed === 'string') {
+    try { parsed = JSON.parse(parsed.slice(parsed.indexOf('{'), parsed.lastIndexOf('}') + 1)); } catch { throw new Error('יצירת התסריט נכשלה — נסה שוב'); }
   }
+  if (!parsed || typeof parsed !== 'object') throw new Error('יצירת התסריט נכשלה — נסה שוב');
 
   const variations: UgcVariation[] = (Array.isArray(parsed.variations) ? parsed.variations : []).slice(0, 3).map((v: any, i: number) => ({
     id: `v${i + 1}`,

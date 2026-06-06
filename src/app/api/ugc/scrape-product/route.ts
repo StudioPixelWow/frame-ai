@@ -65,7 +65,9 @@ export async function POST(req: NextRequest) {
         `כותרת: ${title}\nתיאור מטא: ${metaDesc}\nתוכן העמוד:\n${text}\n\nהחזר JSON: {"businessName":"שם המוצר/העסק","businessType":"נדל״ן/מסעדה/חנות/קליניקה/שירות/לוגיסטיקה/אולם/אחר","description":"תיאור קצר","sellingPoints":"3-5 נקודות מכירה מופרדות בפסיק","price":"מחיר אם מופיע אחרת ריק","targetAudience":"קהל יעד משוער"}`,
         { temperature: 0.3, maxTokens: 600 },
       );
-      data = JSON.parse(out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1));
+      data = (out as any)?.success ? (out as any).data : {};
+      if (typeof data === 'string') data = JSON.parse(data.slice(data.indexOf('{'), data.lastIndexOf('}') + 1));
+      if (!data || typeof data !== 'object') throw new Error('parse');
     } catch {
       data = { businessName: title, description: metaDesc, sellingPoints: '', businessType: 'אחר', targetAudience: '' };
     }

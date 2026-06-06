@@ -58,14 +58,13 @@ export async function generateGeoArticle(
 }
 דרישות: 4-6 claims, 4-6 שאלות FAQ. תשובות קצרות וישירות (משפט-שניים). עברית תקינה.`;
 
-  const raw = await generateWithAI(system, user, { temperature: 0.4, maxTokens: 2200 });
-  let data: any = {};
-  try {
-    const jsonStr = raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1);
-    data = JSON.parse(jsonStr);
-  } catch {
-    data = { title: keyword, tldr: '', directAnswer: raw.slice(0, 400), claims: [], faq: [], comparison: [] };
+  const res: any = await generateWithAI(system, user, { temperature: 0.4, maxTokens: 2200 });
+  let data: any = res?.success ? res.data : {};
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data.slice(data.indexOf('{'), data.lastIndexOf('}') + 1)); }
+    catch { data = { title: keyword, tldr: '', directAnswer: String(res?.data || '').slice(0, 400), claims: [], faq: [], comparison: [] }; }
   }
+  if (!data || typeof data !== 'object') data = { title: keyword, tldr: '', directAnswer: '', claims: [], faq: [], comparison: [] };
 
   const title = data.title || keyword;
   const faq: { q: string; a: string }[] = Array.isArray(data.faq) ? data.faq.filter((f: any) => f?.q && f?.a) : [];
