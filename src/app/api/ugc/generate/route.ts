@@ -10,6 +10,7 @@ import { getSupabase } from '@/lib/db/store';
 import { getRequestRole } from '@/lib/auth/api-guard';
 import { ensureUgcTables, ugcId } from '@/lib/ugc/ugc-db';
 import { generateUgcPackage, type UgcBrief } from '@/lib/ugc/ugc-generator';
+import { buildClientKnowledge } from '@/lib/ugc/client-knowledge';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -39,6 +40,15 @@ export async function POST(req: NextRequest) {
       language: b.language || (project as any).language || 'he',
       style: b.style || (project as any).style || '',
     };
+
+    // Enrich with everything we know about the linked client.
+    const clientId = (project as any).client_id;
+    if (clientId) {
+      try {
+        const knowledge = await buildClientKnowledge(clientId);
+        if (knowledge) brief.clientKnowledge = knowledge.text;
+      } catch { /* best-effort */ }
+    }
 
     const pkg = await generateUgcPackage(brief);
 

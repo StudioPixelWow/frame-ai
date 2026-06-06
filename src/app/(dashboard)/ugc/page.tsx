@@ -19,6 +19,8 @@ interface Pkg { variations: any[]; qc: { passed: boolean; checks: { id: string; 
 
 export default function UgcPage() {
   const [projects, setProjects] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
+  const [clientId, setClientId] = useState('');
   const [form, setForm] = useState({
     businessName: '', businessType: 'נדל״ן', goal: 'לידים', targetAudience: '', tone: 'אותנטי',
     sellingPoints: '', location: '', presenterType: 'real', existingAssets: '', duration: 30, language: 'he', style: 'אותנטי מהשטח',
@@ -32,12 +34,38 @@ export default function UgcPage() {
     try { const r = await fetch('/api/ugc/projects', { headers: H() }); const j = await r.json(); setProjects(j.projects || []); } catch {}
   };
   useEffect(() => { loadProjects(); }, []);
+  useEffect(() => {
+    (async () => {
+      try { const r = await fetch('/api/data/clients', { headers: { 'x-app-role': role() } }); const d = await r.json(); setClients(Array.isArray(d) ? d : d.clients || []); } catch {}
+    })();
+  }, []);
+
+  // When a client is picked, auto-fill the brief from everything we know about them.
+  const pickClient = async (id: string) => {
+    setClientId(id);
+    if (!id) return;
+    try {
+      const r = await fetch(`/api/ugc/client-prefill?clientId=${id}`, { headers: H() });
+      const j = await r.json();
+      const p = j.prefill || {};
+      setForm((f) => ({
+        ...f,
+        businessName: p.businessName || f.businessName,
+        businessType: p.businessType && ['נדל״ן', 'מסעדה', 'חנות', 'קליניקה', 'שירות', 'לוגיסטיקה', 'אולם', 'אחר'].includes(p.businessType) ? p.businessType : f.businessType,
+        targetAudience: p.targetAudience || f.targetAudience,
+        sellingPoints: p.sellingPoints || f.sellingPoints,
+        tone: p.tone && ['צעיר', 'פרימיום', 'רשמי', 'אותנטי', 'מצחיק', 'חד ומכירתי'].includes(p.tone) ? p.tone : f.tone,
+        location: p.location || f.location,
+      }));
+      setMsg(j.hasKnowledge ? '✓ הבריף מולא מתוך הידע על הלקוח — התסריט יתבסס על המיצוב, הקהל והטון שלו.' : 'הלקוח נטען (אין עדיין חקר לקוח — מומלץ להריץ חקר לקוח לתוצאה מדויקת יותר).');
+    } catch { /* ignore */ }
+  };
 
   const generate = async () => {
     if (!form.businessName.trim()) { setErr('שם העסק נדרש'); return; }
     setErr(''); setPkg(null); setBusy('יוצר פרויקט…');
     try {
-      const cr = await fetch('/api/ugc/projects', { method: 'POST', headers: H(), body: JSON.stringify(form) });
+      const cr = await fetch('/api/ugc/projects', { method: 'POST', headers: H(), body: JSON.stringify({ ...form, clientId: clientId || undefined }) });
       const cj = await cr.json();
       if (!cr.ok) throw new Error(cj.error || 'שגיאה ביצירת פרויקט');
       setBusy('כותב תסריט, סטוריבורד ופרומפטים… (כ-30 שניות)');
@@ -88,6 +116,13 @@ export default function UgcPage() {
       {/* Brief */}
       <div style={card}>
         <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 12 }}>בריף קצר</div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={lbl}>🔗 שייך ללקוח (ימלא את הבריף וישתמש בכל הידע עליו)</label>
+          <select className="form-select ux-input" value={clientId} onChange={(e) => pickClient(e.target.value)} style={{ width: '100%' }}>
+            <option value="">— ללא שיוך (בריף ידני) —</option>
+            {clients.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div><label style={lbl}>שם העסק / פרויקט *</label><input className="form-input ux-input" value={form.businessName} onChange={(e) => setForm({ ...form, businessName: e.target.value })} style={{ width: '100%' }} /></div>
           <div><label style={lbl}>תחום</label><select className="form-select ux-input" value={form.businessType} onChange={(e) => setForm({ ...form, businessType: e.target.value })} style={{ width: '100%' }}>{BUSINESS_TYPES.map((t) => <option key={t}>{t}</option>)}</select></div>

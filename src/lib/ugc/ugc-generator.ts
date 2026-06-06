@@ -20,6 +20,7 @@ export interface UgcBrief {
   duration: number;       // 15 / 25 / 30 / 45
   language?: string;      // default he
   style?: string;         // אותנטי מהשטח / פרימיום עסקי / צעיר וטיקטוקי / נדל״ן מכירתי / המלצה אישית
+  clientKnowledge?: string; // compact blob of everything we know about the client
 }
 
 export interface UgcShot {
@@ -81,6 +82,10 @@ export async function generateUgcPackage(brief: UgcBrief): Promise<UgcPackage> {
     'אל תייצר "פרסומת תדמית" מלוטשת — כן UGC אמין. החזר JSON תקין בלבד, ללא טקסט מסביב.',
   ].join(' ');
 
+  const knowledgeBlock = brief.clientKnowledge?.trim()
+    ? `\n\n=== ידע על הלקוח (חובה להתבסס על זה — מיצוב, קהל, טון, בידול) ===\n${brief.clientKnowledge.trim()}\n=== סוף ידע הלקוח ===`
+    : '';
+
   const user = `בריף:
 - עסק: ${brief.businessName}
 - תחום: ${brief.businessType} (${domainHint})
@@ -92,7 +97,7 @@ export async function generateUgcPackage(brief: UgcBrief): Promise<UgcPackage> {
 - פרזנטור: ${brief.presenterType === 'ai' ? 'פרזנטור AI (לייצר)' : 'פרזנטור אמיתי'}
 - חומרים קיימים: ${brief.existingAssets || '—'}
 - משך: ${brief.duration} שניות
-${styleHint ? `- סגנון: ${styleHint}` : ''}
+${styleHint ? `- סגנון: ${styleHint}` : ''}${knowledgeBlock}
 
 צור 3 וריאציות מלאות. החזר JSON:
 {
