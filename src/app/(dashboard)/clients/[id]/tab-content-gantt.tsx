@@ -2253,8 +2253,10 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                                   fontSize: "0.55rem",
                                   padding: "0.15rem 0.3rem",
                                   borderRadius: "2px",
-                                  background: `${ITEM_TYPE_CONFIG[item.itemType]?.color || "#6b7280"}20`,
-                                  color: ITEM_TYPE_CONFIG[item.itemType]?.color || "#6b7280",
+                                  // Pill color gestures to the workflow STAGE (approved → green).
+                                  background: `${GANTT_STATUS_COLORS[item.status]?.color || ITEM_TYPE_CONFIG[item.itemType]?.color || "#6b7280"}20`,
+                                  color: GANTT_STATUS_COLORS[item.status]?.color || ITEM_TYPE_CONFIG[item.itemType]?.color || "#6b7280",
+                                  borderRight: `3px solid ${GANTT_STATUS_COLORS[item.status]?.color || "#6b7280"}`,
                                   fontWeight: 500,
                                   maxWidth: "100%",
                                   overflow: "hidden",
