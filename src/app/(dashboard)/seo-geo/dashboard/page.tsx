@@ -534,8 +534,8 @@ export default function SeoGeoDashboard() {
                         </div>
                       </div>
 
-                      {/* Action buttons — run now / stop / delete */}
-                      <div style={{ display: 'flex', gap: 8, marginTop: 12, borderTop: '1px solid #e5e7eb', paddingTop: 12 }}>
+                      {/* Action buttons — run now / scan / content / authority / stop / delete */}
+                      <div style={{ display: 'flex', gap: 8, marginTop: 12, borderTop: '1px solid #e5e7eb', paddingTop: 12, flexWrap: 'wrap' }}>
                         <button
                           onClick={async (e) => {
                             e.preventDefault();
@@ -629,6 +629,45 @@ export default function SeoGeoDashboard() {
                           }}
                         >
                           ✍️ תוכן GEO
+                        </button>
+                        <button
+                          onClick={async (e) => {
+                            e.preventDefault(); e.stopPropagation();
+                            const btn = e.currentTarget as HTMLButtonElement; const orig = btn.textContent;
+                            btn.disabled = true; btn.textContent = '⏳…';
+                            try {
+                              const res = await fetch('/api/seo-geo-plans/llms-txt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ planId: plan.id }) });
+                              const j = await res.json();
+                              if (!res.ok) throw new Error(j.error || 'שגיאה');
+                              try { await navigator.clipboard.writeText(j.llmsTxt || ''); } catch {}
+                              const missing = (j.checklist || []).filter((c: any) => !c.ok).map((c: any) => `• ${c.label}: ${c.hint}`).join('\n');
+                              alert(`✅ נוצר llms.txt — הועתק ללוח.\nהעלה אותו ל: ${j.llmsTxtUrl || 'האתר/llms.txt'}\n\nלשיפור סמכות (E-E-A-T):\n${missing}`);
+                            } catch (err) { alert(err instanceof Error ? err.message : 'שגיאה'); }
+                            finally { btn.disabled = false; btn.textContent = orig; }
+                          }}
+                          style={{ flex: 1, padding: '6px 0', borderRadius: 8, border: `1px solid ${COLORS.primary}40`, background: `${COLORS.primary}12`, color: COLORS.primary, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                        >
+                          📄 llms.txt
+                        </button>
+                        <button
+                          onClick={async (e) => {
+                            e.preventDefault(); e.stopPropagation();
+                            const btn = e.currentTarget as HTMLButtonElement; const orig = btn.textContent;
+                            btn.disabled = true; btn.textContent = '⏳…';
+                            try {
+                              const res = await fetch('/api/seo-geo-plans/pr-opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ planId: plan.id }) });
+                              const j = await res.json();
+                              if (!res.ok) throw new Error(j.error || 'שגיאה');
+                              const outlets = (j.outlets || []).map((o: any, i: number) => `${i + 1}. [${o.type}] ${o.name} — ${o.action}`).join('\n');
+                              const text = `הזדמנויות PR / סמכות חוץ-אתרית עבור ${plan.clientName}:\n\n${outlets}\n\n— פיץ' מוצע —\nנושא: ${j.pitchEmail?.subject || ''}\n${j.pitchEmail?.body || ''}\n\n— מאמר אורח —\n${j.bylineIdea?.title || ''}: ${j.bylineIdea?.angle || ''}`;
+                              try { await navigator.clipboard.writeText(text); } catch {}
+                              alert(`✅ נמצאו ${(j.outlets || []).length} הזדמנויות סמכות — הרשימה המלאה + פיץ' הועתקו ללוח.`);
+                            } catch (err) { alert(err instanceof Error ? err.message : 'שגיאה'); }
+                            finally { btn.disabled = false; btn.textContent = orig; }
+                          }}
+                          style={{ flex: 1, padding: '6px 0', borderRadius: 8, border: `1px solid ${COLORS.orange}40`, background: `${COLORS.orange}12`, color: COLORS.orange, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                        >
+                          📣 PR / סמכות
                         </button>
                         {plan.status === 'active' && (
                           <button
