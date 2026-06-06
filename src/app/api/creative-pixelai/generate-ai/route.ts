@@ -14,10 +14,13 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-// gpt-image-1 supported sizes
+// Supported gpt-image sizes chosen to MINIMIZE the cover-crop into each output:
+//   square 1:1   → 1024x1024 (exact, no crop)
+//   feed 4:5 0.8 → 1024x1024 (crops only narrow side bands, never top/bottom text)
+//   story 9:16   → 1024x1536 (portrait; crops side bands)
 const GEN_SIZE: Record<string, string> = {
   story: "1024x1536",
-  feed_4_5: "1024x1536",
+  feed_4_5: "1024x1024",
   square: "1024x1024",
 };
 
@@ -73,9 +76,10 @@ export async function POST(req: NextRequest) {
     // dramatically improves Hebrew text fidelity in the generated result.
     const adTexts = mode === "redesign" ? await transcribeAdText(apiKey, imagePng) : "";
 
-    // Side crop happens when adapting 2:3 output to 9:16/4:5 — keep content safe.
+    // The generation is cover-cropped into the exact output ratio, so keep all
+    // content well inside a safe zone — strong, explicit instruction.
     const safeMargin = format === "square" ? "" :
-      " חשוב מאוד: השאר את כל הטקסטים והלוגואים במרכז הקומפוזיציה — לפחות 12% רווח ריק מהשוליים הימני והשמאלי ומהקצה העליון והתחתון, כי הקצוות ייחתכו מעט בהתאמת הפורמט.";
+      " קריטי: כל הטקסטים, המחירים, הטלפונים והלוגואים חייבים להישאר במרכז המסגרת עם שוליים ריקים של לפחות 15% מכל צד (ימין, שמאל, מעלה, מטה). אסור ששום טקסט ייגע בקצה — הקצוות ייחתכו בהתאמה לפורמט הסופי.";
 
     const genPrompt = mode === "edit"
       // TARGETED EDIT of an existing generated version — ChatGPT-style iteration.
@@ -120,37 +124,37 @@ export async function POST(req: NextRequest) {
       signal: AbortSignal.timeout(110000),
     });
 
-    // GPT Image 2 — the model behind ChatGPT Images 2.0 (~99% character-level text
-    // accuracy; always processes image inputs at maximum fidelity). Fall back to
-    // gpt-image-1 (+input_fidelity) if the account doesn't have access yet.
+    // Try GPT Image 2 (ChatGPT Images 2.0 model) first; on ANY failure, fall back
+    // to gpt-image-1 (+input_fidelity, then without it). Robust to accounts that
+    // don't have image-2 access yet.
     let res = await callEdits(buildForm("gpt-image-2", false));
-    if (!res.ok && (res.status === 400 || res.status === 403 || res.status === 404)) {
-      const errText = await res.clone().text();
-      if (/model|not found|does not exist|access/i.test(errText)) {
-        console.warn("[generate-ai] gpt-image-2 unavailable — falling back to gpt-image-1");
-        res = await callEdits(buildForm("gpt-image-1", true));
-        if (res.status === 400) {
-          const t2 = await res.clone().text();
-          if (t2.includes("input_fidelity")) res = await callEdits(buildForm("gpt-image-1", false));
-        }
+    if (!res.ok) {
+      const firstErr = await res.clone().text();
+      console.warn("[generate-ai] gpt-image-2 failed:", res.status, firstErr.slice(0, 200), "— trying gpt-image-1");
+      res = await callEdits(buildForm("gpt-image-1", true));
+      if (res.status === 400) {
+        const t2 = await res.clone().text();
+        if (t2.includes("input_fidelity")) res = await callEdits(buildForm("gpt-image-1", false));
       }
     }
 
     if (!res.ok) {
       const t = await res.text();
       console.error("[generate-ai] OpenAI error:", res.status, t.slice(0, 300));
-      let friendly = `OpenAI ${res.status}`;
-      if (t.includes("must be verified") || t.includes("organization")) {
-        friendly = "הארגון ב-OpenAI לא מאומת ליצירת תמונות — היכנס ל-platform.openai.com → Settings → Organization → Verify";
-      } else if (res.status === 400) {
-        friendly = "OpenAI דחה את הבקשה: " + t.slice(0, 160);
+      let friendly = `שגיאת OpenAI (${res.status})`;
+      if (/must be verified|verify your organization|organization/i.test(t)) {
+        friendly = "הארגון ב-OpenAI לא מאומת ליצירת תמונות — היכנס ל-platform.openai.com → Settings → Organization → Verify, ונסה שוב.";
+      } else if (/content_policy|safety|rejected/i.test(t)) {
+        friendly = "OpenAI דחה את התמונה מסיבות מדיניות תוכן. נסה תמונה אחרת או נסח את ההערה אחרת.";
+      } else if (t.length) {
+        friendly = "OpenAI: " + t.slice(0, 160);
       }
       return NextResponse.json({ error: friendly }, { status: 502 });
     }
 
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
     const outB64 = data?.data?.[0]?.b64_json;
-    if (!outB64) return NextResponse.json({ error: "לא התקבלה תמונה מ-OpenAI" }, { status: 502 });
+    if (!outB64) return NextResponse.json({ error: "לא התקבלה תמונה מ-OpenAI — נסה שוב" }, { status: 502 });
 
     return NextResponse.json({ image: `data:image/png;base64,${outB64}` });
   } catch (e) {
