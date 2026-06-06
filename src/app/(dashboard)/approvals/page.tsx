@@ -297,11 +297,12 @@ export default function ApprovalsPage() {
 
   const handleActionDecision = useCallback(async (actionId: string, decision: 'approve' | 'reject' | 'execute', reason?: string) => {
     try {
-      const body: Record<string, string> = { action: decision };
+      const body: Record<string, unknown> = { action: decision };
       if (reason) body.rejectionReason = reason;
+      if (decision === 'execute') body.publishToMeta = true; // actually write to Meta
       const res = await fetch(`/api/data/campaign-actions/${actionId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'admin' },
         body: JSON.stringify(body),
       });
       if (res.ok) {

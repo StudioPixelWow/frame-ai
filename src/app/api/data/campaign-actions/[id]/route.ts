@@ -16,9 +16,12 @@ import type { CampaignAction } from '@/lib/db/schema';
 import { getSupabase } from '@/lib/db/store';
 import {
   createMetaAd, pauseMetaAd, resumeMetaAd,
+  updateMetaAdSetBudget, copyMetaAdSet, updateMetaAdSet, getMetaAdSetDailyBudget,
   mapCtaToMeta,
   type MetaCredentials, type MetaWriteResult,
 } from '@/lib/meta-ads/write-service';
+import { resolveMetaToken } from '@/lib/meta-ads/token';
+import { getClientAdAccounts } from '@/lib/meta-ads/client-accounts';
 
 export async function GET(
   req: NextRequest,
@@ -130,21 +133,22 @@ export async function PUT(
       if (publishToMeta) {
         const creds = await getClientMetaCreds(existing.clientId);
         if (!creds) {
-          console.warn(`[execute] No Meta credentials for client ${existing.clientId} — skipping Meta write`);
-        } else {
-          metaResult = await executeMetaAction(existing, creds, execResult.newEntityId);
-          if (metaResult && !metaResult.success) {
-            // Meta failed but local succeeded — mark as executed with warning
-            console.error(`[execute] Meta write failed:`, metaResult.error);
-            await logCampaignActivity(
-              existing.campaignId, existing.clientId,
-              'action_failed', `פרסום למטא נכשל: ${existing.title || existing.description}`,
-              metaResult.error || 'Unknown Meta error', userId, id,
-            );
-          } else if (metaResult?.success && metaResult.metaId) {
-            // Save the Meta ID back to the local entity
-            await saveMetaId(existing, execResult.newEntityId, metaResult.metaId);
-          }
+          // HONEST failure: do not pretend it was applied to Meta.
+          const err = 'אין חיבור Meta תקף ללקוח (טוקן/חשבון מודעות חסר) — השינוי לא בוצע ב-Meta. הרץ "בדיקת חיבור" כדי לאתר את הבעיה.';
+          await campaignActions.updateAsync(id, { status: 'failed', failedReason: err, updatedAt: now });
+          await logCampaignActivity(existing.campaignId, existing.clientId, 'action_failed', `פרסום למטא נכשל: ${existing.title || existing.description}`, err, userId, id);
+          return NextResponse.json({ error: err }, { status: 502 });
+        }
+        metaResult = await executeMetaAction(existing, creds, execResult.newEntityId);
+        if (metaResult && !metaResult.success) {
+          // HONEST failure: Meta rejected the write → mark failed, surface the real error.
+          const err = `הפעולה לא בוצעה ב-Meta: ${metaResult.error || 'שגיאה לא ידועה'}`;
+          await campaignActions.updateAsync(id, { status: 'failed', failedReason: err, updatedAt: now });
+          await logCampaignActivity(existing.campaignId, existing.clientId, 'action_failed', `פרסום למטא נכשל: ${existing.title || existing.description}`, metaResult.error || 'Unknown Meta error', userId, id);
+          return NextResponse.json({ error: err, metaResult }, { status: 502 });
+        }
+        if (metaResult?.success && metaResult.metaId) {
+          await saveMetaId(existing, execResult.newEntityId, metaResult.metaId);
         }
       }
 
@@ -374,14 +378,18 @@ async function getClientMetaCreds(clientId: string): Promise<MetaCredentials | n
     const sb = getSupabase();
     const { data } = await sb
       .from('clients')
-      .select('meta_ad_account_id, meta_access_token, meta_page_id')
+      .select('meta_ad_account_id, meta_access_token')
       .eq('id', clientId)
       .maybeSingle();
 
-    if (!data) return null;
-    const adAccountId = (data as Record<string, unknown>).meta_ad_account_id as string;
-    const accessToken = (data as Record<string, unknown>).meta_access_token as string;
-    if (!adAccountId || !accessToken) return null;
+    // Token: per-client token if set, otherwise the central System token.
+    const accessToken = await resolveMetaToken((data as any)?.meta_access_token || null);
+    if (!accessToken) return null;
+
+    // Ad account: link-table (many-to-many) first, then legacy single field.
+    const accounts = await getClientAdAccounts(clientId);
+    const adAccountId = accounts[0] || (data as any)?.meta_ad_account_id;
+    if (!adAccountId) return null;
 
     return { adAccountId, accessToken };
   } catch {
@@ -465,9 +473,46 @@ async function executeMetaAction(
       case 'decrease_budget':
       case 'test_new_audience':
       case 'create_new_adset':
-      case 'mark_for_review':
-        // These require manual Meta management or extended implementation
-        return { success: true, metaId: undefined };
+      case 'mark_for_review': {
+        const kind = payload.kind as string | undefined;
+
+        // Budget reallocation between two ad sets (from the auto-optimizer).
+        if (kind === 'shift_budget' && payload.lagMeta && payload.winMeta) {
+          const r1 = await updateMetaAdSetBudget(creds, payload.lagMeta as string, Number(payload.newLag));
+          const r2 = await updateMetaAdSetBudget(creds, payload.winMeta as string, Number(payload.newWin));
+          if (!r1.success || !r2.success) return { success: false, error: r1.error || r2.error || 'עדכון התקציב נכשל' };
+          return { success: true, metaId: payload.winMeta as string };
+        }
+
+        // Single ad-set budget change.
+        if ((kind === 'set_budget' || type === 'increase_budget' || type === 'decrease_budget') && payload.adSetMeta && payload.newBudget != null) {
+          const r = await updateMetaAdSetBudget(creds, payload.adSetMeta as string, Number(payload.newBudget));
+          return r.success ? { success: true, metaId: payload.adSetMeta as string } : { success: false, error: r.error || 'עדכון התקציב נכשל' };
+        }
+
+        // Budget-neutral audience expansion — duplicate the winner to a broader audience.
+        if (kind === 'expand_audience' && payload.winMeta) {
+          const winMeta = payload.winMeta as string;
+          const srcCents = await getMetaAdSetDailyBudget(creds, winMeta).catch(() => null);
+          const copy = await copyMetaAdSet(creds, winMeta, { deepCopy: true, statusOption: 'ACTIVE' });
+          if (!copy.success || !copy.metaId) return { success: false, error: copy.error || 'שכפול הקבוצה נכשל' };
+          let splitShekels: number | undefined;
+          if (srcCents && srcCents > 0) {
+            const half = Math.floor(srcCents / 2);
+            splitShekels = Math.max(1, Math.round(half / 100));
+            await updateMetaAdSetBudget(creds, winMeta, Math.max(1, Math.round((srcCents - half) / 100)));
+          }
+          await updateMetaAdSet(creds, copy.metaId, {
+            name: `${action.objectName || 'קהל'} — קהל מורחב`,
+            targeting: { age_min: 18, age_max: 65, geo_locations: { countries: ['IL'] } },
+            status: 'ACTIVE', dailyBudget: splitShekels,
+          });
+          return { success: true, metaId: copy.metaId };
+        }
+
+        // No actionable payload → this is a review-only recommendation.
+        return { success: false, error: 'אין נתוני יישום אוטומטי לפעולה זו — יש ליישם ידנית ב-Ads Manager' };
+      }
 
       default:
         return { success: false, error: `Meta write not supported for action type: ${type}` };
