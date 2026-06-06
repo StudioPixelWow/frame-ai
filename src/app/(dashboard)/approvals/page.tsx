@@ -78,7 +78,23 @@ export default function ApprovalsPage() {
   const [processing, setProcessing] = useState<string>('');
 
   const findTask = useCallback((taskId: string): any => {
-    return [...(employeeTasks || []), ...(tasks || [])].find((t: any) => t.id === taskId) || null;
+    const all = [...(employeeTasks || []), ...(tasks || [])];
+    const primary = all.find((t: any) => t.id === taskId);
+    if (!primary) return null;
+    const hasFiles = (t: any) => Array.isArray(t?.files) && t.files.length > 0;
+    if (hasFiles(primary)) return primary;
+    // Mirror split: a content task can live as BOTH a tsk_ record and an
+    // employee-task. The employee may have uploaded the file to the sibling.
+    // Find a sibling (same gantt item, or same client+title) that HAS files and
+    // merge its files/adaptations so the submitted work always shows.
+    const sib = all.find((t: any) =>
+      t.id !== primary.id && hasFiles(t) && (
+        (primary.ganttItemId && t.ganttItemId === primary.ganttItemId) ||
+        (String(t.title || '').trim() === String(primary.title || '').trim() &&
+         String(t.clientName || '').trim() === String(primary.clientName || '').trim())
+      )
+    );
+    return sib ? { ...primary, files: sib.files, adaptations: primary.adaptations || sib.adaptations } : primary;
   }, [tasks, employeeTasks]);
 
   // Source-aware task update (employee-tasks UUID vs tasks tsk_).
