@@ -3,12 +3,20 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useCallback } from 'react';
-import { useApprovals } from '@/lib/api/use-entity';
+import { useApprovals, useTasks, useEmployeeTasks } from '@/lib/api/use-entity';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import type { Approval, CampaignAction } from '@/lib/db/schema';
 import { fireConfetti } from '@/lib/confetti';
 import { ACTION_TYPE_META, ACTION_STATUS_META } from '@/lib/optimization/actions';
+import { loadImage } from '@/lib/creative-pixelai/adapter';
+import { aiAdaptImageToFormat } from '@/lib/creative-pixelai/ai-adapt';
+
+function parseFileEntry(f: string): { name: string; url: string } {
+  const i = f.indexOf('|');
+  return i === -1 ? { name: f, url: f } : { name: f.slice(0, i), url: f.slice(i + 1) };
+}
+const isImageUrl = (u: string) => /\.(png|jpe?g|webp|gif)(\?|$)/i.test(u);
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'טיוטה',
@@ -59,7 +67,95 @@ interface FormData {
 
 export default function ApprovalsPage() {
   const { data: approvals, loading, create, update, remove } = useApprovals();
+  const { data: tasks, update: updateTask } = useTasks();
+  const { data: employeeTasks, update: updateEmployeeTask } = useEmployeeTasks();
   const toast = useToast();
+
+  // ── Task-approval detail (open card → preview + approve / return) ──
+  const [detail, setDetail] = useState<{ approval: Approval; task: any } | null>(null);
+  const [returnNotes, setReturnNotes] = useState('');
+  const [showReturnBox, setShowReturnBox] = useState(false);
+  const [processing, setProcessing] = useState<string>('');
+
+  const findTask = useCallback((taskId: string): any => {
+    return [...(employeeTasks || []), ...(tasks || [])].find((t: any) => t.id === taskId) || null;
+  }, [tasks, employeeTasks]);
+
+  // Source-aware task update (employee-tasks UUID vs tasks tsk_).
+  const updateAnyTask = useCallback((id: string, patch: any) => {
+    const isEmp = (employeeTasks || []).some((t: any) => t.id === id);
+    return isEmp ? updateEmployeeTask(id, patch) : updateTask(id, patch);
+  }, [employeeTasks, updateEmployeeTask, updateTask]);
+
+  const openTaskApproval = (approval: Approval) => {
+    const taskId = (approval as any).taskId;
+    if (!taskId) { openEditModal(approval); return; }
+    setDetail({ approval, task: findTask(taskId) });
+    setShowReturnBox(false);
+    setReturnNotes('');
+  };
+
+  // APPROVE: mark approved → auto-adapt the attached graphic to all sizes →
+  // save the adaptations back into the task.
+  const approveTaskFlow = async () => {
+    if (!detail) return;
+    const { approval, task } = detail;
+    const taskId = (approval as any).taskId;
+    try {
+      setProcessing('מאשר…');
+      await update(approval.id, { status: 'approved' });
+      if (taskId) await updateAnyTask(taskId, { status: 'approved' });
+      fireConfetti(30);
+
+      // Auto size-adaptation on the first attached image.
+      const files: string[] = Array.isArray(task?.files) ? task.files : [];
+      const imgEntry = files.map(parseFileEntry).find((e) => isImageUrl(e.url));
+      if (taskId && imgEntry) {
+        const img = await loadImage(imgEntry.url);
+        const formats: Array<{ id: 'square' | 'feed_4_5' | 'story'; file: string }> = [
+          { id: 'square', file: 'Square-1080x1080.png' },
+          { id: 'feed_4_5', file: 'Feed-1080x1350.png' },
+          { id: 'story', file: 'Story-1080x1920.png' },
+        ];
+        const urls: Record<string, string> = {};
+        const newFiles: string[] = [];
+        for (let i = 0; i < formats.length; i++) {
+          setProcessing(`מתאים גדלים ${i + 1}/3…`);
+          const blob = await aiAdaptImageToFormat(img, formats[i].id);
+          const init = await fetch('/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fileName: `creative-assets/tasks/${taskId}/${Date.now()}_${formats[i].file}`, contentType: 'image/png', fileSize: blob.size }) });
+          if (!init.ok) continue;
+          const { uploadUrl, publicUrl } = await init.json();
+          const put = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: blob });
+          if (!put.ok) continue;
+          urls[formats[i].id] = publicUrl;
+          newFiles.push(`🎨 ${formats[i].file}|${publicUrl}`);
+        }
+        if (Object.keys(urls).length > 0) {
+          setProcessing('שומר למשימה…');
+          await updateAnyTask(taskId, { adaptations: { ...urls, createdAt: new Date().toISOString() }, files: [...files, ...newFiles] });
+        }
+      }
+      toast(imgEntry ? '✓ אושר — והגרפיקה הותאמה לכל הגדלים ונשמרה במשימה' : '✓ אושר', 'success');
+      setDetail(null);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'שגיאה באישור', 'error');
+    } finally { setProcessing(''); }
+  };
+
+  const returnTaskFlow = async () => {
+    if (!detail || !returnNotes.trim()) { toast('כתוב הערות לתיקון', 'error'); return; }
+    const { approval } = detail;
+    const taskId = (approval as any).taskId;
+    try {
+      setProcessing('מחזיר לתיקון…');
+      await update(approval.id, { status: 'needs_changes' });
+      if (taskId) await updateAnyTask(taskId, { status: 'returned', notes: returnNotes.trim() });
+      toast('הוחזר לעובד לסבב תיקון', 'info');
+      setDetail(null);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'שגיאה בהחזרה', 'error');
+    } finally { setProcessing(''); }
+  };
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData>({
@@ -285,9 +381,10 @@ export default function ApprovalsPage() {
                           </span>
                         </div>
 
-                        {/* Card Title */}
-                        <h3 className="apr-card-title" style={{ marginBottom: '0.35rem' }}>
-                          {approval.title}
+                        {/* Card Title — click to open full review (for task approvals) */}
+                        <h3 className="apr-card-title" style={{ marginBottom: '0.35rem', cursor: (approval as any).taskId ? 'pointer' : 'default', color: (approval as any).taskId ? 'var(--accent-text, #00B5FE)' : undefined }}
+                          onClick={() => (approval as any).taskId && openTaskApproval(approval)}>
+                          {approval.title} {(approval as any).taskId ? '↗' : ''}
                         </h3>
 
                         {/* Client Name */}
@@ -569,6 +666,68 @@ export default function ApprovalsPage() {
             </details>
           )}
         </div>
+      )}
+
+      {/* Task-approval detail — preview + approve / return-for-fixing */}
+      {detail && (
+        <Modal open={!!detail} onClose={() => setDetail(null)} title={`בדיקת משימה — ${detail.approval.title}`}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '70vh', overflowY: 'auto' }}>
+            {!detail.task ? (
+              <div style={{ color: 'var(--foreground-muted)', fontSize: 13 }}>המשימה המקושרת לא נמצאה (ייתכן שנמחקה).</div>
+            ) : (
+              <>
+                {(() => {
+                  const t = detail.task;
+                  const ct = t.contentType ? ({ post: '🖼️ פוסט', story: '📱 סטורי', reel: '🎬 רילס' } as any)[t.contentType] : null;
+                  const files: string[] = Array.isArray(t.files) ? t.files : [];
+                  const images = files.map(parseFileEntry).filter((e) => isImageUrl(e.url));
+                  const others = files.map(parseFileEntry).filter((e) => !isImageUrl(e.url));
+                  return (
+                    <>
+                      {ct && <span style={{ alignSelf: 'flex-start', fontSize: 13, fontWeight: 800, color: '#7c3aed', background: 'rgba(124,58,237,0.1)', padding: '0.3rem 0.8rem', borderRadius: 999 }}>{ct}</span>}
+                      <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--foreground)' }}>{t.title}</div>
+                      {t.clientName && <div style={{ fontSize: 13, color: 'var(--foreground-muted)' }}>לקוח: {t.clientName}</div>}
+                      {t.description && <div style={{ fontSize: 13, color: 'var(--foreground)', whiteSpace: 'pre-wrap', background: 'var(--surface)', borderRadius: 10, padding: '0.75rem' }}>{t.description}</div>}
+
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--foreground)' }}>קבצים שהוגשו ({files.length}):</div>
+                      {images.length > 0 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+                          {images.map((im, i) => (
+                            <a key={i} href={im.url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={im.url} alt={im.name} style={{ width: '100%', height: 140, objectFit: 'cover', display: 'block' }} />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                      {others.map((o, i) => (
+                        <a key={i} href={o.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: 'var(--accent-text,#00B5FE)' }}>📎 {o.name}</a>
+                      ))}
+                      {files.length === 0 && <div style={{ fontSize: 13, color: 'var(--foreground-muted)' }}>אין קבצים מצורפים.</div>}
+                    </>
+                  );
+                })()}
+
+                {showReturnBox ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <textarea className="form-input ux-input" rows={3} value={returnNotes} onChange={(e) => setReturnNotes(e.target.value)} placeholder="כתוב מה צריך לתקן…" style={{ resize: 'vertical', fontSize: 13 }} />
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      <button className="mod-btn-ghost ux-btn" onClick={() => setShowReturnBox(false)} disabled={!!processing}>ביטול</button>
+                      <button className="mod-btn-primary ux-btn" onClick={returnTaskFlow} disabled={!!processing || !returnNotes.trim()} style={{ background: '#f97316' }}>{processing || 'שלח הערות והחזר לתיקון'}</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                    <button className="mod-btn-ghost ux-btn" onClick={() => setShowReturnBox(true)} disabled={!!processing} style={{ color: '#f97316', borderColor: 'rgba(249,115,22,0.3)' }}>🔧 החזר לתיקון</button>
+                    <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={approveTaskFlow} disabled={!!processing} style={{ background: '#22c55e', fontWeight: 800 }}>
+                      {processing || '✓ אשר + התאם גדלים אוטומטית'}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </Modal>
       )}
 
       {/* Modal */}
