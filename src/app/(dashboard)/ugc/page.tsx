@@ -43,6 +43,9 @@ export default function UgcPage() {
   const [video, setVideo] = useState<{ status: string; url?: string } | null>(null);
   const [sceneImages, setSceneImages] = useState<Record<string, string[]>>({}); // variationId → [dataURL per shot]
   const [scenesBusy, setScenesBusy] = useState(false);
+  const [productImages, setProductImages] = useState<string[]>([]); // scraped product images (visual reference)
+  const [scenePrompt, setScenePrompt] = useState<Record<string, string>>({}); // `${vid}:${i}` → edited prompt
+  const [sceneBusyKey, setSceneBusyKey] = useState<string>('');
 
   useEffect(() => {
     (async () => {
@@ -80,24 +83,45 @@ export default function UgcPage() {
         targetAudience: p.targetAudience || f.targetAudience,
         existingAssets: (j.images || []).slice(0, 3).join(', ') || f.existingAssets,
       }));
+      setProductImages(Array.isArray(j.images) ? j.images : []);
       setMsg(`✓ נשאבו פרטי המוצר מהקישור${j.images?.length ? ` (${j.images.length} תמונות)` : ''}.`);
     } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה בשאיבה'); }
     finally { setScraping(false); }
+  };
+
+  // Selected avatar preview image (so the storyboard presenter matches the avatar).
+  const avatarImageUrl = (() => {
+    const a = avatars.find((x: any) => (x.avatar_id || x.id) === avatarId);
+    return a?.preview_image_url || a?.preview_image || a?.image_url || '';
+  })();
+
+  // Generate one scene image for a shot — uses the chosen avatar likeness + product.
+  const genOneScene = async (v: any, i: number) => {
+    const s = v.shots[i]; if (!s) return;
+    const key = `${v.id}:${i}`;
+    setSceneBusyKey(key); setErr('');
+    try {
+      const r = await fetch('/api/ugc/scene-image', { method: 'POST', headers: H(), body: JSON.stringify({
+        prompt: scenePrompt[key]?.trim() || undefined,
+        shotType: s.shotType, vo: s.vo, direction: s.direction,
+        businessName: form.businessName, businessType: form.businessType, style: form.style,
+        productName: form.businessName, productImageUrl: productImages[0] || undefined,
+        avatarImageUrl: avatarImageUrl || undefined,
+      }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'שגיאה');
+      setSceneImages((m) => { const arr = [...(m[v.id] || [])]; arr[i] = j.image; return { ...m, [v.id]: arr }; });
+    } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה ביצירת תמונה'); }
+    finally { setSceneBusyKey(''); }
   };
 
   const genScenes = async () => {
     const v = pkg?.variations[active];
     if (!v?.shots?.length) return;
     setScenesBusy(true); setErr('');
-    const imgs: string[] = [];
     try {
-      for (const s of v.shots) {
-        try {
-          const r = await fetch('/api/ugc/scene-image', { method: 'POST', headers: H(), body: JSON.stringify({ shotType: s.shotType, vo: s.vo, direction: s.direction, businessName: form.businessName, businessType: form.businessType, style: form.style }) });
-          const j = await r.json();
-          imgs.push(r.ok && j.image ? j.image : '');
-        } catch { imgs.push(''); }
-        setSceneImages((m) => ({ ...m, [v.id]: [...imgs] }));
+      for (let i = 0; i < v.shots.length; i++) {
+        await genOneScene(v, i);
       }
     } finally { setScenesBusy(false); }
   };
@@ -329,9 +353,16 @@ export default function UgcPage() {
                 <Section title="🎣 Hook" text={v.hook} onCopy={copy} />
                 <Section title="📝 תסריט מלא" text={v.fullScript} onCopy={copy} pre />
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 0 8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 0 4px' }}>
                   <span style={{ fontSize: 13.5, fontWeight: 800 }}>🎞 סטוריבורד / שוטים</span>
-                  <button className="mod-btn-ghost ux-btn" onClick={genScenes} disabled={scenesBusy} style={{ fontSize: 12 }}>{scenesBusy ? '⏳ מצייר סצנות…' : '🖼 צור תמונות סצנה'}</button>
+                  <button className="mod-btn-ghost ux-btn" onClick={genScenes} disabled={scenesBusy} style={{ fontSize: 12 }}>{scenesBusy ? '⏳ מצייר סצנות…' : '🖼 צור את כל התמונות'}</button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: 'var(--foreground-muted,#6b7280)', marginBottom: 8 }}>
+                  {avatarImageUrl
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={avatarImageUrl} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+                    : null}
+                  התמונות נוצרות לפי הדמות שנבחרה{avatarImageUrl ? '' : ' (בחר דמות למטה)'} {productImages[0] ? '+ המוצר מהקישור' : ''}. ניתן לערוך את התיאור לכל תמונה לפני יצירה.
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {(v.shots || []).map((s: any, i: number) => {
@@ -349,7 +380,18 @@ export default function UgcPage() {
                         </div>
                         <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>🎤 {s.vo}</div>
                         {s.caption && <div style={{ fontSize: 12, color: '#0066FF', marginTop: 2 }}>💬 {s.caption}</div>}
-                        {s.direction && <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 2 }}>🎥 {s.direction}</div>}
+                        {/* Editable image prompt — tweak before generating */}
+                        <textarea
+                          value={scenePrompt[`${v.id}:${i}`] ?? (s.direction || s.vo || '')}
+                          onChange={(e) => setScenePrompt((m) => ({ ...m, [`${v.id}:${i}`]: e.target.value }))}
+                          rows={2}
+                          placeholder="תיאור התמונה ל-AI (ניתן לערוך)…"
+                          style={{ width: '100%', marginTop: 6, fontSize: 11.5, lineHeight: 1.5, borderRadius: 8, border: '1px solid var(--border,#e5e7eb)', background: 'var(--surface,#fff)', color: 'var(--foreground)', padding: '0.4rem 0.5rem', resize: 'vertical', boxSizing: 'border-box' }}
+                        />
+                        <button onClick={() => genOneScene(v, i)} disabled={sceneBusyKey === `${v.id}:${i}`}
+                          style={{ marginTop: 5, fontSize: 11.5, fontWeight: 700, color: BRAND, background: 'rgba(0,181,254,0.08)', border: `1px solid ${BRAND}`, borderRadius: 8, padding: '0.3rem 0.7rem', cursor: 'pointer' }}>
+                          {sceneBusyKey === `${v.id}:${i}` ? '⏳ יוצר…' : img ? '🔄 צור מחדש' : '🖼 צור תמונה'}
+                        </button>
                       </div>
                     </div>
                   ); })}
