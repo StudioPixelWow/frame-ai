@@ -416,6 +416,11 @@ export default function UgcPage() {
                     : null}
                   התמונות נוצרות לפי הדמות שנבחרה{avatarImageUrl ? '' : ' (בחר דמות למטה)'} {productImages[0] ? '+ המוצר מהקישור' : ''}. ניתן לערוך את התיאור לכל תמונה לפני יצירה.
                 </div>
+                {err && (
+                  <div style={{ fontSize: 12.5, color: '#dc2626', fontWeight: 700, background: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.25)', borderRadius: 10, padding: '0.6rem 0.8rem', marginBottom: 10 }}>
+                    ⚠ {err}
+                  </div>
+                )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {(v.shots || []).map((s: any, i: number) => {
                     const img = sceneImages[v.id]?.[i];
