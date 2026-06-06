@@ -40,6 +40,8 @@ export default function UgcPage() {
   const [heygenReady, setHeygenReady] = useState<boolean | null>(null);
   const [rendering, setRendering] = useState(false);
   const [video, setVideo] = useState<{ status: string; url?: string } | null>(null);
+  const [sceneImages, setSceneImages] = useState<Record<string, string[]>>({}); // variationId → [dataURL per shot]
+  const [scenesBusy, setScenesBusy] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -81,6 +83,23 @@ export default function UgcPage() {
     finally { setScraping(false); }
   };
 
+  const genScenes = async () => {
+    const v = pkg?.variations[active];
+    if (!v?.shots?.length) return;
+    setScenesBusy(true); setErr('');
+    const imgs: string[] = [];
+    try {
+      for (const s of v.shots) {
+        try {
+          const r = await fetch('/api/ugc/scene-image', { method: 'POST', headers: H(), body: JSON.stringify({ shotType: s.shotType, vo: s.vo, direction: s.direction, businessName: form.businessName, businessType: form.businessType, style: form.style }) });
+          const j = await r.json();
+          imgs.push(r.ok && j.image ? j.image : '');
+        } catch { imgs.push(''); }
+        setSceneImages((m) => ({ ...m, [v.id]: [...imgs] }));
+      }
+    } finally { setScenesBusy(false); }
+  };
+
   const renderVideo = async () => {
     const v = pkg?.variations[active];
     if (!v) return;
@@ -95,7 +114,17 @@ export default function UgcPage() {
       for (let i = 0; i < 60; i++) {
         await new Promise((r) => setTimeout(r, 5000));
         const st = await fetch(`/api/data/heygen/status?videoId=${videoId}`).then((r) => r.json());
-        if (st.status === 'completed' && st.videoUrl) { setVideo({ status: 'completed', url: st.videoUrl }); break; }
+        if (st.status === 'completed' && st.videoUrl) {
+          setVideo({ status: 'completed', url: st.videoUrl });
+          // Auto-save the finished video into the client's Files tab.
+          if (clientId) {
+            try {
+              await fetch('/api/data/client-files', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ clientId, fileName: `UGC · ${form.businessName || 'סרטון'} · ${new Date().toLocaleDateString('he-IL')}`, fileUrl: st.videoUrl, fileType: 'video', category: 'social_media', fileSize: 0, uploadedBy: null, notes: 'נוצר במחולל UGC' }) });
+              setMsg('✓ הווידאו נשמר אוטומטית לקבצי הלקוח.');
+            } catch {}
+          }
+          break;
+        }
         if (st.status === 'failed') { setVideo({ status: 'failed' }); throw new Error(st.error || 'הרינדור נכשל'); }
         setVideo({ status: st.status || 'processing' });
       }
@@ -271,19 +300,30 @@ export default function UgcPage() {
                 <Section title="🎣 Hook" text={v.hook} onCopy={copy} />
                 <Section title="📝 תסריט מלא" text={v.fullScript} onCopy={copy} pre />
 
-                <div style={{ fontSize: 13.5, fontWeight: 800, margin: '14px 0 8px' }}>🎞 סטוריבורד / שוטים</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 0 8px' }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 800 }}>🎞 סטוריבורד / שוטים</span>
+                  <button className="mod-btn-ghost ux-btn" onClick={genScenes} disabled={scenesBusy} style={{ fontSize: 12 }}>{scenesBusy ? '⏳ מצייר סצנות…' : '🖼 צור תמונות סצנה'}</button>
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {(v.shots || []).map((s: any, i: number) => (
-                    <div key={i} style={{ border: '1px solid var(--border,#eee)', borderRadius: 10, padding: '0.6rem 0.8rem', background: 'var(--surface-raised,#fafafa)' }}>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
-                        <span style={{ fontSize: 11, fontWeight: 800, color: BRAND, background: 'rgba(0,181,254,0.1)', borderRadius: 6, padding: '2px 7px' }}>{s.time}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700 }}>{s.shotType}</span>
+                  {(v.shots || []).map((s: any, i: number) => {
+                    const img = sceneImages[v.id]?.[i];
+                    return (
+                    <div key={i} style={{ border: '1px solid var(--border,#eee)', borderRadius: 10, padding: '0.6rem 0.8rem', background: 'var(--surface-raised,#fafafa)', display: 'flex', gap: 10 }}>
+                      {img && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={img} alt="" style={{ width: 78, height: 138, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} />
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: BRAND, background: 'rgba(0,181,254,0.1)', borderRadius: 6, padding: '2px 7px' }}>{s.time}</span>
+                          <span style={{ fontSize: 12, fontWeight: 700 }}>{s.shotType}</span>
+                        </div>
+                        <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>🎤 {s.vo}</div>
+                        {s.caption && <div style={{ fontSize: 12, color: '#0066FF', marginTop: 2 }}>💬 {s.caption}</div>}
+                        {s.direction && <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 2 }}>🎥 {s.direction}</div>}
                       </div>
-                      <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>🎤 {s.vo}</div>
-                      {s.caption && <div style={{ fontSize: 12, color: '#0066FF', marginTop: 2 }}>💬 {s.caption}</div>}
-                      {s.direction && <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 2 }}>🎥 {s.direction}</div>}
                     </div>
-                  ))}
+                  ); })}
                 </div>
 
                 {v.captions?.length > 0 && (
