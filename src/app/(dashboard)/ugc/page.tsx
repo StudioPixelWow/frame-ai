@@ -52,12 +52,13 @@ export default function UgcPage() {
           fetch('/api/data/heygen/voices').then((r) => r.ok ? r.json() : []),
         ]);
         const avList = Array.isArray(av) ? av : [];
-        const voList = Array.isArray(vo) ? vo : [];
+        const voListAll = Array.isArray(vo) ? vo : [];
+        // Hebrew voices only (fall back to all if HeyGen returns none flagged Hebrew).
+        const heVoices = voListAll.filter((v: any) => /hebrew|עברית|\bhe\b|he-il|iw/i.test(`${v.language || ''} ${v.locale || ''} ${v.name || ''}`));
+        const voList = heVoices.length ? heVoices : voListAll;
         setAvatars(avList); setVoices(voList);
         setHeygenReady(avList.length > 0);
-        // Default to a Hebrew voice if present.
-        const he = voList.find((v: any) => /he|hebrew|עברית/i.test(`${v.language || ''} ${v.name || ''}`));
-        if (he) setVoiceId(he.voice_id || he.id || '');
+        if (voList[0]) setVoiceId(voList[0].voice_id || voList[0].id || '');
         if (avList[0]) setAvatarId(avList[0].avatar_id || avList[0].id || '');
       } catch { setHeygenReady(false); }
     })();
@@ -371,20 +372,44 @@ export default function UgcPage() {
                   </div>
                 ) : (
                   <div style={{ border: '1px solid var(--border,#eee)', borderRadius: 12, padding: '0.8rem 0.9rem' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-                      <div>
-                        <label style={lbl}>דמות</label>
-                        <select className="form-select ux-input" value={avatarId} onChange={(e) => setAvatarId(e.target.value)} style={{ width: '100%' }}>
-                          {avatars.map((a: any) => <option key={a.avatar_id || a.id} value={a.avatar_id || a.id}>{a.avatar_name || a.name || a.avatar_id}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label style={lbl}>קול (עברית מומלץ)</label>
-                        <select className="form-select ux-input" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} style={{ width: '100%' }}>
-                          {voices.map((vo: any) => <option key={vo.voice_id || vo.id} value={vo.voice_id || vo.id}>{(vo.name || vo.voice_id)}{vo.language ? ` · ${vo.language}` : ''}</option>)}
-                        </select>
-                      </div>
-                    </div>
+                    {(() => {
+                      const av = avatars.find((a: any) => (a.avatar_id || a.id) === avatarId);
+                      const avImg = av?.preview_image_url || av?.preview_image || av?.image_url;
+                      const avVid = av?.preview_video_url || av?.preview_video;
+                      const vo = voices.find((x: any) => (x.voice_id || x.id) === voiceId);
+                      const sample = vo?.preview_audio || vo?.sample || vo?.preview_url;
+                      return (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10, alignItems: 'start' }}>
+                          <div>
+                            <label style={lbl}>דמות</label>
+                            <select className="form-select ux-input" value={avatarId} onChange={(e) => setAvatarId(e.target.value)} style={{ width: '100%' }}>
+                              {avatars.map((a: any) => <option key={a.avatar_id || a.id} value={a.avatar_id || a.id}>{a.avatar_name || a.name || a.avatar_id}</option>)}
+                            </select>
+                            {/* Avatar preview — see before you confirm */}
+                            <div style={{ marginTop: 8, borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border,#eee)', background: 'var(--surface-raised,#fafafa)', aspectRatio: '3/4', maxWidth: 150 }}>
+                              {avVid
+                                ? <video src={avVid} muted loop autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                : avImg
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  ? <img src={avImg} alt={av?.avatar_name || ''} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                  : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: 11, color: '#999' }}>אין תצוגה</div>}
+                            </div>
+                          </div>
+                          <div>
+                            <label style={lbl}>קול (עברית בלבד)</label>
+                            <select className="form-select ux-input" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} style={{ width: '100%' }}>
+                              {voices.map((x: any) => <option key={x.voice_id || x.id} value={x.voice_id || x.id}>{(x.name || x.voice_id)}{x.gender ? ` · ${x.gender}` : ''}</option>)}
+                            </select>
+                            {/* Voice preview — hear before you confirm */}
+                            <button type="button" onClick={() => { if (sample) { try { new Audio(sample).play(); } catch {} } }} disabled={!sample}
+                              style={{ marginTop: 8, width: '100%', padding: '0.5rem', borderRadius: 8, border: `1px solid ${sample ? BRAND : 'var(--border,#e5e7eb)'}`, background: sample ? 'rgba(0,181,254,0.08)' : 'transparent', color: sample ? BRAND : '#999', fontWeight: 700, fontSize: 12.5, cursor: sample ? 'pointer' : 'default' }}>
+                              {sample ? '▶ השמע דוגמת קול' : 'אין דוגמת קול'}
+                            </button>
+                            {voices.length === 0 && <div style={{ fontSize: 11, color: '#b45309', marginTop: 6 }}>לא נמצאו קולות בעברית בחשבון HeyGen.</div>}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={renderVideo} disabled={rendering || heygenReady === null}
                       style={{ width: '100%', fontSize: 13.5, fontWeight: 800, padding: '0.7rem', opacity: rendering ? 0.6 : 1 }}>
                       {rendering ? `⏳ מפיק וידאו… (${video?.status || 'pending'})` : '🎬 הפק וידאו מהתסריט הזה'}
