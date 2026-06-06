@@ -83,13 +83,37 @@ function Inner() {
                 {t.createdAt && <span>נשלחה: {new Date(t.createdAt).toLocaleDateString('he-IL')}</span>}
                 {t.dueDate && <span>יעד: {new Date(t.dueDate).toLocaleDateString('he-IL')}</span>}
               </div>
-              {files.length > 0 && (
-                <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {files.map((f, i) => (
-                    <a key={i} href={f.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: '#0066FF', fontWeight: 600, textDecoration: 'none', background: 'var(--surface-raised,#f3f4f6)', borderRadius: 8, padding: '0.3rem 0.6rem' }}>📎 {f.name.replace(/^🎨\s*/, '')}</a>
-                  ))}
-                </div>
-              )}
+              {files.length > 0 && (() => {
+                const isImg = (u: string) => /\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(u);
+                const isVid = (u: string) => /\.(mp4|mov|webm|m4v)(\?|$)/i.test(u);
+                const media = files.filter((f) => isImg(f.url) || isVid(f.url));
+                const docs = files.filter((f) => !isImg(f.url) && !isVid(f.url));
+                const done = t.status === 'completed' || t.status === 'approved';
+                return (
+                  <div style={{ marginTop: 12 }}>
+                    {done && media.length > 0 && <div style={{ fontSize: 12.5, fontWeight: 800, color: '#16a34a', marginBottom: 6 }}>✅ התוצר מוכן — תצוגה מקדימה:</div>}
+                    {media.length > 0 && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8, marginBottom: docs.length ? 8 : 0 }}>
+                        {media.map((f, i) => (
+                          <a key={i} href={f.url} target="_blank" rel="noopener noreferrer" title={f.name} style={{ display: 'block', borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.08)' }}>
+                            {isImg(f.url)
+                              // eslint-disable-next-line @next/next/no-img-element
+                              ? <img src={f.url} alt={f.name} loading="lazy" style={{ width: '100%', height: 150, objectFit: 'cover', display: 'block', background: 'var(--surface-raised,#f3f4f6)' }} />
+                              : <video src={f.url} muted playsInline preload="metadata" style={{ width: '100%', height: 150, objectFit: 'cover', display: 'block', background: '#000' }} />}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    {docs.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {docs.map((f, i) => (
+                          <a key={i} href={f.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: '#0066FF', fontWeight: 600, textDecoration: 'none', background: 'var(--surface-raised,#f3f4f6)', borderRadius: 8, padding: '0.3rem 0.6rem' }}>📎 {f.name.replace(/^🎨\s*/, '')}</a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           );
         })
