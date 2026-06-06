@@ -26,14 +26,12 @@ function Inner() {
     if (!clientId) { setLoading(false); return; }
     (async () => {
       try {
-        const r = await fetch('/api/data/tasks', { headers: { 'x-app-role': 'client', 'x-app-client-id': clientId } });
+        // Read from the reliable portal store (employee-tasks JSONB), which always
+        // persists regardless of the flat tasks-table schema. Returns ONLY the
+        // client's portal-submitted requests.
+        const r = await fetch(`/api/portal/my-tasks?clientId=${encodeURIComponent(clientId)}`);
         const d = await r.json();
-        // ONLY tasks the client submitted via the portal (carry the portal marker
-        // in notes) — NOT content tasks from the gantt, which also have client_id.
-        const list = (Array.isArray(d) ? d : []).filter((t: any) =>
-          t.clientId === clientId && String(t.notes || '').includes('מהלקוח דרך הפורטל'));
-        list.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-        setTasks(list);
+        setTasks(Array.isArray(d.tasks) ? d.tasks : []);
       } catch {} finally { setLoading(false); }
     })();
   }, [clientId]);
