@@ -263,6 +263,11 @@ export default function ClientPortalLoginPage() {
           >
             שלח קישור כניסה
           </button>
+          <div style={{ marginTop: '1rem', textAlign: 'center' }}>
+            <a href="/login" style={{ fontSize: '0.8rem', color: 'var(--foreground-muted, #6b7280)', textDecoration: 'none' }}>
+              צוות / ניהול? כניסה למערכת ←
+            </a>
+          </div>
         </div>
       </div>
     </div>
