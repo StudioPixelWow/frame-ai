@@ -56,7 +56,7 @@ async function transcribeAdText(apiKey: string, imageDataUrl: string): Promise<s
 
 export async function POST(req: NextRequest) {
   try {
-    const { imagePng, format, prompt, mode, quality } = (await req.json()) as { imagePng?: string; format?: string; prompt?: string; mode?: string; quality?: string };
+    const { imagePng, format, prompt, mode, quality, correctTexts } = (await req.json()) as { imagePng?: string; format?: string; prompt?: string; mode?: string; quality?: string; correctTexts?: string };
     if (!imagePng || !format || !GEN_SIZE[format]) {
       return NextResponse.json({ error: "imagePng + valid format required" }, { status: 400 });
     }
@@ -72,9 +72,12 @@ export async function POST(req: NextRequest) {
 
     const styleExtra = prompt && prompt.trim() ? ` Style guidance: ${prompt.trim()}.` : "";
 
-    // For redesign: transcribe the exact ad texts first and feed them in the prompt —
-    // dramatically improves Hebrew text fidelity in the generated result.
-    const adTexts = mode === "redesign" ? await transcribeAdText(apiKey, imagePng) : "";
+    // For redesign: get the exact ad texts to feed into the prompt — this dramatically
+    // improves Hebrew text fidelity. If the user supplied the correct text manually
+    // (because OCR mis-read it), that is the source of truth; otherwise auto-transcribe.
+    const adTexts = mode === "redesign"
+      ? ((correctTexts || "").trim() ? (correctTexts as string).trim() : await transcribeAdText(apiKey, imagePng))
+      : "";
 
     // The generation is cover-cropped into the exact output ratio. Tell the model
     // to keep big EMPTY background margins on the axis that gets cropped, so no

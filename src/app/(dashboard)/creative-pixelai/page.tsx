@@ -137,6 +137,12 @@ export default function CreativePixelAIPage() {
   const [aiStylePrompt, setAiStylePrompt] = useState("");
   const [aiHighQuality, setAiHighQuality] = useState(false);
   const [aiTextWarn, setAiTextWarn] = useState<Record<string, string[]>>({}); // formatId → missing/changed text lines
+  const [approvedFormats, setApprovedFormats] = useState<Record<string, boolean>>({}); // formatId → locked/approved
+  const [cardNote, setCardNote] = useState<Record<string, string>>({}); // formatId → per-version fix note
+  const [fixingFormat, setFixingFormat] = useState<string | null>(null);
+  const [manualTexts, setManualTexts] = useState(""); // user-confirmed exact source text — overrides OCR
+  const [detectedTexts, setDetectedTexts] = useState(""); // last auto-detected original (for the "fill from detection" button)
+  const [showTextEditor, setShowTextEditor] = useState(false);
 
   const dominantColors = useMemo(() => (img ? extractDominantColors(img, 3) : []), [img]);
 
@@ -360,7 +366,7 @@ export default function CreativePixelAIPage() {
       const res = await fetch("/api/creative-pixelai/generate-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imagePng: inputDataUrl, format: formatId, mode: aiMode, quality: aiHighQuality ? "high" : "medium", prompt: aiStylePrompt.trim() || undefined }),
+        body: JSON.stringify({ imagePng: inputDataUrl, format: formatId, mode: aiMode, quality: aiHighQuality ? "high" : "medium", prompt: aiStylePrompt.trim() || undefined, correctTexts: manualTexts.trim() || undefined }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "היצירה נכשלה");
@@ -382,8 +388,10 @@ export default function CreativePixelAIPage() {
       }
 
       setAiResults((r) => ({ ...r, [formatId]: fin.toDataURL("image/png") }));
+      setApprovedFormats((a) => { const n = { ...a }; delete n[formatId]; return n; }); // fresh gen → needs re-approval
       setActiveFormat(formatId);
       // Surface AI text-fidelity check (redesign mode).
+      if (json.textCheck?.original && !manualTexts.trim()) setDetectedTexts(json.textCheck.original); // remember for the "fill from detection" button
       if (json.textCheck && !json.textCheck.ok && Array.isArray(json.textCheck.missing) && json.textCheck.missing.length) {
         setAiTextWarn((w) => ({ ...w, [formatId]: json.textCheck.missing }));
       } else {
@@ -393,7 +401,7 @@ export default function CreativePixelAIPage() {
     } catch (e) {
       toast(e instanceof Error ? e.message : "היצירה נכשלה", "error");
     } finally { setAiGenerating(null); }
-  }, [img, scaleMode, aiStylePrompt, aiMode, aiHighQuality, toast]);
+  }, [img, scaleMode, aiStylePrompt, aiMode, aiHighQuality, manualTexts, toast]);
 
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number; current: string } | null>(null);
   const generateAllAI = async () => {
@@ -426,12 +434,13 @@ export default function CreativePixelAIPage() {
   /* ── Per-version AI fix: send the CURRENT generated version back for a targeted
      edit per the user's note (ChatGPT-style iteration). Previous kept for undo. ── */
   const prevAiResultRef = useRef<Record<string, string>>({});
-  const aiFixVersion = async () => {
-    const current = aiResults[activeFormat];
-    if (!current || !refineNote.trim()) return;
-    setRefining(true);
+
+  /** Fix a SPECIFIC generated version per its own note (targeted edit). */
+  const aiFixFor = async (formatId: FormatId, note: string) => {
+    const current = aiResults[formatId];
+    if (!current || !note.trim()) return;
+    setFixingFormat(formatId);
     try {
-      // Downscale the current version for the edit call.
       const curImg = await loadImage(current);
       const maxDim = 1536;
       const ds = Math.min(1, maxDim / Math.max(curImg.naturalWidth, curImg.naturalHeight));
@@ -443,12 +452,12 @@ export default function CreativePixelAIPage() {
       const res = await fetch("/api/creative-pixelai/generate-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imagePng: c.toDataURL("image/png"), format: activeFormat, mode: "edit", quality: aiHighQuality ? "high" : "medium", prompt: refineNote.trim() }),
+        body: JSON.stringify({ imagePng: c.toDataURL("image/png"), format: formatId, mode: "edit", quality: aiHighQuality ? "high" : "medium", prompt: note.trim() }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "התיקון נכשל");
       const genImg = await loadImage(json.image);
-      const f = FORMATS.find((x) => x.id === activeFormat)!;
+      const f = FORMATS.find((x) => x.id === formatId)!;
       const fin = document.createElement("canvas");
       fin.width = f.width; fin.height = f.height;
       const fctx = fin.getContext("2d")!;
@@ -456,29 +465,29 @@ export default function CreativePixelAIPage() {
       const s = Math.max(f.width / genImg.naturalWidth, f.height / genImg.naturalHeight);
       fctx.drawImage(genImg, (f.width - genImg.naturalWidth * s) / 2, (f.height - genImg.naturalHeight * s) / 2, genImg.naturalWidth * s, genImg.naturalHeight * s);
 
-      prevAiResultRef.current[activeFormat] = current; // keep for undo
-      setAiResults((r) => ({ ...r, [activeFormat]: fin.toDataURL("image/png") }));
-      setRefineLog((l) => [{ note: refineNote.trim(), explanation: `תוקן בגרסת ${activeFormat === "story" ? "Story" : activeFormat === "feed_4_5" ? "4:5" : "Square"}` }, ...l].slice(0, 5));
-      setRefineNote("");
-      toast("✓ הגרסה תוקנה לפי ההערה — אפשר לבטל אם לא מתאים", "success");
+      prevAiResultRef.current[formatId] = current;
+      setAiResults((r) => ({ ...r, [formatId]: fin.toDataURL("image/png") }));
+      setCardNote((n) => ({ ...n, [formatId]: "" }));
+      toast("✓ הגרסה תוקנה — בדוק ואשר", "success");
     } catch (e) {
       toast(e instanceof Error ? e.message : "התיקון נכשל", "error");
-    } finally { setRefining(false); }
+    } finally { setFixingFormat(null); }
   };
 
-  const undoAiFix = () => {
-    const prev = prevAiResultRef.current[activeFormat];
+  const undoAiFixFor = (formatId: FormatId) => {
+    const prev = prevAiResultRef.current[formatId];
     if (!prev) return;
-    setAiResults((r) => ({ ...r, [activeFormat]: prev }));
-    delete prevAiResultRef.current[activeFormat];
-    toast("↩ הוחזרה הגרסה הקודמת", "info");
+    setAiResults((r) => ({ ...r, [formatId]: prev }));
+    delete prevAiResultRef.current[formatId];
+    setApprovedFormats((a) => { const n = { ...a }; delete n[formatId]; return n; });
   };
+
+  const selectedDone = FORMATS.filter((f) => selectedFormats.includes(f.id) && aiResults[f.id]);
+  const allApproved = selectedDone.length > 0 && selectedDone.every((f) => approvedFormats[f.id]);
 
   /* ── Refine by note: AI maps Hebrew feedback → parameter changes, re-render is instant ── */
   const applyRefine = async () => {
     if (!refineNote.trim() || !img) return;
-    // In AI mode with a generated version on screen — fix THAT version.
-    if (engine === "ai" && aiResults[activeFormat]) { await aiFixVersion(); return; }
     setRefining(true);
     try {
       const res = await fetch("/api/creative-pixelai/refine", {
@@ -622,6 +631,33 @@ export default function CreativePixelAIPage() {
                 )}
                 <input className="form-input ux-input" value={aiStylePrompt} onChange={(e) => setAiStylePrompt(e.target.value)}
                   placeholder="סגנון (אופציונלי): למשל ׳שמיים כחולים, אווירת יוקרה׳" style={{ fontSize: 12, marginBottom: 8 }} />
+
+                {aiMode === "redesign" && (
+                  <div style={{ marginBottom: 8 }}>
+                    <button onClick={() => setShowTextEditor((v) => !v)} style={{ width: "100%", textAlign: "right", background: manualTexts.trim() ? "rgba(16,185,129,0.08)" : "var(--surface)", border: `1px solid ${manualTexts.trim() ? "rgba(16,185,129,0.4)" : "var(--border)"}`, borderRadius: 8, padding: "0.45rem 0.65rem", fontSize: 11.5, fontWeight: 700, color: manualTexts.trim() ? "#059669" : "var(--foreground)", cursor: "pointer" }}>
+                      {manualTexts.trim() ? "✓ טקסט מקור מוגדר ידנית" : "✏️ הגדר טקסט מקור מדויק"} {showTextEditor ? "▲" : "▼"}
+                    </button>
+                    {showTextEditor && (
+                      <div style={{ marginTop: 6, padding: "0.6rem", border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface)" }}>
+                        <div style={{ fontSize: 10.5, color: "var(--foreground-muted)", lineHeight: 1.55, marginBottom: 6 }}>
+                          אם הזיהוי האוטומטי טעה — רשום כאן את הטקסטים המדויקים, שורה לכל טקסט. המערכת תשתמש בזה גם ליצירה וגם לבדיקת הנאמנות (במקום הזיהוי האוטומטי).
+                        </div>
+                        <textarea className="form-input ux-input" value={manualTexts} onChange={(e) => setManualTexts(e.target.value)} rows={6}
+                          placeholder={"החל מ-3,290,000₪\nא.א. אבן יהודה יזמות\nTHE PLACE TO BE\n…"} style={{ fontSize: 12, width: "100%", resize: "vertical", lineHeight: 1.6 }} />
+                        <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                          {detectedTexts && (
+                            <button className="mod-btn-ghost ux-btn" onClick={() => setManualTexts(detectedTexts)} style={{ fontSize: 11 }} title="מלא מהזיהוי האחרון ואז תקן ידנית">
+                              ↧ מלא מהזיהוי
+                            </button>
+                          )}
+                          {manualTexts.trim() && (
+                            <button className="mod-btn-ghost ux-btn" onClick={() => setManualTexts("")} style={{ fontSize: 11 }}>נקה</button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--foreground)", cursor: "pointer", marginBottom: 8 }}>
                   <input type="checkbox" checked={aiHighQuality} onChange={(e) => setAiHighQuality(e.target.checked)} />
                   💎 איכות מקסימלית (איטי יותר — אם נקטע, הפעל Fluid Compute ב-Vercel)
@@ -823,26 +859,85 @@ export default function CreativePixelAIPage() {
                 <img src={img.src} alt="מקור" style={{ maxWidth: "100%", maxHeight: 480, objectFit: "contain", borderRadius: 8 }} />
               </div>
             ) : engine === "ai" ? (
-              <div style={{ display: "flex", justifyContent: "center", background: "var(--surface)", borderRadius: 12, padding: 12, minHeight: 200, alignItems: "center" }}>
-                {aiGenerating === activeFormat ? (
-                  <div style={{ textAlign: "center", color: BRAND, fontSize: 13, fontWeight: 700 }}>⏳ ה-AI יוצר את הרקע במידות המלאות…<div style={{ fontSize: 11, color: "var(--foreground-muted)", marginTop: 6 }}>20-40 שניות</div></div>
-                ) : aiResults[activeFormat] ? (
-                  <div style={{ width: "100%" }}>
-                    {aiTextWarn[activeFormat]?.length > 0 && (
-                      <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, padding: "0.6rem 0.8rem", marginBottom: 10, fontSize: 12 }}>
-                        <div style={{ fontWeight: 800, color: "#dc2626", marginBottom: 4 }}>⚠️ ייתכן שיבוש טקסט — הטקסטים הבאים לא זוהו זהים למקור:</div>
-                        <div style={{ color: "#b45309", lineHeight: 1.6 }}>{aiTextWarn[activeFormat].map((t, i) => <div key={i}>• {t}</div>)}</div>
-                        <div style={{ color: "var(--foreground-muted)", marginTop: 6 }}>תקן עם ההערה למטה, צור שוב, או השתמש ב-🔒 הרחבה 1:1 לנאמנות מוחלטת.</div>
-                      </div>
-                    )}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={aiResults[activeFormat]} alt="" style={{ maxWidth: "100%", maxHeight: 480, borderRadius: 10, display: "block", margin: "0 auto" }} />
-                  </div>
-                ) : (
-                  <div style={{ textAlign: "center", color: "var(--foreground-muted)", fontSize: 13 }}>
-                    עוד לא נוצר {activeFormat === "story" ? "Story" : activeFormat === "feed_4_5" ? "4:5" : "Square"} — לחץ "✨ צור" במנוע היצירה
+              /* ── Review board: every selected format side-by-side. Each version
+                 has its own fix-note + "אשר גודל" lock. Export unlocks only when
+                 all selected formats are approved. ── */
+              <div>
+                {allApproved && (
+                  <div style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.4)", borderRadius: 10, padding: "0.6rem 0.9rem", marginBottom: 12, fontSize: 12.5, fontWeight: 700, color: "#059669", textAlign: "center" }}>
+                    ✓ כל הגדלים אושרו — אפשר לייצא / לשמור ללקוח / להוריד למטה
                   </div>
                 )}
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(selectedFormats.length, 3)}, 1fr)`, gap: 14 }}>
+                  {FORMATS.filter((f) => selectedFormats.includes(f.id)).map((f) => {
+                    const fLabel = f.id === "story" ? "Story 9:16" : f.id === "feed_4_5" ? "Feed 4:5" : "Square 1:1";
+                    const busy = aiGenerating === f.id || fixingFormat === f.id;
+                    const result = aiResults[f.id];
+                    const approved = !!approvedFormats[f.id];
+                    const warn = aiTextWarn[f.id] || [];
+                    return (
+                      <div key={f.id} style={{ borderRadius: 14, border: `2px solid ${approved ? "#10b981" : "var(--border)"}`, background: "var(--surface)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem 0.7rem", background: approved ? "rgba(16,185,129,0.08)" : "var(--surface-raised)", borderBottom: "1px solid var(--border)" }}>
+                          <span style={{ fontSize: 12, fontWeight: 800, color: approved ? "#059669" : "var(--foreground)" }}>{approved ? "🔒 " : ""}{fLabel}</span>
+                          <span style={{ fontSize: 10, color: "var(--foreground-muted)" }}>{f.width}×{f.height}</span>
+                        </div>
+                        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 10, minHeight: 160, background: "var(--background)" }}>
+                          {busy ? (
+                            <div style={{ textAlign: "center", color: BRAND, fontSize: 12, fontWeight: 700 }}>⏳ {fixingFormat === f.id ? "מתקן…" : "יוצר…"}<div style={{ fontSize: 10, color: "var(--foreground-muted)", marginTop: 4 }}>20-40 שניות</div></div>
+                          ) : result ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={result} alt={fLabel} style={{ maxWidth: "100%", maxHeight: 360, borderRadius: 8, display: "block" }} />
+                          ) : (
+                            <div style={{ textAlign: "center", color: "var(--foreground-muted)", fontSize: 11.5 }}>
+                              עוד לא נוצר<div style={{ marginTop: 8 }}><button className="mod-btn-primary ux-btn" onClick={() => generateAIFor(f.id)} disabled={!img || !!aiGenerating} style={{ fontSize: 11.5 }}>✨ צור {fLabel}</button></div>
+                            </div>
+                          )}
+                        </div>
+                        {result && (
+                          <div style={{ padding: "0.6rem 0.7rem", display: "flex", flexDirection: "column", gap: 7, borderTop: "1px solid var(--border)" }}>
+                            {warn.length > 0 && !approved && (
+                              <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, padding: "0.4rem 0.55rem", fontSize: 10.5 }}>
+                                <div style={{ fontWeight: 800, color: "#dc2626", marginBottom: 2 }}>⚠️ ייתכן שיבוש טקסט:</div>
+                                <div style={{ color: "#b45309", lineHeight: 1.5 }}>{warn.slice(0, 4).map((t, i) => <div key={i}>• {t}</div>)}</div>
+                                <button onClick={() => { if (detectedTexts && !manualTexts.trim()) setManualTexts(detectedTexts); setShowTextEditor(true); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={{ marginTop: 4, background: "none", border: "none", color: "#dc2626", fontWeight: 700, fontSize: 10.5, cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+                                  זיהוי שגוי? תקן את טקסט המקור ←
+                                </button>
+                              </div>
+                            )}
+                            {approved ? (
+                              <button className="mod-btn-ghost ux-btn" onClick={() => setApprovedFormats((a) => { const n = { ...a }; delete n[f.id]; return n; })} style={{ fontSize: 11.5, color: "#059669" }}>
+                                🔓 בטל אישור — ערוך שוב
+                              </button>
+                            ) : (
+                              <>
+                                <div style={{ display: "flex", gap: 6 }}>
+                                  <input
+                                    className="form-input ux-input"
+                                    value={cardNote[f.id] || ""}
+                                    onChange={(e) => setCardNote((n) => ({ ...n, [f.id]: e.target.value }))}
+                                    onKeyDown={(e) => { if (e.key === "Enter" && (cardNote[f.id] || "").trim()) aiFixFor(f.id, cardNote[f.id] || ""); }}
+                                    placeholder="הזן תיקון לגרסה זו…"
+                                    style={{ flex: 1, fontSize: 11.5 }}
+                                    disabled={busy}
+                                  />
+                                  <button className="mod-btn-ghost ux-btn" onClick={() => aiFixFor(f.id, cardNote[f.id] || "")} disabled={busy || !(cardNote[f.id] || "").trim()} style={{ fontSize: 11.5, whiteSpace: "nowrap", opacity: busy || !(cardNote[f.id] || "").trim() ? 0.5 : 1 }}>
+                                    תקן ✨
+                                  </button>
+                                  {prevAiResultRef.current[f.id] && (
+                                    <button className="mod-btn-ghost ux-btn" onClick={() => undoAiFixFor(f.id)} disabled={busy} title="החזר גרסה קודמת" style={{ fontSize: 11.5 }}>↩</button>
+                                  )}
+                                </div>
+                                <button className="mod-btn-primary ux-btn" onClick={() => setApprovedFormats((a) => ({ ...a, [f.id]: true }))} disabled={busy} style={{ fontSize: 12, background: "#10b981", opacity: busy ? 0.5 : 1 }}>
+                                  ✓ אשר גודל
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ) : (
               <div style={{ display: "flex", justifyContent: "center", background: "var(--surface)", borderRadius: 12, padding: 12 }}>
@@ -861,46 +956,28 @@ export default function CreativePixelAIPage() {
             )}
           </div>
 
-          {/* 7.5 AI refine-by-note — iterate on the result instead of starting over */}
+          {/* 7.5 Canvas refine-by-note — AI mode fixes live per-card on the board above */}
+          {engine !== "ai" && (
           <div className="premium-card" style={{ padding: "1.25rem" }}>
-            {(() => {
-              const aiFixMode = engine === "ai" && !!aiResults[activeFormat];
-              const fLabel = activeFormat === "story" ? "Story" : activeFormat === "feed_4_5" ? "4:5" : "Square";
-              const canUndo = aiFixMode && !!prevAiResultRef.current[activeFormat];
-              return (
-                <>
-                  <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4, color: "var(--foreground)" }}>
-                    {aiFixMode ? `✨ תיקון הגרסה הנוכחית (${fLabel})` : "🛠 תיקון לפי הערה"}
-                  </div>
-                  <div style={{ fontSize: 11.5, color: "var(--foreground-muted)", marginBottom: 10 }}>
-                    {aiFixMode
-                      ? "כתוב מה לשנות בגרסה הזו (״השמיים כהים מדי״, ״הגדל את המחיר״, ״תוריד את העץ משמאל״…) — הגרסה תיווצר מחדש מתוקנת, כל השאר נשאר זהה."
-                      : "כתוב מה לא טוב בתוצאה (״גדול מדי״, ״תוריד למטה״, ״רקע כהה יותר״…) — ה-AI יכוון את ההגדרות והתצוגה תתעדכן מיד."}
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <input
-                      className="form-input ux-input"
-                      value={refineNote}
-                      onChange={(e) => setRefineNote(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") applyRefine(); }}
-                      placeholder={aiFixMode ? "למשל: הצללה חזקה מדי על הבניין, תבהיר את השמיים" : "למשל: הקריאייטיב קטן מדי והרקע בהיר מדי"}
-                      style={{ flex: 1, fontSize: 13 }}
-                      disabled={!img || refining}
-                    />
-                    <button className="mod-btn-primary ux-btn" onClick={applyRefine} disabled={!img || refining || !refineNote.trim()}
-                      style={{ fontSize: 12.5, whiteSpace: "nowrap", opacity: !img || refining || !refineNote.trim() ? 0.5 : 1 }}>
-                      {refining ? "⏳ מתקן…" : aiFixMode ? `תקן ${fLabel} ✨` : "תקן ✨"}
-                    </button>
-                    {canUndo && (
-                      <button className="mod-btn-ghost ux-btn" onClick={undoAiFix} disabled={refining}
-                        style={{ fontSize: 12.5, whiteSpace: "nowrap" }} title="החזר את הגרסה שלפני התיקון">
-                        ↩ בטל
-                      </button>
-                    )}
-                  </div>
-                </>
-              );
-            })()}
+            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4, color: "var(--foreground)" }}>🛠 תיקון לפי הערה</div>
+            <div style={{ fontSize: 11.5, color: "var(--foreground-muted)", marginBottom: 10 }}>
+              כתוב מה לא טוב בתוצאה (״גדול מדי״, ״תוריד למטה״, ״רקע כהה יותר״…) — ה-AI יכוון את ההגדרות והתצוגה תתעדכן מיד.
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                className="form-input ux-input"
+                value={refineNote}
+                onChange={(e) => setRefineNote(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") applyRefine(); }}
+                placeholder="למשל: הקריאייטיב קטן מדי והרקע בהיר מדי"
+                style={{ flex: 1, fontSize: 13 }}
+                disabled={!img || refining}
+              />
+              <button className="mod-btn-primary ux-btn" onClick={applyRefine} disabled={!img || refining || !refineNote.trim()}
+                style={{ fontSize: 12.5, whiteSpace: "nowrap", opacity: !img || refining || !refineNote.trim() ? 0.5 : 1 }}>
+                {refining ? "⏳ מתקן…" : "תקן ✨"}
+              </button>
+            </div>
             {refineLog.length > 0 && (
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
                 {refineLog.map((r, i) => (
@@ -911,18 +988,26 @@ export default function CreativePixelAIPage() {
               </div>
             )}
           </div>
+          )}
 
-          {/* 8. Export */}
-          <div className="premium-card" style={{ padding: "1.25rem" }}>
-            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, color: "var(--foreground)" }}>ייצוא ושמירה</div>
+          {/* 8. Export — in AI mode, locked until every selected size is approved */}
+          {(() => {
+            const aiGate = engine === "ai";
+            const exportLocked = aiGate && !allApproved;
+            return (
+          <div className="premium-card" style={{ padding: "1.25rem", opacity: exportLocked ? 0.55 : 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 12, color: "var(--foreground)" }}>
+              ייצוא ושמירה
+              {exportLocked && <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--foreground-muted)", marginInlineStart: 8 }}>🔒 אשר את כל הגדלים כדי לפתוח</span>}
+            </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button className="mod-btn-primary ux-btn" disabled={!img || exporting} onClick={() => exportOne("image/png")} style={{ fontSize: 12.5, opacity: !img || exporting ? 0.5 : 1 }}>
+              <button className="mod-btn-primary ux-btn" disabled={!img || exporting || exportLocked} onClick={() => exportOne("image/png")} style={{ fontSize: 12.5, opacity: !img || exporting || exportLocked ? 0.5 : 1 }}>
                 ⬇ PNG ({activeFormat === "story" ? "Story" : activeFormat === "feed_4_5" ? "4:5" : "Square"})
               </button>
-              <button className="mod-btn-ghost ux-btn" disabled={!img || exporting} onClick={() => exportOne("image/jpeg")} style={{ fontSize: 12.5, opacity: !img || exporting ? 0.5 : 1 }}>
+              <button className="mod-btn-ghost ux-btn" disabled={!img || exporting || exportLocked} onClick={() => exportOne("image/jpeg")} style={{ fontSize: 12.5, opacity: !img || exporting || exportLocked ? 0.5 : 1 }}>
                 ⬇ JPG
               </button>
-              <button className="mod-btn-ghost ux-btn" disabled={!img || exporting || selectedFormats.length === 0} onClick={exportZip} style={{ fontSize: 12.5, opacity: !img || exporting ? 0.5 : 1 }}>
+              <button className="mod-btn-ghost ux-btn" disabled={!img || exporting || exportLocked || selectedFormats.length === 0} onClick={exportZip} style={{ fontSize: 12.5, opacity: !img || exporting || exportLocked ? 0.5 : 1 }}>
                 {exporting ? "⏳ מייצא…" : "📦 הכל כ-ZIP"}
               </button>
             </div>
@@ -931,11 +1016,13 @@ export default function CreativePixelAIPage() {
                 <option value="">ללא שיוך לקוח</option>
                 {(clients || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
-              <button className="mod-btn-primary ux-btn ux-btn-glow" disabled={!img || saving} onClick={saveToAssets} style={{ fontSize: 12.5, background: "#10b981", opacity: !img || saving ? 0.5 : 1 }}>
+              <button className="mod-btn-primary ux-btn ux-btn-glow" disabled={!img || saving || exportLocked} onClick={saveToAssets} style={{ fontSize: 12.5, background: "#10b981", opacity: !img || saving || exportLocked ? 0.5 : 1 }}>
                 {saving ? "⏳ שומר נכסים…" : "💾 שמור לנכסי קמפיין"}
               </button>
             </div>
           </div>
+            );
+          })()}
 
           {/* History */}
           <div className="premium-card" style={{ padding: "1.25rem" }}>
