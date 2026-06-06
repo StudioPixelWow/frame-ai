@@ -167,13 +167,16 @@ export default function ClientsPage() {
 
   const openCreate = () => {
     setEditingClient(null);
+    // Default the new client's type to the category tab you're currently viewing
+    // (e.g. on the "אחסון" tab → open the hosting form), falling back to marketing.
+    const presetType = (filterClientType !== "all" ? filterClientType : "marketing") as Client["clientType"];
     setForm({
       name: "",
       company: "",
       contactPerson: "",
       email: "",
       phone: "",
-      clientType: "marketing",
+      clientType: presetType,
       annualPaymentDate: "",
       businessField: "",
       retainerAmount: 0,
