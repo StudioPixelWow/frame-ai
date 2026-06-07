@@ -1394,6 +1394,15 @@ export default function SeoPlanDetail() {
             {/* Right: action buttons */}
             <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
               <button
+                onClick={() => router.push(`/seo-geo/${planId}/authority`)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, padding: "9px 18px",
+                  background: C.primary, color: "#fff",
+                  border: "none", borderRadius: 10,
+                  fontSize: 12, fontWeight: 800, cursor: "pointer", transition: "all 0.2s",
+                }}
+              >🏆 Authority Center</button>
+              <button
                 onClick={handleGenerateReport}
                 disabled={generatingReport}
                 style={{
