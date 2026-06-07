@@ -44,6 +44,13 @@ export default function UgcPage() {
   const [renderStartedAt, setRenderStartedAt] = useState<number | null>(null);
   const [renderStage, setRenderStage] = useState('');
   const [, forceTick] = useState(0);
+  const VIDEO_FORMATS: { id: string; label: string; w: number; h: number }[] = [
+    { id: 'story', label: 'Story 9:16', w: 1080, h: 1920 },
+    { id: 'feed', label: 'Feed 4:5', w: 1080, h: 1350 },
+    { id: 'square', label: 'Square 1:1', w: 1080, h: 1080 },
+    { id: 'wide', label: 'Wide 16:9', w: 1920, h: 1080 },
+  ];
+  const [videoFormat, setVideoFormat] = useState('story');
   const [sceneImages, setSceneImages] = useState<Record<string, string[]>>({}); // variationId → [dataURL per shot]
   const [scenesBusy, setScenesBusy] = useState(false);
   const [presenterApproved, setPresenterApproved] = useState(false);
@@ -145,7 +152,8 @@ export default function UgcPage() {
     setRendering(true); setVideo({ status: 'pending' }); setErr('');
     setRenderStartedAt(Date.now()); setRenderStage('שולח תסריט ל‑HeyGen…');
     try {
-      const gen = await fetch('/api/data/heygen/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ avatarId, voiceId, script: v.fullScript, dimension: { width: 1080, height: 1920 } }) });
+      const fmt = VIDEO_FORMATS.find((f) => f.id === videoFormat) || VIDEO_FORMATS[0];
+      const gen = await fetch('/api/data/heygen/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ avatarId, voiceId, script: v.fullScript, dimension: { width: fmt.w, height: fmt.h } }) });
       const gj = await gen.json();
       if (!gen.ok || !gj.videoId) throw new Error(gj.error || 'יצירת הווידאו נכשלה');
       const videoId = gj.videoId;
@@ -525,6 +533,23 @@ export default function UgcPage() {
                         </div>
                       );
                     })()}
+                    {/* Video format selector — choose the output aspect (was locked to 9:16). */}
+                    {!rendering && (
+                      <div style={{ marginBottom: 10 }}>
+                        <label style={lbl}>פורמט וידאו</label>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {VIDEO_FORMATS.map((f) => (
+                            <button key={f.id} type="button" onClick={() => setVideoFormat(f.id)}
+                              style={{ padding: '0.4rem 0.8rem', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: `1px solid ${videoFormat === f.id ? BRAND : 'var(--border,#e5e7eb)'}`, background: videoFormat === f.id ? 'rgba(0,181,254,0.1)' : 'transparent', color: videoFormat === f.id ? BRAND : 'var(--foreground)' }}>
+                              {f.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--foreground-muted,#6b7280)', marginTop: 6, lineHeight: 1.6 }}>
+                          💡 HeyGen מפיק את <b>שוט הדמות המדברת</b> בפורמט שתבחר. ל‑<b>B‑roll, תנועתיות ופריימים שונים כמו בסטוריבורד</b> — השתמש בפרומפטים לכלי הווידאו (Sora/Runway/Kling/Veo) שמופיעים למטה, וערוך יחד עם שוט הדמות בעורך. בחר פורמט שתואם למסגרת הדמות כדי שלא יופיעו פסים.
+                        </div>
+                      </div>
+                    )}
                     {rendering ? (() => {
                       const elapsed = renderStartedAt ? Math.floor((Date.now() - renderStartedAt) / 1000) : 0;
                       const EST = 120; // typical HeyGen render ~2 min
