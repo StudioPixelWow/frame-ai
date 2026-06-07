@@ -927,6 +927,11 @@ export default function CreativePixelAIPage() {
                                     <button className="mod-btn-ghost ux-btn" onClick={() => undoAiFixFor(f.id)} disabled={busy} title="החזר גרסה קודמת" style={{ fontSize: 11.5 }}>↩</button>
                                   )}
                                 </div>
+                                {/* Start over for THIS size — if the fix-note can't salvage it,
+                                    regenerate from scratch from the original (fresh attempt). */}
+                                <button className="mod-btn-ghost ux-btn" onClick={() => generateAIFor(f.id)} disabled={busy || !img || !!aiGenerating} title="התחל מחדש — יצירה חדשה מאפס מהמקור" style={{ fontSize: 11.5, opacity: busy || !!aiGenerating ? 0.5 : 1 }}>
+                                  🔄 צור גודל מחדש
+                                </button>
                                 <button className="mod-btn-primary ux-btn" onClick={() => setApprovedFormats((a) => ({ ...a, [f.id]: true }))} disabled={busy} style={{ fontSize: 12, background: "#10b981", opacity: busy ? 0.5 : 1 }}>
                                   ✓ אשר גודל
                                 </button>
