@@ -68,6 +68,13 @@ export default function UgcPage() {
   const [videoCta, setVideoCta] = useState('לפרטים נוספים — צרו קשר');
   const [pipOn, setPipOn] = useState(true);
   const [hookOn, setHookOn] = useState(true);
+  const UGC_TEMPLATES = [
+    { id: 'viral', emoji: '🔥', label: 'ויראלי טיקטוק', format: 'story', music: 'energetic', transition: 'zoom', pip: true, hook: true, captions: true },
+    { id: 'clean', emoji: '✨', label: 'נקי ומינימלי', format: 'story', music: 'calm', transition: 'fade', pip: false, hook: false, captions: true },
+    { id: 'promo', emoji: '🏷️', label: 'מבצע/קד״מ', format: 'feed', music: 'upbeat', transition: 'slideLeft', pip: true, hook: true, captions: true },
+    { id: 'corporate', emoji: '💼', label: 'תאגידי', format: 'wide', music: 'corporate', transition: 'fade', pip: false, hook: false, captions: true },
+    { id: 'testimonial', emoji: '💬', label: 'עדות לקוח', format: 'square', music: 'calm', transition: 'fade', pip: false, hook: true, captions: true },
+  ];
   const [sceneImages, setSceneImages] = useState<Record<string, string[]>>({}); // variationId → [dataURL per shot]
   const [scenesBusy, setScenesBusy] = useState(false);
   const [presenterApproved, setPresenterApproved] = useState(false);
@@ -140,7 +147,8 @@ export default function UgcPage() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || 'שגיאה');
       setSceneImages((m) => { const arr = [...(m[v.id] || [])]; arr[i] = j.image; return { ...m, [v.id]: arr }; });
-    } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה ביצירת תמונה'); }
+      return j.image as string;
+    } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה ביצירת תמונה'); return null; }
     finally { setSceneBusyKey(''); }
   };
 
@@ -184,15 +192,17 @@ export default function UgcPage() {
   };
 
   // Assemble the FULL clip (avatar speech + Ken-Burns B-roll) via Shotstack.
-  const assembleVideo = async () => {
+  // Accepts overrides so "צור הכל" can pass fresh values without stale state.
+  const assembleVideo = async (over?: { avatarUrl?: string; images?: string[]; clips?: string[] }) => {
     const v = pkg?.variations[active];
-    if (!v || !video?.url) { setErr('הפק קודם וידאו דמות (HeyGen)'); return; }
-    const imgs = (sceneImages[v.id] || []).filter(Boolean);
+    const avatarUrl = over?.avatarUrl || video?.url;
+    if (!v || !avatarUrl) { setErr('הפק קודם וידאו דמות (HeyGen)'); return; }
+    const imgs = over?.images || (sceneImages[v.id] || []).filter(Boolean);
     const fmt = VIDEO_FORMATS.find((f) => f.id === videoFormat) || VIDEO_FORMATS[0];
     setAssembling(true); setAssembled(null); setErr(''); setAssembleStartedAt(Date.now()); setAssembleStage('מעלה תמונות B‑roll…');
     try {
-      const clips = (sceneClips[v.id] || []).filter(Boolean);
-      const r = await fetch('/api/ugc/assemble', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ avatarUrl: video.url, images: imgs, brollVideos: clips, durationSec: form.duration, format: { width: fmt.w, height: fmt.h }, businessName: form.businessName, brandColor: '#00B5FE', music: videoMusic, transition: videoTransition, script: v.fullScript, captionsOn, logoUrl: videoLogo.trim() || undefined, ctaText: videoCta, pip: pipOn, hookOn }) });
+      const clips = over?.clips || (sceneClips[v.id] || []).filter(Boolean);
+      const r = await fetch('/api/ugc/assemble', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ avatarUrl, images: imgs, brollVideos: clips, durationSec: form.duration, format: { width: fmt.w, height: fmt.h }, businessName: form.businessName, brandColor: '#00B5FE', music: videoMusic, transition: videoTransition, script: v.fullScript, captionsOn, logoUrl: videoLogo.trim() || undefined, ctaText: videoCta, pip: pipOn, hookOn }) });
       const j = await r.json();
       if (!r.ok || !j.renderId) throw new Error(j.error || 'הרכבת הווידאו נכשלה');
       setAssembleStage('בתור עיבוד…');
@@ -224,6 +234,7 @@ export default function UgcPage() {
       if (!gen.ok || !gj.videoId) throw new Error(gj.error || 'יצירת הווידאו נכשלה');
       const videoId = gj.videoId;
       setRenderStage('הווידאו בתור עיבוד אצל HeyGen…');
+      let finalUrl: string | null = null;
       // Poll status (up to ~5 min).
       for (let i = 0; i < 60; i++) {
         await new Promise((r) => setTimeout(r, 5000));
@@ -231,6 +242,7 @@ export default function UgcPage() {
         if (st.status === 'processing' || st.status === 'pending' || st.status === 'waiting') setRenderStage('מעבד את הווידאו (רינדור הדמות + הקול)…');
         if (st.status === 'completed' && st.videoUrl) {
           setRenderStage('כמעט מוכן — שומר…');
+          finalUrl = st.videoUrl;
           setVideo({ status: 'completed', url: st.videoUrl });
           // Auto-save the finished video into the client's Files tab.
           if (clientId) {
@@ -244,8 +256,36 @@ export default function UgcPage() {
         if (st.status === 'failed') { setVideo({ status: 'failed' }); throw new Error(st.error || 'הרינדור נכשל'); }
         setVideo({ status: st.status || 'processing' });
       }
-    } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה ברינדור'); }
+      return finalUrl;
+    } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה ברינדור'); return null; }
     finally { setRendering(false); }
+  };
+
+  // #5 "צור הכל" — one-click full pipeline: storyboard images → avatar shot → full assembly.
+  const [autoAll, setAutoAll] = useState(false);
+  const [autoStage, setAutoStage] = useState('');
+  const createEverything = async () => {
+    const v = pkg?.variations[active];
+    if (!v) return;
+    if (heygenReady !== false && !presenterApproved) { setErr('בחר ואשר דמות וקול (שלב 1) קודם'); return; }
+    setAutoAll(true); setErr(''); setAssembled(null);
+    try {
+      // 1) Storyboard images (generate any missing), collect locally to avoid stale state.
+      setAutoStage('יוצר תמונות סטוריבורד…');
+      const imgs: string[] = [...(sceneImages[v.id] || [])];
+      for (let i = 0; i < (v.shots || []).length; i++) {
+        if (!imgs[i]) { const u = await genOneScene(v, i); if (u) imgs[i] = u; }
+      }
+      const images = imgs.filter(Boolean);
+      // 2) Avatar shot (render if not already done).
+      let avatarUrl = video?.url || null;
+      if (!avatarUrl) { setAutoStage('מפיק שוט דמות מדברת (HeyGen)…'); avatarUrl = await renderVideo(); }
+      if (!avatarUrl) throw new Error('הפקת שוט הדמות נכשלה (בדוק HeyGen)');
+      // 3) Full assembly (B-roll images/clips + music + captions + hook + intro/outro).
+      setAutoStage('מרכיב סרטון מלא…');
+      await assembleVideo({ avatarUrl, images, clips: (sceneClips[v.id] || []).filter(Boolean) });
+    } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה ביצירה אוטומטית'); }
+    finally { setAutoAll(false); setAutoStage(''); }
   };
 
   const loadProjects = async () => {
@@ -512,6 +552,37 @@ export default function UgcPage() {
                   <button className="mod-btn-ghost ux-btn" onClick={exportMd} style={{ fontSize: 12.5 }}>⬇ ייצוא Markdown</button>
                 </div>
                 {v.abNote && <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>A/B: {v.abNote}</div>}
+
+                {/* #5 One-click full pipeline */}
+                {autoAll ? (
+                  <div style={{ background: 'linear-gradient(90deg, rgba(0,181,254,0.1), rgba(124,92,255,0.1))', border: `1px solid ${BRAND}40`, borderRadius: 12, padding: '0.9rem 1rem', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 16, height: 16, border: `2px solid ${BRAND}`, borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
+                      <span style={{ fontSize: 13.5, fontWeight: 800, color: BRAND }}>✨ יוצר הכל אוטומטית… {autoStage}</span>
+                    </div>
+                    <style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
+                  </div>
+                ) : (
+                  <button onClick={createEverything} disabled={!!busy || rendering || assembling}
+                    style={{ width: '100%', marginBottom: 12, padding: '0.85rem', borderRadius: 12, border: 'none', background: 'linear-gradient(90deg, #00B5FE, #7c5cff)', color: '#fff', fontSize: 14.5, fontWeight: 900, cursor: 'pointer', boxShadow: '0 6px 18px rgba(124,92,255,0.25)' }}>
+                    ✨ צור הכל בלחיצה — סטוריבורד → דמות → סרטון מלא
+                  </button>
+                )}
+
+                {/* #7 Templates gallery — one-tap proven UGC styles */}
+                {!autoAll && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--foreground-muted,#6b7280)', marginBottom: 5 }}>🎨 תבניות מוכנות (לחיצה מחילה הגדרות)</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {UGC_TEMPLATES.map((tpl) => (
+                        <button key={tpl.id} onClick={() => { setVideoFormat(tpl.format); setVideoMusic(tpl.music); setVideoTransition(tpl.transition); setPipOn(tpl.pip); setHookOn(tpl.hook); setCaptionsOn(tpl.captions); setMsg(`הוחלה תבנית: ${tpl.label}`); }}
+                          style={{ fontSize: 11.5, fontWeight: 700, cursor: 'pointer', border: '1px solid var(--border,#e5e7eb)', background: 'var(--surface,#fff)', borderRadius: 999, padding: '0.35rem 0.8rem', color: 'var(--foreground)' }}>
+                          {tpl.emoji} {tpl.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <Section title="🎣 Hook" text={v.hook} onCopy={copy} />
                 <Section title="📝 תסריט מלא" text={v.fullScript} onCopy={copy} pre />
