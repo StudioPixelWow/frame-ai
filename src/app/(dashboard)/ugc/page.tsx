@@ -681,6 +681,38 @@ export default function UgcPage() {
                             </div>
                           ) : (
                             <>
+                              {/* Timeline preview — see the structure before rendering */}
+                              {(() => {
+                                const T = Number(form.duration) || 30;
+                                const OPEN = 4, CLIP = 3.2, GAP = 2, TAIL = 2.5;
+                                const clips = (sceneClips[v.id] || []).filter(Boolean);
+                                const imgs = (sceneImages[v.id] || []).filter(Boolean);
+                                const useVideo = clips.length > 0;
+                                const itemsN = useVideo ? clips.length : imgs.length;
+                                const INTRO = form.businessName ? 2.2 : 0;
+                                const OUTRO = (form.businessName || videoCta) ? 2.6 : 0;
+                                const slots: { start: number; len: number }[] = [];
+                                let tt = OPEN; while (itemsN && tt + CLIP <= T - TAIL) { slots.push({ start: tt, len: CLIP }); tt += CLIP + GAP; }
+                                const pc = (x: number) => `${(x / T) * 100}%`;
+                                return (
+                                  <div style={{ marginBottom: 10 }}>
+                                    <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--foreground-muted,#6b7280)', marginBottom: 5 }}>תצוגת Timeline ({T}s)</div>
+                                    <div dir="ltr" style={{ position: 'relative', height: 34, borderRadius: 8, overflow: 'hidden', background: 'rgba(0,181,254,0.12)', border: '1px solid var(--border,#e5e7eb)' }}>
+                                      {/* avatar base label */}
+                                      <span style={{ position: 'absolute', left: 8, top: 9, fontSize: 10, color: BRAND, fontWeight: 700 }}>🗣 דמות</span>
+                                      {INTRO > 0 && <div style={{ position: 'absolute', left: 0, width: pc(INTRO), height: '100%', background: '#00B5FE', opacity: 0.85, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 9, fontWeight: 800 }}>אינטרו</div>}
+                                      {slots.map((s, i) => <div key={i} title={`${useVideo ? 'B-roll וידאו' : 'B-roll תמונה'} @${s.start.toFixed(1)}s`} style={{ position: 'absolute', left: pc(s.start), width: pc(s.len), height: '100%', background: useVideo ? '#7c3aed' : '#0ea5e9', opacity: 0.9 }} />)}
+                                      {OUTRO > 0 && <div style={{ position: 'absolute', left: pc(T - OUTRO), width: pc(OUTRO), height: '100%', background: '#00B5FE', opacity: 0.85, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 9, fontWeight: 800 }}>אאוטרו</div>}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 10.5, color: 'var(--foreground-muted,#6b7280)', marginTop: 5 }}>
+                                      <span><span style={{ display: 'inline-block', width: 9, height: 9, background: useVideo ? '#7c3aed' : '#0ea5e9', borderRadius: 2, marginInlineEnd: 3 }} />{useVideo ? `${slots.length} חיתוכי B-roll וידאו` : itemsN ? `${slots.length} חיתוכי B-roll (תמונות)` : 'אין B-roll (רק דמות)'}</span>
+                                      {videoMusic !== 'none' && <span>🎵 מוזיקה</span>}
+                                      {captionsOn && <span>💬 כתוביות</span>}
+                                      <span>📐 {VIDEO_FORMATS.find((f) => f.id === videoFormat)?.label}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                               {/* Output options: B-roll AI model, soundtrack, transitions */}
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
                                 <div>
