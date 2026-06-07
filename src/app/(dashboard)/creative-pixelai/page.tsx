@@ -381,23 +381,22 @@ export default function CreativePixelAIPage() {
       const ox = (f.width - genImg.naturalWidth * s) / 2, oy = (f.height - genImg.naturalHeight * s) / 2;
       fctx.drawImage(genImg, ox, oy, genImg.naturalWidth * s, genImg.naturalHeight * s);
 
-      // 4:5 (Feed) was cropping the logo with a plain cover-scale. ONLY for this
-      // format we instead place the FULL design contained over the cover backdrop,
-      // so nothing is cut. Story / Square keep the original (excellent) behavior.
+      // Outpaint mode: paste the ORIGINAL back over its region (smart, full-bleed —
+      // the AI-extended background fills the rest, exactly like the Story result).
       const is45 = f.id === "feed_4_5" || (Math.abs(f.width / f.height - 4 / 5) < 0.02);
-      if (is45) {
-        const src = composite ? img : genImg;
-        const cs = Math.min(f.width / src.naturalWidth, f.height / src.naturalHeight);
-        const cw = src.naturalWidth * cs, ch = src.naturalHeight * cs;
-        const cx = (f.width - cw) / 2;
-        const free = Math.max(0, f.height - ch);
-        const cy = scaleMode === "top_focus" ? 0 : scaleMode === "bottom_focus" ? free : Math.round(free * 0.45);
-        fctx.drawImage(src, cx, cy, cw, ch);
-      } else if (composite) {
-        // Outpaint mode (Story/Square): paste the ORIGINAL back pixel-perfect over its region.
+      if (composite) {
         const s2 = Math.max(f.width / genW, f.height / genH);
-        const ox2 = (f.width - genW * s2) / 2, oy2 = (f.height - genH * s2) / 2;
-        fctx.drawImage(img, composite.gx * s2 + ox2, composite.gy * s2 + oy2, composite.gw * s2, composite.gh * s2);
+        const ow = composite.gw * s2, oh = composite.gh * s2;
+        let ox2 = composite.gx * s2 + (f.width - genW * s2) / 2;
+        let oy2 = composite.gy * s2 + (f.height - genH * s2) / 2;
+        // 4:5 cover-scale used to crop the original's edges (logo). SHIFT the original
+        // back into frame (don't shrink it) so no info is cut, while the AI background
+        // still fills full-bleed behind it. Story/Square keep their exact behavior.
+        if (is45) {
+          if (ow <= f.width) ox2 = Math.max(0, Math.min(ox2, f.width - ow));
+          if (oh <= f.height) oy2 = Math.max(0, Math.min(oy2, f.height - oh));
+        }
+        fctx.drawImage(img, ox2, oy2, ow, oh);
       }
 
       setAiResults((r) => ({ ...r, [formatId]: fin.toDataURL("image/png") }));
