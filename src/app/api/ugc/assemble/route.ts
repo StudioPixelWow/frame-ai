@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getRequestRole } from '@/lib/auth/api-guard';
-import { isShotstackConfigured, hostDataUrl, buildTimeline, submitRender, buildCaptions, MUSIC_PRESETS } from '@/lib/ugc/video-assembly';
+import { isShotstackConfigured, hostDataUrl, buildTimeline, submitRender, buildCaptions, MUSIC_PRESETS, MUSIC_BEAT } from '@/lib/ugc/video-assembly';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -18,10 +18,13 @@ export async function POST(req: NextRequest) {
   if (getRequestRole(req) === 'client') return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
   if (!isShotstackConfigured()) return NextResponse.json({ error: 'Shotstack לא מוגדר — הוסף SHOTSTACK_API_KEY ו-SHOTSTACK_ENV' }, { status: 503 });
   try {
-    const { avatarUrl, images, brollVideos, durationSec, format, businessName, brandColor, music, musicUrl, musicVolume, transition, script, captionsOn, logoUrl, ctaText } = await req.json();
+    const { avatarUrl, images, brollVideos, durationSec, format, businessName, brandColor, music, musicUrl, musicVolume, transition, script, captionsOn, logoUrl, ctaText, pip, hookText, hookOn } = await req.json();
     const resolvedMusic = musicUrl || MUSIC_PRESETS[music as string] || '';
     const dur = Number(durationSec) || 30;
     const captions = (captionsOn !== false && script) ? buildCaptions(String(script), 0.4, dur - 0.4) : [];
+    const beatSec = MUSIC_BEAT[music as string] || 3.2;
+    // #4 Hook: explicit text, else the first line of the script.
+    const hook = (hookOn !== false) ? (hookText || String(script || '').split(/[.!?\n]/)[0]?.trim().slice(0, 60) || '') : '';
     if (!avatarUrl) return NextResponse.json({ error: 'חסר וידאו דמות (avatarUrl) — הפק קודם וידאו HeyGen' }, { status: 400 });
 
     // Prefer real B-roll video clips; otherwise fall back to Ken-Burns still frames.
@@ -48,6 +51,9 @@ export async function POST(req: NextRequest) {
       captions,
       logoUrl: logoUrl || '',
       ctaText: ctaText || '',
+      pip: !!pip,
+      hookText: hook,
+      beatSec,
     });
 
     const { id } = await submitRender(edit);

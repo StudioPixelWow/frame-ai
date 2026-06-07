@@ -66,6 +66,8 @@ export default function UgcPage() {
   const [captionsOn, setCaptionsOn] = useState(true);
   const [videoLogo, setVideoLogo] = useState('');
   const [videoCta, setVideoCta] = useState('לפרטים נוספים — צרו קשר');
+  const [pipOn, setPipOn] = useState(true);
+  const [hookOn, setHookOn] = useState(true);
   const [sceneImages, setSceneImages] = useState<Record<string, string[]>>({}); // variationId → [dataURL per shot]
   const [scenesBusy, setScenesBusy] = useState(false);
   const [presenterApproved, setPresenterApproved] = useState(false);
@@ -190,7 +192,7 @@ export default function UgcPage() {
     setAssembling(true); setAssembled(null); setErr(''); setAssembleStartedAt(Date.now()); setAssembleStage('מעלה תמונות B‑roll…');
     try {
       const clips = (sceneClips[v.id] || []).filter(Boolean);
-      const r = await fetch('/api/ugc/assemble', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ avatarUrl: video.url, images: imgs, brollVideos: clips, durationSec: form.duration, format: { width: fmt.w, height: fmt.h }, businessName: form.businessName, brandColor: '#00B5FE', music: videoMusic, transition: videoTransition, script: v.fullScript, captionsOn, logoUrl: videoLogo.trim() || undefined, ctaText: videoCta }) });
+      const r = await fetch('/api/ugc/assemble', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ avatarUrl: video.url, images: imgs, brollVideos: clips, durationSec: form.duration, format: { width: fmt.w, height: fmt.h }, businessName: form.businessName, brandColor: '#00B5FE', music: videoMusic, transition: videoTransition, script: v.fullScript, captionsOn, logoUrl: videoLogo.trim() || undefined, ctaText: videoCta, pip: pipOn, hookOn }) });
       const j = await r.json();
       if (!r.ok || !j.renderId) throw new Error(j.error || 'הרכבת הווידאו נכשלה');
       setAssembleStage('בתור עיבוד…');
@@ -738,9 +740,11 @@ export default function UgcPage() {
                                 <div><label style={{ ...lbl, fontSize: 10.5 }}>לוגו (URL — לאינטרו/אאוטרו)</label><input className="form-input ux-input" value={videoLogo} onChange={(e) => setVideoLogo(e.target.value)} placeholder="https://…/logo.png" dir="ltr" style={{ width: '100%', fontSize: 11.5 }} /></div>
                                 <div><label style={{ ...lbl, fontSize: 10.5 }}>קריאה לפעולה (אאוטרו)</label><input className="form-input ux-input" value={videoCta} onChange={(e) => setVideoCta(e.target.value)} style={{ width: '100%', fontSize: 11.5 }} /></div>
                               </div>
-                              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 8, cursor: 'pointer' }}>
-                                <input type="checkbox" checked={captionsOn} onChange={(e) => setCaptionsOn(e.target.checked)} /> כתוביות אוטומטיות מהתסריט
-                              </label>
+                              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 8 }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}><input type="checkbox" checked={captionsOn} onChange={(e) => setCaptionsOn(e.target.checked)} /> 💬 כתוביות</label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }} title="הדמות מדברת בפינה בזמן שה-B-roll מלא מסך"><input type="checkbox" checked={pipOn} onChange={(e) => setPipOn(e.target.checked)} /> 🧑‍🎤 פרזנטור בתוך הסצנה (PIP)</label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }} title="כותרת Hook גדולה ב-3 השניות הראשונות"><input type="checkbox" checked={hookOn} onChange={(e) => setHookOn(e.target.checked)} /> 🎯 Hook פתיחה</label>
+                              </div>
                               <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={assembleVideo} style={{ width: '100%', fontSize: 13.5, fontWeight: 800, padding: '0.7rem' }}>
                                 🎬 הרכב סרטון מלא (דמות + B‑roll + תנועה)
                               </button>

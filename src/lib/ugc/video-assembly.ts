@@ -50,7 +50,13 @@ export interface AssembleInput {
   captions?: { text: string; start: number; length: number }[]; // auto captions
   logoUrl?: string;             // brand logo for intro/outro cards
   ctaText?: string;             // outro call-to-action
+  pip?: boolean;                // #1 presenter-in-scene: small talking avatar over B-roll
+  hookText?: string;            // #4 big animated hook in the first ~3s
+  beatSec?: number;             // #3 beat-synced cut length (from music BPM)
 }
+
+// #3 Approx tempo (seconds per cut) per music preset — cuts land on the beat feel.
+export const MUSIC_BEAT: Record<string, number> = { none: 3.2, energetic: 2.0, upbeat: 2.4, calm: 4.0, corporate: 3.0 };
 
 // Royalty-free soundtrack presets (Shotstack hosted sample assets).
 export const MUSIC_PRESETS: Record<string, string> = {
@@ -72,22 +78,37 @@ export function buildTimeline(input: AssembleInput) {
   // B-roll layout: keep the avatar open for the first 4s, then alternate
   // ~3.2s B-roll cutaways with ~2s of avatar between them, leaving the last 2.5s
   // on the avatar (call-to-action / sign-off).
-  const OPEN = 4, CLIP = 3.2, GAP = 2, TAIL = 2.5;
+  // #3 Beat-synced cut length (from the chosen music's tempo), else default.
+  const CLIP = Math.max(1.6, Math.min(4.5, input.beatSec || 3.2));
+  const OPEN = 4, GAP = input.pip ? 0 : 2, TAIL = 2.5; // #1 PIP → continuous B-roll (no avatar gaps)
   const brollClips: any[] = [];
+  const pipClips: any[] = []; // #1 small presenter overlay shown during B-roll
   let t = OPEN;
   let idx = 0;
   const items = (input.broll || []).filter((b) => b && b.src);
   const tr = (TRANSITIONS.includes(input.transition || '') ? input.transition : 'fade') as string;
+  // PIP overlay placement: small avatar bottom-right.
+  const pipScale = 0.34;
+  const pipOffset = { x: 0.33, y: -0.33 };
   while (items.length && t + CLIP <= T - TAIL) {
     const it = items[idx % items.length];
     if (it.type === 'video') {
-      // Real B-roll clip — muted so the avatar's voice keeps playing underneath.
       brollClips.push({ asset: { type: 'video', src: it.src, volume: 0 }, start: +t.toFixed(2), length: CLIP, transition: { in: tr, out: tr }, fit: 'cover' });
     } else {
       brollClips.push({ asset: { type: 'image', src: it.src }, start: +t.toFixed(2), length: CLIP, effect: KEN_BURNS[idx % KEN_BURNS.length], transition: { in: tr, out: tr }, fit: 'cover' });
     }
+    if (input.pip) {
+      // Keep the talking presenter visible (muted copy — audio comes from the base track).
+      pipClips.push({ asset: { type: 'video', src: input.avatarUrl, volume: 0 }, start: +t.toFixed(2), length: CLIP, fit: 'cover', scale: pipScale, offset: pipOffset, transition: { in: 'fade', out: 'fade' } });
+    }
     t += CLIP + GAP; idx++;
   }
+
+  // #4 Big animated hook in the first ~3s (pattern interrupt).
+  const hookClips = input.hookText ? [{
+    asset: { type: 'title', text: input.hookText, style: 'blockbuster', size: 'large', position: 'center', color: '#ffffff', background: input.brandColor || '#00B5FE' },
+    start: 0.2, length: 2.8, transition: { in: 'zoom', out: 'fade' },
+  }] : [];
 
   // ── Branded intro + outro cards (HTML) with optional logo ──
   const brand = input.brandColor || '#00B5FE';
@@ -114,8 +135,10 @@ export function buildTimeline(input: AssembleInput) {
       ...soundtrack,
       tracks: [
         ...(cardClips.length ? [{ clips: cardClips }] : []),       // top: branded intro/outro
-        ...(captionClips.length ? [{ clips: captionClips }] : []), // captions
-        ...(brollClips.length ? [{ clips: brollClips }] : []),     // B-roll cutaways
+        ...(hookClips.length ? [{ clips: hookClips }] : []),       // #4 hook
+        ...(captionClips.length ? [{ clips: captionClips }] : []), // #2 captions
+        ...(pipClips.length ? [{ clips: pipClips }] : []),         // #1 presenter PIP overlay
+        ...(brollClips.length ? [{ clips: brollClips }] : []),     // B-roll
         { clips: [{ asset: { type: 'video', src: input.avatarUrl, volume: 1 }, start: 0, length: T, fit: 'cover' }] }, // base: avatar + audio
       ],
     },
