@@ -10,6 +10,7 @@ import { seoPlans } from '@/lib/db';
 import { ensureVisibilityTables, vid, visSb, visMonthKey, getBrandProfile, upsertBrandProfile, listQueries, listCompetitors } from './db';
 import { availableEngines, runQuery, extractMention, extractCitations, extractCompetitors, VIS_ENGINES, type BrandMatch } from './provider';
 import { calculateAIVisibilityScore, estimateAIReach } from './scoring';
+import { classifyCitation, recordRunHistory, type PerResponse } from './history';
 import type { PlatformId } from '@/lib/seo/platform-apis';
 
 const COST_PER_CALL_CENTS = 0.3;
@@ -96,6 +97,7 @@ export async function runVisibilityRun(opts: RunOpts) {
   let responses = 0, ok = 0, fail = 0, mentions = 0, citations = 0, compMentions = 0, negative = 0, mock = 0;
   const positions: number[] = []; const recLevels: string[] = []; const topics = new Set<string>(); const topicsCovered = new Set<string>();
   const respRows: any[] = [], menRows: any[] = [], citRows: any[] = [], cmRows: any[] = [];
+  const perResponse: PerResponse[] = [];
 
   for (const q of queries) {
     topics.add(q.topic || q.query_text);
@@ -109,6 +111,7 @@ export async function runVisibilityRun(opts: RunOpts) {
         respRows.push({ id: respId, run_id: runId, plan_id: planId, query_id: q.id, ai_engine: engine, raw_response: (res.responseText || '').slice(0, 4000), found: res.found, position: res.position ?? null, mention_type: res.mentionType, latency_ms: res.latencyMs, created_at: new Date().toISOString() });
 
         const m = extractMention(res, brand);
+        const recLevel = m.found ? m.recommendationLevel : 'not_mentioned';
         if (m.found) {
           mentions++;
           if (res.position) positions.push(res.position);
@@ -117,14 +120,20 @@ export async function runVisibilityRun(opts: RunOpts) {
           topicsCovered.add(q.topic || q.query_text);
           menRows.push({ id: vid('vmen'), plan_id: planId, run_id: runId, query_id: q.id, response_id: respId, ai_engine: engine, mention_text: (res.responseText || '').slice(0, 200), mention_type: 'brand', position: res.position ?? null, sentiment: m.sentiment, recommendation_level: m.recommendationLevel, confidence_score: res.confidence, is_exact_match: m.isExact, is_alias_match: m.isAlias, created_at: new Date().toISOString() });
         }
+        const prCitations: PerResponse['citations'] = [];
         for (const c of extractCitations(res, brand, compDomains)) {
           citations++;
-          citRows.push({ id: vid('vcit'), plan_id: planId, run_id: runId, query_id: q.id, response_id: respId, ai_engine: engine, cited_url: c.url, cited_domain: c.domain, cited_page_title: c.title || null, citation_position: c.position, is_own_site: c.isOwn, is_competitor_site: c.isCompetitor, confidence_score: res.confidence, created_at: new Date().toISOString() });
+          const cls = classifyCitation(c.position, c.isOwn);
+          citRows.push({ id: vid('vcit'), plan_id: planId, run_id: runId, query_id: q.id, response_id: respId, ai_engine: engine, cited_url: c.url, cited_domain: c.domain, cited_page_title: c.title || null, citation_position: c.position, is_own_site: c.isOwn, is_competitor_site: c.isCompetitor, confidence_score: res.confidence, source_classification: cls.classification, source_weight: Math.round(cls.weight), is_primary_source: cls.isPrimary, is_featured_source: cls.isFeatured, classification_reason: cls.reason, created_at: new Date().toISOString() });
+          prCitations.push({ url: c.url, domain: c.domain, isOwn: c.isOwn, isCompetitor: c.isCompetitor, position: c.position });
         }
+        const prCompetitors: string[] = [];
         for (const cm of extractCompetitors(res, compMatch)) {
           compMentions++;
+          prCompetitors.push(cm.name);
           cmRows.push({ id: vid('vcm'), plan_id: planId, run_id: runId, query_id: q.id, ai_engine: engine, competitor_name: cm.name, position: cm.position, was_cited: cm.cited, created_at: new Date().toISOString() });
         }
+        perResponse.push({ queryId: q.id, queryText: q.query_text, topic: q.topic || q.query_text, engine, found: m.found, recommendationLevel: recLevel, citations: prCitations, competitors: prCompetitors });
       } catch { fail++; }
     }
   }
@@ -152,7 +161,19 @@ export async function runVisibilityRun(opts: RunOpts) {
 
   await sb.from('geo_visibility_logs').insert({ id: vid('vlog'), plan_id: planId, run_id: runId, level: 'info', event_type: 'run_completed', message: `score=${score.value} mentions=${mentions} citations=${citations} mock=${mock}/${responses}`, created_at: new Date().toISOString() });
 
-  return { runId, responses, mentions, citations, competitorMentions: compMentions, score: score.value, reach, estCostCents: estCost, mocked: mock, engines };
+  // ── History / diff / alerts / global index (Data Moat layer) ──
+  let history: any = null;
+  try {
+    const { data: prev } = await sb.from('geo_visibility_runs').select('id').eq('plan_id', planId).neq('id', runId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    const facts = plan?.websiteScan?.websiteFacts || {};
+    history = await recordRunHistory({
+      planId, clientId: plan.clientId || null, runId, prevRunId: prev?.id || null, perResponse,
+      industry: facts?.detected_industry?.value || facts?.industry || '',
+      country: 'IL', language: 'he',
+    });
+  } catch { /* history is best-effort; never fails the run */ }
+
+  return { runId, responses, mentions, citations, competitorMentions: compMentions, score: score.value, reach, estCostCents: estCost, mocked: mock, engines, history };
 }
 
 async function upsertMonthly(planId: string, clientId: string | null, d: any) {

@@ -11,10 +11,13 @@ const C = {
   border: '#E8EAF0', borderLight: '#F0F2F5', success: '#10B981', warning: '#F59E0B', danger: '#EF4444', info: '#3B82F6',
 };
 const TABS = [
-  { id: 'overview', label: 'סקירה', icon: '📊' }, { id: 'queries', label: 'שאילתות', icon: '🔤' },
-  { id: 'runs', label: 'ריצות', icon: '⚡' }, { id: 'mentions', label: 'אזכורים', icon: '💬' },
-  { id: 'citations', label: 'ציטוטים', icon: '🔗' }, { id: 'competitors', label: 'מתחרים', icon: '🥊' },
-  { id: 'topics', label: 'תחומים', icon: '🗂️' }, { id: 'settings', label: 'הגדרות', icon: '⚙️' },
+  { id: 'overview', label: 'סקירה', icon: '📊' }, { id: 'alerts', label: 'התראות', icon: '🔔' },
+  { id: 'queries', label: 'שאילתות', icon: '🔤' }, { id: 'runs', label: 'ריצות', icon: '⚡' },
+  { id: 'mentions', label: 'אזכורים', icon: '💬' }, { id: 'citations', label: 'ציטוטים', icon: '🔗' },
+  { id: 'timeline', label: 'Citation Timeline', icon: '📈' }, { id: 'changelog', label: 'Change Log', icon: '📝' },
+  { id: 'diffs', label: 'Diffs', icon: '🔀' }, { id: 'competitors', label: 'מתחרים', icon: '🥊' },
+  { id: 'topics', label: 'תחומים', icon: '🗂️' }, { id: 'global', label: 'Global Index', icon: '🌐' },
+  { id: 'settings', label: 'הגדרות', icon: '⚙️' },
 ];
 const sc = (n: number) => (n >= 75 ? C.success : n >= 50 ? C.warning : C.danger);
 const Tag = ({ kind }: { kind: string }) => {
@@ -211,6 +214,68 @@ export default function VisibilityCenterPage() {
               {(s.topics || []).map((t: any) => <tr key={t.topic}><Td>{t.topic}</Td><Td>{t.queries}</Td><Td>{t.mentions}</Td><Td><b style={{ color: sc(t.rate) }}>{t.rate}%</b></Td></tr>)}
               {(s.topics || []).length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', color: C.textMuted, padding: '1.5rem' }}>—</td></tr>}
             </tbody></table></div>
+          )}
+
+          {tab === 'alerts' && (
+            <div style={card}>
+              <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 10 }}>🔔 התראות נראות ({(s.alertCounts?.new || 0)} חדשות)</div>
+              {(s.alerts || []).length === 0 ? <div style={{ color: C.textMuted, fontSize: 13 }}>אין התראות. התראות נוצרות אוטומטית כשמשהו משתנה בין ריצות.</div> :
+                (s.alerts || []).map((a: any) => {
+                  const col = a.severity === 'high' ? C.danger : a.severity === 'medium' ? C.warning : C.info;
+                  return (
+                    <div key={a.id} style={{ borderTop: `1px solid ${C.borderLight}`, padding: '0.7rem 0', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: col, marginTop: 6, flexShrink: 0 }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700 }}>{a.title} {a.status === 'new' && <span style={{ fontSize: 9.5, fontWeight: 800, color: C.danger, background: `${C.danger}15`, borderRadius: 5, padding: '1px 5px' }}>חדש</span>}</div>
+                        <div style={{ fontSize: 11.5, color: C.textSecondary }}>{a.description}</div>
+                        {a.action_recommendation && <div style={{ fontSize: 11, color: C.primaryDark, marginTop: 2 }}>💡 {a.action_recommendation}</div>}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {a.status === 'new' && <button onClick={() => post({ action: 'alert_status', alertId: a.id, status: 'acknowledged' }, `ak-${a.id}`)} style={{ fontSize: 11, fontWeight: 700, color: C.info, background: `${C.info}12`, border: 'none', borderRadius: 7, padding: '0.25rem 0.6rem', cursor: 'pointer' }}>סמן נקרא</button>}
+                        <button onClick={() => post({ action: 'alert_status', alertId: a.id, status: 'dismissed' }, `dm-${a.id}`)} style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, background: C.borderLight, border: 'none', borderRadius: 7, padding: '0.25rem 0.6rem', cursor: 'pointer' }}>הסר</button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+
+          {tab === 'timeline' && (
+            <div style={card}><div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>📈 Citation Timeline (עמודי האתר)</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}><thead><tr><Th>URL</Th><Th>סטטוס</Th><Th>מגמה</Th><Th>נראה לראשונה</Th><Th>לאחרונה</Th><Th>פעמים</Th><Th>אובדנים</Th></tr></thead><tbody>
+                {(s.citationHistory || []).filter((h: any) => h.is_own_site).map((h: any) => { const stc = h.current_visibility_status === 'lost' ? C.danger : h.current_visibility_status === 'regained' ? C.info : C.success; return <tr key={h.id}><Td w={320}>{h.cited_url}</Td><Td><span style={{ color: stc, fontWeight: 700 }}>{h.current_visibility_status}</span></Td><Td>{h.visibility_trend}</Td><Td>{h.first_seen_at ? new Date(h.first_seen_at).toLocaleDateString('he-IL') : '—'}</Td><Td>{h.last_seen_at ? new Date(h.last_seen_at).toLocaleDateString('he-IL') : '—'}</Td><Td>{h.total_times_seen}</Td><Td>{h.citation_loss_count || 0}</Td></tr>; })}
+                {(s.citationHistory || []).filter((h: any) => h.is_own_site).length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', color: C.textMuted, padding: '1.5rem' }}>אין היסטוריית ציטוטים עדיין — צריך לפחות 2 ריצות.</td></tr>}
+              </tbody></table>
+            </div>
+          )}
+
+          {tab === 'changelog' && (
+            <div style={card}><div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>📝 AI Answer Change Log</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}><thead><tr><Th>תאריך</Th><Th>מנוע</Th><Th>אירוע</Th><Th>חומרה</Th><Th>הסבר</Th></tr></thead><tbody>
+                {(s.changeEvents || []).map((e: any) => { const col = e.severity === 'high' ? C.danger : e.severity === 'medium' ? C.warning : C.textMuted; return <tr key={e.id}><Td>{new Date(e.created_at).toLocaleDateString('he-IL')}</Td><Td>{e.ai_engine}</Td><Td><span style={{ color: col, fontWeight: 700 }}>{e.event_type}</span></Td><Td>{e.severity}</Td><Td w={360}>{e.explanation}</Td></tr>; })}
+                {(s.changeEvents || []).length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', color: C.textMuted, padding: '1.5rem' }}>אין שינויים מתועדים עדיין.</td></tr>}
+              </tbody></table>
+            </div>
+          )}
+
+          {tab === 'diffs' && (
+            <div style={card}><div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>🔀 Citation Diffs (בין ריצות)</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}><thead><tr><Th>תאריך</Th><Th>מנוע</Th><Th>סוג</Th><Th>קודם</Th><Th>נוכחי</Th><Th>השפעה</Th></tr></thead><tbody>
+                {(s.diffs || []).map((d: any) => { const up = (d.impact_score || 0) >= 0; return <tr key={d.id}><Td>{new Date(d.created_at).toLocaleDateString('he-IL')}</Td><Td>{d.ai_engine}</Td><Td><span style={{ color: up ? C.success : C.danger, fontWeight: 700 }}>{d.diff_type}</span></Td><Td w={220}>{d.previous_value || '—'}</Td><Td w={220}>{d.current_value || '—'}</Td><Td style={{ color: up ? C.success : C.danger }}>{d.impact_score}</Td></tr>; })}
+                {(s.diffs || []).length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: C.textMuted, padding: '1.5rem' }}>אין diffs עדיין — צריך לפחות 2 ריצות.</td></tr>}
+              </tbody></table>
+            </div>
+          )}
+
+          {tab === 'global' && (
+            <div style={card}>
+              <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>🌐 Global Citation Index</div>
+              <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 10 }}>נתונים אגרגטיביים ואנונימיים מכל הלקוחות — אילו דומיינים/סוגי עמודים AI מעדיף, לפי תחום ומנוע. <Tag kind="measured" /></div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}><thead><tr><Th>דומיין</Th><Th>סוג עמוד</Th><Th>תחום</Th><Th>מנוע</Th><Th>תדירות</Th><Th>מיקום ממוצע</Th></tr></thead><tbody>
+                {(s.globalIndex || []).map((g: any) => <tr key={g.id}><Td>{g.cited_domain}</Td><Td>{g.page_type}</Td><Td>{g.topic}</Td><Td>{g.ai_engine}</Td><Td>{g.citation_frequency}</Td><Td>{Number(g.citation_position_avg).toFixed(1)}</Td></tr>)}
+                {(s.globalIndex || []).length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: C.textMuted, padding: '1.5rem' }}>האינדקס נבנה עם כל ריצה. הרץ בדיקות כדי לצבור נתונים.</td></tr>}
+              </tbody></table>
+            </div>
           )}
 
           {tab === 'settings' && (

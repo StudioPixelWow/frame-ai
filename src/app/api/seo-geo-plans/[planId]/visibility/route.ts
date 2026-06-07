@@ -55,6 +55,15 @@ async function dashboard(planId: string) {
   const mentionedQ = new Set(mentions.map((m: any) => m.query_id));
   const opportunities = queries.filter((q: any) => !mentionedQ.has(q.id)).slice(0, 30).map((q: any) => ({ id: q.id, query: q.query_text, topic: q.topic, priority: q.priority }));
 
+  // History / diff / alerts / global-index layer.
+  const [alerts, citationHistory, changeEvents, diffs, globalIndex] = await Promise.all([
+    sb.from('geo_visibility_alerts').select('*').eq('plan_id', planId).neq('status', 'dismissed').order('detected_at', { ascending: false }).limit(60).then((r) => r.data || []),
+    sb.from('geo_citation_history').select('*').eq('plan_id', planId).order('last_seen_at', { ascending: false }).limit(100).then((r) => r.data || []),
+    sb.from('geo_ai_answer_change_events').select('*').eq('plan_id', planId).order('created_at', { ascending: false }).limit(80).then((r) => r.data || []),
+    sb.from('geo_citation_diffs').select('*').eq('plan_id', planId).order('created_at', { ascending: false }).limit(80).then((r) => r.data || []),
+    sb.from('geo_global_citation_index').select('*').order('citation_frequency', { ascending: false }).limit(50).then((r) => r.data || []),
+  ]);
+
   const latest = agg[agg.length - 1] || null;
   const apiStatus = getApiStatus();
   return {
@@ -65,8 +74,20 @@ async function dashboard(planId: string) {
     brand, queryCount: queries.length, competitorCount: competitors.length,
     engines: VIS_ENGINES.map((e) => ({ id: e, available: !!apiStatus[e] })),
     availableEngines: availableEngines(),
+    alerts, citationHistory, changeEvents, diffs, globalIndex,
+    alertCounts: { new: alerts.filter((a: any) => a.status === 'new').length, total: alerts.length },
+    metricMeta: METRIC_META,
   };
 }
+
+// Real-vs-Estimated framework: how each metric is sourced (drives the UI badges + tooltips).
+const METRIC_META: Record<string, { type: string; source: string; confidence: number; method: string }> = {
+  visibility_score: { type: 'measured', source: 'scheduled AI runs', confidence: 80, method: 'weighted score over measured responses' },
+  total_mentions: { type: 'measured', source: 'scheduled AI runs', confidence: 90, method: 'brand detection in AI answers' },
+  share_of_ai_voice: { type: 'measured', source: 'scheduled AI runs', confidence: 75, method: 'brand vs competitor mentions' },
+  total_citations: { type: 'measured', source: 'scheduled AI runs', confidence: 85, method: 'source URLs in AI answers' },
+  estimated_ai_reach: { type: 'estimated', source: 'model', confidence: 40, method: 'volume × AI-usage × mention probability' },
+};
 
 export const GET = withErrorBoundary(async (req: NextRequest, ctx: { params: Promise<{ planId: string }> }) => {
   const g = requireStaff(req); if (g) return g;
@@ -137,6 +158,11 @@ export const POST = withErrorBoundary(async (req: NextRequest, ctx: { params: Pr
       const modules = new Set<string>([...(st?.modules_enabled || ['geo_refresh']), 'ai_visibility']);
       await asb.from('geo_client_automation_status').update({ modules_enabled: Array.from(modules), run_frequency: body.frequency || st?.run_frequency || 'weekly', updated_at: new Date().toISOString() }).eq('plan_id', planId);
       return ok({ enabled: true, modules: Array.from(modules) });
+    }
+    case 'alert_status': {
+      if (!body.alertId || !body.status) return err('alertId ו-status נדרשים');
+      await sb.from('geo_visibility_alerts').update({ status: body.status }).eq('id', body.alertId).eq('plan_id', planId);
+      return ok({ state: await dashboard(planId) });
     }
     default: return err('action לא נתמך');
   }
