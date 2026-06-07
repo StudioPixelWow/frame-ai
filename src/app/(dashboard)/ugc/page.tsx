@@ -252,7 +252,7 @@ export default function UgcPage() {
 
       {/* Process stepper — always shows where you are and what's next (no surprises) */}
       {(() => {
-        const steps = ['בריף', 'דמות + קול', 'תסריט (3 וריאציות)', 'סטוריבורד + תמונות', 'וידאו מוכן'];
+        const steps = ['דמות + קול', 'בריף', 'תסריט (3 וריאציות)', 'סטוריבורד + תמונות', 'וידאו מוכן'];
         const cur = video?.status === 'completed' ? 4
           : (sceneImages[pkg?.variations[active]?.id || ''] || []).some(Boolean) ? 3
           : pkg ? 2
@@ -273,9 +273,78 @@ export default function UgcPage() {
         );
       })()}
 
+      {/* ── Step 1: Presenter (avatar + voice) — chosen FIRST so everything downstream
+            (storyboard images + the final talking-avatar video) is built around it ── */}
+      {heygenReady !== false && (
+        <div style={{ ...card, border: presenterApproved ? '2px solid #22c55e' : `1px solid var(--border,#e5e7eb)` }}>
+          <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>🧑‍🎤 שלב 1 · בחירת דמות וקול</div>
+          <div style={{ fontSize: 12, color: 'var(--foreground-muted,#6b7280)', marginBottom: 12 }}>בחר קודם את הפרזנטור והקול (עברית), שמע ותראה תצוגה מקדימה, ואשר. הווידאו הסופי יופק עם הדמות הזו — ותמונות הסטוריבורד יישענו עליה.</div>
+          {(() => {
+            const av = avatars.find((a: any) => (a.avatar_id || a.id) === avatarId);
+            const avImg = av?.preview_image_url || av?.preview_image || av?.image_url;
+            const avVid = av?.preview_video_url || av?.preview_video;
+            const vo = voices.find((x: any) => (x.voice_id || x.id) === voiceId);
+            const sample = vo?.preview_audio || vo?.sample || vo?.preview_url;
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'start' }}>
+                <div>
+                  <label style={lbl}>דמות — לחץ על תמונה לבחירה</label>
+                  {/* Visual gallery: every avatar shows its photo so you choose by look, not by name */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(84px, 1fr))', gap: 8, maxHeight: 300, overflowY: 'auto', padding: 4, border: '1px solid var(--border,#eee)', borderRadius: 10, background: 'var(--surface-raised,#fafafa)' }}>
+                    {avatars.length === 0 && <div style={{ gridColumn: '1 / -1', fontSize: 11.5, color: '#999', textAlign: 'center', padding: 12 }}>טוען דמויות…</div>}
+                    {avatars.map((a: any) => {
+                      const id = a.avatar_id || a.id;
+                      const img = a.preview_image_url || a.preview_image || a.image_url;
+                      const sel = id === avatarId;
+                      return (
+                        <button key={id} type="button" onClick={() => { setAvatarId(id); setPresenterApproved(false); }} title={a.avatar_name || a.name || id}
+                          style={{ padding: 0, border: `2px solid ${sel ? BRAND : 'transparent'}`, borderRadius: 10, overflow: 'hidden', cursor: 'pointer', background: '#fff', boxShadow: sel ? `0 0 0 2px ${BRAND}40` : 'none' }}>
+                          <div style={{ aspectRatio: '3/4', background: '#eef2f6' }}>
+                            {img
+                              // eslint-disable-next-line @next/next/no-img-element
+                              ? <img src={img} alt={a.avatar_name || ''} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                              : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: 10, color: '#999' }}>אין תמונה</div>}
+                          </div>
+                          <div style={{ fontSize: 9.5, fontWeight: sel ? 800 : 600, color: sel ? BRAND : 'var(--foreground-muted,#6b7280)', padding: '3px 2px', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(a.avatar_name || a.name || id)}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Live preview of the chosen avatar (video if available) */}
+                  {(avVid || avImg) && (
+                    <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <div style={{ borderRadius: 10, overflow: 'hidden', border: `2px solid ${BRAND}`, aspectRatio: '3/4', width: 88, flexShrink: 0 }}>
+                        {avVid ? <video src={avVid} muted loop autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : /* eslint-disable-next-line @next/next/no-img-element */ <img src={avImg} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--foreground)' }}>נבחר: <b>{avatars.find((a: any) => (a.avatar_id || a.id) === avatarId)?.avatar_name || '—'}</b><div style={{ fontSize: 10.5, color: 'var(--foreground-muted,#6b7280)' }}>זו הדמות שתופיע בווידאו</div></div>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label style={lbl}>קול (עברית בלבד)</label>
+                  <select className="form-select ux-input" value={voiceId} onChange={(e) => { setVoiceId(e.target.value); setPresenterApproved(false); }} style={{ width: '100%' }}>
+                    {voices.map((x: any) => <option key={x.voice_id || x.id} value={x.voice_id || x.id}>{(x.name || x.voice_id)}{x.gender ? ` · ${x.gender}` : ''}</option>)}
+                  </select>
+                  <button type="button" onClick={() => { if (sample) { try { new Audio(sample).play(); } catch {} } }} disabled={!sample}
+                    style={{ marginTop: 8, width: '100%', padding: '0.5rem', borderRadius: 8, border: `1px solid ${sample ? BRAND : 'var(--border,#e5e7eb)'}`, background: sample ? 'rgba(0,181,254,0.08)' : 'transparent', color: sample ? BRAND : '#999', fontWeight: 700, fontSize: 12.5, cursor: sample ? 'pointer' : 'default' }}>
+                    {sample ? '▶ השמע דוגמת קול' : 'אין דוגמת קול'}
+                  </button>
+                  {voices.length === 0 && <div style={{ fontSize: 11, color: '#b45309', marginTop: 6 }}>לא נמצאו קולות בעברית בחשבון HeyGen.</div>}
+                </div>
+              </div>
+            );
+          })()}
+          <button onClick={() => setPresenterApproved(true)} disabled={!avatarId || !voiceId}
+            style={{ marginTop: 14, width: '100%', padding: '0.7rem', borderRadius: 10, border: 'none', background: presenterApproved ? '#22c55e' : BRAND, color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', opacity: (!avatarId || !voiceId) ? 0.5 : 1 }}>
+            {presenterApproved ? '✓ הדמות אושרה — אפשר להמשיך לבריף ולסטוריבורד' : '✓ אשר דמות והמשך'}
+          </button>
+        </div>
+      )}
+
       {/* Brief */}
       <div style={card}>
-        <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 12 }}>בריף קצר</div>
+        <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 12 }}>שלב 2 · בריף קצר</div>
         <div style={{ marginBottom: 12 }}>
           <label style={lbl}>🔗 הדבק קישור מוצר/דף נחיתה — ונמלא את הבריף אוטומטית</label>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -323,52 +392,6 @@ export default function UgcPage() {
         </button>
       </div>
 
-      {/* ── Step 2: Presenter (avatar + voice) — chosen & approved BEFORE the storyboard
-            so the scene images use this presenter's likeness ── */}
-      {heygenReady !== false && (
-        <div style={{ ...card, border: presenterApproved ? '2px solid #22c55e' : `1px solid var(--border,#e5e7eb)` }}>
-          <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>🧑‍🎤 שלב 2 · בחירת דמות וקול</div>
-          <div style={{ fontSize: 12, color: 'var(--foreground-muted,#6b7280)', marginBottom: 12 }}>בחר את הפרזנטור והקול (עברית), שמע ותראה תצוגה מקדימה, ואשר — תמונות הסטוריבורד ייווצרו לפי הדמות הזו.</div>
-          {(() => {
-            const av = avatars.find((a: any) => (a.avatar_id || a.id) === avatarId);
-            const avImg = av?.preview_image_url || av?.preview_image || av?.image_url;
-            const avVid = av?.preview_video_url || av?.preview_video;
-            const vo = voices.find((x: any) => (x.voice_id || x.id) === voiceId);
-            const sample = vo?.preview_audio || vo?.sample || vo?.preview_url;
-            return (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'start' }}>
-                <div>
-                  <label style={lbl}>דמות</label>
-                  <select className="form-select ux-input" value={avatarId} onChange={(e) => { setAvatarId(e.target.value); setPresenterApproved(false); }} style={{ width: '100%' }}>
-                    {avatars.map((a: any) => <option key={a.avatar_id || a.id} value={a.avatar_id || a.id}>{a.avatar_name || a.name || a.avatar_id}</option>)}
-                  </select>
-                  <div style={{ marginTop: 8, borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border,#eee)', background: 'var(--surface-raised,#fafafa)', aspectRatio: '3/4', maxWidth: 160 }}>
-                    {avVid ? <video src={avVid} muted loop autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      : avImg ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={avImg} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: 11, color: '#999' }}>אין תצוגה</div>}
-                  </div>
-                </div>
-                <div>
-                  <label style={lbl}>קול (עברית בלבד)</label>
-                  <select className="form-select ux-input" value={voiceId} onChange={(e) => { setVoiceId(e.target.value); setPresenterApproved(false); }} style={{ width: '100%' }}>
-                    {voices.map((x: any) => <option key={x.voice_id || x.id} value={x.voice_id || x.id}>{(x.name || x.voice_id)}{x.gender ? ` · ${x.gender}` : ''}</option>)}
-                  </select>
-                  <button type="button" onClick={() => { if (sample) { try { new Audio(sample).play(); } catch {} } }} disabled={!sample}
-                    style={{ marginTop: 8, width: '100%', padding: '0.5rem', borderRadius: 8, border: `1px solid ${sample ? BRAND : 'var(--border,#e5e7eb)'}`, background: sample ? 'rgba(0,181,254,0.08)' : 'transparent', color: sample ? BRAND : '#999', fontWeight: 700, fontSize: 12.5, cursor: sample ? 'pointer' : 'default' }}>
-                    {sample ? '▶ השמע דוגמת קול' : 'אין דוגמת קול'}
-                  </button>
-                  {voices.length === 0 && <div style={{ fontSize: 11, color: '#b45309', marginTop: 6 }}>לא נמצאו קולות בעברית בחשבון HeyGen.</div>}
-                </div>
-              </div>
-            );
-          })()}
-          <button onClick={() => setPresenterApproved(true)} disabled={!avatarId || !voiceId}
-            style={{ marginTop: 14, width: '100%', padding: '0.7rem', borderRadius: 10, border: 'none', background: presenterApproved ? '#22c55e' : BRAND, color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', opacity: (!avatarId || !voiceId) ? 0.5 : 1 }}>
-            {presenterApproved ? '✓ הדמות אושרה — אפשר ליצור סטוריבורד' : '✓ אשר דמות והמשך'}
-          </button>
-        </div>
-      )}
-
       {/* Result */}
       {pkg && (
         <>
@@ -414,7 +437,10 @@ export default function UgcPage() {
                     // eslint-disable-next-line @next/next/no-img-element
                     ? <img src={avatarImageUrl} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
                     : null}
-                  התמונות נוצרות לפי הדמות שנבחרה{avatarImageUrl ? '' : ' (בחר דמות למטה)'} {productImages[0] ? '+ המוצר מהקישור' : ''}. ניתן לערוך את התיאור לכל תמונה לפני יצירה.
+                  התמונות נוצרות לפי הדמות שנבחרה{avatarImageUrl ? '' : ' (בחר דמות בשלב 1)'} {productImages[0] ? '+ המוצר מהקישור' : ''}. ניתן לערוך את התיאור לכל תמונה לפני יצירה.
+                </div>
+                <div style={{ fontSize: 11, color: '#b45309', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 8, padding: '0.5rem 0.7rem', marginBottom: 10, lineHeight: 1.6 }}>
+                  ℹ️ הסטוריבורד הוא <b>תכנון/המחשה</b> — תמונת קונספט לכל שוט (לתסריט וכ‑B‑roll אופציונלי). <b>הווידאו הסופי מופק ע"י HeyGen עם הדמות שבחרת ולכן עקבי לאורך כל הסרטון.</b> תמונות הקונספט נוצרות בנפרד לכל שוט (עם הדמות+המוצר כרפרנס) ולכן ייתכן הבדל קל ביניהן — זה לא משפיע על אחידות הווידאו עצמו.
                 </div>
                 {err && (
                   <div style={{ fontSize: 12.5, color: '#dc2626', fontWeight: 700, background: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.25)', borderRadius: 10, padding: '0.6rem 0.8rem', marginBottom: 10 }}>
