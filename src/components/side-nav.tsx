@@ -205,6 +205,7 @@ const mainNavItems: NavItem[] = [
   { href: "/campaigns", label: "קמפיינים", id: "nav-campaigns", icon: Icons.Campaigns, allowedRoles: ['admin'] },
   { href: "/meta-campaigns", label: "קמפיינים Meta", id: "nav-meta-campaigns", icon: Icons.Campaigns, allowedRoles: ['admin'] },
   { href: "/seo-geo/dashboard", label: "PIXEL SEO/GEO", id: "nav-seo-geo", icon: Icons.SeoGeo, allowedRoles: ['admin'] },
+  { href: "/seo-geo/automation", label: "GEO Automation", id: "nav-geo-automation", icon: Icons.SeoGeo, allowedRoles: ['admin'] },
   { href: "/creative-pixelai", label: "Creative PixelAI", id: "nav-creative-pixelai", icon: Icons.Projects, allowedRoles: ['admin', 'employee'] },
   { href: "/ugc", label: "UGC Video Generator", id: "nav-ugc", icon: Icons.Mic, allowedRoles: ['admin', 'employee'] },
   { href: "/tasks", label: "משימות", id: "nav-tasks", icon: Icons.Tasks, allowedRoles: ['admin', 'employee'] },

@@ -1,0 +1,122 @@
+/**
+ * Automation worker — executes a claimed job, writes a run + logs, applies cost
+ * control, and updates the per-client automation status (last/next run, success/
+ * failure, current_status). Job handlers reuse the existing GEO engines so the
+ * system genuinely runs the GEO work for every client automatically.
+ *
+ * The default recurring job 'geo_refresh' is deterministic and quota-free
+ * (recompute scores + recommendations) → it ALWAYS runs for every client even
+ * without OpenAI budget. AI-heavy job types carry a cost estimate and respect
+ * the client's monthly budget.
+ */
+
+import { seoPlans } from '@/lib/db';
+import { getSb, rid, monthKey, ensureAutomationTables } from './db';
+import { GeoJobQueueService } from './queue';
+import { computeAuthorityScore } from '@/lib/seo/geo-authority/authority-score';
+import { saveAuthorityScore, replaceRecommendations } from '@/lib/seo/geo-authority/db';
+import { computeAllScores } from '@/lib/seo/geo-authority/scores';
+import { saveScore } from '@/lib/seo/geo-authority/advanced-db';
+
+/** estimated cost per job type, in cents (for budget control). */
+const JOB_COST_CENTS: Record<string, number> = {
+  geo_refresh: 0,        // deterministic, no AI
+  citation_tracker: 8,   // AI calls (future)
+  answer_simulation: 6,
+  monthly_report: 1,
+};
+
+export const FREQ_MS: Record<string, number> = {
+  daily: 24 * 3600_000, weekly: 7 * 24 * 3600_000, monthly: 30 * 24 * 3600_000,
+};
+export function nextRunFrom(frequency: string, from = new Date()): Date {
+  return new Date(from.getTime() + (FREQ_MS[frequency] || FREQ_MS.daily));
+}
+
+async function log(runId: string, jobId: string, planId: string, level: string, message: string) {
+  try { await getSb().from('geo_automation_run_logs').insert({ id: rid('rlog'), run_id: runId, job_id: jobId, plan_id: planId, level, message: message.slice(0, 1000), created_at: new Date().toISOString() }); } catch { /* */ }
+}
+
+/* ── Job handlers ── */
+const HANDLERS: Record<string, (plan: any, runId: string, jobId: string) => Promise<any>> = {
+  // Deterministic GEO refresh: authority score + recommendations + advanced scores.
+  async geo_refresh(plan, runId, jobId) {
+    const a = computeAuthorityScore(plan);
+    await saveAuthorityScore({ planId: plan.id, clientId: plan.clientId, scope: 'site', overall: a.overall, subScores: a.subScores, issues: a.issues });
+    await replaceRecommendations(plan.id, plan.clientId || null, a.recommendations);
+    await log(runId, jobId, plan.id, 'info', `Authority score = ${a.overall}; ${a.recommendations.length} recommendations`);
+    const scores = computeAllScores(plan);
+    let n = 0;
+    for (const [kind, sc] of Object.entries(scores)) { await saveScore({ planId: plan.id, clientId: plan.clientId, kind, value: sc.value, explanation: sc.explanation, factors: sc.factors, recommendations: sc.recommendations }).catch(() => {}); n++; }
+    await log(runId, jobId, plan.id, 'info', `${n} advanced scores persisted`);
+    return { authority: a.overall, recommendations: a.recommendations.length, scores: n };
+  },
+};
+
+async function getStatus(planId: string) {
+  const { data } = await getSb().from('geo_client_automation_status').select('*').eq('plan_id', planId).maybeSingle();
+  return data;
+}
+
+async function updateStatus(planId: string, patch: Record<string, unknown>) {
+  await getSb().from('geo_client_automation_status').update({ ...patch, updated_at: new Date().toISOString() }).eq('plan_id', planId);
+}
+
+/** Process one claimed job end-to-end with run record, cost control, status update. */
+export async function processJob(job: any): Promise<{ ok: boolean; status: string; cost: number; error?: string }> {
+  await ensureAutomationTables();
+  const sb = getSb();
+  const runId = rid('run');
+  const startedAt = Date.now();
+  const status = await getStatus(job.plan_id);
+
+  // ── Cost / budget control (reset monthly) ──
+  const cost = JOB_COST_CENTS[job.job_type] ?? 0;
+  if (status) {
+    const mk = monthKey();
+    let usage = status.usage_month === mk ? (status.monthly_usage_cents || 0) : 0;
+    if (status.usage_month !== mk) await updateStatus(job.plan_id, { usage_month: mk, monthly_usage_cents: 0 });
+    const budget = status.monthly_budget_cents || 0;
+    if (budget > 0 && cost > 0 && usage + cost > budget) {
+      await GeoJobQueueService.markWaitingForBudget(job.id);
+      await updateStatus(job.plan_id, { current_status: 'waiting_for_budget' });
+      return { ok: false, status: 'waiting_for_budget', cost: 0 };
+    }
+  }
+
+  await sb.from('geo_automation_runs').insert({ id: runId, job_id: job.id, plan_id: job.plan_id, client_id: job.client_id, job_type: job.job_type, status: 'running', started_at: new Date().toISOString(), created_at: new Date().toISOString() });
+  await updateStatus(job.plan_id, { current_status: 'running' });
+
+  try {
+    const plan = await seoPlans.getByIdAsync(job.plan_id);
+    if (!plan) throw new Error('Plan not found');
+    const handler = HANDLERS[job.job_type];
+    if (!handler) throw new Error(`No handler for job_type=${job.job_type}`);
+
+    const result = await handler(plan, runId, job.id);
+    const durationMs = Date.now() - startedAt;
+
+    await GeoJobQueueService.completeJob(job.id, result, cost);
+    await sb.from('geo_automation_runs').update({ status: 'completed', finished_at: new Date().toISOString(), duration_ms: durationMs, cost_cents: cost, summary: result }).eq('id', runId);
+
+    const freq = status?.run_frequency || 'daily';
+    const next = nextRunFrom(freq);
+    const mk = monthKey();
+    const usage = (status && status.usage_month === mk ? (status.monthly_usage_cents || 0) : 0) + cost;
+    await updateStatus(job.plan_id, {
+      last_run_at: new Date().toISOString(), last_success_at: new Date().toISOString(),
+      next_run_at: next.toISOString(), current_status: 'active', failure_count: 0,
+      usage_month: mk, monthly_usage_cents: usage,
+    });
+    return { ok: true, status: 'completed', cost };
+  } catch (e) {
+    const errMsg = e instanceof Error ? e.message : 'failed';
+    await log(runId, job.id, job.plan_id, 'error', errMsg);
+    const { retried } = await GeoJobQueueService.failJob(job, errMsg);
+    await sb.from('geo_automation_runs').update({ status: retried ? 'retrying' : 'failed', finished_at: new Date().toISOString(), duration_ms: Date.now() - startedAt }).eq('id', runId);
+    await updateStatus(job.plan_id, { last_failure_at: new Date().toISOString(), current_status: retried ? 'active' : 'failed', failure_count: (status?.failure_count || 0) + 1 });
+    return { ok: false, status: retried ? 'retrying' : 'failed', cost: 0, error: errMsg };
+  }
+}
+
+export { JOB_COST_CENTS };

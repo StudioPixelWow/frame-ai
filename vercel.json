@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/geo-monitoring",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/geo-automation",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
