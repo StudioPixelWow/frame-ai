@@ -47,10 +47,13 @@ export async function POST(req: NextRequest) {
     let published: any = null;
     if (publish && wp?.siteUrl) {
       try {
+        // Respect the account's publish mode: 'auto' → publish live, else draft.
+        const { getGeoPublishMode } = await import('@/lib/seo/geo-authority/settings');
+        const wpStatus = (await getGeoPublishMode()) === 'auto' ? 'publish' : 'draft';
         published = await createPost(wp, {
           title: article.title,
           content: article.html,
-          status: 'draft', // safe default — review before going live
+          status: wpStatus,
           metaTitle: article.metaTitle,
           metaDescription: article.metaDescription,
           focusKeyword: article.focusKeyword,

@@ -119,6 +119,9 @@ export default function SeoGeoDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredPlans, setFilteredPlans] = useState<SeoPlan[]>([]);
   const [platformStatus, setPlatformStatus] = useState<Record<string, 'real' | 'unavailable'>>({});
+  // Visual in-app result panel (replaces OS alert popups).
+  const [result, setResult] = useState<any>(null);
+  const [busyAction, setBusyAction] = useState<string>('');
 
   // Fetch SEO plans on mount
   useEffect(() => {
@@ -552,9 +555,9 @@ export default function SeoGeoDashboard() {
                               const j = await res.json();
                               if (!res.ok) throw new Error(j.error || 'שגיאה');
                               const r = (j.results || [])[0] || {};
-                              alert(r.tasksExecuted != null ? `הורצו ${r.tasksExecuted} משימות (${r.tasksSuccessful || 0} הצליחו). רענן לעדכון.` : 'ההרצה הסתיימה. רענן לעדכון.');
+                              setResult({ status: 'success', icon: '▶', title: `הרצה הושלמה — ${plan.clientName}`, lines: [r.tasksExecuted != null ? `הורצו ${r.tasksExecuted} משימות` : 'ההרצה הסתיימה', r.tasksSuccessful != null ? `${r.tasksSuccessful} הצליחו` : ''].filter(Boolean) });
                             } catch (err) {
-                              alert(err instanceof Error ? err.message : 'שגיאה בהרצה');
+                              setResult({ status: 'error', icon: '⚠', title: 'שגיאה בהרצה', lines: [err instanceof Error ? err.message : 'שגיאה'] });
                             } finally { btn.disabled = false; btn.textContent = orig; }
                           }}
                           style={{
@@ -583,9 +586,9 @@ export default function SeoGeoDashboard() {
                               const r = j.result || {};
                               const found = r.aiVisibility?.totalFound ?? 0;
                               const total = r.aiVisibility?.totalQueries ?? 0;
-                              alert(`סריקת GEO הושלמה — המותג צוטט ב-${found}/${total} בדיקות AI. רענן לעדכון הציון.`);
+                              setResult({ status: 'success', icon: '🔎', title: `סריקת GEO הושלמה — ${plan.clientName}`, score: { value: total ? Math.round((found / total) * 100) : 0, label: `המותג צוטט ב-${found} מתוך ${total} בדיקות AI` }, lines: ['הציון התעדכן. רענן את הדף לראות את הנתון המעודכן.'] });
                             } catch (err) {
-                              alert(err instanceof Error ? err.message : 'שגיאה בסריקה');
+                              setResult({ status: 'error', icon: '⚠', title: 'שגיאה בסריקה', lines: [err instanceof Error ? err.message : 'שגיאה'] });
                             } finally { btn.disabled = false; btn.textContent = orig; }
                           }}
                           style={{
@@ -612,14 +615,15 @@ export default function SeoGeoDashboard() {
                               });
                               const j = await res.json();
                               if (!res.ok) throw new Error(j.error || 'שגיאה');
-                              if (j.published?.link || j.published?.id) {
-                                alert(`✅ נוצר מאמר GEO ופורסם כטיוטה בוורדפרס: "${j.article?.title}". בדוק ואשר לפרסום.`);
-                              } else {
-                                try { await navigator.clipboard.writeText(j.article?.html || ''); } catch {}
-                                alert(`✅ נוצר מאמר GEO: "${j.article?.title}".${j.wpConnected ? '' : ' (וורדפרס לא מחובר)'} ה-HTML הועתק ללוח — הדבק באתר.`);
-                              }
+                              const wpLink = j.published?.link || null;
+                              setResult({
+                                status: 'success', icon: '✍️', title: `מאמר GEO נוצר — ${j.article?.title || ''}`,
+                                lines: wpLink ? ['פורסם בוורדפרס. אפשר לפתוח ולערוך באתר.'] : (j.wpConnected ? ['פורסם בוורדפרס.'] : ['וורדפרס לא מחובר לתוכנית — להלן ה‑HTML המוכן.']),
+                                html: j.article?.html, wpLink, copyText: j.article?.html,
+                                download: { name: `${(j.article?.title || 'geo-article').replace(/\s+/g, '-')}.html`, content: j.article?.html || '' },
+                              });
                             } catch (err) {
-                              alert(err instanceof Error ? err.message : 'שגיאה ביצירת התוכן');
+                              setResult({ status: 'error', icon: '⚠', title: 'שגיאה ביצירת התוכן', lines: [err instanceof Error ? err.message : 'שגיאה'] });
                             } finally { btn.disabled = false; btn.textContent = orig; }
                           }}
                           style={{
@@ -639,17 +643,15 @@ export default function SeoGeoDashboard() {
                               const res = await fetch('/api/seo-geo-plans/llms-txt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ planId: plan.id }) });
                               const j = await res.json();
                               if (!res.ok) throw new Error(j.error || 'שגיאה');
-                              // Download the ready-to-upload file (and also copy to clipboard).
-                              try { await navigator.clipboard.writeText(j.llmsTxt || ''); } catch {}
-                              try {
-                                const blob = new Blob([j.llmsTxt || ''], { type: 'text/plain;charset=utf-8' });
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement('a'); a.href = url; a.download = 'llms.txt'; document.body.appendChild(a); a.click(); a.remove();
-                                setTimeout(() => URL.revokeObjectURL(url), 1000);
-                              } catch {}
-                              const missing = (j.checklist || []).filter((c: any) => !c.ok).map((c: any) => `• ${c.label}: ${c.hint}`).join('\n');
-                              alert(`✅ הקובץ llms.txt ירד למחשב (וגם הועתק ללוח).\nהעלה אותו לתיקיית השורש של האתר: ${j.llmsTxtUrl || 'האתר/llms.txt'}\n\nלשיפור סמכות (E-E-A-T):\n${missing}`);
-                            } catch (err) { alert(err instanceof Error ? err.message : 'שגיאה'); }
+                              setResult({
+                                status: 'success', icon: '📄', title: 'llms.txt מוכן',
+                                lines: [`העלה לכתובת: ${j.llmsTxtUrl || 'האתר/llms.txt'}`, j.published ? '✓ הותקן אוטומטית בוורדפרס' : 'הורד את הקובץ והעלה לשורש האתר (או השתמש בסניפט לוורדפרס למטה).'],
+                                pre: j.llmsTxt, copyText: j.llmsTxt,
+                                download: { name: 'llms.txt', content: j.llmsTxt || '' },
+                                checklist: j.checklist,
+                                published: j.published || null,
+                              });
+                            } catch (err) { setResult({ status: 'error', icon: '⚠', title: 'שגיאה', lines: [err instanceof Error ? err.message : 'שגיאה'] }); }
                             finally { btn.disabled = false; btn.textContent = orig; }
                           }}
                           style={{ flex: 1, padding: '6px 0', borderRadius: 8, border: `1px solid ${COLORS.primary}40`, background: `${COLORS.primary}12`, color: COLORS.primary, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
@@ -665,11 +667,9 @@ export default function SeoGeoDashboard() {
                               const res = await fetch('/api/seo-geo-plans/pr-opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ planId: plan.id }) });
                               const j = await res.json();
                               if (!res.ok) throw new Error(j.error || 'שגיאה');
-                              const outlets = (j.outlets || []).map((o: any, i: number) => `${i + 1}. [${o.type}] ${o.name} — ${o.action}`).join('\n');
-                              const text = `הזדמנויות PR / סמכות חוץ-אתרית עבור ${plan.clientName}:\n\n${outlets}\n\n— פיץ' מוצע —\nנושא: ${j.pitchEmail?.subject || ''}\n${j.pitchEmail?.body || ''}\n\n— מאמר אורח —\n${j.bylineIdea?.title || ''}: ${j.bylineIdea?.angle || ''}`;
-                              try { await navigator.clipboard.writeText(text); } catch {}
-                              alert(`✅ נמצאו ${(j.outlets || []).length} הזדמנויות סמכות — הרשימה המלאה + פיץ' הועתקו ללוח.`);
-                            } catch (err) { alert(err instanceof Error ? err.message : 'שגיאה'); }
+                              const text = `הזדמנויות PR / סמכות חוץ-אתרית עבור ${plan.clientName}:\n\n${(j.outlets || []).map((o: any, i: number) => `${i + 1}. [${o.type}] ${o.name} — ${o.action}`).join('\n')}\n\n— פיץ' מוצע —\nנושא: ${j.pitchEmail?.subject || ''}\n${j.pitchEmail?.body || ''}`;
+                              setResult({ status: 'success', icon: '📣', title: `${(j.outlets || []).length} הזדמנויות סמכות — ${plan.clientName}`, outlets: j.outlets || [], pitch: j.pitchEmail, byline: j.bylineIdea, copyText: text });
+                            } catch (err) { setResult({ status: 'error', icon: '⚠', title: 'שגיאה', lines: [err instanceof Error ? err.message : 'שגיאה'] }); }
                             finally { btn.disabled = false; btn.textContent = orig; }
                           }}
                           style={{ flex: 1, padding: '6px 0', borderRadius: 8, border: `1px solid ${COLORS.orange}40`, background: `${COLORS.orange}12`, color: COLORS.orange, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
@@ -864,6 +864,77 @@ export default function SeoGeoDashboard() {
           </div>
         </>
       )}
+
+      {/* ── Visual result panel (replaces OS alert popups) ── */}
+      {result && (() => {
+        const ok = result.status !== 'error';
+        const accent = ok ? (COLORS.green || '#10b981') : (COLORS.red || '#ef4444');
+        const download = (name: string, content: string) => { const b = new Blob([content], { type: 'text/plain;charset=utf-8' }); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(u), 1000); };
+        return (
+          <div onClick={() => setResult(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(10,12,20,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+            <div onClick={(e) => e.stopPropagation()} dir="rtl" style={{ background: '#fff', borderRadius: 18, maxWidth: 640, width: '100%', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 24px 60px rgba(0,0,0,0.3)', border: `1px solid ${accent}30` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 22px', borderBottom: '1px solid #eef0f4', background: `${accent}0d`, borderRadius: '18px 18px 0 0' }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: `${accent}1a`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{result.icon || (ok ? '✅' : '⚠')}</div>
+                <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 800, color: '#15192b' }}>{result.title}</div></div>
+                <button onClick={() => setResult(null)} style={{ background: 'none', border: 'none', fontSize: 22, color: '#9aa0ad', cursor: 'pointer', lineHeight: 1 }}>✕</button>
+              </div>
+              <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {result.score && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <div style={{ position: 'relative', width: 84, height: 84, flexShrink: 0 }}>
+                      <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+                        <circle cx="50" cy="50" r="42" fill="none" stroke="#eef0f4" strokeWidth="11" />
+                        <circle cx="50" cy="50" r="42" fill="none" stroke={accent} strokeWidth="11" strokeLinecap="round" strokeDasharray={`${(result.score.value / 100) * 2 * Math.PI * 42} ${2 * Math.PI * 42}`} />
+                      </svg>
+                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 900, color: accent }}>{result.score.value}%</div>
+                    </div>
+                    <div style={{ fontSize: 14, color: '#3a4051', fontWeight: 600 }}>{result.score.label}</div>
+                  </div>
+                )}
+                {(result.lines || []).map((l: string, i: number) => <div key={i} style={{ fontSize: 14, color: '#3a4051', lineHeight: 1.6 }}>{l}</div>)}
+
+                {result.checklist && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {result.checklist.map((c: any, i: number) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5 }}>
+                        <span style={{ color: c.ok ? '#10b981' : '#f59e0b', fontWeight: 800 }}>{c.ok ? '✓' : '○'}</span>
+                        <span style={{ color: '#3a4051' }}><b>{c.label}</b>{!c.ok && c.hint ? ` — ${c.hint}` : ''}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {result.outlets && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {result.outlets.map((o: any, i: number) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, fontSize: 13, padding: '7px 10px', background: '#f7f8fb', borderRadius: 8 }}>
+                        <span style={{ fontWeight: 800, color: COLORS.orange || '#f59e0b' }}>{i + 1}</span>
+                        <span style={{ flex: 1 }}><b>{o.name}</b> <span style={{ color: '#8a90a0', fontSize: 11 }}>[{o.type}]</span><div style={{ color: '#5a6072', fontSize: 12 }}>{o.action}</div></span>
+                      </div>
+                    ))}
+                    {result.pitch && <div style={{ fontSize: 12.5, color: '#3a4051', background: '#f7f8fb', borderRadius: 8, padding: 10 }}><b>פיץ' מוצע:</b> {result.pitch.subject}<div style={{ whiteSpace: 'pre-wrap', marginTop: 4 }}>{result.pitch.body}</div></div>}
+                  </div>
+                )}
+
+                {result.html && (
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#8a90a0', marginBottom: 6 }}>תצוגה מקדימה:</div>
+                    <iframe title="preview" srcDoc={result.html} style={{ width: '100%', height: 260, border: '1px solid #eef0f4', borderRadius: 10, background: '#fff' }} />
+                  </div>
+                )}
+                {result.pre && <pre style={{ fontSize: 11.5, background: '#0f1117', color: '#d6dae3', borderRadius: 10, padding: 12, overflowX: 'auto', maxHeight: 220, whiteSpace: 'pre-wrap' }}>{result.pre}</pre>}
+
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                  {result.wpLink && <a href={result.wpLink} target="_blank" rel="noopener noreferrer" style={{ background: COLORS.primary, color: '#fff', borderRadius: 10, padding: '0.55rem 1rem', fontWeight: 800, fontSize: 13, textDecoration: 'none' }}>↗ פתח בוורדפרס</a>}
+                  {result.download && <button onClick={() => download(result.download.name, result.download.content)} style={{ background: '#15192b', color: '#fff', border: 'none', borderRadius: 10, padding: '0.55rem 1rem', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>⬇ הורד קובץ</button>}
+                  {result.copyText && <button onClick={() => { try { navigator.clipboard.writeText(result.copyText); } catch {} }} style={{ background: '#eef0f4', color: '#3a4051', border: 'none', borderRadius: 10, padding: '0.55rem 1rem', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>📋 העתק</button>}
+                  <button onClick={() => setResult(null)} style={{ marginInlineStart: 'auto', background: 'none', border: '1px solid #e5e7eb', color: '#5a6072', borderRadius: 10, padding: '0.55rem 1rem', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>סגור</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
