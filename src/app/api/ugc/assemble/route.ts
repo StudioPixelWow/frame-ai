@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getRequestRole } from '@/lib/auth/api-guard';
-import { isShotstackConfigured, hostDataUrl, buildTimeline, submitRender, MUSIC_PRESETS } from '@/lib/ugc/video-assembly';
+import { isShotstackConfigured, hostDataUrl, buildTimeline, submitRender, buildCaptions, MUSIC_PRESETS } from '@/lib/ugc/video-assembly';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -18,8 +18,10 @@ export async function POST(req: NextRequest) {
   if (getRequestRole(req) === 'client') return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
   if (!isShotstackConfigured()) return NextResponse.json({ error: 'Shotstack לא מוגדר — הוסף SHOTSTACK_API_KEY ו-SHOTSTACK_ENV' }, { status: 503 });
   try {
-    const { avatarUrl, images, brollVideos, durationSec, format, businessName, brandColor, music, musicUrl, musicVolume, transition } = await req.json();
+    const { avatarUrl, images, brollVideos, durationSec, format, businessName, brandColor, music, musicUrl, musicVolume, transition, script, captionsOn, logoUrl, ctaText } = await req.json();
     const resolvedMusic = musicUrl || MUSIC_PRESETS[music as string] || '';
+    const dur = Number(durationSec) || 30;
+    const captions = (captionsOn !== false && script) ? buildCaptions(String(script), 0.4, dur - 0.4) : [];
     if (!avatarUrl) return NextResponse.json({ error: 'חסר וידאו דמות (avatarUrl) — הפק קודם וידאו HeyGen' }, { status: 400 });
 
     // Prefer real B-roll video clips; otherwise fall back to Ken-Burns still frames.
@@ -43,6 +45,9 @@ export async function POST(req: NextRequest) {
       musicUrl: resolvedMusic,
       musicVolume: typeof musicVolume === 'number' ? musicVolume : 0.12,
       transition: transition || 'fade',
+      captions,
+      logoUrl: logoUrl || '',
+      ctaText: ctaText || '',
     });
 
     const { id } = await submitRender(edit);

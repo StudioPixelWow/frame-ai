@@ -47,6 +47,9 @@ export interface AssembleInput {
   musicUrl?: string;            // background soundtrack (optional)
   musicVolume?: number;         // 0..1 (default 0.12 so the voice stays clear)
   transition?: string;          // B-roll transition style
+  captions?: { text: string; start: number; length: number }[]; // auto captions
+  logoUrl?: string;             // brand logo for intro/outro cards
+  ctaText?: string;             // outro call-to-action
 }
 
 // Royalty-free soundtrack presets (Shotstack hosted sample assets).
@@ -86,11 +89,22 @@ export function buildTimeline(input: AssembleInput) {
     t += CLIP + GAP; idx++;
   }
 
-  // Branded intro lower-third (first 3.2s).
-  const titleClips = input.businessName ? [{
-    asset: { type: 'title', text: input.businessName, style: 'subtitle', size: 'medium', position: 'bottom', color: '#ffffff', background: input.brandColor || '#00B5FE' },
-    start: 0.4, length: 3, transition: { in: 'slideUp', out: 'fade' },
-  }] : [];
+  // ── Branded intro + outro cards (HTML) with optional logo ──
+  const brand = input.brandColor || '#00B5FE';
+  const esc = (s: string) => (s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const cardCss = `.c{width:${width}px;height:${height}px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;background:${brand};font-family:'Heebo',Arial,sans-serif} .c h1{color:#fff;font-size:${Math.round(width / 14)}px;font-weight:800;margin:0;text-align:center;padding:0 8%} .c p{color:#ffffffdd;font-size:${Math.round(width / 26)}px;margin:0;text-align:center} .c img{max-width:46%;max-height:32%;object-fit:contain}`;
+  const logoTag = input.logoUrl ? `<img src="${input.logoUrl}"/>` : '';
+  const cardClips: any[] = [];
+  const INTRO = input.businessName ? 2.2 : 0;
+  const OUTRO = (input.businessName || input.ctaText) ? 2.6 : 0;
+  if (INTRO) cardClips.push({ asset: { type: 'html', html: `<div class="c">${logoTag}<h1>${esc(input.businessName || '')}</h1></div>`, css: cardCss, width, height, background: 'transparent' }, start: 0, length: INTRO, transition: { out: 'fade' }, fit: 'cover' });
+  if (OUTRO) cardClips.push({ asset: { type: 'html', html: `<div class="c">${logoTag}<h1>${esc(input.businessName || '')}</h1>${input.ctaText ? `<p>${esc(input.ctaText)}</p>` : ''}</div>`, css: cardCss, width, height, background: 'transparent' }, start: +(T - OUTRO).toFixed(2), length: OUTRO, transition: { in: 'fade' }, fit: 'cover' });
+
+  // ── Auto captions from the script (timed title clips at the bottom) ──
+  const captionClips = (input.captions || []).map((c) => ({
+    asset: { type: 'title', text: c.text, style: 'subtitle', size: 'small', position: 'bottom', color: '#ffffff', background: '#000000' },
+    start: +c.start.toFixed(2), length: +c.length.toFixed(2), transition: { in: 'fade', out: 'fade' },
+  }));
 
   const soundtrack = input.musicUrl ? { soundtrack: { src: input.musicUrl, effect: 'fadeInFadeOut', volume: input.musicVolume ?? 0.12 } } : {};
 
@@ -99,13 +113,31 @@ export function buildTimeline(input: AssembleInput) {
       background: '#000000',
       ...soundtrack,
       tracks: [
-        ...(titleClips.length ? [{ clips: titleClips }] : []),  // top: title
-        ...(brollClips.length ? [{ clips: brollClips }] : []),  // mid: B-roll cutaways
+        ...(cardClips.length ? [{ clips: cardClips }] : []),       // top: branded intro/outro
+        ...(captionClips.length ? [{ clips: captionClips }] : []), // captions
+        ...(brollClips.length ? [{ clips: brollClips }] : []),     // B-roll cutaways
         { clips: [{ asset: { type: 'video', src: input.avatarUrl, volume: 1 }, start: 0, length: T, fit: 'cover' }] }, // base: avatar + audio
       ],
     },
     output: { format: 'mp4', size: { width, height }, fps: 30 },
   };
+}
+
+/** Split a script into timed caption chunks across [from, to] seconds. */
+export function buildCaptions(script: string, from: number, to: number): { text: string; start: number; length: number }[] {
+  const clean = (script || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return [];
+  const words = clean.split(' ');
+  const chunks: string[] = [];
+  for (let i = 0; i < words.length; i += 6) chunks.push(words.slice(i, i + 6).join(' '));
+  const span = Math.max(1, to - from);
+  const totalChars = chunks.reduce((a, c) => a + c.length, 0) || 1;
+  let cursor = from;
+  return chunks.map((text) => {
+    const len = Math.max(1.2, (text.length / totalChars) * span);
+    const start = cursor; cursor += len;
+    return { text, start, length: Math.min(len, to - start) };
+  }).filter((c) => c.length > 0.4);
 }
 
 /** Submit a render. Returns the render id. */
