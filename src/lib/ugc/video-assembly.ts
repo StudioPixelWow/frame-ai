@@ -44,7 +44,20 @@ export interface AssembleInput {
   format: { width: number; height: number };
   businessName?: string;
   brandColor?: string;
+  musicUrl?: string;            // background soundtrack (optional)
+  musicVolume?: number;         // 0..1 (default 0.12 so the voice stays clear)
+  transition?: string;          // B-roll transition style
 }
+
+// Royalty-free soundtrack presets (Shotstack hosted sample assets).
+export const MUSIC_PRESETS: Record<string, string> = {
+  none: '',
+  energetic: 'https://shotstack-assets.s3-ap-southeast-2.amazonaws.com/music/unminus/lit.mp3',
+  upbeat: 'https://shotstack-assets.s3-ap-southeast-2.amazonaws.com/music/unminus/moment.mp3',
+  calm: 'https://shotstack-assets.s3-ap-southeast-2.amazonaws.com/music/unminus/ambisax.mp3',
+  corporate: 'https://shotstack-assets.s3-ap-southeast-2.amazonaws.com/music/unminus/berlin.mp3',
+};
+export const TRANSITIONS = ['fade', 'slideLeft', 'slideRight', 'zoom', 'wipeLeft', 'carouselLeft'];
 
 const KEN_BURNS = ['zoomIn', 'zoomOut', 'slideLeft', 'slideRight', 'slideUp'];
 
@@ -61,13 +74,14 @@ export function buildTimeline(input: AssembleInput) {
   let t = OPEN;
   let idx = 0;
   const items = (input.broll || []).filter((b) => b && b.src);
+  const tr = (TRANSITIONS.includes(input.transition || '') ? input.transition : 'fade') as string;
   while (items.length && t + CLIP <= T - TAIL) {
     const it = items[idx % items.length];
     if (it.type === 'video') {
       // Real B-roll clip — muted so the avatar's voice keeps playing underneath.
-      brollClips.push({ asset: { type: 'video', src: it.src, volume: 0 }, start: +t.toFixed(2), length: CLIP, transition: { in: 'fade', out: 'fade' }, fit: 'cover' });
+      brollClips.push({ asset: { type: 'video', src: it.src, volume: 0 }, start: +t.toFixed(2), length: CLIP, transition: { in: tr, out: tr }, fit: 'cover' });
     } else {
-      brollClips.push({ asset: { type: 'image', src: it.src }, start: +t.toFixed(2), length: CLIP, effect: KEN_BURNS[idx % KEN_BURNS.length], transition: { in: 'fade', out: 'fade' }, fit: 'cover' });
+      brollClips.push({ asset: { type: 'image', src: it.src }, start: +t.toFixed(2), length: CLIP, effect: KEN_BURNS[idx % KEN_BURNS.length], transition: { in: tr, out: tr }, fit: 'cover' });
     }
     t += CLIP + GAP; idx++;
   }
@@ -78,9 +92,12 @@ export function buildTimeline(input: AssembleInput) {
     start: 0.4, length: 3, transition: { in: 'slideUp', out: 'fade' },
   }] : [];
 
+  const soundtrack = input.musicUrl ? { soundtrack: { src: input.musicUrl, effect: 'fadeInFadeOut', volume: input.musicVolume ?? 0.12 } } : {};
+
   return {
     timeline: {
       background: '#000000',
+      ...soundtrack,
       tracks: [
         ...(titleClips.length ? [{ clips: titleClips }] : []),  // top: title
         ...(brollClips.length ? [{ clips: brollClips }] : []),  // mid: B-roll cutaways

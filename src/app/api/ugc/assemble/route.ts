@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getRequestRole } from '@/lib/auth/api-guard';
-import { isShotstackConfigured, hostDataUrl, buildTimeline, submitRender } from '@/lib/ugc/video-assembly';
+import { isShotstackConfigured, hostDataUrl, buildTimeline, submitRender, MUSIC_PRESETS } from '@/lib/ugc/video-assembly';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -18,7 +18,8 @@ export async function POST(req: NextRequest) {
   if (getRequestRole(req) === 'client') return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
   if (!isShotstackConfigured()) return NextResponse.json({ error: 'Shotstack לא מוגדר — הוסף SHOTSTACK_API_KEY ו-SHOTSTACK_ENV' }, { status: 503 });
   try {
-    const { avatarUrl, images, brollVideos, durationSec, format, businessName, brandColor } = await req.json();
+    const { avatarUrl, images, brollVideos, durationSec, format, businessName, brandColor, music, musicUrl, musicVolume, transition } = await req.json();
+    const resolvedMusic = musicUrl || MUSIC_PRESETS[music as string] || '';
     if (!avatarUrl) return NextResponse.json({ error: 'חסר וידאו דמות (avatarUrl) — הפק קודם וידאו HeyGen' }, { status: 400 });
 
     // Prefer real B-roll video clips; otherwise fall back to Ken-Burns still frames.
@@ -39,6 +40,9 @@ export async function POST(req: NextRequest) {
       format: { width: format?.width || 1080, height: format?.height || 1920 },
       businessName: businessName || '',
       brandColor: brandColor || '#00B5FE',
+      musicUrl: resolvedMusic,
+      musicVolume: typeof musicVolume === 'number' ? musicVolume : 0.12,
+      transition: transition || 'fade',
     });
 
     const { id } = await submitRender(edit);

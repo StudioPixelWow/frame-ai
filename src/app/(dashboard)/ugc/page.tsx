@@ -57,6 +57,12 @@ export default function UgcPage() {
   const [assembled, setAssembled] = useState<string | null>(null);
   const [sceneClips, setSceneClips] = useState<Record<string, string[]>>({});
   const [clipBusyKey, setClipBusyKey] = useState('');
+  const BROLL_MODELS = [{ id: 'kwaivgi/kling-v1.6-standard', label: 'Kling 1.6' }, { id: 'luma/ray', label: 'Luma Ray' }, { id: 'minimax/video-01', label: 'Hailuo (MiniMax)' }, { id: 'stability-ai/stable-video-diffusion', label: 'Stable Video' }];
+  const MUSIC_OPTS = [{ id: 'none', label: 'ללא מוזיקה' }, { id: 'energetic', label: 'אנרגטי' }, { id: 'upbeat', label: 'קצבי' }, { id: 'calm', label: 'רגוע' }, { id: 'corporate', label: 'תאגידי' }];
+  const TRANSITION_OPTS = [{ id: 'fade', label: 'Fade' }, { id: 'slideLeft', label: 'Slide' }, { id: 'zoom', label: 'Zoom' }, { id: 'wipeLeft', label: 'Wipe' }, { id: 'carouselLeft', label: 'Carousel' }];
+  const [brollModel, setBrollModel] = useState(BROLL_MODELS[0].id);
+  const [videoMusic, setVideoMusic] = useState('upbeat');
+  const [videoTransition, setVideoTransition] = useState('fade');
   const [sceneImages, setSceneImages] = useState<Record<string, string[]>>({}); // variationId → [dataURL per shot]
   const [scenesBusy, setScenesBusy] = useState(false);
   const [presenterApproved, setPresenterApproved] = useState(false);
@@ -159,7 +165,7 @@ export default function UgcPage() {
     setClipBusyKey(key); setErr('');
     try {
       const prompt = scenePrompt[key]?.trim() || v.shots?.[i]?.direction || v.shots?.[i]?.vo || '';
-      const r = await fetch('/api/ugc/broll', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ image: img, prompt }) });
+      const r = await fetch('/api/ugc/broll', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ image: img, prompt, model: brollModel }) });
       const j = await r.json();
       if (!r.ok || !j.predictionId) throw new Error(j.error || 'יצירת הקליפ נכשלה');
       for (let k = 0; k < 60; k++) {
@@ -181,7 +187,7 @@ export default function UgcPage() {
     setAssembling(true); setAssembled(null); setErr(''); setAssembleStartedAt(Date.now()); setAssembleStage('מעלה תמונות B‑roll…');
     try {
       const clips = (sceneClips[v.id] || []).filter(Boolean);
-      const r = await fetch('/api/ugc/assemble', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ avatarUrl: video.url, images: imgs, brollVideos: clips, durationSec: form.duration, format: { width: fmt.w, height: fmt.h }, businessName: form.businessName, brandColor: '#00B5FE' }) });
+      const r = await fetch('/api/ugc/assemble', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ avatarUrl: video.url, images: imgs, brollVideos: clips, durationSec: form.duration, format: { width: fmt.w, height: fmt.h }, businessName: form.businessName, brandColor: '#00B5FE', music: videoMusic, transition: videoTransition }) });
       const j = await r.json();
       if (!r.ok || !j.renderId) throw new Error(j.error || 'הרכבת הווידאו נכשלה');
       setAssembleStage('בתור עיבוד…');
@@ -672,6 +678,27 @@ export default function UgcPage() {
                             </div>
                           ) : (
                             <>
+                              {/* Output options: B-roll AI model, soundtrack, transitions */}
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+                                <div>
+                                  <label style={{ ...lbl, fontSize: 10.5 }}>מודל B‑roll וידאו</label>
+                                  <select className="form-select ux-input" value={brollModel} onChange={(e) => setBrollModel(e.target.value)} style={{ width: '100%', fontSize: 11.5 }}>
+                                    {BROLL_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label style={{ ...lbl, fontSize: 10.5 }}>מוזיקת רקע</label>
+                                  <select className="form-select ux-input" value={videoMusic} onChange={(e) => setVideoMusic(e.target.value)} style={{ width: '100%', fontSize: 11.5 }}>
+                                    {MUSIC_OPTS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label style={{ ...lbl, fontSize: 10.5 }}>מעבר</label>
+                                  <select className="form-select ux-input" value={videoTransition} onChange={(e) => setVideoTransition(e.target.value)} style={{ width: '100%', fontSize: 11.5 }}>
+                                    {TRANSITION_OPTS.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                                  </select>
+                                </div>
+                              </div>
                               <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={assembleVideo} style={{ width: '100%', fontSize: 13.5, fontWeight: 800, padding: '0.7rem' }}>
                                 🎬 הרכב סרטון מלא (דמות + B‑roll + תנועה)
                               </button>

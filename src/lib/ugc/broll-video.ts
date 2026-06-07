@@ -9,13 +9,22 @@
  */
 
 const TOKEN = () => process.env.REPLICATE_API_TOKEN || '';
-const MODEL = () => process.env.BROLL_VIDEO_MODEL || 'kwaivgi/kling-v1.6-standard';
+const DEFAULT_MODEL = () => process.env.BROLL_VIDEO_MODEL || 'kwaivgi/kling-v1.6-standard';
+
+// Selectable image→video models (Replicate owner/name).
+export const BROLL_MODELS: { id: string; label: string }[] = [
+  { id: 'kwaivgi/kling-v1.6-standard', label: 'Kling 1.6' },
+  { id: 'luma/ray', label: 'Luma Ray' },
+  { id: 'minimax/video-01', label: 'Hailuo (MiniMax)' },
+  { id: 'stability-ai/stable-video-diffusion', label: 'Stable Video Diffusion' },
+];
 
 export function isBrollVideoConfigured(): boolean { return !!TOKEN(); }
 
 /** Start an image→video prediction. Returns the prediction id. */
-export async function startClip(imageUrl: string, prompt: string): Promise<{ id: string }> {
+export async function startClip(imageUrl: string, prompt: string, model?: string): Promise<{ id: string }> {
   if (!isBrollVideoConfigured()) throw new Error('יצירת B-roll וידאו לא מוגדרת (חסר REPLICATE_API_TOKEN)');
+  const chosen = (model && BROLL_MODELS.some((m) => m.id === model)) ? model : DEFAULT_MODEL();
   // Generic input that fits most Replicate image-to-video models; extra keys are
   // ignored by models that don't use them.
   const input: Record<string, unknown> = {
@@ -25,7 +34,7 @@ export async function startClip(imageUrl: string, prompt: string): Promise<{ id:
     duration: 5,
     cfg_scale: 0.5,
   };
-  const res = await fetch(`https://api.replicate.com/v1/models/${MODEL()}/predictions`, {
+  const res = await fetch(`https://api.replicate.com/v1/models/${chosen}/predictions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${TOKEN()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ input }),
