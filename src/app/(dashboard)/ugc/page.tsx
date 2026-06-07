@@ -51,6 +51,10 @@ export default function UgcPage() {
     { id: 'wide', label: 'Wide 16:9', w: 1920, h: 1080 },
   ];
   const [videoFormat, setVideoFormat] = useState('story');
+  const [assembling, setAssembling] = useState(false);
+  const [assembleStage, setAssembleStage] = useState('');
+  const [assembleStartedAt, setAssembleStartedAt] = useState<number | null>(null);
+  const [assembled, setAssembled] = useState<string | null>(null);
   const [sceneImages, setSceneImages] = useState<Record<string, string[]>>({}); // variationId → [dataURL per shot]
   const [scenesBusy, setScenesBusy] = useState(false);
   const [presenterApproved, setPresenterApproved] = useState(false);
@@ -138,12 +142,39 @@ export default function UgcPage() {
     } finally { setScenesBusy(false); }
   };
 
-  // Tick every second while rendering so the elapsed time + progress bar update live.
+  // Tick every second while rendering/assembling so timers + progress bars update live.
   useEffect(() => {
-    if (!rendering) return;
+    if (!rendering && !assembling) return;
     const id = setInterval(() => forceTick((t) => t + 1), 1000);
     return () => clearInterval(id);
-  }, [rendering]);
+  }, [rendering, assembling]);
+
+  // Assemble the FULL clip (avatar speech + Ken-Burns B-roll) via Shotstack.
+  const assembleVideo = async () => {
+    const v = pkg?.variations[active];
+    if (!v || !video?.url) { setErr('הפק קודם וידאו דמות (HeyGen)'); return; }
+    const imgs = (sceneImages[v.id] || []).filter(Boolean);
+    const fmt = VIDEO_FORMATS.find((f) => f.id === videoFormat) || VIDEO_FORMATS[0];
+    setAssembling(true); setAssembled(null); setErr(''); setAssembleStartedAt(Date.now()); setAssembleStage('מעלה תמונות B‑roll…');
+    try {
+      const r = await fetch('/api/ugc/assemble', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ avatarUrl: video.url, images: imgs, durationSec: form.duration, format: { width: fmt.w, height: fmt.h }, businessName: form.businessName, brandColor: '#00B5FE' }) });
+      const j = await r.json();
+      if (!r.ok || !j.renderId) throw new Error(j.error || 'הרכבת הווידאו נכשלה');
+      setAssembleStage('בתור עיבוד…');
+      for (let i = 0; i < 90; i++) {
+        await new Promise((res) => setTimeout(res, 4000));
+        const st = await fetch(`/api/ugc/assemble/status?id=${j.renderId}`, { headers: { 'x-app-role': 'admin' } }).then((x) => x.json());
+        if (st.stage) setAssembleStage(st.stage);
+        if (st.status === 'done' && st.url) {
+          setAssembled(st.url);
+          if (clientId) { try { await fetch('/api/data/client-files', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ clientId, fileName: `UGC סרטון מלא · ${form.businessName || ''} · ${new Date().toLocaleDateString('he-IL')}`, fileUrl: st.url, fileType: 'video', category: 'social_media', fileSize: 0, uploadedBy: null, notes: 'סרטון מורכב (דמות + B-roll) ממחולל UGC' }) }); setMsg('✓ הסרטון המלא נשמר אוטומטית לקבצי הלקוח.'); } catch {} }
+          break;
+        }
+        if (st.status === 'failed') throw new Error(st.error || 'ההרכבה נכשלה');
+      }
+    } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה בהרכבה'); }
+    finally { setAssembling(false); }
+  };
 
   const renderVideo = async () => {
     const v = pkg?.variations[active];
@@ -580,8 +611,43 @@ export default function UgcPage() {
                     )}
                     {video?.status === 'completed' && video.url && (
                       <div style={{ marginTop: 10 }}>
-                        <video src={video.url} controls style={{ width: '100%', maxHeight: 480, borderRadius: 10, background: '#000' }} />
-                        <a href={video.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, color: BRAND, fontWeight: 700, display: 'inline-block', marginTop: 6 }}>⬇ הורד וידאו</a>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--foreground-muted,#6b7280)', marginBottom: 4 }}>🗣 שוט דמות (HeyGen)</div>
+                        <video src={video.url} controls style={{ width: '100%', maxHeight: 420, borderRadius: 10, background: '#000' }} />
+                        <a href={video.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, color: BRAND, fontWeight: 700, display: 'inline-block', marginTop: 6 }}>⬇ הורד שוט דמות</a>
+
+                        {/* ── Full assembly: avatar + storyboard B-roll → one finished clip ── */}
+                        <div style={{ marginTop: 14, borderTop: '1px dashed var(--border,#e5e7eb)', paddingTop: 12 }}>
+                          {assembling ? (() => {
+                            const el = assembleStartedAt ? Math.floor((Date.now() - assembleStartedAt) / 1000) : 0;
+                            const EST = 90; const pct = Math.min(96, Math.round(6 + (el / EST) * 90));
+                            const mm = Math.floor(el / 60); const ss = String(el % 60).padStart(2, '0');
+                            return (
+                              <div style={{ border: `1px solid ${BRAND}40`, background: 'rgba(0,181,254,0.06)', borderRadius: 12, padding: '0.9rem 1rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}><span style={{ fontSize: 13.5, fontWeight: 800, color: BRAND }}>🎬 מרכיב סרטון מלא…</span><span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--foreground-muted,#6b7280)' }}>{mm}:{ss}</span></div>
+                                <div style={{ height: 10, borderRadius: 999, background: 'var(--surface-raised,#eef2f6)', overflow: 'hidden' }}><div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${BRAND}, #7c5cff)`, transition: 'width 0.8s ease' }} /></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 7 }}><span style={{ fontSize: 12, fontWeight: 600 }}>{assembleStage || 'מתחיל…'}</span><span style={{ fontSize: 11.5, color: 'var(--foreground-muted,#9aa0ad)' }}>{pct}%</span></div>
+                              </div>
+                            );
+                          })() : assembled ? (
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 800, color: '#16a34a', marginBottom: 4 }}>✅ סרטון מלא (דמות + B‑roll + קול)</div>
+                              <video src={assembled} controls style={{ width: '100%', maxHeight: 480, borderRadius: 10, background: '#000' }} />
+                              <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+                                <a href={assembled} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, color: BRAND, fontWeight: 700 }}>⬇ הורד סרטון מלא</a>
+                                <button onClick={assembleVideo} style={{ background: 'none', border: 'none', color: 'var(--foreground-muted,#6b7280)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>🔄 הרכב מחדש</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={assembleVideo} style={{ width: '100%', fontSize: 13.5, fontWeight: 800, padding: '0.7rem' }}>
+                                🎬 הרכב סרטון מלא (דמות + B‑roll + תנועה)
+                              </button>
+                              <div style={{ fontSize: 11, color: 'var(--foreground-muted,#6b7280)', marginTop: 6, lineHeight: 1.6 }}>
+                                מחבר את שוט הדמות עם תמונות הסטוריבורד כ‑B‑roll עם תנועת מצלמה (Ken Burns), מעברים, ופס הקול של הדמות — לסרטון אחד מוכן. {(sceneImages[v.id] || []).filter(Boolean).length === 0 ? <b style={{ color: '#b45309' }}>צור קודם תמונות סטוריבורד למעלה לקבלת B‑roll.</b> : `${(sceneImages[v.id] || []).filter(Boolean).length} תמונות סטוריבורד יוטמעו.`}
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
