@@ -195,7 +195,7 @@ export const POST = withErrorBoundary(async (req: NextRequest, ctx: { params: Pr
       // Add 'ai_visibility' to the client's automation modules (uses the backbone).
       const asb = (await import('@/lib/seo/automation/db')).getSb();
       const { data: st } = await asb.from('geo_client_automation_status').select('modules_enabled,run_frequency').eq('plan_id', planId).maybeSingle();
-      const modules = new Set<string>([...(st?.modules_enabled || ['geo_refresh']), 'ai_visibility']);
+      const modules = new Set<string>([...(st?.modules_enabled || ['geo_refresh']), 'ai_visibility', 'visibility_report']);
       await asb.from('geo_client_automation_status').update({ modules_enabled: Array.from(modules), run_frequency: body.frequency || st?.run_frequency || 'weekly', updated_at: new Date().toISOString() }).eq('plan_id', planId);
       return ok({ enabled: true, modules: Array.from(modules) });
     }

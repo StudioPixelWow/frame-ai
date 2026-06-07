@@ -34,6 +34,7 @@ export default function VisibilityCenterPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
+  const [notice, setNotice] = useState('');
   const [preview, setPreview] = useState<any>(null);
   const [newQ, setNewQ] = useState(''); const [newComp, setNewComp] = useState(''); const [newPrompt, setNewPrompt] = useState('');
   const [brandEdits, setBrandEdits] = useState<Record<string, string>>({});
@@ -69,12 +70,16 @@ export default function VisibilityCenterPage() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={async () => { const d = await post({ action: 'cost_preview' }, 'prev'); if (d) setPreview(d); }} disabled={!!busy} style={{ background: C.card, color: C.text, border: `1px solid ${C.border}`, borderRadius: 12, padding: '0.6rem 1rem', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{busy === 'prev' ? '⏳' : '⚡ הרץ בדיקה'}</button>
-          <button onClick={() => post({ action: 'enable_automation', frequency: 'weekly' }, 'auto')} disabled={!!busy} style={{ background: C.primary, color: '#fff', border: 'none', borderRadius: 12, padding: '0.6rem 1rem', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>{busy === 'auto' ? '⏳' : '🔁 הפעל אוטומציה שבועית'}</button>
+          <button onClick={() => window.open(`/api/seo-geo-plans/${planId}/visibility/report?format=html`, '_blank')} style={{ background: C.card, color: C.text, border: `1px solid ${C.border}`, borderRadius: 12, padding: '0.6rem 0.9rem', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>📄 דוח (PDF)</button>
+          <button onClick={() => window.open(`/api/seo-geo-plans/${planId}/visibility/report?format=csv`, '_blank')} style={{ background: C.card, color: C.text, border: `1px solid ${C.border}`, borderRadius: 12, padding: '0.6rem 0.9rem', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>⬇ CSV</button>
+          <button onClick={async () => { setBusy('send'); setErr(''); try { const r = await fetch(`/api/seo-geo-plans/${planId}/visibility/report`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channel: 'email' }) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'שגיאה'); setNotice(`הדוח נשלח ל-${j.data?.to || 'לקוח'}`); } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה'); } finally { setBusy(''); } }} disabled={!!busy} style={{ background: C.card, color: C.text, border: `1px solid ${C.border}`, borderRadius: 12, padding: '0.6rem 0.9rem', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{busy === 'send' ? '⏳' : '✉ שלח ללקוח'}</button>
+          <button onClick={async () => { const d = await post({ action: 'enable_automation', frequency: 'weekly' }, 'auto'); if (d) setNotice('אוטומציה שבועית הופעלה'); }} disabled={!!busy} style={{ background: C.primary, color: '#fff', border: 'none', borderRadius: 12, padding: '0.6rem 1rem', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>{busy === 'auto' ? '⏳' : '🔁 אוטומציה'}</button>
         </div>
       </div>
 
       <div style={{ background: '#FFFBEB', border: `1px solid ${C.warning}40`, color: '#92610A', borderRadius: 10, padding: '0.5rem 0.8rem', fontSize: 11.5, margin: '10px 0' }}>ℹ️ המספרים מבוססים על שאילתות מנוטרות מול מנועי AI — לא נתון רשמי של שימוש בפועל. <b>אומדן</b> מסומן ככזה.</div>
       {err && <div style={{ background: '#FEF2F2', border: `1px solid ${C.danger}40`, color: C.danger, borderRadius: 10, padding: '0.6rem 0.9rem', fontSize: 13, fontWeight: 600, marginBottom: 8 }}>⚠ {err}</div>}
+      {notice && <div style={{ background: `${C.info}10`, border: `1px solid ${C.info}40`, color: C.info, borderRadius: 10, padding: '0.6rem 0.9rem', fontSize: 13, fontWeight: 600, marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}><span>ℹ {notice}</span><span style={{ cursor: 'pointer' }} onClick={() => setNotice('')}>✕</span></div>}
 
       {/* Cost preview modal */}
       {preview && (

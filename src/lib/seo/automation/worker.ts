@@ -22,6 +22,7 @@ import { saveScore } from '@/lib/seo/geo-authority/advanced-db';
 const JOB_COST_CENTS: Record<string, number> = {
   geo_refresh: 0,        // deterministic, no AI
   ai_visibility: 12,     // AI engine calls (controlled query cap)
+  visibility_report: 1,  // build + email the monthly client report
   citation_tracker: 8,
   answer_simulation: 6,
   monthly_report: 1,
@@ -60,6 +61,27 @@ const HANDLERS: Record<string, (plan: any, runId: string, jobId: string) => Prom
     const out = await runVisibilityRun({ planId: plan.id, runType: 'scheduled', queryLimit: limit });
     await log(runId, jobId, plan.id, 'info', `visibility run: score=${out.score} mentions=${out.mentions} citations=${out.citations} (${out.mocked}/${out.responses} mock)`);
     return out;
+  },
+
+  // Monthly client report — build + email (best-effort). Self-limits to once per
+  // calendar month so it's safe inside a weekly/daily module set.
+  async visibility_report(plan, runId, jobId) {
+    const mk = monthKey();
+    const monthStart = `${mk}-01T00:00:00Z`;
+    const { data: already } = await getSb().from('geo_automation_runs').select('id').eq('plan_id', plan.id).eq('job_type', 'visibility_report').eq('status', 'completed').gte('created_at', monthStart).limit(1);
+    if (already && already.length) { await log(runId, jobId, plan.id, 'info', `report already sent for ${mk} — skipped`); return { month: mk, skipped: true }; }
+    const { buildVisibilityReport } = await import('@/lib/seo/geo-visibility/report');
+    const rep = await buildVisibilityReport(plan.id);
+    let emailed = false;
+    try {
+      const { sendEmail, getSenderEmail, isEmailConfigured } = await import('@/lib/email/email-service');
+      if (await isEmailConfigured()) {
+        const to = rep.clientEmail || (await getSenderEmail());
+        if (to) { await sendEmail({ to, subject: `📡 דוח נראות AI — ${rep.clientName} — ${rep.month}`, html: rep.html }); emailed = true; }
+      }
+    } catch { /* best-effort */ }
+    await log(runId, jobId, plan.id, 'info', `monthly report ${rep.month} emailed=${emailed}`);
+    return { month: rep.month, emailed };
   },
 };
 
