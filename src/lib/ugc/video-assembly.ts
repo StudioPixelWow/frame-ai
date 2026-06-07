@@ -36,9 +36,10 @@ export async function hostDataUrl(dataUrl: string, name: string): Promise<string
   } catch { return null; }
 }
 
+export interface BrollItem { src: string; type: 'image' | 'video'; }
 export interface AssembleInput {
   avatarUrl: string;            // HeyGen rendered clip (has the voice)
-  brollUrls: string[];          // public image URLs for B-roll
+  broll: BrollItem[];           // public URLs (images and/or video clips) for B-roll
   durationSec: number;          // total length (avatar clip length)
   format: { width: number; height: number };
   businessName?: string;
@@ -59,16 +60,15 @@ export function buildTimeline(input: AssembleInput) {
   const brollClips: any[] = [];
   let t = OPEN;
   let idx = 0;
-  const imgs = input.brollUrls.filter(Boolean);
-  while (imgs.length && t + CLIP <= T - TAIL) {
-    const src = imgs[idx % imgs.length];
-    brollClips.push({
-      asset: { type: 'image', src },
-      start: +t.toFixed(2), length: CLIP,
-      effect: KEN_BURNS[idx % KEN_BURNS.length],
-      transition: { in: 'fade', out: 'fade' },
-      fit: 'cover',
-    });
+  const items = (input.broll || []).filter((b) => b && b.src);
+  while (items.length && t + CLIP <= T - TAIL) {
+    const it = items[idx % items.length];
+    if (it.type === 'video') {
+      // Real B-roll clip — muted so the avatar's voice keeps playing underneath.
+      brollClips.push({ asset: { type: 'video', src: it.src, volume: 0 }, start: +t.toFixed(2), length: CLIP, transition: { in: 'fade', out: 'fade' }, fit: 'cover' });
+    } else {
+      brollClips.push({ asset: { type: 'image', src: it.src }, start: +t.toFixed(2), length: CLIP, effect: KEN_BURNS[idx % KEN_BURNS.length], transition: { in: 'fade', out: 'fade' }, fit: 'cover' });
+    }
     t += CLIP + GAP; idx++;
   }
 

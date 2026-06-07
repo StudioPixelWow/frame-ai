@@ -18,19 +18,23 @@ export async function POST(req: NextRequest) {
   if (getRequestRole(req) === 'client') return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
   if (!isShotstackConfigured()) return NextResponse.json({ error: 'Shotstack לא מוגדר — הוסף SHOTSTACK_API_KEY ו-SHOTSTACK_ENV' }, { status: 503 });
   try {
-    const { avatarUrl, images, durationSec, format, businessName, brandColor } = await req.json();
+    const { avatarUrl, images, brollVideos, durationSec, format, businessName, brandColor } = await req.json();
     if (!avatarUrl) return NextResponse.json({ error: 'חסר וידאו דמות (avatarUrl) — הפק קודם וידאו HeyGen' }, { status: 400 });
 
-    // Host base64 frames → public URLs (Shotstack needs URLs).
-    const brollUrls: string[] = [];
-    for (let i = 0; i < (Array.isArray(images) ? images.length : 0); i++) {
-      const u = await hostDataUrl(images[i], `scene${i}`);
-      if (u) brollUrls.push(u);
+    // Prefer real B-roll video clips; otherwise fall back to Ken-Burns still frames.
+    const broll: { src: string; type: 'image' | 'video' }[] = [];
+    if (Array.isArray(brollVideos) && brollVideos.filter(Boolean).length) {
+      for (const u of brollVideos.filter(Boolean)) broll.push({ src: u, type: 'video' });
+    } else {
+      for (let i = 0; i < (Array.isArray(images) ? images.length : 0); i++) {
+        const u = await hostDataUrl(images[i], `scene${i}`);
+        if (u) broll.push({ src: u, type: 'image' });
+      }
     }
 
     const edit = buildTimeline({
       avatarUrl,
-      brollUrls,
+      broll,
       durationSec: Number(durationSec) || 30,
       format: { width: format?.width || 1080, height: format?.height || 1920 },
       businessName: businessName || '',

@@ -55,6 +55,8 @@ export default function UgcPage() {
   const [assembleStage, setAssembleStage] = useState('');
   const [assembleStartedAt, setAssembleStartedAt] = useState<number | null>(null);
   const [assembled, setAssembled] = useState<string | null>(null);
+  const [sceneClips, setSceneClips] = useState<Record<string, string[]>>({});
+  const [clipBusyKey, setClipBusyKey] = useState('');
   const [sceneImages, setSceneImages] = useState<Record<string, string[]>>({}); // variationId → [dataURL per shot]
   const [scenesBusy, setScenesBusy] = useState(false);
   const [presenterApproved, setPresenterApproved] = useState(false);
@@ -149,6 +151,27 @@ export default function UgcPage() {
     return () => clearInterval(id);
   }, [rendering, assembling]);
 
+  // Generate a real B-roll VIDEO clip for one shot (image → motion via Replicate).
+  const genClip = async (v: any, i: number) => {
+    const img = sceneImages[v.id]?.[i];
+    if (!img) { setErr('צור קודם תמונת סטוריבורד לשוט הזה'); return; }
+    const key = `${v.id}:${i}`;
+    setClipBusyKey(key); setErr('');
+    try {
+      const prompt = scenePrompt[key]?.trim() || v.shots?.[i]?.direction || v.shots?.[i]?.vo || '';
+      const r = await fetch('/api/ugc/broll', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ image: img, prompt }) });
+      const j = await r.json();
+      if (!r.ok || !j.predictionId) throw new Error(j.error || 'יצירת הקליפ נכשלה');
+      for (let k = 0; k < 60; k++) {
+        await new Promise((res) => setTimeout(res, 4000));
+        const st = await fetch(`/api/ugc/broll/status?id=${j.predictionId}`, { headers: { 'x-app-role': 'admin' } }).then((x) => x.json());
+        if (st.status === 'succeeded' && st.url) { setSceneClips((m) => { const arr = [...(m[v.id] || [])]; arr[i] = st.url; return { ...m, [v.id]: arr }; }); break; }
+        if (st.status === 'failed' || st.status === 'canceled') throw new Error(st.error || 'יצירת הקליפ נכשלה');
+      }
+    } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה ביצירת קליפ'); }
+    finally { setClipBusyKey(''); }
+  };
+
   // Assemble the FULL clip (avatar speech + Ken-Burns B-roll) via Shotstack.
   const assembleVideo = async () => {
     const v = pkg?.variations[active];
@@ -157,7 +180,8 @@ export default function UgcPage() {
     const fmt = VIDEO_FORMATS.find((f) => f.id === videoFormat) || VIDEO_FORMATS[0];
     setAssembling(true); setAssembled(null); setErr(''); setAssembleStartedAt(Date.now()); setAssembleStage('מעלה תמונות B‑roll…');
     try {
-      const r = await fetch('/api/ugc/assemble', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ avatarUrl: video.url, images: imgs, durationSec: form.duration, format: { width: fmt.w, height: fmt.h }, businessName: form.businessName, brandColor: '#00B5FE' }) });
+      const clips = (sceneClips[v.id] || []).filter(Boolean);
+      const r = await fetch('/api/ugc/assemble', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ avatarUrl: video.url, images: imgs, brollVideos: clips, durationSec: form.duration, format: { width: fmt.w, height: fmt.h }, businessName: form.businessName, brandColor: '#00B5FE' }) });
       const j = await r.json();
       if (!r.ok || !j.renderId) throw new Error(j.error || 'הרכבת הווידאו נכשלה');
       setAssembleStage('בתור עיבוד…');
@@ -524,10 +548,19 @@ export default function UgcPage() {
                           placeholder="תיאור התמונה ל-AI (ניתן לערוך)…"
                           style={{ width: '100%', marginTop: 6, fontSize: 11.5, lineHeight: 1.5, borderRadius: 8, border: '1px solid var(--border,#e5e7eb)', background: 'var(--surface,#fff)', color: 'var(--foreground)', padding: '0.4rem 0.5rem', resize: 'vertical', boxSizing: 'border-box' }}
                         />
-                        <button onClick={() => genOneScene(v, i)} disabled={sceneBusyKey === `${v.id}:${i}`}
-                          style={{ marginTop: 5, fontSize: 11.5, fontWeight: 700, color: BRAND, background: 'rgba(0,181,254,0.08)', border: `1px solid ${BRAND}`, borderRadius: 8, padding: '0.3rem 0.7rem', cursor: 'pointer' }}>
-                          {sceneBusyKey === `${v.id}:${i}` ? '⏳ יוצר…' : img ? '🔄 צור מחדש' : '🖼 צור תמונה'}
-                        </button>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 5 }}>
+                          <button onClick={() => genOneScene(v, i)} disabled={sceneBusyKey === `${v.id}:${i}`}
+                            style={{ fontSize: 11.5, fontWeight: 700, color: BRAND, background: 'rgba(0,181,254,0.08)', border: `1px solid ${BRAND}`, borderRadius: 8, padding: '0.3rem 0.7rem', cursor: 'pointer' }}>
+                            {sceneBusyKey === `${v.id}:${i}` ? '⏳ יוצר…' : img ? '🔄 צור מחדש' : '🖼 צור תמונה'}
+                          </button>
+                          {img && (
+                            <button onClick={() => genClip(v, i)} disabled={clipBusyKey === `${v.id}:${i}`}
+                              style={{ fontSize: 11.5, fontWeight: 700, color: '#7c3aed', background: 'rgba(124,58,237,0.08)', border: '1px solid #7c3aed', borderRadius: 8, padding: '0.3rem 0.7rem', cursor: 'pointer' }}>
+                              {clipBusyKey === `${v.id}:${i}` ? '⏳ מייצר קליפ…' : sceneClips[v.id]?.[i] ? '🎥 קליפ מוכן · צור שוב' : '🎥 הפוך לקליפ וידאו'}
+                            </button>
+                          )}
+                          {sceneClips[v.id]?.[i] && <span style={{ fontSize: 10.5, color: '#16a34a', fontWeight: 700 }}>✓ B-roll וידאו</span>}
+                        </div>
                       </div>
                     </div>
                   ); })}
