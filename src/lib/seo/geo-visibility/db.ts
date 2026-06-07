@@ -140,3 +140,9 @@ export async function listCompetitors(planId: string): Promise<any[]> {
   const { data } = await visSb().from('geo_visibility_competitors').select('*').eq('plan_id', planId).eq('status', 'active');
   return data || [];
 }
+export async function listPrompts(planId: string): Promise<any[]> {
+  try {
+    const { data } = await visSb().from('geo_visibility_prompts').select('*').eq('plan_id', planId).eq('status', 'active').order('conversation_depth', { ascending: true });
+    return data || [];
+  } catch { return []; }
+}

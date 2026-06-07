@@ -18,7 +18,8 @@
 
 import { NextRequest } from 'next/server';
 import { ok, err, loadPlan, notFound, requireStaff, withErrorBoundary } from '@/lib/seo/api-helpers';
-import { ensureVisibilityTables, visSb, vid, getBrandProfile, upsertBrandProfile, listQueries, listCompetitors } from '@/lib/seo/geo-visibility/db';
+import { ensureVisibilityTables, visSb, vid, getBrandProfile, upsertBrandProfile, listQueries, listCompetitors, listPrompts } from '@/lib/seo/geo-visibility/db';
+import { generateWithAI } from '@/lib/ai/openai-client';
 import { runVisibilityRun, estimateRunCostCents, generateQueriesFromPlan, ensureBrandProfile } from '@/lib/seo/geo-visibility/run';
 import { availableEngines, VIS_ENGINES } from '@/lib/seo/geo-visibility/provider';
 import { getApiStatus } from '@/lib/seo/platform-apis';
@@ -75,6 +76,7 @@ async function dashboard(planId: string) {
     engines: VIS_ENGINES.map((e) => ({ id: e, available: !!apiStatus[e] })),
     availableEngines: availableEngines(),
     alerts, citationHistory, changeEvents, diffs, globalIndex,
+    prompts: await listPrompts(planId),
     alertCounts: { new: alerts.filter((a: any) => a.status === 'new').length, total: alerts.length },
     metricMeta: METRIC_META,
   };
@@ -158,6 +160,32 @@ export const POST = withErrorBoundary(async (req: NextRequest, ctx: { params: Pr
       const modules = new Set<string>([...(st?.modules_enabled || ['geo_refresh']), 'ai_visibility']);
       await asb.from('geo_client_automation_status').update({ modules_enabled: Array.from(modules), run_frequency: body.frequency || st?.run_frequency || 'weekly', updated_at: new Date().toISOString() }).eq('plan_id', planId);
       return ok({ enabled: true, modules: Array.from(modules) });
+    }
+    case 'add_prompt': {
+      if (!body.prompt_text) return err('prompt_text נדרש');
+      await ensureVisibilityTables();
+      await visSb().from('geo_visibility_prompts').insert({ id: vid('vp'), plan_id: planId, prompt_text: body.prompt_text, parent_query_id: body.parent_query_id || null, parent_prompt_id: body.parent_prompt_id || null, conversation_depth: body.conversation_depth || 1, intent_stage: body.intent_stage || 'consideration', topic: body.topic || null, priority: body.priority || 5, expected_answer_type: body.expected_answer_type || null, target_brand: body.target_brand || null, target_page_url: body.target_page_url || null, status: 'active', created_at: new Date().toISOString() });
+      return ok({ state: await dashboard(planId) });
+    }
+    case 'delete_prompt': {
+      if (!body.id) return err('id נדרש');
+      await visSb().from('geo_visibility_prompts').update({ status: 'deleted' }).eq('id', body.id).eq('plan_id', planId);
+      return ok({ state: await dashboard(planId) });
+    }
+    case 'gen_followups': {
+      const seed = body.seed || (await listQueries(planId))[0]?.query_text;
+      if (!seed) return err('אין שאילתת זרע');
+      const facts = (plan as any)?.websiteScan?.websiteFacts || {};
+      const r = await generateWithAI(
+        'אתה בונה מסעות שיחה (follow-up prompts) שמשתמש אמיתי ישאל מנוע AI, בעברית. החזר JSON array בלבד.',
+        `נושא/שאילתת פתיחה: "${seed}". תחום: ${facts?.detected_industry?.value || ''}.
+ייצר 5 follow-up prompts בעומק עולה. כל פריט: {"prompt":"...","conversation_depth":1-4,"intent_stage":"awareness|consideration|decision","topic":"..."}`,
+        { temperature: 0.6, maxTokens: 1200 });
+      let items: any[] = [];
+      if (r.success) { const d: any = r.data; items = Array.isArray(d) ? d : (typeof d === 'string' ? (() => { try { return JSON.parse(d.slice(d.indexOf('['), d.lastIndexOf(']') + 1)); } catch { return []; } })() : (d?.items || [])); }
+      const rows = items.slice(0, 8).map((p: any) => ({ id: vid('vp'), plan_id: planId, prompt_text: p.prompt, conversation_depth: p.conversation_depth || 1, intent_stage: p.intent_stage || 'consideration', topic: p.topic || seed, priority: 5, status: 'active', created_at: new Date().toISOString() }));
+      if (rows.length) await visSb().from('geo_visibility_prompts').insert(rows);
+      return ok({ created: rows.length, state: await dashboard(planId) });
     }
     case 'alert_status': {
       if (!body.alertId || !body.status) return err('alertId ו-status נדרשים');

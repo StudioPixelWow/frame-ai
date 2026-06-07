@@ -102,6 +102,17 @@ export async function recordRunHistory(args: {
   await ins('geo_citation_diffs', diffRows);
   await ins('geo_visibility_alerts', alertRows);
 
+  // ── Action Center bridge: high-severity alerts become Authority recommendations ──
+  const ALERT_MODULE: Record<string, string> = { brand_left: 'brand_mention', citation_lost: 'citation_builder', competitor_overtook_brand: 'content_authority' };
+  const recRows = alertRows.filter((a) => a.severity === 'high' || a.alert_type === 'citation_lost').slice(0, 25).map((a) => ({
+    id: hid('grec'), plan_id: args.planId, client_id: args.clientId,
+    module_id: ALERT_MODULE[a.alert_type] || 'authority_score',
+    title: `[נראות AI] ${a.title}`, description: `${a.description}${a.action_recommendation ? ' — ' + a.action_recommendation : ''}`,
+    priority: a.severity === 'high' ? 'high' : 'medium', related_page: a.related_url || null,
+    estimated_impact: 'שיפור נראות AI', status: 'open', created_by: 'ai_visibility', created_at: now,
+  }));
+  if (recRows.length) { try { await sb.from('geo_recommendations').insert(recRows); } catch { /* table from authority center */ } }
+
   // Upsert citation history (own-site URLs seen this run + lost).
   await upsertCitationHistory(args.planId, now, ownUrlsSeen, lostOwnUrls);
   // Upsert global index.

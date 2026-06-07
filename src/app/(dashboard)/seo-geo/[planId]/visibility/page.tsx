@@ -12,7 +12,7 @@ const C = {
 };
 const TABS = [
   { id: 'overview', label: 'סקירה', icon: '📊' }, { id: 'alerts', label: 'התראות', icon: '🔔' },
-  { id: 'queries', label: 'שאילתות', icon: '🔤' }, { id: 'runs', label: 'ריצות', icon: '⚡' },
+  { id: 'queries', label: 'שאילתות', icon: '🔤' }, { id: 'prompts', label: 'Prompts', icon: '🧭' }, { id: 'runs', label: 'ריצות', icon: '⚡' },
   { id: 'mentions', label: 'אזכורים', icon: '💬' }, { id: 'citations', label: 'ציטוטים', icon: '🔗' },
   { id: 'timeline', label: 'Citation Timeline', icon: '📈' }, { id: 'changelog', label: 'Change Log', icon: '📝' },
   { id: 'diffs', label: 'Diffs', icon: '🔀' }, { id: 'competitors', label: 'מתחרים', icon: '🥊' },
@@ -35,7 +35,7 @@ export default function VisibilityCenterPage() {
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
   const [preview, setPreview] = useState<any>(null);
-  const [newQ, setNewQ] = useState(''); const [newComp, setNewComp] = useState('');
+  const [newQ, setNewQ] = useState(''); const [newComp, setNewComp] = useState(''); const [newPrompt, setNewPrompt] = useState('');
   const [brandEdits, setBrandEdits] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
@@ -166,6 +166,21 @@ export default function VisibilityCenterPage() {
                 {(s.opportunities || []).map((q: any) => <tr key={q.id}><Td>{q.query}</Td><Td>{q.topic}</Td><Td>{q.intent || '—'}</Td><Td>{q.priority}</Td></tr>)}
               </tbody></table>
               <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>* מוצגות שאילתות ללא אזכור (הזדמנויות). הרשימה המלאה זמינה דרך הריצות.</div>
+            </div>
+          )}
+
+          {tab === 'prompts' && (
+            <div style={card}>
+              <div style={{ fontSize: 12, color: C.textSecondary, marginBottom: 10 }}>Prompts הם שאלות בסגנון שיחה (follow-up) שנמדדות בנוסף לשאילתות — לניטור Conversation Path Visibility.</div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <input value={newPrompt} onChange={(e) => setNewPrompt(e.target.value)} placeholder="הוסף prompt בסגנון שיחה…" style={{ flex: 1, fontSize: 13, padding: '0.5rem 0.7rem', border: `1px solid ${C.border}`, borderRadius: 9 }} />
+                <button onClick={() => { if (newPrompt.trim()) { post({ action: 'add_prompt', prompt_text: newPrompt.trim() }, 'ap'); setNewPrompt(''); } }} disabled={!!busy} style={{ background: C.primary, color: '#fff', border: 'none', borderRadius: 9, padding: '0.5rem 1rem', fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}>+ הוסף</button>
+                <button onClick={() => post({ action: 'gen_followups' }, 'gf')} disabled={!!busy} style={{ background: C.card, color: C.text, border: `1px solid ${C.border}`, borderRadius: 9, padding: '0.5rem 1rem', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>{busy === 'gf' ? '⏳' : '✨ צור follow-ups'}</button>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}><thead><tr><Th>Prompt</Th><Th>עומק</Th><Th>שלב כוונה</Th><Th>תחום</Th><Th></Th></tr></thead><tbody>
+                {(s.prompts || []).map((p: any) => <tr key={p.id}><Td w={420}>{p.prompt_text}</Td><Td>{p.conversation_depth}</Td><Td>{p.intent_stage}</Td><Td>{p.topic}</Td><Td><button onClick={() => post({ action: 'delete_prompt', id: p.id }, `dp-${p.id}`)} style={{ background: 'none', border: 'none', color: C.danger, cursor: 'pointer', fontSize: 12 }}>מחק</button></Td></tr>)}
+                {(s.prompts || []).length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', color: C.textMuted, padding: '1.5rem' }}>אין prompts — הוסף או צור follow-ups אוטומטית.</td></tr>}
+              </tbody></table>
             </div>
           )}
 

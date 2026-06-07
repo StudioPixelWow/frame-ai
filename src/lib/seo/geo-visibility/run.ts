@@ -7,7 +7,7 @@
  */
 
 import { seoPlans } from '@/lib/db';
-import { ensureVisibilityTables, vid, visSb, visMonthKey, getBrandProfile, upsertBrandProfile, listQueries, listCompetitors } from './db';
+import { ensureVisibilityTables, vid, visSb, visMonthKey, getBrandProfile, upsertBrandProfile, listQueries, listCompetitors, listPrompts } from './db';
 import { availableEngines, runQuery, extractMention, extractCitations, extractCompetitors, VIS_ENGINES, type BrandMatch } from './provider';
 import { calculateAIVisibilityScore, estimateAIReach } from './scoring';
 import { classifyCitation, recordRunHistory, type PerResponse } from './history';
@@ -69,6 +69,10 @@ export async function runVisibilityRun(opts: RunOpts) {
   const brand = await ensureBrandProfile(planId);
   await generateQueriesFromPlan(planId);
   let queries = await listQueries(planId);
+  // Prompt-level visibility: include active prompts (conversation-style) as queries.
+  const prompts = await listPrompts(planId);
+  const promptAsQuery = prompts.map((p: any) => ({ id: p.id, query_text: p.prompt_text, topic: p.topic || 'prompt', estimated_search_volume: null, business_importance_score: p.priority || 5 }));
+  queries = [...queries, ...promptAsQuery];
   const limit = opts.queryLimit ?? 25;
   queries = queries.slice(0, limit);
 
@@ -94,7 +98,7 @@ export async function runVisibilityRun(opts: RunOpts) {
     started_at: startedAt, total_queries: queries.length * engines.length, created_at: startedAt,
   });
 
-  let responses = 0, ok = 0, fail = 0, mentions = 0, citations = 0, compMentions = 0, negative = 0, mock = 0;
+  let responses = 0, ok = 0, fail = 0, mentions = 0, citations = 0, weightedCit = 0, compMentions = 0, negative = 0, mock = 0;
   const positions: number[] = []; const recLevels: string[] = []; const topics = new Set<string>(); const topicsCovered = new Set<string>();
   const respRows: any[] = [], menRows: any[] = [], citRows: any[] = [], cmRows: any[] = [];
   const perResponse: PerResponse[] = [];
@@ -124,6 +128,7 @@ export async function runVisibilityRun(opts: RunOpts) {
         for (const c of extractCitations(res, brand, compDomains)) {
           citations++;
           const cls = classifyCitation(c.position, c.isOwn);
+          weightedCit += cls.weight;
           citRows.push({ id: vid('vcit'), plan_id: planId, run_id: runId, query_id: q.id, response_id: respId, ai_engine: engine, cited_url: c.url, cited_domain: c.domain, cited_page_title: c.title || null, citation_position: c.position, is_own_site: c.isOwn, is_competitor_site: c.isCompetitor, confidence_score: res.confidence, source_classification: cls.classification, source_weight: Math.round(cls.weight), is_primary_source: cls.isPrimary, is_featured_source: cls.isFeatured, classification_reason: cls.reason, created_at: new Date().toISOString() });
           prCitations.push({ url: c.url, domain: c.domain, isOwn: c.isOwn, isCompetitor: c.isCompetitor, position: c.position });
         }
@@ -146,7 +151,7 @@ export async function runVisibilityRun(opts: RunOpts) {
   await insertChunked('geo_visibility_competitor_mentions', cmRows);
 
   const avgPosition = positions.length ? positions.reduce((a, b) => a + b, 0) / positions.length : null;
-  const score = calculateAIVisibilityScore({ totalResponses: responses, mentions, citations, competitorMentions: compMentions, avgPosition, recommendationLevels: recLevels, topicsCovered: topicsCovered.size, totalTopics: topics.size, negativeSentiment: negative });
+  const score = calculateAIVisibilityScore({ totalResponses: responses, mentions, citations, weightedCitations: weightedCit, competitorMentions: compMentions, avgPosition, recommendationLevels: recLevels, topicsCovered: topicsCovered.size, totalTopics: topics.size, negativeSentiment: negative });
   const mentionRate = responses ? mentions / responses : 0;
   const citationRate = responses ? citations / responses : 0;
   const reach = estimateAIReach({ queries, mentionRate, citationRate, enginesCount: engines.length });

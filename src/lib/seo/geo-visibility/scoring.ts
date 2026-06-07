@@ -8,6 +8,7 @@ export interface VisInputs {
   totalResponses: number;
   mentions: number;
   citations: number;
+  weightedCitations?: number;      // sum of source_weight (primary/featured count more)
   competitorMentions: number;
   avgPosition: number | null;      // 1 = best
   recommendationLevels: string[];  // per mention
@@ -24,7 +25,9 @@ export function calculateAIVisibilityScore(i: VisInputs): { value: number; expla
   const resp = Math.max(1, i.totalResponses);
   const mentionRate = i.mentions / resp;                                   // 25%
   const sov = (i.mentions + i.competitorMentions) > 0 ? i.mentions / (i.mentions + i.competitorMentions) : 0; // 20%
-  const citationRate = i.citations / resp;                                 // 20%
+  // Citation component rewards STRONGER sources (primary/featured weigh more).
+  const citEffective = i.weightedCitations != null ? i.weightedCitations : i.citations;
+  const citationRate = Math.min(1, citEffective / resp);                   // 20%
   const positionScore = i.avgPosition ? Math.max(0, 1 - (i.avgPosition - 1) / 9) : 0; // 10% (1→1, 10→0)
   const recScore = i.recommendationLevels.length ? i.recommendationLevels.reduce((a, l) => a + (REC_WEIGHT[l] ?? 0), 0) / i.recommendationLevels.length : 0; // 10%
   const topicScore = i.totalTopics ? i.topicsCovered / i.totalTopics : 0;  // 10%
