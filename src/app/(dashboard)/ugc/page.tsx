@@ -41,6 +41,9 @@ export default function UgcPage() {
   const [heygenReady, setHeygenReady] = useState<boolean | null>(null);
   const [rendering, setRendering] = useState(false);
   const [video, setVideo] = useState<{ status: string; url?: string } | null>(null);
+  const [renderStartedAt, setRenderStartedAt] = useState<number | null>(null);
+  const [renderStage, setRenderStage] = useState('');
+  const [, forceTick] = useState(0);
   const [sceneImages, setSceneImages] = useState<Record<string, string[]>>({}); // variationId → [dataURL per shot]
   const [scenesBusy, setScenesBusy] = useState(false);
   const [presenterApproved, setPresenterApproved] = useState(false);
@@ -128,21 +131,32 @@ export default function UgcPage() {
     } finally { setScenesBusy(false); }
   };
 
+  // Tick every second while rendering so the elapsed time + progress bar update live.
+  useEffect(() => {
+    if (!rendering) return;
+    const id = setInterval(() => forceTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [rendering]);
+
   const renderVideo = async () => {
     const v = pkg?.variations[active];
     if (!v) return;
     if (!avatarId || !voiceId) { setErr('בחר דמות וקול'); return; }
     setRendering(true); setVideo({ status: 'pending' }); setErr('');
+    setRenderStartedAt(Date.now()); setRenderStage('שולח תסריט ל‑HeyGen…');
     try {
       const gen = await fetch('/api/data/heygen/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ avatarId, voiceId, script: v.fullScript, dimension: { width: 1080, height: 1920 } }) });
       const gj = await gen.json();
       if (!gen.ok || !gj.videoId) throw new Error(gj.error || 'יצירת הווידאו נכשלה');
       const videoId = gj.videoId;
+      setRenderStage('הווידאו בתור עיבוד אצל HeyGen…');
       // Poll status (up to ~5 min).
       for (let i = 0; i < 60; i++) {
         await new Promise((r) => setTimeout(r, 5000));
         const st = await fetch(`/api/data/heygen/status?videoId=${videoId}`).then((r) => r.json());
+        if (st.status === 'processing' || st.status === 'pending' || st.status === 'waiting') setRenderStage('מעבד את הווידאו (רינדור הדמות + הקול)…');
         if (st.status === 'completed' && st.videoUrl) {
+          setRenderStage('כמעט מוכן — שומר…');
           setVideo({ status: 'completed', url: st.videoUrl });
           // Auto-save the finished video into the client's Files tab.
           if (clientId) {
@@ -511,10 +525,34 @@ export default function UgcPage() {
                         </div>
                       );
                     })()}
-                    <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={renderVideo} disabled={rendering || heygenReady === null || !presenterApproved}
-                      style={{ width: '100%', fontSize: 13.5, fontWeight: 800, padding: '0.7rem', opacity: rendering ? 0.6 : 1 }}>
-                      {rendering ? `⏳ מפיק וידאו… (${video?.status || 'pending'})` : '🎬 הפק וידאו מהתסריט הזה'}
-                    </button>
+                    {rendering ? (() => {
+                      const elapsed = renderStartedAt ? Math.floor((Date.now() - renderStartedAt) / 1000) : 0;
+                      const EST = 120; // typical HeyGen render ~2 min
+                      const pct = Math.min(96, Math.round(6 + (elapsed / EST) * 90));
+                      const mm = String(Math.floor(elapsed / 60)).padStart(1, '0'); const ss = String(elapsed % 60).padStart(2, '0');
+                      const remain = Math.max(0, EST - elapsed);
+                      return (
+                        <div style={{ border: `1px solid ${BRAND}40`, background: 'rgba(0,181,254,0.06)', borderRadius: 12, padding: '0.9rem 1rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <span style={{ fontSize: 13.5, fontWeight: 800, color: BRAND }}>🎬 מפיק את הווידאו…</span>
+                            <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--foreground-muted,#6b7280)' }}>{mm}:{ss}</span>
+                          </div>
+                          <div style={{ height: 10, borderRadius: 999, background: 'var(--surface-raised,#eef2f6)', overflow: 'hidden' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${BRAND}, #7c5cff)`, borderRadius: 999, transition: 'width 0.8s ease' }} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 7 }}>
+                            <span style={{ fontSize: 12, color: 'var(--foreground)', fontWeight: 600 }}>{renderStage || 'מתחיל…'}</span>
+                            <span style={{ fontSize: 11.5, color: 'var(--foreground-muted,#9aa0ad)' }}>{pct}% · נותרו ~{remain}s</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--foreground-muted,#9aa0ad)', marginTop: 6 }}>זמן הרינדור תלוי ב‑HeyGen (בד״כ 1–3 דקות). אפשר להישאר במסך — נעדכן אוטומטית כשהווידאו מוכן.</div>
+                        </div>
+                      );
+                    })() : (
+                      <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={renderVideo} disabled={heygenReady === null || !presenterApproved}
+                        style={{ width: '100%', fontSize: 13.5, fontWeight: 800, padding: '0.7rem' }}>
+                        🎬 הפק וידאו מהתסריט הזה
+                      </button>
+                    )}
                     {video?.status === 'completed' && video.url && (
                       <div style={{ marginTop: 10 }}>
                         <video src={video.url} controls style={{ width: '100%', maxHeight: 480, borderRadius: 10, background: '#000' }} />
