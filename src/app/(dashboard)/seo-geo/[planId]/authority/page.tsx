@@ -78,6 +78,10 @@ export default function AuthorityCenterPage() {
           <p style={{ color: C.textSecondary, fontSize: 13.5, margin: '4px 0 0' }}>ציון סמכות, 15 מודולים, המלצות → משימות, וטיוטות — שום שינוי לא מתפרסם ללא אישור.</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => router.push(`/seo-geo/${planId}/visibility`)}
+            style={{ background: '#0A2540', color: '#fff', border: 'none', borderRadius: 12, padding: '0.6rem 1.1rem', fontWeight: 800, fontSize: 13.5, cursor: 'pointer' }}>
+            📡 AI Visibility
+          </button>
           <button onClick={() => router.push(`/seo-geo/${planId}/growth`)}
             style={{ background: '#1A1A2E', color: '#fff', border: 'none', borderRadius: 12, padding: '0.6rem 1.1rem', fontWeight: 800, fontSize: 13.5, cursor: 'pointer' }}>
             🚀 Advanced Growth

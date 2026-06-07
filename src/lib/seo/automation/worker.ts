@@ -21,7 +21,8 @@ import { saveScore } from '@/lib/seo/geo-authority/advanced-db';
 /** estimated cost per job type, in cents (for budget control). */
 const JOB_COST_CENTS: Record<string, number> = {
   geo_refresh: 0,        // deterministic, no AI
-  citation_tracker: 8,   // AI calls (future)
+  ai_visibility: 12,     // AI engine calls (controlled query cap)
+  citation_tracker: 8,
   answer_simulation: 6,
   monthly_report: 1,
 };
@@ -50,6 +51,15 @@ const HANDLERS: Record<string, (plan: any, runId: string, jobId: string) => Prom
     for (const [kind, sc] of Object.entries(scores)) { await saveScore({ planId: plan.id, clientId: plan.clientId, kind, value: sc.value, explanation: sc.explanation, factors: sc.factors, recommendations: sc.recommendations }).catch(() => {}); n++; }
     await log(runId, jobId, plan.id, 'info', `${n} advanced scores persisted`);
     return { authority: a.overall, recommendations: a.recommendations.length, scores: n };
+  },
+
+  // Scheduled AI Visibility run — controlled query set × AI engines, measured.
+  async ai_visibility(plan, runId, jobId) {
+    const { runVisibilityRun } = await import('@/lib/seo/geo-visibility/run');
+    const limit = Number(process.env.GEO_VISIBILITY_MAX_RUN_QUERIES || 12);
+    const out = await runVisibilityRun({ planId: plan.id, runType: 'scheduled', queryLimit: limit });
+    await log(runId, jobId, plan.id, 'info', `visibility run: score=${out.score} mentions=${out.mentions} citations=${out.citations} (${out.mocked}/${out.responses} mock)`);
+    return out;
   },
 };
 
