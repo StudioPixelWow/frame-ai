@@ -749,7 +749,7 @@ export default function UgcPage() {
                               <video src={assembled} controls style={{ width: '100%', maxHeight: 480, borderRadius: 10, background: '#000' }} />
                               <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
                                 <a href={assembled} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, color: BRAND, fontWeight: 700 }}>⬇ הורד סרטון מלא</a>
-                                <button onClick={assembleVideo} style={{ background: 'none', border: 'none', color: 'var(--foreground-muted,#6b7280)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>🔄 הרכב מחדש</button>
+                                <button onClick={() => assembleVideo()} style={{ background: 'none', border: 'none', color: 'var(--foreground-muted,#6b7280)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>🔄 הרכב מחדש</button>
                               </div>
                             </div>
                           ) : (
@@ -816,7 +816,7 @@ export default function UgcPage() {
                                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }} title="הדמות מדברת בפינה בזמן שה-B-roll מלא מסך"><input type="checkbox" checked={pipOn} onChange={(e) => setPipOn(e.target.checked)} /> 🧑‍🎤 פרזנטור בתוך הסצנה (PIP)</label>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }} title="כותרת Hook גדולה ב-3 השניות הראשונות"><input type="checkbox" checked={hookOn} onChange={(e) => setHookOn(e.target.checked)} /> 🎯 Hook פתיחה</label>
                               </div>
-                              <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={assembleVideo} style={{ width: '100%', fontSize: 13.5, fontWeight: 800, padding: '0.7rem' }}>
+                              <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={() => assembleVideo()} style={{ width: '100%', fontSize: 13.5, fontWeight: 800, padding: '0.7rem' }}>
                                 🎬 הרכב סרטון מלא (דמות + B‑roll + תנועה)
                               </button>
                               <div style={{ fontSize: 11, color: 'var(--foreground-muted,#6b7280)', marginTop: 6, lineHeight: 1.6 }}>
