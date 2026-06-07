@@ -62,8 +62,9 @@ async function dashboard(planId: string) {
     sb.from('geo_citation_history').select('*').eq('plan_id', planId).order('last_seen_at', { ascending: false }).limit(100).then((r) => r.data || []),
     sb.from('geo_ai_answer_change_events').select('*').eq('plan_id', planId).order('created_at', { ascending: false }).limit(80).then((r) => r.data || []),
     sb.from('geo_citation_diffs').select('*').eq('plan_id', planId).order('created_at', { ascending: false }).limit(80).then((r) => r.data || []),
-    sb.from('geo_global_citation_index').select('*').order('citation_frequency', { ascending: false }).limit(50).then((r) => r.data || []),
+    sb.from('geo_global_citation_index').select('*').order('citation_frequency', { ascending: false }).limit(500).then((r) => r.data || []),
   ]);
+  const globalInsights = computeGlobalInsights(globalIndex);
 
   const latest = agg[agg.length - 1] || null;
   const apiStatus = getApiStatus();
@@ -75,11 +76,48 @@ async function dashboard(planId: string) {
     brand, queryCount: queries.length, competitorCount: competitors.length,
     engines: VIS_ENGINES.map((e) => ({ id: e, available: !!apiStatus[e] })),
     availableEngines: availableEngines(),
-    alerts, citationHistory, changeEvents, diffs, globalIndex,
+    alerts, citationHistory, changeEvents, diffs, globalIndex: globalIndex.slice(0, 50), globalInsights,
     prompts: await listPrompts(planId),
     alertCounts: { new: alerts.filter((a: any) => a.status === 'new').length, total: alerts.length },
     metricMeta: METRIC_META,
   };
+}
+
+// Advanced Global Citation Index insights (aggregated, anonymous).
+function computeGlobalInsights(rows: any[]) {
+  const sumBy = (key: string) => {
+    const m: Record<string, number> = {};
+    for (const r of rows) { const k = r[key] || '—'; m[k] = (m[k] || 0) + (r.citation_frequency || 0); }
+    return Object.entries(m).map(([k, v]) => ({ key: k, value: v })).sort((a, b) => b.value - a.value);
+  };
+  const mostCitedDomains = sumBy('cited_domain').slice(0, 12);
+  const mostCitedPageTypes = sumBy('page_type').slice(0, 8);
+  const byEngine = sumBy('ai_engine').slice(0, 8);
+
+  // Per-topic dominant source type → "AI prefers X for topic Y".
+  const topicType: Record<string, Record<string, number>> = {};
+  const topicDomains: Record<string, Set<string>> = {};
+  for (const r of rows) {
+    const t = r.topic || '—';
+    (topicType[t] ||= {})[r.page_type || 'page'] = (topicType[t]?.[r.page_type || 'page'] || 0) + (r.citation_frequency || 0);
+    (topicDomains[t] ||= new Set()).add(r.cited_domain);
+  }
+  const topicPreference = Object.entries(topicType).map(([topic, types]) => {
+    const top = Object.entries(types).sort((a, b) => b[1] - a[1])[0];
+    return { topic, preferredSource: top?.[0] || '—', strength: top?.[1] || 0 };
+  }).sort((a, b) => b.strength - a.strength).slice(0, 15);
+
+  // Competitiveness/volatility proxy: distinct domains per topic (more = more volatile).
+  const topicVolatility = Object.entries(topicDomains).map(([topic, set]) => ({ topic, distinctSources: set.size }))
+    .sort((a, b) => b.distinctSources - a.distinctSources).slice(0, 12);
+
+  const buckets = {
+    government: topicPreference.filter((t) => t.preferredSource === 'government').map((t) => t.topic),
+    blog: topicPreference.filter((t) => t.preferredSource === 'blog').map((t) => t.topic),
+    service: topicPreference.filter((t) => t.preferredSource === 'service').map((t) => t.topic),
+    reference: topicPreference.filter((t) => t.preferredSource === 'reference').map((t) => t.topic),
+  };
+  return { mostCitedDomains, mostCitedPageTypes, byEngine, topicPreference, topicVolatility, buckets, totalRows: rows.length };
 }
 
 // Real-vs-Estimated framework: how each metric is sourced (drives the UI badges + tooltips).

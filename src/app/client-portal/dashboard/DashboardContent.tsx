@@ -15,6 +15,7 @@ import { useMemo, useState, useCallback, useEffect, Suspense } from 'react';
 import WelcomeBand from '@/components/ui/welcome-band';
 import PortalHighlights from './PortalHighlights';
 import PortalTaskRequest from './PortalTaskRequest';
+import PortalVisibility from './PortalVisibility';
 
 /* ═══════════════════════════════════════════════
    CSS — Apple-level micro-interactions
@@ -234,6 +235,7 @@ function DashboardContentInner() {
       {/* ═══ SUBMIT TASK REQUEST + CALENDAR + SITE/SOCIAL PREVIEW + CONTACT ═══ */}
       <div style={{ marginBottom: '1rem' }}>
         <PortalTaskRequest clientId={clientId || ''} />
+        <PortalVisibility clientId={clientId || ''} />
         <PortalHighlights client={client} clientId={clientId || ''} />
       </div>
 

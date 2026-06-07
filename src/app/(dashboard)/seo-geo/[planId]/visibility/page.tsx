@@ -282,16 +282,46 @@ export default function VisibilityCenterPage() {
             </div>
           )}
 
-          {tab === 'global' && (
-            <div style={card}>
-              <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>🌐 Global Citation Index</div>
-              <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 10 }}>נתונים אגרגטיביים ואנונימיים מכל הלקוחות — אילו דומיינים/סוגי עמודים AI מעדיף, לפי תחום ומנוע. <Tag kind="measured" /></div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}><thead><tr><Th>דומיין</Th><Th>סוג עמוד</Th><Th>תחום</Th><Th>מנוע</Th><Th>תדירות</Th><Th>מיקום ממוצע</Th></tr></thead><tbody>
-                {(s.globalIndex || []).map((g: any) => <tr key={g.id}><Td>{g.cited_domain}</Td><Td>{g.page_type}</Td><Td>{g.topic}</Td><Td>{g.ai_engine}</Td><Td>{g.citation_frequency}</Td><Td>{Number(g.citation_position_avg).toFixed(1)}</Td></tr>)}
-                {(s.globalIndex || []).length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: C.textMuted, padding: '1.5rem' }}>האינדקס נבנה עם כל ריצה. הרץ בדיקות כדי לצבור נתונים.</td></tr>}
-              </tbody></table>
-            </div>
-          )}
+          {tab === 'global' && (() => {
+            const gi = s.globalInsights || {};
+            const Bar = ({ items }: { items: any[] }) => (
+              <div>{(items || []).slice(0, 8).map((it: any) => { const max = Math.max(1, ...(items || []).map((x: any) => x.value)); return (
+                <div key={it.key} style={{ marginBottom: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5 }}><span style={{ color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 240 }}>{it.key}</span><b>{it.value}</b></div>
+                  <div style={{ height: 6, borderRadius: 999, background: C.borderLight, overflow: 'hidden' }}><div style={{ width: `${(it.value / max) * 100}%`, height: '100%', background: C.primary }} /></div>
+                </div>
+              ); })}{(items || []).length === 0 && <div style={{ color: C.textMuted, fontSize: 12 }}>—</div>}</div>
+            );
+            const srcLabel: any = { government: 'מקורות ממשלתיים', blog: 'בלוגים', service: 'עמודי שירות', reference: 'מקורות ידע (ויקי)', page: 'עמודים כלליים' };
+            return (
+              <div style={{ display: 'grid', gap: 14 }}>
+                <div style={{ fontSize: 11.5, color: C.textMuted }}>🌐 נתונים אגרגטיביים ואנונימיים מכל הלקוחות (Data Moat). <Tag kind="measured" /> · {gi.totalRows || 0} רשומות אינדקס</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+                  <div style={card}><div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 8 }}>דומיינים מצוטטים מובילים</div><Bar items={gi.mostCitedDomains} /></div>
+                  <div style={card}><div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 8 }}>סוגי עמודים מועדפים</div><Bar items={gi.mostCitedPageTypes} /></div>
+                  <div style={card}><div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 8 }}>פילוח לפי מנוע</div><Bar items={gi.byEngine} /></div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  <div style={card}>
+                    <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 8 }}>מה AI מעדיף לכל תחום</div>
+                    {(gi.topicPreference || []).map((t: any) => <div key={t.topic} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 0', borderTop: `1px solid ${C.borderLight}` }}><span>{t.topic}</span><b style={{ color: C.primaryDark }}>{srcLabel[t.preferredSource] || t.preferredSource}</b></div>)}
+                    {(gi.topicPreference || []).length === 0 && <div style={{ color: C.textMuted, fontSize: 12 }}>—</div>}
+                  </div>
+                  <div style={card}>
+                    <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 8 }}>תנודתיות/תחרותיות לפי תחום</div>
+                    <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 6 }}>יותר מקורות שונים = תחום תנודתי/תחרותי יותר</div>
+                    {(gi.topicVolatility || []).map((t: any) => <div key={t.topic} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 0', borderTop: `1px solid ${C.borderLight}` }}><span>{t.topic}</span><b style={{ color: t.distinctSources > 5 ? C.warning : C.textSecondary }}>{t.distinctSources} מקורות</b></div>)}
+                    {(gi.topicVolatility || []).length === 0 && <div style={{ color: C.textMuted, fontSize: 12 }}>—</div>}
+                  </div>
+                </div>
+                <details style={card}><summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>טבלת אינדקס מלאה</summary>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, marginTop: 10 }}><thead><tr><Th>דומיין</Th><Th>סוג עמוד</Th><Th>תחום</Th><Th>מנוע</Th><Th>תדירות</Th><Th>מיקום ממוצע</Th></tr></thead><tbody>
+                    {(s.globalIndex || []).map((g: any) => <tr key={g.id}><Td>{g.cited_domain}</Td><Td>{g.page_type}</Td><Td>{g.topic}</Td><Td>{g.ai_engine}</Td><Td>{g.citation_frequency}</Td><Td>{Number(g.citation_position_avg).toFixed(1)}</Td></tr>)}
+                  </tbody></table>
+                </details>
+              </div>
+            );
+          })()}
 
           {tab === 'settings' && (
             <div style={card}>
