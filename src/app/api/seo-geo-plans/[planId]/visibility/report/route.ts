@@ -20,6 +20,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ planId: str
   const { planId } = await ctx.params;
   const { plan, error } = await loadPlan(planId, req); if (error) return error; if (!plan) return notFound('Plan');
   const format = req.nextUrl.searchParams.get('format') || 'html';
+  if (format === 'progress') {
+    const { buildGeoProgressReport } = await import('@/lib/seo/geo-visibility/progress-report');
+    const prog = await buildGeoProgressReport(planId);
+    return new NextResponse(prog.html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  }
   const rep = await buildVisibilityReport(planId);
   if (format === 'csv') return new NextResponse(rep.csv, { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="ai-visibility-${rep.month}.csv"` } });
   if (format === 'json') return NextResponse.json(rep.data);
