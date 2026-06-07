@@ -23,7 +23,7 @@ async function overview() {
   await ensureAutomationTables();
   const sb = getSb();
   const [statuses, runs, failed, queued] = await Promise.all([
-    sb.from('geo_client_automation_status').select('*').order('next_run_at', { ascending: true }).limit(500),
+    sb.from('geo_client_automation_status').select('*').eq('automation_enabled', true).order('next_run_at', { ascending: true }).limit(500),
     sb.from('geo_automation_runs').select('*').order('created_at', { ascending: false }).limit(40),
     sb.from('geo_automation_jobs').select('*').eq('status', 'failed').order('finished_at', { ascending: false }).limit(40),
     sb.from('geo_automation_jobs').select('id,status').in('status', ['queued', 'running', 'waiting_for_budget']).limit(1000),
