@@ -77,10 +77,16 @@ export default function AuthorityCenterPage() {
           <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>🏆 SEO GEO Authority Center</h1>
           <p style={{ color: C.textSecondary, fontSize: 13.5, margin: '4px 0 0' }}>ציון סמכות, 15 מודולים, המלצות → משימות, וטיוטות — שום שינוי לא מתפרסם ללא אישור.</p>
         </div>
-        <button onClick={() => post({ action: 'recompute' }, 'recompute')} disabled={!!busy}
-          style={{ background: C.primary, color: '#fff', border: 'none', borderRadius: 12, padding: '0.6rem 1.1rem', fontWeight: 800, fontSize: 13.5, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
-          {busy === 'recompute' ? '⏳ מחשב…' : '↻ חשב מחדש'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => router.push(`/seo-geo/${planId}/growth`)}
+            style={{ background: '#1A1A2E', color: '#fff', border: 'none', borderRadius: 12, padding: '0.6rem 1.1rem', fontWeight: 800, fontSize: 13.5, cursor: 'pointer' }}>
+            🚀 Advanced Growth
+          </button>
+          <button onClick={() => post({ action: 'recompute' }, 'recompute')} disabled={!!busy}
+            style={{ background: C.primary, color: '#fff', border: 'none', borderRadius: 12, padding: '0.6rem 1.1rem', fontWeight: 800, fontSize: 13.5, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+            {busy === 'recompute' ? '⏳ מחשב…' : '↻ חשב מחדש'}
+          </button>
+        </div>
       </div>
 
       {err && <div style={{ background: '#FEF2F2', border: `1px solid ${C.danger}40`, color: C.danger, borderRadius: 10, padding: '0.6rem 0.9rem', fontSize: 13, fontWeight: 600, margin: '10px 0' }}>⚠ {err}</div>}

@@ -124,7 +124,86 @@ ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS due_date       date;
 
 
 -- ============================================================================
--- C. STORAGE BUCKET (not SQL — do this in the dashboard, once)
+-- C. ADVANCED GEO GROWTH CENTER (25 advanced modules)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS public.geo_scores (
+  id text PRIMARY KEY, plan_id text NOT NULL, client_id text, kind text NOT NULL,
+  scope text DEFAULT 'site', ref text, value integer NOT NULL DEFAULT 0,
+  explanation text, factors jsonb DEFAULT '[]', recommendations jsonb DEFAULT '[]',
+  created_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS geo_scores_plan ON public.geo_scores(plan_id, kind);
+
+CREATE TABLE IF NOT EXISTS public.geo_opportunities (
+  id text PRIMARY KEY, plan_id text NOT NULL, client_id text, title text, type text, bucket text,
+  roi integer, difficulty integer, visibility_potential integer, citation_potential integer,
+  lead_potential integer, demand integer, score integer, related_query text, related_topic text,
+  related_page text, status text DEFAULT 'open', created_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS geo_opps_plan ON public.geo_opportunities(plan_id);
+
+CREATE TABLE IF NOT EXISTS public.geo_content_briefs (
+  id text PRIMARY KEY, plan_id text NOT NULL, client_id text, title text, target_page text,
+  payload jsonb NOT NULL DEFAULT '{}', priority_score integer, status text DEFAULT 'draft', created_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS geo_briefs_plan ON public.geo_content_briefs(plan_id);
+
+CREATE TABLE IF NOT EXISTS public.geo_content_validations (
+  id text PRIMARY KEY, plan_id text NOT NULL, target text, score integer, checks jsonb DEFAULT '[]', passed boolean, created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.geo_answer_simulations (
+  id text PRIMARY KEY, plan_id text NOT NULL, client_id text, query text, platform text,
+  brand_appeared boolean, was_cited boolean, who_appeared jsonb, ideal_answer text, missing text,
+  recommendation text, score integer, created_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS geo_sim_plan ON public.geo_answer_simulations(plan_id);
+
+CREATE TABLE IF NOT EXISTS public.geo_reputation_checks (
+  id text PRIMARY KEY, plan_id text NOT NULL, client_id text, platform text, sentiment text,
+  accurate boolean, risk_level text, issues jsonb, missing_expertise jsonb, description text,
+  score integer, created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.geo_roadmaps (
+  id text PRIMARY KEY, plan_id text NOT NULL, horizon text, payload jsonb NOT NULL DEFAULT '{}', created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.geo_forecasts (
+  id text PRIMARY KEY, plan_id text NOT NULL, payload jsonb NOT NULL DEFAULT '{}', confidence integer, created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.geo_query_discovery_sets (
+  id text PRIMARY KEY, plan_id text NOT NULL, client_id text, query text, query_type text, topic text,
+  target_page text, priority text, country text, language text, est_volume text, status text DEFAULT 'open', created_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS geo_qd_plan ON public.geo_query_discovery_sets(plan_id);
+
+CREATE TABLE IF NOT EXISTS public.geo_conversation_paths (
+  id text PRIMARY KEY, plan_id text NOT NULL, seed text, path jsonb, missing_pages jsonb, linking jsonb, funnel jsonb, created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.geo_citation_opportunities (
+  id text PRIMARY KEY, plan_id text NOT NULL, page text, source_type text, gap text, probability integer,
+  competitor_cited text, status text DEFAULT 'open', created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.geo_brand_memory_snapshots (
+  id text PRIMARY KEY, plan_id text NOT NULL, mentions integer, citations integer, topics jsonb, description text, created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.geo_market_share_snapshots (
+  id text PRIMARY KEY, plan_id text NOT NULL, dimension text, dimension_value text, engine text, share numeric, created_at timestamptz DEFAULT now()
+);
+
+-- Source network (visual map — UI/seed next phase)
+CREATE TABLE IF NOT EXISTS public.geo_source_network_nodes (id text PRIMARY KEY, plan_id text, label text, node_type text, url text, created_at timestamptz DEFAULT now());
+CREATE TABLE IF NOT EXISTS public.geo_source_network_edges (id text PRIMARY KEY, plan_id text, from_node text, to_node text, weight numeric, created_at timestamptz DEFAULT now());
+
+
+-- ============================================================================
+-- D. STORAGE BUCKET (not SQL — do this in the dashboard, once)
 -- ----------------------------------------------------------------------------
 -- The portal/file uploads use a Storage bucket named:  project-files
 -- If it doesn't exist:  Supabase Dashboard → Storage → New bucket
