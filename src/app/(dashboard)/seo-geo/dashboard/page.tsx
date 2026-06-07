@@ -639,9 +639,16 @@ export default function SeoGeoDashboard() {
                               const res = await fetch('/api/seo-geo-plans/llms-txt', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ planId: plan.id }) });
                               const j = await res.json();
                               if (!res.ok) throw new Error(j.error || 'שגיאה');
+                              // Download the ready-to-upload file (and also copy to clipboard).
                               try { await navigator.clipboard.writeText(j.llmsTxt || ''); } catch {}
+                              try {
+                                const blob = new Blob([j.llmsTxt || ''], { type: 'text/plain;charset=utf-8' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a'); a.href = url; a.download = 'llms.txt'; document.body.appendChild(a); a.click(); a.remove();
+                                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                              } catch {}
                               const missing = (j.checklist || []).filter((c: any) => !c.ok).map((c: any) => `• ${c.label}: ${c.hint}`).join('\n');
-                              alert(`✅ נוצר llms.txt — הועתק ללוח.\nהעלה אותו ל: ${j.llmsTxtUrl || 'האתר/llms.txt'}\n\nלשיפור סמכות (E-E-A-T):\n${missing}`);
+                              alert(`✅ הקובץ llms.txt ירד למחשב (וגם הועתק ללוח).\nהעלה אותו לתיקיית השורש של האתר: ${j.llmsTxtUrl || 'האתר/llms.txt'}\n\nלשיפור סמכות (E-E-A-T):\n${missing}`);
                             } catch (err) { alert(err instanceof Error ? err.message : 'שגיאה'); }
                             finally { btn.disabled = false; btn.textContent = orig; }
                           }}
