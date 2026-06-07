@@ -86,6 +86,13 @@ export default function AuthorityCenterPage() {
             style={{ background: '#1A1A2E', color: '#fff', border: 'none', borderRadius: 12, padding: '0.6rem 1.1rem', fontWeight: 800, fontSize: 13.5, cursor: 'pointer' }}>
             🚀 Advanced Growth
           </button>
+          {state && (
+            <button onClick={() => post({ action: 'set_publish_mode', mode: state.publishMode === 'auto' ? 'draft' : 'auto' }, 'pm')} disabled={!!busy}
+              title="auto = שינויים בטוחים (Schema/FAQ/קישורים) מתפרסמים אוטומטית לאתרים מחוברי WordPress"
+              style={{ background: state.publishMode === 'auto' ? '#10B981' : C.card, color: state.publishMode === 'auto' ? '#fff' : C.textSecondary, border: `1px solid ${state.publishMode === 'auto' ? '#10B981' : C.border}`, borderRadius: 12, padding: '0.6rem 1rem', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+              {busy === 'pm' ? '⏳' : state.publishMode === 'auto' ? '⚡ פרסום אוטומטי: פעיל' : '✋ מצב טיוטה'}
+            </button>
+          )}
           <button onClick={() => post({ action: 'recompute' }, 'recompute')} disabled={!!busy}
             style={{ background: C.primary, color: '#fff', border: 'none', borderRadius: 12, padding: '0.6rem 1.1rem', fontWeight: 800, fontSize: 13.5, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
             {busy === 'recompute' ? '⏳ מחשב…' : '↻ חשב מחדש'}

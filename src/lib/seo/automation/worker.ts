@@ -21,6 +21,7 @@ import { saveScore } from '@/lib/seo/geo-authority/advanced-db';
 /** estimated cost per job type, in cents (for budget control). */
 const JOB_COST_CENTS: Record<string, number> = {
   geo_refresh: 0,        // deterministic, no AI
+  geo_autoapply: 0,      // applies existing safe drafts to WP (no AI)
   ai_visibility: 12,     // AI engine calls (controlled query cap)
   visibility_report: 1,  // build + email the monthly client report
   citation_tracker: 8,
@@ -54,8 +55,27 @@ const HANDLERS: Record<string, (plan: any, runId: string, jobId: string) => Prom
     return { authority: a.overall, recommendations: a.recommendations.length, scores: n };
   },
 
+  // Auto-publish: apply existing safe drafts (schema/faq/internal_link) to a
+  // WordPress-connected site. Free (no AI). Respects geo_publish_mode='auto'.
+  async geo_autoapply(plan, runId, jobId) {
+    const { getGeoPublishMode, isAutoApplicableKind } = await import('@/lib/seo/geo-authority/settings');
+    if ((await getGeoPublishMode()) !== 'auto') { return { skipped: 'draft_mode' }; }
+    if (!plan?.wpConnection?.siteUrl) { return { skipped: 'no_wp' }; }
+    const { listDrafts, setDraftStatus } = await import('@/lib/seo/geo-authority/db');
+    const { applyDraft } = await import('@/lib/seo/geo-authority/apply');
+    const drafts = (await listDrafts(plan.id)).filter((d: any) => d.status === 'draft' && isAutoApplicableKind(d.kind));
+    let applied = 0;
+    for (const d of drafts.slice(0, 25)) { const out = await applyDraft(plan, d); if (out.applied) { await setDraftStatus(d.id, 'applied'); applied++; } }
+    await log(runId, jobId, plan.id, 'info', `auto-applied ${applied}/${drafts.length} drafts to WordPress`);
+    return { applied, candidates: drafts.length };
+  },
+
   // Scheduled AI Visibility run — controlled query set × AI engines, measured.
+  // Self-limits to ~once per 7 days so daily ticks don't multiply AI cost.
   async ai_visibility(plan, runId, jobId) {
+    const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
+    const { data: recent } = await getSb().from('geo_automation_runs').select('id').eq('plan_id', plan.id).eq('job_type', 'ai_visibility').eq('status', 'completed').gte('created_at', weekAgo).limit(1);
+    if (recent && recent.length) { await log(runId, jobId, plan.id, 'info', 'visibility ran in last 7d — skipped'); return { skipped: 'weekly_guard' }; }
     const { runVisibilityRun } = await import('@/lib/seo/geo-visibility/run');
     const limit = Number(process.env.GEO_VISIBILITY_MAX_RUN_QUERIES || 12);
     const out = await runVisibilityRun({ planId: plan.id, runType: 'scheduled', queryLimit: limit });

@@ -26,6 +26,21 @@ import {
 } from '@/lib/seo/geo-authority/db';
 import { runCitationBuilder, runBrandMention, runSchemaAutomation } from '@/lib/seo/geo-authority/engines';
 import { applyDraft } from '@/lib/seo/geo-authority/apply';
+import { getGeoPublishMode, setGeoPublishMode, isAutoApplicableKind } from '@/lib/seo/geo-authority/settings';
+
+/** Auto-apply freshly-created safe drafts when publish mode is 'auto'. */
+async function maybeAutoApply(plan: any, moduleId: string): Promise<{ applied: number; results: any[] } | null> {
+  const mode = await getGeoPublishMode();
+  if (mode !== 'auto') return null;
+  const drafts = (await listDrafts(plan.id, moduleId)).filter((d: any) => d.status === 'draft' && isAutoApplicableKind(d.kind));
+  const results: any[] = []; let applied = 0;
+  for (const d of drafts.slice(0, 20)) {
+    const out = await applyDraft(plan, d);
+    if (out.applied) { await setDraftStatus(d.id, 'applied'); applied++; }
+    results.push({ id: d.id, kind: d.kind, ...out });
+  }
+  return { applied, results };
+}
 
 function ctxFromPlan(plan: any) {
   const facts = plan?.websiteScan?.websiteFacts || {};
@@ -66,6 +81,7 @@ async function buildState(plan: any, result?: any) {
     subScores: result?.subScores ?? score?.sub_scores ?? {},
     issues: result?.issues ?? score?.issues ?? [],
     modules, recommendations, tasks, drafts,
+    publishMode: await getGeoPublishMode(),
   };
 }
 
@@ -149,7 +165,15 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
         return ok({ delegated: true, module: m.id, message: `מודול זה מופעל דרך הלשונית הקיימת (${m.engines[0]}).`, state: await buildState(plan) });
       }
       if (out) await saveModuleResult(plan.id, m.id, out).catch(() => {});
-      return ok({ ran: m.id, out, state: await buildState(plan) });
+      // Auto-publish: if enabled, immediately apply the freshly-created safe drafts
+      // (schema/faq/internal_link) to a WordPress-connected site, with logging.
+      const autoApply = await maybeAutoApply(plan, m.id);
+      return ok({ ran: m.id, out, autoApplied: autoApply, state: await buildState(plan) });
+    }
+    case 'set_publish_mode': {
+      if (body.mode !== 'auto' && body.mode !== 'draft') return err('mode חייב להיות auto או draft');
+      await setGeoPublishMode(body.mode);
+      return ok({ mode: body.mode, state: await buildState(plan) });
     }
     default:
       return err('action לא נתמך');
