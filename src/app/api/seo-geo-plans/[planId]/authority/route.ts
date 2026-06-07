@@ -25,6 +25,7 @@ import {
   createTaskFromRecommendation, listTasks, updateTaskStatus, listDrafts, setDraftStatus, saveModuleResult,
 } from '@/lib/seo/geo-authority/db';
 import { runCitationBuilder, runBrandMention, runSchemaAutomation } from '@/lib/seo/geo-authority/engines';
+import { applyDraft } from '@/lib/seo/geo-authority/apply';
 
 function ctxFromPlan(plan: any) {
   const facts = plan?.websiteScan?.websiteFacts || {};
@@ -107,8 +108,32 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
     }
     case 'draft_status': {
       if (!body.draftId || !body.status) return err('draftId ו-status נדרשים');
-      await setDraftStatus(body.draftId, body.status);
-      return ok({ state: await buildState(plan) });
+      // When applying, actually push the approved draft to the website (WordPress).
+      let applyOutcome: any = null;
+      if (body.status === 'applied') {
+        const drafts = await listDrafts(plan.id);
+        const draft = drafts.find((d: any) => d.id === body.draftId);
+        if (draft) applyOutcome = await applyDraft(plan, draft);
+        // Mark applied only if it actually applied OR there's no WP (manual placement).
+        if (!applyOutcome || applyOutcome.applied) await setDraftStatus(body.draftId, 'applied');
+        else await setDraftStatus(body.draftId, 'approved'); // keep approved; surface the reason
+      } else {
+        await setDraftStatus(body.draftId, body.status);
+      }
+      return ok({ apply: applyOutcome, state: await buildState(plan) });
+    }
+    case 'score_page': {
+      if (!body.pageUrl) return err('pageUrl נדרש');
+      const page = (plan.scannedPages || []).find((p: any) => p.url === body.pageUrl);
+      if (!page) return err('עמוד לא נמצא בסריקה', 404);
+      // Compute against a single-page view of the plan.
+      const pagePlan = { ...plan, scannedPages: [page] };
+      const result = computeAuthorityScore(pagePlan);
+      await saveAuthorityScore({
+        planId: plan.id, clientId: plan.clientId, scope: 'page', pageUrl: body.pageUrl,
+        overall: result.overall, subScores: result.subScores, issues: result.issues,
+      });
+      return ok({ pageUrl: body.pageUrl, overall: result.overall, subScores: result.subScores, issues: result.issues });
     }
     case 'run_module': {
       const m = getModule(body.moduleId);

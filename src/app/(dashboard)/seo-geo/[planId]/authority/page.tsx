@@ -35,6 +35,7 @@ export default function AuthorityCenterPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>('');
   const [err, setErr] = useState('');
+  const [notice, setNotice] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true); setErr('');
@@ -83,6 +84,7 @@ export default function AuthorityCenterPage() {
       </div>
 
       {err && <div style={{ background: '#FEF2F2', border: `1px solid ${C.danger}40`, color: C.danger, borderRadius: 10, padding: '0.6rem 0.9rem', fontSize: 13, fontWeight: 600, margin: '10px 0' }}>⚠ {err}</div>}
+      {notice && <div style={{ background: `${C.info}10`, border: `1px solid ${C.info}40`, color: C.info, borderRadius: 10, padding: '0.6rem 0.9rem', fontSize: 13, fontWeight: 600, margin: '10px 0', display: 'flex', justifyContent: 'space-between', gap: 8 }}><span>ℹ {notice}</span><span style={{ cursor: 'pointer' }} onClick={() => setNotice('')}>✕</span></div>}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '4rem', color: C.textMuted }}>טוען…</div>
       ) : !state ? null : (
@@ -219,7 +221,7 @@ export default function AuthorityCenterPage() {
                           </div>
                         )}
                         {d.status === 'approved' && (
-                          <button onClick={() => post({ action: 'draft_status', draftId: d.id, status: 'applied' }, `dr-${d.id}`)} disabled={!!busy} style={{ marginTop: 5, fontSize: 11, fontWeight: 700, color: C.success, background: `${C.success}12`, border: 'none', borderRadius: 7, padding: '0.25rem 0.6rem', cursor: 'pointer' }}>סמן כהוחל</button>
+                          <button onClick={async () => { const r = await post({ action: 'draft_status', draftId: d.id, status: 'applied' }, `dr-${d.id}`); const a = r?.data?.apply; if (a?.detail) setNotice(a.detail); }} disabled={!!busy} style={{ marginTop: 5, fontSize: 11, fontWeight: 700, color: C.success, background: `${C.success}12`, border: 'none', borderRadius: 7, padding: '0.25rem 0.6rem', cursor: 'pointer' }}>החל באתר</button>
                         )}
                       </div>
                     );
