@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     });
 
     const { id } = await submitRender(edit);
-    return NextResponse.json({ ok: true, renderId: id, brollCount: brollUrls.length });
+    return NextResponse.json({ ok: true, renderId: id, brollCount: broll.length, brollType: broll[0]?.type || 'none' });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'הרכבת הווידאו נכשלה' }, { status: 502 });
   }
