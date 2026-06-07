@@ -372,19 +372,36 @@ export default function CreativePixelAIPage() {
       if (!res.ok) throw new Error(json.error || "היצירה נכשלה");
       const genImg = await loadImage(json.image);
 
-      // Compose the FINAL canvas at the exact ad size (cover-scale the generation).
+      // Compose the FINAL canvas at the exact ad size.
+      // RULE: no information may be lost in the size conversion — the full design
+      // (logo + all text) must always be visible. We cover-fill the AI generation
+      // as a background (so there are never empty bars), then place the FULL source
+      // CONTAINED on top (never cropped), positioned per scaleMode.
       const fin = document.createElement("canvas");
       fin.width = f.width; fin.height = f.height;
       const fctx = fin.getContext("2d")!;
       fctx.imageSmoothingQuality = "high";
+      // 1) Background — cover-fill (margins may crop; it's only backdrop).
       const s = Math.max(f.width / genImg.naturalWidth, f.height / genImg.naturalHeight);
-      const ox = (f.width - genImg.naturalWidth * s) / 2, oy = (f.height - genImg.naturalHeight * s) / 2;
-      fctx.drawImage(genImg, ox, oy, genImg.naturalWidth * s, genImg.naturalHeight * s);
+      fctx.drawImage(genImg, (f.width - genImg.naturalWidth * s) / 2, (f.height - genImg.naturalHeight * s) / 2, genImg.naturalWidth * s, genImg.naturalHeight * s);
+
+      // 2) Foreground — the COMPLETE design, contained so nothing is ever cut.
+      const place = (im: HTMLImageElement) => {
+        const cs = Math.min(f.width / im.naturalWidth, f.height / im.naturalHeight);
+        const cw = im.naturalWidth * cs, ch = im.naturalHeight * cs;
+        const cx = (f.width - cw) / 2;
+        const free = Math.max(0, f.height - ch);
+        const cy = scaleMode === "top_focus" ? 0 : scaleMode === "bottom_focus" ? free : Math.round(free * 0.45);
+        fctx.drawImage(im, cx, cy, cw, ch);
+      };
       if (composite) {
-        // Outpaint mode: paste the ORIGINAL back pixel-perfect over its region.
-        const s2 = Math.max(f.width / genW, f.height / genH);
-        const ox2 = (f.width - genW * s2) / 2, oy2 = (f.height - genH * s2) / 2;
-        fctx.drawImage(img, composite.gx * s2 + ox2, composite.gy * s2 + oy2, composite.gw * s2, composite.gh * s2);
+        // Outpaint mode: the ORIGINAL holds all the info (logo/text) → place it whole.
+        place(img);
+      } else {
+        // Redesign mode: if the target aspect differs from the generation, the cover
+        // would crop the redesigned content — so overlay the full redesign contained.
+        const coverCrops = Math.abs(genImg.naturalWidth / genImg.naturalHeight - f.width / f.height) > 0.01;
+        if (coverCrops) place(genImg);
       }
 
       setAiResults((r) => ({ ...r, [formatId]: fin.toDataURL("image/png") }));
