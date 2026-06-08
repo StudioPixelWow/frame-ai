@@ -70,6 +70,8 @@ export default function UgcPage() {
   const [hookOn, setHookOn] = useState(true);
   const FONT_OPTS = ['Heebo', 'Assistant', 'Rubik', 'Alef', 'Arial'];
   const [brandFont, setBrandFont] = useState('Heebo');
+  const LANG_OPTS = [{ id: 'he', label: 'עברית' }, { id: 'en', label: 'English' }, { id: 'ar', label: 'العربية' }, { id: 'ru', label: 'Русский' }, { id: 'fr', label: 'Français' }, { id: 'es', label: 'Español' }];
+  const [videoLang, setVideoLang] = useState('he');
   const UGC_TEMPLATES = [
     { id: 'viral', emoji: '🔥', label: 'ויראלי טיקטוק', format: 'story', music: 'energetic', transition: 'zoom', pip: true, hook: true, captions: true },
     { id: 'clean', emoji: '✨', label: 'נקי ומינימלי', format: 'story', music: 'calm', transition: 'fade', pip: false, hook: false, captions: true },
@@ -204,7 +206,7 @@ export default function UgcPage() {
     setAssembling(true); setAssembled(null); setErr(''); setAssembleStartedAt(Date.now()); setAssembleStage('מעלה תמונות B‑roll…');
     try {
       const clips = over?.clips || (sceneClips[v.id] || []).filter(Boolean);
-      const r = await fetch('/api/ugc/assemble', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ avatarUrl, images: imgs, brollVideos: clips, durationSec: form.duration, format: { width: fmt.w, height: fmt.h }, businessName: form.businessName, brandColor: '#00B5FE', music: videoMusic, transition: videoTransition, script: v.fullScript, captionsOn, logoUrl: videoLogo.trim() || undefined, ctaText: videoCta, pip: pipOn, hookOn, fontFamily: brandFont }) });
+      const r = await fetch('/api/ugc/assemble', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ avatarUrl, images: imgs, brollVideos: clips, durationSec: form.duration, format: { width: fmt.w, height: fmt.h }, businessName: form.businessName, brandColor: '#00B5FE', music: videoMusic, transition: videoTransition, script: v.fullScript, captionsOn, logoUrl: videoLogo.trim() || undefined, ctaText: videoCta, pip: pipOn, hookOn, fontFamily: brandFont, lang: videoLang }) });
       const j = await r.json();
       if (!r.ok || !j.renderId) throw new Error(j.error || 'הרכבת הווידאו נכשלה');
       setAssembleStage('בתור עיבוד…');
@@ -839,12 +841,21 @@ export default function UgcPage() {
                                 <div><label style={{ ...lbl, fontSize: 10.5 }}>לוגו (URL — לאינטרו/אאוטרו)</label><input className="form-input ux-input" value={videoLogo} onChange={(e) => setVideoLogo(e.target.value)} placeholder="https://…/logo.png" dir="ltr" style={{ width: '100%', fontSize: 11.5 }} /></div>
                                 <div><label style={{ ...lbl, fontSize: 10.5 }}>קריאה לפעולה (אאוטרו)</label><input className="form-input ux-input" value={videoCta} onChange={(e) => setVideoCta(e.target.value)} style={{ width: '100%', fontSize: 11.5 }} /></div>
                               </div>
-                              <div style={{ marginBottom: 8 }}>
-                                <label style={{ ...lbl, fontSize: 10.5 }}>פונט מותג (אינטרו/אאוטרו)</label>
-                                <select className="form-select ux-input" value={brandFont} onChange={(e) => setBrandFont(e.target.value)} style={{ width: '100%', fontSize: 11.5 }}>
-                                  {FONT_OPTS.map((f) => <option key={f} value={f}>{f}</option>)}
-                                </select>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                                <div>
+                                  <label style={{ ...lbl, fontSize: 10.5 }}>פונט מותג (אינטרו/אאוטרו)</label>
+                                  <select className="form-select ux-input" value={brandFont} onChange={(e) => setBrandFont(e.target.value)} style={{ width: '100%', fontSize: 11.5 }}>
+                                    {FONT_OPTS.map((f) => <option key={f} value={f}>{f}</option>)}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label style={{ ...lbl, fontSize: 10.5 }}>שפת כתוביות/טקסט</label>
+                                  <select className="form-select ux-input" value={videoLang} onChange={(e) => setVideoLang(e.target.value)} style={{ width: '100%', fontSize: 11.5 }}>
+                                    {LANG_OPTS.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+                                  </select>
+                                </div>
                               </div>
+                              {videoLang !== 'he' && <div style={{ fontSize: 10.5, color: '#b45309', marginBottom: 8 }}>הכתוביות וה‑CTA יתורגמו ל{LANG_OPTS.find((l) => l.id === videoLang)?.label}. שים לב: קול הדמות נשאר בשפת ההקלטה המקורית.</div>}
                               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 8 }}>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}><input type="checkbox" checked={captionsOn} onChange={(e) => setCaptionsOn(e.target.checked)} /> 💬 כתוביות</label>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }} title="הדמות מדברת בפינה בזמן שה-B-roll מלא מסך"><input type="checkbox" checked={pipOn} onChange={(e) => setPipOn(e.target.checked)} /> 🧑‍🎤 פרזנטור בתוך הסצנה (PIP)</label>
