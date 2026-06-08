@@ -68,6 +68,8 @@ export default function UgcPage() {
   const [videoCta, setVideoCta] = useState('לפרטים נוספים — צרו קשר');
   const [pipOn, setPipOn] = useState(true);
   const [hookOn, setHookOn] = useState(true);
+  const FONT_OPTS = ['Heebo', 'Assistant', 'Rubik', 'Alef', 'Arial'];
+  const [brandFont, setBrandFont] = useState('Heebo');
   const UGC_TEMPLATES = [
     { id: 'viral', emoji: '🔥', label: 'ויראלי טיקטוק', format: 'story', music: 'energetic', transition: 'zoom', pip: true, hook: true, captions: true },
     { id: 'clean', emoji: '✨', label: 'נקי ומינימלי', format: 'story', music: 'calm', transition: 'fade', pip: false, hook: false, captions: true },
@@ -193,16 +195,16 @@ export default function UgcPage() {
 
   // Assemble the FULL clip (avatar speech + Ken-Burns B-roll) via Shotstack.
   // Accepts overrides so "צור הכל" can pass fresh values without stale state.
-  const assembleVideo = async (over?: { avatarUrl?: string; images?: string[]; clips?: string[] }) => {
+  const assembleVideo = async (over?: { avatarUrl?: string; images?: string[]; clips?: string[]; formatId?: string }): Promise<string | null> => {
     const v = pkg?.variations[active];
     const avatarUrl = over?.avatarUrl || video?.url;
-    if (!v || !avatarUrl) { setErr('הפק קודם וידאו דמות (HeyGen)'); return; }
+    if (!v || !avatarUrl) { setErr('הפק קודם וידאו דמות (HeyGen)'); return null; }
     const imgs = over?.images || (sceneImages[v.id] || []).filter(Boolean);
-    const fmt = VIDEO_FORMATS.find((f) => f.id === videoFormat) || VIDEO_FORMATS[0];
+    const fmt = VIDEO_FORMATS.find((f) => f.id === (over?.formatId || videoFormat)) || VIDEO_FORMATS[0];
     setAssembling(true); setAssembled(null); setErr(''); setAssembleStartedAt(Date.now()); setAssembleStage('מעלה תמונות B‑roll…');
     try {
       const clips = over?.clips || (sceneClips[v.id] || []).filter(Boolean);
-      const r = await fetch('/api/ugc/assemble', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ avatarUrl, images: imgs, brollVideos: clips, durationSec: form.duration, format: { width: fmt.w, height: fmt.h }, businessName: form.businessName, brandColor: '#00B5FE', music: videoMusic, transition: videoTransition, script: v.fullScript, captionsOn, logoUrl: videoLogo.trim() || undefined, ctaText: videoCta, pip: pipOn, hookOn }) });
+      const r = await fetch('/api/ugc/assemble', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ avatarUrl, images: imgs, brollVideos: clips, durationSec: form.duration, format: { width: fmt.w, height: fmt.h }, businessName: form.businessName, brandColor: '#00B5FE', music: videoMusic, transition: videoTransition, script: v.fullScript, captionsOn, logoUrl: videoLogo.trim() || undefined, ctaText: videoCta, pip: pipOn, hookOn, fontFamily: brandFont }) });
       const j = await r.json();
       if (!r.ok || !j.renderId) throw new Error(j.error || 'הרכבת הווידאו נכשלה');
       setAssembleStage('בתור עיבוד…');
@@ -213,12 +215,27 @@ export default function UgcPage() {
         if (st.status === 'done' && st.url) {
           setAssembled(st.url);
           if (clientId) { try { await fetch('/api/data/client-files', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ clientId, fileName: `UGC סרטון מלא · ${form.businessName || ''} · ${new Date().toLocaleDateString('he-IL')}`, fileUrl: st.url, fileType: 'video', category: 'social_media', fileSize: 0, uploadedBy: null, notes: 'סרטון מורכב (דמות + B-roll) ממחולל UGC' }) }); setMsg('✓ הסרטון המלא נשמר אוטומטית לקבצי הלקוח.'); } catch {} }
-          break;
+          return st.url as string;
         }
         if (st.status === 'failed') throw new Error(st.error || 'ההרכבה נכשלה');
       }
-    } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה בהרכבה'); }
+      return null;
+    } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה בהרכבה'); return null; }
     finally { setAssembling(false); }
+  };
+
+  // #6 Render the same video in ALL key formats at once.
+  const [assembledSet, setAssembledSet] = useState<{ format: string; url: string }[]>([]);
+  const [multiBusy, setMultiBusy] = useState(false);
+  const assembleAllFormats = async () => {
+    if (!video?.url) { setErr('הפק קודם וידאו דמות'); return; }
+    setMultiBusy(true); setErr(''); setAssembledSet([]);
+    try {
+      for (const f of [{ id: 'story', l: 'Story 9:16' }, { id: 'feed', l: 'Feed 4:5' }, { id: 'square', l: 'Square 1:1' }]) {
+        const url = await assembleVideo({ formatId: f.id });
+        if (url) setAssembledSet((s) => [...s, { format: f.l, url }]);
+      }
+    } finally { setMultiBusy(false); }
   };
 
   const renderVideo = async () => {
@@ -747,10 +764,21 @@ export default function UgcPage() {
                             <div>
                               <div style={{ fontSize: 12, fontWeight: 800, color: '#16a34a', marginBottom: 4 }}>✅ סרטון מלא (דמות + B‑roll + קול)</div>
                               <video src={assembled} controls style={{ width: '100%', maxHeight: 480, borderRadius: 10, background: '#000' }} />
-                              <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+                              <div style={{ display: 'flex', gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
                                 <a href={assembled} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, color: BRAND, fontWeight: 700 }}>⬇ הורד סרטון מלא</a>
                                 <button onClick={() => assembleVideo()} style={{ background: 'none', border: 'none', color: 'var(--foreground-muted,#6b7280)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>🔄 הרכב מחדש</button>
+                                <button onClick={assembleAllFormats} disabled={multiBusy || assembling} style={{ background: 'none', border: 'none', color: '#7c3aed', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>{multiBusy ? '⏳ מרכיב את כל הפורמטים…' : '🎞 צור בכל הפורמטים (Story+Feed+Square)'}</button>
                               </div>
+                              {assembledSet.length > 0 && (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10, marginTop: 10 }}>
+                                  {assembledSet.map((a, i) => (
+                                    <div key={i} style={{ border: '1px solid var(--border,#eee)', borderRadius: 10, overflow: 'hidden' }}>
+                                      <video src={a.url} controls style={{ width: '100%', display: 'block', background: '#000' }} />
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11 }}><b>{a.format}</b><a href={a.url} target="_blank" rel="noopener noreferrer" style={{ color: BRAND }}>⬇</a></div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <>
@@ -810,6 +838,12 @@ export default function UgcPage() {
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
                                 <div><label style={{ ...lbl, fontSize: 10.5 }}>לוגו (URL — לאינטרו/אאוטרו)</label><input className="form-input ux-input" value={videoLogo} onChange={(e) => setVideoLogo(e.target.value)} placeholder="https://…/logo.png" dir="ltr" style={{ width: '100%', fontSize: 11.5 }} /></div>
                                 <div><label style={{ ...lbl, fontSize: 10.5 }}>קריאה לפעולה (אאוטרו)</label><input className="form-input ux-input" value={videoCta} onChange={(e) => setVideoCta(e.target.value)} style={{ width: '100%', fontSize: 11.5 }} /></div>
+                              </div>
+                              <div style={{ marginBottom: 8 }}>
+                                <label style={{ ...lbl, fontSize: 10.5 }}>פונט מותג (אינטרו/אאוטרו)</label>
+                                <select className="form-select ux-input" value={brandFont} onChange={(e) => setBrandFont(e.target.value)} style={{ width: '100%', fontSize: 11.5 }}>
+                                  {FONT_OPTS.map((f) => <option key={f} value={f}>{f}</option>)}
+                                </select>
                               </div>
                               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 8 }}>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}><input type="checkbox" checked={captionsOn} onChange={(e) => setCaptionsOn(e.target.checked)} /> 💬 כתוביות</label>

@@ -53,6 +53,7 @@ export interface AssembleInput {
   pip?: boolean;                // #1 presenter-in-scene: small talking avatar over B-roll
   hookText?: string;            // #4 big animated hook in the first ~3s
   beatSec?: number;             // #3 beat-synced cut length (from music BPM)
+  fontFamily?: string;          // #9 brand-kit font for intro/outro cards
 }
 
 // #3 Approx tempo (seconds per cut) per music preset — cuts land on the beat feel.
@@ -113,7 +114,8 @@ export function buildTimeline(input: AssembleInput) {
   // ── Branded intro + outro cards (HTML) with optional logo ──
   const brand = input.brandColor || '#00B5FE';
   const esc = (s: string) => (s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const cardCss = `.c{width:${width}px;height:${height}px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;background:${brand};font-family:'Heebo',Arial,sans-serif} .c h1{color:#fff;font-size:${Math.round(width / 14)}px;font-weight:800;margin:0;text-align:center;padding:0 8%} .c p{color:#ffffffdd;font-size:${Math.round(width / 26)}px;margin:0;text-align:center} .c img{max-width:46%;max-height:32%;object-fit:contain}`;
+  const font = (input.fontFamily || 'Heebo').replace(/[^a-zA-Z0-9 ]/g, '');
+  const cardCss = `.c{width:${width}px;height:${height}px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;background:${brand};font-family:'${font}',Arial,sans-serif} .c h1{color:#fff;font-size:${Math.round(width / 14)}px;font-weight:800;margin:0;text-align:center;padding:0 8%} .c p{color:#ffffffdd;font-size:${Math.round(width / 26)}px;margin:0;text-align:center} .c img{max-width:46%;max-height:32%;object-fit:contain}`;
   const logoTag = input.logoUrl ? `<img src="${input.logoUrl}"/>` : '';
   const cardClips: any[] = [];
   const INTRO = input.businessName ? 2.2 : 0;
