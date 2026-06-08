@@ -315,8 +315,8 @@ export default function UgcPage() {
       }
       const images = imgs.filter(Boolean);
       // 2) Avatar shot (render if not already done).
-      let avatarUrl = video?.url || null;
-      if (!avatarUrl) { setAutoStage('מפיק שוט דמות מדברת (HeyGen)…'); avatarUrl = await renderVideo(); }
+      let avatarUrl: string | null = video?.url || null;
+      if (!avatarUrl) { setAutoStage('מפיק שוט דמות מדברת (HeyGen)…'); avatarUrl = (await renderVideo()) || null; }
       if (!avatarUrl) throw new Error('הפקת שוט הדמות נכשלה (בדוק HeyGen)');
       // 3) Full assembly (B-roll images/clips + music + captions + hook + intro/outro).
       setAutoStage('מרכיב סרטון מלא…');
