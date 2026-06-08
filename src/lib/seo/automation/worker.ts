@@ -23,6 +23,8 @@ const JOB_COST_CENTS: Record<string, number> = {
   geo_refresh: 0,        // deterministic, no AI
   geo_autoapply: 0,      // applies existing safe drafts to WP (no AI)
   ai_visibility: 12,     // AI engine calls (controlled query cap)
+  rank_tracking: 6,      // SERP rank checks (weekly)
+  backlink_tracking: 4,  // backlink + authority pull (weekly)
   visibility_report: 1,  // build + email the monthly client report
   citation_tracker: 8,
   answer_simulation: 6,
@@ -81,6 +83,29 @@ const HANDLERS: Record<string, (plan: any, runId: string, jobId: string) => Prom
     const out = await runVisibilityRun({ planId: plan.id, runType: 'scheduled', queryLimit: limit });
     await log(runId, jobId, plan.id, 'info', `visibility run: score=${out.score} mentions=${out.mentions} citations=${out.citations} (${out.mocked}/${out.responses} mock)`);
     return out;
+  },
+
+  // Weekly rank tracking — ensure 150 keywords + refresh Google ranks.
+  async rank_tracking(plan, runId, jobId) {
+    const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
+    const { data: recent } = await getSb().from('geo_automation_runs').select('id').eq('plan_id', plan.id).eq('job_type', 'rank_tracking').eq('status', 'completed').gte('created_at', weekAgo).limit(1);
+    if (recent && recent.length) return { skipped: 'weekly_guard' };
+    const { ensureTrackedKeywords, scanRanks } = await import('@/lib/seo/rank-backlinks/engine');
+    await ensureTrackedKeywords(plan);
+    const r = await scanRanks(plan);
+    await log(runId, jobId, plan.id, 'info', `ranks scanned: ${r.checked} keywords (${r.mock ? 'mock' : 'live'})`);
+    return r;
+  },
+
+  // Weekly backlink + authority monitoring (up to 500 links).
+  async backlink_tracking(plan, runId, jobId) {
+    const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
+    const { data: recent } = await getSb().from('geo_automation_runs').select('id').eq('plan_id', plan.id).eq('job_type', 'backlink_tracking').eq('status', 'completed').gte('created_at', weekAgo).limit(1);
+    if (recent && recent.length) return { skipped: 'weekly_guard' };
+    const { scanBacklinks } = await import('@/lib/seo/rank-backlinks/engine');
+    const r = await scanBacklinks(plan);
+    await log(runId, jobId, plan.id, 'info', `backlinks: ${r.backlinks} (${r.mock ? 'estimated' : 'live'})`);
+    return r;
   },
 
   // Monthly client report — build + email (best-effort). Self-limits to once per

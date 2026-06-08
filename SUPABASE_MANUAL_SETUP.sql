@@ -426,3 +426,28 @@ CREATE TABLE IF NOT EXISTS public.ugc_video_performance (
   created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ugc_perf_client ON public.ugc_video_performance(client_id, created_at);
+
+-- ============================================================================
+-- I. Rank tracking (150 kw/plan) + Backlinks (500/client) + site authority
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.geo_tracked_keywords (
+  id text PRIMARY KEY, plan_id text NOT NULL, client_id text, keyword text NOT NULL, target_url text,
+  country text DEFAULT 'IL', language text DEFAULT 'he', intent text, search_volume integer, difficulty integer,
+  current_rank integer, previous_rank integer, best_rank integer, history jsonb DEFAULT '[]',
+  last_checked timestamptz, created_at timestamptz DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS geo_tkw_uniq ON public.geo_tracked_keywords(plan_id, keyword);
+
+CREATE TABLE IF NOT EXISTS public.geo_backlinks (
+  id text PRIMARY KEY, plan_id text NOT NULL, client_id text, source_url text, source_domain text, target_url text,
+  anchor text, dofollow boolean DEFAULT true, domain_rating integer, first_seen timestamptz, last_seen timestamptz,
+  status text DEFAULT 'active', created_at timestamptz DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS geo_bl_uniq ON public.geo_backlinks(plan_id, source_url);
+
+CREATE TABLE IF NOT EXISTS public.geo_authority_metrics (
+  id text PRIMARY KEY, plan_id text NOT NULL, client_id text, dr integer DEFAULT 0, ur integer DEFAULT 0,
+  total_links integer DEFAULT 0, referring_domains integer DEFAULT 0, dofollow_domains integer DEFAULT 0,
+  dofollow_links integer DEFAULT 0, source text DEFAULT 'estimated', computed_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS geo_authmet_plan ON public.geo_authority_metrics(plan_id, computed_at);

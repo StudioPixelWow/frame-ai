@@ -52,7 +52,7 @@ export async function enrollActivePlans(): Promise<{ enrolled: number; total: nu
   for (const p of toAdd) {
     const { error } = await sb.from('geo_client_automation_status').insert({
       plan_id: p.id, client_id: p.clientId || null, client_name: p.clientName || '',
-      automation_enabled: true, modules_enabled: ['geo_refresh', 'geo_autoapply', 'ai_visibility', 'visibility_report'], run_frequency: 'daily',
+      automation_enabled: true, modules_enabled: ['geo_refresh', 'geo_autoapply', 'ai_visibility', 'rank_tracking', 'backlink_tracking', 'visibility_report'], run_frequency: 'daily',
       priority: 5, next_run_at: new Date().toISOString(), current_status: 'active',
       failure_count: 0, monthly_budget_cents: 0, monthly_usage_cents: 0,
       usage_month: `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, '0')}`,
