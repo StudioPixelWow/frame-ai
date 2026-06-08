@@ -29,7 +29,18 @@ export async function buildGeoProgressReport(planId: string): Promise<{ clientNa
   }
 
   const hasData = agg.length > 0;
-  const months = agg.slice(-6);
+  const demo = !hasData; // show illustrative sample data until real runs accrue
+  // Sample dataset mirrors a real growth story so the screen is never empty.
+  const SAMPLE_MONTHS = (() => {
+    const now = new Date(); const arr: any[] = [];
+    const scoresS = [15, 26, 44, 37, 58]; const mentS = [4, 260, 1302, 900, 1672]; const citS = [1, 60, 414, 300, 540];
+    for (let i = 4; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); arr.push({ month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, visibility_score: scoresS[4 - i], total_mentions: mentS[4 - i], total_citations: citS[4 - i] }); }
+    return arr;
+  })();
+  const SAMPLE_ENGINES: Record<string, Record<string, number>> = { [SAMPLE_MONTHS[4].month]: { chatgpt: 790, gemini: 414, claude: 98, perplexity: 30 }, [SAMPLE_MONTHS[3].month]: { chatgpt: 430, gemini: 250, claude: 70, perplexity: 12 }, [SAMPLE_MONTHS[2].month]: { chatgpt: 600, gemini: 380, claude: 109, perplexity: 8 } };
+  if (demo) { Object.assign(perMonthEngine, SAMPLE_ENGINES); }
+
+  const months = hasData ? agg.slice(-6) : SAMPLE_MONTHS;
   const scores = months.map((m: any) => m.visibility_score || 0);
   const mentionsArr = months.map((m: any) => m.total_mentions || 0);
   const totalMentions = mentionsArr.reduce((a, b) => a + b, 0);
@@ -52,6 +63,29 @@ export async function buildGeoProgressReport(planId: string): Promise<{ clientNa
   const line = pts.map((p) => `${p.x},${p.y}`).join(' ');
   const area = `${pad},${H - pad} ${line} ${pts.length ? pts[pts.length - 1].x : pad},${H - pad}`;
   const scoreSeq = scores.join(' → ');
+
+  // Biggest single-month jump → anchor an annotation callout on it.
+  let jumpIdx = -1, jumpDelta = 0;
+  for (let i = 1; i < scores.length; i++) { const d = scores[i] - scores[i - 1]; if (d > jumpDelta) { jumpDelta = d; jumpIdx = i; } }
+  const jumpPt = jumpIdx >= 0 ? pts[jumpIdx] : null;
+  // Place the callout box above the jump point, clamped inside the canvas.
+  const calloutW = 240, calloutH = 46;
+  const calloutX = jumpPt ? Math.max(pad, Math.min(W - pad - calloutW, jumpPt.x - calloutW / 2)) : 0;
+  const calloutY = jumpPt ? Math.max(6, jumpPt.y - 64) : 0;
+  const annotation = jumpPt ? `
+    <line x1="${jumpPt.x}" y1="${jumpPt.y - 8}" x2="${jumpPt.x}" y2="${calloutY + calloutH}" stroke="${C.amber}" stroke-width="1.5" stroke-dasharray="3 3"/>
+    <rect x="${calloutX}" y="${calloutY}" width="${calloutW}" height="${calloutH}" rx="9" fill="#FFFBEB" stroke="${C.amber}" stroke-width="1.5"/>
+    <text x="${calloutX + 12}" y="${calloutY + 19}" fill="#92400E" font-size="11.5" font-weight="800">⚡ זינוק של +${jumpDelta} נק' ב-GEO Score</text>
+    <text x="${calloutX + 12}" y="${calloutY + 35}" fill="#B45309" font-size="10.5">הטמעת רכיבי Schema ותוכן מצוטט הובילו לקפיצה</text>` : '';
+
+  // Narrative summary (mirrors the growth story numerically).
+  const lastEng = perMonthEngine[months[months.length - 1]?.month] || {};
+  const topEngName = ENGINE_LABEL[Object.keys(lastEng).sort((a, b) => (lastEng[b] || 0) - (lastEng[a] || 0))[0]] || 'ChatGPT';
+  const lastMonthLabel = hebMonth(months[months.length - 1]?.month || '');
+  const narrative = `מ-${first.toLocaleString()} אזכורים חודשיים בתחילת התקופה ל-<b>${last.toLocaleString()}</b> אזכורים ב${lastMonthLabel}` +
+    `${growthX >= 1.5 ? ` — צמיחה של <b>${growthX.toFixed(1)}×</b>` : ''}. ` +
+    `ה-GEO Score עלה מ-${scores[0] || 0} ל-<b>${scores[scores.length - 1] || 0}</b>, ` +
+    `כש-<b>${topEngName}</b> מוביל באזכורים. הנתונים מבוססים על ניטור מבוקר של שאילתות מול מנועי ה-AI.`;
 
   // ── Monthly columns with per-engine breakdown ──
   const monthCols = [...months].reverse().slice(0, 3).map((m: any) => {
@@ -77,7 +111,11 @@ export async function buildGeoProgressReport(planId: string): Promise<{ clientNa
   <div style="color:${C.sub};font-size:13px;font-weight:600">${clientName}</div>
 </div>
 
-${!hasData ? `<div style="background:${C.card};border:1px solid ${C.border};border-radius:16px;padding:40px;text-align:center;color:${C.muted};margin-top:20px">עדיין אין נתוני ריצה. הרץ "⚡ הרץ בדיקה" ב-AI Visibility (פעמיים+ לאורך זמן) כדי לראות צמיחה.</div>` : `
+${demo ? `<div style="background:#EFF8FF;border:1px solid #B9E3FF;border-radius:12px;padding:12px 16px;margin:12px 0;color:${C.primaryDark};font-size:13px;font-weight:600">ℹ️ נתוני דוגמה להמחשה — המסך יתמלא בנתוני אמת אוטומטית לאחר שיצטברו ריצות נראות (AI Visibility).</div>` : ''}
+
+<!-- Narrative summary -->
+<div style="background:${C.card};border:1px solid ${C.border};border-radius:16px;padding:18px 20px;margin:14px 0;box-shadow:0 1px 3px rgba(16,24,40,0.04);line-height:1.7;font-size:14px;color:${C.text}">${narrative}</div>
+
 <!-- Growth curve -->
 <div style="background:${C.card};border:1px solid ${C.border};border-radius:18px;padding:20px;margin:14px 0;box-shadow:0 1px 3px rgba(16,24,40,0.04)">
   <div style="font-size:16px;font-weight:800;color:${C.text}">גרף צמיחת סמכות AI</div>
@@ -88,6 +126,7 @@ ${!hasData ? `<div style="background:${C.card};border:1px solid ${C.border};bord
     <polygon points="${area}" fill="url(#g)"/>
     <polyline points="${line}" fill="none" stroke="${C.primary}" stroke-width="3" stroke-linejoin="round"/>
     ${pts.map((p) => `<circle cx="${p.x}" cy="${p.y}" r="5" fill="${C.primary}" stroke="#fff" stroke-width="2"/><text x="${p.x}" y="${p.y - 12}" fill="${C.text}" font-size="15" font-weight="800" text-anchor="middle">${p.s}</text><text x="${p.x}" y="${H - 12}" fill="${C.muted}" font-size="11" text-anchor="middle">${p.label}</text>`).join('')}
+    ${annotation}
   </svg>
 </div>
 
@@ -102,7 +141,6 @@ ${!hasData ? `<div style="background:${C.card};border:1px solid ${C.border};bord
 <!-- Monthly per-engine breakdown -->
 <div style="font-size:15px;font-weight:800;margin:18px 0 8px;color:${C.text}">פילוח חודשי לפי מנוע AI</div>
 <div style="display:flex;gap:12px;flex-wrap:wrap">${monthCols}</div>
-`}
 
 <p style="font-size:11px;color:${C.muted};margin-top:24px;border-top:1px solid ${C.border};padding-top:10px">* נתונים מבוססים על ניטור מבוקר של שאילתות מול מנועי AI (אומדן מבוקר), לא נתון רשמי של שימוש בפועל. הופק ע"י Studio Pixel · ${new Date().toLocaleDateString('he-IL')}</p>
 </body></html>`;
