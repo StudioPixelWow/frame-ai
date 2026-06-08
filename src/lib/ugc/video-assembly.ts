@@ -54,6 +54,7 @@ export interface AssembleInput {
   hookText?: string;            // #4 big animated hook in the first ~3s
   beatSec?: number;             // #3 beat-synced cut length (from music BPM)
   fontFamily?: string;          // #9 brand-kit font for intro/outro cards
+  voiceoverUrl?: string;        // #10 cloned-voice voiceover — replaces avatar audio
 }
 
 // #3 Approx tempo (seconds per cut) per music preset — cuts land on the beat feel.
@@ -141,7 +142,9 @@ export function buildTimeline(input: AssembleInput) {
         ...(captionClips.length ? [{ clips: captionClips }] : []), // #2 captions
         ...(pipClips.length ? [{ clips: pipClips }] : []),         // #1 presenter PIP overlay
         ...(brollClips.length ? [{ clips: brollClips }] : []),     // B-roll
-        { clips: [{ asset: { type: 'video', src: input.avatarUrl, volume: 1 }, start: 0, length: T, fit: 'cover' }] }, // base: avatar + audio
+        // #10 cloned-voice voiceover track (replaces avatar audio when present)
+        ...(input.voiceoverUrl ? [{ clips: [{ asset: { type: 'audio', src: input.voiceoverUrl, volume: 1 }, start: 0, length: T }] }] : []),
+        { clips: [{ asset: { type: 'video', src: input.avatarUrl, volume: input.voiceoverUrl ? 0 : 1 }, start: 0, length: T, fit: 'cover' }] }, // base: avatar (muted if voiceover)
       ],
     },
     output: { format: 'mp4', size: { width, height }, fps: 30 },

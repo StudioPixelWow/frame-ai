@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   if (getRequestRole(req) === 'client') return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
   if (!isShotstackConfigured()) return NextResponse.json({ error: 'Shotstack לא מוגדר — הוסף SHOTSTACK_API_KEY ו-SHOTSTACK_ENV' }, { status: 503 });
   try {
-    const { avatarUrl, images, brollVideos, durationSec, format, businessName, brandColor, music, musicUrl, musicVolume, transition, script, captionsOn, logoUrl, ctaText, pip, hookText, hookOn, lang } = await req.json();
+    const { avatarUrl, images, brollVideos, durationSec, format, businessName, brandColor, music, musicUrl, musicVolume, transition, script, captionsOn, logoUrl, ctaText, pip, hookText, hookOn, lang, voiceoverUrl } = await req.json();
     const resolvedMusic = musicUrl || MUSIC_PRESETS[music as string] || '';
     const dur = Number(durationSec) || 30;
     // #11 Multilingual: localize the on-screen text (captions + CTA) to the chosen language.
@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
       pip: !!pip,
       hookText: hook,
       beatSec,
+      voiceoverUrl: voiceoverUrl || undefined,
     });
 
     const { id } = await submitRender(edit);

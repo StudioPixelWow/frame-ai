@@ -72,6 +72,10 @@ export default function UgcPage() {
   const [brandFont, setBrandFont] = useState('Heebo');
   const LANG_OPTS = [{ id: 'he', label: 'עברית' }, { id: 'en', label: 'English' }, { id: 'ar', label: 'العربية' }, { id: 'ru', label: 'Русский' }, { id: 'fr', label: 'Français' }, { id: 'es', label: 'Español' }];
   const [videoLang, setVideoLang] = useState('he');
+  const [cloneVoices, setCloneVoices] = useState<any[]>([]);
+  const [cloneVoiceId, setCloneVoiceId] = useState('');
+  const [voiceoverUrl, setVoiceoverUrl] = useState('');
+  const [voiceBusy, setVoiceBusy] = useState(false);
   const UGC_TEMPLATES = [
     { id: 'viral', emoji: '🔥', label: 'ויראלי טיקטוק', format: 'story', music: 'energetic', transition: 'zoom', pip: true, hook: true, captions: true },
     { id: 'clean', emoji: '✨', label: 'נקי ומינימלי', format: 'story', music: 'calm', transition: 'fade', pip: false, hook: false, captions: true },
@@ -206,7 +210,7 @@ export default function UgcPage() {
     setAssembling(true); setAssembled(null); setErr(''); setAssembleStartedAt(Date.now()); setAssembleStage('מעלה תמונות B‑roll…');
     try {
       const clips = over?.clips || (sceneClips[v.id] || []).filter(Boolean);
-      const r = await fetch('/api/ugc/assemble', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ avatarUrl, images: imgs, brollVideos: clips, durationSec: form.duration, format: { width: fmt.w, height: fmt.h }, businessName: form.businessName, brandColor: '#00B5FE', music: videoMusic, transition: videoTransition, script: v.fullScript, captionsOn, logoUrl: videoLogo.trim() || undefined, ctaText: videoCta, pip: pipOn, hookOn, fontFamily: brandFont, lang: videoLang }) });
+      const r = await fetch('/api/ugc/assemble', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ avatarUrl, images: imgs, brollVideos: clips, durationSec: form.duration, format: { width: fmt.w, height: fmt.h }, businessName: form.businessName, brandColor: '#00B5FE', music: videoMusic, transition: videoTransition, script: v.fullScript, captionsOn, logoUrl: videoLogo.trim() || undefined, ctaText: videoCta, pip: pipOn, hookOn, fontFamily: brandFont, lang: videoLang, voiceoverUrl: voiceoverUrl || undefined }) });
       const j = await r.json();
       if (!r.ok || !j.renderId) throw new Error(j.error || 'הרכבת הווידאו נכשלה');
       setAssembleStage('בתור עיבוד…');
@@ -224,6 +228,20 @@ export default function UgcPage() {
       return null;
     } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה בהרכבה'); return null; }
     finally { setAssembling(false); }
+  };
+
+  // #10 Load cloned/ElevenLabs voices once.
+  useEffect(() => { (async () => { try { const r = await fetch('/api/ugc/voice', { headers: { 'x-app-role': 'admin' } }); const j = await r.json(); if (j.configured) setCloneVoices(j.voices || []); } catch {} })(); }, []);
+  const genVoiceover = async () => {
+    const v = pkg?.variations[active]; if (!v) return;
+    if (!cloneVoiceId) { setErr('בחר קול לשיבוט'); return; }
+    setVoiceBusy(true); setErr('');
+    try {
+      const r = await fetch('/api/ugc/voice', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ text: v.fullScript, voiceId: cloneVoiceId }) });
+      const j = await r.json(); if (!r.ok || !j.url) throw new Error(j.error || 'שגיאה');
+      setVoiceoverUrl(j.url); setMsg('✓ קריינות בקול הנבחר מוכנה — תוטמע בסרטון המורכב.');
+    } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה ביצירת קריינות'); }
+    finally { setVoiceBusy(false); }
   };
 
   // #6 Render the same video in ALL key formats at once.
@@ -856,6 +874,20 @@ export default function UgcPage() {
                                 </div>
                               </div>
                               {videoLang !== 'he' && <div style={{ fontSize: 10.5, color: '#b45309', marginBottom: 8 }}>הכתוביות וה‑CTA יתורגמו ל{LANG_OPTS.find((l) => l.id === videoLang)?.label}. שים לב: קול הדמות נשאר בשפת ההקלטה המקורית.</div>}
+                              {/* #10 Voice cloning (ElevenLabs) */}
+                              {cloneVoices.length > 0 && (
+                                <div style={{ marginBottom: 8, padding: '0.6rem 0.7rem', border: '1px dashed var(--border,#e5e7eb)', borderRadius: 9 }}>
+                                  <label style={{ ...lbl, fontSize: 10.5 }}>🎙 קול משובט (ElevenLabs) — מחליף את קול הדמות</label>
+                                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                    <select className="form-select ux-input" value={cloneVoiceId} onChange={(e) => setCloneVoiceId(e.target.value)} style={{ flex: 1, fontSize: 11.5 }}>
+                                      <option value="">— קול HeyGen ברירת מחדל —</option>
+                                      {cloneVoices.map((vv: any) => <option key={vv.id} value={vv.id}>{vv.name}{vv.category === 'cloned' ? ' (משובט)' : ''}</option>)}
+                                    </select>
+                                    <button onClick={genVoiceover} disabled={voiceBusy || !cloneVoiceId} style={{ fontSize: 11.5, fontWeight: 700, color: '#fff', background: '#7c3aed', border: 'none', borderRadius: 8, padding: '0.4rem 0.7rem', cursor: 'pointer', whiteSpace: 'nowrap', opacity: voiceBusy || !cloneVoiceId ? 0.5 : 1 }}>{voiceBusy ? '⏳' : '🎙 צור קריינות'}</button>
+                                  </div>
+                                  {voiceoverUrl && <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}><span style={{ fontSize: 10.5, color: '#16a34a', fontWeight: 700 }}>✓ קריינות מוכנה</span><audio src={voiceoverUrl} controls style={{ height: 26 }} /><button onClick={() => setVoiceoverUrl('')} style={{ background: 'none', border: 'none', color: 'var(--foreground-muted,#999)', fontSize: 11, cursor: 'pointer' }}>הסר</button></div>}
+                                </div>
+                              )}
                               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 8 }}>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}><input type="checkbox" checked={captionsOn} onChange={(e) => setCaptionsOn(e.target.checked)} /> 💬 כתוביות</label>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }} title="הדמות מדברת בפינה בזמן שה-B-roll מלא מסך"><input type="checkbox" checked={pipOn} onChange={(e) => setPipOn(e.target.checked)} /> 🧑‍🎤 פרזנטור בתוך הסצנה (PIP)</label>
