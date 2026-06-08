@@ -415,3 +415,14 @@ CREATE INDEX IF NOT EXISTS geo_prompts_plan ON public.geo_visibility_prompts(pla
 -- If it doesn't exist:  Supabase Dashboard → Storage → New bucket
 --   name: project-files   |   Public bucket: ON (so previews/links work)
 -- ============================================================================
+
+-- ============================================================================
+-- H. UGC video performance loop
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.ugc_video_performance (
+  id text PRIMARY KEY, client_id text, business_name text, video_url text, format text, hook text,
+  views integer DEFAULT 0, likes integer DEFAULT 0, shares integer DEFAULT 0, comments integer DEFAULT 0,
+  leads integer DEFAULT 0, spend numeric DEFAULT 0, score numeric DEFAULT 0, notes text,
+  created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ugc_perf_client ON public.ugc_video_performance(client_id, created_at);

@@ -76,6 +76,10 @@ export default function UgcPage() {
   const [cloneVoiceId, setCloneVoiceId] = useState('');
   const [voiceoverUrl, setVoiceoverUrl] = useState('');
   const [voiceBusy, setVoiceBusy] = useState(false);
+  const [perfOpen, setPerfOpen] = useState(false);
+  const [perfRecords, setPerfRecords] = useState<any[]>([]);
+  const loadPerf = async () => { try { const r = await fetch('/api/ugc/performance', { headers: { 'x-app-role': 'admin' } }); const j = await r.json(); setPerfRecords(j.records || []); } catch {} };
+  const savePerfMetric = async (id: string, patch: any) => { try { await fetch('/api/ugc/performance', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ id, ...patch }) }); await loadPerf(); } catch {} };
   const UGC_TEMPLATES = [
     { id: 'viral', emoji: '🔥', label: 'ויראלי טיקטוק', format: 'story', music: 'energetic', transition: 'zoom', pip: true, hook: true, captions: true },
     { id: 'clean', emoji: '✨', label: 'נקי ומינימלי', format: 'story', music: 'calm', transition: 'fade', pip: false, hook: false, captions: true },
@@ -220,6 +224,8 @@ export default function UgcPage() {
         if (st.stage) setAssembleStage(st.stage);
         if (st.status === 'done' && st.url) {
           setAssembled(st.url);
+          // #12 record the produced video for the performance loop.
+          try { fetch('/api/ugc/performance', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ videoUrl: st.url, format: fmt.label, businessName: form.businessName, clientId: clientId || null, hook: hookOn ? (v.hook || '') : '' }) }); } catch {}
           if (clientId) { try { await fetch('/api/data/client-files', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'admin' }, body: JSON.stringify({ clientId, fileName: `UGC סרטון מלא · ${form.businessName || ''} · ${new Date().toLocaleDateString('he-IL')}`, fileUrl: st.url, fileType: 'video', category: 'social_media', fileSize: 0, uploadedBy: null, notes: 'סרטון מורכב (דמות + B-roll) ממחולל UGC' }) }); setMsg('✓ הסרטון המלא נשמר אוטומטית לקבצי הלקוח.'); } catch {} }
           return st.url as string;
         }
@@ -939,6 +945,34 @@ export default function UgcPage() {
           </div>
         </div>
       )}
+
+      {/* #12 Performance loop — track what works */}
+      <div style={{ ...card, marginTop: 16 }}>
+        <button onClick={() => { const n = !perfOpen; setPerfOpen(n); if (n) loadPerf(); }} style={{ width: '100%', background: 'none', border: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', fontSize: 14, fontWeight: 800, color: 'var(--foreground)' }}>
+          <span>📊 ביצועי סרטונים (מה עובד)</span><span>{perfOpen ? '▲' : '▼'}</span>
+        </button>
+        {perfOpen && (
+          <div style={{ marginTop: 10, overflowX: 'auto' }}>
+            <div style={{ fontSize: 11, color: 'var(--foreground-muted,#6b7280)', marginBottom: 8 }}>הזן מדדים מהסושיאל כדי שהמערכת תלמד אילו hooks/פורמטים עובדים. (חיבור אוטומטי ל‑Meta/TikTok = שלב הבא.)</div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead><tr>{['סרטון', 'פורמט', 'צפיות', 'לייקים', 'שיתופים', 'לידים', 'ציון'].map((h) => <th key={h} style={{ textAlign: 'right', padding: '6px 6px', color: 'var(--foreground-muted,#6b7280)', fontWeight: 700, borderBottom: '1px solid var(--border,#e5e7eb)', whiteSpace: 'nowrap' }}>{h}</th>)}</tr></thead>
+              <tbody>
+                {perfRecords.map((p) => (
+                  <tr key={p.id}>
+                    <td style={{ padding: '5px 6px', borderBottom: '1px solid var(--borderLight,#f0f2f5)' }}><a href={p.video_url} target="_blank" rel="noopener noreferrer" style={{ color: BRAND }}>{(p.business_name || 'סרטון').slice(0, 18)}</a></td>
+                    <td style={{ padding: '5px 6px' }}>{p.format}</td>
+                    {(['views', 'likes', 'shares', 'leads'] as const).map((k) => (
+                      <td key={k} style={{ padding: '5px 6px' }}><input type="number" defaultValue={p[k] || 0} onBlur={(e) => savePerfMetric(p.id, { [k]: Number(e.target.value), views: p.views, likes: p.likes, shares: p.shares, comments: p.comments, leads: p.leads, [k]: Number(e.target.value) })} style={{ width: 56, fontSize: 11.5, border: '1px solid var(--border,#e5e7eb)', borderRadius: 6, padding: '2px 4px' }} /></td>
+                    ))}
+                    <td style={{ padding: '5px 6px', fontWeight: 800, color: BRAND }}>{Number(p.score || 0).toFixed(1)}</td>
+                  </tr>
+                ))}
+                {perfRecords.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--foreground-muted,#999)', padding: '1rem' }}>אין עדיין סרטונים. כל סרטון מורכב נרשם כאן אוטומטית.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
