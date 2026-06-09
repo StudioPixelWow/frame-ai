@@ -126,6 +126,56 @@ function buildMock(connectionKey: string, from: string, to: string): AdsData {
   return { current, previous, campaigns, devices, locations, searchTerms, trend, optimizationScore: Math.round(72 + rand() * 22), isMock: true };
 }
 
+/* ── manual entry → AdsData (no API needed) ─────────────────────────────── */
+export interface ManualAdsInput {
+  impressions: number; clicks: number; conversions: number; cost: number;
+  convValue?: number; budget?: number;
+  prevImpressions?: number; prevClicks?: number; prevConversions?: number; prevCost?: number;
+  topCampaign?: string; topDevice?: string; topRegion?: string; topTerm?: string;
+}
+
+export function buildManualAdsData(m: ManualAdsInput): AdsData {
+  const impressions = Math.max(0, Math.round(m.impressions || 0));
+  const clicks = Math.max(0, Math.round(m.clicks || 0));
+  const conversions = Math.max(0, m.conversions || 0);
+  const cost = Math.max(0, m.cost || 0);
+  const convValue = Math.max(0, m.convValue || conversions * 200);
+  const budget = Math.max(cost, m.budget || cost);
+  const current = totalsFrom(clicks, impressions, cost, conversions, convValue, budget);
+
+  // Previous period: use entered values where given, else mirror current (neutral deltas).
+  const previous = totalsFrom(
+    m.prevClicks ?? clicks,
+    m.prevImpressions ?? impressions,
+    m.prevCost ?? cost,
+    m.prevConversions ?? conversions,
+    (m.prevConversions ?? conversions) * 200,
+    budget,
+  );
+
+  const campaigns: AdsCampaign[] = [{
+    name: m.topCampaign?.trim() || 'הקמפיין המוביל', status: 'ENABLED', budget,
+    impressions, clicks, ctr: current.ctr, avgCpc: current.avgCpc, cost: current.cost,
+    conversions: current.conversions, convValue: current.convValue, costPerConv: current.costPerConv,
+  }];
+  const devices: AdsBreakdown[] = m.topDevice?.trim()
+    ? [{ label: m.topDevice.trim(), clicks, conversions: current.conversions, cost: current.cost, impressions }] : [];
+  const locations: AdsBreakdown[] = m.topRegion?.trim()
+    ? [{ label: m.topRegion.trim(), clicks, conversions: current.conversions, cost: current.cost, impressions }] : [];
+  const searchTerms: AdsTerm[] = m.topTerm?.trim()
+    ? [{ term: m.topTerm.trim(), clicks: Math.round(clicks * 0.2), conversions: round(current.conversions * 0.2, 1), ctr: current.ctr, cost: round(current.cost * 0.2, 2) }] : [];
+
+  // Gentle synthetic trend so the chart isn't empty.
+  const trend: AdsTrendPoint[] = [];
+  const pts = 7;
+  for (let i = 0; i < pts; i++) {
+    const w = 0.8 + (i / (pts - 1)) * 0.4;
+    trend.push({ date: `יום ${i + 1}`, clicks: Math.round((clicks / pts) * w), conversions: round((conversions / pts) * w, 1), cost: round((cost / pts) * w), impressions: Math.round((impressions / pts) * w) });
+  }
+
+  return { current, previous, campaigns, devices, locations, searchTerms, trend, optimizationScore: null, isMock: false };
+}
+
 /* ── live fetch (best effort; falls back to mock on any issue) ──────────── */
 async function fetchLive(_conn: GoogleAdsConnection, _from: string, _to: string): Promise<AdsData | null> {
   // Live integration requires: OAuth refresh (GOOGLE_ADS_CLIENT_ID/SECRET +

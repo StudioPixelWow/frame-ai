@@ -29,6 +29,9 @@ export default function TabGoogleAds({ client }: { client: any }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [notice, setNotice] = useState("");
+  const [manualOpen, setManualOpen] = useState(false);
+  const [m, setM] = useState<Record<string, string>>({});
+  const setMf = (k: string, v: string) => setM((p) => ({ ...p, [k]: v }));
 
   const load = useCallback(async () => {
     if (!clientId) return;
@@ -51,6 +54,32 @@ export default function TabGoogleAds({ client }: { client: any }) {
       const d = await r.json();
       if (!r.ok || !d.success) throw new Error(d.error || "שגיאה");
       setNotice("✓ הדוח הופק בהצלחה");
+      await load();
+      if (d.report?.id) window.open(`/api/google-ads/reports/${d.report.id}?format=html`, "_blank");
+    } catch (e) { setNotice(e instanceof Error ? e.message : "הפקת הדוח נכשלה"); }
+    finally { setBusy(""); }
+  };
+
+  const generateManual = async () => {
+    setBusy("manual"); setNotice("");
+    try {
+      const manual = {
+        impressions: Number(m.impressions) || 0, clicks: Number(m.clicks) || 0,
+        conversions: Number(m.conversions) || 0, cost: Number(m.cost) || 0,
+        convValue: m.convValue ? Number(m.convValue) : undefined, budget: m.budget ? Number(m.budget) : undefined,
+        prevClicks: m.prevClicks ? Number(m.prevClicks) : undefined,
+        prevConversions: m.prevConversions ? Number(m.prevConversions) : undefined,
+        prevCost: m.prevCost ? Number(m.prevCost) : undefined,
+        topCampaign: m.topCampaign || undefined, topDevice: m.topDevice || undefined,
+        topRegion: m.topRegion || undefined, topTerm: m.topTerm || undefined,
+      };
+      const body: any = { clientId, type: genType, manual };
+      if (genType === "custom") { body.from = from; body.to = to; }
+      const r = await fetch("/api/google-ads/reports/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const d = await r.json();
+      if (!r.ok || !d.success) throw new Error(d.error || "שגיאה");
+      setNotice("✓ הדוח הופק מהנתונים שהוזנו");
+      setManualOpen(false);
       await load();
       if (d.report?.id) window.open(`/api/google-ads/reports/${d.report.id}?format=html`, "_blank");
     } catch (e) { setNotice(e instanceof Error ? e.message : "הפקת הדוח נכשלה"); }
@@ -104,8 +133,40 @@ export default function TabGoogleAds({ client }: { client: any }) {
           <button onClick={generate} disabled={busy === "gen" || (genType === "custom" && (!from || !to))} style={btn(busy === "gen" ? "#cbd5e1" : C.primary)}>
             {busy === "gen" ? "⏳ מפיק…" : "📊 הפק דוח Google Ads"}
           </button>
+          <button onClick={() => setManualOpen((v) => !v)} style={ghost}>{manualOpen ? "✕ סגור הזנה ידנית" : "✏️ הזנה ידנית"}</button>
         </div>
         {notice && <div style={{ marginTop: 10, fontSize: 12.5, fontWeight: 600, color: notice.startsWith("✓") ? C.success : "#B45309" }}>{notice}</div>}
+
+        {manualOpen && (
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px dashed ${C.border}` }}>
+            <div style={{ fontSize: 12.5, color: C.sub, marginBottom: 10 }}>
+              הזן את נתוני התקופה מ-Google Ads (Download → דוח) — והמערכת תפיק את הדוח המלא עם הניתוח והניסוח החיובי. שדות התקופה הקודמת והשדות המובילים אופציונליים.
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
+              {([
+                ["impressions", "חשיפות *"], ["clicks", "קליקים *"], ["conversions", "המרות / לידים *"], ["cost", "עלות כוללת ₪ *"],
+                ["convValue", "ערך המרות ₪"], ["budget", "תקציב ₪"],
+                ["prevClicks", "קליקים — תקופה קודמת"], ["prevConversions", "המרות — תקופה קודמת"], ["prevCost", "עלות — תקופה קודמת"],
+              ] as const).map(([k, label]) => (
+                <div key={k}>
+                  <label style={{ display: "block", fontSize: 11, color: C.sub, fontWeight: 600, marginBottom: 3 }}>{label}</label>
+                  <input type="number" value={m[k] || ""} onChange={(e) => setMf(k, e.target.value)} style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "0.45rem 0.6rem", fontSize: 13 }} />
+                </div>
+              ))}
+              {([
+                ["topCampaign", "קמפיין מוביל"], ["topDevice", "מכשיר מוביל"], ["topRegion", "אזור מוביל"], ["topTerm", "ביטוי חיפוש מוביל"],
+              ] as const).map(([k, label]) => (
+                <div key={k}>
+                  <label style={{ display: "block", fontSize: 11, color: C.sub, fontWeight: 600, marginBottom: 3 }}>{label}</label>
+                  <input value={m[k] || ""} onChange={(e) => setMf(k, e.target.value)} style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 8, padding: "0.45rem 0.6rem", fontSize: 13 }} />
+                </div>
+              ))}
+            </div>
+            <button onClick={generateManual} disabled={busy === "manual" || !m.clicks || !m.conversions} style={{ ...btn(busy === "manual" ? "#cbd5e1" : C.success), marginTop: 12 }}>
+              {busy === "manual" ? "⏳ מפיק…" : "✨ הפק דוח מהנתונים שהוזנו"}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Reports list */}

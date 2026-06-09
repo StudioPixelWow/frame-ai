@@ -10,7 +10,7 @@ import {
   googleAdsReports, googleAdsConnections, getConnectionForClient, logGoogleAds,
   type GoogleAdsReport, type GoogleAdsReportType,
 } from './db';
-import { fetchAdsData, googleAdsConfigured } from './provider';
+import { fetchAdsData, googleAdsConfigured, buildManualAdsData, type AdsData, type ManualAdsInput } from './provider';
 import { analyze } from './insights';
 import { buildExecutiveSummary } from './positive-language';
 import { buildReportHtml } from './report-html';
@@ -54,6 +54,7 @@ export interface GenerateOptions {
   type: GoogleAdsReportType;
   customFrom?: string;
   customTo?: string;
+  manual?: ManualAdsInput;   // manual entry path (no API)
   baseUrl?: string;
 }
 
@@ -63,12 +64,19 @@ export async function generateGoogleAdsReport(opts: GenerateOptions): Promise<Go
   if (!client) throw new Error('client_not_found');
 
   const { from, to, prevFrom, prevTo } = computePeriods(type, opts.customFrom, opts.customTo);
-  const conn = await getConnectionForClient(clientId);
-  const isDemo = !(conn && conn.status === 'connected' && googleAdsConfigured());
 
-  if (isDemo) await logGoogleAds(clientId, 'info', 'No live Google Ads connection — generating demo report from sample data.');
-
-  const data = await fetchAdsData(conn, clientId, from, to, prevFrom, prevTo);
+  let data: AdsData;
+  let isDemo = false;
+  if (opts.manual) {
+    // Manual entry — real numbers typed by the manager, no API.
+    data = buildManualAdsData(opts.manual);
+    await logGoogleAds(clientId, 'info', 'Report generated from manual data entry (no API).');
+  } else {
+    const conn = await getConnectionForClient(clientId);
+    isDemo = !(conn && conn.status === 'connected' && googleAdsConfigured());
+    if (isDemo) await logGoogleAds(clientId, 'info', 'No live Google Ads connection — generating demo report from sample data.');
+    data = await fetchAdsData(conn, clientId, from, to, prevFrom, prevTo);
+  }
   const analysis = analyze(data);
   const reportTypeHe = TYPE_HE[type];
   const { summary, closing, short } = await buildExecutiveSummary((client as any).name, data, analysis, reportTypeHe);
