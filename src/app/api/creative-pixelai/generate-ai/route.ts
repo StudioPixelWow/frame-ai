@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
     // For redesign: get the exact ad texts to feed into the prompt — this dramatically
     // improves Hebrew text fidelity. If the user supplied the correct text manually
     // (because OCR mis-read it), that is the source of truth; otherwise auto-transcribe.
-    const adTexts = mode === "redesign"
+    const adTexts = (mode === "redesign" || mode === "reframe")
       ? ((correctTexts || "").trim() ? (correctTexts as string).trim() : await transcribeAdText(apiKey, imagePng))
       : "";
 
@@ -92,7 +92,15 @@ export async function POST(req: NextRequest) {
         ? " קריטי: השאר שוליי רקע ריקים של 12% בצד ימין ובצד שמאל; כל הטקסטים והלוגואים במרכז בלבד. הצדדים ייחתכו מעט."
         : "";
 
-    const genPrompt = mode === "edit"
+    const genPrompt = mode === "reframe"
+      // REFRAME — the "ChatGPT way": give the model the whole image and ask it to
+      // recompose it to the target ratio. Simple, strong instruction = best result.
+      ? `המר את התמונה הזאת לפורמט ${format === "story" ? "אנכי 9:16 לסטורי אינסטגרם" : format === "feed_4_5" ? "אנכי 4:5 לפיד אינסטגרם (1080×1350)" : "ריבועי 1:1"}. ` +
+        `שמור על כל האלמנטים, הטקסטים, המספרים, הלוגואים והצבעים בדיוק כפי שהם — בלי לחתוך שום אלמנט. ` +
+        `הרחב והשלם את הרקע והעיצוב בצורה טבעית, חכמה ומקצועית כך שימלאו את כל הפריים החדש בצורה יפה ומאוזנת, כאילו העיצוב תוכנן מלכתחילה לפורמט הזה. אל תוסיף טקסט חדש.` +
+        (adTexts ? `\n\nהטקסטים המדויקים שחייבים להישמר אות-באות:\n${adTexts}` : "") +
+        styleExtra
+      : mode === "edit"
       // TARGETED EDIT of an existing generated version — ChatGPT-style iteration.
       // The user's note arrives in `prompt`; everything else must stay identical.
       ? `בצע את התיקון הבא על העיצוב: "${(prompt || "").trim()}". ` +

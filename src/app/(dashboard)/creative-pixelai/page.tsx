@@ -209,29 +209,26 @@ export default function CreativePixelAIPage() {
     return c.toDataURL("image/jpeg", 0.95);
   };
 
-  // AI adaptation to 4:5 — same engine as the single-image flow (outpaint):
-  // the original creative is kept pixel-perfect (full-width, edge-to-edge) and
-  // the AI generates the missing strips above/below to fill the 4:5 frame.
+  // AI reframe to 4:5 — the "ChatGPT way": send the WHOLE image and let the model
+  // intelligently recompose it to a vertical 4:5, keeping every element & text and
+  // extending the design to fill the frame. The model output is used directly
+  // (no strip paste-back), which is what produces the impressive result.
   const aiConvertTo45 = async (image: HTMLImageElement): Promise<string> => {
     const f = FORMATS.find((x) => x.id === "feed_4_5")!;
-    const genW = 1024, genH = 1536;
-    let fullScale = genW / image.naturalWidth;
-    if (image.naturalHeight * fullScale > genH) fullScale = genH / image.naturalHeight; // never clip original
-    const gw = image.naturalWidth * fullScale, gh = image.naturalHeight * fullScale;
-    const gx = (genW - gw) / 2;
-    const freeH = Math.max(0, genH - gh);
-    const gy = Math.round(freeH * 0.45);
-    const genCanvas = document.createElement("canvas");
-    genCanvas.width = genW; genCanvas.height = genH;
-    const gctx = genCanvas.getContext("2d")!;
-    gctx.imageSmoothingQuality = "high";
-    gctx.drawImage(image, gx, gy, gw, gh);
-    const inputDataUrl = genCanvas.toDataURL("image/png");
+    const maxDim = 1536;
+    const ds = Math.min(1, maxDim / Math.max(image.naturalWidth, image.naturalHeight));
+    const c = document.createElement("canvas");
+    c.width = Math.round(image.naturalWidth * ds);
+    c.height = Math.round(image.naturalHeight * ds);
+    const cx = c.getContext("2d")!;
+    cx.imageSmoothingQuality = "high";
+    cx.drawImage(image, 0, 0, c.width, c.height);
+    const inputDataUrl = c.toDataURL("image/jpeg", 0.9);
 
     const res = await fetch("/api/creative-pixelai/generate-ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imagePng: inputDataUrl, format: "feed_4_5", mode: "outpaint", quality: "high", prompt: aiStylePrompt.trim() || undefined }),
+      body: JSON.stringify({ imagePng: inputDataUrl, format: "feed_4_5", mode: "reframe", quality: "high", prompt: aiStylePrompt.trim() || undefined }),
     });
     const json = await parseResponse(res);
     if (!res.ok) throw new Error(json.error || "היצירה נכשלה");
@@ -242,16 +239,7 @@ export default function CreativePixelAIPage() {
     const fctx = fin.getContext("2d")!;
     fctx.imageSmoothingQuality = "high";
     const s = Math.max(f.width / genImg.naturalWidth, f.height / genImg.naturalHeight);
-    const ox = (f.width - genImg.naturalWidth * s) / 2, oy = (f.height - genImg.naturalHeight * s) / 2;
-    fctx.drawImage(genImg, ox, oy, genImg.naturalWidth * s, genImg.naturalHeight * s);
-    // Paste the ORIGINAL back over its region (shifted into frame, never shrunk).
-    const s2 = Math.max(f.width / genW, f.height / genH);
-    const ow = gw * s2, oh = gh * s2;
-    let ox2 = gx * s2 + (f.width - genW * s2) / 2;
-    let oy2 = gy * s2 + (f.height - genH * s2) / 2;
-    if (ow <= f.width) ox2 = Math.max(0, Math.min(ox2, f.width - ow));
-    if (oh <= f.height) oy2 = Math.max(0, Math.min(oy2, f.height - oh));
-    fctx.drawImage(image, ox2, oy2, ow, oh);
+    fctx.drawImage(genImg, (f.width - genImg.naturalWidth * s) / 2, (f.height - genImg.naturalHeight * s) / 2, genImg.naturalWidth * s, genImg.naturalHeight * s);
     return fin.toDataURL("image/png");
   };
 
