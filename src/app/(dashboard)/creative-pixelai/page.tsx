@@ -194,19 +194,72 @@ export default function CreativePixelAIPage() {
     return c.toDataURL("image/jpeg", 0.95);
   };
 
+  // AI adaptation to 4:5 — same engine as the single-image flow (outpaint):
+  // the original creative is kept pixel-perfect (full-width, edge-to-edge) and
+  // the AI generates the missing strips above/below to fill the 4:5 frame.
+  const aiConvertTo45 = async (image: HTMLImageElement): Promise<string> => {
+    const f = FORMATS.find((x) => x.id === "feed_4_5")!;
+    const genW = 1024, genH = 1536;
+    let fullScale = genW / image.naturalWidth;
+    if (image.naturalHeight * fullScale > genH) fullScale = genH / image.naturalHeight; // never clip original
+    const gw = image.naturalWidth * fullScale, gh = image.naturalHeight * fullScale;
+    const gx = (genW - gw) / 2;
+    const freeH = Math.max(0, genH - gh);
+    const gy = Math.round(freeH * 0.45);
+    const genCanvas = document.createElement("canvas");
+    genCanvas.width = genW; genCanvas.height = genH;
+    const gctx = genCanvas.getContext("2d")!;
+    gctx.imageSmoothingQuality = "high";
+    gctx.drawImage(image, gx, gy, gw, gh);
+    const inputDataUrl = genCanvas.toDataURL("image/png");
+
+    const res = await fetch("/api/creative-pixelai/generate-ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imagePng: inputDataUrl, format: "feed_4_5", mode: "outpaint", quality: aiHighQuality ? "high" : "medium", prompt: aiStylePrompt.trim() || undefined }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || "היצירה נכשלה");
+    const genImg = await loadImage(json.image);
+
+    const fin = document.createElement("canvas");
+    fin.width = f.width; fin.height = f.height;
+    const fctx = fin.getContext("2d")!;
+    fctx.imageSmoothingQuality = "high";
+    const s = Math.max(f.width / genImg.naturalWidth, f.height / genImg.naturalHeight);
+    const ox = (f.width - genImg.naturalWidth * s) / 2, oy = (f.height - genImg.naturalHeight * s) / 2;
+    fctx.drawImage(genImg, ox, oy, genImg.naturalWidth * s, genImg.naturalHeight * s);
+    // Paste the ORIGINAL back over its region (shifted into frame, never shrunk).
+    const s2 = Math.max(f.width / genW, f.height / genH);
+    const ow = gw * s2, oh = gh * s2;
+    let ox2 = gx * s2 + (f.width - genW * s2) / 2;
+    let oy2 = gy * s2 + (f.height - genH * s2) / 2;
+    if (ow <= f.width) ox2 = Math.max(0, Math.min(ox2, f.width - ow));
+    if (oh <= f.height) oy2 = Math.max(0, Math.min(oy2, f.height - oh));
+    fctx.drawImage(image, ox2, oy2, ow, oh);
+    return fin.toDataURL("image/png");
+  };
+
   const runCarousel = async () => {
     if (carItems.length === 0) { toast("העלה תמונות לקרוסלה", "error"); return; }
     setCarBusy(true);
     setCarProgress({ done: 0, total: carItems.length });
+    let failures = 0;
     try {
       for (let i = 0; i < carItems.length; i++) {
-        const out = convertTo45(carItems[i].img);
+        let out: string;
+        try {
+          out = await aiConvertTo45(carItems[i].img); // AI engine
+        } catch {
+          out = convertTo45(carItems[i].img); // graceful fallback so the slot isn't empty
+          failures++;
+        }
         // eslint-disable-next-line no-loop-func
         setCarItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, out } : it)));
         setCarProgress({ done: i + 1, total: carItems.length });
-        await new Promise((r) => setTimeout(r, 30)); // yield to paint
       }
-      toast("הקרוסלה הותאמה ל-4:5 ✨", "success");
+      if (failures > 0) toast(`הותאמו ${carItems.length} תמונות (${failures} בעיבוד רגיל — ה-AI נכשל עליהן)`, "info");
+      else toast("הקרוסלה הותאמה ל-4:5 עם AI ✨", "success");
     } finally {
       setCarBusy(false);
     }
@@ -730,7 +783,7 @@ export default function CreativePixelAIPage() {
         </div>
 
         <p style={{ fontSize: 12, color: "var(--foreground-muted)" }}>
-          * ההמרה שומרת על כל המידע (התמונה המלאה ממורכזת על רקע מטושטש בגוון התמונה) ומפיקה 1080×1350 px — הגודל המומלץ לאינסטגרם.
+          * ההתאמה נעשית עם AI (אותו מנגנון של «עיצוב מלא לפורמט»): העיצוב המקורי נשמר פיקסל-פרפקט במלוא הרוחב, וה-AI משלים את הרקע למעלה/למטה כדי למלא את הפריים — תוצאה 1080×1350 px לאינסטגרם, בלי לאבד מידע. כל תמונה לוקחת מספר שניות.
         </p>
       </div>
     );
