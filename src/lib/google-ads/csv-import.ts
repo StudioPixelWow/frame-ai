@@ -178,6 +178,11 @@ export function parseGoogleAdsCsvFiles(files: CsvFile[]): { data: AdsData; warni
   }
 
   campaigns.sort((a, b) => b.conversions - a.conversions);
+
+  // Sanity guard: impressions must be >= clicks (CTR ≤ 100%). If the impressions
+  // column was mis-mapped (impressions < clicks → impossible CTR like 204%),
+  // treat impressions as "not captured" rather than show a wrong number.
+  if (totImpr > 0 && totImpr < totClicks) { totImpr = 0; warnings.push('עמודת החשיפות לא זוהתה כראוי — נדרש קובץ עם עמודת Impressions תקינה'); }
   const current = totalsFrom(totClicks, totImpr, totCost, totConv, totVal, totBudget);
 
   if (!trend.length && campaigns.length) {
