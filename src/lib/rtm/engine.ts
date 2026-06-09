@@ -31,6 +31,8 @@ export interface RtmApplyInput {
   platform?: string;    // facebook | instagram | tiktok | all
   format?: string;      // image | video | reel | story | carousel
   notes?: string;       // extra direction from the user
+  seedTitle?: string;   // FIX MODE: a corrected idea/title to build the whole task around
+  itemId?: string;      // FIX MODE: update this exact gantt item (skip date lookup)
 }
 
 export interface RtmApplyResult {
@@ -109,8 +111,13 @@ RTM טוב הוא רלוונטי, מהיר, חכם, ומקשר בין האירו
   "cta": "קריאה לפעולה ספציפית"
 }`;
 
+  const seedBlock = input.seedTitle?.trim()
+    ? `\n🎯 תיקון מנהל — בנה את כל המשימה סביב הרעיון/כותרת הבאה במדויק: "${input.seedTitle.trim()}".
+זוהי ההנחיה המחייבת. פתח אותה לאפיון מלא (כותרת, רעיון, קופי גרפי, קאפשן, קונספט ויזואלי, hook, CTA) — אבל אל תסטה מהרעיון הזה.\n`
+    : '';
+
   const userPrompt = `אירוע / נושא ה-RTM: "${input.topic}"
-${input.notes ? `הנחיות נוספות: ${input.notes}\n` : ''}
+${input.notes ? `הנחיות נוספות: ${input.notes}\n` : ''}${seedBlock}
 פתח פוסט RTM שמגיב לאירוע הזה ומותאם ספציפית לעסק הבא:
 - שם העסק: ${client.name}
 - תחום: ${client.businessField || 'לא צוין'}
@@ -149,15 +156,21 @@ export async function applyRtmToClient(input: RtmApplyInput): Promise<RtmApplyRe
   const format = (input.format || 'image') as ClientGanttItem['format'];
   const now = new Date().toISOString();
 
-  // Find an existing pre-created monthly item on that date for this client.
+  // Find the target item. FIX MODE targets a specific item by id; otherwise we
+  // look for a pre-created monthly item on that date for this client.
   let existing: ClientGanttItem | undefined;
   try {
     const all = await clientGanttItems.getAllAsync();
-    existing = all.find((it: ClientGanttItem) =>
-      it.clientId === input.clientId &&
-      it.ganttType === 'monthly' &&
-      (it.date || '').slice(0, 10) === dateKey,
-    );
+    if (input.itemId) {
+      existing = all.find((it: ClientGanttItem) => it.id === input.itemId);
+    }
+    if (!existing) {
+      existing = all.find((it: ClientGanttItem) =>
+        it.clientId === input.clientId &&
+        it.ganttType === 'monthly' &&
+        (it.date || '').slice(0, 10) === dateKey,
+      );
+    }
   } catch { /* table may be empty */ }
 
   const contentFields: Partial<ClientGanttItem> = {

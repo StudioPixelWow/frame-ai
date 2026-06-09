@@ -18,6 +18,7 @@ interface Row {
   replaced?: boolean;
   title?: string;
   graphicText?: string;
+  itemId?: string;
   error?: string;
 }
 
@@ -83,7 +84,7 @@ export default function RtmBroadcastPage() {
         const d = await res.json();
         if (!res.ok || !d.success) throw new Error(d.error || 'שגיאה');
         setRows((prev) => prev.map((r) => (r.client.id === c.id
-          ? { ...r, status: 'done', replaced: d.result?.replaced, title: d.result?.title, graphicText: d.result?.graphicText }
+          ? { ...r, status: 'done', replaced: d.result?.replaced, title: d.result?.title, graphicText: d.result?.graphicText, itemId: d.result?.itemId }
           : r)));
       } catch (e) {
         setRows((prev) => prev.map((r) => (r.client.id === c.id
@@ -94,7 +95,36 @@ export default function RtmBroadcastPage() {
     setRunning(false); setDone(true);
   };
 
-  const closeModal = () => { if (running) return; setOpen(false); setRows([]); setDone(false); };
+  // ── Fix a single idea: user types a corrected title → re-develop full task ──
+  const [fixId, setFixId] = useState<string | null>(null);
+  const [fixTitle, setFixTitle] = useState('');
+
+  const openFix = (row: Row) => { setFixId(row.client.id); setFixTitle(row.title || ''); };
+  const cancelFix = () => { setFixId(null); setFixTitle(''); };
+
+  const submitFix = async (row: Row) => {
+    if (!fixTitle.trim()) return;
+    const seed = fixTitle.trim();
+    setFixId(null); setFixTitle('');
+    setRows((prev) => prev.map((r) => (r.client.id === row.client.id ? { ...r, status: 'working' } : r)));
+    try {
+      const res = await fetch('/api/rtm-broadcast', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: row.client.id, topic, date, platform, format, notes, seedTitle: seed, itemId: row.itemId }),
+      });
+      const d = await res.json();
+      if (!res.ok || !d.success) throw new Error(d.error || 'שגיאה');
+      setRows((prev) => prev.map((r) => (r.client.id === row.client.id
+        ? { ...r, status: 'done', replaced: d.result?.replaced, title: d.result?.title, graphicText: d.result?.graphicText, itemId: d.result?.itemId }
+        : r)));
+    } catch (e) {
+      setRows((prev) => prev.map((r) => (r.client.id === row.client.id
+        ? { ...r, status: 'failed', error: e instanceof Error ? e.message : 'שגיאה' }
+        : r)));
+    }
+  };
+
+  const closeModal = () => { if (running) return; setOpen(false); setRows([]); setDone(false); cancelFix(); };
 
   const fmtDate = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('he-IL', { day: '2-digit', month: 'long', year: 'numeric' });
 
@@ -202,15 +232,34 @@ export default function RtmBroadcastPage() {
                   <div style={{ maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {rows.map((r) => {
                       const s = STATUS_UI[r.status];
+                      const editing = fixId === r.client.id;
                       return (
-                        <div key={r.client.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: '8px 12px' }}>
-                          <span style={{ color: s.c, fontWeight: 900, width: 16, textAlign: 'center' }}>{s.icon}</span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700 }}>{r.client.name}</div>
-                            {r.status === 'done' && r.title && <div style={{ fontSize: 11.5, color: C.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.replaced ? '↻ הוחלף · ' : '+ נוצר · '}{r.title}</div>}
-                            {r.status === 'failed' && <div style={{ fontSize: 11.5, color: C.danger }}>{r.error}</div>}
+                        <div key={r.client.id} style={{ background: C.bg, border: `1px solid ${editing ? C.primary : C.border}`, borderRadius: 10, padding: '8px 12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ color: s.c, fontWeight: 900, width: 16, textAlign: 'center' }}>{s.icon}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontWeight: 700 }}>{r.client.name}</div>
+                              {r.status === 'done' && r.title && <div style={{ fontSize: 11.5, color: C.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.replaced ? '↻ הוחלף · ' : '+ נוצר · '}{r.title}</div>}
+                              {r.status === 'failed' && <div style={{ fontSize: 11.5, color: C.danger }}>{r.error}</div>}
+                            </div>
+                            {(r.status === 'done' || r.status === 'failed') && !editing && (
+                              <button onClick={() => openFix(r)} title="תקן רעיון" style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '4px 10px', fontSize: 11.5, fontWeight: 700, color: C.primaryDark, cursor: 'pointer', whiteSpace: 'nowrap' }}>🔄 תקן רעיון</button>
+                            )}
+                            {!editing && <span style={{ fontSize: 11.5, color: s.c, fontWeight: 700 }}>{s.l}</span>}
                           </div>
-                          <span style={{ fontSize: 11.5, color: s.c, fontWeight: 700 }}>{s.l}</span>
+
+                          {editing && (
+                            <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${C.border}` }}>
+                              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: C.sub, marginBottom: 4 }}>כותרת / רעיון מתוקן — אאפיין סביבו את כל המשימה</label>
+                              <input value={fixTitle} onChange={(e) => setFixTitle(e.target.value)} autoFocus
+                                onKeyDown={(e) => { if (e.key === 'Enter') submitFix(r); if (e.key === 'Escape') cancelFix(); }}
+                                placeholder="כתוב את הרעיון הנכון…" style={{ ...inp, marginBottom: 8 }} />
+                              <div style={{ display: 'flex', gap: 8 }}>
+                                <button onClick={() => submitFix(r)} disabled={!fixTitle.trim()} style={{ background: fixTitle.trim() ? C.primary : C.border, color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12.5, fontWeight: 800, cursor: fixTitle.trim() ? 'pointer' : 'not-allowed' }}>אשר ופתח משימה</button>
+                                <button onClick={cancelFix} style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 12px', fontSize: 12.5, fontWeight: 700, color: C.sub, cursor: 'pointer' }}>ביטול</button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}

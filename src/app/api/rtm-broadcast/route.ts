@@ -40,6 +40,8 @@ export async function POST(req: NextRequest) {
       platform: body.platform,
       format: body.format,
       notes: body.notes,
+      seedTitle: body.seedTitle,
+      itemId: body.itemId,
     });
     return NextResponse.json({ success: true, result });
   } catch (error) {
