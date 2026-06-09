@@ -65,6 +65,22 @@ function pick(row: Record<string, string>, keys: string[]): string {
   }
   return '';
 }
+
+// Headers that are derived/ratio columns — must NOT be picked as a base metric
+// (e.g. "Impr. (Abs. Top) %", "Search Impr. share", "Conv. rate").
+const DERIVED_RE = /%|share|abs\.?\s*top|top\s*%|rate|\/|avg\.?\s*cpc|ratio|index/;
+
+/** Pick a BASE numeric metric: prefer the shortest header that matches a synonym
+ *  and is NOT a derived/ratio column. Avoids grabbing "Impr. share %" for impressions. */
+function pickMetric(row: Record<string, string>, keys: string[]): string {
+  const hk = Object.keys(row);
+  const matches = hk.filter((h) => keys.some((k) => h.includes(k)) && !DERIVED_RE.test(h));
+  if (matches.length) {
+    matches.sort((a, b) => a.length - b.length); // shortest = the base column
+    return row[matches[0]];
+  }
+  return '';
+}
 const COL = {
   campaign: ['campaign', 'קמפיין'],
   device: ['device', 'מכשיר'],
@@ -74,8 +90,9 @@ const COL = {
   clicks: ['click', 'קליק'],
   cost: ['cost', 'עלות'],
   conversions: ['conversions', 'conv.', 'המרות', 'המרה'],
-  convValue: ['conv. value', 'all conv. value', 'value', 'ערך המר'],
+  convValue: ['conv. value', 'all conv. value', 'ערך המר'],
   budget: ['budget', 'תקציב'],
+  ctr: ['ctr', 'שיעור הקלקה', 'אחוז הקלקה'],
   date: ['day', 'date', 'תאריך', 'יום'],
 };
 const isTotalRow = (row: Record<string, string>): boolean =>
@@ -132,9 +149,13 @@ export function parseGoogleAdsCsvFiles(files: CsvFile[]): { data: AdsData; warni
     } else if (has('campaign') || (has('clicks') && has('cost'))) {
       // Campaigns (or account-level) report — the primary totals source.
       for (const r of dataRows) {
-        const impressions = toNum(pick(r, COL.impressions)), clicks = toNum(pick(r, COL.clicks));
-        const cost = toNum(pick(r, COL.cost)), conversions = toNum(pick(r, COL.conversions));
-        const convValue = toNum(pick(r, COL.convValue)), budget = toNum(pick(r, COL.budget));
+        const clicks = toNum(pickMetric(r, COL.clicks));
+        let impressions = toNum(pickMetric(r, COL.impressions));
+        const ctrVal = toNum(pickMetric(r, COL.ctr)); // e.g. "2.91%" → 2.91
+        // Recover impressions from CTR if the impressions column was missing/misread.
+        if (impressions === 0 && clicks > 0 && ctrVal > 0) impressions = Math.round(clicks / (ctrVal / 100));
+        const cost = toNum(pickMetric(r, COL.cost)), conversions = toNum(pickMetric(r, COL.conversions));
+        const convValue = toNum(pickMetric(r, COL.convValue)), budget = toNum(pickMetric(r, COL.budget));
         totImpr += impressions; totClicks += clicks; totCost += cost; totConv += conversions; totVal += convValue; totBudget += budget;
         const name = pick(r, COL.campaign);
         if (name) campaigns.push({
