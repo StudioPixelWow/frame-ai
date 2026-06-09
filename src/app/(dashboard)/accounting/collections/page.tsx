@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useClients, usePayments, useProjectPayments, useHostingRecords, usePodcastSessions } from "@/lib/api/use-entity";
 import { useState, useMemo } from "react";
 import { useToast } from "@/components/ui/toast";
+import { openWhatsApp, retainerCollectionMessage } from "@/lib/utils/whatsapp";
 
 interface PaymentEvent {
   id: string;
@@ -209,6 +210,18 @@ export default function CollectionsPage() {
 
   const handleSendReminder = (clientName: string) => {
     toast(`שלחנו תזכורת ל${clientName}`, "success");
+  };
+
+  const handleWhatsApp = (event: PaymentEvent) => {
+    const client = event.clientId ? clients.find((c: any) => c.id === event.clientId) : null;
+    const phone = (client as any)?.phone || "";
+    const ok = openWhatsApp(phone, retainerCollectionMessage(event.clientName, event.amount));
+    if (!ok) toast(`אין מספר טלפון תקין ל${event.clientName}`, "error");
+  };
+
+  const waBtnStyle: React.CSSProperties = {
+    padding: "0.5rem 0.75rem", fontSize: "0.8rem", fontWeight: 600, border: "none",
+    borderRadius: "0.375rem", background: "#25D366", color: "#fff", cursor: "pointer", whiteSpace: "nowrap",
   };
 
   const monthName = new Intl.DateTimeFormat("he-IL", { month: "long" }).format(currentDate);
@@ -454,6 +467,9 @@ export default function CollectionsPage() {
                       >
                         שלח תזכורת
                       </button>
+                      <button onClick={() => handleWhatsApp(event)} style={waBtnStyle} title="שלח תזכורת בוואטסאפ">
+                        💬 וואטסאפ
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -556,6 +572,9 @@ export default function CollectionsPage() {
                           }}
                         >
                           שלח תזכורת
+                        </button>
+                        <button onClick={() => handleWhatsApp(event)} style={waBtnStyle} title="שלח תזכורת בוואטסאפ">
+                          💬 וואטסאפ
                         </button>
                       </div>
                     </div>
@@ -1051,6 +1070,9 @@ export default function CollectionsPage() {
                                 }}
                               >
                                 שלח תזכורת
+                              </button>
+                              <button onClick={() => handleWhatsApp(event)} style={{ ...waBtnStyle, padding: "0.4rem 0.6rem", fontSize: "0.75rem" }} title="שלח תזכורת בוואטסאפ">
+                                💬 וואטסאפ
                               </button>
                             </div>
                           </td>

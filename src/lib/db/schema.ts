@@ -432,7 +432,7 @@ export interface Employee {
 }
 
 // Employee Task
-export type EmployeeTaskStatus = 'new' | 'in_progress' | 'under_review' | 'returned' | 'approved' | 'completed';
+export type EmployeeTaskStatus = 'new' | 'in_progress' | 'under_review' | 'returned' | 'approved' | 'completed' | 'missed';
 export type EmployeeTaskPriority = 'urgent' | 'high' | 'medium' | 'low';
 
 export interface EmployeeTask {
@@ -633,7 +633,7 @@ export interface Approval {
 
 // Client Gantt Item — full content planning item
 export type GanttItemType = 'social_post' | 'story' | 'reel' | 'carousel' | 'internal_task' | 'campaign_task';
-export type GanttItemStatus = 'new_idea' | 'draft' | 'planned' | 'in_progress' | 'submitted_for_approval' | 'returned_for_changes' | 'approved' | 'scheduled' | 'published' | 'cancelled';
+export type GanttItemStatus = 'new_idea' | 'draft' | 'planned' | 'in_progress' | 'submitted_for_approval' | 'returned_for_changes' | 'approved' | 'scheduled' | 'published' | 'cancelled' | 'missed';
 export type ContentPlatform = 'facebook' | 'instagram' | 'tiktok' | 'all';
 export type ContentFormat = 'image' | 'video' | 'story' | 'reel' | 'carousel' | 'live' | 'text';
 

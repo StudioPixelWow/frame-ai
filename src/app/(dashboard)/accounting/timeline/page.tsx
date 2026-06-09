@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useClients, usePayments, useProjectPayments, useHostingRecords } from "@/lib/api/use-entity";
 import { AdminOnly } from "@/components/role-gate";
+import { openWhatsApp, retainerCollectionMessage } from "@/lib/utils/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -303,6 +304,60 @@ export default function AccountingTimelinePage() {
       .sort((a: any, b: any) => a.daysUntil - b.daysUntil);
   }, [hostingRecords]);
 
+  // ── Monthly retainer clients (publishing) — populate the collection roster ──
+  const monthKey = useMemo(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`;
+  }, []);
+
+  const retainerClients = useMemo(() => {
+    const now = new Date();
+    const daysInThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    return clients
+      .filter((c: any) => Number(c.retainerAmount) > 0 && c.clientType !== "hosting" && c.status !== "inactive")
+      .map((c: any) => {
+        const day = Math.min(Number(c.retainerDay) || 1, daysInThisMonth);
+        const collDate = new Date(now.getFullYear(), now.getMonth(), day);
+        return {
+          id: c.id,
+          name: c.name || "לא ידוע",
+          phone: c.phone || "",
+          amount: Number(c.retainerAmount) || 0,
+          day,
+          collDate,
+        };
+      })
+      .sort((a: any, b: any) => a.day - b.day);
+  }, [clients]);
+
+  // Monthly "paid" marks persisted per-month in localStorage (no schema change needed).
+  const [paidMarks, setPaidMarks] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`retainerPaid_${monthKey}`);
+      setPaidMarks(raw ? JSON.parse(raw) : {});
+    } catch { setPaidMarks({}); }
+  }, [monthKey]);
+  const toggleRetainerPaid = (id: string) => {
+    setPaidMarks((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      try { localStorage.setItem(`retainerPaid_${monthKey}`, JSON.stringify(next)); } catch { /* ok */ }
+      return next;
+    });
+  };
+
+  const retainerStats = useMemo(() => {
+    const total = retainerClients.length;
+    const paid = retainerClients.filter((c: any) => paidMarks[c.id]).length;
+    const unpaidAmount = retainerClients.filter((c: any) => !paidMarks[c.id]).reduce((s: number, c: any) => s + c.amount, 0);
+    return { total, paid, unpaid: total - paid, unpaidAmount };
+  }, [retainerClients, paidMarks]);
+
+  const handleRetainerWhatsApp = (c: { name: string; phone: string; amount: number }) => {
+    const ok = openWhatsApp(c.phone, retainerCollectionMessage(c.name, c.amount));
+    if (!ok && typeof window !== "undefined") alert(`אין מספר טלפון תקין ל${c.name}`);
+  };
+
   const handleSendReminder = async (payment: OverduePayment) => {
     const key = payment.id;
     setSendingStates((prev) => ({ ...prev, [key]: true }));
@@ -365,6 +420,82 @@ export default function AccountingTimelinePage() {
             מעקב תשלומים וגבייה אוטומטית
           </p>
         </div>
+
+        {/* Section 0: Monthly Retainer Collection Roster */}
+        <section style={{ marginBottom: "3rem" }}>
+          <h2 style={{ fontSize: "1.5rem", fontWeight: "600", color: "var(--foreground)", marginBottom: "0.35rem" }}>
+            גביית ריטיינר חודשי
+          </h2>
+          <p style={{ color: "var(--foreground-muted)", fontSize: "0.9rem", marginBottom: "1.25rem" }}>
+            כל לקוחות הפרסום החודשיים — תאריך גבייה, סטטוס תשלום, וגבייה בוואטסאפ
+          </p>
+
+          {/* Summary */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "1rem", marginBottom: "1.25rem" }}>
+            <div className="premium-card" style={{ padding: "1.25rem", background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.5rem" }}>
+              <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>לקוחות חודשיים</div>
+              <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "var(--accent)", marginTop: "0.3rem" }}>{retainerStats.total}</div>
+            </div>
+            <div className="premium-card" style={{ padding: "1.25rem", background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.5rem" }}>
+              <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>שולם החודש</div>
+              <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#22c55e", marginTop: "0.3rem" }}>{retainerStats.paid}</div>
+            </div>
+            <div className="premium-card" style={{ padding: "1.25rem", background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.5rem" }}>
+              <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>טרם שולם</div>
+              <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#ef4444", marginTop: "0.3rem" }}>{retainerStats.unpaid}</div>
+              <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>₪{retainerStats.unpaidAmount.toLocaleString("he-IL")}</div>
+            </div>
+          </div>
+
+          {retainerClients.length === 0 ? (
+            <div style={{ padding: "2rem", background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.5rem", textAlign: "center", color: "var(--foreground-muted)" }}>
+              אין כרגע לקוחות ריטיינר חודשיים. ודאו שללקוח מוגדר סכום ריטיינר ויום גבייה.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+              {retainerClients.map((c: any) => {
+                const paid = !!paidMarks[c.id];
+                const overdue = !paid && c.collDate < new Date(new Date().setHours(0, 0, 0, 0));
+                return (
+                  <div key={c.id} style={{
+                    display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap",
+                    padding: "0.9rem 1rem", border: "1px solid var(--border)", borderRadius: "0.6rem", background: "var(--surface)",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", flex: 1, minWidth: 200 }}>
+                      <span style={{ width: 12, height: 12, borderRadius: "50%", flexShrink: 0, background: paid ? "#22c55e" : overdue ? "#ef4444" : "#f59e0b" }} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, color: "var(--foreground)" }}>{c.name}</div>
+                        <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)" }}>
+                          גבייה ב-{c.day} לחודש · {c.collDate.toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" })}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "center", minWidth: 90 }}>
+                      <div style={{ fontWeight: 700, color: "var(--foreground)" }}>₪{c.amount.toLocaleString("he-IL")}</div>
+                      <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>חודשי</div>
+                    </div>
+                    <span style={{
+                      padding: "0.3rem 0.8rem", borderRadius: "0.4rem", fontSize: "0.8rem", fontWeight: 700, color: "#fff", whiteSpace: "nowrap",
+                      background: paid ? "#22c55e" : overdue ? "#ef4444" : "#f59e0b",
+                    }}>
+                      {paid ? "שולם" : overdue ? "באיחור" : "צפוי"}
+                    </span>
+                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                      <button onClick={() => handleRetainerWhatsApp(c)} title="שלח תזכורת בוואטסאפ" style={{
+                        display: "inline-flex", alignItems: "center", gap: 6, padding: "0.5rem 0.85rem", fontSize: "0.82rem", fontWeight: 700,
+                        border: "none", borderRadius: "0.4rem", background: "#25D366", color: "#fff", cursor: "pointer", whiteSpace: "nowrap",
+                      }}>💬 וואטסאפ</button>
+                      <button onClick={() => toggleRetainerPaid(c.id)} style={{
+                        padding: "0.5rem 0.85rem", fontSize: "0.82rem", fontWeight: 700, border: "1px solid var(--border)", borderRadius: "0.4rem",
+                        background: "var(--surface-raised)", color: "var(--foreground)", cursor: "pointer", whiteSpace: "nowrap",
+                      }}>{paid ? "בטל סימון" : "✓ סמן כשולם"}</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
         {/* Section 1: Monthly Timeline */}
         <section style={{ marginBottom: "3rem" }}>

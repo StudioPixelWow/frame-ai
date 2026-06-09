@@ -7,10 +7,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { clientGanttItems } from '@/lib/db';
 import { ensureSeeded } from '@/lib/db/seed';
 import { scopeForClient } from '@/lib/auth/api-guard';
+import { sweepOverdueGantt } from '@/lib/tasks/overdue';
 
 export async function GET(req: NextRequest) {
   ensureSeeded();
   try {
+    try { await sweepOverdueGantt(); } catch { /* non-blocking */ }
     const all = await clientGanttItems.getAllAsync();
     const scoped = scopeForClient(req, all, (item: any) => item.clientId);
     return NextResponse.json(scoped);

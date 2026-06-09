@@ -34,6 +34,7 @@ const GANTT_STATUS_COLORS: Record<string, { label: string; color: string }> = {
   scheduled: { label: "מתוזמן", color: "#06b6d4" },
   published: { label: "פורסם", color: "#15803d" },
   cancelled: { label: "בוטל", color: "#ef4444" },
+  missed: { label: "לא בוצע", color: "#dc2626" },
   none: { label: "לא יוצר", color: "#9ca3af" },
 };
 

@@ -349,6 +349,51 @@ function AccountingPageInner() {
           </div>
         </button>
 
+        {/* Website Hosting Collection Card */}
+        <button
+          className="premium-card ux-stagger-item"
+          onClick={() => router.push("/accounting/hosting-collection")}
+          style={{
+            background: "var(--surface-raised)",
+            border: "2px solid var(--border)",
+            borderRadius: "1rem",
+            padding: "2rem",
+            cursor: "pointer",
+            transition: "all 0.3s ease",
+            textAlign: "right",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 16px rgba(0, 146, 204, 0.2)";
+            (e.currentTarget as HTMLElement).style.borderColor = "#0092cc";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.1)";
+            (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
+          }}
+        >
+          <div style={{ fontSize: "2.5rem", marginBottom: "1rem" }}>🌐</div>
+          <h3 style={{ fontSize: "1.25rem", fontWeight: "bold", marginBottom: "0.5rem", color: "var(--foreground)" }}>
+            גביית אחסון אתרים
+          </h3>
+          <p style={{ color: "var(--foreground-muted)", fontSize: "0.9rem", marginBottom: "1.5rem" }}>
+            תשלום שנתי לכל לקוח אחסון
+          </p>
+          <div
+            style={{
+              display: "inline-block",
+              background: "#0092cc",
+              color: "#fff",
+              padding: "0.5rem 1rem",
+              borderRadius: "0.5rem",
+              fontSize: "0.85rem",
+              fontWeight: "600",
+            }}
+          >
+            גבייה שנתית
+          </div>
+        </button>
+
         {/* Podcast Card */}
         <button
           className="premium-card ux-stagger-item"
