@@ -20,7 +20,6 @@ function AccessDenied() {
 }
 
 interface HostingRow {
-  recordId: string | null;
   clientId: string;
   name: string;
   phone: string;
@@ -28,18 +27,18 @@ interface HostingRow {
   amount: number;
   paid: boolean;
   nextPaymentDate: string | null;
-  lastPaidDate: string | null;
 }
 
-const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
-const isPaidThisYear = (lastPaidDate: string | null | undefined): boolean => {
-  if (!lastPaidDate) return false;
-  const t = new Date(lastPaidDate).getTime();
-  if (Number.isNaN(t)) return false;
-  return Date.now() - t < YEAR_MS;
-};
 const fmtDate = (d: string | null | undefined) =>
   d ? new Date(d).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
+
+// Paid (green) when the next annual payment date is in the future.
+const isPaid = (annualPaymentDate: string | null | undefined): boolean => {
+  if (!annualPaymentDate) return false;
+  const t = new Date(annualPaymentDate).getTime();
+  if (Number.isNaN(t)) return false;
+  return t > Date.now();
+};
 
 export default function HostingCollectionPage() {
   return (
@@ -52,51 +51,32 @@ export default function HostingCollectionPage() {
 function HostingCollectionInner() {
   const router = useRouter();
   const toast = useToast();
-  const { data: rawClients } = useClients();
-  const { data: rawHosting, update: updateHosting, create: createHosting } = useHostingRecords();
+  const { data: rawClients, update: updateClient } = useClients();
+  const { data: rawHosting } = useHostingRecords();
   const clients = rawClients ?? [];
   const hosting = rawHosting ?? [];
   const [busy, setBusy] = useState<string>("");
 
   const rows: HostingRow[] = useMemo(() => {
-    const clientById = new Map<string, any>(clients.map((c: any) => [c.id, c]));
-    const out: HostingRow[] = [];
-    const seen = new Set<string>();
+    // Enrich amount/domain from any hosting record (read-only).
+    const recByClient = new Map<string, any>();
+    hosting.forEach((r: any) => { if (r.clientId) recByClient.set(r.clientId, r); });
 
-    hosting.forEach((r: any) => {
-      const c = clientById.get(r.clientId);
-      seen.add(r.clientId);
-      out.push({
-        recordId: r.id,
-        clientId: r.clientId,
-        name: c?.name || r.clientName || "לא ידוע",
-        phone: c?.phone || "",
-        domain: r.domainName || "",
-        amount: r.yearlyPaymentAmount || c?.retainerAmount || 0,
-        paid: isPaidThisYear(r.lastPaidDate),
-        nextPaymentDate: r.nextPaymentDate || null,
-        lastPaidDate: r.lastPaidDate || null,
-      });
-    });
-
-    // Hosting-type clients that don't yet have a hosting record.
-    clients
-      .filter((c: any) => c.clientType === "hosting" && !seen.has(c.id))
-      .forEach((c: any) => {
-        out.push({
-          recordId: null,
+    return clients
+      .filter((c: any) => c.clientType === "hosting" && c.status !== "inactive")
+      .map((c: any) => {
+        const rec = recByClient.get(c.id);
+        return {
           clientId: c.id,
           name: c.name || "לא ידוע",
           phone: c.phone || "",
-          domain: c.websiteUrl || "",
-          amount: c.retainerAmount || 0,
-          paid: false,
+          domain: (rec?.domainName as string) || c.websiteUrl || "",
+          amount: (rec?.yearlyPaymentAmount as number) || c.retainerAmount || 0,
+          paid: isPaid(c.annualPaymentDate),
           nextPaymentDate: c.annualPaymentDate || null,
-          lastPaidDate: null,
-        });
-      });
-
-    return out.sort((a, b) => Number(a.paid) - Number(b.paid) || a.name.localeCompare(b.name, "he"));
+        };
+      })
+      .sort((a, b) => Number(a.paid) - Number(b.paid) || a.name.localeCompare(b.name, "he"));
   }, [clients, hosting]);
 
   const paidCount = rows.filter((r) => r.paid).length;
@@ -106,25 +86,13 @@ function HostingCollectionInner() {
   const handleSettled = async (row: HostingRow) => {
     setBusy(row.clientId);
     const now = new Date();
-    const today = now.toISOString();
-    const nextYear = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate()).toISOString();
+    // Next annual payment = one year ahead (YYYY-MM-DD).
+    const next = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
+    const nextStr = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
     try {
-      if (row.recordId) {
-        await updateHosting(row.recordId, { status: "active", lastPaidDate: today, nextPaymentDate: nextYear } as any);
-      } else {
-        await createHosting({
-          clientId: row.clientId,
-          clientName: row.name,
-          domainName: row.domain || "",
-          hostingProvider: "",
-          yearlyPaymentAmount: row.amount || 0,
-          nextPaymentDate: nextYear,
-          lastPaidDate: today,
-          status: "active",
-          notes: "",
-        } as any);
-      }
-      toast(`התשלום של ${row.name} סומן כשולם`, "success");
+      const res = await updateClient(row.clientId, { annualPaymentDate: nextStr } as any);
+      if (!res) throw new Error("update failed");
+      toast(`התשלום של ${row.name} סומן כשולם — חיוב הבא ${fmtDate(nextStr)}`, "success");
     } catch {
       toast("שמירת התשלום נכשלה", "error");
     } finally {
@@ -172,7 +140,7 @@ function HostingCollectionInner() {
       <div style={{ ...card, padding: "1rem 1.25rem" }}>
         {rows.length === 0 ? (
           <p style={{ color: "var(--foreground-muted)", fontSize: "0.9rem", padding: "2rem", textAlign: "center" }}>
-            אין כרגע לקוחות אחסון אתרים להצגה.
+            אין כרגע לקוחות אחסון אתרים להצגה. ודאו שסוג הלקוח מוגדר כ"אחסון".
           </p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
@@ -217,7 +185,7 @@ function HostingCollectionInner() {
                     }}>
                     💬 גבייה בוואטסאפ
                   </button>
-                  {!row.paid && (
+                  {!row.paid ? (
                     <button
                       onClick={() => handleSettled(row)}
                       disabled={busy === row.clientId}
@@ -226,6 +194,17 @@ function HostingCollectionInner() {
                         background: "var(--surface-raised)", color: "var(--foreground)", cursor: busy === row.clientId ? "wait" : "pointer", whiteSpace: "nowrap",
                       }}>
                       {busy === row.clientId ? "שומר…" : "✓ תשלום הוסדר"}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleSettled(row)}
+                      disabled={busy === row.clientId}
+                      title="חדש לשנה נוספת"
+                      style={{
+                        padding: "0.5rem 0.85rem", fontSize: "0.82rem", fontWeight: 700, border: "1px solid var(--border)", borderRadius: "0.4rem",
+                        background: "var(--surface-raised)", color: "var(--foreground-muted)", cursor: busy === row.clientId ? "wait" : "pointer", whiteSpace: "nowrap",
+                      }}>
+                      {busy === row.clientId ? "שומר…" : "↻ חדש לשנה"}
                     </button>
                   )}
                 </div>
@@ -236,7 +215,7 @@ function HostingCollectionInner() {
       </div>
 
       <p style={{ fontSize: "0.78rem", color: "var(--foreground-muted)", marginTop: "1rem" }}>
-        * לחיצה על «תשלום הוסדר» מסמנת את הלקוח כשולם (ירוק) ומעדכנת את תאריך התשלום. «גבייה בוואטסאפ» פותחת צ׳אט עם הודעת גבייה מוכנה מראש.
+        * «תשלום הוסדר» מסמן את הלקוח כשולם (ירוק) ומגדיר את תאריך החיוב הבא לשנה קדימה — נשמר במסד הנתונים. «גבייה בוואטסאפ» פותחת צ׳אט עם הודעת גבייה מוכנה מראש.
       </p>
     </div>
   );

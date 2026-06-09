@@ -25,6 +25,7 @@ import type {
   ProjectMilestone,
   ProjectPayment,
   HostingRecord,
+  RetainerPayment,
   AccountantDocument,
   PodcastSession,
   AISettings,
@@ -71,6 +72,7 @@ export const useBusinessProjects = () => useData<BusinessProject>('business-proj
 export const useProjectMilestones = () => useData<ProjectMilestone>('project-milestones', { refetchOnFocus: false });
 export const useProjectPayments = () => useData<ProjectPayment>('project-payments', { refetchOnFocus: false });
 export const useHostingRecords = () => useData<HostingRecord>('hosting-records', { refetchOnFocus: false });
+export const useRetainerPayments = () => useData<RetainerPayment>('retainer-payments', { refetchOnFocus: false });
 export const useAccountantDocuments = () => useData<AccountantDocument>('accountant-documents', { refetchOnFocus: false });
 export const usePodcastSessions = () => useData<PodcastSession>('podcast-sessions', { refetchOnFocus: false });
 export const usePodcastStrategies = () => useData<PodcastStrategy>('podcast-strategies', { refetchOnFocus: false });

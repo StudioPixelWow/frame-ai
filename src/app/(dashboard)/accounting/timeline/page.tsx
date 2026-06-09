@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useClients, usePayments, useProjectPayments, useHostingRecords } from "@/lib/api/use-entity";
+import { useMemo, useState } from "react";
+import { useClients, usePayments, useProjectPayments, useHostingRecords, useRetainerPayments } from "@/lib/api/use-entity";
 import { AdminOnly } from "@/components/role-gate";
 import { openWhatsApp, retainerCollectionMessage } from "@/lib/utils/whatsapp";
 
@@ -74,6 +74,7 @@ export default function AccountingTimelinePage() {
   const { data: payments = [] } = usePayments();
   const { data: projectPayments = [] } = useProjectPayments();
   const { data: hostingRecords = [] } = useHostingRecords();
+  const { data: retainerPaymentsData = [], create: createRetainerPayment, remove: removeRetainerPayment } = useRetainerPayments();
 
   const [sendingStates, setSendingStates] = useState<SendingStates>({});
   const [successMessages, setSuccessMessages] = useState<SuccessMessages>({});
@@ -330,20 +331,30 @@ export default function AccountingTimelinePage() {
       .sort((a: any, b: any) => a.day - b.day);
   }, [clients]);
 
-  // Monthly "paid" marks persisted per-month in localStorage (no schema change needed).
-  const [paidMarks, setPaidMarks] = useState<Record<string, boolean>>({});
-  useEffect(() => {
+  // Monthly "paid" marks — durable, stored in Supabase (app_retainer_payments).
+  // Map clientId → payment record id (for the current month).
+  const paidMarks = useMemo(() => {
+    const map: Record<string, string> = {};
+    (retainerPaymentsData as any[]).forEach((p) => { if (p.month === monthKey && p.clientId) map[p.clientId] = p.id; });
+    return map;
+  }, [retainerPaymentsData, monthKey]);
+
+  const [savingRetainerId, setSavingRetainerId] = useState("");
+  const toggleRetainerPaid = async (c: { id: string; name: string; amount: number }) => {
+    setSavingRetainerId(c.id);
     try {
-      const raw = localStorage.getItem(`retainerPaid_${monthKey}`);
-      setPaidMarks(raw ? JSON.parse(raw) : {});
-    } catch { setPaidMarks({}); }
-  }, [monthKey]);
-  const toggleRetainerPaid = (id: string) => {
-    setPaidMarks((prev) => {
-      const next = { ...prev, [id]: !prev[id] };
-      try { localStorage.setItem(`retainerPaid_${monthKey}`, JSON.stringify(next)); } catch { /* ok */ }
-      return next;
-    });
+      const existingId = paidMarks[c.id];
+      if (existingId) {
+        await removeRetainerPayment(existingId);
+      } else {
+        await createRetainerPayment({
+          clientId: c.id, clientName: c.name, month: monthKey,
+          amount: c.amount, paidAt: new Date().toISOString(),
+        } as any);
+      }
+    } finally {
+      setSavingRetainerId("");
+    }
   };
 
   const retainerStats = useMemo(() => {
@@ -485,10 +496,10 @@ export default function AccountingTimelinePage() {
                         display: "inline-flex", alignItems: "center", gap: 6, padding: "0.5rem 0.85rem", fontSize: "0.82rem", fontWeight: 700,
                         border: "none", borderRadius: "0.4rem", background: "#25D366", color: "#fff", cursor: "pointer", whiteSpace: "nowrap",
                       }}>💬 וואטסאפ</button>
-                      <button onClick={() => toggleRetainerPaid(c.id)} style={{
+                      <button onClick={() => toggleRetainerPaid(c)} disabled={savingRetainerId === c.id} style={{
                         padding: "0.5rem 0.85rem", fontSize: "0.82rem", fontWeight: 700, border: "1px solid var(--border)", borderRadius: "0.4rem",
-                        background: "var(--surface-raised)", color: "var(--foreground)", cursor: "pointer", whiteSpace: "nowrap",
-                      }}>{paid ? "בטל סימון" : "✓ סמן כשולם"}</button>
+                        background: "var(--surface-raised)", color: "var(--foreground)", cursor: savingRetainerId === c.id ? "wait" : "pointer", whiteSpace: "nowrap",
+                      }}>{savingRetainerId === c.id ? "שומר…" : paid ? "בטל סימון" : "✓ סמן כשולם"}</button>
                     </div>
                   </div>
                 );

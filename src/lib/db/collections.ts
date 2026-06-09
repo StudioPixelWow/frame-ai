@@ -6,6 +6,7 @@ import type {
   Lead,
   Employee,
   EmployeeTask,
+  RetainerPayment,
   FollowUpReminder,
   Campaign,
   User,
@@ -111,6 +112,7 @@ export const clientInsights = new SupabaseCrud<ClientInsight>('app_client_insigh
 export const creativeDNA = new SupabaseCrud<CreativeDNA>('app_creative_dna', 'cdna');
 export const clientResearch = new JsonStore<ClientResearch>('client-research', 'crs');
 export const employeeTasks = new SupabaseCrud<EmployeeTask>('app_employee_tasks', 'etk');
+export const retainerPayments = new SupabaseCrud<RetainerPayment>('app_retainer_payments', 'rtp');
 export const followUpReminders = new SupabaseCrud<FollowUpReminder>('app_follow_up_reminders', 'fur');
 export const portalComments = new JsonStore<PortalComment>('portal-comments', 'pcm');
 export const automationRules = new JsonStore<AutomationRule>('automation-rules', 'atr');

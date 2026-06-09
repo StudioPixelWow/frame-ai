@@ -854,6 +854,19 @@ export interface HostingRecord {
   updatedAt: string;
 }
 
+// Monthly retainer payment mark (durable record that a client's monthly
+// retainer was collected for a given month).
+export interface RetainerPayment {
+  id: string;
+  clientId: string;
+  clientName: string;
+  month: string; // "YYYY-MM"
+  amount: number;
+  paidAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Accountant Document
 export interface AccountantDocument {
   id: string;
