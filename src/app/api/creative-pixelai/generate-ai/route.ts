@@ -104,14 +104,15 @@ export async function POST(req: NextRequest) {
         `הרחב את הצילום ופרוס את האלמנטים מחדש כך שימלאו את כל הפורמט בצורה מקצועית ויפה. אל תוסיף טקסט או אלמנט חדש.` +
         (adTexts ? `\n\nאלו הטקסטים המדויקים במודעה — העתק אותם אות-באות, בדיוק כך:\n${adTexts}` : "") +
         safeMargin + styleExtra
-      // OUTPAINT (1:1) — the original spans the full width; fill ONLY the missing
-      // strips above/below so the result reads as one native full-bleed design.
-      : "Seamlessly extend this advertisement vertically to fill the transparent strips above and below it. " +
-        "Above: continue the photograph naturally (sky, architecture, lighting — exactly matching perspective and tones). " +
-        "Below: continue the design panel exactly — same solid colors, same gradient, as if the panel simply continues. " +
-        "The result must look like ONE single full-bleed design with invisible seams. " +
-        "STRICT: do NOT add any text, letters, numbers, logos, watermarks, people or new graphic elements. " +
-        "Do NOT modify the existing artwork pixels — only fill the empty transparent areas." +
+      // OUTPAINT — the original spans the full width; intelligently CONTINUE the
+      // whole design into the transparent strips above/below (generative, not a
+      // flat color fill) so the result reads as one native, professionally-
+      // designed full-bleed creative.
+      : "You are a senior graphic designer doing a generative outpaint. Intelligently EXTEND this advertisement into the empty transparent areas above and below so it becomes one cohesive vertical 4:5 design. " +
+        "Study every visual element touching the edges and continue it realistically: backgrounds, gradients, color fields, textures (e.g. dotted world-map patterns), light streaks and glows, 3D objects, podiums/pedestals and their reflections, shadows and bokeh. " +
+        "Match perspective, depth of field, lighting direction, color grading and grain EXACTLY so the seam is completely invisible and the extension looks intentionally designed — not a plain solid fill. " +
+        "Keep generous clean breathing room near the new top and bottom edges. " +
+        "ABSOLUTELY FORBIDDEN: adding or duplicating any text, letters, numbers, logos, watermarks, people, or new objects; and altering any existing pixel of the original artwork. Only paint the empty transparent regions." +
         (prompt && prompt.trim() ? ` Style guidance: ${prompt.trim()}.` : "");
 
     const buildForm = (model: string, withFidelity: boolean) => {

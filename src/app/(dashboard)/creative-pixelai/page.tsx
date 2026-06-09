@@ -231,7 +231,7 @@ export default function CreativePixelAIPage() {
     const res = await fetch("/api/creative-pixelai/generate-ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imagePng: inputDataUrl, format: "feed_4_5", mode: "outpaint", quality: aiHighQuality ? "high" : "medium", prompt: aiStylePrompt.trim() || undefined }),
+      body: JSON.stringify({ imagePng: inputDataUrl, format: "feed_4_5", mode: "outpaint", quality: "high", prompt: aiStylePrompt.trim() || undefined }),
     });
     const json = await parseResponse(res);
     if (!res.ok) throw new Error(json.error || "היצירה נכשלה");
