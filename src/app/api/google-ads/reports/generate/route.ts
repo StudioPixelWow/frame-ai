@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     const clientId = String(body.clientId || '');
     const type = (['weekly', 'monthly', 'custom'].includes(body.type) ? body.type : 'weekly') as GoogleAdsReportType;
     if (!clientId) return NextResponse.json({ error: 'clientId נדרש' }, { status: 400 });
-    const report = await generateGoogleAdsReport({ clientId, type, customFrom: body.from, customTo: body.to, manual: body.manual });
+    const report = await generateGoogleAdsReport({ clientId, type, customFrom: body.from, customTo: body.to, manual: body.manual, csvFiles: body.csvFiles });
     return NextResponse.json({ success: true, report });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'שגיאה';

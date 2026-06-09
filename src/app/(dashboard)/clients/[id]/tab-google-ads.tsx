@@ -60,6 +60,23 @@ export default function TabGoogleAds({ client }: { client: any }) {
     finally { setBusy(""); }
   };
 
+  const uploadCsv = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    setBusy("csv"); setNotice("");
+    try {
+      const csvFiles = await Promise.all(Array.from(fileList).map(async (f) => ({ name: f.name, text: await f.text() })));
+      const body: any = { clientId, type: genType, csvFiles };
+      if (genType === "custom") { body.from = from; body.to = to; }
+      const r = await fetch("/api/google-ads/reports/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const d = await r.json();
+      if (!r.ok || !d.success) throw new Error(d.error || "שגיאה");
+      setNotice(`✓ הדוח הופק מהקבצים (${csvFiles.length})`);
+      await load();
+      if (d.report?.id) window.open(`/api/google-ads/reports/${d.report.id}?format=html`, "_blank");
+    } catch (e) { setNotice(e instanceof Error ? e.message : "ניתוח הקובץ נכשל"); }
+    finally { setBusy(""); }
+  };
+
   const generateManual = async () => {
     setBusy("manual"); setNotice("");
     try {
@@ -133,7 +150,15 @@ export default function TabGoogleAds({ client }: { client: any }) {
           <button onClick={generate} disabled={busy === "gen" || (genType === "custom" && (!from || !to))} style={btn(busy === "gen" ? "#cbd5e1" : C.primary)}>
             {busy === "gen" ? "⏳ מפיק…" : "📊 הפק דוח Google Ads"}
           </button>
+          <button onClick={() => document.getElementById("gads-csv-input")?.click()} disabled={busy === "csv"} style={btn(busy === "csv" ? "#cbd5e1" : C.primaryDark)}>
+            {busy === "csv" ? "⏳ מנתח…" : "📁 העלאת CSV מ-Google Ads"}
+          </button>
+          <input id="gads-csv-input" type="file" accept=".csv,text/csv" multiple style={{ display: "none" }}
+            onChange={(e) => { uploadCsv(e.target.files); e.currentTarget.value = ""; }} />
           <button onClick={() => setManualOpen((v) => !v)} style={ghost}>{manualOpen ? "✕ סגור הזנה ידנית" : "✏️ הזנה ידנית"}</button>
+        </div>
+        <div style={{ marginTop: 8, fontSize: 11.5, color: C.muted }}>
+          💡 ב-Google Ads: קמפיינים / מכשירים / אזורים / מונחי חיפוש → לחצן <b>Download → ‎.csv‎</b>. אפשר להעלות כמה קבצים יחד — המערכת מזהה כל אחד ומנתחת הכול לבד.
         </div>
         {notice && <div style={{ marginTop: 10, fontSize: 12.5, fontWeight: 600, color: notice.startsWith("✓") ? C.success : "#B45309" }}>{notice}</div>}
 

@@ -11,6 +11,7 @@ import {
   type GoogleAdsReport, type GoogleAdsReportType,
 } from './db';
 import { fetchAdsData, googleAdsConfigured, buildManualAdsData, type AdsData, type ManualAdsInput } from './provider';
+import { parseGoogleAdsCsvFiles, type CsvFile } from './csv-import';
 import { analyze } from './insights';
 import { buildExecutiveSummary } from './positive-language';
 import { buildReportHtml } from './report-html';
@@ -55,6 +56,7 @@ export interface GenerateOptions {
   customFrom?: string;
   customTo?: string;
   manual?: ManualAdsInput;   // manual entry path (no API)
+  csvFiles?: CsvFile[];      // CSV upload path (no API)
   baseUrl?: string;
 }
 
@@ -67,7 +69,12 @@ export async function generateGoogleAdsReport(opts: GenerateOptions): Promise<Go
 
   let data: AdsData;
   let isDemo = false;
-  if (opts.manual) {
+  if (opts.csvFiles && opts.csvFiles.length) {
+    // CSV upload — full data parsed from the Google Ads export, no API.
+    const { data: parsed, warnings } = parseGoogleAdsCsvFiles(opts.csvFiles);
+    data = parsed;
+    await logGoogleAds(clientId, 'info', `Report generated from ${opts.csvFiles.length} uploaded CSV file(s). ${warnings.join(' ')}`.trim());
+  } else if (opts.manual) {
     // Manual entry — real numbers typed by the manager, no API.
     data = buildManualAdsData(opts.manual);
     await logGoogleAds(clientId, 'info', 'Report generated from manual data entry (no API).');
