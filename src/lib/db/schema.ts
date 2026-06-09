@@ -1539,6 +1539,8 @@ export interface PodcastStrategy {
   clientName: string;
   // Step 1
   episodeType: PodcastEpisodeType;
+  // Topics the host wants to cover (free text) — drives structure + questions
+  episodeTopics?: string;
   // Step 2
   goals: PodcastGoal[];
   // Step 3

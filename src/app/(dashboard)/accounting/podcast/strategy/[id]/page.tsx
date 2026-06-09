@@ -102,7 +102,8 @@ function StrategyWizardContent() {
   const [structure, setStructure] = useState<PodcastEpisodeStructure | null>(null);
   const [questions, setQuestions] = useState<PodcastQuestion[]>([]);
   const [clipIdeas, setClipIdeas] = useState<PodcastClipIdea[]>([]);
-  const [useRealAI, setUseRealAI] = useState(false);
+  const [episodeTopics, setEpisodeTopics] = useState('');
+  const [useRealAI, setUseRealAI] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [strategyId, setStrategyId] = useState<string | null>(null);
   const loadedRef = useRef(false);
@@ -122,6 +123,7 @@ function StrategyWizardContent() {
       if (existing.episodeStructure) setStructure(existing.episodeStructure);
       if (existing.questions?.length) setQuestions(existing.questions);
       if (existing.clipIdeas?.length) setClipIdeas(existing.clipIdeas);
+      if (existing.episodeTopics) setEpisodeTopics(existing.episodeTopics);
       if (existing.useRealAI !== undefined) setUseRealAI(existing.useRealAI);
     }
   }, [strategies, sessionId]);
@@ -176,6 +178,8 @@ function StrategyWizardContent() {
         goals,
         persona,
         clientName: session?.clientName || 'הלקוח',
+        clientId: session?.clientId || '',
+        topics: episodeTopics,
         useRealAI,
       });
       setStructure(generated);
@@ -196,6 +200,8 @@ function StrategyWizardContent() {
         goals,
         persona,
         clientName: session?.clientName || 'הלקוח',
+        clientId: session?.clientId || '',
+        topics: episodeTopics,
         useRealAI,
       });
       setStructure(generated);
@@ -221,6 +227,8 @@ function StrategyWizardContent() {
         goals,
         persona,
         clientName: session?.clientName || 'הלקוח',
+        clientId: session?.clientId || '',
+        topics: episodeTopics,
         industry: persona.industry,
         useRealAI,
       });
@@ -242,6 +250,8 @@ function StrategyWizardContent() {
         goals,
         persona,
         clientName: session?.clientName || 'הלקוח',
+        clientId: session?.clientId || '',
+        topics: episodeTopics,
         industry: persona.industry,
         useRealAI,
       });
@@ -289,6 +299,7 @@ function StrategyWizardContent() {
       clientId: session.clientId || '',
       clientName: session.clientName || '',
       episodeType: episodeType || 'deep_interview',
+      episodeTopics,
       goals,
       persona,
       episodeStructure: structure,
@@ -336,6 +347,7 @@ function StrategyWizardContent() {
       clientId: session.clientId || '',
       clientName: session.clientName || '',
       episodeType: episodeType || 'deep_interview',
+      episodeTopics,
       goals,
       persona,
       episodeStructure: structure,
@@ -739,6 +751,22 @@ function StrategyWizardContent() {
 
             {!structure ? (
               <div>
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600, color: 'var(--foreground)', marginBottom: '0.4rem' }}>
+                    על מה חשוב לדבר בפרק? (נושאים מרכזיים)
+                  </label>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--foreground-muted)', marginBottom: '0.5rem' }}>
+                    כתוב את הנושאים, הסיפורים והנקודות שחשוב לכם לכסות — המערכת תבנה את מבנה הפרק והשאלות סביבם, יחד עם מה שלמדנו על העסק בכרטיס הלקוח.
+                  </p>
+                  <textarea
+                    value={episodeTopics}
+                    onChange={(e) => setEpisodeTopics(e.target.value)}
+                    rows={4}
+                    placeholder={'לדוגמה:\n• איך הקמנו את העסק מאפס\n• השיטה הייחודית שלנו לשירות לקוחות\n• טעות גדולה שעלתה לנו ביוקר ומה למדנו'}
+                    style={{ width: '100%', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.7rem 0.9rem', fontSize: '0.9rem', color: 'var(--foreground)', background: 'var(--surface-raised)', fontFamily: 'inherit', resize: 'vertical' }}
+                  />
+                </div>
+
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', cursor: 'pointer' }}>
                   <input
                     type="checkbox"
@@ -746,7 +774,7 @@ function StrategyWizardContent() {
                     onChange={(e) => setUseRealAI(e.target.checked)}
                     style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
                   />
-                  <span style={{ fontSize: '0.9rem', color: 'var(--foreground)' }}>השתמש ב-AI אמיתי (דורש קבע API)</span>
+                  <span style={{ fontSize: '0.9rem', color: 'var(--foreground)' }}>השתמש ב-AI אמיתי (מומלץ)</span>
                 </label>
 
                 <button

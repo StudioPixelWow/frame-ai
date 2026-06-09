@@ -6,6 +6,47 @@ import {
   generateQuestions,
   generateClipIdeas,
 } from "@/lib/podcast/strategy-engine";
+import { getSupabase } from "@/lib/db/store";
+
+/**
+ * Build a concise Hebrew context string from the client's saved research brain
+ * (client_research table). Returns '' if none. Used to ground the podcast
+ * strategy in what we actually know about the business.
+ */
+async function buildResearchContext(clientId?: string): Promise<string> {
+  if (!clientId) return "";
+  try {
+    const sb = getSupabase();
+    const { data } = await sb
+      .from("client_research")
+      .select("client_brain")
+      .eq("client_id", clientId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const raw = (data as any)?.client_brain;
+    if (!raw) return "";
+    const r = typeof raw === "string" ? JSON.parse(raw) : raw;
+    const parts: string[] = [];
+    if (r.identity?.whatTheySell) parts.push(`מה מוכרים: ${r.identity.whatTheySell}`);
+    if (r.identity?.positioning) parts.push(`מיצוב: ${r.identity.positioning}`);
+    if (r.identity?.tone) parts.push(`טון מותג: ${r.identity.tone}`);
+    if (Array.isArray(r.audience?.painPoints) && r.audience.painPoints.length)
+      parts.push(`כאבי קהל: ${r.audience.painPoints.slice(0, 5).join("; ")}`);
+    if (r.audience?.description) parts.push(`קהל יעד: ${r.audience.description}`);
+    if (Array.isArray(r.recommendedContentAngles) && r.recommendedContentAngles.length)
+      parts.push(`זוויות תוכן מומלצות: ${r.recommendedContentAngles.slice(0, 5).join("; ")}`);
+    if (Array.isArray(r.opportunities) && r.opportunities.length)
+      parts.push(`הזדמנויות: ${r.opportunities.slice(0, 4).map((o: any) => o.title || o.description).filter(Boolean).join("; ")}`);
+    if (Array.isArray(r.competitorSummary?.doMoreOf) && r.competitorSummary.doMoreOf.length)
+      parts.push(`בידול מול מתחרים: ${r.competitorSummary.doMoreOf.slice(0, 4).join("; ")}`);
+    if (r.strategicNotes) parts.push(`הערות אסטרטגיות: ${String(r.strategicNotes).slice(0, 400)}`);
+    return parts.join("\n");
+  } catch (err) {
+    console.warn("[podcast-strategy] research load failed:", err instanceof Error ? err.message : err);
+    return "";
+  }
+}
 import type {
   PodcastEpisodeType,
   PodcastGoal,
@@ -25,6 +66,8 @@ interface GenerateStructureRequest {
   persona: PodcastGuestPersona;
   clientName: string;
   useRealAI: boolean;
+  clientId?: string;
+  topics?: string;
 }
 
 interface GenerateQuestionsRequest {
@@ -35,6 +78,8 @@ interface GenerateQuestionsRequest {
   clientName: string;
   industry: string;
   useRealAI: boolean;
+  clientId?: string;
+  topics?: string;
 }
 
 interface GenerateClipsRequest {
@@ -167,15 +212,19 @@ export async function POST(
     // Route to appropriate generator function
     if (req.action === "structure") {
       const structureReq = req as GenerateStructureRequest;
+      const researchContext = await buildResearchContext(structureReq.clientId);
       data = await generateEpisodeStructure({
         episodeType: structureReq.episodeType,
         goals: structureReq.goals,
         persona: structureReq.persona,
         clientName: structureReq.clientName,
         useRealAI: structureReq.useRealAI,
+        topics: structureReq.topics,
+        researchContext,
       });
     } else if (req.action === "questions") {
       const questionsReq = req as GenerateQuestionsRequest;
+      const researchContext = await buildResearchContext(questionsReq.clientId);
       data = await generateQuestions({
         episodeType: questionsReq.episodeType,
         goals: questionsReq.goals,
@@ -183,6 +232,8 @@ export async function POST(
         clientName: questionsReq.clientName,
         industry: questionsReq.industry,
         useRealAI: questionsReq.useRealAI,
+        topics: questionsReq.topics,
+        researchContext,
       });
     } else if (req.action === "clips") {
       const clipsReq = req as GenerateClipsRequest;

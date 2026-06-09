@@ -9,7 +9,47 @@ import type {
   PodcastClipIdea,
 } from '@/lib/db/schema';
 
-import Anthropic from '@anthropic-ai/sdk';
+import { generateWithAI } from '@/lib/ai/openai-client';
+
+// Strategic intent per episode type — fed to the model so each type feels distinct.
+const EPISODE_INTENT: Record<string, string> = {
+  deep_interview: 'ראיון עומק אישי — חושפים את המסע, נקודות המפנה, הכישלונות והלקחים של האורח. המטרה: חיבור רגשי ואותנטיות.',
+  sales: 'פרק מכירתי עקיף — בונים את הבעיה בשוק, שוברים את הפתרונות הישנים, וממצבים את האורח כפתרון. המטרה: לידים והמרות בלי תחושת מכירה אגרסיבית.',
+  educational: 'פרק חינוכי — האורח מלמד מסגרת/שיטה ברורה שהמאזין יכול ליישם מיד. המטרה: ערך פרקטי וביסוס סמכות.',
+  viral_short: 'פרק קצר וויראלי — סיפור אחד חד עם טוויסט, בנוי לקליפים. המטרה: שיתופים והגעה אורגנית.',
+  authority: 'פרק סמכות — מיצוב האורח כקול מוביל בתחום עם תובנות נדירות ודעות חדות. המטרה: בידול מקצועי ואמון.',
+};
+
+const GOAL_LABELS: Record<string, string> = {
+  personal_exposure: 'חשיפה אישית', trust_building: 'בניית אמון',
+  professional_differentiation: 'בידול מקצועי', lead_generation: 'יצירת לידים',
+  sales: 'מכירות', market_education: 'חינוך שוק',
+  storytelling: 'סיפור אישי', objection_handling: 'טיפול בהתנגדויות',
+};
+
+const SENIOR_PRODUCER_SYSTEM = `אתה פרודיוסר ראשי ועורך תוכן בכיר של פודקאסטים עסקיים מובילים בישראל, עם ניסיון בהפקת פרקים שהגיעו למיליוני האזנות.
+אתה בונה אסטרטגיית פרק ברמה מקצועית גבוהה — לא טמפלייט גנרי.
+
+כללי איכות מחייבים:
+- עברית תקנית, זורמת וטבעית. אסור תרגומית, אסור ניסוח מסורבל.
+- הכל ספציפי לאורח, לתחום ולקהל — לא משפטים כלליים שמתאימים לכל אחד.
+- אסור קלישאות שחוקות כמו "לא תאמינו", "הסוד ש...", "מה שאף אחד לא מספר לכם", "תקשיבו עד הסוף".
+- פתיחים (hooks) חייבים ליצור מתח אמיתי או סקרנות מבוססת-מהות, לא סנסציה ריקה.
+- כל סגמנט כולל נקודות דיבור קונקרטיות ושאלה מובילה שמייצרת רגע "סאונדבייט".
+- תחשוב כמו עורך: מבנה דרמטי עם עליות, נקודת מפנה, ושיא.
+החזר JSON תקין בלבד, ללא טקסט נוסף וללא markdown.`;
+
+/** Call the app's configured OpenAI and parse JSON. Returns null on failure. */
+async function aiJson<T>(userPrompt: string, maxTokens: number): Promise<T | null> {
+  try {
+    const res = await generateWithAI(SENIOR_PRODUCER_SYSTEM, userPrompt, { temperature: 0.8, maxTokens });
+    if (!res.success || !res.data) return null;
+    return res.data as T;
+  } catch (err) {
+    console.error('[podcast strategy] AI call failed:', err);
+    return null;
+  }
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 // MOCK ENGINE (Template-based generation)
@@ -384,87 +424,58 @@ function generateMockClipIdeas(params: {
 // REAL AI ENGINE (Anthropic API)
 // ───────────────────────────────────────────────────────────────────────────
 
-async function callAnthropicAPI(prompt: string): Promise<string | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-
-  if (!apiKey) {
-    console.warn(
-      'ANTHROPIC_API_KEY not set, falling back to mock generation'
-    );
-    return null;
-  }
-
-  try {
-    const client = new Anthropic({ apiKey });
-
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-    });
-
-    if (message.content[0]?.type === 'text') {
-      return message.content[0].text;
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Anthropic API call failed:', error);
-    return null;
-  }
-}
-
 async function generateRealEpisodeStructure(params: {
   episodeType: PodcastEpisodeType;
   goals: PodcastGoal[];
   persona: PodcastGuestPersona;
   clientName: string;
+  topics?: string;
+  researchContext?: string;
 }): Promise<PodcastEpisodeStructure | null> {
-  const { episodeType, goals, persona, clientName } = params;
+  const { episodeType, goals, persona, clientName, topics, researchContext } = params;
+  const intent = EPISODE_INTENT[episodeType] || '';
+  const goalsHe = goals.map((g) => GOAL_LABELS[g] || g).join(', ');
+  const topicsBlock = topics?.trim()
+    ? `\n🎯 הנושאים שחשוב למארח לכסות בפרק (בנה את המבנה סביבם — זו ההנחיה המרכזית):\n${topics.trim()}\n`
+    : '';
+  const researchBlock = researchContext?.trim()
+    ? `\n📚 מה שלמדנו על העסק (מחקר לקוח) — השתמש בזה כדי שהמבנה יהיה ספציפי ומבוסס:\n${researchContext.trim()}\n`
+    : '';
 
-  const prompt = `אתה מומחה בהפקת פודקאסטים וב-storytelling. צור מבנה אפיזודה פודקאסט בעברית עבור סוג אפיזודה "${episodeType}".
+  const prompt = `בנה מבנה פרק פודקאסט מלא ומקצועי.
 
-נתונים:
-- שם הלקוח: ${clientName}
-- יעדים: ${goals.join(', ')}
-- טון הדברים: ${persona.tone}
-- רמת ידע: ${persona.expertiseLevel}
+האורח / המותג: ${clientName}
+סוג הפרק: ${episodeType} — ${intent}
+מטרות הפרק: ${goalsHe}
+תחום: ${persona.industry || 'לא צוין'}
+קהל היעד: ${persona.audience || 'לא צוין'}
+טון: ${persona.tone} | סגנון דיבור: ${persona.speakingStyle || 'לא צוין'} | רמת מומחיות: ${persona.expertiseLevel}
+${topicsBlock}${researchBlock}
+דרישות:
+- openingHook: פתיח של 1-2 משפטים שיוצר מתח/סקרנות אמיתיים וספציפיים ל${clientName} ולתחום — לא קלישאה.
+- intro: 2-3 משפטים שממסגרים למה הפרק הזה שווה את הזמן של המאזין דווקא עכשיו.
+- segments: 4-5 סגמנטים. לכל סגמנט: title חד; description עשיר (2-3 משפטים) שכולל נקודות דיבור קונקרטיות + שאלה מובילה אחת שמייצרת רגע "סאונדבייט"; durationMinutes ריאלי.
+- transitions: משפט מעבר חלק לכל סגמנט (אותו מספר כמו הסגמנטים).
+- closingCTA: סגירה שמחברת למטרות (${goalsHe}) בלי תחושת מכירה אגרסיבית.
 
-הנא להחזיר JSON בדיוק בפורמט הזה (בעברית):
-{
-  "openingHook": "שורת פתיחה תופסת",
-  "intro": "הקדמה של 2-3 משפטים",
-  "segments": [
-    {"title": "שם הסגמנט", "description": "תיאור קצר", "durationMinutes": 12}
-  ],
-  "transitions": ["מעבר 1", "מעבר 2"],
-  "closingCTA": "קריאה לפעולה בסיום"
-}`;
+החזר JSON בלבד:
+{"openingHook":"...","intro":"...","segments":[{"title":"...","description":"...","durationMinutes":12}],"transitions":["..."],"closingCTA":"..."}`;
 
-  const response = await callAnthropicAPI(prompt);
-  if (!response) return null;
-
-  try {
-    // Extract JSON from response (in case there's extra text)
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
-
-    const parsed = JSON.parse(jsonMatch[0]);
-    return {
-      openingHook: parsed.openingHook || '',
-      intro: parsed.intro || '',
-      segments: parsed.segments || [],
-      transitions: parsed.transitions || [],
-      closingCTA: parsed.closingCTA || '',
-    };
-  } catch {
-    return null;
-  }
+  const parsed = await aiJson<any>(prompt, 2800);
+  if (!parsed) return null;
+  const structure = parsed.structure || parsed;
+  if (!structure || !Array.isArray(structure.segments) || structure.segments.length === 0) return null;
+  return {
+    openingHook: structure.openingHook || '',
+    intro: structure.intro || '',
+    segments: structure.segments.map((s: any) => ({
+      title: s.title || '',
+      description: s.description || '',
+      durationMinutes: Number(s.durationMinutes) || 10,
+    })),
+    transitions: Array.isArray(structure.transitions) ? structure.transitions : [],
+    closingCTA: structure.closingCTA || '',
+  };
 }
 
 async function generateRealQuestions(params: {
@@ -473,56 +484,54 @@ async function generateRealQuestions(params: {
   persona: PodcastGuestPersona;
   clientName: string;
   industry: string;
+  topics?: string;
+  researchContext?: string;
 }): Promise<PodcastQuestion[] | null> {
-  const { episodeType, goals, persona, clientName, industry } = params;
+  const { episodeType, goals, persona, clientName, industry, topics, researchContext } = params;
+  const intent = EPISODE_INTENT[episodeType] || '';
+  const goalsHe = goals.map((g) => GOAL_LABELS[g] || g).join(', ');
+  const topicsBlock = topics?.trim()
+    ? `\n🎯 הנושאים שחשוב למארח לכסות בפרק — רוב השאלות חייבות להוביל אל הנושאים האלה:\n${topics.trim()}\n`
+    : '';
+  const researchBlock = researchContext?.trim()
+    ? `\n📚 מה שלמדנו על העסק (מחקר לקוח) — בסס עליו שאלות ספציפיות וחדות:\n${researchContext.trim()}\n`
+    : '';
 
-  const prompt = `אתה מומחה בהפקת פודקאסטים וב-crafting שאלות. צור 20 שאלות עבור פודקאסט בעברית.
+  const prompt = `כתוב 20 שאלות ראיון לפודקאסט ברמה של מראיין מקצועי מעולה.
 
-נתונים:
-- שם הלקוח: ${clientName}
-- סוג אפיזודה: ${episodeType}
-- יעדים: ${goals.join(', ')}
-- תחום: ${industry}
-- טון הדברים: ${persona.tone}
+האורח / המותג: ${clientName}
+סוג הפרק: ${episodeType} — ${intent}
+מטרות: ${goalsHe}
+תחום: ${industry}
+קהל היעד: ${persona.audience || 'לא צוין'}
+טון: ${persona.tone} | רמת מומחיות: ${persona.expertiseLevel}
+${topicsBlock}${researchBlock}
+דרישות איכות:
+- כל שאלה ספציפית לתחום ${industry} ול${clientName} — לא שאלה גנרית שמתאימה לכל אורח.
+- מבנה דרמטי מתקדם: התחלה שבונה קרבה ואמון → צלילה לסיפור ולנקודות מפנה → שאלות סמכות ותובנות → שאלות חדות/ויראליות → סגירה עם קריאה לפעולה.
+- שאלות פתוחות שמזמינות סיפור, לא שאלות כן/לא.
+- בלי קלישאות ובלי שאלות שטחיות ("ספר לי על עצמך").
+- שלב 2-3 שאלות "סאונדבייט" שמייצרות אמירה חדה שאפשר לחתוך לקליפ.
+- type: אחד מ-hook|story|authority|objection|cta. labels: עד 2 מתוך viral|emotional|sales (או ריק).
+- score (1-100): פוטנציאל האנגייג'מנט/ויראליות האמיתי של השאלה.
 
-הנא להחזיר JSON בדיוק בפורמט הזה (מערך של 20 שאלות):
-[
-  {
-    "text": "השאלה בעברית",
-    "type": "hook|story|authority|objection|cta",
-    "score": 75,
-    "labels": ["viral|emotional|sales"]
-  }
-]
+החזר JSON בלבד:
+{"questions":[{"text":"...","type":"story","score":82,"labels":["emotional"]}]}`;
 
-חשוב:
-- כל שאלה חייבת להיות בעברית
-- score בין 60 ל-100
-- labels יכול להיות מערך ריק או עם עד 2 label
-- צור שאלות מגוונות וחדשות
-- הקפד על הרלוונטיות ל-${clientName} וה-${industry}`;
-
-  const response = await callAnthropicAPI(prompt);
-  if (!response) return null;
-
-  try {
-    const jsonMatch = response.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return null;
-
-    const parsed: any[] = JSON.parse(jsonMatch[0]);
-    return parsed.map((q, i) => ({
-      id: `q_${Date.now()}_${i}`,
-      text: q.text || '',
-      type: (q.type || 'story') as PodcastQuestionType,
-      score: Math.min(100, Math.max(1, q.score || 75)),
-      labels: (q.labels || []) as PodcastQuestionLabel[],
-      selected: false,
-      order: i,
-      status: 'pending' as const,
-    }));
-  } catch {
-    return null;
-  }
+  const parsed = await aiJson<any>(prompt, 4000);
+  if (!parsed) return null;
+  const arr: any[] = Array.isArray(parsed) ? parsed : (parsed.questions || []);
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  return arr.map((q, i) => ({
+    id: `q_${Date.now()}_${i}`,
+    text: q.text || '',
+    type: (q.type || 'story') as PodcastQuestionType,
+    score: Math.min(100, Math.max(1, Number(q.score) || 75)),
+    labels: (Array.isArray(q.labels) ? q.labels : []) as PodcastQuestionLabel[],
+    selected: false,
+    order: i,
+    status: 'pending' as const,
+  }));
 }
 
 async function generateRealClipIdeas(params: {
@@ -530,53 +539,37 @@ async function generateRealClipIdeas(params: {
   clientName: string;
 }): Promise<PodcastClipIdea[] | null> {
   const { questions, clientName } = params;
-
   if (questions.length === 0) return [];
 
-  const questionTexts = questions.map((q) => `- ${q.text}`).join('\n');
+  const questionList = questions.map((q) => `[${q.id}] ${q.text}`).join('\n');
 
-  const prompt = `אתה מומחה בקליפים לרשתות חברתיות ובעברית. צור קליפ ideas עבור שאלות פודקאסט.
+  const prompt = `אתה עורך קליפים קצרים לרשתות (Reels/TikTok/Shorts) ברמה מקצועית.
+בחר את 6-8 השאלות עם פוטנציאל הקליפ הגבוה ביותר וצור עבורן רעיון קליפ.
 
-שאלות:
-${questionTexts}
+שם המותג: ${clientName}
+שאלות (השתמש ב-id המדויק):
+${questionList}
 
-שם הלקוח: ${clientName}
+לכל קליפ:
+- clipTitle: כותרת עבודה קצרה וברורה.
+- hookLine: 3-6 שניות ראשונות שעוצרות גלילה — אמירה חדה/מסקרנת ספציפית, בלי קלישאות ("הסוד ש...", "לא תאמינו").
+- captionIdea: כיתוב לרשת, משפט-שניים + 1-2 אימוג׳י + קריאה לפעולה קצרה.
+- platformFit: 2-3 מתוך reels|tiktok|youtube_shorts לפי אופי הקליפ.
 
-הנא להחזיר JSON בדיוק בפורמט הזה (קליפ עבור כל שאלה):
-[
-  {
-    "questionId": "q_number",
-    "clipTitle": "כותרת הקליפ",
-    "hookLine": "שורת ווירוס/תופסת בעברית",
-    "captionIdea": "טקסט הכיתוביון עם emoji",
-    "platformFit": ["reels", "tiktok", "youtube_shorts"]
-  }
-]
+החזר JSON בלבד:
+{"clips":[{"questionId":"...","clipTitle":"...","hookLine":"...","captionIdea":"...","platformFit":["reels","tiktok"]}]}`;
 
-חשוב:
-- hookLine צריך להיות אטרקטיבי ובעברית
-- captionIdea צריך להיות קצר וכולל emoji
-- platformFit - בחר 2-3 פלטפורמות הרלוונטיות
-- כל קליפ צריך להיות מחויב לשאלה מסוימת`;
-
-  const response = await callAnthropicAPI(prompt);
-  if (!response) return null;
-
-  try {
-    const jsonMatch = response.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return null;
-
-    const parsed: any[] = JSON.parse(jsonMatch[0]);
-    return parsed.map((clip) => ({
-      questionId: clip.questionId || '',
-      clipTitle: clip.clipTitle || '',
-      hookLine: clip.hookLine || '',
-      captionIdea: clip.captionIdea || '',
-      platformFit: clip.platformFit || ['reels'],
-    }));
-  } catch {
-    return null;
-  }
+  const parsed = await aiJson<any>(prompt, 3000);
+  if (!parsed) return null;
+  const arr: any[] = Array.isArray(parsed) ? parsed : (parsed.clips || []);
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  return arr.map((clip) => ({
+    questionId: clip.questionId || '',
+    clipTitle: clip.clipTitle || '',
+    hookLine: clip.hookLine || '',
+    captionIdea: clip.captionIdea || '',
+    platformFit: Array.isArray(clip.platformFit) && clip.platformFit.length ? clip.platformFit : ['reels'],
+  }));
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -589,6 +582,8 @@ export async function generateEpisodeStructure(params: {
   persona: PodcastGuestPersona;
   clientName: string;
   useRealAI: boolean;
+  topics?: string;
+  researchContext?: string;
 }): Promise<PodcastEpisodeStructure> {
   const { useRealAI } = params;
 
@@ -608,6 +603,8 @@ export async function generateQuestions(params: {
   clientName: string;
   industry: string;
   useRealAI: boolean;
+  topics?: string;
+  researchContext?: string;
 }): Promise<PodcastQuestion[]> {
   const { useRealAI, clientName, industry } = params;
 
