@@ -47,6 +47,14 @@
     {
       "path": "/api/cron/geo-automation",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/google-ads/weekly",
+      "schedule": "0 7 * * 1"
+    },
+    {
+      "path": "/api/cron/google-ads/monthly",
+      "schedule": "0 7 2 * *"
     }
   ]
 }

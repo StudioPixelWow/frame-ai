@@ -26,6 +26,7 @@ import { TabAutomations } from "@/components/client/tab-automations";
 import TabCampaigns from "./tab-campaigns";
 import TabGrowth from "./tab-growth";
 import TabSeoGeo from "./tab-seo-geo";
+import TabGoogleAds from "./tab-google-ads";
 import DailyReportTab from "@/components/meta/daily-report-tab";
 import TabPublishingChannels from "./tab-publishing-channels";
 
@@ -100,7 +101,7 @@ const GANTT_STATUS_COLORS: Record<string, { label: string; color: string }> = {
   none: { label: "לא יוצר", color: "#9ca3af" },
 };
 
-type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "campaigns" | "seo" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos" | "automations" | "integrations" | "growth" | "daily-report" | "publishing-channels" | "competitors";
+type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "campaigns" | "google-ads" | "seo" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos" | "automations" | "integrations" | "growth" | "daily-report" | "publishing-channels" | "competitors";
 
 const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "overview", label: "סקירה" },
@@ -114,6 +115,7 @@ const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "social", label: "סושיאל" },
   { id: "campaigns", label: "קמפיינים" },
   { id: "ads", label: "פרסום" },
+  { id: "google-ads", label: "Google Ads" },
   { id: "seo", label: "PIXEL SEO/GEO" },
   { id: "files", label: "קבצים" },
   { id: "accounting", label: "הנהח״ש" },
@@ -1466,6 +1468,9 @@ function ClientDetailContent() {
         })()}
         {activeTab === "seo" && (
           <TabSeoGeo client={client} />
+        )}
+        {activeTab === "google-ads" && (
+          <TabGoogleAds client={client} />
         )}
       </div>
 
