@@ -124,6 +124,30 @@ export default function RtmBroadcastPage() {
     }
   };
 
+  // ── Regenerate: produce a fresh AI idea for this client (no manual seed) ──
+  const regenerateRow = async (row: Row) => {
+    setFixId(null);
+    setRows((prev) => prev.map((r) => (r.client.id === row.client.id ? { ...r, status: 'working' } : r)));
+    try {
+      const res = await fetch('/api/rtm-broadcast', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: row.client.id, topic, date, platform, format, itemId: row.itemId,
+          notes: `${notes ? notes + ' · ' : ''}צור רעיון חדש ושונה לחלוטין מהקודם (וריאציה ${Date.now() % 10000})`,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok || !d.success) throw new Error(d.error || 'שגיאה');
+      setRows((prev) => prev.map((r) => (r.client.id === row.client.id
+        ? { ...r, status: 'done', replaced: d.result?.replaced, title: d.result?.title, graphicText: d.result?.graphicText, itemId: d.result?.itemId }
+        : r)));
+    } catch (e) {
+      setRows((prev) => prev.map((r) => (r.client.id === row.client.id
+        ? { ...r, status: 'failed', error: e instanceof Error ? e.message : 'שגיאה' }
+        : r)));
+    }
+  };
+
   const closeModal = () => { if (running) return; setOpen(false); setRows([]); setDone(false); cancelFix(); };
 
   const fmtDate = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('he-IL', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -243,7 +267,10 @@ export default function RtmBroadcastPage() {
                               {r.status === 'failed' && <div style={{ fontSize: 11.5, color: C.danger }}>{r.error}</div>}
                             </div>
                             {(r.status === 'done' || r.status === 'failed') && !editing && (
-                              <button onClick={() => openFix(r)} title="תקן רעיון" style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '4px 10px', fontSize: 11.5, fontWeight: 700, color: C.primaryDark, cursor: 'pointer', whiteSpace: 'nowrap' }}>🔄 תקן רעיון</button>
+                              <>
+                                <button onClick={() => regenerateRow(r)} title="ייצר רעיון חדש דרך AI" style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '4px 10px', fontSize: 11.5, fontWeight: 700, color: C.primary, cursor: 'pointer', whiteSpace: 'nowrap' }}>🔁 ייצר מחדש</button>
+                                <button onClick={() => openFix(r)} title="הגדרה ידנית של הרעיון" style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '4px 10px', fontSize: 11.5, fontWeight: 700, color: C.primaryDark, cursor: 'pointer', whiteSpace: 'nowrap' }}>🔄 תקן רעיון</button>
+                              </>
                             )}
                             {!editing && <span style={{ fontSize: 11.5, color: s.c, fontWeight: 700 }}>{s.l}</span>}
                           </div>
