@@ -103,14 +103,26 @@ export default function TabGoogleAds({ client }: { client: any }) {
     finally { setBusy(""); }
   };
 
-  const send = async (id: string) => {
-    setBusy(id);
+  // email popup
+  const [emailFor, setEmailFor] = useState<string | null>(null);
+  const [emailTo, setEmailTo] = useState("");
+  const openEmail = (id: string) => { setEmailFor(id); setEmailTo(client?.email || ""); };
+
+  const sendEmail = async () => {
+    if (!emailFor || !emailTo.trim()) return;
+    const id = emailFor;
+    setBusy(id); setNotice("");
     try {
-      const r = await fetch(`/api/google-ads/reports/${id}/send`, { method: "POST" });
+      const r = await fetch(`/api/google-ads/reports/${id}/send`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: emailTo.trim() }),
+      });
       const d = await r.json();
-      if (d.success) setNotice(`✓ סומן כנשלח · תקציר: ${d.summary || ""}`);
+      if (!r.ok || !d.success) throw new Error(d.error || "שגיאה");
+      setNotice(d.mock ? "✓ הדוח נשלח (מצב הדגמה — חבר Gmail בהגדרות לשליחה אמיתית)" : `✓ הדוח נשלח ל-${d.sentTo}`);
+      setEmailFor(null); setEmailTo("");
       await load();
-    } catch { /* ignore */ } finally { setBusy(""); }
+    } catch (e) { setNotice(e instanceof Error ? e.message : "שליחת המייל נכשלה"); }
+    finally { setBusy(""); }
   };
 
   const btn = (bg: string): React.CSSProperties => ({ background: bg, color: "#fff", border: "none", borderRadius: 9, padding: "0.5rem 0.9rem", fontWeight: 700, fontSize: 12.5, cursor: "pointer" });
@@ -217,7 +229,7 @@ export default function TabGoogleAds({ client }: { client: any }) {
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <a href={`/api/google-ads/reports/${r.id}?format=html`} target="_blank" rel="noreferrer" style={{ ...ghost, textDecoration: "none", color: C.text }}>👁 צפייה</a>
                     <a href={`/api/google-ads/reports/${r.id}/pdf`} target="_blank" rel="noreferrer" style={{ ...btn(C.primaryDark), textDecoration: "none" }}>⬇ PDF</a>
-                    <button onClick={() => send(r.id)} disabled={busy === r.id} style={btn(C.success)}>{busy === r.id ? "…" : "✉ סמן כנשלח"}</button>
+                    <button onClick={() => openEmail(r.id)} disabled={busy === r.id} style={btn(C.success)}>{busy === r.id ? "…" : "📧 שלח בדואל"}</button>
                   </div>
                 </div>
               );
@@ -225,6 +237,33 @@ export default function TabGoogleAds({ client }: { client: any }) {
           </div>
         )}
       </div>
+
+      {/* Email popup */}
+      {emailFor && (
+        <div onClick={() => setEmailFor(null)} style={{ position: "fixed", inset: 0, background: "rgba(16,24,40,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 420, overflow: "hidden", boxShadow: "0 20px 60px rgba(16,24,40,0.25)" }}>
+            <div style={{ background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, color: "#fff", padding: "16px 20px" }}>
+              <div style={{ fontSize: 12, opacity: 0.85, fontWeight: 700, letterSpacing: 1 }}>שליחת דוח</div>
+              <div style={{ fontSize: 18, fontWeight: 900 }}>📧 שלח את הדוח בדואל</div>
+            </div>
+            <div style={{ padding: "18px 20px" }}>
+              <label style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: C.sub, marginBottom: 6 }}>כתובת המייל לשליחה</label>
+              <input type="email" value={emailTo} onChange={(e) => setEmailTo(e.target.value)} placeholder="name@example.com"
+                onKeyDown={(e) => { if (e.key === "Enter") sendEmail(); }} autoFocus
+                style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 14 }} />
+              <div style={{ background: "#F7F9FC", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 12.5, color: C.sub, marginTop: 12, lineHeight: 1.7 }}>
+                היי {client?.name || "לקוח"},<br/>מצורף דוח נתונים תקופתי. שמחים לעמוד לשירותכם!<br/>ניפגש בדוח הבא ✨
+              </div>
+              <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+                <button onClick={sendEmail} disabled={!emailTo.trim() || busy === emailFor} style={{ ...btn(emailTo.trim() ? C.success : C.border), flex: 1, padding: "0.7rem" }}>
+                  {busy === emailFor ? "⏳ שולח…" : "📧 שלח עכשיו"}
+                </button>
+                <button onClick={() => setEmailFor(null)} style={{ ...ghost, padding: "0.7rem 1rem" }}>ביטול</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
