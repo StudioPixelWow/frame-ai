@@ -105,10 +105,12 @@ function HostingCollectionInner() {
 
   const handleSettled = async (row: HostingRow) => {
     setBusy(row.clientId);
-    const today = new Date().toISOString();
+    const now = new Date();
+    const today = now.toISOString();
+    const nextYear = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate()).toISOString();
     try {
       if (row.recordId) {
-        await updateHosting(row.recordId, { status: "active", lastPaidDate: today, nextPaymentDate: today } as any);
+        await updateHosting(row.recordId, { status: "active", lastPaidDate: today, nextPaymentDate: nextYear } as any);
       } else {
         await createHosting({
           clientId: row.clientId,
@@ -116,7 +118,7 @@ function HostingCollectionInner() {
           domainName: row.domain || "",
           hostingProvider: "",
           yearlyPaymentAmount: row.amount || 0,
-          nextPaymentDate: today,
+          nextPaymentDate: nextYear,
           lastPaidDate: today,
           status: "active",
           notes: "",
