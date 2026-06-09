@@ -252,6 +252,27 @@ export function renderAdaptation(
   // 1) background
   drawBackground(ctx, img, opt);
 
+  // ── FULL-BLEED 4:5 ──
+  // A square (or wider) creative shrunk into 4:5 with padding looks like a small
+  // floating card on a big cream margin. Instead, place the original EDGE-TO-EDGE
+  // at full width (no padding / rounded / shadow that shrink it), centered, with
+  // the blurred background filling only the slim top/bottom strips — a premium
+  // full-bleed look. Only for the default (non-manual) modes.
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  const isFullBleedTarget = opt.format.id === "feed_4_5" && opt.scaleMode !== "manual" && (iw / ih) >= 0.85;
+  if (isFullBleedTarget) {
+    let s = W / iw;                 // fill width edge-to-edge
+    if (ih * s > H) s = H / ih;     // never crop a tall source — fall back to fit-height
+    const dW = iw * s, dH = ih * s;
+    const fbX = (W - dW) / 2;
+    const freeH = H - dH;
+    const fbY = opt.scaleMode === "top_focus" ? 0
+      : opt.scaleMode === "bottom_focus" ? freeH
+      : Math.round(freeH * (0.5 + (opt.verticalOffset || 0) * 0.5));
+    ctx.drawImage(img, fbX, Math.max(0, Math.min(freeH, fbY)), dW, dH);
+    return { scale: s, drawW: dW, drawH: dH, x: fbX, y: fbY, cropped: false };
+  }
+
   // 2) layout for the LOCKED original layer
   const layout = computeLayout(img.naturalWidth, img.naturalHeight, opt);
 
