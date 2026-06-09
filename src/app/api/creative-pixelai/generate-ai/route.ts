@@ -20,7 +20,7 @@ export const maxDuration = 120;
 //   story 9:16   → 1024x1536 (portrait; crops side bands)
 const GEN_SIZE: Record<string, string> = {
   story: "1024x1536",
-  feed_4_5: "1024x1024",
+  feed_4_5: "1024x1536", // portrait — matches the 4:5 canvas the client sends (was 1024x1024 → square mismatch = poor 4:5)
   square: "1024x1024",
 };
 
@@ -66,6 +66,9 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "OpenAI לא מוגדר" }, { status: 503 });
 
+    const mimeMatch = imagePng.match(/^data:(image\/\w+);base64,/);
+    const inMime = mimeMatch ? mimeMatch[1] : "image/png";
+    const inExt = inMime === "image/jpeg" ? "jpg" : inMime === "image/webp" ? "webp" : "png";
     const b64 = imagePng.replace(/^data:image\/\w+;base64,/, "");
     const buf = Buffer.from(b64, "base64");
     if (buf.length > 20 * 1024 * 1024) return NextResponse.json({ error: "תמונה גדולה מדי" }, { status: 400 });
@@ -84,7 +87,7 @@ export async function POST(req: NextRequest) {
     // text/logo is ever lost. 4:5 crops the sides → demand 20% side margins.
     const safeMargin =
       format === "feed_4_5"
-        ? " קריטי ביותר: השאר רצועת רקע ריקה (בלי טקסט, בלי לוגו) ברוחב 20% בצד ימין וברוחב 20% בצד שמאל של המסגרת. כל הטקסטים, המחירים והלוגואים חייבים להיות אך ורק ב-60% המרכזיים. הצדדים ייחתכו — אסור ששום טקסט יהיה שם."
+        ? " קריטי ביותר: זהו פורמט אנכי 4:5. השאר רצועת רקע ריקה (בלי טקסט, בלי לוגו) בגובה 15% בחלק העליון וכן בחלק התחתון של המסגרת. כל הטקסטים, המחירים והלוגואים חייבים להיות ב-70% המרכזיים (אנכית). החלק העליון והתחתון עשויים להיחתך מעט — אסור ששום טקסט יהיה שם."
         : format === "story"
         ? " קריטי: השאר שוליי רקע ריקים של 12% בצד ימין ובצד שמאל; כל הטקסטים והלוגואים במרכז בלבד. הצדדים ייחתכו מעט."
         : "";
@@ -114,7 +117,7 @@ export async function POST(req: NextRequest) {
     const buildForm = (model: string, withFidelity: boolean) => {
       const fd = new FormData();
       fd.append("model", model);
-      fd.append("image", new Blob([new Uint8Array(buf)], { type: "image/png" }), "input.png");
+      fd.append("image", new Blob([new Uint8Array(buf)], { type: inMime }), `input.${inExt}`);
       fd.append("prompt", genPrompt);
       fd.append("size", GEN_SIZE[format]);
       // "medium" is 2-3x faster than "high" — default keeps us inside the

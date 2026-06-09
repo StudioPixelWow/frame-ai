@@ -55,6 +55,21 @@ function toAnalysisDataUrl(img: HTMLImageElement, maxDim = 1024): string {
   return c.toDataURL("image/jpeg", 0.85);
 }
 
+/** Parse a fetch Response safely — surfaces non-JSON platform errors (e.g. a
+ *  413 "Request Entity Too Large" returned as plain text) as a clean message
+ *  instead of crashing on res.json() with "Unexpected token 'R'". */
+async function parseResponse(res: Response): Promise<any> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    if (res.status === 413 || /too large|request entity|entity too/i.test(text)) {
+      throw new Error("הקובץ גדול מדי לשרת. נסה תמונה קטנה יותר או הקטן את הרזולוציה (עד ~4MB).");
+    }
+    throw new Error(text ? text.slice(0, 160) : `שגיאת רשת (${res.status})`);
+  }
+}
+
 const BG_OPTIONS: { id: BackgroundType; label: string }[] = [
   { id: "blurred", label: "תמונה מטושטשת" },
   { id: "dominant_color", label: "צבע דומיננטי" },
@@ -218,7 +233,7 @@ export default function CreativePixelAIPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ imagePng: inputDataUrl, format: "feed_4_5", mode: "outpaint", quality: aiHighQuality ? "high" : "medium", prompt: aiStylePrompt.trim() || undefined }),
     });
-    const json = await res.json();
+    const json = await parseResponse(res);
     if (!res.ok) throw new Error(json.error || "היצירה נכשלה");
     const genImg = await loadImage(json.image);
 
@@ -484,7 +499,9 @@ export default function CreativePixelAIPage() {
         const cx = c.getContext("2d")!;
         cx.imageSmoothingQuality = "high";
         cx.drawImage(img, 0, 0, c.width, c.height);
-        inputDataUrl = c.toDataURL("image/png");
+        // JPEG keeps the request body small (PNG of a full photo can exceed the
+        // serverless body limit → "Request Entity Too Large").
+        inputDataUrl = c.toDataURL("image/jpeg", 0.9);
       } else {
         // FULL-WIDTH 1:1 — the original spans the ENTIRE width (edge-to-edge, looks
         // native/full-bleed); the AI only completes the missing strips above/below
@@ -513,7 +530,7 @@ export default function CreativePixelAIPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imagePng: inputDataUrl, format: formatId, mode: aiMode, quality: aiHighQuality ? "high" : "medium", prompt: aiStylePrompt.trim() || undefined, correctTexts: manualTexts.trim() || undefined }),
       });
-      const json = await res.json();
+      const json = await parseResponse(res);
       if (!res.ok) throw new Error(json.error || "היצירה נכשלה");
       const genImg = await loadImage(json.image);
 
@@ -609,9 +626,9 @@ export default function CreativePixelAIPage() {
       const res = await fetch("/api/creative-pixelai/generate-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imagePng: c.toDataURL("image/png"), format: formatId, mode: "edit", quality: aiHighQuality ? "high" : "medium", prompt: note.trim() }),
+        body: JSON.stringify({ imagePng: c.toDataURL("image/jpeg", 0.92), format: formatId, mode: "edit", quality: aiHighQuality ? "high" : "medium", prompt: note.trim() }),
       });
-      const json = await res.json();
+      const json = await parseResponse(res);
       if (!res.ok) throw new Error(json.error || "התיקון נכשל");
       const genImg = await loadImage(json.image);
       const f = FORMATS.find((x) => x.id === formatId)!;
