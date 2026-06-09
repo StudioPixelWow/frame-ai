@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
         `שמור על כל האלמנטים, הטקסטים, המספרים, הלוגואים והצבעים בדיוק כפי שהם — בלי לחתוך שום אלמנט. ` +
         `הרחב והשלם את הרקע והעיצוב בצורה טבעית, חכמה ומקצועית כך שימלאו את כל הפריים החדש בצורה יפה ומאוזנת, כאילו העיצוב תוכנן מלכתחילה לפורמט הזה. אל תוסיף טקסט חדש.` +
         (adTexts ? `\n\nהטקסטים המדויקים שחייבים להישמר אות-באות:\n${adTexts}` : "") +
-        styleExtra
+        safeMargin + styleExtra
       : mode === "edit"
       // TARGETED EDIT of an existing generated version — ChatGPT-style iteration.
       // The user's note arrives in `prompt`; everything else must stay identical.
