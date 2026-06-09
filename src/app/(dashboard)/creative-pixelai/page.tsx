@@ -209,10 +209,10 @@ export default function CreativePixelAIPage() {
     return c.toDataURL("image/jpeg", 0.95);
   };
 
-  // AI reframe to 4:5 — the "ChatGPT way": send the WHOLE image and let the model
-  // intelligently recompose it to a vertical 4:5, keeping every element & text and
-  // extending the design to fill the frame. The model output is used directly
-  // (no strip paste-back), which is what produces the impressive result.
+  // AI 4:5 — uses the EXACT same engine as the single-image flow (mode "redesign"):
+  // send the whole image, the model recomposes it to a vertical 4:5 keeping every
+  // element & text, output cover-scaled to exact 1080×1350. Matches the single
+  // image result that works great.
   const aiConvertTo45 = async (image: HTMLImageElement): Promise<string> => {
     const f = FORMATS.find((x) => x.id === "feed_4_5")!;
     const maxDim = 1536;
@@ -228,7 +228,7 @@ export default function CreativePixelAIPage() {
     const res = await fetch("/api/creative-pixelai/generate-ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imagePng: inputDataUrl, format: "feed_4_5", mode: "reframe", quality: "high", prompt: aiStylePrompt.trim() || undefined }),
+      body: JSON.stringify({ imagePng: inputDataUrl, format: "feed_4_5", mode: "redesign", quality: aiHighQuality ? "high" : "medium", prompt: aiStylePrompt.trim() || undefined }),
     });
     const json = await parseResponse(res);
     if (!res.ok) throw new Error(json.error || "היצירה נכשלה");
