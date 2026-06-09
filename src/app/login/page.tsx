@@ -55,6 +55,11 @@ export default function LoginPage() {
       localStorage.setItem('frameai_role', data.user.role || '');
       localStorage.setItem('frameai_client_id', data.user.linkedClientId || '');
       localStorage.setItem('frameai_employee_id', data.user.linkedEmployeeId || '');
+      // Store the freshly logged-in user's identity so the UI shows THEIR name,
+      // not a stale value left in this browser by a previous session.
+      localStorage.setItem('frameai_user_id', data.user.id || '');
+      localStorage.setItem('frameai_email', data.user.email || '');
+      localStorage.setItem('frameai_display_name', data.user.displayName || '');
 
       // Redirect based on role
       if (data.user.role === 'admin') {

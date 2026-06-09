@@ -90,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setEmail(u.email || null);
           setClientIdState(u.clientId || null);
           setEmployeeIdState(u.employeeId || null);
+          if (u.displayName) setDisplayName(u.displayName);
           setIsAuthenticated(true);
 
           // Sync localStorage
@@ -97,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             localStorage.setItem('frameai_role', u.role);
             localStorage.setItem('frameai_user_id', u.userId || '');
             localStorage.setItem('frameai_email', u.email || '');
+            if (u.displayName) localStorage.setItem('frameai_display_name', u.displayName);
             if (u.clientId) localStorage.setItem('frameai_client_id', u.clientId);
             if (u.employeeId) localStorage.setItem('frameai_employee_id', u.employeeId);
           } catch {}
@@ -179,6 +181,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         else setRoleState(data.user.role);
         setUserId(data.user.userId);
         setEmail(data.user.email);
+        if (data.user.displayName) {
+          setDisplayName(data.user.displayName);
+          try { localStorage.setItem('frameai_display_name', data.user.displayName); } catch {}
+        }
         setClientIdState(data.user.clientId || null);
         setEmployeeIdState(data.user.employeeId || null);
         setIsAuthenticated(true);
@@ -231,6 +237,8 @@ export function useAuth(): AuthContextType {
       isLoading: false,
       role: 'admin',
       setRole: () => {},
+      accountRole: 'admin',
+      canImpersonate: true,
       isAdmin: true,
       isEmployee: false,
       isClient: false,

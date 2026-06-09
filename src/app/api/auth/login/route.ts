@@ -43,6 +43,7 @@ function buildSuccessResponse(user: {
     userId: user.id,
     email: user.email,
     role: user.role,
+    displayName: user.displayName,
     clientId: user.linkedClientId,
     employeeId: user.linkedEmployeeId,
   });

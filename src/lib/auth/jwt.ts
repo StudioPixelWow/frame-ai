@@ -7,6 +7,7 @@ interface JWTPayload {
   userId: string;
   email: string;
   role: 'admin' | 'employee' | 'client';
+  displayName?: string | null;
   clientId?: string | null;
   employeeId?: string | null;
   iat: number;

@@ -9,6 +9,7 @@ export interface SessionUser {
   userId: string;
   email: string;
   role: AppRole;
+  displayName?: string | null;
   clientId?: string | null;
   employeeId?: string | null;
 }
@@ -23,6 +24,7 @@ export function getSession(req: NextRequest): SessionUser | null {
     userId: payload.userId,
     email: payload.email,
     role: payload.role as AppRole,
+    displayName: payload.displayName || null,
     clientId: payload.clientId || null,
     employeeId: payload.employeeId || null,
   };
@@ -31,12 +33,13 @@ export function getSession(req: NextRequest): SessionUser | null {
 /** Create a response that sets the session cookie. */
 export function setSessionCookie(
   response: NextResponse,
-  user: { id: string; email: string; role: AppRole; linkedClientId?: string | null; linkedEmployeeId?: string | null }
+  user: { id: string; email: string; role: AppRole; displayName?: string | null; linkedClientId?: string | null; linkedEmployeeId?: string | null }
 ): NextResponse {
   const token = signToken({
     userId: user.id,
     email: user.email,
     role: user.role,
+    displayName: user.displayName || null,
     clientId: user.linkedClientId || null,
     employeeId: user.linkedEmployeeId || null,
   });
