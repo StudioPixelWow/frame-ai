@@ -20,10 +20,18 @@ export async function GET(req: NextRequest) {
     const role = getRequestRole(req);
     if (role === 'employee') {
       const employeeId = getRequestEmployeeId(req);
-      const mine = (tasks as any[]).filter(
-        (t) => (t.assignedEmployeeId === employeeId || t.employeeId === employeeId)
-          && t.status !== 'missed', // hide expired/not-done tasks from the employee's to-do
-      );
+      const startToday = new Date(); startToday.setHours(0, 0, 0, 0);
+      const doneStatuses = new Set(['completed', 'approved', 'under_review']);
+      const mine = (tasks as any[]).filter((t) => {
+        if (!(t.assignedEmployeeId === employeeId || t.employeeId === employeeId)) return false;
+        if (t.status === 'missed') return false; // not-done → manager only
+        // Hide tasks whose date already passed (yesterday or earlier) — unless done/in-review.
+        if (t.dueDate && !doneStatuses.has(t.status)) {
+          const d = new Date(t.dueDate).getTime();
+          if (!Number.isNaN(d) && d < startToday.getTime()) return false;
+        }
+        return true;
+      });
       // Sort by nearest due date first (tasks without a date go last).
       mine.sort((a, b) => {
         const da = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;

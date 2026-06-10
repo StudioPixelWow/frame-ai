@@ -11,11 +11,47 @@
  * UI can show live, one-by-one progress and we never hit a serverless timeout.
  */
 
-import { clientGanttItems } from '@/lib/db';
+import { clientGanttItems, employeeTasks } from '@/lib/db';
 import { getSupabase } from '@/lib/db/store';
 import { getClientById } from '@/lib/db/client-helpers';
 import { generateWithAI, getClientKnowledgeContext } from '@/lib/ai/openai-client';
-import type { ClientGanttItem, GanttItemType } from '@/lib/db';
+import type { ClientGanttItem, GanttItemType, EmployeeTask } from '@/lib/db';
+
+/**
+ * RTM is immediate: as soon as the content is created it's assigned to the
+ * employee and scheduled — no manager approval step. Creates (or updates) the
+ * linked employee task so it shows in the employee's to-do right away.
+ */
+async function upsertRtmEmployeeTask(gantt: { id: string; clientId: string; title: string; ideaSummary: string; caption: string; date: string; assigneeId: string | null }, clientName: string) {
+  const now = new Date().toISOString();
+  const due = (gantt.date || '').slice(0, 10) || now.slice(0, 10);
+  try {
+    const all = (await employeeTasks.getAllAsync()) as EmployeeTask[];
+    const existing = all.find((t) => t.ganttItemId === gantt.id);
+    const fields: Partial<EmployeeTask> = {
+      title: gantt.title || 'משימת RTM',
+      description: gantt.ideaSummary || gantt.caption || '',
+      assignedEmployeeId: gantt.assigneeId || '',
+      clientId: gantt.clientId || null,
+      clientName,
+      ganttItemId: gantt.id,
+      dueDate: due,
+      priority: 'urgent',
+      notes: '🔴 RTM — שיבוץ מיידי, ללא צורך באישור מנהל',
+      updatedAt: now,
+    };
+    if (existing) {
+      // Keep it active/visible (don't resurrect a completed one).
+      await employeeTasks.updateAsync(existing.id, fields as Partial<EmployeeTask>);
+    } else {
+      await employeeTasks.createAsync({
+        ...fields, status: 'new', files: [], projectId: null, createdAt: now,
+      } as Omit<EmployeeTask, 'id'>);
+    }
+  } catch (e) {
+    console.warn('[RTM] employee task upsert failed:', e instanceof Error ? e.message : e);
+  }
+}
 
 export interface RtmEligibleClient {
   id: string;
@@ -189,17 +225,21 @@ export async function applyRtmToClient(input: RtmApplyInput): Promise<RtmApplyRe
     internalNotes: `🔴 RTM — ${input.topic}${input.notes ? ` | ${input.notes}` : ''}`,
     researchSource: 'manual_note' as any,
     researchReason: `RTM בזמן אמת: ${input.topic}`,
-    status: 'new_idea',
+    // RTM is immediate — mark as in-work (assigned) so it skips the manager-approval step.
+    status: 'in_progress',
     updatedAt: now,
   };
 
+  const assignee = (client as any).assignedManagerId || null;
+
   if (existing) {
-    const updated = await clientGanttItems.updateAsync(existing.id, contentFields as any);
+    await clientGanttItems.updateAsync(existing.id, contentFields as any);
+    await upsertRtmEmployeeTask({ id: existing.id, clientId: input.clientId, title: contentFields.title || '', ideaSummary: contentFields.ideaSummary || '', caption: contentFields.caption || '', date: (existing.date || dt.toISOString()), assigneeId: existing.assigneeId || assignee }, client.name);
     return {
       clientId: input.clientId, clientName: client.name, replaced: true,
       itemId: existing.id, title: contentFields.title || '', caption: contentFields.caption || '',
       graphicText: contentFields.graphicText || '', usedAI: true,
-      note: 'הוחלף תוכן קיים בתאריך',
+      note: 'הוחלף תוכן קיים בתאריך — שובץ לעובד מיידית',
     };
   }
 
@@ -209,16 +249,18 @@ export async function applyRtmToClient(input: RtmApplyInput): Promise<RtmApplyRe
     month, year, date: dt.toISOString(),
     ...contentFields,
     relatedVideoId: '', relatedFileUrl: '', imageUrls: [], attachedFiles: [],
-    assigneeId: (client as any).assignedManagerId || null,
-    assignedManagerId: (client as any).assignedManagerId || null,
+    assigneeId: assignee,
+    assignedManagerId: assignee,
     clientNotes: '', holidayTag: '', monthTheme: 'rtm_realtime',
     ganttGeneratedAt: now, createdAt: now,
   } as Omit<ClientGanttItem, 'id'>);
+
+  await upsertRtmEmployeeTask({ id: created.id, clientId: input.clientId, title: contentFields.title || '', ideaSummary: contentFields.ideaSummary || '', caption: contentFields.caption || '', date: dt.toISOString(), assigneeId: assignee }, client.name);
 
   return {
     clientId: input.clientId, clientName: client.name, replaced: false,
     itemId: created.id, title: contentFields.title || '', caption: contentFields.caption || '',
     graphicText: contentFields.graphicText || '', usedAI: true,
-    note: 'נוצר פריט חדש בתאריך',
+    note: 'נוצר פריט חדש בתאריך — שובץ לעובד מיידית',
   };
 }
