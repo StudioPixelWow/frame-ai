@@ -1193,53 +1193,34 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
     const clientKws = job.clientKeywords || [];
     const hasClientKeywords = clientKws.length > 0;
     if (hasClientKeywords) {
-      for (const kw of clientKws) {
-        const trimmed = kw.trim();
-        if (!trimmed) continue;
-        // Base keyword on ALL platforms
-        for (const p of PLATFORMS) {
-          addQuery(trimmed, p.id, 'client_keyword');
-        }
-        // Location variations
-        if (location) {
-          const locVariations = isHebrew
-            ? [`${trimmed} ב${location}`, `${trimmed} ${location}`]
-            : [`${trimmed} in ${location}`, `${trimmed} ${location}`];
-          for (const v of locVariations) {
-            for (const p of PLATFORMS) {
-              addQuery(v, p.id, 'client_keyword');
-            }
-          }
-        }
-        // Comparison/recommendation variations (AI platforms)
-        if (isHebrew) {
-          for (const p of aiPlatforms) {
-            addQuery(`${trimmed} הכי טוב`, p, 'client_keyword');
-            addQuery(`${trimmed} מומלץ`, p, 'client_keyword');
-          }
-        } else {
-          for (const p of aiPlatforms) {
-            addQuery(`best ${trimmed}`, p, 'client_keyword');
-            addQuery(`${trimmed} recommended`, p, 'client_keyword');
-          }
-        }
-        // Informational variations (AI platforms)
-        const infoQueries = isHebrew ? [
-          `איך לבחור ${trimmed}`,
-          `מה ההבדל בין ${trimmed}`,
-          `למה צריך ${trimmed}`,
-        ] : [
-          `how to choose ${trimmed}`,
-          `${trimmed} vs alternatives`,
-          `why ${trimmed}`,
-        ];
-        for (const q of infoQueries) {
-          for (const p of aiPlatforms) {
-            addQuery(q, p, 'client_keyword');
-          }
-        }
+      // Direct push that BYPASSES the garbage filter — the AI-expanded queries are
+      // already clean, full search terms / questions (not scraped fragments).
+      const pushDirect = (text: string, platform: PlatformId, intent: string) => {
+        const t = (text || '').trim();
+        if (!t || t.length < 2 || t.length > 90) return;
+        const key = `${t.toLowerCase()}::${platform}`;
+        if (!uniqueQueries.has(key)) { uniqueQueries.add(key); queries.push({ query: t, platform, intent }); }
+      };
+      const seeds = clientKws.map((k) => k.trim()).filter(Boolean);
+
+      // Expand the 10 seeds with AI → ~150 Google keywords + ~150 AI questions.
+      let expanded: { google: string[]; ai: string[] } = { google: [], ai: [] };
+      try {
+        const { expandSeedKeywords } = await import('./keyword-research/expand');
+        const r = await expandSeedKeywords(seeds, { businessName: bName, industry, location, services: cleanProducts });
+        expanded = { google: r.google || [], ai: r.ai || [] };
+      } catch (e) {
+        log(job, 'generate_queries', `הרחבת AI נכשלה — שימוש בביטויי הזרע בלבד: ${e instanceof Error ? e.message : ''}`, 'warning');
       }
-      log(job, 'generate_queries', `${clientKws.length} ביטויי לקוח — שאילתות נבנות אך ורק מביטויי הלקוח`, 'success');
+
+      // Base seeds — checked on every platform.
+      for (const s of seeds) for (const p of PLATFORMS) pushDirect(s, p.id, 'client_keyword');
+      // Google search keywords → Google SEO.
+      for (const g of expanded.google) pushDirect(g, 'google_seo', 'seed_google');
+      // Natural AI questions → each AI engine.
+      for (const q of expanded.ai) for (const p of aiPlatforms) pushDirect(q, p, 'seed_ai');
+
+      log(job, 'generate_queries', `הרחבת AI מ-${seeds.length} ביטויי זרע: ${expanded.google.length} גוגל + ${expanded.ai.length} שאלות AI`, 'success');
     }
 
     // 1. Brand name queries (ALL platforms — always check brand visibility)
