@@ -133,6 +133,49 @@ export default function VisibilityCenterPage() {
         <>
           {tab === 'overview' && (
             <>
+              {/* ── PIXEL Score: unified SEO + GEO + Authority ── */}
+              {s.pixelScore && (
+                <div style={{ ...card, marginBottom: 14, background: 'linear-gradient(135deg, #00B5FE08, #0095D012)', border: `1px solid ${C.primary}30` }}>
+                  <div style={{ display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ textAlign: 'center', minWidth: 120 }}>
+                      <div style={{ fontSize: 10.5, fontWeight: 800, color: C.primary, letterSpacing: 1 }}>PIXEL SCORE</div>
+                      <div style={{ fontSize: 52, fontWeight: 900, color: sc(s.pixelScore.overall || 0), lineHeight: 1.05 }}>{s.pixelScore.overall ?? 0}</div>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: s.pixelScore.band === 'strong' ? C.success : s.pixelScore.band === 'building' ? C.warning : C.danger }}>{s.pixelScore.band === 'strong' ? 'חזק' : s.pixelScore.band === 'building' ? 'בבנייה' : 'דורש חיזוק'}</div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 260 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>ציון מאוחד: אורגני + נראות AI + סמכות</div>
+                      {(s.pixelScore.pillars || []).map((p: any) => (
+                        <div key={p.key} style={{ marginBottom: 7, opacity: p.measured ? 1 : 0.45 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5 }}>
+                            <span>{p.label} {p.measured ? <span style={{ color: C.textMuted }}>· {Math.round(p.weight * 100)}% משקל</span> : <span style={{ color: C.textMuted }}>· אין נתונים</span>}</span>
+                            <b style={{ color: sc(p.score) }}>{p.measured ? p.score : '—'}</b>
+                          </div>
+                          <div style={{ height: 6, borderRadius: 999, background: C.borderLight, overflow: 'hidden' }}><div style={{ width: `${p.measured ? p.score : 0}%`, height: '100%', background: sc(p.score) }} /></div>
+                          {p.measured && <div style={{ fontSize: 10.5, color: C.textMuted, marginTop: 2 }}>{p.note}</div>}
+                        </div>
+                      ))}
+                      <div style={{ fontSize: 11.5, color: C.textSecondary, marginTop: 6, lineHeight: 1.6 }}>{s.pixelScore.story}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Sentiment of mentions ── */}
+              {s.sentiment && s.sentiment.total > 0 && (() => {
+                const { positive, neutral, negative } = s.sentiment.counts; const t = s.sentiment.total || 1;
+                const seg = (n: number, col: string) => n > 0 ? <div style={{ width: `${(n / t) * 100}%`, background: col }} title={`${n}`} /> : null;
+                return (
+                  <div style={{ ...card, marginBottom: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <div style={{ fontWeight: 800, fontSize: 13.5 }}>איך מדברים עלינו (סנטימנט אזכורים)</div>
+                      <div style={{ fontSize: 11.5, color: C.textSecondary }}>{positive} חיובי · {neutral} נייטרלי · {negative} שלילי</div>
+                    </div>
+                    <div style={{ display: 'flex', height: 12, borderRadius: 999, overflow: 'hidden', background: C.borderLight }}>{seg(positive, C.success)}{seg(neutral, C.textMuted)}{seg(negative, C.danger)}</div>
+                    {negative > 0 && <div style={{ fontSize: 11, color: C.danger, marginTop: 6 }}>⚠ זוהו אזכורים שליליים/לא מדויקים — שווה לתקן את המידע במקור.</div>}
+                  </div>
+                );
+              })()}
+
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', gap: 10, marginBottom: 14 }}>
                 {[
                   ['Visibility Score', sum.visibility_score ?? 0, 'measured', sc(sum.visibility_score || 0)],

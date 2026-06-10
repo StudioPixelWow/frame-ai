@@ -24,6 +24,7 @@ import { runVisibilityRun, estimateRunCostCents, generateQueriesFromPlan, ensure
 import { availableEngines, VIS_ENGINES } from '@/lib/seo/geo-visibility/provider';
 import { getApiStatus } from '@/lib/seo/platform-apis';
 import { getQueryDrilldown, executeImprovement } from '@/lib/seo/geo-visibility/drilldown';
+import { computePixelScore } from '@/lib/seo/geo-visibility/pixel-score';
 
 async function dashboard(planId: string) {
   await ensureVisibilityTables();
@@ -95,10 +96,20 @@ async function dashboard(planId: string) {
   ]);
   const globalInsights = computeGlobalInsights(globalIndex);
 
+  // Sentiment / accuracy of brand mentions (how we're talked about, not just whether).
+  const sentimentCounts = { positive: 0, neutral: 0, negative: 0 };
+  for (const m of mentions) { const s = (m.sentiment || 'neutral') as keyof typeof sentimentCounts; if (s in sentimentCounts) sentimentCounts[s]++; else sentimentCounts.neutral++; }
+  const sentimentTotal = mentions.length;
+
+  // Unified PIXEL Score (organic + GEO + authority). Best-effort.
+  let pixelScore: any = null;
+  try { pixelScore = await computePixelScore(planId); } catch { /* non-fatal */ }
+
   const latest = agg[agg.length - 1] || null;
   const apiStatus = getApiStatus();
   return {
-    summary: latest, trend: agg, runs,
+    summary: latest, trend: agg, runs, pixelScore,
+    sentiment: { counts: sentimentCounts, total: sentimentTotal },
     mentions: mentions.slice(0, 50), citations: citations.slice(0, 50),
     topics: Object.values(topicStats).map((t) => ({ ...t, rate: t.queries ? Math.round((t.mentions / t.queries) * 100) : 0 })).sort((a, b) => b.rate - a.rate),
     citationPages, competitors, competitorLeaderboard, opportunities, allQueries, shareOfVoice,
