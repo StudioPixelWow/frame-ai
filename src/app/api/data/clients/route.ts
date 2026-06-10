@@ -77,15 +77,15 @@ function rowToClient(r: ClientRow) {
 /* ── GET ──────────────────────────────────────────────────────────────── */
 
 export async function GET(req: NextRequest) {
-  const role = getRequestRole(req);
-
-  // Clients can fetch their own record; admin/employee can fetch all
-  if (role !== 'client') {
-    const roleErr = requireRole(req, 'admin', 'employee');
-    if (roleErr) return roleErr;
-  }
-
   try {
+    const role = getRequestRole(req);
+
+    // Clients can fetch their own record; admin/employee can fetch all
+    if (role !== 'client') {
+      const roleErr = requireRole(req, 'admin', 'employee');
+      if (roleErr) return roleErr;
+    }
+
     const sb = getSupabase();
     console.log('[API] GET /api/data/clients — Supabase client OK, querying clients...');
     let query = sb.from('clients').select('*').order('id');
