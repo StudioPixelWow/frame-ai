@@ -22,8 +22,14 @@ export async function GET(req: NextRequest) {
       const employeeId = getRequestEmployeeId(req);
       const mine = (tasks as any[]).filter(
         (t) => (t.assignedEmployeeId === employeeId || t.employeeId === employeeId)
-          && t.status !== 'missed', // hide not-done tasks from the employee's to-do
+          && t.status !== 'missed', // hide expired/not-done tasks from the employee's to-do
       );
+      // Sort by nearest due date first (tasks without a date go last).
+      mine.sort((a, b) => {
+        const da = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+        const db = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+        return da - db;
+      });
       return NextResponse.json(mine);
     }
     return NextResponse.json(tasks);

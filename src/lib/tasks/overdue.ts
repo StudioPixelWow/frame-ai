@@ -1,10 +1,11 @@
 /**
  * Overdue gantt sweep
  * --------------------
- * Monthly gantt items whose publish date passed by more than 2 days WITHOUT
- * being completed are moved to the "missed" (לא בוצע) status, and their linked
- * employee tasks are moved to "missed" too — so they drop out of the employee's
- * to-do list instead of lingering there forever.
+ * Monthly gantt items whose date has PASSED (yesterday or earlier) WITHOUT being
+ * completed are moved to the "missed" (לא בוצע) status, and their linked employee
+ * tasks are moved to "missed" too — so they drop out of the employee's to-do list
+ * (the employee only sees today + upcoming) and surface to the manager as
+ * not-done. Tasks dated today are still shown.
  *
  * Cheap to call: if nothing is overdue it does zero writes. It's invoked lazily
  * from the employee-tasks and gantt-items list endpoints so the state is always
@@ -34,13 +35,15 @@ export async function sweepOverdueGantt(force = false): Promise<{ marked: number
   let items: ClientGanttItem[] = [];
   try { items = (await clientGanttItems.getAllAsync()) as ClientGanttItem[]; } catch { return { marked: 0, tasksMissed: 0 }; }
 
-  const cutoffMs = OVERDUE_DAYS * 86400000;
+  // Start of today (local) — anything whose date ended before this is "past".
+  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+  const startMs = startOfToday.getTime();
   const overdue = items.filter((it) => {
     if (!it?.date || it.ganttType !== 'monthly') return false;
     if (SAFE_GANTT.has(it.status)) return false;
     const dayEnd = new Date(`${(it.date || '').slice(0, 10)}T23:59:59`).getTime();
     if (Number.isNaN(dayEnd)) return false;
-    return now - dayEnd > cutoffMs;
+    return dayEnd < startMs; // date is yesterday or earlier (today is still shown)
   });
   if (overdue.length === 0) return { marked: 0, tasksMissed: 0 };
 
