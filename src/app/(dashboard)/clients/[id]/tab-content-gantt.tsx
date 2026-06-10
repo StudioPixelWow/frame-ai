@@ -1486,6 +1486,26 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                         )}
                       </div>
 
+                      {/* Deliverable thumbnails (incl. 1:1 / 4:5 / 9:16 size versions) */}
+                      {(() => {
+                        const parse = (e: string) => { const i = e.indexOf('|'); return i === -1 ? { name: (e.split('/').pop() || e).split('?')[0], url: e } : { name: e.slice(0, i), url: e.slice(i + 1) }; };
+                        const isImg = (u: string) => /\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(u);
+                        const seen = new Set<string>();
+                        const imgs = [...(item.imageUrls || []), ...(item.attachedFiles || [])].map(parse).filter((f) => f.url && isImg(f.url) && !seen.has(f.url) && seen.add(f.url)).slice(0, 6);
+                        if (imgs.length === 0) return null;
+                        return (
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                            {imgs.map((im, i) => (
+                              <a key={i} href={im.url} target="_blank" rel="noopener noreferrer" title={im.name} onClick={(e) => e.stopPropagation()} style={{ display: 'block', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', width: 64 }}>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={im.url} alt={im.name} loading="lazy" style={{ width: 64, height: 64, objectFit: 'cover', display: 'block', background: '#fff' }} />
+                                {im.name.replace(/^🎨\s*/, '').match(/1:1|4:5|9:16/) && <div style={{ fontSize: 8.5, textAlign: 'center', fontWeight: 700, color: 'var(--foreground-muted)', padding: '1px 0' }}>{(im.name.match(/1:1|4:5|9:16/) || [''])[0]}</div>}
+                              </a>
+                            ))}
+                          </div>
+                        );
+                      })()}
+
                       {/* Caption / Social Copy — Structured Preview */}
                       {item.caption && (() => {
                         const lines = item.caption.split("\n").filter((l: string) => l.trim());

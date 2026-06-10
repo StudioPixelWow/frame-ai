@@ -279,6 +279,16 @@ function TasksPageInner() {
       toast("המשימה אושרה", "success");
       setEditingTask({ ...editingTask, status: "approved" });
       setForm(prev => ({ ...prev, status: "approved" }));
+      // Auto-create the 3 delivery sizes (1:1 / 4:5 / 9:16) from the approved image.
+      const alreadyAdapted = !!(editingTask as any).adaptations?.square;
+      const src = findApprovedImage();
+      if (!alreadyAdapted && src) {
+        toast("יוצר אוטומטית 3 גרסאות גודל (1:1 / 4:5 / 9:16)…", "info");
+        runAdaptations(src.url)
+          .then(() => { toast("✓ 3 גרסאות הגודל נוצרו ונשמרו בגאנט", "success"); try { fireConfetti(); } catch { /* */ } })
+          .catch((e) => toast(e instanceof Error ? e.message : "יצירת הגרסאות נכשלה", "error"))
+          .finally(() => setAdaptingSizes(null));
+      }
     } catch {
       toast("שגיאה באישור", "error");
     }
@@ -389,45 +399,77 @@ function TasksPageInner() {
   const [adaptingSizes, setAdaptingSizes] = useState<string | null>(null);
   const [taskAdaptations, setTaskAdaptations] = useState<Record<string, string> | null>(null);
 
+  // The 3 delivery sizes: 1:1 feed, 4:5 Instagram, 9:16 story.
+  const ADAPT_FORMATS: Array<{ id: "square" | "feed_4_5" | "story"; label: string; fileName: string }> = [
+    { id: "square", label: "1:1 פיד", fileName: "Feed-1080x1080.png" },
+    { id: "feed_4_5", label: "4:5 אינסטגרם", fileName: "Portrait-1080x1350.png" },
+    { id: "story", label: "9:16 סטורי", fileName: "Story-1080x1920.png" },
+  ];
+
+  // Find the approved creative: prefer the employee's submitted deliverable, then attached files.
+  const findApprovedImage = (): { name: string; url: string } | null => {
+    const parseEntry = (f: any) => parseFile(f);
+    const isImg = (u: string) => /\.(png|jpe?g|webp)(\?|$)/i.test(u || "");
+    const fromSubmitted = (form.submittedFiles || []).map(parseEntry).find((e) => e.url && isImg(e.url));
+    if (fromSubmitted?.url) return { name: fromSubmitted.name, url: fromSubmitted.url };
+    const fromFiles = (form.files || []).map(parseEntry).filter((e) => !e.name.startsWith("🎨")).find((e) => e.url && isImg(e.url));
+    return fromFiles?.url ? { name: fromFiles.name, url: fromFiles.url } : null;
+  };
+
+  // Core: generate the 3 sizes from a source image, save them on the task, and
+  // mirror them into the linked gantt item so the gantt list + popup show them.
+  const runAdaptations = async (sourceUrl: string): Promise<Record<string, string> | null> => {
+    if (!editingTask) return null;
+    setAdaptingSizes("טוען את הקריאייטיב…");
+    const img = await loadImage(sourceUrl);
+    const urls: Record<string, string> = {};
+    const newFileEntries: string[] = [];
+    for (let i = 0; i < ADAPT_FORMATS.length; i++) {
+      const f = ADAPT_FORMATS[i];
+      setAdaptingSizes(`יוצר ${i + 1}/3 — ${f.label}…`);
+      const blob = await aiAdaptImageToFormat(img, f.id);
+      const init = await fetch("/api/upload", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: `creative-assets/tasks/${editingTask.id}/${Date.now()}_${f.fileName}`, contentType: "image/png", fileSize: blob.size }),
+      });
+      if (!init.ok) throw new Error("קבלת כתובת העלאה נכשלה");
+      const { uploadUrl, publicUrl } = await init.json();
+      const put = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": "image/png" }, body: blob });
+      if (!put.ok) throw new Error("העלאת התוצר נכשלה");
+      urls[f.id] = publicUrl;
+      newFileEntries.push(`🎨 ${f.label}|${publicUrl}`);
+    }
+    setAdaptingSizes("שומר…");
+    const adaptations = { ...urls, createdAt: new Date().toISOString() };
+    const mergedFiles = [...(form.files || []), ...newFileEntries];
+    await updateAny(editingTask.id, { adaptations, files: mergedFiles } as any);
+    setForm((prev) => ({ ...prev, files: mergedFiles }));
+    setTaskAdaptations(urls);
+
+    // Mirror into the linked gantt item (so the calendar popup + list show the sizes).
+    const ganttItemId = (editingTask as any).ganttItemId;
+    if (ganttItemId) {
+      try {
+        const r = await fetch(`/api/data/client-gantt-items/${ganttItemId}`);
+        if (r.ok) {
+          const item = await r.json();
+          const existing: string[] = Array.isArray(item.imageUrls) ? item.imageUrls : [];
+          const adaptEntries = [`🎨 1:1 פיד|${urls.square}`, `🎨 4:5 אינסטגרם|${urls.feed_4_5}`, `🎨 9:16 סטורי|${urls.story}`];
+          const merged = Array.from(new Set([...existing, ...adaptEntries]));
+          await fetch(`/api/data/client-gantt-items/${ganttItemId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageUrls: merged }) });
+        }
+      } catch { /* non-fatal */ }
+    }
+    return urls;
+  };
+
   const handleAdaptSizes = async () => {
     if (!editingTask) return;
-    // First attached image = the approved creative.
-    const parseEntry = (f: string) => { const i = f.indexOf("|"); return i === -1 ? { name: f, url: "" } : { name: f.slice(0, i), url: f.slice(i + 1) }; };
-    const imgEntry = (form.files || []).map(parseEntry).find((e) => e.url && /\.(png|jpe?g|webp)(\?|$)/i.test(e.url));
-    if (!imgEntry) { toast("אין קובץ תמונה מצורף למשימה", "error"); return; }
+    const src = findApprovedImage();
+    if (!src) { toast("אין קובץ תמונה מאושר/מצורף למשימה", "error"); return; }
     try {
-      setAdaptingSizes("טוען את הקריאייטיב…");
-      const img = await loadImage(imgEntry.url);
-      const formats: Array<{ id: "square" | "feed_4_5" | "story"; label: string; fileName: string }> = [
-        { id: "square", label: "Square", fileName: "Square-1080x1080.png" },
-        { id: "feed_4_5", label: "4:5", fileName: "Feed-1080x1350.png" },
-        { id: "story", label: "Story", fileName: "Story-1080x1920.png" },
-      ];
-      const urls: Record<string, string> = {};
-      const newFileEntries: string[] = [];
-      for (let i = 0; i < formats.length; i++) {
-        const f = formats[i];
-        setAdaptingSizes(`יוצר ${i + 1}/3 — ${f.label}…`);
-        const blob = await aiAdaptImageToFormat(img, f.id);
-        // upload through the system pipeline
-        const init = await fetch("/api/upload", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fileName: `creative-assets/tasks/${editingTask.id}/${Date.now()}_${f.fileName}`, contentType: "image/png", fileSize: blob.size }),
-        });
-        if (!init.ok) throw new Error("קבלת כתובת העלאה נכשלה");
-        const { uploadUrl, publicUrl } = await init.json();
-        const put = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": "image/png" }, body: blob });
-        if (!put.ok) throw new Error("העלאת התוצר נכשלה");
-        urls[f.id] = publicUrl;
-        newFileEntries.push(`🎨 ${f.fileName}|${publicUrl}`);
-      }
-      setAdaptingSizes("שומר למשימה…");
-      const adaptations = { ...urls, createdAt: new Date().toISOString() };
-      const mergedFiles = [...(form.files || []), ...newFileEntries];
-      await updateAny(editingTask.id, { adaptations, files: mergedFiles } as any);
-      setForm((prev) => ({ ...prev, files: mergedFiles }));
-      setTaskAdaptations(urls);
-      toast("✓ נוצרו 3 גרסאות (Square / 4:5 / Story) ונשמרו במשימה", "success");
+      await runAdaptations(src.url);
+      toast("✓ נוצרו 3 גרסאות (1:1 / 4:5 / 9:16) ונשמרו במשימה ובגאנט", "success");
       try { fireConfetti(); } catch { /* noop */ }
     } catch (e) {
       toast(e instanceof Error ? e.message : "ההתאמה נכשלה", "error");
