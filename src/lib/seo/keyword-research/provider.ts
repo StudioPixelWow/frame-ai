@@ -61,6 +61,24 @@ function mockIdeas(seed: string, limit: number): KeywordIdea[] {
   return ideas.sort((a, b) => b.volume - a.volume);
 }
 
+/** Keep only ideas genuinely related to the seed (share a word/substring), sorted
+ *  by volume. Hebrew Labs results often drift to unrelated same-category terms, so
+ *  we filter them out. Falls back to the full list when too few stay on-topic. */
+function rankBySeedRelevance(ideas: KeywordIdea[], seed: string): KeywordIdea[] {
+  const tokens = seed.toLowerCase().split(/\s+/)
+    .map((t) => t.replace(/[^֐-׿a-z0-9]/gi, ''))
+    .filter((t) => t.length >= 2);
+  if (!tokens.length) return ideas;
+  const isRelated = (k: KeywordIdea) => {
+    const kw = (k.keyword || '').toLowerCase();
+    return tokens.some((t) => kw.includes(t) || t.includes(kw));
+  };
+  const relevant = ideas.filter(isRelated).sort((a, b) => b.volume - a.volume);
+  const rest = ideas.filter((k) => !isRelated(k)).sort((a, b) => b.volume - a.volume);
+  // Enough on-topic results → return only those. Otherwise keep relevant first.
+  return relevant.length >= 5 ? relevant : [...relevant, ...rest];
+}
+
 export async function getKeywordIdeas(seed: string, country = 'Israel', language = 'Hebrew', limit = 100): Promise<{ ideas: KeywordIdea[]; mock: boolean; reason?: string }> {
   const s = (seed || '').trim();
   if (!s) return { ideas: [], mock: true, reason: 'no_seed' };
@@ -124,7 +142,10 @@ export async function getKeywordIdeas(seed: string, country = 'Israel', language
       // Labs nests items under result[0].items; Google Ads puts them directly in result[].
       const result = task?.result || [];
       const rawItems = Array.isArray(result?.[0]?.items) ? result[0].items : result;
-      const ideas = (Array.isArray(rawItems) ? rawItems : []).map(attempt.parse).filter(Boolean).slice(0, limit) as KeywordIdea[];
+      const parsed = (Array.isArray(rawItems) ? rawItems : []).map(attempt.parse).filter(Boolean) as KeywordIdea[];
+      // Keep ONLY keywords actually related to the seed (Labs can drift to random
+      // same-category terms in Hebrew). Falls back to all if too few relevant.
+      const ideas = rankBySeedRelevance(parsed, s).slice(0, limit);
       if (ideas.length) return { ideas, mock: false };
       if (reason === 'unknown') reason = 'no_results: לא נמצאו ביטויים לזרע הזה';
     } catch (e) {
