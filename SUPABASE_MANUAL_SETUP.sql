@@ -333,6 +333,14 @@ CREATE TABLE IF NOT EXISTS public.geo_visibility_logs (
   metadata jsonb, created_at timestamptz DEFAULT now()
 );
 
+-- Drill-down "execute now" generated drafts (draft-gated; never auto-published)
+CREATE TABLE IF NOT EXISTS public.geo_visibility_drafts (
+  id text PRIMARY KEY, plan_id text NOT NULL, client_id text, query_id text,
+  query_text text, action_type text, title text, content_html text, content_text text,
+  meta jsonb, status text DEFAULT 'draft', created_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS geo_vis_draft_plan ON public.geo_visibility_drafts(plan_id, created_at);
+
 
 -- ============================================================================
 -- F. GEO AI VISIBILITY — HISTORY / DIFF / ALERTS / GLOBAL INDEX (Data Moat)

@@ -23,6 +23,7 @@ import { generateWithAI } from '@/lib/ai/openai-client';
 import { runVisibilityRun, estimateRunCostCents, generateQueriesFromPlan, ensureBrandProfile } from '@/lib/seo/geo-visibility/run';
 import { availableEngines, VIS_ENGINES } from '@/lib/seo/geo-visibility/provider';
 import { getApiStatus } from '@/lib/seo/platform-apis';
+import { getQueryDrilldown, executeImprovement } from '@/lib/seo/geo-visibility/drilldown';
 
 async function dashboard(planId: string) {
   await ensureVisibilityTables();
@@ -56,6 +57,14 @@ async function dashboard(planId: string) {
   const mentionedQ = new Set(mentions.map((m: any) => m.query_id));
   const opportunities = queries.filter((q: any) => !mentionedQ.has(q.id)).slice(0, 30).map((q: any) => ({ id: q.id, query: q.query_text, topic: q.topic, priority: q.priority }));
 
+  // Full query list (for the clickable drill-down table): mention count + appeared flag.
+  const menCountByQ: Record<string, number> = {};
+  for (const m of mentions) menCountByQ[m.query_id] = (menCountByQ[m.query_id] || 0) + 1;
+  const allQueries = queries.map((q: any) => ({
+    id: q.id, query: q.query_text, topic: q.topic, intent: q.intent || null,
+    priority: q.priority, mentions: menCountByQ[q.id] || 0, appeared: (menCountByQ[q.id] || 0) > 0,
+  })).sort((a: any, b: any) => (a.appeared === b.appeared ? a.priority - b.priority : a.appeared ? 1 : -1));
+
   // History / diff / alerts / global-index layer.
   const [alerts, citationHistory, changeEvents, diffs, globalIndex] = await Promise.all([
     sb.from('geo_visibility_alerts').select('*').eq('plan_id', planId).neq('status', 'dismissed').order('detected_at', { ascending: false }).limit(60).then((r) => r.data || []),
@@ -72,7 +81,7 @@ async function dashboard(planId: string) {
     summary: latest, trend: agg, runs,
     mentions: mentions.slice(0, 50), citations: citations.slice(0, 50),
     topics: Object.values(topicStats).map((t) => ({ ...t, rate: t.queries ? Math.round((t.mentions / t.queries) * 100) : 0 })).sort((a, b) => b.rate - a.rate),
-    citationPages, competitors, competitorLeaderboard, opportunities,
+    citationPages, competitors, competitorLeaderboard, opportunities, allQueries,
     brand, queryCount: queries.length, competitorCount: competitors.length,
     engines: VIS_ENGINES.map((e) => ({ id: e, available: !!apiStatus[e] })),
     availableEngines: availableEngines(),
@@ -229,6 +238,21 @@ export const POST = withErrorBoundary(async (req: NextRequest, ctx: { params: Pr
       if (!body.alertId || !body.status) return err('alertId ו-status נדרשים');
       await sb.from('geo_visibility_alerts').update({ status: body.status }).eq('id', body.alertId).eq('plan_id', planId);
       return ok({ state: await dashboard(planId) });
+    }
+    case 'query_detail': {
+      if (!body.queryId) return err('queryId נדרש');
+      const detail = await getQueryDrilldown(planId, body.queryId);
+      return ok({ detail });
+    }
+    case 'query_execute': {
+      if (!body.queryId || !body.actionType) return err('queryId ו-actionType נדרשים');
+      const draft = await executeImprovement(planId, body.queryId, { actionType: body.actionType, title: body.title, detail: body.detail });
+      return ok({ draft });
+    }
+    case 'list_drafts': {
+      await ensureVisibilityTables();
+      const { data } = await sb.from('geo_visibility_drafts').select('*').eq('plan_id', planId).order('created_at', { ascending: false }).limit(50);
+      return ok({ drafts: data || [] });
     }
     default: return err('action לא נתמך');
   }

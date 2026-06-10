@@ -38,6 +38,31 @@ export default function VisibilityCenterPage() {
   const [preview, setPreview] = useState<any>(null);
   const [newQ, setNewQ] = useState(''); const [newComp, setNewComp] = useState(''); const [newPrompt, setNewPrompt] = useState('');
   const [brandEdits, setBrandEdits] = useState<Record<string, string>>({});
+  // Drill-down drawer state
+  const [detail, setDetail] = useState<any>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailErr, setDetailErr] = useState('');
+  const [openEngine, setOpenEngine] = useState<string | null>(null);
+  const [execBusy, setExecBusy] = useState('');
+  const [execResult, setExecResult] = useState<any>(null);
+
+  const openDetail = useCallback(async (queryId: string) => {
+    setDetail(null); setDetailErr(''); setDetailLoading(true); setOpenEngine(null); setExecResult(null);
+    try {
+      const r = await fetch(`/api/seo-geo-plans/${planId}/visibility`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'query_detail', queryId }) });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || 'שגיאה');
+      setDetail((d.data || d).detail);
+    } catch (e) { setDetailErr(e instanceof Error ? e.message : 'שגיאה'); } finally { setDetailLoading(false); }
+  }, [planId]);
+
+  const runExecute = useCallback(async (queryId: string, imp: any) => {
+    setExecBusy(imp.actionType + imp.title); setExecResult(null); setDetailErr('');
+    try {
+      const r = await fetch(`/api/seo-geo-plans/${planId}/visibility`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'query_execute', queryId, actionType: imp.actionType, title: imp.title, detail: imp.detail }) });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || 'שגיאה');
+      setExecResult((d.data || d).draft);
+    } catch (e) { setDetailErr(e instanceof Error ? e.message : 'שגיאה'); } finally { setExecBusy(''); }
+  }, [planId]);
 
   const load = useCallback(async () => {
     setLoading(true); setErr('');
@@ -152,10 +177,30 @@ export default function VisibilityCenterPage() {
               </div>
 
               <div style={{ ...card, marginTop: 14 }}>
-                <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>זמינות מנועים</div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {(s.engines || []).map((e: any) => <span key={e.id} style={{ fontSize: 12, fontWeight: 700, color: e.available ? C.success : C.textMuted, background: e.available ? `${C.success}15` : C.borderLight, borderRadius: 8, padding: '4px 10px' }}>{e.available ? '✓' : '○'} {e.id}{!e.available ? ' (דמו)' : ''}</span>)}
-                </div>
+                <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>נראות לפי מנוע AI</div>
+                {(() => {
+                  const counts: Record<string, number> = {};
+                  for (const m of (s.mentions || [])) counts[m.ai_engine] = (counts[m.ai_engine] || 0) + 1;
+                  const maxC = Math.max(1, ...Object.values(counts));
+                  return (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: 10 }}>
+                      {(s.engines || []).map((e: any) => {
+                        const c = counts[e.id] || 0;
+                        return (
+                          <div key={e.id} style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '0.6rem 0.7rem', background: e.available ? C.card : C.bg }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: 12, fontWeight: 700 }}>{e.id}</span>
+                              <span style={{ fontSize: 9.5, fontWeight: 800, color: e.available ? C.success : C.textMuted, background: e.available ? `${C.success}15` : C.borderLight, borderRadius: 5, padding: '1px 6px' }}>{e.available ? 'חי' : 'דמו'}</span>
+                            </div>
+                            <div style={{ fontSize: 22, fontWeight: 900, color: c ? C.primaryDark : C.textMuted, margin: '4px 0 2px' }}>{c}</div>
+                            <div style={{ height: 5, borderRadius: 999, background: C.borderLight, overflow: 'hidden' }}><div style={{ width: `${(c / maxC) * 100}%`, height: '100%', background: C.primary }} /></div>
+                            <div style={{ fontSize: 10, color: C.textMuted, marginTop: 3 }}>אזכורים</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             </>
           )}
@@ -167,11 +212,18 @@ export default function VisibilityCenterPage() {
                 <button onClick={() => { if (newQ.trim()) { post({ action: 'add_query', query_text: newQ.trim() }, 'aq'); setNewQ(''); } }} disabled={!!busy} style={{ background: C.primary, color: '#fff', border: 'none', borderRadius: 9, padding: '0.5rem 1rem', fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}>+ הוסף</button>
                 <button onClick={() => post({ action: 'gen_queries' }, 'gq')} disabled={!!busy} style={{ background: C.card, color: C.text, border: `1px solid ${C.border}`, borderRadius: 9, padding: '0.5rem 1rem', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>{busy === 'gq' ? '⏳' : '✨ צור אוטומטית מהאתר'}</button>
               </div>
-              <div style={{ fontSize: 12, color: C.textSecondary, marginBottom: 6 }}>{s.queryCount} שאילתות פעילות</div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}><thead><tr><Th>שאילתה</Th><Th>תחום</Th><Th>Intent</Th><Th>עדיפות</Th></tr></thead><tbody>
-                {(s.opportunities || []).map((q: any) => <tr key={q.id}><Td>{q.query}</Td><Td>{q.topic}</Td><Td>{q.intent || '—'}</Td><Td>{q.priority}</Td></tr>)}
+              <div style={{ fontSize: 12, color: C.textSecondary, marginBottom: 6 }}>{s.queryCount} שאילתות פעילות · לחץ על שאילתה לניתוח מלא «למה» + «מה לשפר»</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}><thead><tr><Th>שאילתה</Th><Th>תחום</Th><Th>סטטוס</Th><Th>אזכורים</Th><Th></Th></tr></thead><tbody>
+                {(s.allQueries || s.opportunities || []).map((q: any) => (
+                  <tr key={q.id} onClick={() => openDetail(q.id)} style={{ cursor: 'pointer' }} title="פתח ניתוח מלא">
+                    <Td>{q.query}</Td><Td>{q.topic}</Td>
+                    <Td>{q.appeared ? <span style={{ color: C.success, fontWeight: 700 }}>● הופיע</span> : <span style={{ color: C.textMuted, fontWeight: 700 }}>○ לא הופיע</span>}</Td>
+                    <Td>{q.mentions ?? '—'}</Td>
+                    <Td><span style={{ color: C.primary, fontWeight: 800, fontSize: 12 }}>ניתוח ←</span></Td>
+                  </tr>
+                ))}
+                {(s.allQueries || []).length === 0 && (s.opportunities || []).length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', color: C.textMuted, padding: '1.5rem' }}>אין שאילתות — הוסף או צור אוטומטית.</td></tr>}
               </tbody></table>
-              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>* מוצגות שאילתות ללא אזכור (הזדמנויות). הרשימה המלאה זמינה דרך הריצות.</div>
             </div>
           )}
 
@@ -353,6 +405,123 @@ export default function VisibilityCenterPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* ── Per-query drill-down drawer ── */}
+      {(detailLoading || detail || detailErr) && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 60, display: 'flex', justifyContent: 'flex-start' }} onClick={() => { setDetail(null); setDetailErr(''); }}>
+          <div dir="rtl" onClick={(e) => e.stopPropagation()} style={{ width: 'min(640px, 96vw)', height: '100%', background: C.bg, overflowY: 'auto', boxShadow: '4px 0 24px rgba(0,0,0,.18)', padding: '1.2rem 1.25rem 3rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: C.primary, letterSpacing: 1 }}>QUERY DRILL-DOWN</div>
+              <button onClick={() => { setDetail(null); setDetailErr(''); }} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: '0.3rem 0.7rem', cursor: 'pointer', fontWeight: 700 }}>✕ סגור</button>
+            </div>
+
+            {detailLoading && <div style={{ textAlign: 'center', padding: '3rem', color: C.textMuted }}>מנתח שאילתה…</div>}
+            {detailErr && <div style={{ background: '#FEF2F2', border: `1px solid ${C.danger}40`, color: C.danger, borderRadius: 10, padding: '0.6rem 0.9rem', fontSize: 13, fontWeight: 600 }}>⚠ {detailErr}</div>}
+
+            {detail && (
+              <>
+                <h2 style={{ fontSize: 18, fontWeight: 900, margin: '2px 0 4px' }}>{detail.query?.text}</h2>
+                <div style={{ fontSize: 12, color: C.textSecondary, marginBottom: 12 }}>{detail.query?.topic}{detail.query?.intent ? ` · ${detail.query.intent}` : ''}</div>
+
+                {/* Coverage */}
+                <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
+                  <div style={{ width: 58, height: 58, borderRadius: 12, background: `${sc(detail.coverage?.rate || 0)}18`, color: sc(detail.coverage?.rate || 0), display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 18 }}>{detail.coverage?.rate ?? 0}%</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 800, fontSize: 14 }}>הופענו ב-{detail.coverage?.appeared ?? 0} מתוך {detail.coverage?.tested ?? 0} מנועים</div>
+                    <div style={{ fontSize: 12, color: C.textSecondary }}>{detail.measured ? 'מבוסס על הריצה האחרונה' : 'עדיין לא בוצעה בדיקה — הרץ בדיקה.'}</div>
+                  </div>
+                </div>
+
+                {/* Per-engine */}
+                <div style={{ ...card, marginBottom: 12 }}>
+                  <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 8 }}>פעילות סריקה לפי מנוע</div>
+                  {(detail.engines || []).length === 0 && <div style={{ color: C.textMuted, fontSize: 12.5 }}>אין נתוני מנוע עדיין.</div>}
+                  {(detail.engines || []).map((e: any) => (
+                    <div key={e.engine} style={{ borderTop: `1px solid ${C.borderLight}`, padding: '8px 0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: e.answerText ? 'pointer' : 'default' }} onClick={() => e.answerText && setOpenEngine(openEngine === e.engine ? null : e.engine)}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <span style={{ fontSize: 12.5, fontWeight: 700 }}>{e.engine}</span>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: e.found ? C.success : C.textMuted, background: e.found ? `${C.success}15` : C.borderLight, borderRadius: 6, padding: '1px 7px' }}>{e.found ? `הוזכר${e.position ? ` · מיקום ${e.position}` : ''}` : 'לא הוזכר'}</span>
+                        </div>
+                        {e.answerText && <span style={{ fontSize: 11, color: C.primary, fontWeight: 700 }}>{openEngine === e.engine ? 'הסתר תשובה ▲' : 'תשובת AI ▼'}</span>}
+                      </div>
+                      {openEngine === e.engine && e.answerText && (
+                        <div style={{ marginTop: 6, fontSize: 12.5, lineHeight: 1.7, color: C.text, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '0.6rem 0.8rem', whiteSpace: 'pre-wrap', maxHeight: 220, overflow: 'auto' }}>{e.answerText}</div>
+                      )}
+                      {(e.citations || []).length > 0 && (
+                        <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {e.citations.slice(0, 6).map((c: any, i: number) => <span key={i} style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 5, padding: '1px 6px', color: c.isOwn ? C.success : c.isCompetitor ? C.danger : C.textSecondary, background: c.isOwn ? `${C.success}12` : c.isCompetitor ? `${C.danger}10` : C.borderLight }}>{c.isOwn ? '★ ' : c.isCompetitor ? '⚔ ' : ''}{c.domain}</span>)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Why */}
+                <div style={{ ...card, marginBottom: 12, borderInlineStart: `3px solid ${C.primary}` }}>
+                  <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 6 }}>🧠 ניתוח: למה?</div>
+                  <div style={{ fontSize: 13, lineHeight: 1.8, color: C.text }}>{detail.why}</div>
+                </div>
+
+                {/* Improvements with "execute now" */}
+                <div style={{ ...card, marginBottom: 12 }}>
+                  <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 8 }}>🚀 מה לשפר — ולחיצה אחת לביצוע</div>
+                  {(detail.improvements || []).map((imp: any, idx: number) => {
+                    const col = imp.impact === 'high' ? C.danger : imp.impact === 'medium' ? C.warning : C.textMuted;
+                    const busyKey = imp.actionType + imp.title;
+                    return (
+                      <div key={idx} style={{ borderTop: `1px solid ${C.borderLight}`, padding: '10px 0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700 }}>{imp.title} <span style={{ fontSize: 9.5, fontWeight: 800, color: col, background: `${col}15`, borderRadius: 5, padding: '1px 6px' }}>{imp.impact === 'high' ? 'השפעה גבוהה' : imp.impact === 'medium' ? 'בינונית' : 'נמוכה'}</span></div>
+                            <div style={{ fontSize: 12, color: C.textSecondary, lineHeight: 1.6, marginTop: 2 }}>{imp.detail}</div>
+                          </div>
+                          <button onClick={() => runExecute(detail.query.id, imp)} disabled={!!execBusy} style={{ flexShrink: 0, background: C.primary, color: '#fff', border: 'none', borderRadius: 9, padding: '0.45rem 0.9rem', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>{execBusy === busyKey ? '⏳ מייצר…' : '⚡ בצע עכשיו'}</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {(detail.improvements || []).length === 0 && <div style={{ color: C.textMuted, fontSize: 12.5 }}>—</div>}
+                </div>
+
+                {/* Execute result (generated draft) */}
+                {execResult && (
+                  <div style={{ ...card, marginBottom: 12, border: `2px solid ${C.primary}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <div style={{ fontWeight: 800, fontSize: 13.5 }}>✨ טיוטה נוצרה: {execResult.title}</div>
+                      <button onClick={() => { navigator.clipboard?.writeText(execResult.text || execResult.html || ''); }} style={{ background: C.primary, color: '#fff', border: 'none', borderRadius: 8, padding: '0.3rem 0.7rem', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>📋 העתק</button>
+                    </div>
+                    <div style={{ fontSize: 12.5, lineHeight: 1.75, color: C.text, whiteSpace: 'pre-wrap', maxHeight: 260, overflow: 'auto', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '0.6rem 0.8rem' }}>{execResult.text || '—'}</div>
+                    <div style={{ fontSize: 11, color: C.textSecondary, marginTop: 6 }}>💾 {execResult.note}</div>
+                  </div>
+                )}
+
+                {/* Cited sources + competitors */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                  <div style={card}>
+                    <div style={{ fontWeight: 800, fontSize: 12.5, marginBottom: 6 }}>מקורות שצוטטו</div>
+                    {(detail.citedDomains || []).slice(0, 10).map((d: any) => <div key={d.domain} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, padding: '3px 0' }}><span style={{ color: d.isOwn ? C.success : d.isCompetitor ? C.danger : C.text }}>{d.isOwn ? '★ ' : d.isCompetitor ? '⚔ ' : ''}{d.domain}</span><b>{d.count}</b></div>)}
+                    {(detail.citedDomains || []).length === 0 && <div style={{ color: C.textMuted, fontSize: 11.5 }}>—</div>}
+                  </div>
+                  <div style={card}>
+                    <div style={{ fontWeight: 800, fontSize: 12.5, marginBottom: 6 }}>מתחרים בתשובות</div>
+                    {(detail.competitors || []).slice(0, 10).map((c: any) => <div key={c.name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, padding: '3px 0' }}><span>{c.name}</span><b>{c.count}</b></div>)}
+                    {(detail.competitors || []).length === 0 && <div style={{ color: C.textMuted, fontSize: 11.5 }}>אין</div>}
+                  </div>
+                </div>
+
+                {/* Change log for this query */}
+                {(detail.changes || []).length > 0 && (
+                  <div style={card}>
+                    <div style={{ fontWeight: 800, fontSize: 12.5, marginBottom: 6 }}>📝 שינויים אחרונים בתשובות</div>
+                    {detail.changes.map((c: any, i: number) => <div key={i} style={{ fontSize: 11.5, padding: '4px 0', borderTop: i ? `1px solid ${C.borderLight}` : 'none' }}><b>{c.engine}</b> · {c.type} {c.date ? `· ${new Date(c.date).toLocaleDateString('he-IL')}` : ''}<div style={{ color: C.textSecondary }}>{c.explanation}</div></div>)}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
