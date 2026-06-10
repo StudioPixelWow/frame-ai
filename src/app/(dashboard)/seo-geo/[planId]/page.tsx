@@ -346,6 +346,27 @@ export default function SeoPlanDetail() {
   const [expandedKeyword, setExpandedKeyword] = useState<string | null>(null);
   const [editingRanks, setEditingRanks] = useState<Record<number, string>>({});
   const [savingRanks, setSavingRanks] = useState(false);
+  const [expandingKw, setExpandingKw] = useState(false);
+
+  // Expand the client's seed keywords into ~150 Google + ~150 AI queries via AI,
+  // replacing any junk that was previously scraped from the site.
+  const handleExpandKeywords = async () => {
+    if (expandingKw) return;
+    if (!confirm("הפעולה תיקח את ביטויי הזרע של הלקוח ותפתח אותם ל-~150 ביטויי גוגל + ~150 שאלות AI, ותחליף את השאילתות הקיימות. להמשיך?")) return;
+    setExpandingKw(true);
+    try {
+      const res = await fetch(`/api/seo-geo-plans/${planId}/expand-keywords`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const d = await res.json();
+      if (!res.ok || d.error) throw new Error(d.error || "שגיאה");
+      const data = d.data || d;
+      alert(`✓ נוצרו ${data.googleCount} ביטויי גוגל + ${data.aiCount} שאלות AI מ-${data.seeds.length} ביטויי זרע${data.usedAI ? "" : " (מצב בסיסי — ללא מפתח AI)"}.\n\nהרץ סריקת נראות כדי לבדוק אותם.`);
+      if (typeof window !== "undefined") window.location.reload();
+    } catch (e) {
+      alert("שגיאה ביצירת הביטויים: " + (e instanceof Error ? e.message : ""));
+    } finally {
+      setExpandingKw(false);
+    }
+  };
   const [checkingKeyword, setCheckingKeyword] = useState<number | null>(null);
   const [checkingAll, setCheckingAll] = useState(false);
   const [checkAllProgress, setCheckAllProgress] = useState<{ current: number; total: number } | null>(null);
@@ -4216,9 +4237,13 @@ export default function SeoPlanDetail() {
                   <div>
                     <div style={{ textAlign: "center", marginBottom: 24 }}>
                       <h3 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 8px" }}>השאילתות שלנו בודקות</h3>
-                      <p style={{ fontSize: 13, color: C.textMuted, maxWidth: 500, margin: "0 auto" }}>
+                      <p style={{ fontSize: 13, color: C.textMuted, maxWidth: 500, margin: "0 auto 14px" }}>
                         הנה רשימת הביטויים שהזנת ידנית, שאנחנו בודקים עבורך במנועי ה-AI השונים כדי לוודא שהמותג שלך מופיע בתשובות
                       </p>
+                      <button onClick={handleExpandKeywords} disabled={expandingKw} style={{ background: expandingKw ? "#cbd5e1" : "linear-gradient(135deg,#00B5FE,#0095D0)", color: "#fff", border: "none", borderRadius: 12, padding: "0.65rem 1.5rem", fontWeight: 800, fontSize: 14, cursor: expandingKw ? "default" : "pointer", boxShadow: "0 6px 18px rgba(0,181,254,0.3)" }}>
+                        {expandingKw ? "⏳ מפתח ביטויים…" : "✨ פתח את הביטויים שלי ל-150 גוגל + 150 AI"}
+                      </button>
+                      <div style={{ fontSize: 11.5, color: C.textMuted, marginTop: 8 }}>ה-AI ירחיב את ביטויי הזרע שהזנת — לא מכותרות האתר.</div>
                     </div>
                     {clientKwList.length === 0 && (
                       <div style={{ textAlign: "center", padding: 32, color: C.textMuted, fontSize: 14 }}>

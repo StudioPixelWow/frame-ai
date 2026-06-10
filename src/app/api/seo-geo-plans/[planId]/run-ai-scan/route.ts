@@ -208,6 +208,9 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
     const planLocation = (plan as any).location || (plan as any).city || '';
 
     for (const vq of visibilityQueries) {
+      // Respect the query's target channel: 'google' keywords are checked on Google
+      // only (skip them on AI engines). 'ai' + untagged + brand run on AI engines.
+      if ((vq as any).category === 'google') continue;
       try {
         // Apply GEO query formulation per Hebrew SEO/GEO Toolkit guidelines
         const geoQuery = buildGEOQuery(vq.query, platformId, businessName, planLocation);
@@ -265,6 +268,8 @@ export const POST = withErrorBoundary(async (req: NextRequest, context: { params
     let googleScanned = 0;
 
     for (const vq of visibilityQueries) {
+      // On Google we check the Google-style keywords + untagged/brand — skip AI-only queries.
+      if ((vq as any).category === 'ai') continue;
       try {
         const result = await queryPlatform('google_seo', vq.query, businessName, targetDomain);
         googleScanned++;
