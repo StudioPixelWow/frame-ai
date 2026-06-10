@@ -5091,6 +5091,19 @@ export default function SeoPlanDetail() {
                           ? `בודק ${checkAllProgress.current}/${checkAllProgress.total}...`
                           : '🔍 בדוק הכל'}
                       </button>
+                      <button
+                        onClick={handleExpandKeywords}
+                        disabled={expandingKw}
+                        style={{
+                          padding: "10px 20px", borderRadius: 10, border: "none", marginInlineStart: 8,
+                          background: expandingKw ? "#cbd5e1" : `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+                          color: "#fff", fontSize: 13, fontWeight: 800, cursor: expandingKw ? "wait" : "pointer",
+                          whiteSpace: "nowrap", boxShadow: `0 2px 8px ${C.primary}40`,
+                        }}
+                        title="הבינה המלאכותית תרחיב את הביטויים האלה ל-150 ביטויי גוגל + 150 שאלות AI ותריץ סריקה"
+                      >
+                        {expandingKw ? "⏳ מפתח…" : "✨ פתח ל-150 גוגל + 150 AI"}
+                      </button>
                     </div>
 
                     {/* Summary cards */}
