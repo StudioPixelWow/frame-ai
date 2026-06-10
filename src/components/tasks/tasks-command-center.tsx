@@ -149,6 +149,17 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
     return s;
   };
 
+  // ── My tasks due in the next 48 hours (flat, cross-client list) ──
+  const tomorrowStr = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })();
+  const next48 = useMemo(
+    () => open.filter((t) => t.dueDate && t.dueDate <= tomorrowStr).sort((a, b) => score(b) - score(a)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [open],
+  );
+  const dueLabel = (d?: string) => (!d ? '' : d < today ? 'באיחור' : d === today ? 'היום' : d === tomorrowStr ? 'מחר' : new Date(d).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' }));
+  const dueColor = (d?: string) => (!d ? C.muted : d < today ? '#ef4444' : d === today ? '#d97706' : '#2563eb');
+  const prioColor: Record<string, string> = { urgent: '#ef4444', high: '#f59e0b', medium: '#3b82f6', low: '#9ca3af' };
+
   // Group by client
   const clients = useMemo(() => {
     const map = new Map<string, { name: string; open: AnyTask[]; overdue: AnyTask[]; dueToday: AnyTask[]; completed: number; total: number }>();
@@ -357,6 +368,33 @@ export default function TasksCommandCenter({ onOpenTask, onCompleteTask }: { onO
                 <span style={{ flex: 1, minWidth: 0, fontSize: "0.92rem", fontWeight: 500, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
                 <span style={{ fontSize: "0.74rem", color: C.muted, whiteSpace: "nowrap" }}>{t.clientName || ""}</span>
                 <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#d97706", whiteSpace: "nowrap" }}>תקן ושלח שוב ←</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* NEXT 48H — flat, cross-client priority list (click → submit popup) */}
+      {next48.length > 0 && (
+        <div style={{ marginBottom: 22 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: "0.95rem", fontWeight: 800, color: C.text }}>⚡ המשימות שלי ל-48 השעות הקרובות</span>
+            <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#fff", background: "#00B5FE", borderRadius: 99, padding: "1px 9px" }}>{next48.length}</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {next48.map((t) => (
+              <div key={t.id} onClick={() => onOpenTask(t)}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "0.85rem 1.1rem", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, cursor: "pointer", transition: "transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease" }}
+                onMouseEnter={(e) => { const el = e.currentTarget as HTMLElement; el.style.transform = "translateY(-2px)"; el.style.boxShadow = "0 8px 22px rgba(0,0,0,0.08)"; el.style.borderColor = "#00B5FE"; }}
+                onMouseLeave={(e) => { const el = e.currentTarget as HTMLElement; el.style.transform = "translateY(0)"; el.style.boxShadow = "none"; el.style.borderColor = C.border; }}>
+                <span style={{ width: 10, height: 10, borderRadius: 99, background: prioColor[t.priority] || "#9ca3af", flex: "0 0 auto" }} title={t.priority} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "0.95rem", fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div>
+                  {t.clientName && <div style={{ fontSize: "0.76rem", color: C.muted }}>{t.clientName}</div>}
+                </div>
+                {t.status === "returned" && <span style={{ fontSize: "0.7rem", fontWeight: 800, color: "#d97706", whiteSpace: "nowrap" }}>בתיקון</span>}
+                <span style={{ fontSize: "0.76rem", fontWeight: 800, color: dueColor(t.dueDate), background: `${dueColor(t.dueDate)}14`, borderRadius: 8, padding: "3px 10px", whiteSpace: "nowrap" }}>{dueLabel(t.dueDate)}</span>
+                <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#00B5FE", whiteSpace: "nowrap" }}>פתח והגש ←</span>
               </div>
             ))}
           </div>
