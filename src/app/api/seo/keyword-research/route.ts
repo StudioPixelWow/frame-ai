@@ -31,8 +31,8 @@ export async function POST(req: NextRequest) {
 
     const seed = String(body.seed || '').trim();
     if (!seed) return NextResponse.json({ error: 'הזן ביטוי מקור' }, { status: 400 });
-    const { ideas, mock } = await getKeywordIdeas(seed, body.country || 'Israel', body.language || 'Hebrew', Number(body.limit) || 100);
-    return NextResponse.json({ success: true, ideas, mock, configured: keywordProviderConfigured() });
+    const { ideas, mock, reason } = await getKeywordIdeas(seed, body.country || 'Israel', body.language || 'Hebrew', Number(body.limit) || 100);
+    return NextResponse.json({ success: true, ideas, mock, reason, configured: keywordProviderConfigured() });
   } catch (e) {
     console.error('[keyword-research] error:', e instanceof Error ? e.message : e);
     return NextResponse.json({ error: 'החיפוש נכשל' }, { status: 400 });

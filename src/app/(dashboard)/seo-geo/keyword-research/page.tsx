@@ -26,6 +26,7 @@ export default function KeywordResearchPage() {
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [loading, setLoading] = useState(false);
   const [mock, setMock] = useState(false);
+  const [mockReason, setMockReason] = useState('');
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [trendFor, setTrendFor] = useState<Idea | null>(null);
   const [questions, setQuestions] = useState<string[] | null>(null);
@@ -39,7 +40,7 @@ export default function KeywordResearchPage() {
       const r = await fetch('/api/seo/keyword-research', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'ideas', seed }) });
       const d = await r.json();
       if (!r.ok || !d.success) throw new Error(d.error || 'שגיאה');
-      setIdeas(d.ideas || []); setMock(!!d.mock); setSel(new Set());
+      setIdeas(d.ideas || []); setMock(!!d.mock); setMockReason(d.reason || ''); setSel(new Set());
     } catch (e) { setNotice(e instanceof Error ? e.message : 'החיפוש נכשל'); }
     finally { setLoading(false); }
   };
@@ -82,7 +83,18 @@ export default function KeywordResearchPage() {
       </div>
 
       {notice && <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 600, color: notice.startsWith('✓') ? C.low : '#B45309' }}>{notice}</div>}
-      {mock && ideas.length > 0 && <div style={{ background: '#EFF8FF', border: '1px solid #B9E3FF', borderRadius: 10, padding: '8px 12px', fontSize: 12, color: C.primaryDark, marginBottom: 12 }}>ℹ️ נתוני הערכה — חבר DataForSEO (DATAFORSEO_LOGIN/PASSWORD) לנתוני נפח אמיתיים.</div>}
+      {mock && ideas.length > 0 && (() => {
+        const r = mockReason || '';
+        const msg = r.startsWith('no_credentials') ? 'לא הוגדרו מפתחות DataForSEO (DATAFORSEO_LOGIN/PASSWORD) ב-Vercel.'
+          : r.startsWith('auth_failed') ? '⚠ ההתחברות ל-DataForSEO נכשלה — שם המשתמש/סיסמת ה-API שגויים. בדוק את הערכים ב-Vercel.'
+          : r.startsWith('payment_required') ? '⚠ חשבון ה-DataForSEO לא מאומת/ממומן — צריך לאמת ולהטעין יתרה בחשבון כדי לקבל נתונים אמיתיים.'
+          : r.startsWith('task_error') || r.startsWith('api_error') ? `⚠ DataForSEO החזיר שגיאה: ${r.split(': ')[1] || r}`
+          : r.startsWith('no_results') ? 'ℹ️ לא נמצאו נתוני נפח לזרע הזה ב-DataForSEO — מוצגת הערכה.'
+          : r.startsWith('request_failed') ? `⚠ הבקשה ל-DataForSEO נכשלה: ${r.split(': ')[1] || ''}`
+          : 'ℹ️ נתוני הערכה — חבר DataForSEO לנתוני נפח אמיתיים.';
+        const isErr = msg.startsWith('⚠');
+        return <div style={{ background: isErr ? '#FEF3F2' : '#EFF8FF', border: `1px solid ${isErr ? '#FDA29B' : '#B9E3FF'}`, borderRadius: 10, padding: '8px 12px', fontSize: 12.5, color: isErr ? '#B42318' : C.primaryDark, marginBottom: 12, fontWeight: 600 }}>{msg}</div>;
+      })()}
 
       {/* Selection actions */}
       {ideas.length > 0 && (

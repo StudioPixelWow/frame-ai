@@ -90,6 +90,8 @@ function TasksPageInner() {
   const [fileUploading, setFileUploading] = useState(false);
   const [showReviewNotes, setShowReviewNotes] = useState(false);
   const [reviewNotes, setReviewNotes] = useState("");
+  const [previewImg, setPreviewImg] = useState<string | null>(null);
+  const isImageUrl = (s: string) => /\.(png|jpe?g|gif|webp|bmp|svg|avif)(\?|$)/i.test(s || "");
   const [autoAssignmentNote, setAutoAssignmentNote] = useState("");
   const [allocSuggest, setAllocSuggest] = useState<AllocationSuggestion[]>([]);
   const computeAllocation = useCallback(() => {
@@ -1247,6 +1249,15 @@ function TasksPageInner() {
       )}
       </>)}
 
+      {/* Image preview lightbox (review submitted images without downloading) */}
+      {previewImg && (
+        <div onClick={() => setPreviewImg(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 5000, padding: 24 }}>
+          <img src={previewImg} alt="preview" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "92vw", maxHeight: "88vh", objectFit: "contain", borderRadius: 10, boxShadow: "0 10px 50px rgba(0,0,0,0.6)" }} />
+          <button onClick={() => setPreviewImg(null)} style={{ position: "fixed", top: 18, insetInlineEnd: 22, background: "rgba(255,255,255,0.15)", color: "#fff", border: "none", borderRadius: 10, padding: "0.5rem 1rem", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>✕ סגור</button>
+          <a href={previewImg} target="_blank" rel="noopener noreferrer" style={{ position: "fixed", bottom: 20, insetInlineStart: 22, background: "rgba(255,255,255,0.15)", color: "#fff", borderRadius: 10, padding: "0.5rem 1rem", fontWeight: 700, fontSize: 13, textDecoration: "none" }}>פתח בגודל מלא ↗</a>
+        </div>
+      )}
+
       {/* Celebration popup (employee submitted a task) */}
       {celebration && (
         <div onClick={() => setCelebration(null)} style={{ position: "fixed", inset: 0, background: "rgba(10,12,30,0.5)", backdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 4000, animation: "fadeIn .2s ease" }}>
@@ -1463,16 +1474,28 @@ function TasksPageInner() {
                   <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#047857", marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>📤 הגשת התוצר לאישור המנהל</div>
                   <div style={{ fontSize: "0.76rem", color: "#065f46", marginBottom: 12, fontWeight: 600 }}>⬅ כאן מעלים את הקובץ המוגמר של המשימה. ההעלאה תעביר את המשימה אוטומטית ל״בבדיקה״ ותשלח אותה לאישור. <b>זה לא קבצי העזר למעלה.</b></div>
                   {form.submittedFiles.length > 0 && (
-                    <div style={{ marginBottom: 10, display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                      <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#047857" }}>כבר הוגשו:</div>
-                      {form.submittedFiles.map((file, idx) => {
-                        const { name, url } = parseFile(file);
-                        return (
-                          <div key={idx} style={{ padding: "0.4rem 0.55rem", background: "var(--surface)", borderRadius: 8, fontSize: "0.76rem" }}>
-                            {url ? <a href={url} target="_blank" rel="noopener noreferrer" download style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}>📥 {name}</a> : <span>📄 {name}</span>}
-                          </div>
-                        );
-                      })}
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#047857", marginBottom: 6 }}>הוגשו לבדיקה ({form.submittedFiles.length}):</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        {form.submittedFiles.map((file, idx) => {
+                          const { name, url } = parseFile(file);
+                          const img = url && (isImageUrl(url) || isImageUrl(name));
+                          if (img) {
+                            return (
+                              <div key={idx} style={{ width: 110, textAlign: "center" }}>
+                                <img src={url} alt={name} onClick={() => setPreviewImg(url)} loading="lazy"
+                                  style={{ width: 110, height: 110, objectFit: "cover", borderRadius: 10, border: "1px solid var(--border)", cursor: "zoom-in", background: "#fff" }} />
+                                <div style={{ fontSize: "0.62rem", color: "var(--foreground-muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+                              </div>
+                            );
+                          }
+                          return (
+                            <div key={idx} style={{ padding: "0.4rem 0.55rem", background: "var(--surface)", borderRadius: 8, fontSize: "0.76rem", display: "flex", alignItems: "center" }}>
+                              {url ? <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}>📄 {name} ↗</a> : <span>📄 {name}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                   <input

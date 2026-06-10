@@ -61,20 +61,31 @@ function mockIdeas(seed: string, limit: number): KeywordIdea[] {
   return ideas.sort((a, b) => b.volume - a.volume);
 }
 
-export async function getKeywordIdeas(seed: string, country = 'Israel', language = 'Hebrew', limit = 100): Promise<{ ideas: KeywordIdea[]; mock: boolean }> {
+export async function getKeywordIdeas(seed: string, country = 'Israel', language = 'Hebrew', limit = 100): Promise<{ ideas: KeywordIdea[]; mock: boolean; reason?: string }> {
   const s = (seed || '').trim();
-  if (!s) return { ideas: [], mock: true };
+  if (!s) return { ideas: [], mock: true, reason: 'no_seed' };
 
-  if (keywordProviderConfigured()) {
-    try {
-      const auth = 'Basic ' + Buffer.from(`${DFS_LOGIN()}:${DFS_PASS()}`).toString('base64');
-      const r = await fetch('https://api.dataforseo.com/v3/keywords_data/google_ads/keywords_for_keywords/live', {
-        method: 'POST', headers: { Authorization: auth, 'Content-Type': 'application/json' },
-        body: JSON.stringify([{ keywords: [s], location_name: country, language_name: language, sort_by: 'search_volume', limit }]),
-        signal: AbortSignal.timeout(25000),
-      });
-      const j = await r.json();
-      const items = j?.tasks?.[0]?.result || [];
+  if (!keywordProviderConfigured()) {
+    return { ideas: mockIdeas(s, limit), mock: true, reason: 'no_credentials' };
+  }
+
+  let reason = 'unknown';
+  try {
+    const auth = 'Basic ' + Buffer.from(`${DFS_LOGIN()}:${DFS_PASS()}`).toString('base64');
+    const r = await fetch('https://api.dataforseo.com/v3/keywords_data/google_ads/keywords_for_keywords/live', {
+      method: 'POST', headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify([{ keywords: [s], location_name: country, language_name: language, sort_by: 'search_volume', limit }]),
+      signal: AbortSignal.timeout(25000),
+    });
+    const j = await r.json().catch(() => ({}));
+    // DataForSEO error surfacing: top-level + task-level status codes/messages.
+    if (r.status === 401) reason = 'auth_failed: שם משתמש/סיסמת API שגויים';
+    else if (r.status === 402 || j?.status_code === 40200) reason = 'payment_required: החשבון לא מאומת/ממומן ב-DataForSEO';
+    else if (j?.status_code && j.status_code !== 20000) reason = `api_error: ${j.status_message || j.status_code}`;
+    const task = j?.tasks?.[0];
+    if (task?.status_code && task.status_code !== 20000) reason = `task_error: ${task.status_message || task.status_code}`;
+    const items = task?.result || [];
+    {
       if (Array.isArray(items) && items.length) {
         const ideas: KeywordIdea[] = items.slice(0, limit).map((it: any) => {
           const volume = it.search_volume || 0;
@@ -91,9 +102,11 @@ export async function getKeywordIdeas(seed: string, country = 'Israel', language
         });
         return { ideas, mock: false };
       }
-    } catch (e) {
-      console.warn('[keyword-research] DataForSEO failed, using mock:', e instanceof Error ? e.message : e);
+      if (reason === 'unknown') reason = 'no_results: לא נמצאו ביטויים לזרע הזה';
     }
+  } catch (e) {
+    reason = `request_failed: ${e instanceof Error ? e.message : 'שגיאת רשת'}`;
+    console.warn('[keyword-research] DataForSEO failed, using mock:', e instanceof Error ? e.message : e);
   }
-  return { ideas: mockIdeas(s, limit), mock: true };
+  return { ideas: mockIdeas(s, limit), mock: true, reason };
 }
