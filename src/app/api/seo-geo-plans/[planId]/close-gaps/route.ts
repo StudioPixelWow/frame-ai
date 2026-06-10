@@ -107,16 +107,18 @@ export async function POST(
     const gapDay = allGapDays[0];
     const totalGapDays = allGapDays.length;
 
-    // Track cumulative progress across calls
-    const previouslyCompleted = gc?.completedDays || 0;
-    // totalDays = the total we set at the start of this batch, or the current total if first call
-    const batchTotal = gc?.totalDays && gc.totalDays >= totalGapDays
-      ? gc.totalDays
-      : totalGapDays + previouslyCompleted;
+    // Track cumulative progress across calls — but RESET on a fresh batch so the
+    // counter can never accumulate across separate runs (which caused 424%).
+    const idleMs = gc?.startedAt ? (Date.now() - new Date(gc.startedAt).getTime()) : Infinity;
+    const isFreshBatch = !gc || !!gc.completedAt || (!gc.active && idleMs > 20 * 60000);
+    const previouslyCompleted = isFreshBatch ? 0 : (gc?.completedDays || 0);
+    // Total is ALWAYS self-consistent: done-this-batch + what's still left.
+    // Guarantees completedDays ≤ totalDays, so the bar never exceeds 100%.
+    const batchTotal = previouslyCompleted + totalGapDays;
 
     // ── Mark as active ───────────────────────────────────────────
-    const startedAt = gc?.startedAt && previouslyCompleted > 0
-      ? gc.startedAt  // preserve original start time across calls
+    const startedAt = !isFreshBatch && gc?.startedAt
+      ? gc.startedAt  // preserve original start time across calls within a batch
       : new Date().toISOString();
 
     await updatePlanSafe(planId, {

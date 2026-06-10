@@ -2153,9 +2153,10 @@ export default function SeoPlanDetail() {
                     const isStuck = gcStuckMinutes > 15;
                     const isRunning = (closingGaps || gapClosing?.active) && !isStuck;
 
-                    const gcCompleted = gapClosing?.completedDays || 0;
                     const gcTotal = gapClosing?.totalDays || missedCount;
-                    const gcPercent = gcTotal > 0 ? Math.round((gcCompleted / gcTotal) * 100) : 0;
+                    // Clamp so stale/over-counted progress can never exceed the total (no 424%).
+                    const gcCompleted = Math.min(gapClosing?.completedDays || 0, gcTotal);
+                    const gcPercent = gcTotal > 0 ? Math.min(100, Math.round((gcCompleted / gcTotal) * 100)) : 0;
 
                     return (
                       <div style={{
