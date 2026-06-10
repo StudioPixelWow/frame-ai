@@ -32,6 +32,39 @@ const PRIORITIES = [
   { id: "low", label: "נמוך", color: "#6b7280" },
 ] as const;
 
+const IS_IMAGE = (s: string) => /\.(png|jpe?g|gif|webp|bmp|svg|avif|heic|heif)(\?|$)/i.test(s || "");
+
+/** A submitted-file thumbnail that previews images inline and gracefully falls
+ *  back to a clickable card if the image can't be loaded (private bucket, CDN lag,
+ *  non-image, etc.) — so the reviewer always sees something useful. */
+function SubmittedFilePreview({ name, url, onZoom }: { name: string; url: string | null; onZoom: (u: string) => void }) {
+  const [errored, setErrored] = useState(false);
+  const looksImage = !!url && (IS_IMAGE(url) || IS_IMAGE(name));
+  if (url && looksImage && !errored) {
+    return (
+      <div style={{ width: 120, textAlign: "center" }}>
+        <img
+          src={url}
+          alt={name}
+          loading="lazy"
+          onError={() => setErrored(true)}
+          onClick={() => onZoom(url)}
+          style={{ width: 120, height: 120, objectFit: "contain", borderRadius: 10, border: "1px solid var(--border)", cursor: "zoom-in", background: "#fff" }}
+        />
+        <div style={{ fontSize: "0.62rem", color: "var(--foreground-muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+      </div>
+    );
+  }
+  return (
+    <a href={url || undefined} target="_blank" rel="noopener noreferrer"
+      style={{ width: 120, minHeight: 120, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, padding: "0.6rem", background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)", textDecoration: "none", color: "var(--accent)" }}>
+      <span style={{ fontSize: 26 }}>{looksImage ? "🖼️" : "📄"}</span>
+      <span style={{ fontSize: "0.66rem", fontWeight: 600, textAlign: "center", wordBreak: "break-word", lineHeight: 1.3 }}>{name}</span>
+      <span style={{ fontSize: "0.6rem", color: "var(--foreground-muted)" }}>פתח ↗</span>
+    </a>
+  );
+}
+
 function TasksPageInner() {
   const { isEmployee } = useAuth();
   const { data: tasks, loading, create, update, remove } = useTasks();
@@ -91,7 +124,6 @@ function TasksPageInner() {
   const [showReviewNotes, setShowReviewNotes] = useState(false);
   const [reviewNotes, setReviewNotes] = useState("");
   const [previewImg, setPreviewImg] = useState<string | null>(null);
-  const isImageUrl = (s: string) => /\.(png|jpe?g|gif|webp|bmp|svg|avif)(\?|$)/i.test(s || "");
   const [autoAssignmentNote, setAutoAssignmentNote] = useState("");
   const [allocSuggest, setAllocSuggest] = useState<AllocationSuggestion[]>([]);
   const computeAllocation = useCallback(() => {
@@ -294,10 +326,17 @@ function TasksPageInner() {
   };
 
   // Split a stored file entry "name|url" → { name, url }. Old entries (name only) → no url.
-  const parseFile = (entry: string): { name: string; url: string | null } => {
-    const i = entry.indexOf("|");
-    if (i === -1) return { name: entry, url: null };
-    return { name: entry.slice(0, i), url: entry.slice(i + 1) };
+  const parseFile = (entry: any): { name: string; url: string | null } => {
+    // Defensive: entries are usually "name|url" strings, but may arrive as objects.
+    if (entry && typeof entry === "object") {
+      const url = entry.url || entry.publicUrl || entry.href || null;
+      const name = entry.name || entry.fileName || (url ? String(url).split("/").pop() : "קובץ") || "קובץ";
+      return { name, url };
+    }
+    const s = String(entry || "");
+    const i = s.indexOf("|");
+    if (i === -1) return { name: s, url: IS_IMAGE(s) || /^https?:/i.test(s) ? s : null };
+    return { name: s.slice(0, i), url: s.slice(i + 1) };
   };
 
   const handleRemoveFile = (index: number) => {
@@ -1479,21 +1518,7 @@ function TasksPageInner() {
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                         {form.submittedFiles.map((file, idx) => {
                           const { name, url } = parseFile(file);
-                          const img = url && (isImageUrl(url) || isImageUrl(name));
-                          if (img) {
-                            return (
-                              <div key={idx} style={{ width: 110, textAlign: "center" }}>
-                                <img src={url} alt={name} onClick={() => setPreviewImg(url)} loading="lazy"
-                                  style={{ width: 110, height: 110, objectFit: "cover", borderRadius: 10, border: "1px solid var(--border)", cursor: "zoom-in", background: "#fff" }} />
-                                <div style={{ fontSize: "0.62rem", color: "var(--foreground-muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
-                              </div>
-                            );
-                          }
-                          return (
-                            <div key={idx} style={{ padding: "0.4rem 0.55rem", background: "var(--surface)", borderRadius: 8, fontSize: "0.76rem", display: "flex", alignItems: "center" }}>
-                              {url ? <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}>📄 {name} ↗</a> : <span>📄 {name}</span>}
-                            </div>
-                          );
+                          return <SubmittedFilePreview key={idx} name={name} url={url} onZoom={setPreviewImg} />;
                         })}
                       </div>
                     </div>
