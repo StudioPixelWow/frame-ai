@@ -24,6 +24,7 @@ import {
  * Queries each AI engine (ChatGPT, Gemini, Perplexity, Claude, Google)
  * with the plan's visibility queries and stores actual results.
  */
+export const maxDuration = 300;
 
 interface AIQueryResult {
   platform: PlatformId;

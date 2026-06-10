@@ -493,6 +493,32 @@ function ScanPageInner() {
         if (resultId) {
           setSavedPlanId(resultId);
           console.log(`[PIXEL-SEO-SCAN-UI] PERSISTED planId=${resultId}`);
+          // ── Build the visibility queries from the 10 seed keywords via AI:
+          //    ~150 Google search keywords + ~150 conversational AI queries.
+          //    This REPLACES any scraped queries so both the gaps view and the
+          //    "אזכורים לפי מנוע AI" view reflect the client's real keywords. ──
+          if (mappedClientKeywords.length > 0) {
+            try {
+              const exp = await fetch(`/api/seo-geo-plans/${resultId}/expand-keywords`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+              });
+              if (exp.ok) {
+                const ed = await exp.json();
+                const d = ed.data || ed;
+                console.log(`[PIXEL-SEO-SCAN-UI] expanded keywords: ${d.googleCount} google + ${d.aiCount} ai`);
+                // Re-run the AI visibility scan over the freshly-expanded queries so the
+                // results views (gaps + "אזכורים לפי מנוע AI") reflect the 150+150 set.
+                try {
+                  await fetch(`/api/seo-geo-plans/${resultId}/run-ai-scan`, { method: 'POST' });
+                  console.log('[PIXEL-SEO-SCAN-UI] re-ran AI scan over expanded queries');
+                } catch (scanErr) {
+                  console.warn('[PIXEL-SEO-SCAN-UI] re-scan failed (non-blocking):', scanErr);
+                }
+              }
+            } catch (expErr) {
+              console.warn('[PIXEL-SEO-SCAN-UI] keyword expansion failed (non-blocking):', expErr);
+            }
+          }
         } else {
           console.warn('[PIXEL-SEO-SCAN-UI] PERSIST_FAILED after migration retry');
           console.warn('[PIXEL-SEO-SCAN-UI] ⚠️ To fix: go to Supabase SQL Editor and run:\n' +
