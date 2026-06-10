@@ -53,6 +53,26 @@ async function dashboard(planId: string) {
   for (const cm of compMentions) compCounts[cm.competitor_name] = (compCounts[cm.competitor_name] || 0) + 1;
   const competitorLeaderboard = Object.entries(compCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
 
+  // ── Share of Voice (us vs competitors in AI answers) ──
+  const ourTotal = mentions.length;            // brand mentions in recent window
+  const compTotal = compMentions.length;       // competitor mentions in recent window
+  const totalVoice = ourTotal + compTotal;
+  const sovNow = totalVoice ? Math.round((ourTotal / totalVoice) * 100) : 0;
+  // SOV trend over months (from monthly aggregations — already stores share_of_ai_voice).
+  const sovTrend = agg.map((m: any) => ({ month: m.month, sov: Math.round((m.share_of_ai_voice || 0) * 100), us: m.total_mentions || 0 }));
+  // Per-competitor mentions per month (for competitor trend).
+  const moKey = (iso: string) => (iso || '').slice(0, 7);
+  const compByMonth: Record<string, Record<string, number>> = {};
+  for (const cm of compMentions) { const mo = moKey(cm.created_at); ((compByMonth[mo] ||= {})[cm.competitor_name] = (compByMonth[mo]?.[cm.competitor_name] || 0) + 1); }
+  const sovMonths = Object.keys(compByMonth).sort();
+  const topComps = competitorLeaderboard.slice(0, 5).map((c) => c.name);
+  const competitorTrend = sovMonths.map((mo) => ({ month: mo, ...Object.fromEntries(topComps.map((n) => [n, compByMonth[mo]?.[n] || 0])) }));
+  const shareOfVoice = {
+    now: sovNow, us: ourTotal, competitors: compTotal,
+    breakdown: [{ name: 'אנחנו', count: ourTotal, isUs: true }, ...competitorLeaderboard.slice(0, 6).map((c) => ({ name: c.name, count: c.count, isUs: false }))],
+    trend: sovTrend, topComps, competitorTrend,
+  };
+
   // Opportunity queries: those with no mention in the latest run.
   const mentionedQ = new Set(mentions.map((m: any) => m.query_id));
   const opportunities = queries.filter((q: any) => !mentionedQ.has(q.id)).slice(0, 30).map((q: any) => ({ id: q.id, query: q.query_text, topic: q.topic, priority: q.priority }));
@@ -81,7 +101,7 @@ async function dashboard(planId: string) {
     summary: latest, trend: agg, runs,
     mentions: mentions.slice(0, 50), citations: citations.slice(0, 50),
     topics: Object.values(topicStats).map((t) => ({ ...t, rate: t.queries ? Math.round((t.mentions / t.queries) * 100) : 0 })).sort((a, b) => b.rate - a.rate),
-    citationPages, competitors, competitorLeaderboard, opportunities, allQueries,
+    citationPages, competitors, competitorLeaderboard, opportunities, allQueries, shareOfVoice,
     brand, queryCount: queries.length, competitorCount: competitors.length,
     engines: VIS_ENGINES.map((e) => ({ id: e, available: !!apiStatus[e] })),
     availableEngines: availableEngines(),

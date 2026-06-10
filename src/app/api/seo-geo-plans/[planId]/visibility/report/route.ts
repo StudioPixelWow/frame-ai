@@ -25,6 +25,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ planId: str
     const prog = await buildGeoProgressReport(planId);
     return new NextResponse(prog.html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
   }
+  if (format === 'xlsx' || format === 'excel') {
+    const { buildVisibilityWorkbook } = await import('@/lib/seo/geo-visibility/excel');
+    const wb = await buildVisibilityWorkbook(planId);
+    return new NextResponse(wb.xml, { headers: { 'Content-Type': 'application/vnd.ms-excel; charset=utf-8', 'Content-Disposition': `attachment; filename="${wb.filename}"` } });
+  }
   const rep = await buildVisibilityReport(planId);
   if (format === 'csv') return new NextResponse(rep.csv, { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="ai-visibility-${rep.month}.csv"` } });
   if (format === 'json') return NextResponse.json(rep.data);

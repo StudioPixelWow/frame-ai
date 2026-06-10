@@ -11,7 +11,7 @@ const C = {
   border: '#E8EAF0', borderLight: '#F0F2F5', success: '#10B981', warning: '#F59E0B', danger: '#EF4444', info: '#3B82F6',
 };
 const TABS = [
-  { id: 'overview', label: 'סקירה', icon: '📊' }, { id: 'alerts', label: 'התראות', icon: '🔔' },
+  { id: 'overview', label: 'סקירה', icon: '📊' }, { id: 'sov', label: 'נתח קול', icon: '🥇' }, { id: 'alerts', label: 'התראות', icon: '🔔' },
   { id: 'queries', label: 'שאילתות', icon: '🔤' }, { id: 'prompts', label: 'Prompts', icon: '🧭' }, { id: 'runs', label: 'ריצות', icon: '⚡' },
   { id: 'mentions', label: 'אזכורים', icon: '💬' }, { id: 'citations', label: 'ציטוטים', icon: '🔗' },
   { id: 'timeline', label: 'Citation Timeline', icon: '📈' }, { id: 'changelog', label: 'Change Log', icon: '📝' },
@@ -98,6 +98,7 @@ export default function VisibilityCenterPage() {
           <button onClick={() => window.open(`/api/seo-geo-plans/${planId}/visibility/report?format=progress`, '_blank')} style={{ background: C.primary, color: '#fff', border: 'none', borderRadius: 12, padding: '0.6rem 0.9rem', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>📈 דוח צמיחה</button>
           <button onClick={() => window.open(`/api/seo-geo-plans/${planId}/visibility/report?format=html`, '_blank')} style={{ background: C.card, color: C.text, border: `1px solid ${C.border}`, borderRadius: 12, padding: '0.6rem 0.9rem', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>📄 דוח (PDF)</button>
           <button onClick={() => window.open(`/api/seo-geo-plans/${planId}/visibility/report?format=csv`, '_blank')} style={{ background: C.card, color: C.text, border: `1px solid ${C.border}`, borderRadius: 12, padding: '0.6rem 0.9rem', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>⬇ CSV</button>
+          <button onClick={() => window.open(`/api/seo-geo-plans/${planId}/visibility/report?format=xlsx`, '_blank')} style={{ background: C.card, color: '#107C41', border: `1px solid ${C.border}`, borderRadius: 12, padding: '0.6rem 0.9rem', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>📊 Excel</button>
           <button onClick={async () => { setBusy('send'); setErr(''); try { const r = await fetch(`/api/seo-geo-plans/${planId}/visibility/report`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channel: 'email' }) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'שגיאה'); setNotice(`הדוח נשלח ל-${j.data?.to || 'לקוח'}`); } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה'); } finally { setBusy(''); } }} disabled={!!busy} style={{ background: C.card, color: C.text, border: `1px solid ${C.border}`, borderRadius: 12, padding: '0.6rem 0.9rem', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{busy === 'send' ? '⏳' : '✉ שלח ללקוח'}</button>
           <button onClick={async () => { const d = await post({ action: 'enable_automation', frequency: 'weekly' }, 'auto'); if (d) setNotice('אוטומציה שבועית הופעלה'); }} disabled={!!busy} style={{ background: C.primary, color: '#fff', border: 'none', borderRadius: 12, padding: '0.6rem 1rem', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>{busy === 'auto' ? '⏳' : '🔁 אוטומציה'}</button>
         </div>
@@ -204,6 +205,59 @@ export default function VisibilityCenterPage() {
               </div>
             </>
           )}
+
+          {tab === 'sov' && (() => {
+            const sov = s.shareOfVoice || {};
+            const breakdown = sov.breakdown || [];
+            const maxB = Math.max(1, ...breakdown.map((b: any) => b.count));
+            const trend = sov.trend || [];
+            return (
+              <div style={{ display: 'grid', gap: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 14 }}>
+                  <div style={{ ...card, textAlign: 'center' }}>
+                    <div style={{ fontSize: 12, color: C.textSecondary, fontWeight: 700 }}>נתח הקול שלנו ב-AI<Tag kind="measured" /></div>
+                    <div style={{ fontSize: 52, fontWeight: 900, color: sc(sov.now || 0), lineHeight: 1.1, margin: '6px 0' }}>{sov.now ?? 0}%</div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>{sov.us ?? 0} אזכורים שלנו · {sov.competitors ?? 0} של מתחרים</div>
+                  </div>
+                  <div style={card}>
+                    <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>אנחנו מול מתחרים (אזכורים בתשובות)</div>
+                    {breakdown.length === 0 ? <div style={{ color: C.textMuted, fontSize: 13 }}>אין נתונים עדיין — הרץ בדיקה והוסף מתחרים.</div> :
+                      breakdown.map((b: any) => (
+                        <div key={b.name} style={{ marginBottom: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}><span style={{ fontWeight: b.isUs ? 800 : 600, color: b.isUs ? C.primaryDark : C.text }}>{b.isUs ? '★ ' : ''}{b.name}</span><b>{b.count}</b></div>
+                          <div style={{ height: 8, borderRadius: 999, background: C.borderLight, overflow: 'hidden' }}><div style={{ width: `${(b.count / maxB) * 100}%`, height: '100%', background: b.isUs ? C.primary : C.warning }} /></div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+
+                <div style={card}>
+                  <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>מגמת נתח קול לאורך זמן</div>
+                  {trend.length === 0 ? <div style={{ color: C.textMuted, fontSize: 13 }}>צריך לפחות חודש אחד של נתונים.</div> : (
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 130 }}>
+                      {trend.map((t: any) => (
+                        <div key={t.month} style={{ flex: 1, textAlign: 'center' }}>
+                          <div style={{ fontSize: 10, fontWeight: 700 }}>{t.sov}%</div>
+                          <div style={{ height: `${t.sov * 0.9}px`, background: sc(t.sov), borderRadius: '4px 4px 0 0', minHeight: 2 }} title={`${t.sov}% · ${t.us} אזכורים`} />
+                          <div style={{ fontSize: 9.5, color: C.textMuted, marginTop: 4 }}>{(t.month || '').slice(5)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 8 }}>יתרון על המתחרה: לא רק תצלום רגעי — מגמת נתח-קול חודשית מול המתחרים.</div>
+                </div>
+
+                {(sov.topComps || []).length > 0 && (sov.competitorTrend || []).length > 0 && (
+                  <div style={card}>
+                    <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>אזכורי מתחרים לפי חודש</div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}><thead><tr><Th>חודש</Th>{(sov.topComps || []).map((n: string) => <Th key={n}>{n}</Th>)}</tr></thead><tbody>
+                      {(sov.competitorTrend || []).map((rowm: any) => <tr key={rowm.month}><Td>{rowm.month}</Td>{(sov.topComps || []).map((n: string) => <Td key={n}>{rowm[n] || 0}</Td>)}</tr>)}
+                    </tbody></table>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {tab === 'queries' && (
             <div style={card}>
