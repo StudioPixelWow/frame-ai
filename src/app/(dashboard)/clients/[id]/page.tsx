@@ -1068,6 +1068,17 @@ function ClientDetailContent() {
                 </button>
                 <button
                   className="mod-btn-ghost"
+                  style={{
+                    fontSize: "0.875rem", padding: "0.5rem 1.125rem",
+                    display: "inline-flex", alignItems: "center", gap: "0.375rem",
+                    color: "#0095D0", borderColor: "rgba(0,181,254,0.35)", background: "rgba(0,181,254,0.08)", fontWeight: 700,
+                  }}
+                  onClick={() => window.open(`/api/clients/${clientId}/unified-report?format=html`, '_blank')}
+                >
+                  🧩 דוח מאוחד
+                </button>
+                <button
+                  className="mod-btn-ghost"
                   disabled={reportGenerating}
                   style={{
                     fontSize: "0.875rem",
