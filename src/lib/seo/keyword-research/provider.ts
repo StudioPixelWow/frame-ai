@@ -108,8 +108,10 @@ export async function getKeywordIdeas(seed: string, country = 'Israel', language
       },
     },
     {
-      url: 'https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_ideas/live',
-      body: [{ keywords: [s], location_code: locationCode, language_code: languageCode, limit }],
+      // keyword_suggestions returns keywords that CONTAIN the seed (on-topic),
+      // unlike keyword_ideas which drifts to same-category terms. Note: singular `keyword`.
+      url: 'https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_suggestions/live',
+      body: [{ keyword: s, location_code: locationCode, language_code: languageCode, limit, include_seed_keyword: true }],
       parse: (it: any) => {
         const ki = it?.keyword_info || {};
         const kw = it?.keyword;
