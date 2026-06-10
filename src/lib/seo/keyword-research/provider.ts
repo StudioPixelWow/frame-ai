@@ -69,50 +69,70 @@ export async function getKeywordIdeas(seed: string, country = 'Israel', language
     return { ideas: mockIdeas(s, limit), mock: true, reason: 'no_credentials' };
   }
 
-  let reason = 'unknown';
-  try {
-    const auth = 'Basic ' + Buffer.from(`${DFS_LOGIN()}:${DFS_PASS()}`).toString('base64');
-    // Use canonical location_code + language_code (what the working SERP calls use).
-    // location_name/language_name strings can trigger "Invalid Field" on this endpoint.
-    const locationCode = /israel|ישראל/i.test(country) ? 2376 : 2840; // 2376=Israel, 2840=US
-    const languageCode = /hebrew|עברית|he/i.test(language) ? 'he' : 'en';
-    const r = await fetch('https://api.dataforseo.com/v3/keywords_data/google_ads/keywords_for_keywords/live', {
-      method: 'POST', headers: { Authorization: auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify([{ keywords: [s], location_code: locationCode, language_code: languageCode }]),
-      signal: AbortSignal.timeout(25000),
-    });
-    const j = await r.json().catch(() => ({}));
-    // Log the raw status so Vercel logs reveal the exact cause if it still fails.
-    try { console.log('[keyword-research] DFS status:', j?.status_code, j?.status_message, 'task:', j?.tasks?.[0]?.status_code, j?.tasks?.[0]?.status_message); } catch { /* */ }
-    // DataForSEO error surfacing: top-level + task-level status codes/messages.
-    if (r.status === 401) reason = 'auth_failed: שם משתמש/סיסמת API שגויים';
-    else if (r.status === 402 || j?.status_code === 40200) reason = 'payment_required: החשבון לא מאומת/ממומן ב-DataForSEO';
-    else if (j?.status_code && j.status_code !== 20000) reason = `api_error: ${j.status_message || j.status_code}`;
-    const task = j?.tasks?.[0];
-    if (task?.status_code && task.status_code !== 20000) reason = `task_error: ${task.status_message || task.status_code}`;
-    const items = task?.result || [];
+  const auth = 'Basic ' + Buffer.from(`${DFS_LOGIN()}:${DFS_PASS()}`).toString('base64');
+  const locationCode = /israel|ישראל/i.test(country) ? 2376 : 2840; // 2376=Israel, 2840=US
+  const languageCode = /hebrew|עברית|he/i.test(language) ? 'he' : 'en';
+
+  // Try multiple DataForSEO endpoints in order — whichever the account has access to.
+  // 1) Google Ads "keywords for keywords" (flat items)
+  // 2) DataForSEO Labs "keyword ideas" (nested keyword_info)
+  const attempts: Array<{ url: string; body: any; parse: (it: any) => KeywordIdea | null }> = [
     {
-      if (Array.isArray(items) && items.length) {
-        const ideas: KeywordIdea[] = items.slice(0, limit).map((it: any) => {
-          const volume = it.search_volume || 0;
-          const compIdx = Math.round((it.competition_index ?? (it.competition === 'HIGH' ? 80 : it.competition === 'MEDIUM' ? 50 : 20)) || 0);
-          const competition: Competition = compIdx > 66 ? 'HIGH' : compIdx > 33 ? 'MEDIUM' : 'LOW';
-          const ms = (it.monthly_searches || []).slice(-12).map((m: any) => ({ month: `${HE_MONTHS[(m.month || 1) - 1]} ${String(m.year || '').slice(2)}`, volume: m.search_volume || 0 }));
-          return {
-            keyword: it.keyword, volume, competition, competitionIndex: compIdx,
-            cpcLow: Math.round((it.low_top_of_page_bid ?? it.cpc ?? 0) * 100) / 100,
-            cpcHigh: Math.round((it.high_top_of_page_bid ?? it.cpc ?? 0) * 100) / 100,
-            potential: potentialOf(volume, compIdx),
-            trend: ms.length ? ms : buildTrend(hash(it.keyword), volume),
-          };
-        });
-        return { ideas, mock: false };
-      }
+      url: 'https://api.dataforseo.com/v3/keywords_data/google_ads/keywords_for_keywords/live',
+      body: [{ keywords: [s], location_code: locationCode, language_code: languageCode }],
+      parse: (it: any) => {
+        if (!it?.keyword) return null;
+        const volume = it.search_volume || 0;
+        const compIdx = Math.round((it.competition_index ?? (it.competition === 'HIGH' ? 80 : it.competition === 'MEDIUM' ? 50 : 20)) || 0);
+        const competition: Competition = compIdx > 66 ? 'HIGH' : compIdx > 33 ? 'MEDIUM' : 'LOW';
+        const ms = (it.monthly_searches || []).slice(-12).map((m: any) => ({ month: `${HE_MONTHS[(m.month || 1) - 1]} ${String(m.year || '').slice(2)}`, volume: m.search_volume || 0 }));
+        return { keyword: it.keyword, volume, competition, competitionIndex: compIdx, cpcLow: Math.round((it.low_top_of_page_bid ?? it.cpc ?? 0) * 100) / 100, cpcHigh: Math.round((it.high_top_of_page_bid ?? it.cpc ?? 0) * 100) / 100, potential: potentialOf(volume, compIdx), trend: ms.length ? ms : buildTrend(hash(it.keyword), volume) };
+      },
+    },
+    {
+      url: 'https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_ideas/live',
+      body: [{ keywords: [s], location_code: locationCode, language_code: languageCode, limit }],
+      parse: (it: any) => {
+        const ki = it?.keyword_info || {};
+        const kw = it?.keyword;
+        if (!kw) return null;
+        const volume = ki.search_volume || 0;
+        const compIdx = Math.round((ki.competition != null ? ki.competition * 100 : (ki.competition_level === 'HIGH' ? 80 : ki.competition_level === 'MEDIUM' ? 50 : 20)) || 0);
+        const competition: Competition = compIdx > 66 ? 'HIGH' : compIdx > 33 ? 'MEDIUM' : 'LOW';
+        const ms = (ki.monthly_searches || []).slice(-12).map((m: any) => ({ month: `${HE_MONTHS[(m.month || 1) - 1]} ${String(m.year || '').slice(2)}`, volume: m.search_volume || 0 }));
+        return { keyword: kw, volume, competition, competitionIndex: compIdx, cpcLow: Math.round((ki.low_top_of_page_bid ?? ki.cpc ?? 0) * 100) / 100, cpcHigh: Math.round((ki.high_top_of_page_bid ?? ki.cpc ?? 0) * 100) / 100, potential: potentialOf(volume, compIdx), trend: ms.length ? ms : buildTrend(hash(kw), volume) };
+      },
+    },
+  ];
+
+  let reason = 'unknown';
+  for (const attempt of attempts) {
+    try {
+      const r = await fetch(attempt.url, {
+        method: 'POST', headers: { Authorization: auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify(attempt.body), signal: AbortSignal.timeout(25000),
+      });
+      const j = await r.json().catch(() => ({}));
+      const task = j?.tasks?.[0];
+      try { console.log(`[keyword-research] ${attempt.url.split('/v3/')[1]} → http=${r.status} status=${j?.status_code} "${j?.status_message}" task=${task?.status_code} "${task?.status_message}"`); } catch { /* */ }
+
+      if (r.status === 401) { reason = 'auth_failed: שם משתמש/סיסמת API שגויים'; break; }
+      if (r.status === 402 || j?.status_code === 40200) { reason = 'payment_required: החשבון לא מאומת/ממומן ב-DataForSEO'; break; }
+      if (j?.status_code && j.status_code !== 20000) reason = `api_error: ${j.status_message || j.status_code}`;
+      if (task?.status_code && task.status_code !== 20000) reason = `task_error: ${task.status_message || task.status_code}`;
+
+      // Labs nests items under result[0].items; Google Ads puts them directly in result[].
+      const result = task?.result || [];
+      const rawItems = Array.isArray(result?.[0]?.items) ? result[0].items : result;
+      const ideas = (Array.isArray(rawItems) ? rawItems : []).map(attempt.parse).filter(Boolean).slice(0, limit) as KeywordIdea[];
+      if (ideas.length) return { ideas, mock: false };
       if (reason === 'unknown') reason = 'no_results: לא נמצאו ביטויים לזרע הזה';
+    } catch (e) {
+      reason = `request_failed: ${e instanceof Error ? e.message : 'שגיאת רשת'}`;
     }
-  } catch (e) {
-    reason = `request_failed: ${e instanceof Error ? e.message : 'שגיאת רשת'}`;
-    console.warn('[keyword-research] DataForSEO failed, using mock:', e instanceof Error ? e.message : e);
+    // If it was an auth/payment problem, no point trying the next endpoint.
+    if (reason.startsWith('auth_failed') || reason.startsWith('payment_required')) break;
   }
+  console.warn('[keyword-research] all DataForSEO attempts failed, using mock. reason:', reason);
   return { ideas: mockIdeas(s, limit), mock: true, reason };
 }
