@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTasks, useEmployees, useClients, useEmployeeTasks } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
@@ -31,7 +31,7 @@ const PRIORITIES = [
   { id: "low", label: "נמוך", color: "#6b7280" },
 ] as const;
 
-export default function TasksPage() {
+function TasksPageInner() {
   const { isEmployee } = useAuth();
   const { data: tasks, loading, create, update, remove } = useTasks();
   const { data: employeeTasks, loading: employeeTasksLoading, update: updateEmployeeTask } = useEmployeeTasks();
@@ -1604,5 +1604,13 @@ export default function TasksPage() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+export default function TasksPage() {
+  return (
+    <Suspense fallback={null}>
+      <TasksPageInner />
+    </Suspense>
   );
 }
