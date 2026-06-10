@@ -162,9 +162,12 @@ function EmployeeDashboard({ employeeId }: { employeeId: string }) {
     const da = a.dueDate || "9999-99-99"; const db = b.dueDate || "9999-99-99";
     return da < db ? -1 : da > db ? 1 : 0;
   };
+  const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })();
   const overdue = myTasks.filter(t => t.dueDate && t.dueDate < today).sort(byDate);
   const todayList = myTasks.filter(t => t.dueDate && t.dueDate === today).sort(byDate);
   const upcoming = myTasks.filter(t => !t.dueDate || t.dueDate > today).sort(byDate);
+  // Next 48 hours: today + tomorrow (the employee's focus list).
+  const next48 = myTasks.filter(t => t.dueDate && t.dueDate >= today && t.dueDate <= tomorrow).sort(byDate);
   const overdueCount = overdue.length;
   const todayTaskCount = todayList.length;
 
@@ -174,7 +177,7 @@ function EmployeeDashboard({ employeeId }: { employeeId: string }) {
   const renderTask = (task: any) => {
     const overdueRow = task.dueDate && task.dueDate < today;
     return (
-      <Link key={task.id} href="/tasks" style={{
+      <Link key={task.id} href={`/tasks?task=${task.id}`} style={{
         textDecoration: "none", display: "flex", alignItems: "center", gap: "0.85rem",
         padding: "0.85rem 1rem", background: "var(--surface-raised)", border: "1px solid var(--border)",
         borderRadius: "0.6rem", direction: "rtl", transition: "all 150ms ease",
@@ -241,18 +244,23 @@ function EmployeeDashboard({ employeeId }: { employeeId: string }) {
           ))}
         </div>
 
-        {/* ═══ TASKS, GROUPED — calm and clear ═══ */}
-        {allMyTaskCount === 0 ? (
+        {/* ═══ NEXT 48 HOURS — the employee's focus list ═══ */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.8rem", direction: "rtl" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: "1rem", fontWeight: 800, color: "var(--foreground)" }}>⚡ המשימות שלי ל-48 השעות הקרובות</span>
+            <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#fff", background: "#00B5FE", borderRadius: 999, padding: "1px 9px" }}>{next48.length}</span>
+          </div>
+          <Link href="/tasks" style={{ fontSize: "0.78rem", fontWeight: 700, color: "#00B5FE", textDecoration: "none" }}>כל המשימות ←</Link>
+        </div>
+        {next48.length === 0 ? (
           <div style={{ textAlign: "center", padding: "3rem 1.5rem", color: "var(--foreground-muted)", background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem" }}>
             <div style={{ fontSize: "2.5rem", marginBottom: "0.75rem" }}>✨</div>
-            <div style={{ fontSize: "0.95rem", fontWeight: 600 }}>אין משימות פתוחות — כל הכבוד!</div>
+            <div style={{ fontSize: "0.95rem", fontWeight: 600 }}>אין משימות ל-48 השעות הקרובות — שיהיה יום מעולה!</div>
           </div>
         ) : (
-          <>
-            <Section title="🔴 באיחור" color="#ef4444" items={overdue} />
-            <Section title="📅 להיום" color="#38bdf8" items={todayList} />
-            <Section title="📋 הקרובות" color="#2dd4bf" items={upcoming} />
-          </>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            {next48.map(renderTask)}
+          </div>
         )}
       </div>
     </div>
@@ -323,7 +331,7 @@ function AdminDashboard() {
         saved: data.saved || 0,
         errors: data.errors?.length || 0,
       });
-      if (data.sent > 0) wow('confetti');
+      if (data.sent > 0) wow.reportReady();
     } catch {
       setReportResult({ sent: 0, saved: 0, errors: 1 });
     } finally {

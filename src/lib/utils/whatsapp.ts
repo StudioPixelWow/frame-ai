@@ -31,12 +31,18 @@ export function openWhatsApp(phone: string | null | undefined, message: string):
   return true;
 }
 
+/** Quick credit-card payment link (Meshulam). */
+export const QUICK_PAYMENT_LINK = 'https://meshulam.co.il/quick_payment?b=e0db5c02d0c99cff256844a1f465b3ea';
+
 /** Maya's annual website-hosting collection message. */
 export function hostingCollectionMessage(clientName: string): string {
   return `היי ${clientName},
 תשלום שנתי על אחסון אתר טרם בוצע,
 אשמח להסדיר את התשלום בהקדם,
 איך תרצו לשלם? העברה בנקאית או חיוב באשראי?
+
+לתשלום מהיר בכרטיס אשראי:
+${QUICK_PAYMENT_LINK}
 
 תודה רבה מראש,
 מאיה - סטודיו פיקסל`;

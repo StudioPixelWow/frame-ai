@@ -2,7 +2,8 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { useTasks, useEmployees, useClients, useEmployeeTasks } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
@@ -147,6 +148,19 @@ export default function TasksPage() {
     setTaskAdaptations(((task as any).adaptations as Record<string, string>) || null);
     setModalOpen(true);
   };
+
+  // Auto-open the submit/edit popup when arriving from the dashboard with ?task=<id>.
+  const searchParams = useSearchParams();
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenedRef.current) return;
+    const wantId = searchParams.get("task");
+    if (!wantId) return;
+    if (loading || employeeTasksLoading) return;
+    const all = [...(tasks || []), ...(employeeTasks || [])];
+    const found = all.find((t: any) => t.id === wantId);
+    if (found) { autoOpenedRef.current = true; openEdit(found as Task); }
+  }, [searchParams, loading, employeeTasksLoading, tasks, employeeTasks]);
 
   const handleSave = async () => {
     if (!form.title.trim()) { toast("כותרת המשימה היא שדה חובה", "error"); return; }
