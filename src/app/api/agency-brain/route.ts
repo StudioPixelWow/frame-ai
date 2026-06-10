@@ -9,13 +9,14 @@ export const maxDuration = 45;
 import { ensureSeeded } from '@/lib/db/seed';
 import { buildAgencySnapshot } from '@/lib/agency-brain/snapshot';
 import { buildDailyBrief, answerAgencyQuestion } from '@/lib/agency-brain/engine';
+import { buildClientRisk } from '@/lib/agency-brain/risk';
 
 export async function GET() {
   ensureSeeded();
   try {
     const snap = await buildAgencySnapshot();
-    const brief = await buildDailyBrief(snap);
-    return NextResponse.json({ success: true, snapshot: snap, brief });
+    const [brief, risk] = await Promise.all([buildDailyBrief(snap), buildClientRisk()]);
+    return NextResponse.json({ success: true, snapshot: snap, brief, risk });
   } catch (e) {
     console.error('[agency-brain GET]', e instanceof Error ? e.message : e);
     return NextResponse.json({ success: false, error: 'שגיאה' }, { status: 200 });

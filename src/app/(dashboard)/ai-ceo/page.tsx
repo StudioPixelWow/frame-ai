@@ -10,6 +10,7 @@ const C = {
 };
 
 interface Brief { headline: string; priorities: string[]; risks: string[]; opportunity: string }
+interface Risk { clientId: string; clientName: string; score: number; level: 'high' | 'medium' | 'low'; reasons: string[] }
 interface Msg { role: 'user' | 'ai'; text: string }
 
 const SUGGESTED = [
@@ -21,6 +22,7 @@ const SUGGESTED = [
 
 export default function AiCeoPage() {
   const [brief, setBrief] = useState<Brief | null>(null);
+  const [risk, setRisk] = useState<Risk[]>([]);
   const [snap, setSnap] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -33,7 +35,7 @@ export default function AiCeoPage() {
     try {
       const r = await fetch('/api/agency-brain', { cache: 'no-store' });
       const d = await r.json();
-      setBrief(d.brief || null); setSnap(d.snapshot || null);
+      setBrief(d.brief || null); setSnap(d.snapshot || null); setRisk(d.risk || []);
     } catch { /* ok */ } finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -101,6 +103,28 @@ export default function AiCeoPage() {
           </>
         ) : <div style={{ marginTop: 6, opacity: 0.9 }}>אין נתונים זמינים.</div>}
       </div>
+
+      {/* At-risk clients (Churn radar) */}
+      {risk.length > 0 && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 18, padding: '1rem 1.2rem', marginBottom: 18 }}>
+          <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>🚨 לקוחות בסיכון <span style={{ fontSize: 12, fontWeight: 700, color: C.muted }}>({risk.length})</span></div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {risk.map((c) => {
+              const col = c.level === 'high' ? '#EF4444' : c.level === 'medium' ? C.warn : C.muted;
+              return (
+                <div key={c.clientId} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 12px', border: `1px solid ${C.border}`, borderRadius: 10, background: C.bg }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 10, background: `${col}1A`, color: col, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 15, flex: '0 0 auto' }}>{c.score}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <a href={`/clients/${c.clientId}`} style={{ fontWeight: 800, fontSize: 14, color: C.text, textDecoration: 'none' }}>{c.clientName}</a>
+                    <div style={{ fontSize: 12, color: C.sub }}>{c.reasons.join(' · ')}</div>
+                  </div>
+                  <span style={{ fontSize: 11.5, fontWeight: 800, color: col, whiteSpace: 'nowrap' }}>{c.level === 'high' ? 'סיכון גבוה' : c.level === 'medium' ? 'סיכון בינוני' : 'מעקב'}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Ask the data */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 18, padding: '1rem 1.2rem' }}>
