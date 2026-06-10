@@ -201,6 +201,7 @@ const mainNavItems: NavItem[] = [
   { href: "/dashboard", label: "דשבורד", id: "nav-dashboard", icon: Icons.Dashboard, allowedRoles: ['admin', 'employee'] },
   { href: "/ai-ceo", label: "מנכ״ל AI", id: "nav-ai-ceo", icon: Icons.Brain, allowedRoles: ['admin'] },
   { href: "/quality-check", label: "בקרת איכות AI", id: "nav-quality-check", icon: Icons.Shield, allowedRoles: ['admin', 'employee'] },
+  { href: "/anomalies", label: "מכ״ם אנומליות", id: "nav-anomalies", icon: Icons.Shield, allowedRoles: ['admin'] },
   { href: "/projects", label: "PixelManageAI", id: "nav-projects", icon: Icons.Projects, allowedRoles: ['admin'] },
   { href: "/clients", label: "לקוחות", id: "nav-clients", icon: Icons.Clients, allowedRoles: ['admin'] },
   { href: "/leads", label: "לידים", id: "nav-leads", icon: Icons.Leads, allowedRoles: ['admin'] },
