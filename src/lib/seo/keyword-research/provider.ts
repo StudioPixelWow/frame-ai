@@ -74,7 +74,7 @@ export async function getKeywordIdeas(seed: string, country = 'Israel', language
     const auth = 'Basic ' + Buffer.from(`${DFS_LOGIN()}:${DFS_PASS()}`).toString('base64');
     const r = await fetch('https://api.dataforseo.com/v3/keywords_data/google_ads/keywords_for_keywords/live', {
       method: 'POST', headers: { Authorization: auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify([{ keywords: [s], location_name: country, language_name: language, sort_by: 'search_volume', limit }]),
+      body: JSON.stringify([{ keywords: [s], location_name: country, language_name: language }]),
       signal: AbortSignal.timeout(25000),
     });
     const j = await r.json().catch(() => ({}));
