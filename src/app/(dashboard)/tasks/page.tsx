@@ -14,6 +14,7 @@ import { fireConfetti } from "@/lib/confetti";
 import { useAuth } from "@/lib/auth/auth-context";
 import { loadImage } from "@/lib/creative-pixelai/adapter";
 import { aiAdaptImageToFormat } from "@/lib/creative-pixelai/ai-adapt";
+import { suggestAssignees, buildOpenTaskMap, type AllocationSuggestion } from "@/lib/tasks/allocation";
 
 const COLUMNS = [
   { id: "new", label: "חדש", color: "#3b82f6" },
@@ -85,6 +86,15 @@ function TasksPageInner() {
   const [showReviewNotes, setShowReviewNotes] = useState(false);
   const [reviewNotes, setReviewNotes] = useState("");
   const [autoAssignmentNote, setAutoAssignmentNote] = useState("");
+  const [allocSuggest, setAllocSuggest] = useState<AllocationSuggestion[]>([]);
+  const computeAllocation = useCallback(() => {
+    const ownerId = (clients || []).find((c: any) => c.id === form.clientId)?.assignedManagerId || null;
+    const openMap = buildOpenTaskMap([...(tasks || []), ...(employeeTasks || [])] as any);
+    setAllocSuggest(suggestAssignees(
+      { title: form.title, description: form.description, tags: form.tags ? form.tags.split(',').map(s => s.trim()) : [], clientId: form.clientId, contentType: form.contentType, assigneeIds: form.assigneeIds },
+      teamEmployees as any, openMap, ownerId,
+    ).slice(0, 3));
+  }, [clients, tasks, employeeTasks, teamEmployees, form.title, form.description, form.tags, form.clientId, form.contentType, form.assigneeIds]);
 
   // Auto-assign employee when client is selected
   useEffect(() => {
@@ -1524,7 +1534,22 @@ function TasksPageInner() {
 
               {/* Assignees Section */}
               <div>
-                <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>מוקצה לעובדים</label>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
+                  <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)" }}>מוקצה לעובדים</label>
+                  <button type="button" onClick={computeAllocation} style={{ background: "#00B5FE15", color: "#0095D0", border: "none", borderRadius: 8, padding: "0.25rem 0.7rem", fontSize: "0.7rem", fontWeight: 700, cursor: "pointer" }}>✨ הצע שיבוץ חכם</button>
+                </div>
+                {allocSuggest.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                    {allocSuggest.map((sug) => (
+                      <button key={sug.employeeId} type="button" title={sug.reasons.join(' · ')} onClick={() => setForm({ ...form, assigneeIds: [sug.employeeId] })}
+                        style={{ display: "flex", alignItems: "center", gap: 6, background: form.assigneeIds.includes(sug.employeeId) ? "#00B5FE" : "#F7F9FC", color: form.assigneeIds.includes(sug.employeeId) ? "#fff" : "#1A1A2E", border: "1px solid #E8EAF0", borderRadius: 999, padding: "0.3rem 0.7rem", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer" }}>
+                        <span>{sug.name}</span>
+                        <span style={{ fontSize: "0.65rem", fontWeight: 800, opacity: 0.8 }}>{sug.score} · {sug.openTasks} משימות</span>
+                      </button>
+                    ))}
+                    <span style={{ fontSize: "0.65rem", color: "var(--foreground-muted)", alignSelf: "center" }}>לחץ כדי לשבץ</span>
+                  </div>
+                )}
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                   <select
                     multiple
