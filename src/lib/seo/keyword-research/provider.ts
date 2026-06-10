@@ -72,12 +72,18 @@ export async function getKeywordIdeas(seed: string, country = 'Israel', language
   let reason = 'unknown';
   try {
     const auth = 'Basic ' + Buffer.from(`${DFS_LOGIN()}:${DFS_PASS()}`).toString('base64');
+    // Use canonical location_code + language_code (what the working SERP calls use).
+    // location_name/language_name strings can trigger "Invalid Field" on this endpoint.
+    const locationCode = /israel|ישראל/i.test(country) ? 2376 : 2840; // 2376=Israel, 2840=US
+    const languageCode = /hebrew|עברית|he/i.test(language) ? 'he' : 'en';
     const r = await fetch('https://api.dataforseo.com/v3/keywords_data/google_ads/keywords_for_keywords/live', {
       method: 'POST', headers: { Authorization: auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify([{ keywords: [s], location_name: country, language_name: language }]),
+      body: JSON.stringify([{ keywords: [s], location_code: locationCode, language_code: languageCode }]),
       signal: AbortSignal.timeout(25000),
     });
     const j = await r.json().catch(() => ({}));
+    // Log the raw status so Vercel logs reveal the exact cause if it still fails.
+    try { console.log('[keyword-research] DFS status:', j?.status_code, j?.status_message, 'task:', j?.tasks?.[0]?.status_code, j?.tasks?.[0]?.status_message); } catch { /* */ }
     // DataForSEO error surfacing: top-level + task-level status codes/messages.
     if (r.status === 401) reason = 'auth_failed: שם משתמש/סיסמת API שגויים';
     else if (r.status === 402 || j?.status_code === 40200) reason = 'payment_required: החשבון לא מאומת/ממומן ב-DataForSEO';
