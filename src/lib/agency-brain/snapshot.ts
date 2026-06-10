@@ -6,7 +6,8 @@
  */
 
 import { getSupabase } from '@/lib/db/store';
-import { employeeTasks, clientGanttItems, googleAdsReports } from '@/lib/db';
+import { employeeTasks } from '@/lib/db';
+import { googleAdsReports } from '@/lib/google-ads/db';
 
 export interface AgencySnapshot {
   generatedAt: string;
