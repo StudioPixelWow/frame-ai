@@ -352,14 +352,27 @@ export default function SeoPlanDetail() {
   // replacing any junk that was previously scraped from the site.
   const handleExpandKeywords = async () => {
     if (expandingKw) return;
-    if (!confirm("הפעולה תיקח את ביטויי הזרע של הלקוח ותפתח אותם ל-~150 ביטויי גוגל + ~150 שאלות AI, ותחליף את השאילתות הקיימות. להמשיך?")) return;
+    // Use the saved client keywords; if none exist, ask the user to type them.
+    const existingSeeds = (Array.isArray((plan as any)?.clientKeywords) ? (plan as any).clientKeywords : [])
+      .map((k: any) => (typeof k === "string" ? k : k?.keyword)).filter(Boolean);
+    let seeds: string[] = existingSeeds;
+    if (!seeds.length) {
+      const typed = prompt("לא נמצאו ביטויי מפתח לתוכנית הזו.\nהדבק כאן את 10 ביטויי ה-SEO (מופרדים בפסיק או שורה):", "");
+      if (!typed) return;
+      seeds = typed.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+      if (!seeds.length) return;
+    } else if (!confirm(`הפעולה תפתח את ${seeds.length} ביטויי הזרע ל-~150 ביטויי גוגל + ~150 שאלות AI, תחליף את השאילתות הקיימות ותריץ סריקה מחדש. להמשיך?`)) {
+      return;
+    }
     setExpandingKw(true);
     try {
-      const res = await fetch(`/api/seo-geo-plans/${planId}/expand-keywords`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const res = await fetch(`/api/seo-geo-plans/${planId}/expand-keywords`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ seeds }) });
       const d = await res.json();
       if (!res.ok || d.error) throw new Error(d.error || "שגיאה");
       const data = d.data || d;
-      alert(`✓ נוצרו ${data.googleCount} ביטויי גוגל + ${data.aiCount} שאלות AI מ-${data.seeds.length} ביטויי זרע${data.usedAI ? "" : " (מצב בסיסי — ללא מפתח AI)"}.\n\nהרץ סריקת נראות כדי לבדוק אותם.`);
+      // Re-run the AI scan so the results views reflect the new 150+150 set.
+      try { await fetch(`/api/seo-geo-plans/${planId}/run-ai-scan`, { method: "POST" }); } catch { /* non-blocking */ }
+      alert(`✓ נוצרו ${data.googleCount} ביטויי גוגל + ${data.aiCount} שאלות AI מ-${data.seeds.length} ביטויי זרע${data.usedAI ? "" : " (מצב בסיסי — ללא מפתח AI)"}.`);
       if (typeof window !== "undefined") window.location.reload();
     } catch (e) {
       alert("שגיאה ביצירת הביטויים: " + (e instanceof Error ? e.message : ""));

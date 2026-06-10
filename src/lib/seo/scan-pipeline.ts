@@ -1151,6 +1151,14 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
       if (/\?$/.test(text.trim()) && /^(why choose|what makes|how we|what we|who we|are you)/i.test(text.trim())) return true;
       // Hebrew site-copy patterns
       if (/^(למה לבחור בנו|מה מייחד אותנו|הצוות שלנו|השירותים שלנו|הלקוחות שלנו|קצת עלינו)/i.test(text.trim())) return true;
+      // Footer / nav / generic site phrases that are NEVER real searches
+      if (/(כל הזכויות שמורות|all rights reserved|לקוחות ממליצים|המלצות לקוחות|לקוחות מספרים|עקבו אחרינו|שתפו|מפת אתר|הרשמה לניוזלטר|דברו איתנו|בואו נדבר)/i.test(text)) return true;
+      // Sentence fragments (start with a preposition/connector or end with "?") — these are scraped heading pieces, not searches
+      if (/^(ל|ב|מ|ה|ו|של|עם|כדי)/.test(text.trim()) && /\?$/.test(text.trim())) return true;
+      // Mechanical template variations the team does NOT want (used to be auto-generated)
+      if (/^(איך לבחור|מה ההבדל בין|למה צריך|למה לבחור)\s/.test(text.trim())) return true;
+      if (/\s(מומלץ|הכי טוב|לעומת|או)\s*$/.test(text.trim())) return true;
+      if (/\s(לעומת|או)\s/.test(text.trim()) && /(שלכם|שלנו|\?)/.test(text)) return true;
       return false;
     };
 

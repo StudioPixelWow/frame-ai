@@ -28,6 +28,13 @@ export const POST = withErrorBoundary(async (req: NextRequest, ctx: { params: Pr
 
   if (!seeds.length) return err('אין ביטויי זרע. הוסף תחילה את ביטויי המפתח של הלקוח.', 400);
 
+  // If seeds were passed explicitly (e.g. the user typed the 10 keywords for an
+  // existing plan), persist them as the plan's clientKeywords for future scans.
+  if (Array.isArray(body.seeds) && body.seeds.length) {
+    const mapped = seeds.map((kw: string) => ({ keyword: kw, source: 'manual', initialRank: null, currentRank: null, trend: 'stable', lastChecked: null, history: [], priority: 1, addedAt: new Date().toISOString() }));
+    try { await updatePlanSafe(planId, { clientKeywords: mapped } as any); } catch { /* non-fatal */ }
+  }
+
   const facts = p.websiteScan?.websiteFacts || {};
   const context = {
     businessName: p.clientName || p.businessProfile?.businessName || '',
