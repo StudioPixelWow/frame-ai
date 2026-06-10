@@ -118,7 +118,14 @@ export async function recordRunHistory(args: {
   // Upsert global index.
   await upsertGlobalIndex(now, globalAgg, args.industry, args.country, args.language);
 
-  return { snapshots: snapRows.length, changeEvents: eventRows.length, diffs: diffRows.length, alerts: alertRows.length };
+  // ── Outbound notification: email the team about high-severity changes (throttled). ──
+  let notified: any = null;
+  try {
+    const { notifyVisibilityAlerts } = await import('./notify');
+    notified = await notifyVisibilityAlerts(args.planId, args.clientId, alertRows);
+  } catch { /* non-fatal */ }
+
+  return { snapshots: snapRows.length, changeEvents: eventRows.length, diffs: diffRows.length, alerts: alertRows.length, notified };
 }
 
 async function upsertCitationHistory(planId: string, now: string, seen: Map<string, any>, lost: Set<string>) {

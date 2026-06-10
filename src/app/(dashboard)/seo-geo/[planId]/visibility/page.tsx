@@ -388,7 +388,8 @@ export default function VisibilityCenterPage() {
 
           {tab === 'alerts' && (
             <div style={card}>
-              <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 10 }}>🔔 התראות נראות ({(s.alertCounts?.new || 0)} חדשות)</div>
+              <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>🔔 התראות נראות ({(s.alertCounts?.new || 0)} חדשות)</div>
+              <div style={{ fontSize: 11.5, color: C.textSecondary, marginBottom: 10 }}>שינויים חמורים (ירידה מתשובה / אובדן ציטוט / מתחרה שעקף) נשלחים אוטומטית במייל לצוות וזורמים ל-Action Center.</div>
               {(s.alerts || []).length === 0 ? <div style={{ color: C.textMuted, fontSize: 13 }}>אין התראות. התראות נוצרות אוטומטית כשמשהו משתנה בין ריצות.</div> :
                 (s.alerts || []).map((a: any) => {
                   const col = a.severity === 'high' ? C.danger : a.severity === 'medium' ? C.warning : C.info;
