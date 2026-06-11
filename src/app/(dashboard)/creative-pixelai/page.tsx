@@ -160,22 +160,22 @@ export default function CreativePixelAIPage() {
   const [detectedTexts, setDetectedTexts] = useState(""); // last auto-detected original (for the "fill from detection" button)
   const [showTextEditor, setShowTextEditor] = useState(false);
 
-  /* ── Mode: single image vs carousel (up to 10 → each square→4:5) ── */
-  const [pageMode, setPageMode] = useState<"single" | "carousel">("single");
+  /* ── Mode: single image · carousel batch (→4:5) · story batch (→9:16) ── */
+  const [pageMode, setPageMode] = useState<"single" | "carousel" | "story">("single");
   type CarouselItem = { id: string; name: string; src: string; img: HTMLImageElement; out: string | null };
   const [carItems, setCarItems] = useState<CarouselItem[]>([]);
   const [carBusy, setCarBusy] = useState(false);
   const [carProgress, setCarProgress] = useState<{ done: number; total: number } | null>(null);
   const CAROUSEL_MAX = 10;
+  const STORY_MAX = 20;
+  // The active batch's target format + limit are driven by the mode.
+  const batchFmtId: FormatId = pageMode === "story" ? "story" : "feed_4_5";
+  const batchMax = pageMode === "story" ? STORY_MAX : CAROUSEL_MAX;
+  const batchLabel = pageMode === "story" ? "9:16" : "4:5";
 
   const addCarouselFiles = useCallback(async (files: FileList | File[]) => {
     const arr = Array.from(files).filter((f) => /^image\/(png|jpe?g|webp)$/.test(f.type));
     if (arr.length === 0) return;
-    setCarItems((prev) => {
-      const room = CAROUSEL_MAX - prev.length;
-      if (room <= 0) { toast(`אפשר עד ${CAROUSEL_MAX} תמונות בקרוסלה`, "error"); return prev; }
-      return prev; // actual append happens after images load below
-    });
     const loaded: CarouselItem[] = [];
     for (const f of arr) {
       try {
@@ -184,37 +184,39 @@ export default function CreativePixelAIPage() {
         loaded.push({ id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, name: f.name, src: url, img: image, out: null });
       } catch { /* skip bad file */ }
     }
-    setCarItems((prev) => [...prev, ...loaded].slice(0, CAROUSEL_MAX));
-  }, [toast]);
+    setCarItems((prev) => {
+      const merged = [...prev, ...loaded];
+      if (merged.length > batchMax) toast(`אפשר עד ${batchMax} תמונות`, "info");
+      return merged.slice(0, batchMax);
+    });
+  }, [toast, batchMax]);
 
   const removeCarItem = (id: string) => setCarItems((prev) => prev.filter((it) => it.id !== id));
 
-  // Convert any image to 4:5 (1080×1350) — blurred cover background + full image
-  // contained on top so NO information is ever cropped.
-  const convertTo45 = (image: HTMLImageElement): string => {
-    const W = 1080, H = 1350;
+  // Convert any image to a target format — blurred cover background + full image
+  // contained on top so NO information is ever cropped (deterministic fallback).
+  const convertToFormat = (image: HTMLImageElement, fmtId: FormatId): string => {
+    const f = FORMATS.find((x) => x.id === fmtId)!;
+    const W = f.width, H = f.height;
     const c = document.createElement("canvas"); c.width = W; c.height = H;
     const ctx = c.getContext("2d")!;
     const iw = image.naturalWidth || image.width, ih = image.naturalHeight || image.height;
-    // Blurred cover background fills the frame.
     const cover = Math.max(W / iw, H / ih);
     const bw = iw * cover, bh = ih * cover;
     ctx.filter = "blur(38px) brightness(0.82)";
     ctx.drawImage(image, (W - bw) / 2, (H - bh) / 2, bw, bh);
     ctx.filter = "none";
-    // Full image contained (centered) — nothing cropped.
     const contain = Math.min(W / iw, H / ih);
     const fw = iw * contain, fh = ih * contain;
     ctx.drawImage(image, (W - fw) / 2, (H - fh) / 2, fw, fh);
     return c.toDataURL("image/jpeg", 0.95);
   };
 
-  // AI 4:5 — uses the EXACT same engine as the single-image flow (mode "redesign"):
-  // send the whole image, the model recomposes it to a vertical 4:5 keeping every
-  // element & text, output cover-scaled to exact 1080×1350. Matches the single
-  // image result that works great.
-  const aiConvertTo45 = async (image: HTMLImageElement): Promise<string> => {
-    const f = FORMATS.find((x) => x.id === "feed_4_5")!;
+  // AI adapt to a target format — EXACT same engine as the single-image flow
+  // (mode "redesign"): the model recomposes the whole image to the target ratio
+  // keeping every element & text; output cover-scaled to the exact dimensions.
+  const aiConvertToFormat = async (image: HTMLImageElement, fmtId: FormatId): Promise<string> => {
+    const f = FORMATS.find((x) => x.id === fmtId)!;
     const maxDim = 1536;
     const ds = Math.min(1, maxDim / Math.max(image.naturalWidth, image.naturalHeight));
     const c = document.createElement("canvas");
@@ -228,7 +230,7 @@ export default function CreativePixelAIPage() {
     const res = await fetch("/api/creative-pixelai/generate-ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imagePng: inputDataUrl, format: "feed_4_5", mode: "redesign", quality: aiHighQuality ? "high" : "medium", prompt: aiStylePrompt.trim() || undefined }),
+      body: JSON.stringify({ imagePng: inputDataUrl, format: fmtId, mode: "redesign", quality: aiHighQuality ? "high" : "medium", prompt: aiStylePrompt.trim() || undefined }),
     });
     const json = await parseResponse(res);
     if (!res.ok) throw new Error(json.error || "היצירה נכשלה");
@@ -244,7 +246,8 @@ export default function CreativePixelAIPage() {
   };
 
   const runCarousel = async () => {
-    if (carItems.length === 0) { toast("העלה תמונות לקרוסלה", "error"); return; }
+    if (carItems.length === 0) { toast("העלה תמונות", "error"); return; }
+    const fmtId = batchFmtId; const label = batchLabel;
     setCarBusy(true);
     setCarProgress({ done: 0, total: carItems.length });
     let failures = 0;
@@ -252,9 +255,9 @@ export default function CreativePixelAIPage() {
       for (let i = 0; i < carItems.length; i++) {
         let out: string;
         try {
-          out = await aiConvertTo45(carItems[i].img); // AI engine
+          out = await aiConvertToFormat(carItems[i].img, fmtId); // AI engine
         } catch {
-          out = convertTo45(carItems[i].img); // graceful fallback so the slot isn't empty
+          out = convertToFormat(carItems[i].img, fmtId); // graceful fallback so the slot isn't empty
           failures++;
         }
         // eslint-disable-next-line no-loop-func
@@ -262,16 +265,17 @@ export default function CreativePixelAIPage() {
         setCarProgress({ done: i + 1, total: carItems.length });
       }
       if (failures > 0) toast(`הותאמו ${carItems.length} תמונות (${failures} בעיבוד רגיל — ה-AI נכשל עליהן)`, "info");
-      else toast("הקרוסלה הותאמה ל-4:5 עם AI ✨", "success");
+      else toast(`הותאמו ${carItems.length} תמונות ל-${label} עם AI ✨`, "success");
     } finally {
       setCarBusy(false);
     }
   };
 
+  const batchSuffix = pageMode === "story" ? "9x16_story" : "4x5";
   const downloadCarItem = (it: CarouselItem, idx: number) => {
     if (!it.out) return;
     const a = document.createElement("a");
-    a.href = it.out; a.download = `carousel_${String(idx + 1).padStart(2, "0")}_4x5.jpg`; a.click();
+    a.href = it.out; a.download = `${String(idx + 1).padStart(2, "0")}_${batchSuffix}.jpg`; a.click();
   };
 
   const downloadCarouselZip = async () => {
@@ -281,11 +285,11 @@ export default function CreativePixelAIPage() {
       const zip = new JSZip();
       ready.forEach((it, idx) => {
         const b64 = (it.out as string).split(",")[1];
-        zip.file(`carousel_${String(idx + 1).padStart(2, "0")}_4x5.jpg`, b64, { base64: true });
+        zip.file(`${String(idx + 1).padStart(2, "0")}_${batchSuffix}.jpg`, b64, { base64: true });
       });
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a"); a.href = url; a.download = "carousel_4x5.zip"; a.click();
+      const a = document.createElement("a"); a.href = url; a.download = `${batchSuffix}.zip`; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
     } catch { toast("יצירת ה-ZIP נכשלה", "error"); }
   };
@@ -710,8 +714,8 @@ export default function CreativePixelAIPage() {
 
   const ModeToggle = (
     <div style={{ display: "inline-flex", gap: 4, background: "var(--surface)", border: `1px solid var(--border)`, borderRadius: 12, padding: 4, marginBottom: 20 }}>
-      {([["single", "🖼️ תמונה בודדת"], ["carousel", "🎠 קרוסלה (4:5)"]] as const).map(([m, label]) => (
-        <button key={m} onClick={() => setPageMode(m)}
+      {([["single", "🖼️ תמונה בודדת"], ["carousel", "🎠 קרוסלה (4:5)"], ["story", "📱 סטוריז (9:16)"]] as const).map(([m, label]) => (
+        <button key={m} onClick={() => { setPageMode(m); setCarItems([]); }}
           style={{ padding: "0.5rem 1rem", borderRadius: 9, fontSize: 13, fontWeight: 800, cursor: "pointer", border: "none",
             background: pageMode === m ? BRAND : "transparent", color: pageMode === m ? "#fff" : "var(--foreground)" }}>
           {label}
@@ -720,21 +724,26 @@ export default function CreativePixelAIPage() {
     </div>
   );
 
-  /* ═══════════════════════════ CAROUSEL MODE ═══════════════════════════ */
-  if (pageMode === "carousel") {
+  /* ═════════════════════ BATCH MODE (carousel 4:5 / story 9:16) ═════════════════════ */
+  if (pageMode === "carousel" || pageMode === "story") {
+    const isStory = pageMode === "story";
+    const icon = isStory ? "📱" : "🎠";
+    const previewRatio = isStory ? "9 / 16" : "4 / 5";
     return (
       <div dir="rtl" style={{ maxWidth: 1100, margin: "0 auto", padding: "2rem 1.75rem 4rem" }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6, color: "var(--foreground)" }}>🎨 Creative PixelAI</h1>
         <p style={{ color: "var(--foreground-muted)", fontSize: 14, marginBottom: 18 }}>
-          התאמת קרוסלה לאינסטגרם — העלה עד {CAROUSEL_MAX} תמונות, וכל אחת תותאם לפורמט 4:5 בלי לאבד מידע.
+          {isStory
+            ? `התאמת סטוריז — העלה עד ${STORY_MAX} תמונות, וכל אחת תותאם לגודל סטורי 9:16 (1080×1920) ברמה מושלמת עם AI, בלי לאבד מידע.`
+            : `התאמת קרוסלה לאינסטגרם — העלה עד ${CAROUSEL_MAX} תמונות, וכל אחת תותאם לפורמט 4:5 בלי לאבד מידע.`}
         </p>
         {ModeToggle}
 
         {/* Upload */}
         <div className="premium-card" style={{ padding: "1.25rem", marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: "var(--foreground)" }}>1 · העלאת תמונות הקרוסלה</div>
-            <div style={{ fontSize: 12, color: "var(--foreground-muted)" }}>{carItems.length}/{CAROUSEL_MAX}</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "var(--foreground)" }}>1 · העלאת תמונות {isStory ? "לסטוריז" : "הקרוסלה"}</div>
+            <div style={{ fontSize: 12, color: "var(--foreground-muted)" }}>{carItems.length}/{batchMax}</div>
           </div>
           <div
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -742,8 +751,8 @@ export default function CreativePixelAIPage() {
             onDrop={(e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files?.length) addCarouselFiles(e.dataTransfer.files); }}
             onClick={() => document.getElementById("cpai-car-input")?.click()}
             style={{ border: `2px dashed ${dragging ? BRAND : "var(--border)"}`, borderRadius: 12, padding: "1.5rem", textAlign: "center", cursor: "pointer", background: dragging ? "rgba(0,181,254,0.05)" : "var(--surface)" }}>
-            <div style={{ fontSize: 26, marginBottom: 6 }}>🎠</div>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--foreground)" }}>גרור תמונות לכאן או לחץ להעלאה (עד {CAROUSEL_MAX})</div>
+            <div style={{ fontSize: 26, marginBottom: 6 }}>{icon}</div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--foreground)" }}>גרור תמונות לכאן או לחץ להעלאה (עד {batchMax})</div>
             <div style={{ fontSize: 11.5, color: "var(--foreground-muted)", marginTop: 4 }}>JPG · PNG · WEBP</div>
           </div>
           <input id="cpai-car-input" type="file" accept="image/png,image/jpeg,image/webp" multiple style={{ display: "none" }}
@@ -751,16 +760,16 @@ export default function CreativePixelAIPage() {
 
           {carItems.length > 0 && (
             <>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12, marginTop: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fill, minmax(${isStory ? 120 : 150}px, 1fr))`, gap: 12, marginTop: 16 }}>
                 {carItems.map((it, idx) => (
                   <div key={it.id} style={{ border: `1px solid var(--border)`, borderRadius: 10, overflow: "hidden", background: "var(--surface)", position: "relative" }}>
                     <div style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,0.6)", color: "#fff", borderRadius: 6, fontSize: 11, fontWeight: 800, padding: "1px 7px", zIndex: 2 }}>{idx + 1}</div>
                     <button onClick={() => removeCarItem(it.id)} title="הסר"
                       style={{ position: "absolute", top: 6, left: 6, background: "rgba(0,0,0,0.6)", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 800, padding: "1px 7px", cursor: "pointer", zIndex: 2 }}>✕</button>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={it.out || it.src} alt="" style={{ width: "100%", aspectRatio: it.out ? "4 / 5" : "1 / 1", objectFit: it.out ? "cover" : "contain", background: "#0001", display: "block" }} />
+                    <img src={it.out || it.src} alt="" style={{ width: "100%", aspectRatio: it.out ? previewRatio : "1 / 1", objectFit: it.out ? "cover" : "contain", background: "#0001", display: "block" }} />
                     <div style={{ padding: "6px 8px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 11, color: it.out ? "#16a34a" : "var(--foreground-muted)", fontWeight: 700 }}>{it.out ? "✓ 4:5" : "ממתין"}</span>
+                      <span style={{ fontSize: 11, color: it.out ? "#16a34a" : "var(--foreground-muted)", fontWeight: 700 }}>{it.out ? `✓ ${batchLabel}` : "ממתין"}</span>
                       {it.out && <button onClick={() => downloadCarItem(it, idx)} style={{ fontSize: 11, fontWeight: 700, color: BRAND, background: "none", border: "none", cursor: "pointer" }}>⬇ הורד</button>}
                     </div>
                   </div>
@@ -770,12 +779,12 @@ export default function CreativePixelAIPage() {
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16, alignItems: "center" }}>
                 <button onClick={runCarousel} disabled={carBusy}
                   style={{ background: carBusy ? "#cbd5e1" : BRAND, color: "#fff", border: "none", borderRadius: 10, padding: "0.7rem 1.3rem", fontWeight: 800, fontSize: 14, cursor: carBusy ? "wait" : "pointer" }}>
-                  {carBusy && carProgress ? `מתאים… ${carProgress.done}/${carProgress.total}` : `🚀 התאם את הקרוסלה ל-4:5 (${carItems.length})`}
+                  {carBusy && carProgress ? `מתאים… ${carProgress.done}/${carProgress.total}` : `🚀 התאם ${isStory ? "לסטוריז" : "לקרוסלה"} ${batchLabel} (${carItems.length})`}
                 </button>
                 {carDoneCount > 0 && (
                   <button onClick={downloadCarouselZip}
                     style={{ background: "#16a34a", color: "#fff", border: "none", borderRadius: 10, padding: "0.7rem 1.3rem", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
-                    📦 הורד את כל הקרוסלה (ZIP)
+                    📦 הורד הכל (ZIP)
                   </button>
                 )}
                 <button onClick={() => setCarItems([])} disabled={carBusy}
@@ -788,7 +797,7 @@ export default function CreativePixelAIPage() {
         </div>
 
         <p style={{ fontSize: 12, color: "var(--foreground-muted)" }}>
-          * ההתאמה נעשית עם AI (אותו מנגנון של «עיצוב מלא לפורמט»): העיצוב המקורי נשמר פיקסל-פרפקט במלוא הרוחב, וה-AI משלים את הרקע למעלה/למטה כדי למלא את הפריים — תוצאה 1080×1350 px לאינסטגרם, בלי לאבד מידע. כל תמונה לוקחת מספר שניות.
+          * ההתאמה נעשית עם AI (אותו מנגנון של «עיצוב מלא לפורמט»): העיצוב המקורי נשמר פיקסל-פרפקט, וה-AI משלים את הרקע כדי למלא את הפריים — תוצאה {isStory ? "1080×1920 px (סטורי 9:16)" : "1080×1350 px (4:5)"} בלי לאבד מידע. כל תמונה לוקחת מספר שניות.
         </p>
       </div>
     );
