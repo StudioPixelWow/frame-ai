@@ -56,33 +56,23 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const abcd: { label: string; url: string; prompt: string }[] = [];
     let genError: string | null = null;
     if (higgsfieldConfigured()) {
-      const prompts = [spec.posts[0]?.imagePrompt, spec.posts[1]?.imagePrompt].filter(Boolean) as string[];
       const labels = ['A', 'B', 'C', 'D'];
-      let li = 0;
       const isStory = item.format === 'story' || item.itemType === 'story';
       const size = isStory ? '1536x2048' : '1536x1536';
+      // Soul accepts batch_size 1 or 4 → one call for 4 on-brand A/B/C/D variations.
+      const prompt = (spec.posts[0]?.imagePrompt || spec.posts[1]?.imagePrompt || spec.headline) as string;
       try {
-        for (const prompt of (prompts.length ? prompts : [spec.headline])) {
-          const start = await startSoulImages(prompt, { count: 2, size, quality: '1080p', referenceImageUrls: refs });
-          // Some responses return images immediately.
-          const immediate = start.immediateUrls || [];
-          if (immediate.length) {
-            for (const url of immediate.slice(0, 2)) abcd.push({ label: labels[li++] || `V${li}`, url, prompt });
-            continue;
-          }
-          if (start.ok && start.jobs[0]) {
-            const polled = await pollSoulJob(start.jobs[0], { tries: 32, intervalMs: 3500 }); // ~112s per prompt
-            if (polled.urls.length) {
-              for (const url of polled.urls.slice(0, 2)) abcd.push({ label: labels[li++] || `V${li}`, url, prompt });
-            } else {
-              // Capture WHY: failed / nsfw / timeout / error.
-              genError = `poll_${polled.status}`;
-            }
-          } else {
-            // Capture the real start error (auth, no credits, bad input, http_xxx…).
-            genError = start.error || 'start_failed';
-          }
+        const start = await startSoulImages(prompt, { count: 4, size, quality: '1080p', referenceImageUrls: refs });
+        const immediate = start.immediateUrls || [];
+        let urls: string[] = immediate;
+        if (!urls.length && start.ok && start.jobs[0]) {
+          const polled = await pollSoulJob(start.jobs[0], { tries: 40, intervalMs: 3500 }); // ~140s
+          urls = polled.urls;
+          if (!urls.length) genError = `poll_${polled.status}`;
+        } else if (!urls.length && !start.ok) {
+          genError = start.error || 'start_failed';
         }
+        urls.slice(0, 4).forEach((url, i) => abcd.push({ label: labels[i] || `V${i + 1}`, url, prompt }));
       } catch (e) { genError = e instanceof Error ? e.message : 'generation_failed'; }
       // If we got at least one image, don't surface a partial error as a hard failure.
       if (abcd.length > 0) genError = null;

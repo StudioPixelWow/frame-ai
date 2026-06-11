@@ -97,6 +97,8 @@ function normalizeQuality(q?: string): string {
   if (q === '720p' || q === 'sd') return '720p';
   return '1080p'; // default / hd
 }
+// Soul only accepts batch_size 1 or 4.
+function normalizeBatch(n?: number): number { return (n ?? 4) <= 1 ? 1 : 4; }
 
 /** Kick off a Soul text-to-image generation. Returns the request id(s). */
 export async function startSoulImages(prompt: string, opts: SoulImageOpts = {}): Promise<{ ok: boolean; jobs: string[]; raw: any; error?: string; immediateUrls?: string[] }> {
@@ -105,7 +107,7 @@ export async function startSoulImages(prompt: string, opts: SoulImageOpts = {}):
     prompt,
     width_and_height: normalizeSize(opts.size),
     quality: normalizeQuality(opts.quality),
-    batch_size: opts.count ?? 4,
+    batch_size: normalizeBatch(opts.count),
   };
   if (opts.seed !== undefined) params.seed = opts.seed;
   if (opts.referenceImageUrls?.length) {
