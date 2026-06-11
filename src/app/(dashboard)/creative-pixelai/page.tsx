@@ -166,6 +166,7 @@ export default function CreativePixelAIPage() {
   const [carItems, setCarItems] = useState<CarouselItem[]>([]);
   const [carBusy, setCarBusy] = useState(false);
   const [carProgress, setCarProgress] = useState<{ done: number; total: number } | null>(null);
+  const [regenId, setRegenId] = useState<string | null>(null);
   const CAROUSEL_MAX = 10;
   const STORY_MAX = 20;
   // The active batch's target format + limit are driven by the mode.
@@ -269,6 +270,18 @@ export default function CreativePixelAIPage() {
     } finally {
       setCarBusy(false);
     }
+  };
+
+  // Regenerate a single image (if it came out badly) — re-runs the AI adapt for that one item.
+  const regenCarItem = async (it: CarouselItem, idx: number) => {
+    if (regenId) return;
+    setRegenId(it.id);
+    try {
+      let out: string;
+      try { out = await aiConvertToFormat(it.img, batchFmtId); }
+      catch { out = convertToFormat(it.img, batchFmtId); toast("ה-AI נכשל — נוצר בעיבוד רגיל", "info"); }
+      setCarItems((prev) => prev.map((x, i) => (i === idx ? { ...x, out } : x)));
+    } finally { setRegenId(null); }
   };
 
   const batchSuffix = pageMode === "story" ? "9x16_story" : "4x5";
@@ -769,8 +782,13 @@ export default function CreativePixelAIPage() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={it.out || it.src} alt="" style={{ width: "100%", aspectRatio: it.out ? previewRatio : "1 / 1", objectFit: it.out ? "cover" : "contain", background: "#0001", display: "block" }} />
                     <div style={{ padding: "6px 8px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 11, color: it.out ? "#16a34a" : "var(--foreground-muted)", fontWeight: 700 }}>{it.out ? `✓ ${batchLabel}` : "ממתין"}</span>
-                      {it.out && <button onClick={() => downloadCarItem(it, idx)} style={{ fontSize: 11, fontWeight: 700, color: BRAND, background: "none", border: "none", cursor: "pointer" }}>⬇ הורד</button>}
+                      <span style={{ fontSize: 11, color: it.out ? "#16a34a" : "var(--foreground-muted)", fontWeight: 700 }}>{regenId === it.id ? "⏳ יוצר…" : it.out ? `✓ ${batchLabel}` : "ממתין"}</span>
+                      {it.out && (
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button onClick={() => regenCarItem(it, idx)} disabled={!!regenId || carBusy} title="צור מחדש אם יצא לא טוב" style={{ fontSize: 11, fontWeight: 700, color: "#7c3aed", background: "none", border: "none", cursor: regenId ? "wait" : "pointer" }}>🔄 צור מחדש</button>
+                          <button onClick={() => downloadCarItem(it, idx)} style={{ fontSize: 11, fontWeight: 700, color: BRAND, background: "none", border: "none", cursor: "pointer" }}>⬇ הורד</button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
