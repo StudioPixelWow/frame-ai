@@ -94,8 +94,8 @@ function normalizeSize(size?: string): string {
   return '1536x1536';
 }
 function normalizeQuality(q?: string): string {
-  if (q === '720p' || q === 'sd') return 'sd';
-  return 'hd'; // 1080p / default
+  if (q === '720p' || q === 'sd') return '720p';
+  return '1080p'; // default / hd
 }
 
 /** Kick off a Soul text-to-image generation. Returns the request id(s). */
