@@ -11,6 +11,7 @@ import type { Client, Employee } from "@/lib/db/schema";
 import TabOverview from "./tab-overview";
 import TabSocial from "./tab-social";
 import TabFiles from "./tab-files";
+import TabBrandKit from "./tab-brand-kit";
 import TabAccounting from "./tab-accounting";
 import TabPortal from "./tab-portal";
 import TabActivity from "./tab-activity";
@@ -101,10 +102,11 @@ const GANTT_STATUS_COLORS: Record<string, { label: string; color: string }> = {
   none: { label: "לא יוצר", color: "#9ca3af" },
 };
 
-type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "campaigns" | "google-ads" | "seo" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos" | "automations" | "integrations" | "growth" | "daily-report" | "publishing-channels" | "competitors";
+type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "campaigns" | "google-ads" | "seo" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos" | "automations" | "integrations" | "growth" | "daily-report" | "publishing-channels" | "competitors" | "brand-kit";
 
 const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "overview", label: "סקירה" },
+  { id: "brand-kit", label: "🎨 ערכת מותג" },
   { id: "content", label: "תוכן וגאנט" },
   { id: "videos", label: "סרטונים" },
   { id: "research", label: "חקור לקוח" },
@@ -1345,6 +1347,9 @@ function ClientDetailContent() {
               <TabInsights client={client} employees={employees || []} />
             </div>
           </>
+        )}
+        {activeTab === "brand-kit" && (
+          <TabBrandKit client={client} />
         )}
         {activeTab === "content" && (
           <TabContentGantt client={client} employees={employees || []} />
