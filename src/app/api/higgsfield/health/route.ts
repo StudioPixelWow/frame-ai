@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   const start = await startSoulImages('minimal abstract brand color swatch, clean studio background', { count: 1, size: '2048x2048', quality: '720p' });
   let poll: any = null;
   if (start.ok && start.jobs[0]) {
-    poll = await pollSoulJob(start.jobs[0], { tries: 8, intervalMs: 3000 });
+    poll = await pollSoulJob(start.jobs[0], { tries: 18, intervalMs: 3000 }); // ~54s, under maxDuration 60
   }
   return NextResponse.json({
     configured: true,

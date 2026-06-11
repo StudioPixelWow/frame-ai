@@ -121,13 +121,10 @@ export async function startSoulImages(prompt: string, opts: SoulImageOpts = {}):
   if (!res.ok) return { ok: false, jobs: [], raw: res.data, error: res.error };
 
   const d = res.data || {};
-  const jobs: string[] = [];
-  // Real API returns { request_id, status_url, ... }.
-  if (d.request_id) jobs.push(String(d.request_id));
-  if (d.id) jobs.push(String(d.id));
-  if (Array.isArray(d.jobs)) for (const j of d.jobs) { const jid = j?.request_id || j?.id; if (jid) jobs.push(String(jid)); }
-  if (d.data?.request_id) jobs.push(String(d.data.request_id));
-  if (d.data?.id) jobs.push(String(d.data.id));
+  // The pollable id is the TOP-LEVEL request id (maps to /requests/{id}/status).
+  // The nested jobs[].id are sub-jobs and are NOT pollable that way — ignore them.
+  const requestId = d.request_id || d.id || d.data?.request_id || d.data?.id;
+  const jobs: string[] = requestId ? [String(requestId)] : [];
 
   // Sometimes the POST already returns completed images.
   const immediateUrls = extractImageUrls(d);
@@ -141,13 +138,18 @@ export async function startSoulImages(prompt: string, opts: SoulImageOpts = {}):
 /** Extract image URLs from a job-status payload (tolerant of shapes). */
 export function extractImageUrls(payload: any): string[] {
   const urls: string[] = [];
-  const pushUrl = (u: any) => { if (typeof u === 'string' && /^https?:\/\//i.test(u)) urls.push(u); };
+  // Control URLs returned by the API that are NOT images.
+  const isControl = (u: string) => /\/requests\/[^/]+\/(status|cancel)\b/i.test(u);
+  const isImageUrl = (u: string) => /^https?:\/\/.+\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(u);
+  const pushUrl = (u: any) => { if (typeof u === 'string' && /^https?:\/\//i.test(u) && !isControl(u)) urls.push(u); };
   const visit = (v: any, keyHint?: string) => {
     if (!v) return;
     if (typeof v === 'string') {
-      // image extension OR a value under a url-ish key
-      if (/^https?:\/\/.+\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(v)) pushUrl(v);
-      else if (keyHint && /url/i.test(keyHint) && /^https?:\/\//i.test(v)) pushUrl(v);
+      // Skip the status/cancel control keys entirely.
+      if (keyHint && /^(status_url|cancel_url|webhook|callback)$/i.test(keyHint)) return;
+      // An image file URL, OR a value under an image-result key (url/raw/min/image).
+      if (isImageUrl(v)) pushUrl(v);
+      else if (keyHint && /^(url|image|image_url|raw|min|thumbnail)$/i.test(keyHint)) pushUrl(v);
     } else if (Array.isArray(v)) v.forEach((x) => visit(x, keyHint));
     else if (typeof v === 'object') for (const k of Object.keys(v)) visit(v[k], k);
   };

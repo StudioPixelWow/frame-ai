@@ -71,7 +71,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
             continue;
           }
           if (start.ok && start.jobs[0]) {
-            const polled = await pollSoulJob(start.jobs[0], { tries: 24, intervalMs: 3000 });
+            const polled = await pollSoulJob(start.jobs[0], { tries: 32, intervalMs: 3500 }); // ~112s per prompt
             if (polled.urls.length) {
               for (const url of polled.urls.slice(0, 2)) abcd.push({ label: labels[li++] || `V${li}`, url, prompt });
             } else {
