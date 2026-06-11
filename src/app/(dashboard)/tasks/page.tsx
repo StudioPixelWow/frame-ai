@@ -79,15 +79,15 @@ function TasksPageInner() {
   }, [employeeTasks, updateEmployeeTask, update]);
 
   // Celebration popup shown when an employee submits a task (with the task name).
-  const [celebration, setCelebration] = useState<{ taskName: string } | null>(null);
-  const celebrate = useCallback((taskName: string) => {
+  const [celebration, setCelebration] = useState<{ taskName: string; returned?: boolean } | null>(null);
+  const celebrate = useCallback((taskName: string, opts?: { returned?: boolean }) => {
     // Festive multi-burst confetti.
     try {
       fireConfetti(90, 4200);
       setTimeout(() => fireConfetti(60, 3400), 250);
       setTimeout(() => fireConfetti(70, 3800), 600);
     } catch { /* noop */ }
-    setCelebration({ taskName: taskName || 'המשימה' });
+    setCelebration({ taskName: taskName || 'המשימה', returned: opts?.returned });
     setTimeout(() => setCelebration(null), 5000);
   }, []);
   const TEAM_MEMBERS = ["טל זטלמן", "מאיה זטלמן", "נועם בוברין", "מיכאלה"];
@@ -383,7 +383,8 @@ function TasksPageInner() {
       await updateAny(uploadingTaskId, { submittedFiles: [...existing, entry], status: "under_review" as Task["status"] });
 
       setModalOpen(false);
-      celebrate(cur?.title || editingTask?.title || 'המשימה');
+      const wasReturned = (cur?.status || editingTask?.status || form.status) === 'returned';
+      celebrate(cur?.title || editingTask?.title || 'המשימה', { returned: wasReturned });
       const fileInput = document.querySelector(`input[data-task="${uploadingTaskId}"]`) as HTMLInputElement;
       if (fileInput) fileInput.value = "";
       setSelectedFile(null);
@@ -1344,8 +1345,8 @@ function TasksPageInner() {
         <div onClick={() => setCelebration(null)} style={{ position: "fixed", inset: 0, background: "rgba(10,12,30,0.5)", backdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 4000, animation: "fadeIn .2s ease" }}>
           <div dir="rtl" onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 24, padding: "2.6rem 2.5rem 2rem", textAlign: "center", maxWidth: 440, width: "90%", boxShadow: "0 24px 70px rgba(0,0,0,0.3)", border: "1px solid #E8EAF0", position: "relative", overflow: "hidden" }}>
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 6, background: "linear-gradient(90deg,#00B5FE,#10B981,#F59E0B,#00B5FE)" }} />
-            <div style={{ fontSize: "4rem", marginBottom: 6, animation: "popBounce .5s cubic-bezier(.2,1.4,.4,1)" }}>🎉</div>
-            <div style={{ fontSize: "1.5rem", fontWeight: 900, color: "#10B981", marginBottom: 10 }}>הוגשה בהצלחה לבדיקה!</div>
+            <div style={{ fontSize: "4rem", marginBottom: 6, animation: "popBounce .5s cubic-bezier(.2,1.4,.4,1)" }}>{celebration.returned ? "🔄" : "🎉"}</div>
+            <div style={{ fontSize: "1.5rem", fontWeight: 900, color: "#10B981", marginBottom: 10 }}>{celebration.returned ? "המשימה הוחזרה לאישור מנהל!" : "הוגשה בהצלחה לבדיקה!"}</div>
             <div style={{ background: "#F7F9FC", border: "1px solid #E8EAF0", borderRadius: 14, padding: "0.8rem 1rem", margin: "0 auto 8px", maxWidth: 360 }}>
               <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#9A9AB0", letterSpacing: 1 }}>המשימה</div>
               <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#1A1A2E", lineHeight: 1.4 }}>{celebration.taskName}</div>
@@ -1411,16 +1412,17 @@ function TasksPageInner() {
                   if (!editingTask) return;
                   try {
                     await updateAny(editingTask.id, { status: "under_review" });
-                    toast("המשימה נשלחה לבדיקה מחדש", "success");
                     setEditingTask({ ...editingTask, status: "under_review" });
                     setForm(prev => ({ ...prev, status: "under_review" }));
+                    setModalOpen(false);
+                    celebrate(editingTask.title, { returned: true });
                   } catch {
                     toast("שגיאה בשליחה לבדיקה", "error");
                   }
                 }}
                 style={{ fontSize: "0.75rem", background: "#38bdf8" }}
               >
-                שלח משימה לבדיקה
+                שלח משימה מתוקנת לאישור ←
               </button>
             )}
             <button className="mod-btn-ghost ux-btn" onClick={() => { setModalOpen(false); setReviewNotes(""); setShowReviewNotes(false); }}>ביטול</button>
