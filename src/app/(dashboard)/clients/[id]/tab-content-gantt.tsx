@@ -287,7 +287,10 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
       if (mode === 'approve') {
         const imageUrls = Array.from(new Set([...(item.imageUrls || []), `${item.title || 'גרפיקה מאושרת'}|${url}`]));
         await updateGanttItem(item.id, { imageUrls, status: 'approved' } as any);
-        toast('✓ הגרפיקה אושרה — עבור ל-Creative PixelAI להתאמת גדלים', 'success');
+        toast('✓ הגרפיקה אושרה — פותח את Creative PixelAI להתאמת גדלים', 'success');
+        // Close the loop: open the size-adapter with this image pre-loaded.
+        const title = encodeURIComponent(item.title || 'גרפיקה מאושרת');
+        window.open(`/creative-pixelai?src=${encodeURIComponent(url)}&title=${title}&client=${client.id}`, '_blank');
       } else {
         const attachedFiles = Array.from(new Set([...(item.attachedFiles || []), `🎯 רפרנס עיצובי|${url}`]));
         await updateGanttItem(item.id, { attachedFiles, status: 'in_progress' } as any);

@@ -376,6 +376,38 @@ export default function CreativePixelAIPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* ── Deep-link: open a creative directly (?src=<url>&title=<...>) ──
+     Used by the gantt "✓ אשר" flow so a manager-approved A/B/C/D image lands
+     here pre-loaded for size adaptation — no manual re-upload. The image is
+     pulled through our same-origin proxy so the canvas stays export-clean. */
+  const deepLinkDone = useRef(false);
+  useEffect(() => {
+    if (deepLinkDone.current) return;
+    deepLinkDone.current = true;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const src = sp.get('src');
+      if (!src) return;
+      const title = sp.get('title') || 'גרפיקה מאושרת';
+      (async () => {
+        try {
+          const proxied = `/api/proxy-image?url=${encodeURIComponent(src)}`;
+          const image = await loadImage(proxied);
+          setImg(image);
+          setFileName(`${title}.png`);
+          setMimeType('image/png');
+          setOriginalBlob(null);
+          setAnalysis(null);
+          runAnalysis(image);
+          toast('✓ הגרפיקה המאושרת נטענה — בחר גדלים והתאם', 'success');
+        } catch {
+          toast('טעינת הגרפיקה מהקישור נכשלה — נסה להעלות ידנית', 'error');
+        }
+      })();
+    } catch { /* */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /* ── Build options per format ── */
   const optionsFor = useCallback((format: FormatSpec): AdaptationOptions => ({
     format, scaleMode, background, brandColor, customBgImage: customBg,
