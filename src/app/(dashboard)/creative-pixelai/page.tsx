@@ -216,7 +216,7 @@ export default function CreativePixelAIPage() {
   // AI adapt to a target format — EXACT same engine as the single-image flow
   // (mode "redesign"): the model recomposes the whole image to the target ratio
   // keeping every element & text; output cover-scaled to the exact dimensions.
-  const aiConvertToFormat = async (image: HTMLImageElement, fmtId: FormatId): Promise<string> => {
+  const aiConvertToFormat = async (image: HTMLImageElement, fmtId: FormatId, variation?: string): Promise<string> => {
     const f = FORMATS.find((x) => x.id === fmtId)!;
     const maxDim = 1536;
     const ds = Math.min(1, maxDim / Math.max(image.naturalWidth, image.naturalHeight));
@@ -231,7 +231,7 @@ export default function CreativePixelAIPage() {
     const res = await fetch("/api/creative-pixelai/generate-ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imagePng: inputDataUrl, format: fmtId, mode: "redesign", quality: aiHighQuality ? "high" : "medium", prompt: aiStylePrompt.trim() || undefined }),
+      body: JSON.stringify({ imagePng: inputDataUrl, format: fmtId, mode: "redesign", quality: aiHighQuality ? "high" : "medium", prompt: [aiStylePrompt.trim(), variation].filter(Boolean).join(" ") || undefined }),
     });
     const json = await parseResponse(res);
     if (!res.ok) throw new Error(json.error || "היצירה נכשלה");
@@ -272,15 +272,20 @@ export default function CreativePixelAIPage() {
     }
   };
 
-  // Regenerate a single image (if it came out badly) — re-runs the AI adapt for that one item.
+  // Regenerate a single image (if it came out badly) — re-runs the AI adapt for that one
+  // item. A fresh variation hint guarantees a genuinely new take each click.
   const regenCarItem = async (it: CarouselItem, idx: number) => {
-    if (regenId) return;
+    if (regenId || carBusy) return;
     setRegenId(it.id);
     try {
-      let out: string;
-      try { out = await aiConvertToFormat(it.img, batchFmtId); }
-      catch { out = convertToFormat(it.img, batchFmtId); toast("ה-AI נכשל — נוצר בעיבוד רגיל", "info"); }
+      let out: string; let aiOk = true;
+      const variation = `וריאציה חדשה ${Math.floor(Math.random() * 100000)} — רקע שונה מעט.`;
+      try { out = await aiConvertToFormat(it.img, batchFmtId, variation); }
+      catch { out = convertToFormat(it.img, batchFmtId); aiOk = false; }
       setCarItems((prev) => prev.map((x, i) => (i === idx ? { ...x, out } : x)));
+      toast(aiOk ? "נוצרה גרסה חדשה ✨" : "ה-AI נכשל — נוצר בעיבוד רגיל", aiOk ? "success" : "info");
+    } catch {
+      toast("היצירה מחדש נכשלה", "error");
     } finally { setRegenId(null); }
   };
 
