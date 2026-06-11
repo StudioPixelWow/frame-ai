@@ -1,24 +1,46 @@
 /**
  * Higgsfield Cloud API client (server-side only).
  *
- * Auth: API Key ID + Secret sent as `hf-api-key` / `hf-secret` headers (the
- * official Higgsfield SDK scheme). Configure in Vercel env:
- *   HIGGSFIELD_API_KEY     = the API Key ID
- *   HIGGSFIELD_API_SECRET  = the API Key Secret
+ * Auth (per the official @higgsfield/client v2 SDK):
+ *   Authorization: Key <KEY_ID>:<KEY_SECRET>
+ * Configure in Vercel env (any of these work):
+ *   HIGGSFIELD_API_KEY     = the API Key ID      (a.k.a HF_API_KEY)
+ *   HIGGSFIELD_API_SECRET  = the API Key Secret   (a.k.a HF_SECRET)
+ *   HIGGSFIELD_CREDENTIALS = "KEY_ID:KEY_SECRET"  (a.k.a HF_CREDENTIALS, single var)
  *   HIGGSFIELD_BASE_URL    = (optional) override, default https://platform.higgsfield.ai
  *
- * Generation is async/queue-based: POST a job → poll until completed → image URLs.
- * Every call is best-effort and surfaces the raw status so we can diagnose.
+ * Generation is async/queue-based: POST a job → poll /requests/{request_id}/status
+ * until status="completed" → image URLs. Every call surfaces the raw status so we
+ * can diagnose failures instead of failing silently.
  */
 
-const KEY = () => process.env.HIGGSFIELD_API_KEY || process.env.HF_API_KEY || '';
-const SECRET = () => process.env.HIGGSFIELD_API_SECRET || process.env.HF_SECRET || '';
+function creds(): { key: string; secret: string } {
+  const combined = process.env.HIGGSFIELD_CREDENTIALS || process.env.HF_CREDENTIALS || '';
+  if (combined.includes(':')) {
+    const [k, ...rest] = combined.split(':');
+    return { key: (k || '').trim(), secret: rest.join(':').trim() };
+  }
+  return {
+    key: (process.env.HIGGSFIELD_API_KEY || process.env.HF_API_KEY || '').trim(),
+    secret: (process.env.HIGGSFIELD_API_SECRET || process.env.HF_SECRET || '').trim(),
+  };
+}
 const BASE = () => (process.env.HIGGSFIELD_BASE_URL || 'https://platform.higgsfield.ai').replace(/\/$/, '');
 
-export function higgsfieldConfigured(): boolean { return !!(KEY() && SECRET()); }
+export function higgsfieldConfigured(): boolean { const { key, secret } = creds(); return !!(key && secret); }
 
 function headers(): Record<string, string> {
-  return { 'hf-api-key': KEY(), 'hf-secret': SECRET(), 'Content-Type': 'application/json', Accept: 'application/json' };
+  const { key, secret } = creds();
+  return {
+    // Official v2 scheme.
+    Authorization: `Key ${key}:${secret}`,
+    // Legacy headers kept as a harmless fallback for older gateways.
+    'hf-api-key': key,
+    'hf-secret': secret,
+    'User-Agent': 'frame-ai-server/1.0',
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  };
 }
 
 export interface HfResult { ok: boolean; status: number; data: any; error?: string }
@@ -36,7 +58,9 @@ export async function hfRequest(path: string, init?: { method?: string; body?: a
     });
     let data: any = null;
     try { data = await r.json(); } catch { try { data = await r.text(); } catch { data = null; } }
-    return { ok: r.ok, status: r.status, data, error: r.ok ? undefined : (data?.message || data?.error || `http_${r.status}`) };
+    const errMsg = r.ok ? undefined
+      : (data?.message || data?.error || data?.detail || (typeof data === 'string' ? data.slice(0, 200) : '') || `http_${r.status}`);
+    return { ok: r.ok, status: r.status, data, error: errMsg };
   } catch (e) {
     return { ok: false, status: 0, data: null, error: e instanceof Error ? e.message : 'request_failed' };
   }
@@ -44,79 +68,116 @@ export async function hfRequest(path: string, init?: { method?: string; body?: a
 
 export interface SoulImageOpts {
   count?: number;            // batch size (default 4 → A/B/C/D)
-  size?: string;             // width_and_height, e.g. "1536x2048" (portrait), "2048x2048"
-  quality?: '720p' | '1080p';
+  size?: string;             // width_and_height, e.g. "1536x2048" (portrait), "1536x1536"
+  quality?: '720p' | '1080p' | 'sd' | 'hd';
   referenceImageUrls?: string[]; // brand assets / logo for visual-language conditioning
   negativePrompt?: string;
+  seed?: number;
   webhookUrl?: string;
 }
 
-export interface SoulJob { id: string | null; raw: any }
+// Higgsfield Soul accepts a fixed set of width_and_height strings.
+const SOUL_SIZES = ['1536x1536', '1536x2048', '2048x1536'];
+function normalizeSize(size?: string): string {
+  if (size && SOUL_SIZES.includes(size)) return size;
+  if (size === '2048x2048' || !size) return '1536x1536';
+  // portrait-ish → 1536x2048, landscape-ish → 2048x1536
+  const m = /^(\d+)x(\d+)$/.exec(size);
+  if (m) { const w = +m[1], h = +m[2]; return h > w ? '1536x2048' : w > h ? '2048x1536' : '1536x1536'; }
+  return '1536x1536';
+}
+function normalizeQuality(q?: string): string {
+  if (q === '720p' || q === 'sd') return 'sd';
+  return 'hd'; // 1080p / default
+}
 
-/** Kick off a Soul text-to-image generation. Returns the job id(s). */
-export async function startSoulImages(prompt: string, opts: SoulImageOpts = {}): Promise<{ ok: boolean; jobs: string[]; raw: any; error?: string }> {
+/** Kick off a Soul text-to-image generation. Returns the request id(s). */
+export async function startSoulImages(prompt: string, opts: SoulImageOpts = {}): Promise<{ ok: boolean; jobs: string[]; raw: any; error?: string; immediateUrls?: string[] }> {
   const body: any = {
     prompt,
-    width_and_height: opts.size || '1536x2048',
-    quality: opts.quality || '1080p',
+    width_and_height: normalizeSize(opts.size),
+    quality: normalizeQuality(opts.quality),
     batch_size: opts.count ?? 4,
   };
-  if (opts.referenceImageUrls?.length) body.reference_images = opts.referenceImageUrls;
+  if (opts.seed !== undefined) body.seed = opts.seed;
+  if (opts.referenceImageUrls?.length) {
+    // Soul expects reference images as typed objects.
+    body.input_images = opts.referenceImageUrls.map((url) => ({ type: 'image_url', image_url: url }));
+  }
   if (opts.negativePrompt) body.negative_prompt = opts.negativePrompt;
   if (opts.webhookUrl) body.webhook = { url: opts.webhookUrl };
 
   const res = await hfRequest('/v1/text2image/soul', { method: 'POST', body, timeoutMs: 45000 });
   if (!res.ok) return { ok: false, jobs: [], raw: res.data, error: res.error };
-  // Response shapes vary: { id }, { jobs:[{id}] }, { data:{ id } } …
+
   const d = res.data || {};
   const jobs: string[] = [];
+  // Real API returns { request_id, status_url, ... }.
+  if (d.request_id) jobs.push(String(d.request_id));
   if (d.id) jobs.push(String(d.id));
-  if (Array.isArray(d.jobs)) for (const j of d.jobs) if (j?.id) jobs.push(String(j.id));
+  if (Array.isArray(d.jobs)) for (const j of d.jobs) { const jid = j?.request_id || j?.id; if (jid) jobs.push(String(jid)); }
+  if (d.data?.request_id) jobs.push(String(d.data.request_id));
   if (d.data?.id) jobs.push(String(d.data.id));
-  return { ok: true, jobs: Array.from(new Set(jobs)), raw: d };
+
+  // Sometimes the POST already returns completed images.
+  const immediateUrls = extractImageUrls(d);
+
+  if (jobs.length === 0 && immediateUrls.length === 0) {
+    return { ok: false, jobs: [], raw: d, error: 'no_request_id' };
+  }
+  return { ok: true, jobs: Array.from(new Set(jobs)), raw: d, immediateUrls };
 }
 
 /** Extract image URLs from a job-status payload (tolerant of shapes). */
 export function extractImageUrls(payload: any): string[] {
   const urls: string[] = [];
-  const visit = (v: any) => {
+  const pushUrl = (u: any) => { if (typeof u === 'string' && /^https?:\/\//i.test(u)) urls.push(u); };
+  const visit = (v: any, keyHint?: string) => {
     if (!v) return;
-    if (typeof v === 'string' && /^https?:\/\/.+\.(png|jpe?g|webp|gif)(\?|$)/i.test(v)) urls.push(v);
-    else if (Array.isArray(v)) v.forEach(visit);
-    else if (typeof v === 'object') for (const k of Object.keys(v)) visit(v[k]);
+    if (typeof v === 'string') {
+      // image extension OR a value under a url-ish key
+      if (/^https?:\/\/.+\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(v)) pushUrl(v);
+      else if (keyHint && /url/i.test(keyHint) && /^https?:\/\//i.test(v)) pushUrl(v);
+    } else if (Array.isArray(v)) v.forEach((x) => visit(x, keyHint));
+    else if (typeof v === 'object') for (const k of Object.keys(v)) visit(v[k], k);
   };
   visit(payload);
   return Array.from(new Set(urls));
 }
 
-/** Poll a job until it completes (or times out). */
-export async function pollSoulJob(jobId: string, opts: { tries?: number; intervalMs?: number } = {}): Promise<{ done: boolean; urls: string[]; status: string; raw: any }> {
+/** Poll a request until it completes (or times out). Uses /requests/{id}/status. */
+export async function pollSoulJob(requestId: string, opts: { tries?: number; intervalMs?: number } = {}): Promise<{ done: boolean; urls: string[]; status: string; raw: any }> {
   const tries = opts.tries || 20;
   const interval = opts.intervalMs || 3000;
+  let lastRaw: any = null;
   for (let i = 0; i < tries; i++) {
-    const res = await hfRequest(`/v1/text2image/soul/${jobId}`);
+    const res = await hfRequest(`/requests/${requestId}/status`);
     const d = res.data || {};
+    lastRaw = d;
     const status = String(d.status || d.state || (res.ok ? 'pending' : 'error')).toLowerCase();
     const urls = extractImageUrls(d);
     if (urls.length || status === 'completed' || status === 'succeeded' || status === 'done') {
       return { done: true, urls, status, raw: d };
     }
-    if (status === 'failed' || status === 'error' || status === 'canceled') {
+    if (status === 'failed' || status === 'error' || status === 'canceled' || status === 'nsfw') {
       return { done: false, urls: [], status, raw: d };
     }
     await new Promise((r) => setTimeout(r, interval));
   }
-  return { done: false, urls: [], status: 'timeout', raw: null };
+  return { done: false, urls: [], status: 'timeout', raw: lastRaw };
 }
 
 /** One-shot helper: generate N images and wait for the URLs. */
 export async function generateSoulImages(prompt: string, opts: SoulImageOpts = {}): Promise<{ ok: boolean; urls: string[]; error?: string; raw?: any }> {
   const start = await startSoulImages(prompt, opts);
+  if (start.immediateUrls?.length) return { ok: true, urls: start.immediateUrls, raw: start.raw };
   if (!start.ok || !start.jobs.length) return { ok: false, urls: [], error: start.error || 'no_job', raw: start.raw };
   const all: string[] = [];
+  let lastStatus = '';
   for (const jobId of start.jobs) {
     const polled = await pollSoulJob(jobId);
+    lastStatus = polled.status;
     all.push(...polled.urls);
   }
-  return { ok: all.length > 0, urls: Array.from(new Set(all)), raw: start.raw, error: all.length ? undefined : 'no_images' };
+  return { ok: all.length > 0, urls: Array.from(new Set(all)), raw: start.raw, error: all.length ? undefined : (lastStatus || 'no_images') };
 }

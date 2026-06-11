@@ -3019,7 +3019,11 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                         ))}
                       </div>
                     ) : creative && !busy ? (
-                      <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", marginTop: 6 }}>האפיון נוצר. {creative.genError === 'higgsfield_not_configured' ? 'הגדר Higgsfield ב-Vercel כדי לקבל וריאציות A/B/C/D.' : 'הוריאציות לא נוצרו — נסה "צור מחדש".'}</div>
+                      <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", marginTop: 6 }}>
+                        האפיון נוצר. {creative.genError === 'higgsfield_not_configured'
+                          ? 'הגדר Higgsfield ב-Vercel כדי לקבל וריאציות A/B/C/D.'
+                          : <>הוריאציות לא נוצרו{creative.genError ? <> — סיבה: <code style={{ color: '#dc2626', direction: 'ltr', display: 'inline-block' }}>{String(creative.genError)}</code></> : ''}. נסה "צור מחדש".</>}
+                      </div>
                     ) : !creative && !busy ? (
                       <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>לחץ "צור אפיון" — המערכת תבנה 2 פוסטים + 2 סרטונים ותייצר 4 וריאציות נראות על בסיס המותג.</div>
                     ) : null}

@@ -59,15 +59,33 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       const prompts = [spec.posts[0]?.imagePrompt, spec.posts[1]?.imagePrompt].filter(Boolean) as string[];
       const labels = ['A', 'B', 'C', 'D'];
       let li = 0;
+      const isStory = item.format === 'story' || item.itemType === 'story';
+      const size = isStory ? '1536x2048' : '1536x1536';
       try {
         for (const prompt of (prompts.length ? prompts : [spec.headline])) {
-          const start = await startSoulImages(prompt, { count: 2, size: item.format === 'story' || item.itemType === 'story' ? '1536x2048' : '2048x2048', quality: '1080p', referenceImageUrls: refs });
+          const start = await startSoulImages(prompt, { count: 2, size, quality: '1080p', referenceImageUrls: refs });
+          // Some responses return images immediately.
+          const immediate = start.immediateUrls || [];
+          if (immediate.length) {
+            for (const url of immediate.slice(0, 2)) abcd.push({ label: labels[li++] || `V${li}`, url, prompt });
+            continue;
+          }
           if (start.ok && start.jobs[0]) {
             const polled = await pollSoulJob(start.jobs[0], { tries: 24, intervalMs: 3000 });
-            for (const url of polled.urls.slice(0, 2)) { abcd.push({ label: labels[li++] || `V${li}`, url, prompt }); }
-          } else if (start.error) { genError = start.error; }
+            if (polled.urls.length) {
+              for (const url of polled.urls.slice(0, 2)) abcd.push({ label: labels[li++] || `V${li}`, url, prompt });
+            } else {
+              // Capture WHY: failed / nsfw / timeout / error.
+              genError = `poll_${polled.status}`;
+            }
+          } else {
+            // Capture the real start error (auth, no credits, bad input, http_xxx…).
+            genError = start.error || 'start_failed';
+          }
         }
       } catch (e) { genError = e instanceof Error ? e.message : 'generation_failed'; }
+      // If we got at least one image, don't surface a partial error as a hard failure.
+      if (abcd.length > 0) genError = null;
     } else {
       genError = 'higgsfield_not_configured';
     }
