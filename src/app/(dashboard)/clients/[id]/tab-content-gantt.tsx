@@ -258,6 +258,45 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
   const [expandedRefIds, setExpandedRefIds] = useState<Set<string>>(new Set());
   const [itemRefsMap, setItemRefsMap] = useState<Record<string, ReferenceItem[]>>({});
 
+  // ── Creative Studio (spec + A/B/C/D) per gantt item ──
+  const [creativeBusyId, setCreativeBusyId] = useState<string | null>(null);
+  const [creativePreview, setCreativePreview] = useState<string | null>(null);
+  const genTaskCreative = useCallback(async (item: ClientGanttItem) => {
+    if (creativeBusyId) return;
+    setCreativeBusyId(item.id);
+    try {
+      const r = await fetch(`/api/clients/${client.id}/task-creative`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ganttItemId: item.id }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'שגיאה');
+      await refetchGanttItems();
+      if (d.genError && d.imagesGenerated === 0) {
+        toast(d.genError === 'higgsfield_not_configured' ? 'האפיון נוצר. לחיבור A/B/C/D הגדר את Higgsfield ב-Vercel.' : `האפיון נוצר. יצירת התמונות נכשלה: ${d.genError}`, 'info');
+      } else {
+        toast(`✨ נוצר אפיון מלא + ${d.imagesGenerated} וריאציות`, 'success');
+      }
+    } catch (e) { toast(e instanceof Error ? e.message : 'שגיאה', 'error'); }
+    finally { setCreativeBusyId(null); }
+  }, [client.id, creativeBusyId, refetchGanttItems, toast]);
+
+  // Manager picks an A/B/C/D image → approve (to size-adaptation) or send as employee reference.
+  const useCreativeImage = useCallback(async (item: ClientGanttItem, url: string, mode: 'approve' | 'reference') => {
+    try {
+      if (mode === 'approve') {
+        const imageUrls = Array.from(new Set([...(item.imageUrls || []), `${item.title || 'גרפיקה מאושרת'}|${url}`]));
+        await updateGanttItem(item.id, { imageUrls, status: 'approved' } as any);
+        toast('✓ הגרפיקה אושרה — עבור ל-Creative PixelAI להתאמת גדלים', 'success');
+      } else {
+        const attachedFiles = Array.from(new Set([...(item.attachedFiles || []), `🎯 רפרנס עיצובי|${url}`]));
+        await updateGanttItem(item.id, { attachedFiles, status: 'in_progress' } as any);
+        toast('📌 נשלח כרפרנס לעובד — נוצרה משימה לעובד', 'success');
+      }
+      await refetchGanttItems();
+    } catch (e) { toast(e instanceof Error ? e.message : 'שגיאה', 'error'); }
+  }, [updateGanttItem, refetchGanttItems, toast]);
+
   // Approved deliverable files linked to a gantt item (from the client Files tab).
   const [deliverablesMap, setDeliverablesMap] = useState<Record<string, { name: string; url: string }[]>>({});
   const loadDeliverablesForItem = useCallback(async (item: ClientGanttItem) => {
@@ -1491,7 +1530,8 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                         const parse = (e: string) => { const i = e.indexOf('|'); return i === -1 ? { name: (e.split('/').pop() || e).split('?')[0], url: e } : { name: e.slice(0, i), url: e.slice(i + 1) }; };
                         const isImg = (u: string) => /\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(u);
                         const seen = new Set<string>();
-                        const imgs = [...(item.imageUrls || []), ...(item.attachedFiles || [])].map(parse).filter((f) => f.url && isImg(f.url) && !seen.has(f.url) && seen.add(f.url)).slice(0, 6);
+                        const abcdUrls = ((item as any).creative?.abcd || []).map((v: any) => ({ name: `וריאציה ${v.label}`, url: v.url }));
+                        const imgs = [...abcdUrls, ...(item.imageUrls || []).map(parse), ...(item.attachedFiles || []).map(parse)].filter((f) => f.url && isImg(f.url) && !seen.has(f.url) && seen.add(f.url)).slice(0, 8);
                         if (imgs.length === 0) return null;
                         return (
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
@@ -2940,6 +2980,50 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                 );
               })()}
 
+              {/* ── Creative Studio: deep spec + A/B/C/D variations ── */}
+              {(() => {
+                const creative = (selectedItem as any).creative;
+                const busy = creativeBusyId === selectedItem.id;
+                const abcd: { label: string; url: string; prompt?: string }[] = creative?.abcd || [];
+                const spec = creative?.spec;
+                return (
+                  <div style={{ marginTop: "0.9rem", padding: "0.9rem", borderRadius: "0.75rem", border: `1px solid #a855f730`, background: "linear-gradient(135deg,#faf5ff,#f0f9ff)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                      <div style={{ fontWeight: 800, fontSize: "0.85rem", color: "#7c3aed" }}>🎨 סטודיו קריאייטיב — אפיון + A/B/C/D</div>
+                      <button onClick={() => genTaskCreative(selectedItem)} disabled={busy}
+                        style={{ background: busy ? "#cbd5e1" : "#7c3aed", color: "#fff", border: "none", borderRadius: 9, padding: "0.45rem 0.9rem", fontWeight: 800, fontSize: "0.75rem", cursor: busy ? "wait" : "pointer" }}>
+                        {busy ? "⏳ מייצר…" : creative ? "🔄 צור מחדש" : "✨ צור אפיון + A/B/C/D"}
+                      </button>
+                    </div>
+
+                    {spec?.headline && <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--foreground)" }}>{spec.headline}</div>}
+                    {spec?.brandNotes && <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", marginBottom: 6 }}>{spec.brandNotes}</div>}
+
+                    {abcd.length > 0 ? (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px,1fr))", gap: 10, marginTop: 8 }}>
+                        {abcd.map((v) => (
+                          <div key={v.label} style={{ border: `1px solid var(--border)`, borderRadius: 10, overflow: "hidden", background: "#fff" }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={v.url} alt={v.label} onClick={() => setCreativePreview(v.url)} style={{ width: "100%", height: 150, objectFit: "cover", display: "block", cursor: "zoom-in" }} />
+                            <div style={{ padding: "5px 7px" }}>
+                              <div style={{ fontSize: "0.7rem", fontWeight: 800, color: "#7c3aed", marginBottom: 4 }}>וריאציה {v.label}</div>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <button onClick={() => useCreativeImage(selectedItem, v.url, 'approve')} title="אשר → התאמת גדלים" style={{ flex: 1, fontSize: "0.66rem", fontWeight: 700, color: "#16a34a", background: "#16a34a15", border: "none", borderRadius: 6, padding: "3px 4px", cursor: "pointer" }}>✓ אשר</button>
+                                <button onClick={() => useCreativeImage(selectedItem, v.url, 'reference')} title="שלח כרפרנס לעובד" style={{ flex: 1, fontSize: "0.66rem", fontWeight: 700, color: "#0095D0", background: "#00B5FE15", border: "none", borderRadius: 6, padding: "3px 4px", cursor: "pointer" }}>📌 לעובד</button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : creative && !busy ? (
+                      <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", marginTop: 6 }}>האפיון נוצר. {creative.genError === 'higgsfield_not_configured' ? 'הגדר Higgsfield ב-Vercel כדי לקבל וריאציות A/B/C/D.' : 'הוריאציות לא נוצרו — נסה "צור מחדש".'}</div>
+                    ) : !creative && !busy ? (
+                      <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>לחץ "צור אפיון" — המערכת תבנה 2 פוסטים + 2 סרטונים ותייצר 4 וריאציות נראות על בסיס המותג.</div>
+                    ) : null}
+                  </div>
+                );
+              })()}
+
               {/* Action Buttons */}
               <div style={{
                 display: "flex", gap: "0.5rem", flexWrap: "wrap",
@@ -3834,6 +3918,15 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
           </div>
         )}
       </div>
+
+      {/* ── A/B/C/D image lightbox ── */}
+      {creativePreview && (
+        <div onClick={() => setCreativePreview(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 6000, padding: 24 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={creativePreview} alt="preview" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "92vw", maxHeight: "88vh", objectFit: "contain", borderRadius: 10 }} />
+          <button onClick={() => setCreativePreview(null)} style={{ position: "fixed", top: 18, insetInlineEnd: 22, background: "rgba(255,255,255,0.15)", color: "#fff", border: "none", borderRadius: 10, padding: "0.5rem 1rem", fontWeight: 800, cursor: "pointer" }}>✕</button>
+        </div>
+      )}
 
       {/* ── Reference Preview Modal ── */}
       {refModalOpen && refModalItem && (
