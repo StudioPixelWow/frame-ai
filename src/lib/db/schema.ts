@@ -272,6 +272,8 @@ export interface ClientResearch {
     explanation: string; // strategic angle / direction
     category: 'weakness' | 'opportunity' | 'audience' | 'competitor' | 'trend' | 'seasonal' | 'brand' | 'engagement';
   }>;
+  // Focus directions (up to 3) that all contentIdeas25 were generated around.
+  contentFocus?: string[];
   // 7. Recommended Campaign Concepts
   recommendedCampaignConcepts: Array<{
     name: string;

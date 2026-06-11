@@ -20,13 +20,22 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { clientId, keepIdeaIds, addCategory, addCount } = body as {
+    const { clientId, keepIdeaIds, addCategory, addCount, focusDirections } = body as {
       clientId?: string; keepIdeaIds?: string[]; addCategory?: string; addCount?: number;
+      focusDirections?: string[];
     };
 
     if (!clientId) {
       return NextResponse.json({ error: 'Missing clientId' }, { status: 400 });
     }
+
+    // Focus directions: up to 3 free-text directions the user wants ALL ideas to
+    // orbit around (e.g. "טעינה ביתית", "צי רכבים עסקי", "חיסכון בחשמל").
+    const focus = (Array.isArray(focusDirections) ? focusDirections : [])
+      .map((s) => (typeof s === 'string' ? s.trim() : ''))
+      .filter(Boolean)
+      .slice(0, 3);
+    const hasFocus = focus.length > 0;
 
     // Append-mode: generate N more ideas of ONE specific category and add them
     // to the existing list (keeps everything already there). Categories the UI uses.
@@ -172,9 +181,17 @@ export async function POST(req: NextRequest) {
 5. עברית בלבד.
 6. החזר JSON תקין בלבד — בלי markdown, בלי backticks, בלי הסברים.
 7. כל רעיון בקטגוריות seasonal ו-trend חייב להתייחס לתקופה הנוכחית בלבד — ${hebrewMonths[currentMonth - 1]} ${currentYear} והחודשים הקרובים. אסור בשום אופן להתייחס לחגים שעברו, לעונות שלא רלוונטיות, או לשנים קודמות.
-8. השנה הנוכחית היא ${currentYear}. אל תזכיר שנים אחרות.`;
+8. השנה הנוכחית היא ${currentYear}. אל תזכיר שנים אחרות.${hasFocus ? `
+9. 🎯 מיקוד חובה: כל ${neededCount} הרעיונות חייבים להתרכז סביב הכיוונים הבאים שהמשתמש הגדיר כחשובים לעסק:
+${focus.map((f, i) => `   (${i + 1}) ${f}`).join('\n')}
+   כל רעיון חייב לקדם לפחות אחד מהכיוונים האלה בזווית אסטרטגית אחרת. גוון את הזוויות בין הכיוונים, אבל אל תסטה מהם. אם רעיון לא משרת אף אחד מהכיוונים — אל תייצר אותו.` : ''}`;
 
-    const userPrompt = `## הקשר זמני (RTM — Real-Time Marketing):
+    const userPrompt = `${hasFocus ? `## 🎯 מיקוד הרעיונות (הכי חשוב — גובר על הכל):
+המשתמש הגדיר ${focus.length} כיוונים שכל הרעיונות חייבים לסוב סביבם:
+${focus.map((f, i) => `${i + 1}. ${f}`).join('\n')}
+חלק את ${neededCount} הרעיונות בין הכיוונים האלה, כל רעיון בזווית אחרת. אסור לייצר רעיון שלא קשור לאף כיוון.
+
+` : ''}## הקשר זמני (RTM — Real-Time Marketing):
 ${temporalContext}
 
 ## נתוני העסק והחקר:
@@ -327,8 +344,10 @@ ${keptIdeas.length > 0 ? `\nחשוב: הרעיונות הבאים כבר נבח�
     const updatedResearch: ClientResearch = {
       ...research,
       contentIdeas25: ideas as ClientResearch['contentIdeas25'],
+      // Remember the focus directions (full-regen only) so the UI can prefill them.
+      ...(appendMode ? {} : { contentFocus: hasFocus ? focus : [] }),
       updatedAt: new Date().toISOString(),
-    };
+    } as ClientResearch;
 
     // Save to Supabase (single source of truth)
     let sbSaved = false;

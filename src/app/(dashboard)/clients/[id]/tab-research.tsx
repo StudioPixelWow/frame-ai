@@ -55,6 +55,7 @@ interface ResearchData {
     explanation: string;
     category: 'weakness' | 'opportunity' | 'audience' | 'competitor' | 'trend' | 'seasonal' | 'brand' | 'engagement';
   }>;
+  contentFocus?: string[];
   recommendedCampaignConcepts: Array<{
     name: string;
     goal: string;
@@ -97,6 +98,9 @@ export default function TabResearch({ client }: TabResearchProps) {
   const [syncSuccess, setSyncSuccess] = useState<string | null>(null);
   const [isGeneratingIdeas, setIsGeneratingIdeas] = useState(false);
   const [generatingCategory, setGeneratingCategory] = useState<string | null>(null);
+  // Focus-ideas popup: up to 3 free-text directions that re-focus all 25 ideas.
+  const [showFocusPopup, setShowFocusPopup] = useState(false);
+  const [focusInputs, setFocusInputs] = useState<string[]>(['', '', '']);
 
   const messages = [
     'מנתח את העסק...',
@@ -374,6 +378,41 @@ export default function TabResearch({ client }: TabResearchProps) {
       alert(err instanceof Error ? err.message : 'שגיאה ביצירת רעיונות נוספים');
     } finally {
       setGeneratingCategory(null);
+    }
+  };
+
+  // ---- Open the focus popup, prefilled from any saved focus ----
+  const openFocusPopup = () => {
+    const saved = research?.contentFocus || [];
+    setFocusInputs([saved[0] || '', saved[1] || '', saved[2] || '']);
+    setShowFocusPopup(true);
+  };
+
+  // ---- Regenerate all 25 ideas focused around the 3 directions ----
+  const handleGenerateFocused = async () => {
+    const dirs = focusInputs.map((s) => s.trim()).filter(Boolean);
+    if (dirs.length === 0) { alert('מלא לפחות כיוון אחד'); return; }
+    setIsGeneratingIdeas(true);
+    setShowFocusPopup(false);
+    setSyncSuccess(null);
+    try {
+      // Keep any ideas the user explicitly checked; refocus the rest.
+      const keepIds = selectedIdeaIds.size > 0 ? Array.from(selectedIdeaIds) : [];
+      const res = await fetch('/api/ai/generate-content-ideas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: client.id, keepIdeaIds: keepIds, focusDirections: dirs }),
+      });
+      const result = await res.json();
+      if (!res.ok || !result.success) throw new Error(result.error || 'Failed to generate focused ideas');
+      setResearch(result.data);
+      setSelectedIdeaIds(new Set());
+      setSyncSuccess(`🎯 הרעיונות מוקדו סביב: ${dirs.join(' · ')}`);
+      setTimeout(() => setSyncSuccess(null), 4000);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'שגיאה במיקוד הרעיונות');
+    } finally {
+      setIsGeneratingIdeas(false);
     }
   };
 
@@ -966,6 +1005,24 @@ export default function TabResearch({ client }: TabResearchProps) {
                     >
                       {isGeneratingIdeas ? '⏳ מייצר...' : selectedIdeaIds.size > 0 ? `🔄 ייצר ${(research?.contentIdeas25?.length || 25) - selectedIdeaIds.size} מחדש (${selectedIdeaIds.size} נשמרים)` : '🔄 ייצר מחדש'}
                     </button>
+                    {/* Focus ideas button — opens the 3-direction popup */}
+                    <button
+                      onClick={openFocusPopup}
+                      disabled={isGeneratingIdeas}
+                      title="מקד את כל הרעיונות סביב 3 כיוונים שחשובים לעסק"
+                      style={{
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        padding: '0.3rem 0.8rem',
+                        borderRadius: '0.375rem',
+                        border: '1px solid #7c3aed',
+                        background: (research?.contentFocus && research.contentFocus.length > 0) ? '#7c3aed' : '#7c3aed12',
+                        color: (research?.contentFocus && research.contentFocus.length > 0) ? '#fff' : '#7c3aed',
+                        cursor: isGeneratingIdeas ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      🎯 מיקוד רעיונות תוכן{research?.contentFocus && research.contentFocus.length > 0 ? ` (${research.contentFocus.length})` : ''}
+                    </button>
                   </>
                 )}
                 {/* Add to gantt button — ALWAYS visible when ideas exist */}
@@ -1133,6 +1190,56 @@ export default function TabResearch({ client }: TabResearchProps) {
           </div>
 
           {/* Month Picker Popup for Gantt Sync */}
+          {/* ── Focus ideas popup — 3 directions ── */}
+          {showFocusPopup && (
+            <div
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+              onClick={() => setShowFocusPopup(false)}
+            >
+              <div
+                style={{ background: 'var(--surface-raised)', borderRadius: '0.85rem', padding: '1.6rem', maxWidth: '460px', width: '92%', direction: 'rtl', border: '1px solid var(--border)' }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#7c3aed', marginBottom: '0.4rem' }}>🎯 מיקוד רעיונות תוכן</div>
+                <div style={{ fontSize: '0.83rem', color: 'var(--foreground-muted)', marginBottom: '1.1rem', lineHeight: 1.5 }}>
+                  כתוב עד 3 כיוונים שחשובים לעסק כרגע. כל {research?.contentIdeas25?.length || 25} הרעיונות ייווצרו מחדש סביב הכיוונים האלה.
+                </div>
+                {[0, 1, 2].map((i) => (
+                  <div key={i} style={{ marginBottom: '0.7rem' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--foreground-muted)' }}>כיוון {i + 1}{i === 0 ? ' (חובה)' : ' (אופציונלי)'}</label>
+                    <input
+                      type="text"
+                      value={focusInputs[i]}
+                      onChange={(e) => { const v = [...focusInputs]; v[i] = e.target.value; setFocusInputs(v); }}
+                      placeholder={i === 0 ? 'לדוגמה: טעינה ביתית לרכב חשמלי' : i === 1 ? 'לדוגמה: צי רכבים לעסקים' : 'לדוגמה: חיסכון בעלויות חשמל'}
+                      style={{ width: '100%', marginTop: '0.25rem', padding: '0.55rem 0.7rem', borderRadius: '0.5rem', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--foreground)', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                ))}
+                {selectedIdeaIds.size > 0 && (
+                  <div style={{ fontSize: '0.74rem', color: 'var(--foreground-muted)', marginTop: '0.3rem' }}>
+                    💡 {selectedIdeaIds.size} רעיונות מסומנים יישמרו, השאר ימוקדו מחדש.
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: '0.6rem', marginTop: '1.2rem' }}>
+                  <button
+                    onClick={handleGenerateFocused}
+                    disabled={isGeneratingIdeas}
+                    style={{ flex: 1, padding: '0.6rem', borderRadius: '0.5rem', border: 'none', background: '#7c3aed', color: '#fff', fontWeight: 800, fontSize: '0.9rem', cursor: isGeneratingIdeas ? 'wait' : 'pointer' }}
+                  >
+                    {isGeneratingIdeas ? '⏳ ממקד...' : '🎯 מקד את הרעיונות'}
+                  </button>
+                  <button
+                    onClick={() => setShowFocusPopup(false)}
+                    style={{ padding: '0.6rem 1rem', borderRadius: '0.5rem', border: '1px solid var(--border)', background: 'transparent', color: 'var(--foreground-muted)', fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    ביטול
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {showMonthPicker && (
             <div
               style={{
