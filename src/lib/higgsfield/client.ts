@@ -58,8 +58,15 @@ export async function hfRequest(path: string, init?: { method?: string; body?: a
     });
     let data: any = null;
     try { data = await r.json(); } catch { try { data = await r.text(); } catch { data = null; } }
-    const errMsg = r.ok ? undefined
-      : (data?.message || data?.error || data?.detail || (typeof data === 'string' ? data.slice(0, 200) : '') || `http_${r.status}`);
+    let errMsg: string | undefined;
+    if (!r.ok) {
+      const pick = data?.message ?? data?.error ?? data?.detail ?? data;
+      let msg: string;
+      if (typeof pick === 'string') msg = pick;
+      else if (pick == null) msg = '';
+      else { try { msg = JSON.stringify(pick); } catch { msg = String(pick); } }
+      errMsg = `http_${r.status}${msg ? `: ${msg.slice(0, 400)}` : ''}`;
+    }
     return { ok: r.ok, status: r.status, data, error: errMsg };
   } catch (e) {
     return { ok: false, status: 0, data: null, error: e instanceof Error ? e.message : 'request_failed' };
@@ -93,18 +100,21 @@ function normalizeQuality(q?: string): string {
 
 /** Kick off a Soul text-to-image generation. Returns the request id(s). */
 export async function startSoulImages(prompt: string, opts: SoulImageOpts = {}): Promise<{ ok: boolean; jobs: string[]; raw: any; error?: string; immediateUrls?: string[] }> {
-  const body: any = {
+  // Higgsfield wraps all generation fields under a top-level `params` object.
+  const params: any = {
     prompt,
     width_and_height: normalizeSize(opts.size),
     quality: normalizeQuality(opts.quality),
     batch_size: opts.count ?? 4,
   };
-  if (opts.seed !== undefined) body.seed = opts.seed;
+  if (opts.seed !== undefined) params.seed = opts.seed;
   if (opts.referenceImageUrls?.length) {
     // Soul expects reference images as typed objects.
-    body.input_images = opts.referenceImageUrls.map((url) => ({ type: 'image_url', image_url: url }));
+    params.input_images = opts.referenceImageUrls.map((url) => ({ type: 'image_url', image_url: url }));
   }
-  if (opts.negativePrompt) body.negative_prompt = opts.negativePrompt;
+  if (opts.negativePrompt) params.negative_prompt = opts.negativePrompt;
+
+  const body: any = { params };
   if (opts.webhookUrl) body.webhook = { url: opts.webhookUrl };
 
   const res = await hfRequest('/v1/text2image/soul', { method: 'POST', body, timeoutMs: 45000 });
