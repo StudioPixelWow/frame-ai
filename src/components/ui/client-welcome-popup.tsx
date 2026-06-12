@@ -45,10 +45,13 @@ export default function ClientWelcomePopup({ clientName = "", logoUrl = "", mess
     <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 8000, padding: 20, animation: "cwp-fade 0.3s ease" }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface-raised, #fff)", borderRadius: 22, padding: "2rem 2.2rem", maxWidth: 380, width: "92%", textAlign: "center", direction: "rtl", boxShadow: "0 24px 70px rgba(0,0,0,0.28)", animation: "cwp-pop 0.4s cubic-bezier(0.18,1.25,0.4,1)" }}>
         {logoUrl && (
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-            <div style={{ width: 110, height: 110, borderRadius: "50%", border: "5px solid var(--yellow, #E8F401)", boxShadow: "0 0 0 1px rgba(232,244,1,0.25), 0 0 16px rgba(232,244,1,0.45)", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", boxSizing: "border-box", padding: 10 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={logoUrl} alt={clientName} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
+            <div className="cwp-logo-wrap">
+              <span className="cwp-ring" aria-hidden />
+              <span className="cwp-logo-float" style={{ width: 152, height: 152, borderRadius: "50%", border: "5px solid var(--yellow, #E8F401)", boxShadow: "0 0 0 1px rgba(232,244,1,0.25), 0 0 18px rgba(232,244,1,0.45)", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", boxSizing: "border-box", padding: 16 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={logoUrl} alt={clientName} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+              </span>
             </div>
           </div>
         )}
@@ -56,7 +59,17 @@ export default function ClientWelcomePopup({ clientName = "", logoUrl = "", mess
         <div style={{ fontSize: "1rem", color: "var(--foreground-muted, #64748b)", lineHeight: 1.5, marginBottom: 20 }}>{msg}</div>
         <button onClick={() => setOpen(false)} style={{ width: "100%", padding: "0.7rem", borderRadius: 12, border: "none", background: "var(--accent, #00B5FE)", color: "#fff", fontWeight: 800, fontSize: "0.95rem", cursor: "pointer" }}>תודה, קדימה ✨</button>
       </div>
-      <style>{`@keyframes cwp-fade{from{opacity:0}to{opacity:1}}@keyframes cwp-pop{from{opacity:0;transform:scale(0.85)}to{opacity:1;transform:scale(1)}}`}</style>
+      <style>{`
+        @keyframes cwp-fade{from{opacity:0}to{opacity:1}}
+        @keyframes cwp-pop{from{opacity:0;transform:scale(0.85)}to{opacity:1;transform:scale(1)}}
+        @keyframes cwp-spin{to{transform:rotate(360deg)}}
+        @keyframes cwp-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+        @keyframes cwp-glow{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:.95;transform:scale(1.06)}}
+        .cwp-logo-wrap{position:relative;width:152px;height:152px;display:flex;align-items:center;justify-content:center}
+        .cwp-ring{position:absolute;inset:-16px;border-radius:50%;background:conic-gradient(from 0deg,var(--accent,#00B5FE),var(--yellow,#E8F401),var(--accent,#00B5FE),var(--yellow,#E8F401),var(--accent,#00B5FE));filter:blur(11px);opacity:.75;z-index:0;animation:cwp-spin 4.5s linear infinite,cwp-glow 2.6s ease-in-out infinite}
+        .cwp-logo-float{position:relative;z-index:1;animation:cwp-float 3.2s ease-in-out infinite}
+        @media (prefers-reduced-motion: reduce){.cwp-ring,.cwp-logo-float{animation:none}}
+      `}</style>
     </div>
   );
 }
