@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useCallback, useEffect, useState } from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 const C = {
   primary: '#00B5FE', primaryDark: '#0095D0', bg: '#F7F9FC', card: '#FFFFFF',
@@ -31,14 +32,11 @@ export default function AnomaliesPage() {
 
   return (
     <div dir="rtl" style={{ maxWidth: 1000, margin: '0 auto', padding: '1.5rem 1.25rem 4rem', color: C.text, background: C.bg, minHeight: '100vh' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-        <div>
-          <div style={{ fontSize: 12, color: C.primary, letterSpacing: 2, fontWeight: 800 }}>ANOMALY RADAR</div>
-          <h1 style={{ fontSize: 24, fontWeight: 900, margin: '2px 0' }}>🚨 מכ״ם אנומליות</h1>
-          <p style={{ color: C.sub, fontSize: 13.5, margin: 0 }}>זיהוי אוטומטי של שינויים חריגים בכל הלקוחות — נראות AI, דירוגים אורגניים ו-Google Ads.</p>
-        </div>
-        <button onClick={load} disabled={loading} style={{ background: C.primary, color: '#fff', border: 'none', borderRadius: 12, padding: '0.6rem 1.2rem', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>{loading ? '⏳ סורק…' : '🔄 סרוק שוב'}</button>
-      </div>
+      <PageHeader
+        title="🚨 מכ״ם אנומליות"
+        subtitle="זיהוי אוטומטי של שינויים חריגים בכל הלקוחות — נראות AI, דירוגים אורגניים ו-Google Ads."
+        primaryAction={{ label: loading ? '⏳ סורק…' : '🔄 סרוק שוב', onClick: () => { if (!loading) load(); } }}
+      />
 
       {err && <div style={{ background: '#FEF2F2', border: `1px solid ${C.high}40`, color: C.high, borderRadius: 10, padding: '0.6rem 0.9rem', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>⚠ {err}</div>}
 

@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 // ── Types ──
 
@@ -200,35 +201,11 @@ export default function GrowthDashboardPage() {
   return (
     <div style={{ direction: 'rtl', padding: '24px 32px', fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 1200, margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: '#111827', margin: 0 }}>
-            🌱 מנוע צמיחה אוטומטי
-          </h1>
-          <p style={{ color: '#6b7280', margin: '4px 0 0', fontSize: 14 }}>
-            זיהוי הזדמנויות, הכנת פעולות, ולמידה מתוצאות — הכל באישור מלא שלך
-          </p>
-        </div>
-        <button
-          onClick={runScan}
-          disabled={scanning}
-          style={{
-            padding: '10px 20px',
-            borderRadius: 8,
-            border: 'none',
-            background: scanning ? '#d1d5db' : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-            color: '#fff',
-            fontWeight: 600,
-            fontSize: 14,
-            cursor: scanning ? 'wait' : 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-          }}
-        >
-          {scanning ? '⏳ סורק...' : '🔍 הרץ בדיקת צמיחה חכמה'}
-        </button>
-      </div>
+      <PageHeader
+        title="🌱 מנוע צמיחה אוטומטי"
+        subtitle="זיהוי הזדמנויות, הכנת פעולות, ולמידה מתוצאות — הכל באישור מלא שלך"
+        primaryAction={{ label: scanning ? '⏳ סורק...' : '🔍 הרץ בדיקת צמיחה חכמה', onClick: () => { if (!scanning) runScan(); } }}
+      />
 
       {/* Trust banner */}
       <div style={{

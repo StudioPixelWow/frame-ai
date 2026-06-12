@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useMemo, useState } from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 import { useRouter } from 'next/navigation';
 import { useLeads } from '@/lib/api/use-entity';
 import { scoreAndRankLeads, TIER_META, type LeadTier } from '@/lib/leads/scoring';
@@ -33,11 +34,10 @@ export default function LeadScoringPage() {
 
   return (
     <div dir="rtl" style={{ maxWidth: 1080, margin: '0 auto', padding: '1.5rem 1.25rem 4rem', color: C.text, background: C.bg, minHeight: '100vh' }}>
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 12, color: C.primary, letterSpacing: 2, fontWeight: 800 }}>LEAD SCORING</div>
-        <h1 style={{ fontSize: 24, fontWeight: 900, margin: '2px 0' }}>🎯 דירוג לידים חמים</h1>
-        <p style={{ color: C.sub, fontSize: 13.5, margin: 0 }}>הלידים מדורגים אוטומטית לפי סיכוי לסגירה — עבדו קודם את החמים ביותר.</p>
-      </div>
+      <PageHeader
+        title="🎯 דירוג לידים חמים"
+        subtitle="הלידים מדורגים אוטומטית לפי סיכוי לסגירה — עבדו קודם את החמים ביותר."
+      />
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         {([['all', `הכל (${ranked.length})`], ['hot', `${TIER_META.hot.label} (${counts.hot})`], ['warm', `${TIER_META.warm.label} (${counts.warm})`], ['cold', `${TIER_META.cold.label} (${counts.cold})`]] as [LeadTier | 'all', string][]).map(([k, label]) => (

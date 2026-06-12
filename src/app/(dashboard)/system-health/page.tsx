@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 import { PremiumStatGrid, PremiumKpiCard, BRAND } from '@/components/charts';
 
 // ── Types ──
@@ -135,14 +136,7 @@ export default function SystemHealthPage() {
   return (
     <main dir="rtl" style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--foreground)', margin: 0 }}>
-          🏥 בריאות המערכת
-        </h1>
-        <p style={{ fontSize: '0.82rem', color: 'var(--foreground-muted)', margin: '0.3rem 0 0' }}>
-          ניטור, שגיאות, התראות ובקרה
-        </p>
-      </div>
+      <PageHeader title="🏥 בריאות המערכת" subtitle="ניטור, שגיאות, התראות ובקרה" />
 
       {/* Overall Status Banner */}
       <div style={{

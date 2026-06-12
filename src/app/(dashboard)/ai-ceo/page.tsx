@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 const C = {
   primary: '#00B5FE', primaryDark: '#0095D0', bg: '#F7F9FC', card: '#FFFFFF',
@@ -61,14 +62,11 @@ export default function AiCeoPage() {
 
   return (
     <div dir="rtl" style={{ maxWidth: 1000, margin: '0 auto', padding: '1.5rem 1.25rem 4rem', color: C.text, background: C.bg, minHeight: '100vh' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
-        <div>
-          <div style={{ fontSize: 12, color: C.primary, letterSpacing: 2, fontWeight: 800 }}>AI CEO</div>
-          <h1 style={{ fontSize: 24, fontWeight: 900, margin: '2px 0' }}>🧠 מנכ״ל AI</h1>
-          <p style={{ color: C.sub, fontSize: 13.5, margin: 0 }}>תדריך בוקר חכם ושאל-את-הנתונים בשפה חופשית — מבוסס על מצב הסוכנות בזמן אמת.</p>
-        </div>
-        <button onClick={load} disabled={loading} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: '0.55rem 1rem', fontWeight: 700, fontSize: 13, cursor: 'pointer', color: C.text }}>{loading ? '⏳' : '↻ רענן'}</button>
-      </div>
+      <PageHeader
+        title="🧠 מנכ״ל AI"
+        subtitle="תדריך בוקר חכם ושאל-את-הנתונים בשפה חופשית — מבוסס על מצב הסוכנות בזמן אמת."
+        primaryAction={{ label: loading ? '⏳' : '↻ רענן', variant: 'secondary', onClick: () => { if (!loading) load(); } }}
+      />
 
       {/* KPIs */}
       {snap && (

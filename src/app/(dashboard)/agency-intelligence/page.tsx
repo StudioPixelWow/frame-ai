@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 import { PremiumStatGrid, PremiumKpiCard, PremiumRadialMetric, BRAND } from '@/components/charts';
 
 // ── Types ──
@@ -200,10 +201,10 @@ export default function AgencyIntelligencePage() {
   return (
     <div dir="rtl" style={{ padding: '24px 32px', maxWidth: 1400, margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: '#0f172a', margin: 0 }}>🧠 Agency Intelligence</h1>
-        <p style={{ fontSize: 14, color: '#64748b', marginTop: 4 }}>כיול, פלייבוקים, תבניות ולמידה — המוח הפנימי של הסוכנות</p>
-      </div>
+      <PageHeader
+        title="🧠 Agency Intelligence"
+        subtitle="כיול, פלייבוקים, תבניות ולמידה — המוח הפנימי של הסוכנות"
+      />
 
       {/* KPI Cards */}
       <PremiumStatGrid

@@ -13,6 +13,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 import { PremiumKpiCard, PremiumStatGrid, PremiumRadialMetric, PremiumBarChart, BRAND } from '@/components/charts';
 
 interface HealthScore {
@@ -89,14 +90,10 @@ export default function BIDashboardPage() {
   return (
     <div style={{ padding: '2rem', maxWidth: 1200, margin: '0 auto', direction: 'rtl' }}>
       {/* Header */}
-      <div style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>
-          📊 Business Intelligence
-        </h1>
-        <p style={{ fontSize: '0.85rem', color: 'var(--foreground-muted)', marginTop: '0.3rem' }}>
-          ניתוח ביצועים חכם — מבוסס נתונים אמיתיים
-        </p>
-      </div>
+      <PageHeader
+        title="📊 Business Intelligence"
+        subtitle="ניתוח ביצועים חכם — מבוסס נתונים אמיתיים"
+      />
 
       {/* Tabs */}
       <div style={{
