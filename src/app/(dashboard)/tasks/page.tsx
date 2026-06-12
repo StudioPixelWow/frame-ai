@@ -28,6 +28,21 @@ const COLUMNS = [
   { id: "completed", label: "הושלם", color: "#10b981" },
 ] as const;
 
+/* Compact progress ring for the health dashboard */
+function Ring({ label, value, color }: { label: string; value: number; color: string }) {
+  const r = 26, c = 2 * Math.PI * r, off = c - (Math.min(100, Math.max(0, value)) / 100) * c;
+  return (
+    <div style={{ textAlign: "center" }}>
+      <svg width={64} height={64} viewBox="0 0 64 64">
+        <circle cx={32} cy={32} r={r} fill="none" stroke="var(--border)" strokeWidth={7} />
+        <circle cx={32} cy={32} r={r} fill="none" stroke={color} strokeWidth={7} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off} transform="rotate(-90 32 32)" />
+        <text x={32} y={37} textAnchor="middle" fontSize={15} fontWeight={800} fill="var(--foreground)">{value}%</text>
+      </svg>
+      <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", marginTop: 2 }}>{label}</div>
+    </div>
+  );
+}
+
 const PRIORITIES = [
   { id: "urgent", label: "דחוף", color: "#ef4444" },
   { id: "high", label: "גבוה", color: "#f59e0b" },
@@ -69,7 +84,7 @@ function SubmittedFilePreview({ name, url, onZoom }: { name: string; url: string
 }
 
 function TasksPageInner() {
-  const { isEmployee, role, displayName } = useAuth();
+  const { isEmployee, role, displayName, employeeId: authEmployeeId } = useAuth();
   const [workspaceTask, setWorkspaceTask] = useState<Task | null>(null);
   const { data: tasks, loading, create, update, remove } = useTasks();
   const { data: employeeTasks, loading: employeeTasksLoading, update: updateEmployeeTask } = useEmployeeTasks();
@@ -579,18 +594,189 @@ function TasksPageInner() {
     return empTasks.length + empTasksFromOther.length;
   };
 
+  // ── Mission-control metrics (whole operation, not the filtered view) ──
+  const mc = useMemo(() => {
+    const all = (tasks || []) as any[];
+    const now = new Date();
+    const t0 = new Date(now.toDateString()).getTime();
+    const dayMs = 86400000;
+    const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay()); weekStart.setHours(0, 0, 0, 0);
+    const isOpen = (t: any) => t.status !== "completed" && t.status !== "approved";
+    const overdueOf = (t: any) => t.dueDate && new Date(new Date(t.dueDate).toDateString()).getTime() < t0 && isOpen(t);
+    const open = all.filter(isOpen);
+    const overdue = all.filter(overdueOf);
+    const completedWeek = all.filter((t) => (t.status === "completed" || t.status === "approved") && t.updatedAt && new Date(t.updatedAt) >= weekStart).length;
+    const mine = authEmployeeId ? all.filter((t) => (t.assigneeIds || []).includes(authEmployeeId)).length : 0;
+    const doneTotal = all.filter((t) => t.status === "completed" || t.status === "approved").length;
+    const byStatus = COLUMNS.map((c) => ({ id: c.id, label: c.label, color: c.color, count: all.filter((t) => t.status === c.id).length }));
+    const byPriority = PRIORITIES.map((p) => ({ id: p.id, label: p.label, color: p.color, count: open.filter((t) => t.priority === p.id).length }));
+    // team workload
+    const counts: Record<string, { open: number; overdue: number }> = {};
+    const bump = (id: string, od: boolean) => { if (!id) return; counts[id] = counts[id] || { open: 0, overdue: 0 }; counts[id].open++; if (od) counts[id].overdue++; };
+    open.forEach((t) => (t.assigneeIds || []).forEach((id: string) => bump(id, overdueOf(t))));
+    (employeeTasks || []).filter((t: any) => t.status !== "completed").forEach((t: any) => bump(t.assignedEmployeeId, !!(t.dueDate && new Date(new Date(t.dueDate).toDateString()).getTime() < t0)));
+    const maxLoad = Math.max(1, ...Object.values(counts).map((c) => c.open));
+    const workload = teamEmployees.map((e: any) => ({ id: e.id, name: e.name, avatarUrl: e.avatarUrl, open: counts[e.id]?.open || 0, overdue: counts[e.id]?.overdue || 0, pct: Math.round(((counts[e.id]?.open || 0) / maxLoad) * 100) })).filter((e) => e.open > 0).sort((a, b) => b.open - a.open);
+    // deadlines
+    const dueOpen = all.filter((t) => t.dueDate && isOpen(t));
+    const bucket = (lo: number, hi: number) => dueOpen.filter((t) => { const d = new Date(new Date(t.dueDate).toDateString()).getTime(); return d >= lo && d < hi; }).sort((a, b) => +new Date(a.dueDate) - +new Date(b.dueDate));
+    const deadlines = { today: bucket(t0, t0 + dayMs), tomorrow: bucket(t0 + dayMs, t0 + 2 * dayMs), thisWeek: bucket(t0 + 2 * dayMs, t0 + 7 * dayMs), nextWeek: bucket(t0 + 7 * dayMs, t0 + 14 * dayMs) };
+    // AI insights
+    const insights: string[] = [];
+    if (overdue.length) insights.push(`${overdue.length} משימות באיחור דורשות טיפול מיידי`);
+    if (workload[0] && workload[0].open >= 6) insights.push(`עומס גבוה אצל ${workload[0].name} — ${workload[0].open} משימות פתוחות`);
+    const reviewCount = byStatus.find((s) => s.id === "under_review")?.count || 0;
+    if (reviewCount >= 3) insights.push(`${reviewCount} משימות ממתינות לבדיקה — צוואר בקבוק באישורים`);
+    const returnedCount = byStatus.find((s) => s.id === "returned")?.count || 0;
+    if (returnedCount > 0) insights.push(`${returnedCount} משימות הוחזרו לתיקון`);
+    if (insights.length === 0) insights.push("המערכת בריאה — אין חריגות כרגע 🎉");
+    return {
+      active: open.length, high: open.filter((t) => t.priority === "urgent" || t.priority === "high").length,
+      inProgress: byStatus.find((s) => s.id === "in_progress")?.count || 0, review: reviewCount,
+      overdue: overdue.length, completedWeek, mine, total: all.length,
+      completionRate: all.length ? Math.round((doneTotal / all.length) * 100) : 0,
+      overdueRate: open.length ? Math.round((overdue.length / open.length) * 100) : 0,
+      byStatus, byPriority, workload, deadlines, insights,
+    };
+  }, [tasks, employeeTasks, teamEmployees, authEmployeeId]);
+
+  const aiQuickActions: { label: string; run: () => void }[] = [
+    { label: "🔥 הצג משימות באיחור", run: () => { setFilterDateRange("overdue"); setShowWork(true); } },
+    { label: "↩️ משימות שהוחזרו", run: () => { setFilterStatus("returned"); setShowWork(true); } },
+    { label: "🔍 ממתינות לבדיקה", run: () => { setFilterStatus("under_review"); setShowWork(true); } },
+    { label: "📋 פתח לוח מלא", run: () => setShowWork(true) },
+  ];
+
   return (
     <div className="tasks-page">
-      {/* Header */}
-      <div className="tasks-header">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem" }}>
-          <div className="mod-page-title">✅ לוח משימות</div>
-          <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
-            <input className="mod-search ux-input" placeholder="🔍 חיפוש משימה..." value={search} onChange={(e) => setSearch(e.target.value)} />
-            <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={() => openCreate("new")}>+ משימה חדשה</button>
+      {/* ═══ ZONE 1 — TASK COMMAND HEADER ═══ */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem", marginBottom: "1.25rem" }}>
+        <div>
+          <div style={{ fontSize: "1.7rem", fontWeight: 900, color: "var(--foreground)" }}>✅ לוח משימות</div>
+          <div style={{ fontSize: "0.88rem", color: "var(--foreground-muted)", marginTop: 2 }}>מרכז השליטה בביצוע של כל הסוכנות</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+            {[
+              { n: mc.active, l: "פעילות", c: "#3b82f6" },
+              { n: mc.high, l: "עדיפות גבוהה", c: "#ef4444" },
+              { n: mc.inProgress, l: "בעבודה", c: "#f59e0b" },
+              { n: mc.completedWeek, l: "הושלמו השבוע", c: "#22c55e" },
+            ].map((s, i) => (
+              <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 999, padding: "0.3rem 0.8rem", fontSize: "0.78rem" }}>
+                <b style={{ color: s.c, fontSize: "0.92rem" }}>{s.n}</b><span style={{ color: "var(--foreground-muted)" }}>{s.l}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
+          <input className="mod-search ux-input" placeholder="🔍 חיפוש משימה..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={() => openCreate("new")}>+ משימה חדשה</button>
+        </div>
+      </div>
+
+      {/* ═══ ZONE 2 — EXECUTIVE KPI STRIP ═══ */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: "0.85rem", marginBottom: "1.25rem" }}>
+        {[
+          { icon: "🙋", label: "המשימות שלי", val: mc.mine, color: "#6366f1" },
+          { icon: "🔥", label: "עדיפות גבוהה", val: mc.high, color: "#ef4444" },
+          { icon: "⚙️", label: "בעבודה", val: mc.inProgress, color: "#f59e0b" },
+          { icon: "⏰", label: "באיחור", val: mc.overdue, color: "#f97316" },
+          { icon: "✅", label: "הושלמו השבוע", val: mc.completedWeek, color: "#22c55e" },
+        ].map((k, i) => (
+          <div key={i} className="premium-card" style={{ padding: "1rem 1.1rem", borderTop: `3px solid ${k.color}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "1.3rem" }}>{k.icon}</span>
+              <span style={{ fontSize: "1.9rem", fontWeight: 900, color: k.color, lineHeight: 1 }}>{k.val}</span>
+            </div>
+            <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", marginTop: 4 }}>{k.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ═══ ZONE 3 + 4 — HEALTH + AI COMMAND CENTER ═══ */}
+      <div style={{ display: "grid", gridTemplateColumns: "1.15fr 1fr", gap: "1rem", marginBottom: "1.25rem" }} className="tasks-mc-2col">
+        {/* Health */}
+        <div className="premium-card" style={{ padding: "1.1rem 1.2rem" }}>
+          <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "var(--foreground)", marginBottom: 12 }}>📊 בריאות הביצוע</div>
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+            <Ring label="השלמה" value={mc.completionRate} color="#22c55e" />
+            <Ring label="איחור" value={mc.overdueRate} color="#ef4444" />
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", marginBottom: 6 }}>פילוח לפי סטטוס</div>
+              {mc.byStatus.filter((s) => s.count > 0).map((s) => {
+                const pct = mc.total ? Math.round((s.count / mc.total) * 100) : 0;
+                return (
+                  <div key={s.id} style={{ marginBottom: 6 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "var(--foreground-muted)", marginBottom: 2 }}><span>{s.label}</span><span>{s.count}</span></div>
+                    <div style={{ height: 6, background: "var(--surface)", borderRadius: 999, overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: s.color, borderRadius: 999 }} /></div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        {/* AI command center */}
+        <div style={{ borderRadius: 16, padding: "1.1rem 1.2rem", background: "linear-gradient(135deg,#eef2ff,#ecfeff)", border: "1px solid #c7d2fe" }}>
+          <div style={{ fontSize: "1.05rem", fontWeight: 900, background: "linear-gradient(90deg,#6366f1,#06b6d4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>✨ Pixel AI</div>
+          <div style={{ fontSize: "0.74rem", color: "#64748b", marginBottom: 10 }}>עוזר התבונה למשימות</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+            {mc.insights.slice(0, 3).map((t, i) => (
+              <div key={i} style={{ fontSize: "0.8rem", color: "#334155", background: "rgba(255,255,255,0.7)", borderRadius: 8, padding: "0.45rem 0.7rem" }}>💡 {t}</div>
+            ))}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+            {aiQuickActions.map((a, i) => (
+              <button key={i} onClick={a.run} style={{ background: "#fff", border: "1px solid #c7d2fe", color: "#4f46e5", borderRadius: 999, padding: "0.4rem 0.85rem", fontSize: "0.76rem", fontWeight: 700, cursor: "pointer" }}>{a.label}</button>
+            ))}
           </div>
         </div>
       </div>
+
+      {/* ═══ ZONE 7 + 8 — TEAM WORKLOAD + DEADLINES ═══ */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }} className="tasks-mc-2col">
+        <div className="premium-card" style={{ padding: "1.1rem 1.2rem" }}>
+          <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "var(--foreground)", marginBottom: 12 }}>👥 עומס צוות</div>
+          {mc.workload.length === 0 ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>אין משימות פתוחות לצוות</div> :
+            mc.workload.map((e: any) => (
+              <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                <Avatar src={e.avatarUrl} name={e.name} size={30} ring={false} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", marginBottom: 3 }}>
+                    <span style={{ fontWeight: 700, color: "var(--foreground)" }}>{e.name}</span>
+                    <span style={{ color: "var(--foreground-muted)" }}>{e.open}{e.overdue > 0 ? ` · ${e.overdue} באיחור` : ""}</span>
+                  </div>
+                  <div style={{ height: 7, background: "var(--surface)", borderRadius: 999, overflow: "hidden" }}>
+                    <div style={{ width: `${e.pct}%`, height: "100%", background: e.pct > 80 ? "#ef4444" : e.pct > 50 ? "#f59e0b" : "#22c55e", borderRadius: 999 }} />
+                  </div>
+                </div>
+                {e.pct > 80 && <span style={{ fontSize: "0.62rem", fontWeight: 800, color: "#ef4444", background: "#fef2f2", borderRadius: 999, padding: "2px 7px" }}>עומס</span>}
+              </div>
+            ))}
+        </div>
+        <div className="premium-card" style={{ padding: "1.1rem 1.2rem" }}>
+          <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "var(--foreground)", marginBottom: 12 }}>🗓️ דדליינים קרובים</div>
+          {([["today", "היום", "#ef4444"], ["tomorrow", "מחר", "#f59e0b"], ["thisWeek", "השבוע", "#3b82f6"], ["nextWeek", "שבוע הבא", "#94a3b8"]] as const).map(([k, label, color]) => {
+            const list = (mc.deadlines as any)[k] as any[];
+            return (
+              <div key={k} style={{ marginBottom: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: color }} />
+                  <span style={{ fontSize: "0.76rem", fontWeight: 800, color: "var(--foreground)" }}>{label}</span>
+                  <span style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>({list.length})</span>
+                </div>
+                {list.slice(0, 3).map((t: any) => (
+                  <div key={t.id} onClick={() => openEdit(t)} style={{ cursor: "pointer", display: "flex", justifyContent: "space-between", gap: 8, fontSize: "0.74rem", color: "var(--foreground-muted)", padding: "0.2rem 0 0.2rem 0.5rem", borderInlineStart: `2px solid ${color}`, marginBottom: 2 }}>
+                    <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--foreground)" }}>{t.title}</span>
+                    <span style={{ whiteSpace: "nowrap" }}>{resolveClientName(t) || ""}</span>
+                  </div>
+                ))}
+                {list.length === 0 && <div style={{ fontSize: "0.7rem", color: "var(--foreground-subtle)", paddingInlineStart: 13 }}>—</div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <style>{`@media (max-width:980px){.tasks-mc-2col{grid-template-columns:1fr !important}}`}</style>
 
       {/* ── New execution-first workspace (primary) ── */}
       <TasksCommandCenter onOpenTask={openEdit} onCompleteTask={(t) => { updateAny(t.id, { status: "completed" }); fireConfetti(); }} />
