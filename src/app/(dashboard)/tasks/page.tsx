@@ -124,7 +124,7 @@ function TasksPageInner() {
   const [showReviewNotes, setShowReviewNotes] = useState(false);
   const [reviewNotes, setReviewNotes] = useState("");
   // Task-workspace tab (replaces the single long scroll form).
-  const [modalTab, setModalTab] = useState<'overview' | 'brief' | 'files' | 'ai'>('overview');
+  const [modalTab, setModalTab] = useState<'overview' | 'brief' | 'files' | 'activity' | 'approval' | 'ai'>('overview');
   const [previewImg, setPreviewImg] = useState<string | null>(null);
   const [autoAssignmentNote, setAutoAssignmentNote] = useState("");
   const [allocSuggest, setAllocSuggest] = useState<AllocationSuggestion[]>([]);
@@ -1455,7 +1455,7 @@ function TasksPageInner() {
                   {form.dueDate && <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--foreground-muted)", background: "var(--surface)", borderRadius: 20, padding: "3px 11px", border: "1px solid var(--border)" }}>📅 {new Date(form.dueDate).toLocaleDateString("he-IL")}</span>}
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
-                  {([["overview", "📋 סקירה"], ["brief", "📝 בריף"], ["files", "📎 קבצים"], ...(!isEmployee && editingTask ? [["ai", "✨ AI"]] : [])] as [string, string][]).map(([id, label]) => {
+                  {([["overview", "📋 סקירה"], ["brief", "📝 בריף"], ["files", "📎 קבצים"], ...(editingTask ? [["activity", "🕒 פעילות"], ["approval", "✅ אישור"]] : []), ...(!isEmployee && editingTask ? [["ai", "✨ AI"]] : [])] as [string, string][]).map(([id, label]) => {
                     const active = modalTab === id;
                     return (
                       <button key={id} type="button" onClick={() => setModalTab(id as any)} style={{ padding: "0.4rem 0.85rem", fontSize: "0.8rem", fontWeight: active ? 700 : 500, color: active ? "var(--accent-text)" : "var(--foreground-muted)", background: active ? "var(--accent-muted)" : "transparent", border: "none", borderRadius: "0.4rem 0.4rem 0 0", borderBottom: active ? "2.5px solid var(--accent)" : "2.5px solid transparent", cursor: "pointer" }}>{label}</button>
@@ -1608,6 +1608,49 @@ function TasksPageInner() {
                   >
                     📤 העלה ושלח לבדיקה
                   </button>
+                </div>
+              )}
+
+              {/* APPROVAL — visual stage stepper */}
+              {modalTab === "approval" && editingTask && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div style={{ fontWeight: 800, fontSize: "0.95rem" }}>זרימת אישור</div>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 4 }}>
+                    {COLUMNS.map((c, i) => {
+                      const curIdx = COLUMNS.findIndex((x) => x.id === form.status);
+                      const done = i < curIdx, active = i === curIdx;
+                      return (
+                        <div key={c.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, flex: 1 }}>
+                          <div style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.8rem", fontWeight: 800, color: active || done ? "#fff" : "var(--foreground-muted)", background: active ? c.color : done ? "#10b981" : "var(--border)", boxShadow: active ? `0 3px 10px ${c.color}55` : "none" }}>{done ? "✓" : i + 1}</div>
+                          <span style={{ fontSize: "0.62rem", color: active ? c.color : "var(--foreground-muted)", fontWeight: active ? 700 : 400, textAlign: "center", lineHeight: 1.2 }}>{c.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", background: "var(--surface)", borderRadius: 10, padding: "0.7rem 0.85rem", lineHeight: 1.5 }}>
+                    {isEmployee ? "כשתסיים — העלה את התוצר בלשונית סקירה כדי לשלוח לבדיקה, או הגב לבקשת שינויים." : "אשר פנימית, בקש שינויים, שלח ללקוח או סמן כהושלם — בכפתורי הפעולה בתחתית."}
+                  </div>
+                </div>
+              )}
+
+              {/* ACTIVITY — task timeline */}
+              {modalTab === "activity" && editingTask && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <div style={{ fontWeight: 800, fontSize: "0.95rem", marginBottom: 8 }}>פעילות המשימה</div>
+                  {([
+                    { icon: "🆕", text: "המשימה נוצרה", time: editingTask.createdAt },
+                    ...(form.submittedFiles.length ? [{ icon: "📤", text: `${form.submittedFiles.length} קבצים הוגשו לבדיקה`, time: (editingTask as any).updatedAt || "" }] : []),
+                    { icon: "📍", text: `סטטוס נוכחי: ${COLUMNS.find((c) => c.id === form.status)?.label || form.status}`, time: (editingTask as any).updatedAt || "" },
+                    ...((editingTask as any).notes ? [{ icon: "📝", text: `הערה: ${(editingTask as any).notes}`, time: "" }] : []),
+                  ] as { icon: string; text: string; time: string }[]).map((act, i) => (
+                    <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", borderInlineStart: "2px solid var(--border)", paddingInlineStart: 12, paddingBottom: 12 }}>
+                      <span style={{ fontSize: "1rem", marginTop: -2 }}>{act.icon}</span>
+                      <div>
+                        <div style={{ fontSize: "0.82rem", color: "var(--foreground)" }}>{act.text}</div>
+                        {act.time && <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>{new Date(act.time).toLocaleString("he-IL")}</div>}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
 
