@@ -3009,7 +3009,9 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={v.url} alt={v.label} onClick={() => setCreativePreview(v.url)} style={{ width: "100%", height: 150, objectFit: "cover", display: "block", cursor: "zoom-in" }} />
                             <div style={{ padding: "5px 7px" }}>
-                              <div style={{ fontSize: "0.7rem", fontWeight: 800, color: "#7c3aed", marginBottom: 4 }}>וריאציה {v.label}</div>
+                              <div style={{ fontSize: "0.7rem", fontWeight: 800, color: "#7c3aed", marginBottom: 2 }}>וריאציה {v.label}{(v as any).approach ? ` · ${(v as any).approach}` : ''}</div>
+                              {(v as any).message && <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--foreground)", marginBottom: 2, lineHeight: 1.3 }}>{(v as any).message}</div>}
+                              {(v as any).cta && <div style={{ fontSize: "0.64rem", color: "var(--foreground-muted)", marginBottom: 5 }}>↜ {(v as any).cta}</div>}
                               <div style={{ display: "flex", gap: 6 }}>
                                 <button onClick={() => useCreativeImage(selectedItem, v.url, 'approve')} title="אשר → התאמת גדלים" style={{ flex: 1, fontSize: "0.66rem", fontWeight: 700, color: "#16a34a", background: "#16a34a15", border: "none", borderRadius: 6, padding: "3px 4px", cursor: "pointer" }}>✓ אשר</button>
                                 <button onClick={() => useCreativeImage(selectedItem, v.url, 'reference')} title="שלח כרפרנס לעובד" style={{ flex: 1, fontSize: "0.66rem", fontWeight: 700, color: "#0095D0", background: "#00B5FE15", border: "none", borderRadius: 6, padding: "3px 4px", cursor: "pointer" }}>📌 לעובד</button>

@@ -79,6 +79,7 @@ export interface SoulImageOpts {
   quality?: '720p' | '1080p' | 'sd' | 'hd';
   referenceImageUrls?: string[]; // brand assets / logo for visual-language conditioning
   negativePrompt?: string;
+  enhancePrompt?: boolean;   // let Higgsfield expand/upgrade the prompt for quality
   seed?: number;
   webhookUrl?: string;
 }
@@ -110,6 +111,7 @@ export async function startSoulImages(prompt: string, opts: SoulImageOpts = {}):
     batch_size: normalizeBatch(opts.count),
   };
   if (opts.seed !== undefined) params.seed = opts.seed;
+  if (opts.enhancePrompt) params.enhance_prompt = true;
   if (opts.referenceImageUrls?.length) {
     // Soul expects reference images as typed objects.
     params.input_images = opts.referenceImageUrls.map((url) => ({ type: 'image_url', image_url: url }));

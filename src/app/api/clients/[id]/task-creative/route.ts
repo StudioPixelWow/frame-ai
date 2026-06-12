@@ -52,27 +52,37 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       platform: item.platform || 'instagram',
     });
 
-    // 2) A/B/C/D visuals via Higgsfield (2 prompts × 2 = 4). Best-effort.
-    const abcd: { label: string; url: string; prompt: string }[] = [];
+    // 2) A/B/C/D visuals via Higgsfield — 4 DISTINCT prompts (one image each), so
+    //    the result is 4 genuinely different ad creatives on the same idea.
+    const abcd: { label: string; url: string; prompt: string; message?: string; cta?: string; approach?: string }[] = [];
     let genError: string | null = null;
     if (higgsfieldConfigured()) {
-      const labels = ['A', 'B', 'C', 'D'];
       const isStory = item.format === 'story' || item.itemType === 'story';
       const size = isStory ? '1536x2048' : '1536x1536';
-      // Soul accepts batch_size 1 or 4 → one call for 4 on-brand A/B/C/D variations.
-      const prompt = (spec.posts[0]?.imagePrompt || spec.posts[1]?.imagePrompt || spec.headline) as string;
+      const variations = (spec.variations?.length ? spec.variations : []).slice(0, 4);
+      const negative = spec.negativePrompt || undefined;
       try {
-        const start = await startSoulImages(prompt, { count: 4, size, quality: '1080p', referenceImageUrls: refs });
-        const immediate = start.immediateUrls || [];
-        let urls: string[] = immediate;
-        if (!urls.length && start.ok && start.jobs[0]) {
-          const polled = await pollSoulJob(start.jobs[0], { tries: 40, intervalMs: 3500 }); // ~140s
-          urls = polled.urls;
-          if (!urls.length) genError = `poll_${polled.status}`;
-        } else if (!urls.length && !start.ok) {
-          genError = start.error || 'start_failed';
+        // Phase 1: fire all 4 generations (fast POSTs) so they queue concurrently.
+        const started = await Promise.all(variations.map(async (v) => {
+          const prompt = v.imagePrompt || spec.headline;
+          const start = await startSoulImages(prompt, {
+            count: 1, size, quality: '1080p', referenceImageUrls: refs,
+            negativePrompt: negative, enhancePrompt: true,
+          });
+          return { v, prompt, start };
+        }));
+        // Phase 2: poll each (generation already running server-side in parallel).
+        for (const { v, prompt, start } of started) {
+          let urls: string[] = start.immediateUrls || [];
+          if (!urls.length && start.ok && start.jobs[0]) {
+            const polled = await pollSoulJob(start.jobs[0], { tries: 36, intervalMs: 3000 }); // ~108s budget
+            urls = polled.urls;
+            if (!urls.length) genError = `poll_${polled.status}`;
+          } else if (!urls.length && !start.ok) {
+            genError = start.error || 'start_failed';
+          }
+          if (urls[0]) abcd.push({ label: v.label, url: urls[0], prompt, message: v.message, cta: v.cta, approach: v.approach });
         }
-        urls.slice(0, 4).forEach((url, i) => abcd.push({ label: labels[i] || `V${i + 1}`, url, prompt }));
       } catch (e) { genError = e instanceof Error ? e.message : 'generation_failed'; }
       // If we got at least one image, don't surface a partial error as a hard failure.
       if (abcd.length > 0) genError = null;
