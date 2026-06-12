@@ -1,17 +1,15 @@
 export const dynamic = "force-dynamic";
 
+import { PageHeader } from '@/components/ui/saas-kit';
+
 export default function ContentPage() {
   return (
     <main className="max-w-[1100px] mx-auto px-6 py-8"><div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-[1.35rem] font-bold tracking-tight">תוכן</h1>
-          <p className="text-foreground-muted text-[0.92rem] mt-1">
-            רנדרים של וידאו, עריכות AI וספריית תוכן.
-          </p>
-        </div>
-        <button className="btn-primary">רנדר חדש</button>
-      </div>
+      <PageHeader
+        title="תוכן"
+        subtitle="רנדרים של וידאו, עריכות AI וספריית תוכן."
+        primaryAction={{ label: "רנדר חדש", onClick: () => {} }}
+      />
 
       {/* Content grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
