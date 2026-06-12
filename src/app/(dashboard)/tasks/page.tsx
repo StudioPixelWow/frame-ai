@@ -123,6 +123,8 @@ function TasksPageInner() {
   const [fileUploading, setFileUploading] = useState(false);
   const [showReviewNotes, setShowReviewNotes] = useState(false);
   const [reviewNotes, setReviewNotes] = useState("");
+  // Task-workspace tab (replaces the single long scroll form).
+  const [modalTab, setModalTab] = useState<'overview' | 'brief' | 'files' | 'ai'>('overview');
   const [previewImg, setPreviewImg] = useState<string | null>(null);
   const [autoAssignmentNote, setAutoAssignmentNote] = useState("");
   const [allocSuggest, setAllocSuggest] = useState<AllocationSuggestion[]>([]);
@@ -159,6 +161,7 @@ function TasksPageInner() {
     setEditingTask(null);
     setDefaultStatus(status);
     setForm({ title: "", description: "", status, priority: "medium", clientId: "", clientName: "", dueDate: "", tags: "", assigneeIds: [], files: [], submittedFiles: [], notes: "", contentType: "" });
+    setModalTab('overview');
     setModalOpen(true);
   };
 
@@ -195,6 +198,7 @@ function TasksPageInner() {
       contentType: ((task as any).contentType as "" | "post" | "story" | "reel") || "",
     });
     setTaskAdaptations(((task as any).adaptations as Record<string, string>) || null);
+    setModalTab('overview');
     setModalOpen(true);
   };
 
@@ -1442,8 +1446,26 @@ function TasksPageInner() {
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxHeight: "60vh", overflowY: "auto" }}>
           {!showReviewNotes ? (
             <>
+              {/* ── Fixed task-workspace header + tabs ── */}
+              <div style={{ position: "sticky", top: 0, zIndex: 3, background: "var(--surface-raised)", borderBottom: "1px solid var(--border)", paddingBottom: "0.6rem", marginBottom: "0.2rem" }}>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: "0.6rem" }}>
+                  {(() => { const st = COLUMNS.find((c) => c.id === form.status); return st ? <span style={{ fontSize: "0.7rem", fontWeight: 800, color: st.color, background: `${st.color}1a`, borderRadius: 20, padding: "3px 11px" }}>● {st.label}</span> : null; })()}
+                  {form.priority && <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#7c3aed", background: "#7c3aed14", borderRadius: 20, padding: "3px 11px" }}>{form.priority === "high" ? "🔴 דחוף" : form.priority === "low" ? "🟢 נמוך" : "🟡 רגיל"}</span>}
+                  {form.clientName && <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--foreground-muted)", background: "var(--surface)", borderRadius: 20, padding: "3px 11px", border: "1px solid var(--border)" }}>🏢 {form.clientName}</span>}
+                  {form.dueDate && <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--foreground-muted)", background: "var(--surface)", borderRadius: 20, padding: "3px 11px", border: "1px solid var(--border)" }}>📅 {new Date(form.dueDate).toLocaleDateString("he-IL")}</span>}
+                </div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {([["overview", "📋 סקירה"], ["brief", "📝 בריף"], ["files", "📎 קבצים"], ...(!isEmployee && editingTask ? [["ai", "✨ AI"]] : [])] as [string, string][]).map(([id, label]) => {
+                    const active = modalTab === id;
+                    return (
+                      <button key={id} type="button" onClick={() => setModalTab(id as any)} style={{ padding: "0.4rem 0.85rem", fontSize: "0.8rem", fontWeight: active ? 700 : 500, color: active ? "var(--accent-text)" : "var(--foreground-muted)", background: active ? "var(--accent-muted)" : "transparent", border: "none", borderRadius: "0.4rem 0.4rem 0 0", borderBottom: active ? "2.5px solid var(--accent)" : "2.5px solid transparent", cursor: "pointer" }}>{label}</button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* HERO — title + graphic text, made to stand out far more than the rest */}
-              {(() => {
+              {modalTab === "overview" && (() => {
                 const desc = form.description || "";
                 const m = desc.match(/טקסט לגרפיקה[:\s]*([\s\S]*?)(?:\n\n|🖼️|💬|📅|🎉|🔬|$)/);
                 const gtext = m ? m[1].trim() : "";
@@ -1475,6 +1497,7 @@ function TasksPageInner() {
               })()}
 
               {/* קבצי עזר / רפרנס — design assets the MANAGER attaches for the employee to use */}
+              {modalTab === "files" && (
               <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "0.9rem 1rem" }}>
                 <label style={{ fontSize: "0.8rem", fontWeight: 800, color: "#0369a1", marginBottom: "0.2rem", display: "flex", alignItems: "center", gap: 6 }}>🎨 קבצי עזר ורפרנס למשימה</label>
                 <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)", marginBottom: "0.6rem" }}>
@@ -1520,9 +1543,10 @@ function TasksPageInner() {
                   <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>אין קבצים מצורפים למשימה.</div>
                 )}
               </div>
+              )}
 
               {/* MANAGER: AI size adaptations — turn the approved creative into Square/4:5/Story, saved INTO the task */}
-              {!isEmployee && editingTask && (
+              {modalTab === "ai" && !isEmployee && editingTask && (
                 <div style={{ background: "linear-gradient(135deg, #f0f9ff 0%, #faf5ff 100%)", border: "1px solid #ddd6fe", borderRadius: 16, padding: "1rem 1.1rem" }}>
                   <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "#7c3aed", marginBottom: 4 }}>🎨 התאמות גדלים — Creative PixelAI</div>
                   <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", marginBottom: 10 }}>
@@ -1552,7 +1576,7 @@ function TasksPageInner() {
               {/* SUBMISSION — the deliverable upload. Shown to everyone working the
                   task (employee primarily), visually loud so it's never confused
                   with the reference/helper files above. */}
-              {editingTask && (
+              {modalTab === "overview" && editingTask && (
                 <div style={{ background: "linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)", border: "3px solid #10b981", borderRadius: 18, padding: "1.25rem 1.4rem", boxShadow: "0 4px 18px rgba(16,185,129,0.18)" }}>
                   <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#047857", marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>📤 הגשת התוצר לאישור המנהל</div>
                   <div style={{ fontSize: "0.76rem", color: "#065f46", marginBottom: 12, fontWeight: 600 }}>⬅ כאן מעלים את הקובץ המוגמר של המשימה. ההעלאה תעביר את המשימה אוטומטית ל״בבדיקה״ ותשלח אותה לאישור. <b>זה לא קבצי העזר למעלה.</b></div>
@@ -1587,6 +1611,7 @@ function TasksPageInner() {
                 </div>
               )}
 
+              {modalTab === "brief" && (<>
               <div>
                 <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>כותרת *</label>
                 <input className="form-input ux-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="כותרת המשימה" disabled={isEmployee} />
@@ -1714,6 +1739,7 @@ function TasksPageInner() {
                   </div>
                 </div>
               )}
+              </>)}
             </>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
