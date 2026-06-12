@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { useRouter } from "next/navigation";
 import { usePayments, useClients, useHostingRecords, useProjectPayments } from "@/lib/api/use-entity";
+import FinancialCommandCenter from "@/components/finance/financial-command-center";
 import { useState, useMemo } from "react";
 import { AdminOnly } from "@/components/role-gate";
 
@@ -89,8 +90,16 @@ function AccountingPageInner() {
         <h1 style={{ fontSize: "2rem", fontWeight: "bold", marginBottom: "0.5rem", color: "var(--foreground)" }}>
           ניהול חשבונות
         </h1>
-        <p style={{ color: "var(--foreground-muted)", fontSize: "0.95rem" }}>ניהול תשלומים, גבייות ומסמכים</p>
+        <p style={{ color: "var(--foreground-muted)", fontSize: "0.95rem" }}>מרכז הפיקוד הפיננסי של Pixel Studio</p>
       </div>
+
+      {/* Premium financial command center */}
+      <FinancialCommandCenter
+        payments={payments || []}
+        projectPayments={projectPayments || []}
+        clients={clients || []}
+        hostingRecords={hostingRecords || []}
+      />
 
       {/* Summary Stats */}
       <div
