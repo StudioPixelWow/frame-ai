@@ -13,6 +13,7 @@ import type { Campaign, CampaignType, CampaignStatus, CampaignPlatform, Campaign
 import { buildCampaignLeadInsights } from '@/lib/leads/lead-quality';
 import { generateSmartSummary } from '@/lib/campaigns/smart-summary';
 import { SmartHint, EmptyStateAI } from '@/components/ui/smart-hint';
+import { PageHeader } from '@/components/ui/saas-kit';
 import {
   computeHealth,
   generateCampaignAlerts,
@@ -957,33 +958,13 @@ export default function CampaignsPage() {
     <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem 1.5rem', direction: 'rtl' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
-        {/* ── Header ───────────────────────────────────────────── */}
-        <div className="ux-hero-enter" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <div>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--foreground)', margin: 0, letterSpacing: '-0.02em' }}>
-              קמפיינים
-            </h1>
-            <p style={{ color: 'var(--foreground-muted)', fontSize: '0.8rem', marginTop: '0.15rem' }}>
-              ניהול, מעקב ובקרה על כל הקמפיינים
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <Link
-              href="/campaign-builder"
-              className="mod-btn-primary ux-btn ux-btn-glow"
-              style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 700, borderRadius: '0.5rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-            >
-              🚀 בנה קמפיין
-            </Link>
-            <button
-              onClick={() => handleOpenModal()}
-              className="mod-btn-ghost"
-              style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 600, borderRadius: '0.5rem', cursor: 'pointer' }}
-            >
-              + מהיר
-            </button>
-          </div>
-        </div>
+        {/* ── Header (aligned to shared design-system PageHeader) ── */}
+        <PageHeader
+          title="קמפיינים"
+          subtitle="ניהול, מעקב ובקרה על כל הקמפיינים"
+          primaryAction={{ label: "🚀 בנה קמפיין", href: "/campaign-builder" }}
+          secondaryActions={[{ label: "+ מהיר", onClick: () => handleOpenModal() }]}
+        />
 
         {/* ── KPI Row ──────────────────────────────────────────── */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
