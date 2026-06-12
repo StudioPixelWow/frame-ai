@@ -81,14 +81,29 @@ export default function WelcomePopup() {
   return (
     <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 8000, padding: 20, animation: "wp-fade 0.3s ease" }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface-raised)", borderRadius: 22, padding: "2rem 2.2rem", maxWidth: 380, width: "92%", textAlign: "center", direction: "rtl", boxShadow: "0 24px 70px rgba(0,0,0,0.28)", animation: "wp-pop 0.4s cubic-bezier(0.18,1.25,0.4,1)" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-          <Avatar src={data.avatar} name={data.name} size={104} />
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
+          <div className="wp-avatar-wrap">
+            <span className="wp-ring" aria-hidden />
+            <span className="wp-avatar-float">
+              <Avatar src={data.avatar} name={data.name} size={164} />
+            </span>
+          </div>
         </div>
         <div style={{ fontSize: "1.4rem", fontWeight: 800, color: "var(--foreground)", marginBottom: 8 }}>היי, {data.name} 👋</div>
         <div style={{ fontSize: "1rem", color: "var(--foreground-muted)", lineHeight: 1.5, marginBottom: 20 }}>{data.message}</div>
         <button onClick={() => setOpen(false)} style={{ width: "100%", padding: "0.7rem", borderRadius: 12, border: "none", background: "var(--accent)", color: "#fff", fontWeight: 800, fontSize: "0.95rem", cursor: "pointer" }}>קדימה לעבודה ✨</button>
       </div>
-      <style>{`@keyframes wp-fade{from{opacity:0}to{opacity:1}}@keyframes wp-pop{from{opacity:0;transform:scale(0.85)}to{opacity:1;transform:scale(1)}}`}</style>
+      <style>{`
+        @keyframes wp-fade{from{opacity:0}to{opacity:1}}
+        @keyframes wp-pop{from{opacity:0;transform:scale(0.85)}to{opacity:1;transform:scale(1)}}
+        @keyframes wp-spin{to{transform:rotate(360deg)}}
+        @keyframes wp-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+        @keyframes wp-glow{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:.95;transform:scale(1.06)}}
+        .wp-avatar-wrap{position:relative;width:164px;height:164px;display:flex;align-items:center;justify-content:center}
+        .wp-ring{position:absolute;inset:-16px;border-radius:50%;background:conic-gradient(from 0deg,var(--accent,#00B5FE),var(--yellow,#E8F401),var(--accent,#00B5FE),var(--yellow,#E8F401),var(--accent,#00B5FE));filter:blur(11px);opacity:.75;z-index:0;animation:wp-spin 4.5s linear infinite,wp-glow 2.6s ease-in-out infinite}
+        .wp-avatar-float{position:relative;z-index:1;border-radius:50%;animation:wp-float 3.2s ease-in-out infinite}
+        @media (prefers-reduced-motion: reduce){.wp-ring,.wp-avatar-float{animation:none}}
+      `}</style>
     </div>
   );
 }
