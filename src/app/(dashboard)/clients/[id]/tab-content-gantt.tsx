@@ -5,7 +5,6 @@ import type { Client, Employee, ClientGanttItem } from "@/lib/db/schema";
 import { useClientGanttItems, useTasks, useEmployees, useProjects, useEmployeeTasks } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import { fetchReferences, getStyleLabel, type ReferenceItem, type ReferenceQuery } from "@/lib/gantt/reference-engine";
-import { composeSocialPost } from "@/lib/social-post/composer";
 
 const HEB_MONTHS = [
   "ינואר",
@@ -262,9 +261,6 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
   // ── Creative Studio (spec + A/B/C/D) per gantt item ──
   const [creativeBusyId, setCreativeBusyId] = useState<string | null>(null);
   const [creativePreview, setCreativePreview] = useState<string | null>(null);
-  // Finished social posts (label → PNG data URL) composed from each A/B/C/D visual.
-  const [composedPosts, setComposedPosts] = useState<Record<string, string>>({});
-  const [composing, setComposing] = useState(false);
   const genTaskCreative = useCallback(async (item: ClientGanttItem) => {
     if (creativeBusyId) return;
     setCreativeBusyId(item.id);
@@ -277,7 +273,11 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
       if (!r.ok) throw new Error(d.error || 'שגיאה');
       await refetchGanttItems();
       if (d.genError && d.imagesGenerated === 0) {
-        toast(d.genError === 'higgsfield_not_configured' ? 'האפיון נוצר. לחיבור A/B/C/D הגדר את Higgsfield ב-Vercel.' : `האפיון נוצר. יצירת התמונות נכשלה: ${d.genError}`, 'info');
+        const m = d.genError === 'openai_not_configured' ? 'חסר OPENAI_API_KEY ב-Vercel.'
+          : d.genError === 'openai_quota' ? 'אין יתרת OpenAI — הוסף קרדיט.'
+          : d.genError === 'openai_not_verified' ? 'הארגון ב-OpenAI לא מאומת ל-gpt-image-1.'
+          : `יצירת הפוסטים נכשלה: ${d.genError}`;
+        toast(`האפיון נוצר. ${m}`, 'info');
       } else {
         toast(`✨ נוצר אפיון מלא + ${d.imagesGenerated} וריאציות`, 'success');
       }
@@ -303,33 +303,6 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
       await refetchGanttItems();
     } catch (e) { toast(e instanceof Error ? e.message : 'שגיאה', 'error'); }
   }, [updateGanttItem, refetchGanttItems, toast]);
-
-  // Compose finished social posts (visual + message + CTA + logo + brand) whenever
-  // the open item's A/B/C/D variations change.
-  useEffect(() => {
-    const item: any = ganttItems.find((i) => i.id === editingItemId);
-    const abcd: any[] = item?.creative?.abcd || [];
-    if (!abcd.length) { setComposedPosts({}); return; }
-    let cancelled = false;
-    const fmt = (item.format === 'story' || item.itemType === 'story') ? 'story' : 'portrait';
-    (async () => {
-      setComposing(true);
-      const out: Record<string, string> = {};
-      for (const v of abcd) {
-        if (cancelled) return;
-        try {
-          out[v.label] = await composeSocialPost({
-            imageUrl: v.url, message: v.message || item.title || '', cta: v.cta || '',
-            logoUrl: client.logoUrl || '', brandColor: client.color || '#00B5FE', format: fmt as any,
-          });
-          if (!cancelled) setComposedPosts((p) => ({ ...p, [v.label]: out[v.label] }));
-        } catch { /* keep raw */ }
-      }
-      if (!cancelled) setComposing(false);
-    })();
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingItemId, JSON.stringify((ganttItems.find((i) => i.id === editingItemId) as any)?.creative?.abcd?.map((v: any) => v.url) || [])]);
 
   // Approved deliverable files linked to a gantt item (from the client Files tab).
   const [deliverablesMap, setDeliverablesMap] = useState<Record<string, { name: string; url: string }[]>>({});
@@ -3035,38 +3008,35 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
 
                     {abcd.length > 0 ? (
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px,1fr))", gap: 10, marginTop: 8 }}>
-                        {abcd.map((v) => {
-                          const finished = composedPosts[v.label] || v.url;
-                          const isComposed = !!composedPosts[v.label];
-                          return (
+                        {abcd.map((v) => (
                           <div key={v.label} style={{ border: `1px solid var(--border)`, borderRadius: 10, overflow: "hidden", background: "#fff" }}>
-                            <div style={{ position: "relative" }}>
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={finished} alt={v.label} onClick={() => setCreativePreview(finished)} style={{ width: "100%", height: 210, objectFit: "cover", display: "block", cursor: "zoom-in", background: "#f1f5f9" }} />
-                              {!isComposed && composing && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.55)", fontSize: "0.68rem", fontWeight: 700, color: "#7c3aed" }}>⏳ מעצב פוסט…</div>}
-                            </div>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={v.url} alt={v.label} onClick={() => setCreativePreview(v.url)} style={{ width: "100%", height: 210, objectFit: "cover", display: "block", cursor: "zoom-in", background: "#f1f5f9" }} />
                             <div style={{ padding: "5px 7px" }}>
                               <div style={{ fontSize: "0.7rem", fontWeight: 800, color: "#7c3aed", marginBottom: 2 }}>וריאציה {v.label}{(v as any).approach ? ` · ${(v as any).approach}` : ''}</div>
                               {(v as any).message && <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--foreground)", marginBottom: 2, lineHeight: 1.3 }}>{(v as any).message}</div>}
                               {(v as any).cta && <div style={{ fontSize: "0.64rem", color: "var(--foreground-muted)", marginBottom: 5 }}>↜ {(v as any).cta}</div>}
                               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                                <button onClick={() => useCreativeImage(selectedItem, finished, 'approve')} title="אשר → התאמת גדלים" style={{ flex: 1, fontSize: "0.66rem", fontWeight: 700, color: "#16a34a", background: "#16a34a15", border: "none", borderRadius: 6, padding: "3px 4px", cursor: "pointer" }}>✓ אשר</button>
-                                <button onClick={() => useCreativeImage(selectedItem, finished, 'reference')} title="שלח כרפרנס לעובד" style={{ flex: 1, fontSize: "0.66rem", fontWeight: 700, color: "#0095D0", background: "#00B5FE15", border: "none", borderRadius: 6, padding: "3px 4px", cursor: "pointer" }}>📌 לעובד</button>
-                                <button onClick={() => { const a = document.createElement('a'); a.href = finished; a.download = `post-${v.label}.png`; a.click(); }} title="הורד פוסט" style={{ fontSize: "0.66rem", fontWeight: 700, color: "#7c3aed", background: "#7c3aed12", border: "none", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>⤓</button>
+                                <button onClick={() => useCreativeImage(selectedItem, v.url, 'approve')} title="אשר → התאמת גדלים" style={{ flex: 1, fontSize: "0.66rem", fontWeight: 700, color: "#16a34a", background: "#16a34a15", border: "none", borderRadius: 6, padding: "3px 4px", cursor: "pointer" }}>✓ אשר</button>
+                                <button onClick={() => useCreativeImage(selectedItem, v.url, 'reference')} title="שלח כרפרנס לעובד" style={{ flex: 1, fontSize: "0.66rem", fontWeight: 700, color: "#0095D0", background: "#00B5FE15", border: "none", borderRadius: 6, padding: "3px 4px", cursor: "pointer" }}>📌 לעובד</button>
+                                <button onClick={() => { const a = document.createElement('a'); a.href = v.url; a.download = `post-${v.label}.png`; a.click(); }} title="הורד פוסט" style={{ fontSize: "0.66rem", fontWeight: 700, color: "#7c3aed", background: "#7c3aed12", border: "none", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>⤓</button>
                               </div>
                             </div>
                           </div>
-                          );
-                        })}
+                        ))}
                       </div>
                     ) : creative && !busy ? (
                       <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", marginTop: 6 }}>
-                        האפיון נוצר. {creative.genError === 'higgsfield_not_configured'
-                          ? 'הגדר Higgsfield ב-Vercel כדי לקבל וריאציות A/B/C/D.'
-                          : <>הוריאציות לא נוצרו{creative.genError ? <> — סיבה: <code style={{ color: '#dc2626', direction: 'ltr', display: 'inline-block' }}>{String(creative.genError)}</code></> : ''}. נסה "צור מחדש".</>}
+                        האפיון נוצר. {creative.genError === 'openai_not_configured'
+                          ? 'חסר OPENAI_API_KEY ב-Vercel — נדרש כדי לייצר את הפוסטים.'
+                          : creative.genError === 'openai_quota'
+                          ? 'חרגת ממכסת OpenAI / אין יתרה — הוסף קרדיט ב-platform.openai.com.'
+                          : creative.genError === 'openai_not_verified'
+                          ? 'הארגון ב-OpenAI לא מאומת ל-gpt-image-1 — בדוק את החשבון.'
+                          : <>הפוסטים לא נוצרו{creative.genError ? <> — סיבה: <code style={{ color: '#dc2626', direction: 'ltr', display: 'inline-block' }}>{String(creative.genError)}</code></> : ''}. נסה "צור מחדש".</>}
                       </div>
                     ) : !creative && !busy ? (
-                      <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>לחץ "צור אפיון" — המערכת תבנה 2 פוסטים + 2 סרטונים ותייצר 4 וריאציות נראות על בסיס המותג.</div>
+                      <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>לחץ "צור אפיון" — המערכת תייצר 4 פוסטים מוגמרים (ויזואל + מסר + מיתוג) על בסיס שפת המותג.</div>
                     ) : null}
                   </div>
                 );
