@@ -13,6 +13,7 @@ export interface Client {
   email: string;
   phone: string;
   logoUrl: string;
+  clientWelcomeMessages?: string[];   // optional per-client portal welcome messages ({client_name})
   color: string;
   // Business classification
   clientType: ClientType;

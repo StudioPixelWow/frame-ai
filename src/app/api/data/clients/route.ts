@@ -69,6 +69,9 @@ function rowToClient(r: ClientRow) {
     marketingGoals:      (r.marketing_goals as string) ?? '',
     keyMarketingMessages:(r.key_marketing_messages as string) ?? '',
     logoUrl:             (r.logo_url as string) ?? '',
+    clientWelcomeMessages: Array.isArray((r as any).client_welcome_messages)
+      ? ((r as any).client_welcome_messages as unknown[]).filter((x) => typeof x === 'string')
+      : (() => { try { const p = JSON.parse(String((r as any).client_welcome_messages || '[]')); return Array.isArray(p) ? p.filter((x: unknown) => typeof x === 'string') : []; } catch { return []; } })(),
     createdAt:           (r.created_at as string) ?? '',
     updatedAt:           (r.updated_at as string) ?? '',
   };

@@ -5,6 +5,7 @@ import { ThemeProvider } from '@/lib/theme';
 import { ToastProvider } from '@/components/ui/toast';
 import { Suspense, useEffect, useState, useMemo, useCallback } from 'react';
 import ClientPortalHeader from '@/components/client-portal-header';
+import ClientWelcomePopup from '@/components/ui/client-welcome-popup';
 
 interface ClientInfo {
   id: string;
@@ -15,6 +16,7 @@ interface ClientInfo {
   color: string;
   businessField: string;
   status: string;
+  welcomeMessages: string[];
 }
 
 function LayoutContentInner({ children }: { children: React.ReactNode }) {
@@ -82,6 +84,7 @@ function LayoutContentInner({ children }: { children: React.ReactNode }) {
             color: found.color || '',
             businessField: found.businessField || '',
             status: found.status || 'active',
+            welcomeMessages: Array.isArray(found.clientWelcomeMessages) ? found.clientWelcomeMessages : [],
           });
         }
       })
@@ -201,6 +204,10 @@ function LayoutContentInner({ children }: { children: React.ReactNode }) {
           }}>
             {children}
           </main>
+          {/* Personalized client welcome popup (once per session, portal only) */}
+          {!isLoginPage && clientInfo?.name && (
+            <ClientWelcomePopup clientName={clientInfo.name} logoUrl={clientInfo.logoUrl} messages={clientInfo.welcomeMessages} />
+          )}
         </div>
       </ToastProvider>
     </ThemeProvider>
