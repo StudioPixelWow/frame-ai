@@ -33,6 +33,8 @@ const client = new Client({
   authStrategy: new LocalAuth({ dataPath: SESSION_DIR }),
   puppeteer: {
     headless: true,
+    // Use the system Chromium installed by the Dockerfile when present.
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
   },
 });
