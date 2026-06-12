@@ -1,0 +1,18 @@
+{
+  "name": "frame-ai-whatsapp-service",
+  "version": "1.0.0",
+  "description": "Standalone WhatsApp QR sender service for Frame AI (whatsapp-web.js). Deploy on an always-on host (Railway / Render / VPS) — NOT Vercel.",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "qrcode": "^1.5.3",
+    "whatsapp-web.js": "^1.25.0"
+  }
+}

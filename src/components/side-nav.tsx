@@ -228,6 +228,7 @@ const mainNavItems: NavItem[] = [
   { href: "/workload", label: "עומס ורווחיות", id: "nav-workload", icon: Icons.Team, allowedRoles: ['admin'] },
   { href: "/executive", label: "סיכום מנהלים", id: "nav-executive", icon: Icons.Briefcase, allowedRoles: ['admin'] },
   { href: "/whatsapp", label: "וואטסאפ", id: "nav-whatsapp", icon: Icons.MessageCircle, allowedRoles: ['admin'] },
+  { href: "/whatsapp-broadcast", label: "דיוור וואטסאפ", id: "nav-whatsapp-broadcast", icon: Icons.MessageCircle, allowedRoles: ['admin'] },
   { href: "/mailing", label: "דיוור", id: "nav-mailing", icon: Icons.Mail, allowedRoles: ['admin'] },
   { href: "/email-sequences", label: "סדרות מיילים", id: "nav-email-seq", icon: Icons.Mail, allowedRoles: ['admin'] },
   { href: "/linkedin", label: "לינקדאין", id: "nav-linkedin", icon: Icons.Briefcase, allowedRoles: ['admin'] },
