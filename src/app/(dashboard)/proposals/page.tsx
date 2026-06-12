@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState } from 'react';
 import { useClients } from '@/lib/api/use-entity';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 const C = {
   primary: '#00B5FE', primaryDark: '#0095D0', bg: '#F7F9FC', card: '#FFFFFF',
@@ -56,11 +57,10 @@ export default function ProposalsPage() {
 
   return (
     <div dir="rtl" style={{ maxWidth: 980, margin: '0 auto', padding: '1.5rem 1.25rem 4rem', color: C.text, background: C.bg, minHeight: '100vh' }}>
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 12, color: C.primary, letterSpacing: 2, fontWeight: 800 }}>AI PROPOSAL</div>
-        <h1 style={{ fontSize: 24, fontWeight: 900, margin: '2px 0' }}>📝 מחולל הצעות עבודה</h1>
-        <p style={{ color: C.sub, fontSize: 13.5, margin: 0 }}>בנה הצעת עבודה מקצועית ומשכנעת בעברית תוך שניות — מותאמת ללקוח, לשירותים ולתקציב.</p>
-      </div>
+      <PageHeader
+        title="📝 מחולל הצעות עבודה"
+        subtitle="בנה הצעת עבודה מקצועית ומשכנעת בעברית תוך שניות — מותאמת ללקוח, לשירותים ולתקציב."
+      />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '1rem 1.2rem' }}>
