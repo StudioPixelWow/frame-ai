@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 // ==================== TYPES ====================
 interface SeoPlan {
@@ -340,29 +341,11 @@ export default function SeoGeoDashboard() {
       `}</style>
 
       {/* ══════════ HEADER ══════════ */}
-      <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
-        <div>
-          <h1 style={{ fontSize: '28px', fontWeight: '700', color: COLORS.text, margin: '0 0 8px 0' }}>
-            מרכז PIXEL SEO/GEO
-          </h1>
-          <p style={{ fontSize: '14px', color: COLORS.textMuted, margin: 0 }}>
-            סקירת כל תוכניות PIXEL SEO/GEO ללקוחות
-          </p>
-        </div>
-        <Link href="/seo-geo" style={{
-          padding: '12px 24px',
-          borderRadius: '12px',
-          fontSize: '14px',
-          fontWeight: '600',
-          background: COLORS.primary,
-          color: 'white',
-          textDecoration: 'none',
-          transition: 'all 0.2s ease',
-          whiteSpace: 'nowrap',
-        }}>
-          תוכנית PIXEL SEO/GEO חדשה +
-        </Link>
-      </div>
+      <PageHeader
+        title="מרכז PIXEL SEO/GEO"
+        subtitle="סקירת כל תוכניות PIXEL SEO/GEO ללקוחות"
+        primaryAction={{ label: "תוכנית PIXEL SEO/GEO חדשה +", href: "/seo-geo" }}
+      />
 
       {/* ══════════ KPI CARDS ROW ══════════ */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '32px' }}>

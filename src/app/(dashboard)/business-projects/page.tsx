@@ -9,6 +9,7 @@ import { useBusinessProjects, useProjectMilestones, useProjectPayments, useClien
 import type { BusinessProject, BusinessProjectType, BusinessProjectStatus, ClientType } from "@/lib/db/schema";
 import { deriveProjectData, STATUS_COLORS, STATUS_LABELS, type DerivedProjectStatus } from "@/lib/project-status-utils";
 import { useToast } from "@/components/ui/toast";
+import { PageHeader } from "@/components/ui/saas-kit";
 
 type ViewMode = "grid" | "list";
 
@@ -323,21 +324,11 @@ export default function BusinessProjectsPage() {
   return (
     <main dir="rtl" style={{ maxWidth: "1400px", margin: "0 auto", padding: "2rem 1.5rem" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
-        <div>
-          <h1 style={{ fontSize: "1.75rem", fontWeight: "700", margin: "0", marginBottom: "0.25rem" }}>פרויקטים עסקיים</h1>
-          <p style={{ fontSize: "0.875rem", color: "var(--foreground-muted)", margin: "0" }}>
-            {filteredProjects.length} מתוך {projects?.length || 0} פרויקטים
-          </p>
-        </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="ux-btn ux-btn-glow mod-btn-primary"
-          style={{ textDecoration: "none", display: "inline-block", padding: "0.5rem 1.125rem", border: "none", cursor: "pointer" }}
-        >
-          + צור פרויקט חדש
-        </button>
-      </div>
+      <PageHeader
+        title="פרויקטים עסקיים"
+        subtitle={`${filteredProjects.length} מתוך ${projects?.length || 0} פרויקטים`}
+        primaryAction={{ label: "+ צור פרויקט חדש", onClick: () => setShowCreateModal(true) }}
+      />
 
       {/* Filter and View Controls */}
       {(projects?.length || 0) > 0 && (

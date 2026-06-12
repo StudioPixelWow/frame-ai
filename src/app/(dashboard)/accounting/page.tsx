@@ -7,6 +7,7 @@ import { usePayments, useClients, useHostingRecords, useProjectPayments } from "
 import FinancialCommandCenter from "@/components/finance/financial-command-center";
 import { useState, useMemo } from "react";
 import { AdminOnly } from "@/components/role-gate";
+import { PageHeader } from "@/components/ui/saas-kit";
 
 function AccessDenied() {
   return (
@@ -86,12 +87,7 @@ function AccountingPageInner() {
   return (
     <div style={{ direction: "rtl", padding: "2rem" }}>
       {/* Header */}
-      <div style={{ marginBottom: "2rem" }}>
-        <h1 style={{ fontSize: "2rem", fontWeight: "bold", marginBottom: "0.5rem", color: "var(--foreground)" }}>
-          ניהול חשבונות
-        </h1>
-        <p style={{ color: "var(--foreground-muted)", fontSize: "0.95rem" }}>מרכז הפיקוד הפיננסי של Pixel Studio</p>
-      </div>
+      <PageHeader title="ניהול חשבונות" subtitle="מרכז הפיקוד הפיננסי של Pixel Studio" />
 
       {/* Premium financial command center */}
       <FinancialCommandCenter
