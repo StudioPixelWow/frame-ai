@@ -131,6 +131,18 @@ const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "activity", label: "פעילות" },
 ];
 
+// Two-level navigation: 7 primary sections, each grouping the existing tabs.
+// Replaces the long horizontal scrolling tab bar.
+const TAB_GROUPS: { id: string; label: string; icon: string; tabs: TabName[] }[] = [
+  { id: "g-overview", label: "סקירה", icon: "📊", tabs: ["overview"] },
+  { id: "g-marketing", label: "שיווק", icon: "📣", tabs: ["content", "social", "campaigns", "ads", "google-ads", "publishing-channels", "videos"] },
+  { id: "g-seo", label: "SEO / GEO", icon: "🔍", tabs: ["seo", "growth"] },
+  { id: "g-crm", label: "לידים ומשימות", icon: "🎯", tabs: ["leads", "tasks"] },
+  { id: "g-brand", label: "מותג ותוכן", icon: "🎨", tabs: ["brand-kit", "dna", "research", "competitors"] },
+  { id: "g-ops", label: "תפעול", icon: "⚙️", tabs: ["automations", "daily-report", "activity", "portal", "files", "integrations"] },
+  { id: "g-finance", label: "פיננסים", icon: "💰", tabs: ["accounting"] },
+];
+
 const TEAM_MEMBERS = ["טל זטלמן", "מאיה זטלמן", "נועם בוברין", "מיכאלה"];
 
 function formatDate(dateStr: string | null): string {
@@ -1271,74 +1283,79 @@ function ClientDetailContent() {
       {/* Client Alerts */}
       <ClientAlerts client={client} />
 
-      {/* Tab Navigation */}
-      <div
-        style={{
-          display: "flex",
-          gap: "0.25rem",
-          borderBottom: "1px solid var(--border)",
-          marginBottom: "2rem",
-          overflowX: "auto",
-          overflowY: "hidden",
-          scrollBehavior: "smooth",
-        }}
-      >
-        {TABS.map((tab) => {
-          // Determine if tab should be visible based on client type and role
-          const userRole = typeof window !== 'undefined' ? localStorage.getItem('frameai_role') || 'admin' : 'admin';
-          let shouldShow = true;
-          if (tab.showFor === "all") {
-            shouldShow = true;
-          } else if (tab.id === "content" || tab.id === "social" || tab.id === "ads" || tab.id === "portal") {
-            shouldShow = client.clientType === "marketing";
-          } else if (tab.id === "accounting") {
-            // Accounting — admin only, employees should not see financial data
-            shouldShow = (client.clientType === "marketing" || client.clientType === "hosting") && userRole === 'admin';
+      {/* ── Two-level navigation (primary sections + secondary tabs) ── */}
+      {(() => {
+        const userRole = typeof window !== 'undefined' ? localStorage.getItem('frameai_role') || 'admin' : 'admin';
+        const isTabVisible = (id: TabName) => {
+          if (id === "content" || id === "social" || id === "ads" || id === "portal") {
+            if (client.clientType !== "marketing") return false;
           }
-          // Hide portal management tab from employees (admin-only)
-          if (tab.id === "portal" && userRole === 'employee') shouldShow = false;
-          // Competitor research — manager (admin) only
-          if (tab.id === "competitors") shouldShow = userRole === 'admin';
-          // "overview", "tasks", "files", "activity" show for all types and roles
+          if (id === "accounting") return (client.clientType === "marketing" || client.clientType === "hosting") && userRole === 'admin';
+          if (id === "portal" && userRole === 'employee') return false;
+          if (id === "competitors") return userRole === 'admin';
+          return true;
+        };
+        const labelOf = (id: TabName) => TABS.find((t) => t.id === id)?.label || id;
+        const visibleGroups = TAB_GROUPS
+          .map((g) => ({ ...g, tabs: g.tabs.filter(isTabVisible) }))
+          .filter((g) => g.tabs.length > 0);
+        const activeGroup = visibleGroups.find((g) => g.tabs.includes(activeTab)) || visibleGroups[0];
 
-          return (
-            shouldShow && (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className="mod-tab"
-                style={{
-                  padding: "0.875rem 1rem",
-                  fontSize: "0.875rem",
-                  fontWeight: 500,
-                  color: activeTab === tab.id ? "var(--accent-text)" : "var(--foreground-muted)",
-                  background: activeTab === tab.id ? "var(--accent-muted)" : "transparent",
-                  border: "none",
-                  borderRadius: "0.375rem",
-                  cursor: "pointer",
-                  transition: "color 150ms, background-color 150ms",
-                  whiteSpace: "nowrap",
-                  borderBottom: activeTab === tab.id ? `3px solid var(--accent)` : "none",
-                }}
-                onMouseEnter={(e) => {
-                  if (activeTab !== tab.id) {
-                    (e.target as HTMLElement).style.color = "var(--foreground)";
-                    (e.target as HTMLElement).style.background = "rgba(0, 181, 254, 0.05)";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (activeTab !== tab.id) {
-                    (e.target as HTMLElement).style.color = "var(--foreground-muted)";
-                    (e.target as HTMLElement).style.background = "transparent";
-                  }
-                }}
-              >
-                {tab.label}
-              </button>
-            )
-          );
-        })}
-      </div>
+        return (
+          <div style={{ marginBottom: "1.75rem" }}>
+            {/* Primary sections */}
+            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: activeGroup && activeGroup.tabs.length > 1 ? "0.75rem" : 0 }}>
+              {visibleGroups.map((g) => {
+                const active = activeGroup?.id === g.id;
+                return (
+                  <button
+                    key={g.id}
+                    onClick={() => { if (!g.tabs.includes(activeTab)) setActiveTab(g.tabs[0]); }}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: "0.4rem",
+                      padding: "0.55rem 1.05rem", borderRadius: "0.6rem",
+                      fontSize: "0.9rem", fontWeight: active ? 700 : 600,
+                      color: active ? "#fff" : "var(--foreground-muted)",
+                      background: active ? "var(--accent)" : "var(--surface-raised)",
+                      border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
+                      cursor: "pointer", transition: "all 150ms", boxShadow: active ? "0 4px 12px rgba(0,181,254,0.25)" : "none",
+                    }}
+                  >
+                    <span style={{ fontSize: "1rem" }}>{g.icon}</span>{g.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Secondary tabs of the active section */}
+            {activeGroup && activeGroup.tabs.length > 1 && (
+              <div style={{ display: "flex", gap: "0.25rem", flexWrap: "wrap", borderBottom: "1px solid var(--border)", paddingBottom: "0.25rem" }}>
+                {activeGroup.tabs.map((id) => {
+                  const active = activeTab === id;
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => setActiveTab(id)}
+                      style={{
+                        padding: "0.5rem 0.85rem", fontSize: "0.84rem", fontWeight: active ? 700 : 500,
+                        color: active ? "var(--accent-text)" : "var(--foreground-muted)",
+                        background: active ? "var(--accent-muted)" : "transparent",
+                        border: "none", borderRadius: "0.4rem 0.4rem 0 0", cursor: "pointer",
+                        borderBottom: active ? `2.5px solid var(--accent)` : "2.5px solid transparent",
+                        whiteSpace: "nowrap", transition: "all 150ms",
+                      }}
+                      onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = "var(--foreground)"; }}
+                      onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = "var(--foreground-muted)"; }}
+                    >
+                      {labelOf(id)}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Tab Content */}
       <div>
