@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTasks, useEmployees, useClients, useEmployeeTasks } from "@/lib/api/use-entity";
+import TaskWorkspaceModal from "@/components/tasks/task-workspace-modal";
 import TasksMissionControl from "@/components/tasks/mission-control";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
@@ -67,7 +68,8 @@ function SubmittedFilePreview({ name, url, onZoom }: { name: string; url: string
 }
 
 function TasksPageInner() {
-  const { isEmployee } = useAuth();
+  const { isEmployee, role, displayName } = useAuth();
+  const [workspaceTask, setWorkspaceTask] = useState<Task | null>(null);
   const { data: tasks, loading, create, update, remove } = useTasks();
   const { data: employeeTasks, loading: employeeTasksLoading, update: updateEmployeeTask } = useEmployeeTasks();
   const { data: employees } = useEmployees();
@@ -176,31 +178,10 @@ function TasksPageInner() {
     return '';
   };
 
+  // Clicking a task opens the premium tabbed Task Workspace (role-based).
   const openEdit = (task: Task) => {
     setEditingTask(task);
-    // Defensive: task.tags / task.assigneeIds may be undefined if API doesn't return them
-    const tags = Array.isArray(task.tags) ? task.tags : [];
-    const assigneeIds = Array.isArray(task.assigneeIds)
-      ? task.assigneeIds
-      : ((task as any).assigneeId ? [(task as any).assigneeId] : []);
-    setForm({
-      title: task.title || '',
-      description: task.description || '',
-      status: task.status,
-      priority: task.priority || 'medium',
-      clientId: task.clientId || '',
-      clientName: getClientName(task),
-      dueDate: task.dueDate || '',
-      tags: tags.join(', '),
-      assigneeIds,
-      files: Array.isArray((task as any).files) ? (task as any).files : [],
-      submittedFiles: Array.isArray((task as any).submittedFiles) ? (task as any).submittedFiles : [],
-      notes: (task as any).notes || '',
-      contentType: ((task as any).contentType as "" | "post" | "story" | "reel") || "",
-    });
-    setTaskAdaptations(((task as any).adaptations as Record<string, string>) || null);
-    setModalTab('overview');
-    setModalOpen(true);
+    setWorkspaceTask(task);
   };
 
   // Auto-open the submit/edit popup when arriving from the dashboard with ?task=<id>.
@@ -1366,7 +1347,24 @@ function TasksPageInner() {
         </div>
       )}
 
-      {/* Task Modal */}
+      {/* ── Premium Task Workspace (role-based, tabbed) — opens on task click ── */}
+      {workspaceTask && (() => {
+        const live = [...(tasks || []), ...(employeeTasks || [])].find((t: any) => t.id === workspaceTask.id) || workspaceTask;
+        return (
+          <TaskWorkspaceModal
+            task={live}
+            employees={employees || []}
+            clients={clients || []}
+            role={(role as any) || "admin"}
+            displayName={displayName || undefined}
+            onClose={() => { setWorkspaceTask(null); setEditingTask(null); }}
+            onUpdate={(id, patch) => updateAny(id, patch)}
+            onDelete={isEmployee ? undefined : (id) => remove(id)}
+          />
+        );
+      })()}
+
+      {/* Task Modal (create) */}
       <Modal open={modalOpen} onClose={() => { setModalOpen(false); setReviewNotes(""); setShowReviewNotes(false); }} title={editingTask ? `עריכת משימה — ${COLUMNS.find(c => c.id === form.status)?.label || ''}` : "משימה חדשה"} footer={
         <div style={{ display: "flex", gap: "0.5rem", justifyContent: "space-between", flexWrap: "wrap" }}>
           <div>
