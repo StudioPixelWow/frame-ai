@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useHostingRecords, useClients } from "@/lib/api/use-entity"
+import { PageHeader } from "@/components/ui/saas-kit";
 
 export default function HostingPage() {
   const router = useRouter()
@@ -141,9 +142,7 @@ export default function HostingPage() {
 
   return (
     <div style={{ direction: "rtl", padding: "2rem", color: "var(--foreground)" }}>
-      <h1 style={{ marginBottom: "2rem", fontSize: "2rem", fontWeight: "bold" }}>
-        ניהול הוסטינג
-      </h1>
+      <PageHeader title="ניהול הוסטינג" subtitle="ניהול רשומות אחסון אתרים ותשלומים" />
 
       {/* Summary Cards */}
       <div

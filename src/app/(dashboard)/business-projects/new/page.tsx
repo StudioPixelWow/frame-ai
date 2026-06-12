@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useClients, useEmployees, useBusinessProjects, useProjectMilestones, useProjectPayments } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
+import { PageHeader } from "@/components/ui/saas-kit";
 import type { BusinessProjectType } from "@/lib/db/schema";
 
 interface Milestone {
@@ -216,22 +217,10 @@ export default function NewBusinessProjectPage() {
   return (
     <div dir="rtl" style={{ maxWidth: "1000px", margin: "0 auto", padding: "2rem 1.5rem" }}>
       {/* Header */}
-      <div style={{ marginBottom: "2rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <h1 style={{ fontSize: "1.75rem", fontWeight: "700", margin: "0" }}>פרויקט עסקי חדש</h1>
-        <Link
-          href="/business-projects"
-          style={{
-            color: "var(--foreground-muted)",
-            textDecoration: "none",
-            fontSize: "0.9rem",
-            transition: "color 150ms",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--accent)")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--foreground-muted)")}
-        >
-          ← חזור לפרויקטים
-        </Link>
-      </div>
+      <PageHeader
+        title="פרויקט עסקי חדש"
+        secondaryActions={[{ label: "← חזור לפרויקטים", href: "/business-projects" }]}
+      />
 
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
         {/* Section 1: Client Selection */}
