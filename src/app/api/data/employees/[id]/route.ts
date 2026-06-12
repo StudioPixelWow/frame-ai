@@ -82,6 +82,7 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
     ['workload', 'workload'],
     ['joinDate', 'join_date'],
     ['notes', 'notes'],
+    ['welcomeMessages', 'welcome_messages'],
   ];
   for (const [k, dbKey] of map) {
     if (body[k] !== undefined) out[dbKey] = nullable.has(dbKey) ? nullIfEmpty(body[k]) : body[k];
@@ -91,7 +92,7 @@ function toUpdate(body: Record<string, unknown>): Record<string, unknown> {
 }
 
 const SELECT_COLUMNS =
-  'id, name, role_id, role, email, phone, avatar_url, salary, status, skills, tasks_count, workload, join_date, notes, created_at, updated_at';
+  'id, name, role_id, role, email, phone, avatar_url, salary, status, skills, tasks_count, workload, join_date, notes, welcome_messages, created_at, updated_at';
 
 function parseBadColumn(msg: string): string | null {
   const m = msg.match(/column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);

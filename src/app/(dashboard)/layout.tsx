@@ -8,6 +8,7 @@ import { DataErrorBoundary } from "@/components/ui/data-states";
 import DashboardShell from "@/components/dashboard-shell";
 import WeeklyDigestPrompt from "@/components/weekly-digest-prompt";
 import WaNotifier from "@/components/whatsapp/wa-notifier";
+import WelcomePopup from "@/components/ui/welcome-popup";
 
 export default function DashboardLayout({
   children,
@@ -46,6 +47,7 @@ export default function DashboardLayout({
             <AICopilotContainer />
             <WeeklyDigestPrompt />
             <WaNotifier />
+            <WelcomePopup />
           </div>
 
           {/* Responsive layout rules */}

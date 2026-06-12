@@ -429,6 +429,7 @@ export interface Employee {
   workload: number;
   joinDate: string;
   notes: string;
+  welcomeMessages: string[];   // personal login welcome messages ({name} placeholder)
   createdAt: string;
   updatedAt: string;
 }

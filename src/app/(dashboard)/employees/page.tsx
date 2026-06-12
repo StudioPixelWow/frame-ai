@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useEmployees, useEmployeeTasks, useTasks } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
+import Avatar from "@/components/ui/avatar";
 import type { Employee } from "@/lib/db/schema";
 
 const ROLE_CONFIG: Record<string, { labelHe: string; color: string; bg: string; iconColor: string }> = {
@@ -58,6 +59,8 @@ interface FormData {
   status: "online" | "busy" | "offline";
   skills: string;
   notes: string;
+  avatarUrl: string;
+  welcomeMessages: string[];
 }
 
 // Only show these 4 team members on the Team page
@@ -72,6 +75,8 @@ const INITIAL_FORM: FormData = {
   status: "offline",
   skills: "",
   notes: "",
+  avatarUrl: "",
+  welcomeMessages: [],
 };
 
 export default function EmployeesPage() {
@@ -87,6 +92,22 @@ export default function EmployeesPage() {
   const [isRulesExpanded, setIsRulesExpanded] = useState(true);
   const [formData, setFormData] = useState<FormData>(INITIAL_FORM);
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+
+  // Upload an avatar image to storage and save its public URL into the form.
+  const uploadAvatar = async (file: File) => {
+    setAvatarBusy(true);
+    try {
+      const init = await fetch("/api/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileName: file.name, contentType: file.type, fileSize: file.size }) });
+      const d = await init.json();
+      if (!init.ok) throw new Error(d.error || "upload init failed");
+      const put = await fetch(d.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
+      if (!put.ok) throw new Error("upload failed");
+      setFormData((p) => ({ ...p, avatarUrl: d.publicUrl }));
+      toast("✓ התמונה הועלתה", "success");
+    } catch { toast("שגיאה בהעלאת התמונה", "success"); }
+    finally { setAvatarBusy(false); }
+  };
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [credBusyId, setCredBusyId] = useState<string | null>(null);
   const [credModal, setCredModal] = useState<{ email: string; password: string; name: string; existing?: boolean } | null>(null);
@@ -214,6 +235,8 @@ export default function EmployeesPage() {
       status: employee.status,
       skills: employee.skills.join(", "),
       notes: employee.notes,
+      avatarUrl: (employee as any).avatarUrl || "",
+      welcomeMessages: Array.isArray((employee as any).welcomeMessages) ? (employee as any).welcomeMessages : [],
     });
     setIsModalOpen(true);
   };
@@ -992,6 +1015,39 @@ export default function EmployeesPage() {
                 resize: "vertical",
               }}
             />
+          </div>
+
+          {/* Profile image / avatar */}
+          <div>
+            <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "0.5rem" }}>תמונת פרופיל</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <Avatar src={formData.avatarUrl} name={formData.name} size={72} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "0.45rem 0.9rem", borderRadius: 8, border: "1px dashed var(--border)", background: "var(--surface)", cursor: avatarBusy ? "wait" : "pointer", fontSize: "0.82rem", fontWeight: 600, width: "fit-content" }}>
+                  {avatarBusy ? "⏳ מעלה…" : formData.avatarUrl ? "🔄 החלף תמונה" : "📷 העלה תמונה"}
+                  <input type="file" accept="image/*" disabled={avatarBusy} style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAvatar(f); e.currentTarget.value = ""; }} />
+                </label>
+                {formData.avatarUrl && <button type="button" onClick={() => setFormData((p) => ({ ...p, avatarUrl: "" }))} style={{ fontSize: "0.72rem", color: "#dc2626", background: "transparent", border: "none", cursor: "pointer", textAlign: "start" }}>הסר תמונה</button>}
+              </div>
+            </div>
+          </div>
+
+          {/* Personal welcome messages */}
+          <div>
+            <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: "0.3rem" }}>הודעות ברוכים-הבאים אישיות</label>
+            <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", marginBottom: 8 }}>נבחרת אקראית בכניסה. השתמש ב-<code>{"{name}"}</code> לשם העובד. אם ריק — ייעשה שימוש בברירת מחדל לפי תפקיד.</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {formData.welcomeMessages.map((msg, i) => (
+                <div key={i} style={{ display: "flex", gap: 6 }}>
+                  <input value={msg} onChange={(e) => setFormData((p) => { const w = [...p.welcomeMessages]; w[i] = e.target.value; return { ...p, welcomeMessages: w }; })}
+                    placeholder="היום הופכים רעיונות לתוצאות, {name} ✨"
+                    className="ux-input" style={{ flex: 1, padding: "0.5rem 0.7rem", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--foreground)", fontSize: "0.85rem" }} />
+                  <button type="button" onClick={() => setFormData((p) => ({ ...p, welcomeMessages: p.welcomeMessages.filter((_, x) => x !== i) }))} style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626", borderRadius: 8, padding: "0 0.6rem", cursor: "pointer" }}>✕</button>
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={() => setFormData((p) => ({ ...p, welcomeMessages: [...p.welcomeMessages, ""] }))}
+              style={{ marginTop: 8, fontSize: "0.78rem", fontWeight: 700, color: "var(--accent)", background: "var(--accent-muted)", border: "none", borderRadius: 8, padding: "0.4rem 0.85rem", cursor: "pointer" }}>+ הוסף הודעה</button>
           </div>
         </div>
       </Modal>

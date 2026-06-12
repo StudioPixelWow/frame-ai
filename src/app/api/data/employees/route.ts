@@ -79,6 +79,9 @@ function rowToEmployee(r: Row) {
     workload: pickNumber(r, 'workload'),
     joinDate: pickString(r, 'join_date', 'joinDate', 'hired_at', 'start_date'),
     notes: pickString(r, 'notes'),
+    welcomeMessages: Array.isArray((r as any).welcome_messages)
+      ? ((r as any).welcome_messages as unknown[]).filter((x) => typeof x === 'string')
+      : (() => { try { const p = JSON.parse(String((r as any).welcome_messages || '[]')); return Array.isArray(p) ? p.filter((x: unknown) => typeof x === 'string') : []; } catch { return []; } })(),
     createdAt: pickString(r, 'created_at', 'createdAt'),
     updatedAt: pickString(r, 'updated_at', 'updatedAt'),
   };
@@ -101,13 +104,14 @@ function toInsert(body: Record<string, unknown>, id: string, now: string): Recor
     workload: typeof body.workload === 'number' ? body.workload : 0,
     join_date: nullIfEmpty(body.joinDate),
     notes: (body.notes ?? '') as string,
+    welcome_messages: Array.isArray(body.welcomeMessages) ? (body.welcomeMessages as unknown[]).filter((x) => typeof x === 'string') : [],
     created_at: now,
     updated_at: now,
   };
 }
 
 const SELECT_COLUMNS =
-  'id, name, role_id, role, email, phone, avatar_url, salary, status, skills, tasks_count, workload, join_date, notes, created_at, updated_at';
+  'id, name, role_id, role, email, phone, avatar_url, salary, status, skills, tasks_count, workload, join_date, notes, welcome_messages, created_at, updated_at';
 
 function parseBadColumn(msg: string): string | null {
   const m = msg.match(/column .*?\.?['"]?([a-z_]+)['"]? (?:does not exist|of .* does not exist)|Could not find the '([^']+)' column/i);
