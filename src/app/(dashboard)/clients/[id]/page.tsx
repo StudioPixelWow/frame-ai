@@ -957,11 +957,11 @@ function ClientDetailContent() {
             {!client.logoUrl && initials(client.name)}
           </div>
 
-          <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1.5rem", marginBottom: "1rem" }}>
-              <div>
-                <h1 style={{ fontSize: "2rem", fontWeight: 700, color: "var(--foreground)", margin: "0 0 0.25rem 0", display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  {client.name}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+              <div style={{ minWidth: 0, flex: "1 1 260px" }}>
+                <h1 style={{ fontSize: "1.75rem", fontWeight: 700, color: "var(--foreground)", margin: "0 0 0.25rem 0", display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', lineHeight: 1.15 }}>
+                  <span>{client.name}</span>
                   <ClientHealthBadge clientId={client.id} />
                 </h1>
                 <p style={{ fontSize: "0.95rem", color: "var(--foreground-muted)", margin: 0 }}>
@@ -970,7 +970,7 @@ function ClientDetailContent() {
               </div>
 
               {/* Quick Action Buttons */}
-              <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", justifyContent: "flex-end", flex: "1 1 auto" }}>
                 <button
                   onClick={handleOpenEditModal}
                   className="mod-btn-primary"
