@@ -20,6 +20,7 @@ import {
   type FunnelStage,
 } from "@/lib/leads/lead-quality";
 import { SmartHint, EmptyStateAI } from "@/components/ui/smart-hint";
+import SalesCommandCenter from "@/components/leads/sales-command-center";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -2387,6 +2388,8 @@ function LeadsPageInner() {
         ) : viewMode === "pipeline" ? (
           /* PIPELINE VIEW */
           <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            {/* Premium sales command center (AI + heat + funnel + sources + hot leads) */}
+            <SalesCommandCenter leads={filteredLeads} />
             {/* Active stages */}
             <div
               style={{
