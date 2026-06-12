@@ -8,6 +8,7 @@ import CampaignAssigner from '@/components/meta/campaign-assigner';
 import CampaignReports from '@/components/meta/campaign-reports';
 import MetaCommandCenter from '@/components/meta/meta-command-center';
 import MetaDiagnostic from '@/components/meta/meta-diagnostic';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 const BRAND = '#00B5FE';
 
@@ -59,10 +60,10 @@ export default function MetaCampaignsPage() {
 
   return (
     <div dir="rtl" style={{ maxWidth: 1320, margin: '0 auto', padding: '2rem 1.75rem 4rem', color: 'var(--foreground, #1a1a2e)' }}>
-      <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>קמפיינים — Meta Ads</h1>
-      <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 24 }}>
-        ניהול ובקרה של הקמפיינים הסרוקים מתוך Meta Business Manager — השהיה, הפעלה, ועדכון תקציב.
-      </p>
+      <PageHeader
+        title="קמפיינים — Meta Ads"
+        subtitle="ניהול ובקרה של הקמפיינים הסרוקים מתוך Meta Business Manager — השהיה, הפעלה, ועדכון תקציב."
+      />
 
       {loading ? (
         <div style={{ color: '#6b7280' }}>טוען לקוחות...</div>

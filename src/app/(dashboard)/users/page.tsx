@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useUsers } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
+import { PageHeader } from "@/components/ui/saas-kit";
 import type { User } from "@/lib/db/schema";
 
 /* ── Role configuration ── */
@@ -126,26 +127,10 @@ export default function UsersPage() {
     <main className="max-w-[1100px] mx-auto px-6 py-8">
       <div className="usr-page" style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem", justifyContent: "space-between" }}>
-          <div style={{ flex: 1 }}>
-            <h1 style={{ fontSize: "1.75rem", fontWeight: 700, letterSpacing: "-0.025em" }}>
-              ניהול משתמשים
-            </h1>
-          </div>
-          <button
-            className="mod-btn-primary"
-            onClick={handleOpenCreateModal}
-            style={{
-              padding: "0.5rem 1.125rem",
-              fontSize: "0.9375rem",
-              fontWeight: 600,
-              whiteSpace: "nowrap",
-            }}
-            disabled={loading}
-          >
-            + הוסף משתמש
-          </button>
-        </div>
+        <PageHeader
+          title="ניהול משתמשים"
+          primaryAction={{ label: "+ הוסף משתמש", onClick: () => { if (!loading) handleOpenCreateModal(); } }}
+        />
 
         {/* Search Input */}
         <div

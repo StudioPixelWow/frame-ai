@@ -17,6 +17,7 @@ import {
 } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
+import { PageHeader } from "@/components/ui/saas-kit";
 import type { EmployeeTask, EmployeeTaskStatus, EmployeeTaskPriority, Meeting, MeetingStatus } from "@/lib/db/schema";
 
 /* ── Hebrew helpers ────────────────────────────────────────────── */
@@ -464,26 +465,11 @@ export default function BusinessCalendarPage() {
     <div style={{ padding: "1.5rem 2rem", maxWidth: 1400, margin: "0 auto" }} dir="rtl">
 
       {/* ── Page header ─────────────────────────────────────── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
-        <h1 style={{ fontSize: "1.5rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          📅 ניהול יומן ומשימות
-        </h1>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button onClick={() => openCreateTask()} style={{
-            padding: "0.5rem 1.2rem", borderRadius: "0.5rem", border: "none",
-            background: "var(--accent)", color: "#fff", fontWeight: 600, cursor: "pointer", fontSize: "0.85rem",
-          }}>
-            + משימה חדשה
-          </button>
-          <button onClick={() => openCreateMeeting()} style={{
-            padding: "0.5rem 1.2rem", borderRadius: "0.5rem",
-            border: "1px solid #06b6d4", background: "rgba(6,182,212,0.08)", color: "#06b6d4",
-            fontWeight: 600, cursor: "pointer", fontSize: "0.85rem",
-          }}>
-            🤝 פגישה חדשה
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="📅 ניהול יומן ומשימות"
+        secondaryActions={[{ label: "🤝 פגישה חדשה", onClick: () => openCreateMeeting() }]}
+        primaryAction={{ label: "+ משימה חדשה", onClick: () => openCreateTask() }}
+      />
 
       {/* ── Stats cards ─────────────────────────────────────── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.75rem", marginBottom: "1.5rem" }}>

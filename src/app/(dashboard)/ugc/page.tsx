@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 const BRAND = '#00B5FE';
 
@@ -418,8 +419,10 @@ export default function UgcPage() {
 
   return (
     <div dir="rtl" style={{ maxWidth: 1100, margin: '0 auto', padding: '2rem 1.5rem 4rem', color: 'var(--foreground,#111)' }}>
-      <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4, color: 'var(--foreground)' }}>🎬 UGC Business Video Generator</h1>
-      <p style={{ color: 'var(--foreground-muted,#6b7280)', fontSize: 14, marginBottom: 18 }}>חבילת הפקה מלאה לסרטון UGC עסקי 9:16 — מקישור מוצר או מהלקוח ועד וידאו אמיתי עם דמות מדברת.</p>
+      <PageHeader
+        title="🎬 UGC Business Video Generator"
+        subtitle="חבילת הפקה מלאה לסרטון UGC עסקי 9:16 — מקישור מוצר או מהלקוח ועד וידאו אמיתי עם דמות מדברת."
+      />
 
       {/* Process stepper — always shows where you are and what's next (no surprises) */}
       {(() => {

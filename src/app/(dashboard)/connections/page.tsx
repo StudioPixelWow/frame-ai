@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useMemo, useCallback } from "react";
+import { PageHeader } from "@/components/ui/saas-kit";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -612,32 +613,7 @@ export default function ConnectionsPage() {
       }}
     >
       {/* ═══ Header ═══ */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          flexWrap: "wrap",
-          gap: "1rem",
-        }}
-      >
-        <div>
-          <h1
-            style={{
-              fontSize: "1.75rem",
-              fontWeight: 800,
-              color: "var(--foreground)",
-              marginBottom: "0.25rem",
-              letterSpacing: "-0.02em",
-            }}
-          >
-            🔌 חיבורים ואינטגרציות
-          </h1>
-          <p style={{ color: "var(--foreground-muted)", fontSize: "0.875rem" }}>
-            {getGreeting()} · {getDateLabel()}
-          </p>
-        </div>
-      </div>
+      <PageHeader title="🔌 חיבורים ואינטגרציות" subtitle={`${getGreeting()} · ${getDateLabel()}`} />
 
       {/* ═══ Critical Warning Banner ═══ */}
       {criticalIssues.length > 0 && (
