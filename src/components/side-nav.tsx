@@ -197,54 +197,79 @@ const Icons = {
   ),
 };
 
-const mainNavItems: NavItem[] = [
+// Quick-access items pinned at the top (always visible, ungrouped).
+const pinnedItems: NavItem[] = [
   { href: "/dashboard", label: "דשבורד", id: "nav-dashboard", icon: Icons.Dashboard, allowedRoles: ['admin', 'employee'] },
-  { href: "/ai-ceo", label: "מנכ״ל AI", id: "nav-ai-ceo", icon: Icons.Brain, allowedRoles: ['admin'] },
-  { href: "/quality-check", label: "בקרת איכות AI", id: "nav-quality-check", icon: Icons.Shield, allowedRoles: ['admin', 'employee'] },
-  { href: "/anomalies", label: "מכ״ם אנומליות", id: "nav-anomalies", icon: Icons.Shield, allowedRoles: ['admin'] },
-  { href: "/projects", label: "PixelManageAI", id: "nav-projects", icon: Icons.Projects, allowedRoles: ['admin'] },
   { href: "/clients", label: "לקוחות", id: "nav-clients", icon: Icons.Clients, allowedRoles: ['admin'] },
-  { href: "/leads", label: "לידים", id: "nav-leads", icon: Icons.Leads, allowedRoles: ['admin'] },
-  { href: "/lead-scoring", label: "דירוג לידים", id: "nav-lead-scoring", icon: Icons.Leads, allowedRoles: ['admin'] },
-  { href: "/campaigns", label: "קמפיינים", id: "nav-campaigns", icon: Icons.Campaigns, allowedRoles: ['admin'] },
-  { href: "/meta-campaigns", label: "קמפיינים Meta", id: "nav-meta-campaigns", icon: Icons.Campaigns, allowedRoles: ['admin'] },
-  { href: "/seo-geo/dashboard", label: "PIXEL SEO/GEO", id: "nav-seo-geo", icon: Icons.SeoGeo, allowedRoles: ['admin'] },
-  { href: "/seo-geo/automation", label: "GEO Automation", id: "nav-geo-automation", icon: Icons.SeoGeo, allowedRoles: ['admin'] },
-  { href: "/seo-geo/keyword-research", label: "מחקר ביטויים", id: "nav-keyword-research", icon: Icons.SeoGeo, allowedRoles: ['admin'] },
-  { href: "/creative-pixelai", label: "Creative PixelAI", id: "nav-creative-pixelai", icon: Icons.Projects, allowedRoles: ['admin', 'employee'] },
-  { href: "/proposals", label: "מחולל הצעות", id: "nav-proposals", icon: Icons.BusinessProjects, allowedRoles: ['admin'] },
-  { href: "/ugc", label: "UGC Video Generator", id: "nav-ugc", icon: Icons.Mic, allowedRoles: ['admin'] },
-  { href: "/rtm", label: "שיבוץ RTM", id: "nav-rtm", icon: Icons.Calendar, allowedRoles: ['admin'] },
   { href: "/tasks", label: "משימות", id: "nav-tasks", icon: Icons.Tasks, allowedRoles: ['admin', 'employee'] },
-  { href: "/approvals", label: "אישורים", id: "nav-approvals", icon: Icons.Shield, allowedRoles: ['admin'] },
-  { href: "/business-calendar", label: "יומן", id: "nav-biz-calendar", icon: Icons.Calendar, allowedRoles: ['admin', 'employee'] },
-  { href: "/employees", label: "צוות", id: "nav-employees", icon: Icons.Team, allowedRoles: ['admin'] },
-  { href: "/business-projects", label: "פרויקטים", id: "nav-otp", icon: Icons.BusinessProjects, allowedRoles: ['admin'] },
-  { href: "/business-projects/dashboard", label: "דשבורד פרויקטים", id: "nav-biz-dash", icon: Icons.BarChart, allowedRoles: ['admin'] },
-  { href: "/seo-geo/results", label: "תוצאות SEO", id: "nav-seo-results", icon: Icons.TrendingUp, allowedRoles: ['admin'] },
-  { href: "/accounting", label: "חשבונות", id: "nav-payments", icon: Icons.CreditCard, allowedRoles: ['admin'] },
-  { href: "/accounting/timeline", label: "גבייה חכמה", id: "nav-timeline", icon: Icons.BarChart, allowedRoles: ['admin'] },
-  { href: "/accounting/podcast", label: "פודקאסט", id: "nav-podcast", icon: Icons.Mic, allowedRoles: ['admin'] },
-  { href: "/workload", label: "עומס ורווחיות", id: "nav-workload", icon: Icons.Team, allowedRoles: ['admin'] },
-  { href: "/executive", label: "סיכום מנהלים", id: "nav-executive", icon: Icons.Briefcase, allowedRoles: ['admin'] },
-  { href: "/whatsapp", label: "וואטסאפ", id: "nav-whatsapp", icon: Icons.MessageCircle, allowedRoles: ['admin'] },
-  { href: "/whatsapp-broadcast", label: "דיוור וואטסאפ", id: "nav-whatsapp-broadcast", icon: Icons.MessageCircle, allowedRoles: ['admin'] },
-  { href: "/mailing", label: "דיוור", id: "nav-mailing", icon: Icons.Mail, allowedRoles: ['admin'] },
-  { href: "/email-sequences", label: "סדרות מיילים", id: "nav-email-seq", icon: Icons.Mail, allowedRoles: ['admin'] },
-  { href: "/linkedin", label: "לינקדאין", id: "nav-linkedin", icon: Icons.Briefcase, allowedRoles: ['admin'] },
-  { href: "/surveys", label: "סקרים", id: "nav-surveys", icon: Icons.Shield, allowedRoles: ['admin'] },
-  { href: "/social", label: "רשתות חברתיות", id: "nav-social", icon: Icons.MessageCircle, allowedRoles: ['admin'] },
-  { href: "/accounting/invoicing", label: "חשבוניות", id: "nav-invoicing", icon: Icons.CreditCard, allowedRoles: ['admin'] },
-  { href: "/accounting/receipts", label: "קבלות", id: "nav-receipts", icon: Icons.CreditCard, allowedRoles: ['admin'] },
-  { href: "/growth", label: "מנוע צמיחה", id: "nav-growth", icon: Icons.Growth, allowedRoles: ['admin'] },
-  { href: "/knowledge", label: "בסיס ידע", id: "nav-knowledge", icon: Icons.Knowledge, allowedRoles: ['admin'] },
-  { href: "/strategy", label: "מוח אסטרטגי", id: "nav-strategy", icon: Icons.Brain, allowedRoles: ['admin'] },
-  { href: "/autopilot", label: "אוטופיילוט", id: "nav-autopilot", icon: Icons.Autopilot, allowedRoles: ['admin'] },
-  { href: "/system-health", label: "בריאות המערכת", id: "nav-health", icon: Icons.Health, allowedRoles: ['admin'] },
-  { href: "/agency-intelligence", label: "אינטליגנציה", id: "nav-agency-intelligence", icon: Icons.AgencyIntelligence, allowedRoles: ['admin'] },
-  { href: "/stats", label: "סטטיסטיקות", id: "nav-stats", icon: Icons.TrendingUp, allowedRoles: ['admin'] },
-  { href: "/exec-dashboard", label: "מנהלים", id: "nav-exec", icon: Icons.Briefcase, allowedRoles: ['admin'] },
-  { href: "/settings", label: "הגדרות", id: "nav-settings", icon: Icons.Settings, allowedRoles: ['admin'] },
+];
+
+interface NavGroup { id: string; label: string; icon: React.ReactNode; items: NavItem[]; }
+
+// Everything else, organized into logical collapsible groups.
+const navGroups: NavGroup[] = [
+  { id: "g-sales", label: "מכירות ולידים", icon: Icons.Leads, items: [
+    { href: "/leads", label: "לידים", id: "nav-leads", icon: Icons.Leads, allowedRoles: ['admin'] },
+    { href: "/lead-scoring", label: "דירוג לידים", id: "nav-lead-scoring", icon: Icons.Leads, allowedRoles: ['admin'] },
+    { href: "/proposals", label: "מחולל הצעות", id: "nav-proposals", icon: Icons.BusinessProjects, allowedRoles: ['admin'] },
+    { href: "/growth", label: "מנוע צמיחה", id: "nav-growth", icon: Icons.Growth, allowedRoles: ['admin'] },
+  ]},
+  { id: "g-campaigns", label: "קמפיינים ופרסום", icon: Icons.Campaigns, items: [
+    { href: "/campaigns", label: "קמפיינים", id: "nav-campaigns", icon: Icons.Campaigns, allowedRoles: ['admin'] },
+    { href: "/meta-campaigns", label: "קמפיינים Meta", id: "nav-meta-campaigns", icon: Icons.Campaigns, allowedRoles: ['admin'] },
+  ]},
+  { id: "g-content", label: "תוכן וקריאייטיב", icon: Icons.Projects, items: [
+    { href: "/creative-pixelai", label: "Creative PixelAI", id: "nav-creative-pixelai", icon: Icons.Projects, allowedRoles: ['admin', 'employee'] },
+    { href: "/ugc", label: "UGC Video Generator", id: "nav-ugc", icon: Icons.Mic, allowedRoles: ['admin'] },
+    { href: "/rtm", label: "שיבוץ RTM", id: "nav-rtm", icon: Icons.Calendar, allowedRoles: ['admin'] },
+    { href: "/social", label: "רשתות חברתיות", id: "nav-social", icon: Icons.MessageCircle, allowedRoles: ['admin'] },
+    { href: "/business-calendar", label: "יומן", id: "nav-biz-calendar", icon: Icons.Calendar, allowedRoles: ['admin', 'employee'] },
+  ]},
+  { id: "g-seo", label: "SEO / GEO", icon: Icons.SeoGeo, items: [
+    { href: "/seo-geo/dashboard", label: "PIXEL SEO/GEO", id: "nav-seo-geo", icon: Icons.SeoGeo, allowedRoles: ['admin'] },
+    { href: "/seo-geo/automation", label: "GEO Automation", id: "nav-geo-automation", icon: Icons.SeoGeo, allowedRoles: ['admin'] },
+    { href: "/seo-geo/keyword-research", label: "מחקר ביטויים", id: "nav-keyword-research", icon: Icons.SeoGeo, allowedRoles: ['admin'] },
+    { href: "/seo-geo/results", label: "תוצאות SEO", id: "nav-seo-results", icon: Icons.TrendingUp, allowedRoles: ['admin'] },
+  ]},
+  { id: "g-outreach", label: "דיוור ותקשורת", icon: Icons.Mail, items: [
+    { href: "/whatsapp", label: "וואטסאפ", id: "nav-whatsapp", icon: Icons.MessageCircle, allowedRoles: ['admin'] },
+    { href: "/whatsapp-broadcast", label: "דיוור וואטסאפ", id: "nav-whatsapp-broadcast", icon: Icons.MessageCircle, allowedRoles: ['admin'] },
+    { href: "/mailing", label: "דיוור", id: "nav-mailing", icon: Icons.Mail, allowedRoles: ['admin'] },
+    { href: "/email-sequences", label: "סדרות מיילים", id: "nav-email-seq", icon: Icons.Mail, allowedRoles: ['admin'] },
+    { href: "/linkedin", label: "לינקדאין", id: "nav-linkedin", icon: Icons.Briefcase, allowedRoles: ['admin'] },
+    { href: "/surveys", label: "סקרים", id: "nav-surveys", icon: Icons.Shield, allowedRoles: ['admin'] },
+  ]},
+  { id: "g-finance", label: "פיננסים", icon: Icons.CreditCard, items: [
+    { href: "/accounting", label: "חשבונות", id: "nav-payments", icon: Icons.CreditCard, allowedRoles: ['admin'] },
+    { href: "/accounting/timeline", label: "גבייה חכמה", id: "nav-timeline", icon: Icons.BarChart, allowedRoles: ['admin'] },
+    { href: "/accounting/invoicing", label: "חשבוניות", id: "nav-invoicing", icon: Icons.CreditCard, allowedRoles: ['admin'] },
+    { href: "/accounting/receipts", label: "קבלות", id: "nav-receipts", icon: Icons.CreditCard, allowedRoles: ['admin'] },
+    { href: "/accounting/podcast", label: "פודקאסט", id: "nav-podcast", icon: Icons.Mic, allowedRoles: ['admin'] },
+  ]},
+  { id: "g-projects", label: "פרויקטים וצוות", icon: Icons.BusinessProjects, items: [
+    { href: "/projects", label: "PixelManageAI", id: "nav-projects", icon: Icons.Projects, allowedRoles: ['admin'] },
+    { href: "/business-projects", label: "פרויקטים", id: "nav-otp", icon: Icons.BusinessProjects, allowedRoles: ['admin'] },
+    { href: "/business-projects/dashboard", label: "דשבורד פרויקטים", id: "nav-biz-dash", icon: Icons.BarChart, allowedRoles: ['admin'] },
+    { href: "/approvals", label: "אישורים", id: "nav-approvals", icon: Icons.Shield, allowedRoles: ['admin'] },
+    { href: "/employees", label: "צוות", id: "nav-employees", icon: Icons.Team, allowedRoles: ['admin'] },
+    { href: "/workload", label: "עומס ורווחיות", id: "nav-workload", icon: Icons.Team, allowedRoles: ['admin'] },
+  ]},
+  { id: "g-intel", label: "בינה ואסטרטגיה", icon: Icons.Brain, items: [
+    { href: "/ai-ceo", label: "מנכ״ל AI", id: "nav-ai-ceo", icon: Icons.Brain, allowedRoles: ['admin'] },
+    { href: "/strategy", label: "מוח אסטרטגי", id: "nav-strategy", icon: Icons.Brain, allowedRoles: ['admin'] },
+    { href: "/autopilot", label: "אוטופיילוט", id: "nav-autopilot", icon: Icons.Autopilot, allowedRoles: ['admin'] },
+    { href: "/agency-intelligence", label: "אינטליגנציה", id: "nav-agency-intelligence", icon: Icons.AgencyIntelligence, allowedRoles: ['admin'] },
+    { href: "/quality-check", label: "בקרת איכות AI", id: "nav-quality-check", icon: Icons.Shield, allowedRoles: ['admin', 'employee'] },
+    { href: "/anomalies", label: "מכ״ם אנומליות", id: "nav-anomalies", icon: Icons.Shield, allowedRoles: ['admin'] },
+    { href: "/knowledge", label: "בסיס ידע", id: "nav-knowledge", icon: Icons.Knowledge, allowedRoles: ['admin'] },
+    { href: "/stats", label: "סטטיסטיקות", id: "nav-stats", icon: Icons.TrendingUp, allowedRoles: ['admin'] },
+    { href: "/executive", label: "סיכום מנהלים", id: "nav-executive", icon: Icons.Briefcase, allowedRoles: ['admin'] },
+    { href: "/exec-dashboard", label: "מנהלים", id: "nav-exec", icon: Icons.Briefcase, allowedRoles: ['admin'] },
+    { href: "/system-health", label: "בריאות המערכת", id: "nav-health", icon: Icons.Health, allowedRoles: ['admin'] },
+  ]},
+  { id: "g-system", label: "מערכת", icon: Icons.Settings, items: [
+    { href: "/settings", label: "הגדרות", id: "nav-settings", icon: Icons.Settings, allowedRoles: ['admin'] },
+  ]},
 ];
 
 /* ── Main component ────────────────────────────────────────────────────── */
@@ -253,15 +278,21 @@ export function SideNav() {
   const pathname = usePathname();
   const { role, email, logout } = useAuth();
   const [isExpanded, setIsExpanded] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
 
-  // Filter nav items based on role
-  const visibleNavItems = mainNavItems.filter(
-    (item) => !item.allowedRoles || item.allowedRoles.includes(role)
-  );
+  const roleAllows = (item: NavItem) => !item.allowedRoles || item.allowedRoles.includes(role);
+  const visiblePinned = pinnedItems.filter(roleAllows);
+  const visibleGroups = navGroups
+    .map((g) => ({ ...g, items: g.items.filter(roleAllows) }))
+    .filter((g) => g.items.length > 0);
 
   const isActive = (href: string) => {
     return pathname === href || pathname.startsWith(href + "/");
   };
+  // The group that contains the active route is always shown open.
+  const activeGroupId = visibleGroups.find((g) => g.items.some((it) => isActive(it.href)))?.id;
+  const toggleGroup = (id: string) =>
+    setOpenGroups((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const renderNavLink = (item: NavItem) => {
     const active = isActive(item.href);
@@ -374,6 +405,49 @@ export function SideNav() {
     );
   };
 
+  const renderGroup = (g: { id: string; label: string; icon: React.ReactNode; items: NavItem[] }) => {
+    const open = openGroups.has(g.id) || g.id === activeGroupId;
+    const groupActive = g.items.some((it) => isActive(it.href));
+    return (
+      <div key={g.id} style={{ display: "flex", flexDirection: "column" }}>
+        {/* Group header */}
+        <button
+          onClick={() => { if (!isExpanded) setIsExpanded(true); toggleGroup(g.id); }}
+          title={g.label}
+          className="relative group"
+          style={{
+            display: "flex", alignItems: "center", gap: "0.75rem",
+            padding: "0.7rem 0.75rem", borderRadius: "0.5rem",
+            color: groupActive ? "var(--accent-text)" : "var(--foreground-muted)",
+            background: "transparent", border: "none", cursor: "pointer",
+            fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.01em",
+            width: "100%", textAlign: "start",
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--foreground)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = groupActive ? "var(--accent-text)" : "var(--foreground-muted)"; }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, width: "1.25rem", height: "1.25rem" }}>{g.icon}</div>
+          <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1, opacity: isExpanded ? 1 : 0, maxWidth: isExpanded ? "100%" : "0", transition: "opacity 150ms, max-width 150ms" }}>{g.label}</span>
+          {isExpanded && (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 150ms", flexShrink: 0 }}>
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          )}
+          {/* Collapsed tooltip */}
+          {!isExpanded && (
+            <div className="group-hover:opacity-100" style={{ position: "absolute", insetInlineEnd: "100%", top: "50%", transform: "translateY(-50%)", marginRight: "0.5rem", backgroundColor: "var(--surface-raised)", color: "var(--foreground)", padding: "0.375rem 0.75rem", borderRadius: "0.375rem", fontSize: "0.75rem", fontWeight: 500, whiteSpace: "nowrap", pointerEvents: "none", opacity: 0, transition: "opacity 150ms", zIndex: 50, border: "1px solid var(--border)" }}>{g.label}</div>
+          )}
+        </button>
+        {/* Children */}
+        {open && isExpanded && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.15rem", paddingInlineStart: "0.6rem", marginInlineStart: "0.5rem", borderInlineStart: "1px solid var(--border)" }}>
+            {g.items.map(renderNavLink)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <nav
       style={{
@@ -460,7 +534,11 @@ export function SideNav() {
           gap: "0.25rem",
         }}
       >
-        {visibleNavItems.map(renderNavLink)}
+        {visiblePinned.map(renderNavLink)}
+        {visibleGroups.length > 0 && (
+          <div style={{ height: 1, background: "var(--border)", margin: "0.4rem 0.25rem" }} />
+        )}
+        {visibleGroups.map(renderGroup)}
       </div>
 
       {/* Bottom Actions Section */}
