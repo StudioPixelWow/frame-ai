@@ -8,6 +8,7 @@ import { useClients, useHostingRecords } from "@/lib/api/use-entity";
 import { AdminOnly } from "@/components/role-gate";
 import { useToast } from "@/components/ui/toast";
 import { openWhatsApp, hostingCollectionMessage } from "@/lib/utils/whatsapp";
+import { PageHeader } from "@/components/ui/saas-kit";
 
 function AccessDenied() {
   return (
@@ -114,10 +115,7 @@ function HostingCollectionInner() {
       <button onClick={() => router.push("/accounting")} style={{ background: "none", border: "none", color: "var(--foreground-muted)", fontSize: "0.85rem", cursor: "pointer", marginBottom: "0.75rem" }}>
         ← חזרה לחשבונות
       </button>
-      <div style={{ marginBottom: "2rem" }}>
-        <h1 style={{ fontSize: "2rem", fontWeight: "bold", marginBottom: "0.5rem", color: "var(--foreground)" }}>גביית אחסון אתרים</h1>
-        <p style={{ color: "var(--foreground-muted)", fontSize: "0.95rem" }}>סטטוס תשלום שנתי לכל לקוח אחסון — גבייה בוואטסאפ בלחיצה</p>
-      </div>
+      <PageHeader title="גביית אחסון אתרים" subtitle="סטטוס תשלום שנתי לכל לקוח אחסון — גבייה בוואטסאפ בלחיצה" />
 
       {/* Summary */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>

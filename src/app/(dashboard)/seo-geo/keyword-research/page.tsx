@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 const C = {
   primary: '#00B5FE', primaryDark: '#0095D0', bg: '#F7F9FC', card: '#FFFFFF',
@@ -67,11 +68,10 @@ export default function KeywordResearchPage() {
   return (
     <div dir="rtl" style={{ maxWidth: 1200, margin: '0 auto', padding: '1.5rem 1.25rem 4rem', color: C.text, background: C.bg, minHeight: '100vh' }}>
       <button onClick={() => router.push('/seo-geo/dashboard')} style={{ background: 'none', border: 'none', color: C.sub, fontSize: 13, cursor: 'pointer', marginBottom: 8 }}>← SEO/GEO</button>
-      <div style={{ marginBottom: 18 }}>
-        <div style={{ fontSize: 12, color: C.primary, letterSpacing: 2, fontWeight: 800 }}>KEYWORD RESEARCH</div>
-        <h1 style={{ fontSize: 24, fontWeight: 900, margin: '2px 0' }}>🔑 מחקר ביטויים</h1>
-        <p style={{ color: C.sub, fontSize: 13.5, margin: 0 }}>נפח חיפוש, תחרות, CPC וטרנד — והפיכת ביטויים לשאלות AI מנוטרות (GEO).</p>
-      </div>
+      <PageHeader
+        title="🔑 מחקר ביטויים"
+        subtitle="נפח חיפוש, תחרות, CPC וטרנד — והפיכת ביטויים לשאלות AI מנוטרות (GEO)."
+      />
 
       {/* Search */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '1rem 1.2rem', marginBottom: 16, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>

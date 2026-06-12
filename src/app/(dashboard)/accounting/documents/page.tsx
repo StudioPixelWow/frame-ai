@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { useAccountantDocuments } from "@/lib/api/use-entity";
 import { useState, useMemo, useRef, useCallback } from "react";
 import { useToast } from "@/components/ui/toast";
+import { PageHeader } from "@/components/ui/saas-kit";
 
 /* ── Email Preview Modal types ── */
 interface EmailAttachment {
@@ -308,14 +309,7 @@ export default function DocumentsPage() {
   return (
     <div style={{ direction: "rtl", padding: "2rem" }}>
       {/* Header */}
-      <div style={{ marginBottom: "2rem" }}>
-        <h1 style={{ fontSize: "2rem", fontWeight: "bold", marginBottom: "0.5rem", color: "var(--foreground)" }}>
-          מסמכי רואה חשבון
-        </h1>
-        <p style={{ color: "var(--foreground-muted)", fontSize: "0.95rem" }}>
-          ניהול מסמכים דו-חודשי — נשמרים בענן (Supabase)
-        </p>
-      </div>
+      <PageHeader title="מסמכי רואה חשבון" subtitle="ניהול מסמכים דו-חודשי — נשמרים בענן (Supabase)" />
 
       {/* Year Selector */}
       <div style={{

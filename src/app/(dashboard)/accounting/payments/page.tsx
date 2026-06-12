@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { useClients, usePayments, useProjectPayments, useHostingRecords, usePodcastSessions } from "@/lib/api/use-entity";
 import { useState, useMemo } from "react";
+import { PageHeader } from "@/components/ui/saas-kit";
 
 interface UnifiedPayment {
   id: string;
@@ -303,12 +304,7 @@ export default function PaymentsPage() {
   return (
     <div style={{ direction: "rtl", padding: "2rem" }}>
       {/* Header */}
-      <div style={{ marginBottom: "2rem" }}>
-        <h1 style={{ fontSize: "2rem", fontWeight: "bold", marginBottom: "0.5rem", color: "var(--foreground)" }}>
-          תשלומים
-        </h1>
-        <p style={{ color: "var(--foreground-muted)", fontSize: "0.95rem" }}>ניהול כל התשלומים מכל המקורות</p>
-      </div>
+      <PageHeader title="תשלומים" subtitle="ניהול כל התשלומים מכל המקורות" />
 
       {/* Summary Stats */}
       <div

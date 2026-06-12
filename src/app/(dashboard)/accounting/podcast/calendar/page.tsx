@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { usePodcastSessions, useClients } from "@/lib/api/use-entity"
 import { useToast } from "@/components/ui/toast"
 import type { PodcastSession } from "@/lib/db/schema"
+import { PageHeader } from "@/components/ui/saas-kit";
 
 const PACKAGE_TYPES = {
   recording_only: { name: "הקלטה בלבד", price: 497 },
@@ -324,21 +325,7 @@ export default function PodcastCalendarPage() {
       }}
     >
       {/* Header */}
-      <div style={{ marginBottom: "2.5rem" }}>
-        <h1
-          style={{
-            fontSize: "2rem",
-            fontWeight: "700",
-            marginBottom: "0.5rem",
-            color: "var(--foreground)",
-          }}
-        >
-          לוח הקלטות פודקאסט
-        </h1>
-        <p style={{ fontSize: "0.95rem", color: "var(--foreground-muted)", margin: "0" }}>
-          ניהול הזמנות הקלטות ופדקאסט
-        </p>
-      </div>
+      <PageHeader title="לוח הקלטות פודקאסט" subtitle="ניהול הזמנות הקלטות ופדקאסט" />
 
       {/* Week Navigation */}
       <div

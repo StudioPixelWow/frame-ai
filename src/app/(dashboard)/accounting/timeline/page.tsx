@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useClients, usePayments, useProjectPayments, useHostingRecords, useRetainerPayments } from "@/lib/api/use-entity";
 import { AdminOnly } from "@/components/role-gate";
 import { openWhatsApp, retainerCollectionMessage } from "@/lib/utils/whatsapp";
+import { PageHeader } from "@/components/ui/saas-kit";
 
 export const dynamic = "force-dynamic";
 
@@ -411,26 +412,7 @@ export default function AccountingTimelinePage() {
     <AdminOnly fallback={<AccessDenied />}>
       <div style={{ direction: "rtl", padding: "2rem" }}>
         {/* Header */}
-        <div style={{ marginBottom: "3rem" }}>
-          <h1
-            style={{
-              fontSize: "2rem",
-              fontWeight: "bold",
-              color: "var(--foreground)",
-              marginBottom: "0.5rem",
-            }}
-          >
-            ציר זמן חשבונאי וגבייה חכמה
-          </h1>
-          <p
-            style={{
-              fontSize: "1rem",
-              color: "var(--foreground-muted)",
-            }}
-          >
-            מעקב תשלומים וגבייה אוטומטית
-          </p>
-        </div>
+        <PageHeader title="ציר זמן חשבונאי וגבייה חכמה" subtitle="מעקב תשלומים וגבייה אוטומטית" />
 
         {/* Section 0: Monthly Retainer Collection Roster */}
         <section style={{ marginBottom: "3rem" }}>

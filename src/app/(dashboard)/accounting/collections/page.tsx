@@ -7,6 +7,7 @@ import { useClients, usePayments, useProjectPayments, useHostingRecords, usePodc
 import { useState, useMemo } from "react";
 import { useToast } from "@/components/ui/toast";
 import { openWhatsApp, retainerCollectionMessage } from "@/lib/utils/whatsapp";
+import { PageHeader } from "@/components/ui/saas-kit";
 
 interface PaymentEvent {
   id: string;
@@ -243,12 +244,7 @@ export default function CollectionsPage() {
   return (
     <div style={{ direction: "rtl", padding: "2rem" }}>
       {/* Header */}
-      <div style={{ marginBottom: "2rem" }}>
-        <h1 style={{ fontSize: "2rem", fontWeight: "bold", marginBottom: "0.5rem", color: "var(--foreground)" }}>
-          גבייה
-        </h1>
-        <p style={{ color: "var(--foreground-muted)", fontSize: "0.95rem" }}>לוח גבייה חודשי</p>
-      </div>
+      <PageHeader title="גבייה" subtitle="לוח גבייה חודשי" />
 
       {/* Empty State */}
       {isDataEmpty && (

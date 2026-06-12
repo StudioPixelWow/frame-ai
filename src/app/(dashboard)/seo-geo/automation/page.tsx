@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 const C = {
   primary: '#00B5FE', primaryDark: '#0095D0', primaryLight: '#E6F7FF',
@@ -47,16 +48,12 @@ export default function AutomationCenterPage() {
   return (
     <div dir="rtl" style={{ maxWidth: 1280, margin: '0 auto', padding: '1.5rem 1.25rem 4rem', color: C.text, background: C.bg, minHeight: '100vh' }}>
       <button onClick={() => router.push('/seo-geo')} style={{ background: 'none', border: 'none', color: C.textSecondary, fontSize: 13, cursor: 'pointer', marginBottom: 8 }}>← SEO/GEO</button>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>⚙️ GEO Automation Control Center</h1>
-          <p style={{ color: C.textSecondary, fontSize: 13.5, margin: '4px 0 0' }}>כל לקוח פעיל רץ אוטומטית לפי תדירות — queue, retries, logs, סטטוס, ובקרת עלות.</p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => post({ action: 'enroll' }, 'enroll')} disabled={!!busy} style={{ background: C.card, color: C.text, border: `1px solid ${C.border}`, borderRadius: 12, padding: '0.6rem 1rem', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{busy === 'enroll' ? '⏳' : '↻ רישום לקוחות'}</button>
-          <button onClick={() => post({ action: 'tick' }, 'tick')} disabled={!!busy} style={{ background: C.primary, color: '#fff', border: 'none', borderRadius: 12, padding: '0.6rem 1.1rem', fontWeight: 800, fontSize: 13.5, cursor: 'pointer' }}>{busy === 'tick' ? '⏳ מריץ…' : '▶ הרץ עכשיו (Tick)'}</button>
-        </div>
-      </div>
+      <PageHeader
+        title="⚙️ GEO Automation Control Center"
+        subtitle="כל לקוח פעיל רץ אוטומטית לפי תדירות — queue, retries, logs, סטטוס, ובקרת עלות."
+        secondaryActions={[{ label: busy === 'enroll' ? '⏳' : '↻ רישום לקוחות', onClick: () => { if (!busy) post({ action: 'enroll' }, 'enroll'); } }]}
+        primaryAction={{ label: busy === 'tick' ? '⏳ מריץ…' : '▶ הרץ עכשיו (Tick)', onClick: () => { if (!busy) post({ action: 'tick' }, 'tick'); } }}
+      />
 
       {err && <div style={{ background: '#FEF2F2', border: `1px solid ${C.danger}40`, color: C.danger, borderRadius: 10, padding: '0.6rem 0.9rem', fontSize: 13, fontWeight: 600, margin: '10px 0' }}>⚠ {err}</div>}
 
