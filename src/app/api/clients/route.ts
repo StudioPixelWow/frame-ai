@@ -53,6 +53,7 @@ function rowToClient(r: ClientRow) {
     retainerAmount: Number(r.retainer_amount) || 0,
     retainerDay: Number(r.retainer_day) || 1,
     color: (r.color as string) ?? '#00B5FE',
+    logoUrl: (r.logo_url as string) ?? '',
     convertedFromLead: (r.converted_from_lead as string) ?? null,
     assignedManagerId: (r.assigned_manager_id as string) ?? null,
     createdAt: (r.created_at as string) ?? '',
