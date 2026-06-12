@@ -7,7 +7,11 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   if (getRequestRole(req) === 'client') return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 });
-  if (!whatsappConfigured()) return NextResponse.json({ error: 'not_configured', chats: [] }, { status: 503 });
+  // Always answer 200 so the dashboard poller / global notifier don't flood the
+  // browser console with 409/503 network errors when the WhatsApp service isn't
+  // ready. The `state` field tells clients whether real data is available.
+  if (!whatsappConfigured()) return NextResponse.json({ configured: false, state: 'not_configured', chats: [], totalUnread: 0 });
   const r = await waChats();
-  return NextResponse.json(r.data, { status: r.ok ? 200 : (r.status || 502) });
+  if (!r.ok) return NextResponse.json({ configured: true, state: 'unavailable', chats: [], totalUnread: 0 });
+  return NextResponse.json({ configured: true, state: 'ok', ...(r.data || {}) });
 }

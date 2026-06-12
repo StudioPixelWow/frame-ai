@@ -99,6 +99,24 @@ function parseBadColumn(msg: string): string | null {
   return m?.[1] || m?.[2] || null;
 }
 
+// Detect the column behind a unique-constraint conflict (Postgres 23505) so we can
+// drop just that field and still persist the rest of the update (e.g. the avatar).
+function parseConflictColumn(err: { message?: string; details?: string; code?: string } | null): string | null {
+  if (!err) return null;
+  const code = err.code;
+  const text = `${err.message || ''} ${err.details || ''}`;
+  if (code !== '23505' && !/duplicate key|unique constraint/i.test(text)) return null;
+  // e.g. Key (email)=(x) already exists.  /  constraint "employees_email_key"
+  const byKey = text.match(/Key \(([a-z_]+)\)/i);
+  if (byKey) return byKey[1];
+  const byConstraint = text.match(/constraint "[a-z]+_([a-z_]+)_key"/i);
+  if (byConstraint) return byConstraint[1];
+  // common offenders, fall back to email
+  if (/email/i.test(text)) return 'email';
+  if (/phone/i.test(text)) return 'phone';
+  return null;
+}
+
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   // Only admin and employee can view employee details
   const getErr = requireRole(req, 'admin', 'employee');
@@ -148,16 +166,23 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     let selectList = SELECT_COLUMNS;
 
     let updated: Row | null = null;
-    let lastErr: { message: string; code?: string } | null = null;
+    let lastErr: { message: string; code?: string; details?: string } | null = null;
     for (let attempt = 0; attempt < 12; attempt++) {
       const { data, error } = await sb.from(TABLE).update(updateRow).eq('id', id).select(selectList).maybeSingle();
       if (!error) { updated = (data as unknown as Row) ?? null; break; }
       lastErr = error as any;
+      // 1) Missing column → drop it from the write/select and retry.
       const bad = parseBadColumn(error.message);
-      if (!bad) break;
-      if (bad in updateRow) { const { [bad]: _d, ...rest } = updateRow; void _d; updateRow = rest; }
-      else if (selectList.includes(bad)) selectList = selectList.split(',').map((s) => s.trim()).filter((c) => c !== bad).join(', ');
-      else break;
+      if (bad) {
+        if (bad in updateRow) { const { [bad]: _d, ...rest } = updateRow; void _d; updateRow = rest; continue; }
+        if (selectList.includes(bad)) { selectList = selectList.split(',').map((s) => s.trim()).filter((c) => c !== bad).join(', '); continue; }
+      }
+      // 2) Unique-constraint conflict (e.g. email/phone already on another row) →
+      //    drop just that field so the rest of the edit (avatar, welcome messages,
+      //    name…) still persists instead of failing the whole save.
+      const conflict = parseConflictColumn(error as any);
+      if (conflict && conflict in updateRow) { const { [conflict]: _c, ...rest } = updateRow; void _c; updateRow = rest; continue; }
+      break;
     }
 
     if (lastErr && !updated) return NextResponse.json({ error: lastErr.message }, { status: 400 });

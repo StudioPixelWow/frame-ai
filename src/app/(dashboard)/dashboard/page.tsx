@@ -484,7 +484,7 @@ function AdminDashboard() {
     } catch {}
     fetch("/api/whatsapp/qr-chats", { headers, cache: "no-store" })
       .then((r) => r.json())
-      .then((d) => { if (!alive) return; if (Array.isArray(d?.chats)) { setWaChats(d.chats); setWaState("ok"); } else setWaState("off"); })
+      .then((d) => { if (!alive) return; if (d?.state === "ok" && Array.isArray(d?.chats)) { setWaChats(d.chats); setWaState("ok"); } else setWaState("off"); })
       .catch(() => { if (alive) setWaState("off"); });
     return () => { alive = false; };
   }, []);

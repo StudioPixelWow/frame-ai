@@ -250,7 +250,8 @@ export default function EmployeesPage() {
       }
       handleCloseModal();
     } catch (error) {
-      toast("שגיאה בשמירת העובד", "success");
+      const msg = error instanceof Error ? error.message : "שגיאה בשמירת העובד";
+      toast(`שגיאה בשמירת העובד: ${msg}`, "error");
     }
   };
 
