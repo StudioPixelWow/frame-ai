@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 const DOC_TYPE_LABELS: Record<number, string> = {
   10: 'הצעת מחיר',
@@ -15,11 +16,11 @@ const DOC_TYPE_LABELS: Record<number, string> = {
 };
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  draft: { label: 'טיוטה', color: 'bg-gray-500/20 text-gray-300' },
-  issued: { label: 'הופקה', color: 'bg-blue-500/20 text-blue-300' },
-  paid: { label: 'שולמה', color: 'bg-green-500/20 text-green-300' },
-  cancelled: { label: 'בוטלה', color: 'bg-red-500/20 text-red-300' },
-  overdue: { label: 'חורגת', color: 'bg-orange-500/20 text-orange-300' },
+  draft: { label: 'טיוטה', color: 'bg-gray-500/20 text-gray-600' },
+  issued: { label: 'הופקה', color: 'bg-blue-500/20 text-blue-700' },
+  paid: { label: 'שולמה', color: 'bg-green-500/20 text-green-700' },
+  cancelled: { label: 'בוטלה', color: 'bg-red-500/20 text-red-700' },
+  overdue: { label: 'חורגת', color: 'bg-orange-500/20 text-orange-700' },
 };
 
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
@@ -192,48 +193,34 @@ export default function InvoicingPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto" dir="rtl">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-white">חשבוניות</h1>
-          <p className="text-sm text-white/50 mt-1">ניהול חשבוניות — חיבור ל-Green Invoice (חשבונית ירוקה)</p>
-        </div>
-        <div className="flex gap-3">
-          <button
-            onClick={() => setShowSettings(true)}
-            className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white/70 rounded-lg text-sm transition-colors"
-          >
-            ⚙️ הגדרות Green Invoice
-          </button>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            + חשבונית חדשה
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="חשבוניות"
+        subtitle="ניהול חשבוניות — חיבור ל-Green Invoice (חשבונית ירוקה)"
+        secondaryActions={[{ label: "⚙️ הגדרות Green Invoice", onClick: () => setShowSettings(true) }]}
+        primaryAction={{ label: "+ חשבונית חדשה", onClick: () => setShowCreate(true) }}
+      />
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4 mb-8">
-        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-          <div className="text-sm text-white/50">סה&quot;כ חשבוניות</div>
-          <div className="text-2xl font-bold text-white mt-1">{invoicesList.length}</div>
+        <div className="bg-surface rounded-xl p-4 border border-border">
+          <div className="text-sm text-foreground-muted">סה&quot;כ חשבוניות</div>
+          <div className="text-2xl font-bold text-foreground mt-1">{invoicesList.length}</div>
         </div>
         <div className="bg-green-500/10 rounded-xl p-4 border border-green-500/20">
-          <div className="text-sm text-green-300/70">הכנסות שנגבו</div>
-          <div className="text-2xl font-bold text-green-300 mt-1">₪{totalRevenue.toLocaleString()}</div>
+          <div className="text-sm text-green-700/70">הכנסות שנגבו</div>
+          <div className="text-2xl font-bold text-green-700 mt-1">₪{totalRevenue.toLocaleString()}</div>
         </div>
         <div className="bg-blue-500/10 rounded-xl p-4 border border-blue-500/20">
-          <div className="text-sm text-blue-300/70">ממתין לגבייה</div>
-          <div className="text-2xl font-bold text-blue-300 mt-1">₪{totalPending.toLocaleString()}</div>
+          <div className="text-sm text-blue-700/70">ממתין לגבייה</div>
+          <div className="text-2xl font-bold text-blue-700 mt-1">₪{totalPending.toLocaleString()}</div>
         </div>
-        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-          <div className="text-sm text-white/50">חיבור Green Invoice</div>
+        <div className="bg-surface rounded-xl p-4 border border-border">
+          <div className="text-sm text-foreground-muted">חיבור Green Invoice</div>
           <div className="text-lg font-medium mt-1">
             {settings?.connected ? (
-              <span className="text-green-400">✓ מחובר</span>
+              <span className="text-green-700">✓ מחובר</span>
             ) : (
-              <span className="text-orange-400">לא מחובר</span>
+              <span className="text-orange-700">לא מחובר</span>
             )}
           </div>
         </div>
@@ -247,7 +234,7 @@ export default function InvoicingPage() {
             onClick={() => setFilter(f)}
             className={`px-4 py-1.5 rounded-full text-sm transition-colors ${filter === f
               ? 'bg-blue-600 text-white'
-              : 'bg-white/5 text-white/60 hover:bg-white/10'
+              : 'bg-surface text-foreground-muted hover:bg-surface-raised'
             }`}
           >
             {f === 'all' ? 'הכל' : STATUS_LABELS[f]?.label || f}
@@ -257,11 +244,11 @@ export default function InvoicingPage() {
 
       {/* Invoice List */}
       {loading ? (
-        <div className="text-center text-white/40 py-20">טוען חשבוניות...</div>
+        <div className="text-center text-foreground-subtle py-20">טוען חשבוניות...</div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-20">
           <div className="text-4xl mb-4">📄</div>
-          <p className="text-white/50">אין חשבוניות עדיין</p>
+          <p className="text-foreground-muted">אין חשבוניות עדיין</p>
           <button onClick={() => setShowCreate(true)} className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm">
             צור חשבונית ראשונה
           </button>
@@ -269,24 +256,24 @@ export default function InvoicingPage() {
       ) : (
         <div className="space-y-3">
           {filtered.map((inv: any) => (
-            <div key={inv.id} className="bg-white/5 rounded-xl p-4 border border-white/10 hover:border-white/20 transition-colors">
+            <div key={inv.id} className="bg-surface rounded-xl p-4 border border-border hover:border-border-muted transition-colors">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div>
-                    <div className="font-medium text-white">{inv.clientName}</div>
-                    <div className="text-sm text-white/50">
+                    <div className="font-medium text-foreground">{inv.clientName}</div>
+                    <div className="text-sm text-foreground-muted">
                       {DOC_TYPE_LABELS[inv.docType] || 'חשבונית'}
                       {inv.greenInvoiceNumber && ` #${inv.greenInvoiceNumber}`}
                     </div>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-xs ${STATUS_LABELS[inv.status]?.color || 'bg-gray-500/20 text-gray-300'}`}>
+                  <span className={`px-3 py-1 rounded-full text-xs ${STATUS_LABELS[inv.status]?.color || 'bg-gray-500/20 text-gray-600'}`}>
                     {STATUS_LABELS[inv.status]?.label || inv.status}
                   </span>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-left">
-                    <div className="text-lg font-bold text-white">₪{(inv.total || 0).toLocaleString()}</div>
-                    <div className="text-xs text-white/40">
+                    <div className="text-lg font-bold text-foreground">₪{(inv.total || 0).toLocaleString()}</div>
+                    <div className="text-xs text-foreground-subtle">
                       {inv.paymentMethod && PAYMENT_METHOD_LABELS[inv.paymentMethod]}
                     </div>
                   </div>
@@ -304,7 +291,7 @@ export default function InvoicingPage() {
                         href={inv.greenInvoicePdfUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs rounded-lg transition-colors"
+                        className="px-3 py-1.5 bg-surface-raised hover:bg-surface-raised text-foreground text-xs rounded-lg transition-colors"
                       >
                         📥 PDF
                       </a>
@@ -313,7 +300,7 @@ export default function InvoicingPage() {
                 </div>
               </div>
               {inv.description && (
-                <div className="text-sm text-white/40 mt-2">{inv.description}</div>
+                <div className="text-sm text-foreground-subtle mt-2">{inv.description}</div>
               )}
             </div>
           ))}
@@ -323,25 +310,25 @@ export default function InvoicingPage() {
       {/* Create Modal */}
       {showCreate && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[#1a1f2e] rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-white/10">
-            <h2 className="text-xl font-bold text-white mb-6">חשבונית חדשה</h2>
+          <div className="bg-surface-raised rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-border">
+            <h2 className="text-xl font-bold text-foreground mb-6">חשבונית חדשה</h2>
 
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="text-sm text-white/60 block mb-1">שם לקוח</label>
+                <label className="text-sm text-foreground-muted block mb-1">שם לקוח</label>
                 <input
                   value={form.clientName}
                   onChange={e => setForm(prev => ({ ...prev, clientName: e.target.value }))}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-foreground text-sm"
                   placeholder="שם הלקוח"
                 />
               </div>
               <div>
-                <label className="text-sm text-white/60 block mb-1">סוג מסמך</label>
+                <label className="text-sm text-foreground-muted block mb-1">סוג מסמך</label>
                 <select
                   value={form.docType}
                   onChange={e => setForm(prev => ({ ...prev, docType: Number(e.target.value) }))}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-foreground text-sm"
                 >
                   {Object.entries(DOC_TYPE_LABELS).map(([val, label]) => (
                     <option key={val} value={val}>{label}</option>
@@ -352,20 +339,20 @@ export default function InvoicingPage() {
 
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="text-sm text-white/60 block mb-1">תיאור</label>
+                <label className="text-sm text-foreground-muted block mb-1">תיאור</label>
                 <input
                   value={form.description}
                   onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-foreground text-sm"
                   placeholder="תיאור כללי"
                 />
               </div>
               <div>
-                <label className="text-sm text-white/60 block mb-1">אמצעי תשלום</label>
+                <label className="text-sm text-foreground-muted block mb-1">אמצעי תשלום</label>
                 <select
                   value={form.paymentMethod}
                   onChange={e => setForm(prev => ({ ...prev, paymentMethod: e.target.value }))}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-foreground text-sm"
                 >
                   {Object.entries(PAYMENT_METHOD_LABELS).map(([val, label]) => (
                     <option key={val} value={val}>{label}</option>
@@ -377,22 +364,22 @@ export default function InvoicingPage() {
             {/* Items */}
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm text-white/60">פריטים</label>
-                <button onClick={addItem} className="text-xs text-blue-400 hover:text-blue-300">+ הוסף פריט</button>
+                <label className="text-sm text-foreground-muted">פריטים</label>
+                <button onClick={addItem} className="text-xs text-blue-700 hover:text-blue-700">+ הוסף פריט</button>
               </div>
               {form.items.map((item, idx) => (
                 <div key={idx} className="flex gap-2 mb-2">
                   <input
                     value={item.description}
                     onChange={e => updateItem(idx, 'description', e.target.value)}
-                    className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
+                    className="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-foreground text-sm"
                     placeholder="תיאור פריט"
                   />
                   <input
                     type="number"
                     value={item.quantity}
                     onChange={e => updateItem(idx, 'quantity', Number(e.target.value))}
-                    className="w-20 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
+                    className="w-20 bg-surface border border-border rounded-lg px-3 py-2 text-foreground text-sm"
                     placeholder="כמות"
                     min={1}
                   />
@@ -400,42 +387,42 @@ export default function InvoicingPage() {
                     type="number"
                     value={item.unitPrice || ''}
                     onChange={e => updateItem(idx, 'unitPrice', Number(e.target.value))}
-                    className="w-28 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
+                    className="w-28 bg-surface border border-border rounded-lg px-3 py-2 text-foreground text-sm"
                     placeholder="מחיר ₪"
                   />
                   <select
                     value={item.vatType}
                     onChange={e => updateItem(idx, 'vatType', Number(e.target.value))}
-                    className="w-24 bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-white text-xs"
+                    className="w-24 bg-surface border border-border rounded-lg px-2 py-2 text-foreground text-xs"
                   >
                     <option value={1}>+ מע&quot;מ</option>
                     <option value={0}>ללא מע&quot;מ</option>
                   </select>
                   {form.items.length > 1 && (
-                    <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-300 px-2">✕</button>
+                    <button onClick={() => removeItem(idx)} className="text-red-700 hover:text-red-700 px-2">✕</button>
                   )}
                 </div>
               ))}
             </div>
 
             {/* Totals */}
-            <div className="bg-white/5 rounded-lg p-4 mb-6 text-sm">
-              <div className="flex justify-between text-white/60 mb-1">
+            <div className="bg-surface rounded-lg p-4 mb-6 text-sm">
+              <div className="flex justify-between text-foreground-muted mb-1">
                 <span>סכום לפני מע&quot;מ</span>
                 <span>₪{subtotal.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-white/60 mb-1">
+              <div className="flex justify-between text-foreground-muted mb-1">
                 <span>מע&quot;מ (18%)</span>
                 <span>₪{Math.round(vatAmount).toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-white font-bold text-base border-t border-white/10 pt-2 mt-2">
+              <div className="flex justify-between text-foreground font-bold text-base border-t border-border pt-2 mt-2">
                 <span>סה&quot;כ</span>
                 <span>₪{Math.round(subtotal + vatAmount).toLocaleString()}</span>
               </div>
             </div>
 
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowCreate(false)} className="px-5 py-2 bg-white/10 text-white rounded-lg text-sm">ביטול</button>
+              <button onClick={() => setShowCreate(false)} className="px-5 py-2 bg-surface-raised text-foreground rounded-lg text-sm">ביטול</button>
               <button onClick={handleCreateInvoice} className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium">
                 צור חשבונית
               </button>
@@ -447,29 +434,29 @@ export default function InvoicingPage() {
       {/* Settings Modal */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[#1a1f2e] rounded-2xl p-6 w-full max-w-lg border border-white/10">
-            <h2 className="text-xl font-bold text-white mb-6">הגדרות Green Invoice</h2>
-            <p className="text-sm text-white/50 mb-4">
+          <div className="bg-surface-raised rounded-2xl p-6 w-full max-w-lg border border-border">
+            <h2 className="text-xl font-bold text-foreground mb-6">הגדרות Green Invoice</h2>
+            <p className="text-sm text-foreground-muted mb-4">
               חבר את חשבון Green Invoice שלך כדי להפיק חשבוניות מס אוטומטית.
             </p>
 
             <div className="space-y-4">
               <div>
-                <label className="text-sm text-white/60 block mb-1">API ID</label>
+                <label className="text-sm text-foreground-muted block mb-1">API ID</label>
                 <input
                   value={settingsForm.apiId}
                   onChange={e => setSettingsForm(prev => ({ ...prev, apiId: e.target.value }))}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-foreground text-sm"
                   placeholder="מ-Green Invoice → הגדרות → API"
                 />
               </div>
               <div>
-                <label className="text-sm text-white/60 block mb-1">API Secret</label>
+                <label className="text-sm text-foreground-muted block mb-1">API Secret</label>
                 <input
                   type="password"
                   value={settingsForm.apiSecret}
                   onChange={e => setSettingsForm(prev => ({ ...prev, apiSecret: e.target.value }))}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-foreground text-sm"
                   placeholder="סיסמת API"
                 />
               </div>
@@ -480,7 +467,7 @@ export default function InvoicingPage() {
                   onChange={e => setSettingsForm(prev => ({ ...prev, sandbox: e.target.checked }))}
                   className="rounded"
                 />
-                <label className="text-sm text-white/60">מצב Sandbox (לבדיקות)</label>
+                <label className="text-sm text-foreground-muted">מצב Sandbox (לבדיקות)</label>
               </div>
               <div className="flex items-center gap-3">
                 <input
@@ -489,18 +476,18 @@ export default function InvoicingPage() {
                   onChange={e => setSettingsForm(prev => ({ ...prev, autoIssueOnPayment: e.target.checked }))}
                   className="rounded"
                 />
-                <label className="text-sm text-white/60">הפק חשבונית אוטומטית בקבלת תשלום</label>
+                <label className="text-sm text-foreground-muted">הפק חשבונית אוטומטית בקבלת תשלום</label>
               </div>
             </div>
 
             {settings?.connected && (
               <div className="mt-4 p-3 bg-green-500/10 rounded-lg border border-green-500/20">
-                <span className="text-green-400 text-sm">✓ מחובר — {settings.businessName}</span>
+                <span className="text-green-700 text-sm">✓ מחובר — {settings.businessName}</span>
               </div>
             )}
 
             <div className="flex gap-3 justify-end mt-6">
-              <button onClick={() => setShowSettings(false)} className="px-5 py-2 bg-white/10 text-white rounded-lg text-sm">ביטול</button>
+              <button onClick={() => setShowSettings(false)} className="px-5 py-2 bg-surface-raised text-foreground rounded-lg text-sm">ביטול</button>
               <button onClick={handleSaveSettings} className="px-5 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium">
                 שמור וחבר
               </button>

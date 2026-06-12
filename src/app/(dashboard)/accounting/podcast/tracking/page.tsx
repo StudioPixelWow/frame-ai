@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { useState } from "react"
+import { PageHeader } from "@/components/ui/saas-kit";
 import { useRouter } from "next/navigation"
 import { usePodcastSessions } from "@/lib/api/use-entity"
 
@@ -72,14 +73,12 @@ export default function PodcastTrackingPage() {
       style={{
         direction: "rtl",
         minHeight: "100vh",
-        background: "#1a1a2e",
-        color: "white",
+        background: "var(--surface)",
+        color: "var(--foreground)",
         padding: "2rem",
       }}
     >
-      <h1 style={{ fontSize: "2rem", fontWeight: "bold", marginBottom: "2rem", color: "#CCFF00" }}>
-        מעקב תוכן
-      </h1>
+      <PageHeader title="מעקב תוכן" subtitle="לוח מעקב תוכן פודקאסט" />
 
       {/* Kanban Board */}
       <div
@@ -97,8 +96,8 @@ export default function PodcastTrackingPage() {
             <div
               key={status}
               style={{
-                background: "rgba(204, 255, 0, 0.05)",
-                border: "2px solid #CCFF00",
+                background: "var(--accent-muted)",
+                border: "2px solid var(--accent)",
                 borderRadius: "0.75rem",
                 padding: "1.5rem",
                 minHeight: "600px",
@@ -108,10 +107,10 @@ export default function PodcastTrackingPage() {
                 style={{
                   fontSize: "1.25rem",
                   fontWeight: "bold",
-                  color: "#CCFF00",
+                  color: "var(--accent)",
                   marginBottom: "1rem",
                   paddingBottom: "1rem",
-                  borderBottom: "2px solid #CCFF00",
+                  borderBottom: "2px solid var(--accent)",
                 }}
               >
                 {STATUS_LABELS[status]}
@@ -122,8 +121,8 @@ export default function PodcastTrackingPage() {
                   <div
                     key={session.id}
                     style={{
-                      background: "#1a1a2e",
-                      border: "1px solid #444",
+                      background: "var(--surface-raised)",
+                      border: "1px solid var(--border)",
                       borderRadius: "0.5rem",
                       padding: "1rem",
                       cursor: "default",
@@ -138,7 +137,7 @@ export default function PodcastTrackingPage() {
                     <div
                       style={{
                         fontSize: "0.875rem",
-                        color: "#CCFF00",
+                        color: "var(--accent)",
                         marginBottom: "0.75rem",
                       }}
                     >
@@ -149,7 +148,7 @@ export default function PodcastTrackingPage() {
                     <div
                       style={{
                         fontSize: "0.875rem",
-                        color: "rgba(255, 255, 255, 0.7)",
+                        color: "var(--foreground-muted)",
                         marginBottom: "0.75rem",
                       }}
                     >
@@ -160,7 +159,7 @@ export default function PodcastTrackingPage() {
                     <div
                       style={{
                         fontSize: "0.875rem",
-                        color: "rgba(255, 255, 255, 0.7)",
+                        color: "var(--foreground-muted)",
                         marginBottom: "0.75rem",
                       }}
                     >
@@ -195,9 +194,9 @@ export default function PodcastTrackingPage() {
                           style={{
                             flex: 1,
                             padding: "0.5rem",
-                            background: "#444",
-                            color: "white",
-                            border: "1px solid #666",
+                            background: "var(--surface-raised)",
+                            color: "var(--foreground)",
+                            border: "1px solid var(--border)",
                             borderRadius: "0.25rem",
                             cursor: "pointer",
                             fontSize: "0.75rem",
@@ -217,8 +216,8 @@ export default function PodcastTrackingPage() {
                           style={{
                             flex: 1,
                             padding: "0.5rem",
-                            background: "#CCFF00",
-                            color: "#1a1a2e",
+                            background: "var(--accent)",
+                            color: "#fff",
                             border: "none",
                             borderRadius: "0.25rem",
                             cursor: "pointer",
@@ -238,7 +237,7 @@ export default function PodcastTrackingPage() {
                     style={{
                       textAlign: "center",
                       padding: "2rem 1rem",
-                      color: "rgba(255, 255, 255, 0.5)",
+                      color: "var(--foreground-muted)",
                       fontSize: "0.875rem",
                     }}
                   >
@@ -270,8 +269,8 @@ export default function PodcastTrackingPage() {
         >
           <div
             style={{
-              background: "#1a1a2e",
-              border: "2px solid #CCFF00",
+              background: "var(--surface-raised)",
+              border: "2px solid var(--accent)",
               borderRadius: "1rem",
               padding: "2rem",
               maxWidth: "500px",
@@ -279,23 +278,23 @@ export default function PodcastTrackingPage() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 style={{ fontSize: "1.5rem", marginBottom: "1rem", color: "#CCFF00" }}>
+            <h2 style={{ fontSize: "1.5rem", marginBottom: "1rem", color: "var(--accent)" }}>
               סיום הקלטה
             </h2>
 
             <div
               style={{
-                background: "rgba(204, 255, 0, 0.1)",
+                background: "var(--accent-muted)",
                 padding: "1.5rem",
                 borderRadius: "0.5rem",
                 marginBottom: "2rem",
-                border: "1px solid #CCFF00",
+                border: "1px solid var(--accent)",
               }}
             >
               <div style={{ fontSize: "1.25rem", fontWeight: "bold", marginBottom: "1rem" }}>
                 הנחה של 10% להקלטה הבאה
               </div>
-              <div style={{ fontSize: "0.875rem", color: "rgba(255, 255, 255, 0.8)" }}>
+              <div style={{ fontSize: "0.875rem", color: "var(--foreground-muted)" }}>
                 הנחה זו תמסר ללקוח בדוא"ל הגמר
               </div>
             </div>
@@ -306,8 +305,8 @@ export default function PodcastTrackingPage() {
                 style={{
                   flex: 1,
                   padding: "1rem",
-                  background: "#444",
-                  color: "white",
+                  background: "var(--surface-raised)",
+                  color: "var(--foreground)",
                   border: "none",
                   borderRadius: "0.5rem",
                   cursor: "pointer",
@@ -322,8 +321,8 @@ export default function PodcastTrackingPage() {
                 style={{
                   flex: 1,
                   padding: "1rem",
-                  background: "#CCFF00",
-                  color: "#1a1a2e",
+                  background: "var(--accent)",
+                  color: "#fff",
                   border: "none",
                   borderRadius: "0.5rem",
                   cursor: "pointer",

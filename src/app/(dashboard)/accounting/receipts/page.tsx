@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { PageHeader } from "@/components/ui/saas-kit";
 import { useToast } from "@/components/ui/toast";
 import type { ScannedReceipt, ExpenseCategory, ReceiptStatus } from "@/lib/db/schema";
 
@@ -218,14 +219,7 @@ export default function ReceiptsPage() {
   return (
     <div dir="rtl" style={{ padding: "1.5rem", maxWidth: 1400, margin: "0 auto" }}>
       {/* Header */}
-      <div style={{ marginBottom: "1.5rem" }}>
-        <h1 style={{ fontSize: "1.5rem", fontWeight: 700, color: "white", marginBottom: "0.25rem" }}>
-          סריקת קבלות והוצאות
-        </h1>
-        <p style={{ fontSize: "0.875rem", color: "rgba(255,255,255,0.5)" }}>
-          סרוק קבלות, סווג הוצאות, ועקוב אחרי ניכוי מע״מ
-        </p>
-      </div>
+      <PageHeader title="סריקת קבלות והוצאות" subtitle="סרוק קבלות, סווג הוצאות, ועקוב אחרי ניכוי מע״מ" />
 
       {/* Summary cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
@@ -237,8 +231,8 @@ export default function ReceiptsPage() {
 
       {/* Upload area */}
       <div style={{
-        background: "rgba(255,255,255,0.05)",
-        border: "2px dashed rgba(255,255,255,0.15)",
+        background: "var(--surface)",
+        border: "2px dashed var(--border)",
         borderRadius: 12,
         padding: "2rem",
         textAlign: "center",
@@ -271,15 +265,15 @@ export default function ReceiptsPage() {
             <div style={{ fontSize: "2rem", marginBottom: "0.5rem", animation: "spin 1s linear infinite" }}>
               ⏳
             </div>
-            <p style={{ color: "rgba(255,255,255,0.7)" }}>סורק קבלה...</p>
+            <p style={{ color: "var(--foreground-muted)" }}>סורק קבלה...</p>
           </div>
         ) : (
           <div>
             <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>📄</div>
-            <p style={{ color: "rgba(255,255,255,0.7)", fontWeight: 600 }}>
+            <p style={{ color: "var(--foreground-muted)", fontWeight: 600 }}>
               לחץ או גרור קבלה לכאן לסריקה
             </p>
-            <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.8rem", marginTop: "0.25rem" }}>
+            <p style={{ color: "var(--foreground-subtle)", fontSize: "0.8rem", marginTop: "0.25rem" }}>
               תמונה או PDF
             </p>
           </div>
@@ -366,32 +360,32 @@ export default function ReceiptsPage() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: "1.25rem", alignItems: "start" }}>
         {/* Receipts table */}
         <div style={{
-          background: "rgba(255,255,255,0.05)",
+          background: "var(--surface)",
           borderRadius: 12,
-          border: "1px solid rgba(255,255,255,0.1)",
+          border: "1px solid var(--border)",
           overflow: "hidden",
         }}>
-          <div style={{ padding: "0.75rem 1rem", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-            <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "white" }}>
+          <div style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--border)" }}>
+            <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--foreground)" }}>
               קבלות ({receipts.length})
             </h2>
           </div>
 
           {loading ? (
-            <div style={{ padding: "2rem", textAlign: "center", color: "rgba(255,255,255,0.4)" }}>
+            <div style={{ padding: "2rem", textAlign: "center", color: "var(--foreground-subtle)" }}>
               טוען...
             </div>
           ) : receipts.length === 0 ? (
-            <div style={{ padding: "2rem", textAlign: "center", color: "rgba(255,255,255,0.4)" }}>
+            <div style={{ padding: "2rem", textAlign: "center", color: "var(--foreground-subtle)" }}>
               אין קבלות להצגה
             </div>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
                 <thead>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
                     {["ספק", "תאריך", "סכום", "מע״מ", "קטגוריה", "סטטוס", "ניכוי", "פעולות"].map((h) => (
-                      <th key={h} style={{ padding: "0.6rem 0.75rem", textAlign: "right", color: "rgba(255,255,255,0.5)", fontWeight: 600 }}>
+                      <th key={h} style={{ padding: "0.6rem 0.75rem", textAlign: "right", color: "var(--foreground-muted)", fontWeight: 600 }}>
                         {h}
                       </th>
                     ))}
@@ -399,22 +393,22 @@ export default function ReceiptsPage() {
                 </thead>
                 <tbody>
                   {receipts.map((r) => (
-                    <tr key={r.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                      <td style={{ padding: "0.6rem 0.75rem", color: "white", fontWeight: 600 }}>
+                    <tr key={r.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "var(--foreground)", fontWeight: 600 }}>
                         {r.vendorName}
                         {r.vendorTaxId && (
-                          <span style={{ display: "block", fontSize: "0.7rem", color: "rgba(255,255,255,0.4)" }}>
+                          <span style={{ display: "block", fontSize: "0.7rem", color: "var(--foreground-subtle)" }}>
                             {r.vendorTaxId}
                           </span>
                         )}
                       </td>
-                      <td style={{ padding: "0.6rem 0.75rem", color: "rgba(255,255,255,0.7)" }}>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "var(--foreground-muted)" }}>
                         {r.receiptDate}
                       </td>
-                      <td style={{ padding: "0.6rem 0.75rem", color: "white", fontWeight: 600 }}>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "var(--foreground)", fontWeight: 600 }}>
                         {CURRENCY_SYMBOLS[r.currency]}{r.total.toLocaleString("he-IL", { minimumFractionDigits: 2 })}
                       </td>
-                      <td style={{ padding: "0.6rem 0.75rem", color: "rgba(255,255,255,0.6)" }}>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "var(--foreground-muted)" }}>
                         {CURRENCY_SYMBOLS[r.currency]}{r.vatAmount.toLocaleString("he-IL", { minimumFractionDigits: 2 })}
                       </td>
                       <td style={{ padding: "0.6rem 0.75rem" }}>
@@ -440,7 +434,7 @@ export default function ReceiptsPage() {
                           {STATUS_LABELS[r.status]}
                         </span>
                       </td>
-                      <td style={{ padding: "0.6rem 0.75rem", color: "rgba(255,255,255,0.6)" }}>
+                      <td style={{ padding: "0.6rem 0.75rem", color: "var(--foreground-muted)" }}>
                         {r.deductionPercentage}%
                       </td>
                       <td style={{ padding: "0.6rem 0.75rem" }}>
@@ -489,30 +483,30 @@ export default function ReceiptsPage() {
 
         {/* Category breakdown chart */}
         <div style={{
-          background: "rgba(255,255,255,0.05)",
+          background: "var(--surface)",
           borderRadius: 12,
-          border: "1px solid rgba(255,255,255,0.1)",
+          border: "1px solid var(--border)",
           padding: "1rem",
         }}>
-          <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "white", marginBottom: "1rem" }}>
+          <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "1rem" }}>
             פילוח לפי קטגוריה
           </h2>
           {categoryBreakdown.length === 0 ? (
-            <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.8rem" }}>אין נתונים</p>
+            <p style={{ color: "var(--foreground-subtle)", fontSize: "0.8rem" }}>אין נתונים</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
               {categoryBreakdown.map(([cat, amount]) => (
                 <div key={cat}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", marginBottom: "0.2rem" }}>
-                    <span style={{ color: "rgba(255,255,255,0.7)" }}>{CATEGORY_LABELS[cat]}</span>
-                    <span style={{ color: "white", fontWeight: 600 }}>
+                    <span style={{ color: "var(--foreground-muted)" }}>{CATEGORY_LABELS[cat]}</span>
+                    <span style={{ color: "var(--foreground)", fontWeight: 600 }}>
                       ₪{amount.toLocaleString("he-IL", { minimumFractionDigits: 0 })}
                     </span>
                   </div>
                   <div style={{
                     width: "100%",
                     height: 8,
-                    background: "rgba(255,255,255,0.08)",
+                    background: "var(--surface-raised)",
                     borderRadius: 4,
                     overflow: "hidden",
                   }}>
@@ -533,33 +527,33 @@ export default function ReceiptsPage() {
           <div style={{
             marginTop: "1.5rem",
             paddingTop: "1rem",
-            borderTop: "1px solid rgba(255,255,255,0.1)",
+            borderTop: "1px solid var(--border)",
           }}>
-            <h3 style={{ fontSize: "0.85rem", fontWeight: 700, color: "white", marginBottom: "0.75rem" }}>
+            <h3 style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "0.75rem" }}>
               סיכום חודשי
             </h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", fontSize: "0.8rem" }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "rgba(255,255,255,0.5)" }}>סה״כ הוצאות</span>
-                <span style={{ color: "white", fontWeight: 600 }}>
+                <span style={{ color: "var(--foreground-muted)" }}>סה״כ הוצאות</span>
+                <span style={{ color: "var(--foreground)", fontWeight: 600 }}>
                   ₪{summary.totalExpenses.toLocaleString("he-IL", { minimumFractionDigits: 2 })}
                 </span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "rgba(255,255,255,0.5)" }}>מע״מ תשומות</span>
+                <span style={{ color: "var(--foreground-muted)" }}>מע״מ תשומות</span>
                 <span style={{ color: "#38bdf8", fontWeight: 600 }}>
                   ₪{summary.totalVat.toLocaleString("he-IL", { minimumFractionDigits: 2 })}
                 </span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "rgba(255,255,255,0.5)" }}>מע״מ לניכוי</span>
+                <span style={{ color: "var(--foreground-muted)" }}>מע״מ לניכוי</span>
                 <span style={{ color: "#22c55e", fontWeight: 600 }}>
                   ₪{summary.deductibleVat.toLocaleString("he-IL", { minimumFractionDigits: 2 })}
                 </span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "rgba(255,255,255,0.5)" }}>קבלות</span>
-                <span style={{ color: "white" }}>{receipts.length}</span>
+                <span style={{ color: "var(--foreground-muted)" }}>קבלות</span>
+                <span style={{ color: "var(--foreground)" }}>{receipts.length}</span>
               </div>
             </div>
           </div>
@@ -576,12 +570,12 @@ export default function ReceiptsPage() {
 function SummaryCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <div style={{
-      background: "rgba(255,255,255,0.05)",
-      border: "1px solid rgba(255,255,255,0.1)",
+      background: "var(--surface)",
+      border: "1px solid var(--border)",
       borderRadius: 12,
       padding: "1rem 1.25rem",
     }}>
-      <p style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.5)", marginBottom: "0.25rem" }}>{label}</p>
+      <p style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", marginBottom: "0.25rem" }}>{label}</p>
       <p style={{ fontSize: "1.25rem", fontWeight: 700, color }}>{value}</p>
     </div>
   );
@@ -590,8 +584,8 @@ function SummaryCard({ label, value, color }: { label: string; value: string; co
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <span style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.75rem" }}>{label}: </span>
-      <span style={{ color: "white" }}>{value}</span>
+      <span style={{ color: "var(--foreground-muted)", fontSize: "0.75rem" }}>{label}: </span>
+      <span style={{ color: "var(--foreground)" }}>{value}</span>
     </div>
   );
 }
@@ -612,9 +606,9 @@ function SelectFilter({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       style={{
-        background: "rgba(255,255,255,0.08)",
-        color: "white",
-        border: "1px solid rgba(255,255,255,0.15)",
+        background: "var(--surface-raised)",
+        color: "var(--foreground)",
+        border: "1px solid var(--border)",
         borderRadius: 8,
         padding: "0.5rem 0.75rem",
         fontSize: "0.8rem",
@@ -623,9 +617,9 @@ function SelectFilter({
         minWidth: 140,
       }}
     >
-      <option value="" style={{ background: "#1a1a2e" }}>{placeholder}</option>
+      <option value="" style={{ background: "var(--surface-raised)" }}>{placeholder}</option>
       {options.map((opt) => (
-        <option key={opt.value} value={opt.value} style={{ background: "#1a1a2e" }}>
+        <option key={opt.value} value={opt.value} style={{ background: "var(--surface-raised)" }}>
           {opt.label}
         </option>
       ))}
