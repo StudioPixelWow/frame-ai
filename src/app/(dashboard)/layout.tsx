@@ -6,6 +6,7 @@ import { AICopilotContainer } from "@/components/ui/ai-copilot-drawer";
 import { PageTransition } from "@/components/ui/page-transition";
 import { DataErrorBoundary } from "@/components/ui/data-states";
 import DashboardShell from "@/components/dashboard-shell";
+import WeeklyDigestPrompt from "@/components/weekly-digest-prompt";
 
 export default function DashboardLayout({
   children,
@@ -42,6 +43,7 @@ export default function DashboardLayout({
               </DashboardShell>
             </div>
             <AICopilotContainer />
+            <WeeklyDigestPrompt />
           </div>
 
           {/* Responsive layout rules */}
