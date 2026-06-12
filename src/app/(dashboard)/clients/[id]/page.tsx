@@ -11,6 +11,7 @@ import type { Client, Employee } from "@/lib/db/schema";
 import TabOverview from "./tab-overview";
 import TabSocial from "./tab-social";
 import ChatThread from "@/components/whatsapp/chat-thread";
+import ClientWorkspaceOverview from "@/components/client/workspace-overview";
 import TabFiles from "./tab-files";
 import TabBrandKit from "./tab-brand-kit";
 import TabAccounting from "./tab-accounting";
@@ -1361,6 +1362,17 @@ function ClientDetailContent() {
       <div>
         {activeTab === "overview" && (
           <>
+            {/* Premium executive overview (KPIs, performance, Pixel AI, command center, health) */}
+            <ClientWorkspaceOverview
+              client={client}
+              tasks={overviewTasks || []}
+              payments={overviewPayments || []}
+              projectPayments={overviewProjectPayments || []}
+              campaigns={overviewCampaigns || []}
+              leads={overviewLeads || []}
+              ganttItems={overviewGanttItems || []}
+              onNavigateTab={(tab) => setActiveTab(tab as TabName)}
+            />
             <TabOverview
               client={client}
               assignedManager={assignedManager}
