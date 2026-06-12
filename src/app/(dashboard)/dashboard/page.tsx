@@ -30,6 +30,7 @@ import WelcomeBand from "@/components/ui/welcome-band";
 import { useAuth } from "@/lib/auth/auth-context";
 import { generateWeeklyTrends, generateClientContentIdeas, type SmartTrend, type ContentIdea } from "@/lib/ai/smart-trends";
 import { PremiumKpiCard, PremiumStatGrid, BRAND } from '@/components/charts';
+import ExecutiveDashboard from '@/components/dashboard/executive-dashboard';
 
 /* ── Module definitions ── */
 const modules = [
@@ -551,6 +552,19 @@ function AdminDashboard() {
             </div>
           );
         })()}
+
+        {/* ═══ PREMIUM EXECUTIVE DASHBOARD ═══ */}
+        {!isLoading && analytics && (
+          <ExecutiveDashboard
+            analytics={analytics}
+            clients={clients}
+            tasks={tasks}
+            leads={leads}
+            payments={payments}
+            campaigns={campaigns}
+            aiInsights={aiInsights}
+          />
+        )}
 
         {/* ═══ 2. URGENT ACTIONS ═══ */}
         {!isLoading && analytics && (analytics.overduePaymentsCount > 0 || analytics.overdueTasks > 0 || analytics.pendingApprovals > 0 || analytics.dueTodayFollowUps > 0) && (
