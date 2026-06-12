@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import type { Client, Employee } from "@/lib/db/schema";
+import Avatar from "@/components/ui/avatar";
 import {
   computeClientHealth,
   inferClientStatus,
@@ -360,24 +361,7 @@ export default function TabOverview({ client, assignedManager, color, onUpdateCl
           {assignedManager ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <div
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: "50%",
-                    background: `${color}20`,
-                    border: `2px solid ${color}40`,
-                    color,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontWeight: 700,
-                    fontSize: "0.7rem",
-                    flexShrink: 0,
-                  }}
-                >
-                  {initials(assignedManager.name)}
-                </div>
+                <Avatar src={(assignedManager as any).avatarUrl} name={assignedManager.name} size={40} ring={false} />
                 <div>
                   <div style={{ fontWeight: 600, fontSize: "0.9rem", color: "var(--foreground)" }}>
                     {assignedManager.name}
