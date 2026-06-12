@@ -152,11 +152,27 @@ export function connectGBP(clientId: string, locationId: string, refreshToken: s
     connectionStatus: 'connected',
   };
   connections.set(clientId, connection);
+  // Persist to DB (best-effort, async) so it survives restarts + the worker can use it.
+  import('./gbp-store').then((m) => m.saveGbpConnection({ clientId, locationId, refreshToken, status: 'connected' })).catch(() => {});
   return connection;
 }
 
 export function getConnection(clientId: string): GBPConnection | null {
   return connections.get(clientId) || null;
+}
+
+/** Load the connection into the in-memory cache from DB if not already present. */
+export async function hydrateConnection(clientId: string): Promise<GBPConnection | null> {
+  const cached = connections.get(clientId);
+  if (cached) return cached;
+  try {
+    const { loadGbpConnection } = await import('./gbp-store');
+    const stored = await loadGbpConnection(clientId);
+    if (!stored || stored.status !== 'connected') return null;
+    const conn: GBPConnection = { clientId, locationId: stored.locationId, refreshToken: stored.refreshToken, connectionStatus: 'connected' };
+    connections.set(clientId, conn);
+    return conn;
+  } catch { return null; }
 }
 
 // ============================================================================

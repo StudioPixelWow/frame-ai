@@ -5,7 +5,6 @@ export const dynamic = "force-dynamic";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { wow } from '@/lib/wow';
 import { useClients, useProjects, useTasks, useCampaigns, useClientGanttItems } from "@/lib/api/use-entity";
 import { useEmployees } from "@/lib/api/use-entity";
@@ -649,13 +648,13 @@ export default function ClientsPage() {
 
                   {/* Header with avatar and name */}
                   <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
-                    {/* Avatar */}
+                    {/* Avatar — CSS background so any logo URL works without next/image domain config */}
                     <div
                       style={{
                         width: 48,
                         height: 48,
                         borderRadius: "50%",
-                        background: `${displayColor}20`,
+                        background: client.logoUrl ? "transparent" : `${displayColor}20`,
                         border: `2px solid ${displayColor}40`,
                         color: displayColor,
                         display: "flex",
@@ -665,19 +664,12 @@ export default function ClientsPage() {
                         fontSize: "0.9rem",
                         flexShrink: 0,
                         overflow: "hidden",
+                        backgroundImage: client.logoUrl ? `url(${client.logoUrl})` : undefined,
+                        backgroundSize: "cover",
+                        backgroundPosition: "center",
                       }}
                     >
-                      {client.logoUrl ? (
-                        <Image
-                          src={client.logoUrl}
-                          alt={client.name}
-                          width={48}
-                          height={48}
-                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                        />
-                      ) : (
-                        initials(client.name)
-                      )}
+                      {!client.logoUrl && initials(client.name)}
                     </div>
 
                     {/* Name and company */}
@@ -865,7 +857,7 @@ export default function ClientsPage() {
                             width: 36,
                             height: 36,
                             borderRadius: "50%",
-                            background: `${displayColor}20`,
+                            background: client.logoUrl ? "transparent" : `${displayColor}20`,
                             border: `2px solid ${displayColor}40`,
                             color: displayColor,
                             display: "flex",
@@ -875,19 +867,12 @@ export default function ClientsPage() {
                             fontSize: "0.8rem",
                             flexShrink: 0,
                             overflow: "hidden",
+                            backgroundImage: client.logoUrl ? `url(${client.logoUrl})` : undefined,
+                            backgroundSize: "cover",
+                            backgroundPosition: "center",
                           }}
                         >
-                          {client.logoUrl ? (
-                            <Image
-                              src={client.logoUrl}
-                              alt={client.name}
-                              width={36}
-                              height={36}
-                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                            />
-                          ) : (
-                            initials(client.name)
-                          )}
+                          {!client.logoUrl && initials(client.name)}
                         </div>
                         <Link href={`/clients/${client.id}`} style={{ textDecoration: "none", color: "var(--foreground)" }}>
                           <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>
