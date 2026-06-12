@@ -20,7 +20,12 @@ import {
   useBusinessProjects,
   useSocialPosts,
   useEmployeeTasks,
+  useMeetings,
+  useActivities,
+  useHostingRecords,
 } from "@/lib/api/use-entity";
+import { KpiRow, KpiCard, SectionCard, Sparkline, StatusBadge } from "@/components/ui/saas-kit";
+import Avatar from "@/components/ui/avatar";
 import { useOperationalAlerts } from "@/lib/alerts/use-alerts";
 import { SkeletonKPIRow, SkeletonGrid } from "@/components/ui/skeleton";
 import { AIInsightsPanel, generateInsights } from "@/components/ai-insights-panel";
@@ -295,9 +300,17 @@ function AdminDashboard() {
   const { data: rawProjectPayments, loading: ppL } = useProjectPayments();
   const { data: rawBusinessProjects, loading: bpL } = useBusinessProjects();
   const { data: rawSocialPosts, loading: spL } = useSocialPosts();
+  const { data: rawMeetings } = useMeetings();
+  const { data: rawActivities } = useActivities();
+  const { data: rawHosting } = useHostingRecords();
+  const { data: rawEmployeeTasks } = useEmployeeTasks();
 
   // Safe fallbacks — never let undefined reach .filter/.map/.reduce/.length
   const clients = rawClients ?? [];
+  const meetings = rawMeetings ?? [];
+  const activities = rawActivities ?? [];
+  const hosting = rawHosting ?? [];
+  const allEmployeeTasks = rawEmployeeTasks ?? [];
   const tasks = rawTasks ?? [];
   const payments = rawPayments ?? [];
   const leads = rawLeads ?? [];
@@ -459,462 +472,352 @@ function AdminDashboard() {
     return generateInsights({ tasks, clients, approvals, payments, campaigns, socialPosts });
   }, [isLoading, tasks, clients, approvals, payments, campaigns, socialPosts]);
 
+  // ── WhatsApp live conversations (QR microservice) ──
+  const [waChats, setWaChats] = useState<any[]>([]);
+  const [waState, setWaState] = useState<"loading" | "ok" | "off">("loading");
+  useEffect(() => {
+    let alive = true;
+    const headers: Record<string, string> = {};
+    try {
+      const r = localStorage.getItem("frameai_role"); if (r) headers["x-app-role"] = r;
+      const u = localStorage.getItem("frameai_user_id"); if (u) headers["x-app-user-id"] = u;
+    } catch {}
+    fetch("/api/whatsapp/qr-chats", { headers, cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (!alive) return; if (Array.isArray(d?.chats)) { setWaChats(d.chats); setWaState("ok"); } else setWaState("off"); })
+      .catch(() => { if (alive) setWaState("off"); });
+    return () => { alive = false; };
+  }, []);
+  const waUnread = useMemo(() => waChats.filter((c: any) => (c.unread || 0) > 0).sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0)), [waChats]);
+
+  // ── Next 48h schedule ──
+  const schedule = useMemo(() => {
+    const now = new Date();
+    const dayStr = (d: Date) => d.toDateString();
+    type Ev = { time: string; title: string; sub: string; icon: string; href: string; sort: number };
+    const build = (dStr: string): Ev[] => {
+      const out: Ev[] = [];
+      meetings.filter((m: any) => m.date && new Date(m.date).toDateString() === dStr && m.status !== "cancelled").forEach((m: any) => out.push({ time: m.startTime || "", title: m.title || "פגישה", sub: m.clientName || m.location || "", icon: "🤝", href: "/business-calendar", sort: parseInt(String(m.startTime || "0000").replace(":", "")) || 0 }));
+      podcastSessions.filter((s: any) => s.sessionDate && new Date(s.sessionDate).toDateString() === dStr).forEach((s: any) => out.push({ time: "", title: "הקלטת פודקאסט", sub: s.clientName || "", icon: "🎙️", href: "/accounting/podcast/calendar", sort: 1200 }));
+      tasks.filter((t: any) => t.dueDate && new Date(t.dueDate).toDateString() === dStr && t.status !== "completed" && t.status !== "approved").forEach((t: any) => out.push({ time: "", title: t.title || "משימה", sub: t.clientName || "דדליין", icon: "⏰", href: "/tasks", sort: 2400 }));
+      return out.sort((a, b) => a.sort - b.sort);
+    };
+    return { today: build(dayStr(now)).slice(0, 6), tomorrow: build(dayStr(new Date(now.getTime() + 86400000))).slice(0, 6) };
+  }, [meetings, tasks, podcastSessions]);
+
+  // ── Collections (due/overdue) with client name + phone ──
+  const collections = useMemo(() => {
+    const now = new Date();
+    const cOf = (id: string) => clients.find((c: any) => c.id === id);
+    const list: any[] = [];
+    const add = (p: any, prefix: string) => list.push({ id: `${prefix}-${p.id}`, clientId: p.clientId, name: p.clientName || cOf(p.clientId)?.name || "לקוח", amount: Number(p.amount) || 0, overdue: p.dueDate ? new Date(p.dueDate) < now : false, phone: cOf(p.clientId)?.phone || "" });
+    payments.filter((p: any) => ["pending", "overdue", "collection_needed"].includes(p.status)).forEach((p: any) => add(p, "g"));
+    (projectPayments || []).filter((p: any) => ["pending", "overdue", "collection_needed"].includes(p.status)).forEach((p: any) => add(p, "p"));
+    return list.sort((a, b) => (Number(b.overdue) - Number(a.overdue)) || b.amount - a.amount).slice(0, 6);
+  }, [payments, projectPayments, clients]);
+
+  // ── Team execution: open tasks per employee ──
+  const teamLoad = useMemo(() => {
+    const counts: Record<string, { open: number; overdue: number }> = {};
+    const now = new Date();
+    const bump = (id: string, overdue: boolean) => { if (!id) return; counts[id] = counts[id] || { open: 0, overdue: 0 }; counts[id].open++; if (overdue) counts[id].overdue++; };
+    tasks.filter((t: any) => t.status !== "completed" && t.status !== "approved").forEach((t: any) => (t.assigneeIds || []).forEach((id: string) => bump(id, !!(t.dueDate && new Date(t.dueDate) < now))));
+    allEmployeeTasks.filter((t: any) => t.status !== "completed").forEach((t: any) => bump(t.assigneeId || t.employeeId, !!(t.dueDate && new Date(t.dueDate) < now)));
+    return employees.map((e: any) => ({ id: e.id, name: e.name, avatarUrl: (e as any).avatarUrl, open: counts[e.id]?.open || 0, overdue: counts[e.id]?.overdue || 0 })).filter((e) => e.open > 0).sort((a, b) => b.open - a.open).slice(0, 6);
+  }, [tasks, allEmployeeTasks, employees]);
+
+  // ── Action center buckets ──
+  const actionCenter = useMemo(() => {
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 86400000);
+    const needs: any[] = [];
+    tasks.filter((t: any) => t.dueDate && new Date(t.dueDate) < now && t.status !== "completed" && t.status !== "approved").slice(0, 4).forEach((t: any) => needs.push({ icon: "⏰", title: t.title || "משימה בפיגור", sub: t.clientName || "", href: "/tasks", tone: "#ef4444" }));
+    approvals.filter((a: any) => a.status === "pending_approval").slice(0, 3).forEach((a: any) => needs.push({ icon: "✋", title: a.title || "אישור ממתין", sub: a.clientName || "", href: "/approvals", tone: "#f59e0b" }));
+    collections.filter((c: any) => c.overdue).slice(0, 2).forEach((c: any) => needs.push({ icon: "💰", title: `גבייה — ${c.name}`, sub: formatCurrency(c.amount), href: "/accounting", tone: "#f59e0b" }));
+    const inProgress: any[] = [];
+    tasks.filter((t: any) => t.status === "under_review" || t.status === "in_progress").slice(0, 5).forEach((t: any) => inProgress.push({ icon: "🔄", title: t.title || "משימה", sub: t.clientName || "", href: "/tasks" }));
+    campaigns.filter((c: any) => c.status === "active").slice(0, 3).forEach((c: any) => inProgress.push({ icon: "🚀", title: c.name || "קמפיין", sub: c.clientName || "פעיל", href: "/campaigns" }));
+    const done: any[] = tasks.filter((t: any) => (t.status === "completed" || t.status === "approved") && t.updatedAt && new Date(t.updatedAt) >= weekAgo).slice(0, 6).map((t: any) => ({ icon: "✅", title: t.title || "משימה", sub: t.clientName || "", href: "/tasks" }));
+    return { needs: needs.slice(0, 7), inProgress: inProgress.slice(0, 7), done };
+  }, [tasks, approvals, collections, campaigns]);
+
+  // ── Recommended actions (Chief of Staff) ──
+  const recommended = useMemo(() => {
+    if (!analytics) return [] as { icon: string; label: string; href: string }[];
+    const recs: { icon: string; label: string; href: string }[] = [];
+    if (waUnread.length) recs.push({ icon: "💬", label: `השב ל${waUnread[0].name || "לקוח"} בוואטסאפ`, href: "/whatsapp-inbox" });
+    if (analytics.pendingApprovals > 0) recs.push({ icon: "✋", label: `אשר ${analytics.pendingApprovals} פריטים ממתינים`, href: "/approvals" });
+    const ovd = collections.find((c: any) => c.overdue);
+    if (ovd) recs.push({ icon: "💰", label: `שלח תזכורת גבייה ל${ovd.name}`, href: "/accounting" });
+    if (analytics.overdueTasks > 0) recs.push({ icon: "⏰", label: `טפל ב-${analytics.overdueTasks} משימות בפיגור`, href: "/tasks" });
+    if (analytics.clientsMissingGantt > 0) recs.push({ icon: "📅", label: `צור תוכנית חודשית ל-${analytics.clientsMissingGantt} לקוחות`, href: "/clients" });
+    return recs.slice(0, 4);
+  }, [analytics, waUnread, collections]);
+
+  const greeting = (() => { const h = new Date().getHours(); return h < 12 ? "בוקר טוב" : h < 18 ? "צהריים טובים" : "ערב טוב"; })();
+  const todayLabel = new Date().toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long" });
+
+  const timeSince = (ts: number) => {
+    if (!ts) return "";
+    const diff = Math.max(0, Date.now() - ts * 1000);
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return "עכשיו";
+    if (m < 60) return `לפני ${m} ד׳`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `לפני ${h} ש׳`;
+    return `לפני ${Math.floor(h / 24)} ימים`;
+  };
+  const openProjects = (businessProjects || []).filter((p: any) => p.projectStatus !== "completed").length;
+  const sectionLabel: React.CSSProperties = { fontSize: "0.74rem", fontWeight: 800, letterSpacing: 1, color: "var(--foreground-muted)", marginBottom: 10, textTransform: "uppercase" };
+  const linkSmall: React.CSSProperties = { fontSize: "0.74rem", fontWeight: 700, color: "var(--accent)", textDecoration: "none" };
+
   return (
     <div className="mhd-root">
-      <div className="mhd-content stagger-in">
-        {/* ═══ UNIFIED WELCOME BAND ═══ */}
-        <div style={{ marginBottom: "1.5rem" }}>
-          <WelcomeBand name="טל" subtitle="מרכז פיקוד Studio Pixel — סקירת ביצועים בזמן אמת" />
-        </div>
-
-        {/* ═══ 1. HERO SECTION ═══ */}
-        <div className="mhd-header ux-hero-enter">
-          <div>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
-              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e", animation: "pulse 2s infinite" }} />
-              <span style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", fontWeight: 600 }}>מערכת AI פעילה</span>
-            </div>
-            <div className="mhd-greeting-sub">
-              מרכז פיקוד Studio Pixel — סקירת ביצועים בזמן אמת
-            </div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.75rem" }}>
-            {!isLoading && analytics && (
-              <div className="mhd-stats-row">
-                <Link href="/clients" className="mhd-stat" style={{ textDecoration: "none" }}>
-                  <div className="mhd-stat-icon">👥</div>
-                  <div>
-                    <div className="mhd-stat-val" style={{ color: "#38bdf8" }}>{analytics.activeClients}</div>
-                    <div className="mhd-stat-label">לקוחות פעילים</div>
-                  </div>
-                </Link>
-                <Link href="/tasks" className="mhd-stat" style={{ textDecoration: "none" }}>
-                  <div className="mhd-stat-icon">✅</div>
-                  <div>
-                    <div className="mhd-stat-val" style={{ color: "#34d399" }}>{analytics.openTasks}</div>
-                    <div className="mhd-stat-label">משימות פתוחות</div>
-                  </div>
-                </Link>
-                <Link href="/payments" className="mhd-stat" style={{ textDecoration: "none" }}>
-                  <div className="mhd-stat-icon">💳</div>
-                  <div>
-                    <div className="mhd-stat-val" style={{ color: "#fbbf24" }}>{formatCurrency(analytics.pendingPayments)}</div>
-                    <div className="mhd-stat-label">תשלומים ממתינים</div>
-                  </div>
-                </Link>
-                <Link href="/approvals" className="mhd-stat" style={{ textDecoration: "none" }}>
-                  <div className="mhd-stat-icon">📋</div>
-                  <div>
-                    <div className="mhd-stat-val" style={{ color: "#ef4444" }}>{analytics.pendingApprovals}</div>
-                    <div className="mhd-stat-label">אישורים ממתינים</div>
-                  </div>
-                </Link>
+      <div className="mhd-content stagger-in" style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+        {(isLoading || !analytics) ? (
+          <div style={{ padding: "4rem", textAlign: "center", color: "var(--foreground-muted)" }}>טוען מרכז פיקוד…</div>
+        ) : (
+          <>
+            {/* ═══ 1. MORNING BRIEFING ═══ */}
+            <div style={{ borderRadius: 22, padding: "1.6rem 1.8rem", background: "linear-gradient(135deg,#eff6ff 0%,#f5f3ff 45%,#ecfeff 100%)", border: "1px solid #dbeafe", direction: "rtl" }}>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e" }} />
+                <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#475569" }}>Pixel AI · Chief of Staff</span>
               </div>
-            )}
-          </div>
-        </div>
+              <h1 style={{ fontSize: "1.8rem", fontWeight: 900, margin: 0, color: "#0f172a" }}>{greeting}, טל 👋</h1>
+              <div style={{ fontSize: "0.9rem", color: "#64748b", marginTop: 2 }}>{todayLabel}</div>
 
-        {/* ═══ 1.5. AI CONTEXTUAL SUGGESTION ═══ */}
-        {!isLoading && analytics && (() => {
-          const dayOfWeek = new Date().getDay();
-          const hour = new Date().getHours();
-          const completedTasks = tasks.filter(t => t.status === "completed").length;
-          const totalTasks = tasks.length;
-          const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-
-          // Priority-ordered suggestions — first match wins
-          const suggestion = analytics.overdueTasks > 3
-            ? { icon: "🔥", text: `${analytics.overdueTasks} משימות בפיגור — הכי ארוכה עברה ${Math.max(...tasks.filter(t => t.dueDate && t.dueDate < new Date().toISOString().split("T")[0] && t.status !== "completed").map(t => Math.floor((Date.now() - new Date(t.dueDate!).getTime()) / 86400000)).concat([0]))} ימים. תעדף ופנה לאחראים.`, action: "טפל עכשיו", href: "/tasks" }
-            : analytics.overduePaymentsCount > 0
-            ? { icon: "💰", text: `${formatCurrency(analytics.overdueTotal)} בפיגור גבייה מ-${analytics.overduePaymentsCount} תשלומים — כל יום עיכוב פוגע בתזרים`, action: "שלח תזכורת", href: "/accounting" }
-            : analytics.pendingApprovals > 3
-            ? { icon: "✋", text: `${analytics.pendingApprovals} אישורים ממתינים — עיכוב באישורים עוצר את כל צוות התוכן`, action: "אשר עכשיו", href: "/approvals" }
-            : analytics.clientsMissingGantt > 2
-            ? { icon: "📅", text: `${analytics.clientsMissingGantt} לקוחות ללא תוכנית חודשית — בלי תוכנית אין שליטה על הפרסום`, action: "צור תוכניות", href: "/clients" }
-            : analytics.activeLeads > 5 && dayOfWeek >= 0 && dayOfWeek <= 3
-            ? { icon: "🎯", text: `${analytics.activeLeads} לידים פעילים — תחילת שבוע זה הזמן הכי טוב לסגור עסקאות`, action: "נהל לידים", href: "/leads" }
-            : analytics.activeLeads > 5
-            ? { icon: "🎯", text: `${analytics.activeLeads} לידים פעילים ממתינים לתשומת לב. זמן תגובה מהיר מעלה סיכויי המרה ב-50%`, action: "פעל עכשיו", href: "/leads" }
-            : completionRate > 80 && totalTasks > 5
-            ? { icon: "🏆", text: `${completionRate}% השלמת משימות — ביצועים מצוינים! שקול לקחת פרויקטים חדשים`, action: "צפה בדשבורד", href: "/stats" }
-            : analytics.activeCampaigns > 0 && hour >= 10 && hour <= 15
-            ? { icon: "📣", text: `${analytics.activeCampaigns} קמפיינים פעילים — זה הזמן לבדוק ביצועים ולבצע אופטימיזציה`, action: "נתח קמפיינים", href: "/campaigns" }
-            : null;
-          if (!suggestion) return null;
-          return (
-            <div className="ai-suggestion-banner">
-              <span className="ai-badge">✨ AI</span>
-              <span style={{ fontSize: "1rem" }}>{suggestion.icon}</span>
-              <span style={{ flex: 1, fontSize: "0.82rem", fontWeight: 500, color: "var(--foreground)" }}>{suggestion.text}</span>
-              <Link href={suggestion.href} style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--accent)", textDecoration: "none", whiteSpace: "nowrap" }}>
-                {suggestion.action} ←
-              </Link>
-            </div>
-          );
-        })()}
-
-        {/* ═══ PREMIUM EXECUTIVE DASHBOARD ═══ */}
-        {!isLoading && analytics && (
-          <ExecutiveDashboard
-            analytics={analytics}
-            clients={clients}
-            tasks={tasks}
-            leads={leads}
-            payments={payments}
-            campaigns={campaigns}
-            aiInsights={aiInsights}
-          />
-        )}
-
-        {/* ═══ 2. URGENT ACTIONS ═══ */}
-        {!isLoading && analytics && (analytics.overduePaymentsCount > 0 || analytics.overdueTasks > 0 || analytics.pendingApprovals > 0 || analytics.dueTodayFollowUps > 0) && (
-          <div style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)", borderRadius: "0.75rem", padding: "1.25rem", direction: "rtl" }}>
-            <div style={{ fontSize: "0.875rem", fontWeight: 600, marginBottom: "0.75rem", color: "#ef4444" }}>
-              🚨 צריך טיפול עכשיו
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
-              {analytics.overduePaymentsCount > 0 && (
-                <Link href="/accounting" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem" }}>
-                  <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>תשלומים בפיגור</div>
-                  <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ef4444" }}>{analytics.overduePaymentsCount}</div>
-                  <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>{formatCurrency(analytics.overdueTotal)}</div>
-                </Link>
-              )}
-              {analytics.overdueTasks > 0 && (
-                <Link href="/tasks" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem" }}>
-                  <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>משימות בפיגור</div>
-                  <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#f97316" }}>{analytics.overdueTasks}</div>
-                </Link>
-              )}
-              {analytics.pendingApprovals > 0 && (
-                <Link href="/approvals" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem" }}>
-                  <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>אישורים ממתינים</div>
-                  <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ef4444" }}>{analytics.pendingApprovals}</div>
-                </Link>
-              )}
-              {analytics.dueTodayFollowUps > 0 && (
-                <Link href="/leads" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem" }}>
-                  <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>פולואפים היום</div>
-                  <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#f97316" }}>{analytics.dueTodayFollowUps}</div>
-                </Link>
-              )}
-              {analytics.clientsMissingGantt > 0 && (
-                <Link href="/clients" className="premium-card" style={{ textDecoration: "none", padding: "0.75rem" }}>
-                  <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>לקוחות ללא תוכנית</div>
-                  <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#f59e0b" }}>{analytics.clientsMissingGantt}</div>
-                </Link>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ═══ 3. KPI ROW (with skeleton) ═══ */}
-        <div>
-          <div className="mhd-section-label">מדדי ביצוע עיקריים</div>
-          {isLoading ? (
-            <SkeletonKPIRow count={8} />
-          ) : analytics ? (
-            <PremiumStatGrid
-              items={[
-                { icon: "👥", value: Number(analytics.activeClients) || 0, label: "לקוחות פעילים", color: "#38bdf8" },
-                { icon: "🎯", value: Number(analytics.leadsThisMonth) || 0, label: "לידים החודש", color: "#34d399" },
-                { icon: "💰", value: Number(analytics.revenue) || 0, label: "הכנסה החודש", color: "#10b981", format: "currency" },
-                { icon: "⚠️", value: Number(analytics.overduePaymentsCount) || 0, label: "תשלומים בפיגור", color: "#ef4444" },
-                { icon: "📋", value: Number(analytics.openTasks) || 0, label: "משימות פתוחות", color: "#2dd4bf" },
-                { icon: "⏳", value: Number(analytics.pendingApprovals) || 0, label: "אישורים ממתינים", color: "#f59e0b" },
-                { icon: "📣", value: Number(analytics.activeCampaigns) || 0, label: "קמפיינים פעילים", color: "#a78bfa" },
-                { icon: "🎙️", value: Number(analytics.podcastThisMonth) || 0, label: "פודקאסטים החודש", color: "#E8F401" },
-              ]}
-              columns={8}
-              variant="light"
-            />
-          ) : null}
-        </div>
-
-        {/* ═══ 4. QUICK ACTIONS ═══ */}
-        <div>
-          <div className="mhd-section-label">פעולות מהירות</div>
-          <div className="ux-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: "0.75rem" }}>
-            {QUICK_ACTIONS.map(a =>
-              a.route === '__monthly_reports__' ? (
-                <button
-                  key={a.label}
-                  onClick={handleSendMonthlyReports}
-                  disabled={sendingReports}
-                  className="quick-action-btn ux-light-sweep"
-                  style={{ border: 'none', cursor: sendingReports ? 'wait' : 'pointer', position: 'relative' }}
-                >
-                  <span className="quick-action-icon" style={{ filter: `drop-shadow(0 2px 8px ${a.color}60)` }}>
-                    {sendingReports ? '⏳' : a.icon}
-                  </span>
-                  <span className="quick-action-label">
-                    {sendingReports ? 'שולח...' : reportResult ? `${reportResult.sent} נשלחו` : a.label}
-                  </span>
-                </button>
-              ) : (
-                <Link key={a.label} href={a.route} className="quick-action-btn ux-light-sweep">
-                  <span className="quick-action-icon" style={{ filter: `drop-shadow(0 2px 8px ${a.color}60)` }}>{a.icon}</span>
-                  <span className="quick-action-label">{a.label}</span>
-                </Link>
-              )
-            )}
-          </div>
-        </div>
-
-        {/* ═══ 5. AI INSIGHTS (smart cards) ═══ */}
-        {aiInsights.length > 0 && (
-          <div>
-            <div className="mhd-section-label">🧠 תובנות AI</div>
-            <AIInsightsPanel insights={aiInsights} />
-          </div>
-        )}
-
-        {/* ═══ 6. QUICK SECTIONS (2-col grid) ═══ */}
-        <div>
-          <div className="mhd-section-label">סקירה מהירה</div>
-          {isLoading ? (
-            <SkeletonGrid count={4} columns="repeat(auto-fit, minmax(280px, 1fr))" />
-          ) : analytics ? (
-            <div className="ux-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
-              <SmartTooltip content="סיכום כל הנתונים הכלכליים — הכנסות, חובות וגביות צפויות" detail="לחץ לפרטים מלאים" trend={analytics.revenue > 0 ? "up" : "neutral"} placement="bottom" style={{ display: "flex", width: "100%" }}>
-                <SummaryPane title="סיכום כלכלי" icon="💰" color="#10b981" href="/accounting" linkText="צפה בפרטים"
-                  rows={[
-                    { label: "הכנסה החודש", value: formatCurrency(analytics.revenue), color: "#10b981" },
-                    { label: "בפיגור", value: formatCurrency(analytics.overdueTotal), color: "#ef4444" },
-                    { label: "גביות קרובות", value: formatCurrency(analytics.upcomingCollections), color: "#38bdf8" },
-                    ...(analytics.projectsTotalValue > 0 ? [{ label: "שווי פרויקטים", value: formatCurrency(analytics.projectsTotalValue), color: "#818cf8" }] : []),
-                  ]}
-                />
-              </SmartTooltip>
-              <SmartTooltip content="לקוחות שדורשים תשומת לב — חסרי תוכנית תוכן או מנהל מטפל" recommendation={analytics.clientsMissingGantt > 0 ? "הוסף תוכנית לגאנט ללקוחות חסרי תוכנית" : undefined} placement="bottom" style={{ display: "flex", width: "100%" }}>
-                <SummaryPane title="בריאות לקוחות" icon="👥" color="#38bdf8" href="/clients" linkText="צפה בלקוחות"
-                  rows={[
-                    { label: "ללא תוכנית", value: analytics.clientsMissingGantt, color: "#f59e0b" },
-                    { label: "ללא מנהל", value: analytics.noManagerCount, color: "#a78bfa" },
-                  ]}
-                />
-              </SmartTooltip>
-              <SmartTooltip content="מצב הלידים בצנרת — לידים פתוחים ולידים שהומרו ללקוחות" trend={analytics.wonLeads > 0 ? "up" : "neutral"} delta={analytics.wonLeads > 0 ? `${analytics.wonLeads} סגירות` : undefined} placement="bottom" style={{ display: "flex", width: "100%" }}>
-                <SummaryPane title="סקירת לידים" icon="🎯" color="#34d399" href="/leads" linkText="צפה בלידים"
-                  rows={[
-                    { label: "לידים פעילים", value: analytics.activeLeads, color: "#34d399" },
-                    { label: "זכו החודש", value: analytics.wonLeads, color: "#10b981" },
-                  ]}
-                />
-              </SmartTooltip>
-              <SummaryPane title="משימות וצוות" icon="👨‍💼" color="#2dd4bf" href="/tasks" linkText="צפה בלוח"
-                rows={[
-                  { label: "פתוחות", value: analytics.openTasks, color: "#34d399" },
-                  { label: "בפיגור", value: analytics.overdueTasks, color: "#ef4444" },
-                  { label: "בביקורת", value: analytics.underReview, color: "#f59e0b" },
-                  { label: "עובד עסוק ביותר", value: `${analytics.busiestEmployee.name} (${analytics.busiestEmployee.count})` },
-                ]}
-              />
-            </div>
-          ) : null}
-        </div>
-
-        {/* ═══ 7. TODAY TIMELINE ═══ */}
-        {analytics && (analytics.todayTasks.length > 0 || analytics.todayPodcasts.length > 0) && (
-          <div>
-            <div className="mhd-section-label">📅 ציר הזמן של היום</div>
-            <div className="premium-card" style={{ direction: "rtl" }}>
-              {analytics.todayTasks.map(t => (
-                <TimelineItem
-                  key={t.id}
-                  icon="📋"
-                  title={t.title || "משימה"}
-                  subtitle={`סטטוס: ${t.status || "חדש"}`}
-                  time="היום"
-                  color="#2dd4bf"
-                />
-              ))}
-              {analytics.todayPodcasts.map((s: any) => (
-                <TimelineItem
-                  key={s.id}
-                  icon="🎙️"
-                  title={s.clientName || "הקלטה"}
-                  subtitle={s.episodeTitle || "אפיזוד"}
-                  time={s.sessionTime || "היום"}
-                  color="#E8F401"
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ═══ 8. SMART TRENDS WIDGET ═══ */}
-        <div>
-          <div className="mhd-section-label">🔥 מה חם השבוע</div>
-          <div style={{
-            background: "linear-gradient(135deg, rgba(239,68,68,0.04), rgba(249,115,22,0.04))",
-            border: "1px solid rgba(239,68,68,0.1)", borderRadius: "0.75rem",
-            padding: "1.25rem", direction: "rtl",
-          }}>
-            {smartTrends.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "2rem", color: "var(--foreground-muted)", fontSize: "0.875rem" }}>
-                אין טרנדים זמינים כרגע
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, margin: "1.1rem 0 0.2rem" }}>
+                {[
+                  { icon: "✅", label: "משימות פתוחות", val: analytics.openTasks, href: "/tasks" },
+                  { icon: "🤝", label: "פגישות היום", val: schedule.today.filter((e: any) => e.icon === "🤝").length, href: "/business-calendar" },
+                  { icon: "💬", label: "שיחות ללא מענה", val: waUnread.length, href: "/whatsapp-inbox" },
+                  { icon: "✋", label: "אישורים ממתינים", val: analytics.pendingApprovals, href: "/approvals" },
+                  { icon: "💰", label: "לגבייה", val: formatCurrency(analytics.pendingPayments), href: "/accounting" },
+                ].map((p, i) => (
+                  <Link key={i} href={p.href} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.7)", border: "1px solid #e2e8f0", borderRadius: 12, padding: "0.5rem 0.85rem", textDecoration: "none" }}>
+                    <span style={{ fontSize: "1.05rem" }}>{p.icon}</span>
+                    <span style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a" }}>{p.val}</span>
+                    <span style={{ fontSize: "0.76rem", color: "#64748b" }}>{p.label}</span>
+                  </Link>
+                ))}
               </div>
-            ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))", gap: "1rem" }}>
-                {smartTrends.slice(0, 6).map(trend => (
-                  <div key={trend.id} className="premium-card" style={{ padding: "1.25rem", transition: "all 200ms ease" }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)"; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(0)"; }}
-                  >
-                    <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start", marginBottom: "0.75rem" }}>
-                      <span style={{ fontSize: "1.25rem" }}>{trend.icon}</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--foreground)", marginBottom: "0.25rem" }}>
-                          {trend.title}
-                        </div>
-                        <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
-                          <span style={{
-                            fontSize: "0.6rem", fontWeight: 600, padding: "0.15rem 0.45rem", borderRadius: "999px",
-                            background: trend.urgency === "high" ? "rgba(239,68,68,0.12)" : trend.urgency === "medium" ? "rgba(249,115,22,0.12)" : "rgba(34,197,94,0.12)",
-                            color: trend.urgency === "high" ? "#ef4444" : trend.urgency === "medium" ? "#f97316" : "#22c55e",
-                          }}>
-                            {trend.urgency === "high" ? "חם עכשיו" : trend.urgency === "medium" ? "כדאי לתכנן" : "לשקול"}
-                          </span>
-                          <span style={{
-                            fontSize: "0.6rem", fontWeight: 500, padding: "0.15rem 0.45rem", borderRadius: "999px",
-                            background: "var(--background-muted, rgba(0,0,0,0.05))", color: "var(--foreground-muted)",
-                          }}>
-                            {trend.source === "calendar" ? "לוח שנה" : trend.source === "seasonal" ? "עונתי" : trend.source === "platform" ? "פלטפורמה" : trend.source === "data" ? "מבוסס נתונים" : "תעשייה"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", lineHeight: 1.6, marginBottom: "0.75rem" }}>
-                      {trend.description}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: 1 }}>
-                        <div style={{ flex: 1, maxWidth: "80px", height: "4px", background: "var(--border)", borderRadius: "2px", overflow: "hidden" }}>
-                          <div style={{
-                            height: "100%", width: `${Math.round(trend.relevanceScore * 100)}%`, transition: "width 600ms ease",
-                            background: trend.relevanceScore >= 0.75 ? "#22c55e" : trend.relevanceScore >= 0.5 ? "#f59e0b" : "#ef4444",
-                            borderRadius: "2px",
-                          }} />
-                        </div>
-                        <span style={{ fontSize: "0.65rem", color: "var(--foreground-muted)" }}>{Math.round(trend.relevanceScore * 100)}%</span>
-                      </div>
-                      {trend.actionText && trend.actionHref && (
-                        <Link href={trend.actionHref} style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--accent)", textDecoration: "none" }}>
-                          {trend.actionText} ←
+
+              {recommended.length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "#6366f1", marginBottom: 8, letterSpacing: 1 }}>פעולות מומלצות</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {recommended.map((r, i) => (
+                      <Link key={i} href={r.href} style={{ display: "flex", alignItems: "center", gap: 7, background: "#fff", border: "1px solid #c7d2fe", color: "#4f46e5", borderRadius: 999, padding: "0.45rem 0.9rem", fontSize: "0.82rem", fontWeight: 700, textDecoration: "none" }}>
+                        <span>{r.icon}</span>{r.label}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ═══ 2 + 3. SCHEDULE + WHATSAPP ═══ */}
+            <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: "1rem" }} className="dash-2col">
+              <SectionCard title="📆 היום ומחר">
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                  {[{ k: "today", label: "היום" }, { k: "tomorrow", label: "מחר" }].map((col) => (
+                    <div key={col.k}>
+                      <div style={{ fontSize: "0.74rem", fontWeight: 800, color: "var(--foreground-muted)", marginBottom: 8 }}>{col.label}</div>
+                      {(schedule as any)[col.k].length === 0 ? (
+                        <div style={{ fontSize: "0.8rem", color: "var(--foreground-subtle)", padding: "0.4rem 0" }}>אין אירועים</div>
+                      ) : (schedule as any)[col.k].map((e: any, i: number) => (
+                        <Link key={i} href={e.href} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "0.45rem 0", textDecoration: "none", borderBottom: "1px solid var(--border)" }}>
+                          <span style={{ fontSize: "1rem" }}>{e.icon}</span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.title}</div>
+                            <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>{e.time ? e.time + " · " : ""}{e.sub}</div>
+                          </div>
                         </Link>
-                      )}
+                      ))}
                     </div>
+                  ))}
+                </div>
+              </SectionCard>
+
+              <SectionCard title="💬 מרכז וואטסאפ" action={<Link href="/whatsapp-inbox" style={linkSmall}>פתח תיבה ←</Link>}>
+                {waState === "off" ? (
+                  <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)", lineHeight: 1.6 }}>
+                    הוואטסאפ לא מחובר. <Link href="/whatsapp-broadcast" style={{ color: "var(--accent)", fontWeight: 700 }}>חבר עכשיו</Link>
+                  </div>
+                ) : waUnread.length === 0 ? (
+                  <div style={{ fontSize: "0.85rem", color: "var(--foreground-muted)" }}>אין הודעות שלא נענו 🎉</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    {waUnread.slice(0, 5).map((c: any, i: number) => (
+                      <Link key={i} href="/whatsapp-inbox" style={{ display: "flex", gap: 10, alignItems: "center", padding: "0.5rem 0", textDecoration: "none", borderBottom: "1px solid var(--border)" }}>
+                        <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#dcfce7", color: "#16a34a", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, flexShrink: 0, fontSize: "0.8rem" }}>{String(c.name || "?").slice(0, 2)}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                            <span style={{ fontSize: "0.84rem", fontWeight: 700, color: "var(--foreground)" }}>{c.name || c.phone}</span>
+                            <span style={{ fontSize: "0.68rem", color: "var(--foreground-subtle)" }}>{timeSince(c.timestamp)}</span>
+                          </div>
+                          <div style={{ fontSize: "0.74rem", color: "var(--foreground-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.lastMessage || ""}</div>
+                        </div>
+                        <span style={{ background: "#22c55e", color: "#fff", fontSize: "0.66rem", fontWeight: 800, borderRadius: 999, padding: "1px 7px" }}>{c.unread}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </SectionCard>
+            </div>
+
+            {/* ═══ 4. ACTION CENTER ═══ */}
+            <div>
+              <div style={sectionLabel}>⚡ מרכז פעולה</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "1rem" }} className="dash-3col">
+                {[
+                  { label: "דורש טיפול", color: "#ef4444", items: actionCenter.needs },
+                  { label: "בתהליך", color: "#3b82f6", items: actionCenter.inProgress },
+                  { label: "הושלם השבוע", color: "#22c55e", items: actionCenter.done },
+                ].map((col, ci) => (
+                  <div key={ci} className="premium-card" style={{ padding: "1rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                      <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--foreground)" }}>{col.label}</span>
+                      <span style={{ fontSize: "0.7rem", fontWeight: 800, color: col.color, background: col.color + "1a", borderRadius: 999, padding: "2px 9px" }}>{col.items.length}</span>
+                    </div>
+                    {col.items.length === 0 ? <div style={{ fontSize: "0.78rem", color: "var(--foreground-subtle)" }}>—</div> :
+                      col.items.map((it: any, i: number) => (
+                        <Link key={i} href={it.href} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "0.4rem 0", textDecoration: "none", borderBottom: "1px solid var(--border)" }}>
+                          <span style={{ fontSize: "0.9rem" }}>{it.icon}</span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.title}</div>
+                            {it.sub && <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>{it.sub}</div>}
+                          </div>
+                        </Link>
+                      ))}
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* ═══ 5. BUSINESS SNAPSHOT ═══ */}
+            <div>
+              <div style={sectionLabel}>📊 תמונת מצב עסקית</div>
+              <KpiRow min={170}>
+                <KpiCard label="לידים פעילים" value={analytics.activeLeads} icon="🎯" href="/leads" />
+                <KpiCard label="משימות פתוחות" value={analytics.openTasks} icon="✅" href="/tasks" />
+                <KpiCard label="הכנסה החודש" value={formatCurrency(analytics.revenue)} icon="💰" href="/accounting" />
+                <KpiCard label="גבייה ממתינה" value={formatCurrency(analytics.pendingPayments)} icon="🧾" color="#f59e0b" href="/accounting" />
+                <KpiCard label="לקוחות פעילים" value={analytics.activeClients} icon="👥" href="/clients" />
+                <KpiCard label="פרויקטים פתוחים" value={openProjects} icon="📁" href="/business-projects" />
+              </KpiRow>
+            </div>
+
+            {/* ═══ 6. REVENUE/COLLECTIONS + TEAM ═══ */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }} className="dash-2col">
+              <SectionCard title="💰 גבייה ותשלומים" action={<Link href="/accounting" style={linkSmall}>פתח חשבונות ←</Link>}>
+                {collections.length === 0 ? <div style={{ fontSize: "0.84rem", color: "var(--foreground-muted)" }}>אין תשלומים פתוחים 🎉</div> :
+                  collections.map((c: any, i: number) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.5rem 0", borderBottom: "1px solid var(--border)" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "0.84rem", fontWeight: 700, color: "var(--foreground)" }}>{c.name}</div>
+                        <div style={{ fontSize: "0.7rem" }}>{c.overdue ? <span style={{ color: "#ef4444", fontWeight: 700 }}>באיחור</span> : <span style={{ color: "var(--foreground-muted)" }}>ממתין</span>}</div>
+                      </div>
+                      <div style={{ fontSize: "0.92rem", fontWeight: 800, color: "var(--foreground)" }}>{formatCurrency(c.amount)}</div>
+                    </div>
+                  ))}
+              </SectionCard>
+
+              <SectionCard title="👥 עומס צוות" action={<Link href="/workload" style={linkSmall}>ניתוח מלא ←</Link>}>
+                {teamLoad.length === 0 ? <div style={{ fontSize: "0.84rem", color: "var(--foreground-muted)" }}>אין משימות פתוחות לצוות</div> :
+                  teamLoad.map((e: any, i: number) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.45rem 0", borderBottom: "1px solid var(--border)" }}>
+                      <Avatar src={e.avatarUrl} name={e.name} size={34} ring={false} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "0.84rem", fontWeight: 700, color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.name}</div>
+                        <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>{e.open} משימות{e.overdue > 0 ? ` · ${e.overdue} בפיגור` : ""}</div>
+                      </div>
+                      {e.overdue > 0 && <span style={{ fontSize: "0.66rem", fontWeight: 800, color: "#ef4444", background: "#fef2f2", borderRadius: 999, padding: "2px 8px" }}>עומס</span>}
+                    </div>
+                  ))}
+              </SectionCard>
+            </div>
+
+            {/* ═══ 7. PRIMARY WORKSPACES ═══ */}
+            <div>
+              <div style={sectionLabel}>🗂️ סביבות עבודה מרכזיות</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: "0.85rem" }}>
+                {[
+                  { t: "לידים", d: "CRM ומכירות", icon: "🎯", href: "/leads", c: "#6366f1" },
+                  { t: "משימות", d: "ניהול עבודה", icon: "✅", href: "/tasks", c: "#22c55e" },
+                  { t: "לקוחות", d: "כל הלקוחות", icon: "👥", href: "/clients", c: "#06b6d4" },
+                  { t: "פרויקטים", d: "פרויקטים עסקיים", icon: "📁", href: "/business-projects", c: "#f59e0b" },
+                  { t: "כספים", d: "חשבונות וגבייה", icon: "💰", href: "/accounting", c: "#10b981" },
+                  { t: "SEO/GEO", d: "קידום אורגני", icon: "🔍", href: "/seo-geo", c: "#8b5cf6" },
+                ].map((w, i) => (
+                  <Link key={i} href={w.href} className="premium-card" style={{ padding: "1.1rem", textDecoration: "none", display: "flex", flexDirection: "column", gap: 6, borderTop: `3px solid ${w.c}` }}>
+                    <span style={{ fontSize: "1.6rem" }}>{w.icon}</span>
+                    <span style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--foreground)" }}>{w.t}</span>
+                    <span style={{ fontSize: "0.74rem", color: "var(--foreground-muted)" }}>{w.d}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
+              {[
+                { t: "פודקאסט", icon: "🎙️", href: "/accounting/podcast/calendar" },
+                { t: "אחסון", icon: "🌐", href: "/business-projects/hosting" },
+                { t: "מסמכים", icon: "📄", href: "/accounting/documents" },
+                { t: "דוחות", icon: "📑", href: "/reports" },
+                { t: "אוטומציות", icon: "⚙️", href: "/automations" },
+                { t: "קריאייטיב AI", icon: "✨", href: "/creative-pixelai" },
+                { t: "הגדרות", icon: "🔧", href: "/settings" },
+              ].map((s, i) => (
+                <Link key={i} href={s.href} style={{ display: "flex", alignItems: "center", gap: 7, background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 10, padding: "0.5rem 0.85rem", fontSize: "0.8rem", fontWeight: 600, color: "var(--foreground)", textDecoration: "none" }}>
+                  <span>{s.icon}</span>{s.t}
+                </Link>
+              ))}
+            </div>
+
+            {/* ═══ 8. AI EXECUTIVE INSIGHTS ═══ */}
+            {(aiInsights.length > 0 || opInsights.length > 0) && (
+              <div>
+                <div style={sectionLabel}>🧠 תובנות AI אסטרטגיות</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: "0.85rem" }}>
+                  {[...opInsights, ...aiInsights].slice(0, 3).map((ins: any, i: number) => (
+                    <div key={i} className="premium-card" style={{ padding: "1rem" }}>
+                      <div style={{ fontSize: "1.3rem", marginBottom: 6 }}>{ins.icon || "💡"}</div>
+                      <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--foreground)", marginBottom: 4 }}>{ins.title}</div>
+                      <div style={{ fontSize: "0.76rem", color: "var(--foreground-muted)", lineHeight: 1.5 }}>{ins.description}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
-          </div>
-        </div>
 
-        {/* ═══ 8.2. CLIENT CONTENT SUGGESTIONS ═══ */}
-        {clientContentSuggestions.length > 0 && (
-          <div>
-            <div className="mhd-section-label">💡 רעיונות תוכן ללקוחות</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              {clientContentSuggestions.map(cs => (
-                <div key={cs.clientId} className="premium-card" style={{ padding: "1.25rem", direction: "rtl" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
-                    <Link href={`/clients/${cs.clientId}`} style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--foreground)", textDecoration: "none" }}>
-                      {cs.clientName}
-                    </Link>
-                    <span style={{ fontSize: "0.6rem", fontWeight: 500, padding: "0.1rem 0.4rem", borderRadius: "999px", background: "rgba(56,189,248,0.1)", color: "#38bdf8" }}>
-                      3 רעיונות השבוע
-                    </span>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.75rem" }}>
-                    {cs.ideas.map(idea => {
-                      const formatIcons: Record<string, string> = { reel: "🎬", carousel: "📸", story: "📱", post: "📝", video: "🎥" };
-                      const catColors: Record<string, string> = { value: "#22c55e", engagement: "#38bdf8", seasonal: "#f59e0b", trend: "#ef4444", social_proof: "#a78bfa", brand: "#f472b6" };
-                      return (
-                        <div key={idea.id} style={{
-                          background: "var(--background)", border: "1px solid var(--border)", borderRadius: "0.5rem",
-                          padding: "0.875rem", fontSize: "0.8rem",
-                        }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.5rem" }}>
-                            <span>{formatIcons[idea.format] || "📝"}</span>
-                            <span style={{ fontWeight: 600, fontSize: "0.82rem" }}>{idea.title}</span>
-                          </div>
-                          <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", lineHeight: 1.5, marginBottom: "0.5rem" }}>
-                            {idea.description}
-                          </div>
-                          <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
-                            <span style={{ fontSize: "0.6rem", fontWeight: 600, padding: "0.1rem 0.4rem", borderRadius: "999px", background: `${catColors[idea.category] || "#6b7280"}15`, color: catColors[idea.category] || "#6b7280" }}>
-                              {idea.platform}
-                            </span>
-                            <span style={{ fontSize: "0.6rem", fontWeight: 500, padding: "0.1rem 0.4rem", borderRadius: "999px", background: "var(--background-muted, rgba(0,0,0,0.05))", color: "var(--foreground-muted)" }}>
-                              {idea.urgencyLabel}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+            {/* ═══ 9. ACTIVITY FEED ═══ */}
+            {activities.length > 0 && (
+              <SectionCard title="🕑 פעילות אחרונה">
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  {activities.slice(0, 8).map((a: any, i: number) => (
+                    <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "0.4rem 0", borderBottom: "1px solid var(--border)" }}>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--accent)", marginTop: 6, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "0.8rem", color: "var(--foreground)" }}>{a.description || a.title || a.action || "פעילות"}</div>
+                        <div style={{ fontSize: "0.68rem", color: "var(--foreground-subtle)" }}>{a.userName ? a.userName + " · " : ""}{a.createdAt ? new Date(a.createdAt).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </SectionCard>
+            )}
+
+            {/* ═══ 10. ANALYTICS (bottom) ═══ */}
+            <SectionCard title="📈 אנליטיקה מתקדמת" action={<Link href="/bi-dashboard" style={linkSmall}>פתח BI ←</Link>}>
+              <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)", lineHeight: 1.6 }}>
+                ניתוח ביצועים מלא — לידים, הכנסות, קמפיינים ומגמות — זמין בדשבורד ה-BI.
+              </div>
+            </SectionCard>
+          </>
         )}
-
-        {/* ═══ 8.5 SMART WEEKLY CALENDAR ═══ */}
-        <SmartWeeklyCalendar />
-
-        {/* ═══ 9. MODULE GRID ═══ */}
-        <div>
-          <div className="mhd-section-label">מודולי המערכת</div>
-          <div className="mhd-grid">
-            {modules.map(m => (
-              <Link key={m.title} href={m.route} className="mhd-card premium-card" style={{ "--mc": m.color, textDecoration: "none" } as React.CSSProperties}>
-                <div className="mhd-card-icon" style={{ background: m.bg, boxShadow: `0 0 0 1px ${m.color}28` }}>
-                  <span style={{ filter: `drop-shadow(0 2px 10px ${m.color}90)` }}>{m.icon}</span>
-                </div>
-                <div className="mhd-card-title">{m.title}</div>
-                <div className="mhd-card-desc">{m.desc}</div>
-                <div className="mhd-card-footer">
-                  <span className="mhd-card-arrow" style={{ color: m.color }}>←</span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        {/* ═══ 10. OPERATIONAL INSIGHTS & ALERTS ═══ */}
-        {opInsights.length > 0 && (
-          <div>
-            <div className="mhd-section-label">✨ תובנות מערכת</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
-              {opInsights.slice(0, 3).map((insight, idx) => (
-                <div key={idx} className="premium-card">
-                  <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>{insight.icon}</div>
-                  <div style={{ fontSize: "0.875rem", fontWeight: 600, marginBottom: "0.5rem" }}>{insight.title}</div>
-                  <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", lineHeight: 1.5 }}>{insight.description}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {alerts.length > 0 && (
-          <div>
-            <div className="mhd-section-label">🔔 התראות המערכת</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              {alerts.slice(0, 5).map((alert, idx) => (
-                <div key={idx} className="premium-card ux-stagger-item" style={{ padding: "0.75rem", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
-                  <div style={{ width: "0.5rem", height: "0.5rem", borderRadius: "50%", background: alert.severity === "critical" ? "#ef4444" : "#f59e0b", marginTop: "0.35rem", flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>{alert.title}</div>
-                    <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>{alert.description}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <style>{`@media (max-width:900px){.dash-2col{grid-template-columns:1fr !important}.dash-3col{grid-template-columns:1fr !important}}`}</style>
       </div>
     </div>
   );
