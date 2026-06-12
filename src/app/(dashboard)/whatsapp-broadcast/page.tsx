@@ -39,7 +39,9 @@ export default function WhatsAppBroadcastPage() {
   useEffect(() => { pollConn(); const t = setInterval(pollConn, 4000); return () => clearInterval(t); }, [pollConn]);
 
   // ── Recipients ──
-  const withPhone = useMemo(() => (clients || []).filter((c: any) => (c.phone || "").trim()), [clients]);
+  // Coerce to string (some phones come back as numbers) and accept any phone-like field.
+  const phoneOf = (c: any) => String(c?.phone ?? c?.phoneNumber ?? c?.mobile ?? c?.whatsapp ?? "").trim();
+  const withPhone = useMemo(() => (clients || []).map((c: any) => ({ ...c, phone: phoneOf(c) })).filter((c: any) => c.phone), [clients]);
   const types = useMemo(() => Array.from(new Set(withPhone.map((c: any) => c.clientType || "other"))), [withPhone]);
   const [mode, setMode] = useState<"all" | "type" | "manual">("all");
   const [selTypes, setSelTypes] = useState<string[]>([]);
@@ -55,7 +57,28 @@ export default function WhatsAppBroadcastPage() {
   // ── Message ──
   const [message, setMessage] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
+  const [mediaName, setMediaName] = useState("");
+  const [uploading, setUploading] = useState(false);
   const [intervalSeconds, setIntervalSeconds] = useState(60);
+
+  // Upload an image/video directly to storage (bypasses Vercel's 4.5MB limit).
+  const uploadMedia = useCallback(async (file: File) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const init = await fetch("/api/upload", {
+        method: "POST", headers: { "Content-Type": "application/json", ...roleHeaders() },
+        body: JSON.stringify({ fileName: file.name, contentType: file.type, fileSize: file.size }),
+      });
+      const d = await init.json();
+      if (!init.ok) throw new Error(d.error || "אתחול העלאה נכשל");
+      const put = await fetch(d.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
+      if (!put.ok) throw new Error("ההעלאה נכשלה");
+      setMediaUrl(d.publicUrl); setMediaName(file.name);
+      toast("✓ הקובץ הועלה", "success");
+    } catch (e) { toast(e instanceof Error ? e.message : "שגיאה בהעלאה", "error"); }
+    finally { setUploading(false); }
+  }, [toast]);
 
   // ── Sending / progress ──
   const [sending, setSending] = useState(false);
@@ -207,7 +230,10 @@ export default function WhatsAppBroadcastPage() {
 
         <div style={{ marginTop: 10, fontSize: "0.85rem", fontWeight: 700, color: "#128C7E" }}>
           ✓ {recipients.length} נמענים ייכללו בדיוור
-          {withPhone.length < (clients?.length || 0) && <span style={{ color: "var(--foreground-muted)", fontWeight: 500 }}> · ({(clients?.length || 0) - withPhone.length} לקוחות ללא טלפון יושמטו)</span>}
+        </div>
+        <div style={{ marginTop: 4, fontSize: "0.72rem", color: "var(--foreground-muted)" }}>
+          נטענו {clients?.length || 0} לקוחות · {withPhone.length} עם מספר טלפון
+          {(clients?.length || 0) > 0 && withPhone.length === 0 && <span style={{ color: "#dc2626" }}> — נראה שאין מספרי טלפון שמורים בכרטיסי הלקוח</span>}
         </div>
       </div>
 
@@ -225,8 +251,24 @@ export default function WhatsAppBroadcastPage() {
         <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={5}
           placeholder="טקסט ההודעה… אפשר להשתמש ב-{{name}} לשם הלקוח."
           style={{ width: "100%", padding: "0.7rem", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--foreground)", fontSize: "0.9rem", boxSizing: "border-box", resize: "vertical" }} />
-        <input value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)} placeholder="קישור לגרפיקה (אופציונלי) — https://…"
-          style={{ width: "100%", marginTop: 8, padding: "0.55rem 0.7rem", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--foreground)", fontSize: "0.85rem", boxSizing: "border-box", direction: "ltr" }} />
+        {/* Attach an image/video file (uploaded to storage). */}
+        <div style={{ marginTop: 10 }}>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px dashed var(--border)", background: "var(--surface)", cursor: uploading ? "wait" : "pointer", fontSize: "0.85rem", fontWeight: 600 }}>
+            {uploading ? "⏳ מעלה…" : "📎 צרף תמונה / סרטון"}
+            <input type="file" accept="image/*,video/*" disabled={uploading} style={{ display: "none" }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadMedia(f); e.currentTarget.value = ""; }} />
+          </label>
+          {mediaUrl && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+              {/^.*\.(mp4|mov|webm|avi)(\?|$)/i.test(mediaUrl)
+                ? <video src={mediaUrl} style={{ width: 70, height: 70, objectFit: "cover", borderRadius: 8, border: "1px solid var(--border)" }} muted />
+                /* eslint-disable-next-line @next/next/no-img-element */
+                : <img src={mediaUrl} alt="media" style={{ width: 70, height: 70, objectFit: "cover", borderRadius: 8, border: "1px solid var(--border)" }} />}
+              <span style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", flex: 1, wordBreak: "break-all" }}>{mediaName || "קובץ מצורף"}</span>
+              <button onClick={() => { setMediaUrl(""); setMediaName(""); }} style={{ fontSize: "0.75rem", color: "#dc2626", background: "transparent", border: "none", cursor: "pointer" }}>הסר ✕</button>
+            </div>
+          )}
+        </div>
 
         <button onClick={startSend} disabled={sending}
           style={{ marginTop: 14, width: "100%", padding: "0.8rem", borderRadius: 10, border: "none", background: sending ? "#9ca3af" : "#25D366", color: "#fff", fontWeight: 800, fontSize: "0.95rem", cursor: sending ? "wait" : "pointer" }}>
