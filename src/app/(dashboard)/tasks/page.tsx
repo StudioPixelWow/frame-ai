@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTasks, useEmployees, useClients, useEmployeeTasks } from "@/lib/api/use-entity";
+import TasksMissionControl from "@/components/tasks/mission-control";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import { SmartHint } from "@/components/ui/smart-hint";
@@ -929,6 +930,9 @@ function TasksPageInner() {
           </div>
         </div>
       )}
+
+      {/* Premium tasks mission-control (AI + health + workload + deadlines) */}
+      {!isEmployee && <TasksMissionControl tasks={tasks || []} employees={employees || []} />}
 
       {/* Kanban Board View */}
       {viewMode === 'board' && (
