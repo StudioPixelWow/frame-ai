@@ -67,9 +67,11 @@ export default function WelcomePopup() {
     const pool = personal.length ? personal : (isManager ? MANAGER_MSGS : EMPLOYEE_MSGS);
     const message = (pool[Math.floor(Math.random() * pool.length)] || "").replace(/\{name\}/g, first || "");
 
-    // Wait until employees have loaded so we can resolve the real name (by id or
-    // email) before showing — prevents a flash of a role-word/empty greeting.
-    if (!employees && !name) return;
+    // Wait until the employees list has loaded so we can resolve the matched
+    // employee — and crucially their avatar — BEFORE showing. Otherwise the popup
+    // fires from displayName alone, locks the session flag, and never picks up the
+    // avatar once employees arrive (the bug where everyone saw initials).
+    if (!employees) return;
 
     setData({ name, avatar: (emp as any)?.avatarUrl || "", message });
     const t = setTimeout(() => { setOpen(true); sessionStorage.setItem(key, "1"); }, 600);
