@@ -30,6 +30,6 @@ async function call(path: string, init?: { method?: string; body?: any; timeoutM
 
 export const waStatus = () => call('/status');
 export const waLogout = () => call('/logout', { method: 'POST' });
-export const waSendBatch = (body: { recipients: { phone: string; name?: string }[]; message: string; mediaUrl?: string; intervalSeconds: number }) =>
+export const waSendBatch = (body: { recipients: { phone: string; name?: string; message?: string; mediaUrl?: string }[]; message?: string; mediaUrl?: string; intervalSeconds: number }) =>
   call('/send-batch', { method: 'POST', body, timeoutMs: 25000 });
 export const waBatch = (id: string) => call(`/batch/${encodeURIComponent(id)}`);

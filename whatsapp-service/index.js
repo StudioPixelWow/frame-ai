@@ -69,15 +69,26 @@ const jobs = new Map(); // id → { total, sent, failed, done, results[], starte
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
+// Cache loaded media by URL so we don't re-download a shared graphic per recipient.
+const mediaCache = new Map();
+async function loadMedia(url) {
+  if (!url) return null;
+  if (mediaCache.has(url)) return mediaCache.get(url);
+  let m = null;
+  try { m = await MessageMedia.fromUrl(url, { unsafeMime: true }); } catch (e) { console.log('[wa] media load failed:', e.message); }
+  mediaCache.set(url, m);
+  return m;
+}
+
 async function runBatch(id, recipients, message, mediaUrl, intervalMs) {
   const job = jobs.get(id);
-  let media = null;
-  if (mediaUrl) { try { media = await MessageMedia.fromUrl(mediaUrl, { unsafeMime: true }); } catch (e) { console.log('[wa] media load failed:', e.message); } }
 
   for (let i = 0; i < recipients.length; i++) {
     const r = recipients[i];
     const chatId = toChatId(r.phone);
-    const text = (message || '').replace(/\{\{name\}\}/g, r.name || '');
+    // Per-recipient overrides (for personalized digests) fall back to the shared message/media.
+    const text = ((r.message || message) || '').replace(/\{\{name\}\}/g, r.name || '');
+    const media = await loadMedia(r.mediaUrl || mediaUrl);
     try {
       if (!chatId) throw new Error('invalid_phone');
       // Verify the number is on WhatsApp before sending.
@@ -128,7 +139,9 @@ app.post('/send-batch', auth, (req, res) => {
   if (state !== 'ready') return res.status(409).json({ error: 'not_connected', state });
   const { recipients, message, mediaUrl, intervalSeconds } = req.body || {};
   if (!Array.isArray(recipients) || recipients.length === 0) return res.status(400).json({ error: 'no_recipients' });
-  if (!message && !mediaUrl) return res.status(400).json({ error: 'empty_message' });
+  // OK if there's a shared message/media, OR every recipient carries its own.
+  const everyHasOwn = recipients.every((r) => (r && (r.message || r.mediaUrl)));
+  if (!message && !mediaUrl && !everyHasOwn) return res.status(400).json({ error: 'empty_message' });
   const intervalMs = Math.max(5, Math.min(600, Number(intervalSeconds) || 60)) * 1000;
   const id = `b_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   jobs.set(id, { id, total: recipients.length, sent: 0, failed: 0, done: false, results: [], startedAt: Date.now(), intervalMs });

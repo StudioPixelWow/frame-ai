@@ -93,6 +93,26 @@ export default function WhatsAppBroadcastPage() {
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
+  // ── Weekly progress digest (scheduled every Sunday 09:00; can trigger now) ──
+  const [digestBusy, setDigestBusy] = useState(false);
+  const triggerDigest = useCallback(async (dryRun: boolean) => {
+    setDigestBusy(true);
+    try {
+      const r = await fetch(`/api/cron/whatsapp-qr-weekly-digest${dryRun ? "?dryRun=1" : ""}`, { headers: roleHeaders(), cache: "no-store" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || d.skipped || "נכשל");
+      if (dryRun) {
+        const first = d.previews?.[0];
+        toast(`תצוגה מקדימה: ${d.count} נמענים. דוגמה:\n\n${first ? first.message.replace(/\{\{name\}\}/g, first.name) : "—"}`.slice(0, 600), "info", 9000);
+      } else if (d.skipped) {
+        toast(d.skipped === "not_connected" ? "הוואטסאפ לא מחובר — סרוק QR" : `דולג: ${d.skipped}`, "error");
+      } else {
+        toast(`📤 דיוור התקדמות נשלח ל-${d.recipients} לקוחות`, "success");
+      }
+    } catch (e) { toast(e instanceof Error ? e.message : "שגיאה", "error"); }
+    finally { setDigestBusy(false); }
+  }, [toast]);
+
   const card: React.CSSProperties = { background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 14, padding: "1.25rem", marginBottom: "1.25rem" };
   const title: React.CSSProperties = { fontSize: "1rem", fontWeight: 800, marginBottom: "0.75rem", color: "var(--foreground)" };
   const seg = (active: boolean): React.CSSProperties => ({ padding: "0.4rem 0.9rem", borderRadius: 8, border: `1px solid ${active ? "#25D366" : "var(--border)"}`, background: active ? "#25D36615" : "transparent", color: active ? "#128C7E" : "var(--foreground-muted)", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer" });
@@ -130,9 +150,21 @@ export default function WhatsAppBroadcastPage() {
         )}
       </div>
 
+      {/* Weekly progress digest */}
+      <div style={{ ...card, background: "linear-gradient(135deg,#ecfdf5,#eff6ff)", border: "1px solid #25D36640" }}>
+        <div style={title}>📅 דיוור התקדמות שבועי (אוטומטי)</div>
+        <div style={{ fontSize: "0.85rem", color: "var(--foreground-muted)", lineHeight: 1.6, marginBottom: 10 }}>
+          כל יום ראשון ב-09:00 נשלח אוטומטית לכל לקוח (עם טלפון) עדכון אישי: מה הושלם השבוע, מה מתוכנן לשבוע הקרוב, והגרפיקה האחרונה שאושרה. אפשר גם להריץ עכשיו:
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={() => triggerDigest(true)} disabled={digestBusy} style={seg(false)}>👁 תצוגה מקדימה</button>
+          <button onClick={() => triggerDigest(false)} disabled={digestBusy} style={{ ...seg(true), background: "#25D366", color: "#fff", border: "none" }}>{digestBusy ? "⏳…" : "📤 שלח עכשיו"}</button>
+        </div>
+      </div>
+
       {/* Recipients */}
       <div style={card}>
-        <div style={title}>נמענים</div>
+        <div style={title}>נמענים (דיוור חד-פעמי)</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
           <button style={seg(mode === "all")} onClick={() => setMode("all")}>כל הלקוחות</button>
           <button style={seg(mode === "type")} onClick={() => setMode("type")}>לפי סוג</button>

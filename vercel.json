@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/whatsapp-qr-weekly-digest",
+      "schedule": "0 9 * * 0"
+    },
+    {
       "path": "/api/cron/daily-seo",
       "schedule": "0 5 * * *"
     },
