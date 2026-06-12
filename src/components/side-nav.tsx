@@ -202,6 +202,7 @@ const pinnedItems: NavItem[] = [
   { href: "/dashboard", label: "דשבורד", id: "nav-dashboard", icon: Icons.Dashboard, allowedRoles: ['admin', 'employee'] },
   { href: "/clients", label: "לקוחות", id: "nav-clients", icon: Icons.Clients, allowedRoles: ['admin'] },
   { href: "/tasks", label: "משימות", id: "nav-tasks", icon: Icons.Tasks, allowedRoles: ['admin', 'employee'] },
+  { href: "/business-calendar", label: "יומן", id: "nav-biz-calendar", icon: Icons.Calendar, allowedRoles: ['admin', 'employee'] },
 ];
 
 interface NavGroup { id: string; label: string; icon: React.ReactNode; items: NavItem[]; }
@@ -219,11 +220,11 @@ const navGroups: NavGroup[] = [
     { href: "/meta-campaigns", label: "קמפיינים Meta", id: "nav-meta-campaigns", icon: Icons.Campaigns, allowedRoles: ['admin'] },
   ]},
   { id: "g-content", label: "תוכן וקריאייטיב", icon: Icons.Projects, items: [
+    { href: "/projects", label: "PixelManageAI", id: "nav-projects", icon: Icons.Projects, allowedRoles: ['admin'] },
     { href: "/creative-pixelai", label: "Creative PixelAI", id: "nav-creative-pixelai", icon: Icons.Projects, allowedRoles: ['admin', 'employee'] },
     { href: "/ugc", label: "UGC Video Generator", id: "nav-ugc", icon: Icons.Mic, allowedRoles: ['admin'] },
     { href: "/rtm", label: "שיבוץ RTM", id: "nav-rtm", icon: Icons.Calendar, allowedRoles: ['admin'] },
     { href: "/social", label: "רשתות חברתיות", id: "nav-social", icon: Icons.MessageCircle, allowedRoles: ['admin'] },
-    { href: "/business-calendar", label: "יומן", id: "nav-biz-calendar", icon: Icons.Calendar, allowedRoles: ['admin', 'employee'] },
   ]},
   { id: "g-seo", label: "SEO / GEO", icon: Icons.SeoGeo, items: [
     { href: "/seo-geo/dashboard", label: "PIXEL SEO/GEO", id: "nav-seo-geo", icon: Icons.SeoGeo, allowedRoles: ['admin'] },
@@ -248,7 +249,6 @@ const navGroups: NavGroup[] = [
     { href: "/accounting/podcast", label: "פודקאסט", id: "nav-podcast", icon: Icons.Mic, allowedRoles: ['admin'] },
   ]},
   { id: "g-projects", label: "פרויקטים וצוות", icon: Icons.BusinessProjects, items: [
-    { href: "/projects", label: "PixelManageAI", id: "nav-projects", icon: Icons.Projects, allowedRoles: ['admin'] },
     { href: "/business-projects", label: "פרויקטים", id: "nav-otp", icon: Icons.BusinessProjects, allowedRoles: ['admin'] },
     { href: "/business-projects/dashboard", label: "דשבורד פרויקטים", id: "nav-biz-dash", icon: Icons.BarChart, allowedRoles: ['admin'] },
     { href: "/approvals", label: "אישורים", id: "nav-approvals", icon: Icons.Shield, allowedRoles: ['admin'] },
