@@ -6,6 +6,7 @@ import { useState, useMemo } from 'react';
 import { useClients } from '@/lib/api/use-entity';
 import { useToast } from '@/components/ui/toast';
 import type { WhatsAppMessage } from '@/lib/db/schema';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 /* ── Status badge colors and labels ─────────────────────────────────────── */
 
@@ -328,47 +329,11 @@ export default function WhatsAppPage() {
     <div dir="rtl" style={{ padding: '2rem' }}>
       {/* ── Page Header ──────────────────────────────────────────────────────── */}
 
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '2rem',
-        }}
-      >
-        <h1
-          style={{
-            fontSize: '1.875rem',
-            fontWeight: '700',
-            color: 'var(--foreground)',
-            margin: 0,
-          }}
-        >
-          ניהול וואטסאפ
-        </h1>
-        <button
-          style={{
-            padding: '0.625rem 1.25rem',
-            backgroundColor: 'var(--accent)',
-            color: 'white',
-            border: 'none',
-            borderRadius: '0.5rem',
-            fontSize: '0.875rem',
-            fontWeight: '600',
-            cursor: 'pointer',
-            transition: 'background-color 150ms ease',
-          }}
-          onMouseEnter={(e) => {
-            (e.target as HTMLElement).style.backgroundColor = 'var(--accent)';
-            (e.target as HTMLElement).style.opacity = '0.9';
-          }}
-          onMouseLeave={(e) => {
-            (e.target as HTMLElement).style.opacity = '1';
-          }}
-        >
-          + הודעה חדשה
-        </button>
-      </div>
+      <PageHeader
+        title="ניהול וואטסאפ"
+        subtitle="הודעות, תבניות ושליחה ללקוחות"
+        primaryAction={{ label: "+ הודעה חדשה", onClick: () => {} }}
+      />
 
       {/* ── Stats Row ─────────────────────────────────────────────────────────── */}
 

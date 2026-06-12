@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useClients } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
+import { PageHeader } from "@/components/ui/saas-kit";
 
 function roleHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
@@ -142,8 +143,10 @@ export default function WhatsAppBroadcastPage() {
 
   return (
     <div style={{ maxWidth: 820, margin: "0 auto", direction: "rtl", padding: "1rem" }}>
-      <h1 style={{ fontSize: "1.6rem", fontWeight: 800, marginBottom: "0.3rem" }}>📣 דיוור וואטסאפ</h1>
-      <p style={{ color: "var(--foreground-muted)", fontSize: "0.9rem", marginBottom: "1.25rem" }}>שליחת הודעות ללקוחות דרך חיבור QR — בחר נמענים, מרווח שליחה, מסר וגרפיקה.</p>
+      <PageHeader
+        title="📣 דיוור וואטסאפ"
+        subtitle="שליחת הודעות ללקוחות דרך חיבור QR — בחר נמענים, מרווח שליחה, מסר וגרפיקה."
+      />
 
       {/* Connection */}
       <div style={card}>

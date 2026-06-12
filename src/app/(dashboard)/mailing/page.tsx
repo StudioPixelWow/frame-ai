@@ -6,6 +6,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useClients, useEmployees, useMailings, useEmailTemplates } from '@/lib/api/use-entity';
 import { useToast } from '@/components/ui/toast';
 import type { Mailing, MailingStatus, Client, EmailTemplate } from '@/lib/db/schema';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 const MAILING_STATUS_LABELS: Record<MailingStatus, string> = {
   draft: 'טיוטה',
@@ -732,17 +733,11 @@ export default function MailingPage() {
         }
       `}</style>
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem", borderBottom: "1px solid var(--border)", paddingBottom: "1rem" }}>
-        <div>
-          <h1 className="mod-page-title">לוח דיוורים</h1>
-          <p style={{ color: 'var(--foreground-muted)', fontSize: '0.8rem', marginTop: '0.25rem' }}>
-            {(allMailings || []).length} דיוורים סה"כ — {scheduledMailings.length} מתוזמנים, {draftMailings.length} טיוטות
-          </p>
-        </div>
-        <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={() => setActiveTab('new')}>
-          + דיוור חדש
-        </button>
-      </div>
+      <PageHeader
+        title="לוח דיוורים"
+        subtitle={`${(allMailings || []).length} דיוורים סה"כ — ${scheduledMailings.length} מתוזמנים, ${draftMailings.length} טיוטות`}
+        primaryAction={{ label: "+ דיוור חדש", onClick: () => setActiveTab('new') }}
+      />
 
       <div style={{ marginBottom: '20px', display: 'flex', gap: '0.5rem' }}>
         <button

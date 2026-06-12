@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useCallback } from "react";
 import ChatThread from "@/components/whatsapp/chat-thread";
+import { PageHeader } from "@/components/ui/saas-kit";
 
 function roleHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
@@ -38,7 +39,7 @@ export default function WhatsAppInboxPage() {
 
   return (
     <div style={{ direction: "rtl", padding: "1rem", maxWidth: 1100, margin: "0 auto" }}>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 800, marginBottom: "1rem" }}>💬 תיבת וואטסאפ</h1>
+      <PageHeader title="💬 תיבת וואטסאפ" subtitle="שיחות נכנסות ויוצאות דרך חיבור ה-QR" />
 
       {status === "not_configured" ? (
         <div style={{ padding: "1rem", border: "1px solid var(--border)", borderRadius: 12, color: "var(--foreground-muted)" }}>
