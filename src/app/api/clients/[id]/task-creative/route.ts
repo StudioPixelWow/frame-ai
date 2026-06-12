@@ -16,8 +16,7 @@ export const maxDuration = 300;
 import { clientGanttItems, clientFiles } from '@/lib/db';
 import { getClientById } from '@/lib/db/client-helpers';
 import { generateTaskCreativeSpec } from '@/lib/creative-spec/engine';
-import { generateFullPost } from '@/lib/social-post/ai-generate';
-import { uploadToStorage } from '@/lib/storage/upload';
+import { higgsfieldConfigured, startSoulImages, pollSoulJob } from '@/lib/higgsfield/client';
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -53,48 +52,47 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       platform: item.platform || 'instagram',
     });
 
-    // 2) 4 DISTINCT FINISHED posts via a text-capable model (gpt-image-1). Each
-    //    post is fully designed by the AI — visual + Hebrew headline + brand —
-    //    no rigid template. Generated in parallel, then hosted on Supabase.
-    const abcd: { label: string; url: string; prompt: string; message?: string; cta?: string; approach?: string; engine?: string }[] = [];
+    // 2) Premium VISUAL-ONLY backgrounds via Higgsfield Soul (no text in image).
+    //    Headlines/CTA/logo are added later in the design/overlay layer. Each
+    //    variation carries its own overlay guidance for the designer.
+    const abcd: { label: string; url: string; prompt: string; tier?: string; concept?: string; heroObject?: string; overlay?: any; aspectRatio?: string; message?: string; cta?: string }[] = [];
     let genError: string | null = null;
-    const isStory = item.format === 'story' || item.itemType === 'story';
-    const size: '1024x1536' | '1024x1024' = '1024x1536';
     const variations = (spec.variations?.length ? spec.variations : []).slice(0, 4);
-    const brandLine = [
-      client?.name ? `Brand: ${client.name}` : '',
-      client?.businessField ? `(${client.businessField})` : '',
-    ].filter(Boolean).join(' ');
+    // Higgsfield Soul valid sizes → map from the variation's aspect ratio.
+    const sizeFor = (ar?: string) => (ar === '1:1' ? '1536x1536' : ar === '2:1' ? '2048x1536' : '1536x2048');
 
-    const buildPostPrompt = (v: { imagePrompt: string; message: string; cta: string }) => [
-      `Design ONE complete, finished, premium Instagram ${isStory ? 'story (9:16)' : 'feed post (4:5 portrait)'} for a real advertising campaign.`,
-      brandLine,
-      `Visual concept: ${v.imagePrompt}`,
-      v.message ? `Render this EXACT Hebrew headline text large, bold and perfectly legible as the main typography (spell every Hebrew letter correctly, right-to-left): "${v.message}".` : '',
-      v.cta ? `Add a small, tasteful call-to-action in Hebrew: "${v.cta}".` : '',
-      `Strong understanding of the brand's visual language: use the brand's real colors and logo from the references, harmonious typography, clean premium layout, clear hierarchy, one dominant hero subject, award-winning agency quality, ultra realistic where relevant. The result must look like a polished, ready-to-publish social post — NOT a plain photo and NOT a generic template.`,
-    ].filter(Boolean).join(' ');
-
-    try {
-      const results = await Promise.all(variations.map(async (v) => {
-        const prompt = buildPostPrompt(v);
-        const r = await generateFullPost(prompt, refs, size);
-        if (!r.b64) return { v, prompt, error: r.error || 'no_image' };
-        try {
-          const buf = Buffer.from(r.b64, 'base64');
-          const up = await uploadToStorage({
-            buffer: buf, fileName: `post-${ganttItemId}-${v.label}-${Date.now()}.png`,
-            contentType: 'image/png', maxSize: 15 * 1024 * 1024,
+    if (higgsfieldConfigured()) {
+      try {
+        // Phase 1: fire all generations (fast POSTs) so they queue concurrently.
+        const started = await Promise.all(variations.map(async (v) => {
+          const start = await startSoulImages(v.imagePrompt, {
+            count: 1, size: sizeFor(v.aspectRatio), quality: '1080p',
+            referenceImageUrls: refs, negativePrompt: v.negativePrompt || spec.negativePrompt, enhancePrompt: true,
           });
-          return { v, prompt, url: up.publicUrl, engine: r.engine };
-        } catch (e) { return { v, prompt, error: `upload_${e instanceof Error ? e.message : 'failed'}` }; }
-      }));
-      for (const r of results) {
-        if ((r as any).url) abcd.push({ label: r.v.label, url: (r as any).url, prompt: r.prompt, message: r.v.message, cta: r.v.cta, approach: r.v.approach, engine: (r as any).engine });
-        else genError = (r as any).error || genError;
-      }
-    } catch (e) { genError = e instanceof Error ? e.message : 'generation_failed'; }
-    if (abcd.length > 0) genError = null;
+          return { v, start };
+        }));
+        // Phase 2: poll each.
+        for (const { v, start } of started) {
+          let urls: string[] = start.immediateUrls || [];
+          if (!urls.length && start.ok && start.jobs[0]) {
+            const polled = await pollSoulJob(start.jobs[0], { tries: 36, intervalMs: 3000 });
+            urls = polled.urls;
+            if (!urls.length) genError = `poll_${polled.status}`;
+          } else if (!urls.length && !start.ok) {
+            genError = start.error || 'start_failed';
+          }
+          if (urls[0]) abcd.push({
+            label: v.label, url: urls[0], prompt: v.imagePrompt,
+            tier: v.tier, concept: v.concept, heroObject: v.heroObject,
+            overlay: v.overlay, aspectRatio: v.aspectRatio,
+            message: v.overlay?.headline, cta: v.overlay?.cta,
+          });
+        }
+      } catch (e) { genError = e instanceof Error ? e.message : 'generation_failed'; }
+      if (abcd.length > 0) genError = null;
+    } else {
+      genError = 'higgsfield_not_configured';
+    }
 
     // 3) Persist onto the gantt item.
     const creative = { spec, abcd, genError, updatedAt: new Date().toISOString() };

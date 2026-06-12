@@ -273,13 +273,11 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
       if (!r.ok) throw new Error(d.error || 'שגיאה');
       await refetchGanttItems();
       if (d.genError && d.imagesGenerated === 0) {
-        const m = d.genError === 'openai_not_configured' ? 'חסר OPENAI_API_KEY ב-Vercel.'
-          : d.genError === 'openai_quota' ? 'אין יתרת OpenAI — הוסף קרדיט.'
-          : d.genError === 'openai_not_verified' ? 'הארגון ב-OpenAI לא מאומת ל-gpt-image-1.'
-          : `יצירת הפוסטים נכשלה: ${d.genError}`;
+        const m = d.genError === 'higgsfield_not_configured' ? 'הגדר Higgsfield ב-Vercel.'
+          : `יצירת הוויזואלים נכשלה: ${d.genError}`;
         toast(`האפיון נוצר. ${m}`, 'info');
       } else {
-        toast(`✨ נוצר אפיון מלא + ${d.imagesGenerated} וריאציות`, 'success');
+        toast(`✨ נוצרו ${d.imagesGenerated} קונספטים פרימיום`, 'success');
       }
     } catch (e) { toast(e instanceof Error ? e.message : 'שגיאה', 'error'); }
     finally { setCreativeBusyId(null); }
@@ -3013,9 +3011,17 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={v.url} alt={v.label} onClick={() => setCreativePreview(v.url)} style={{ width: "100%", height: 210, objectFit: "cover", display: "block", cursor: "zoom-in", background: "#f1f5f9" }} />
                             <div style={{ padding: "5px 7px" }}>
-                              <div style={{ fontSize: "0.7rem", fontWeight: 800, color: "#7c3aed", marginBottom: 2 }}>וריאציה {v.label}{(v as any).approach ? ` · ${(v as any).approach}` : ''}</div>
-                              {(v as any).message && <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--foreground)", marginBottom: 2, lineHeight: 1.3 }}>{(v as any).message}</div>}
-                              {(v as any).cta && <div style={{ fontSize: "0.64rem", color: "var(--foreground-muted)", marginBottom: 5 }}>↜ {(v as any).cta}</div>}
+                              <div style={{ fontSize: "0.7rem", fontWeight: 800, color: "#7c3aed", marginBottom: 2 }}>וריאציה {v.label}{(v as any).tier ? ` · ${(v as any).tier}` : ''}</div>
+                              {(v as any).concept && <div style={{ fontSize: "0.66rem", color: "var(--foreground-muted)", marginBottom: 3, lineHeight: 1.3 }}>💡 {(v as any).concept}</div>}
+                              {(v as any).overlay?.headline && (
+                                <div style={{ background: "#f8fafc", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 6px", marginBottom: 5 }}>
+                                  <div style={{ fontSize: "0.6rem", fontWeight: 700, color: "#7c3aed", marginBottom: 1 }}>שכבת טקסט (להוספה בעיצוב):</div>
+                                  <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--foreground)", lineHeight: 1.25 }}>{(v as any).overlay.headline}</div>
+                                  {(v as any).overlay.subheadline && <div style={{ fontSize: "0.64rem", color: "var(--foreground-muted)" }}>{(v as any).overlay.subheadline}</div>}
+                                  {(v as any).overlay.cta && <div style={{ fontSize: "0.62rem", color: "#0095D0", fontWeight: 600 }}>↜ {(v as any).overlay.cta}</div>}
+                                  <div style={{ fontSize: "0.58rem", color: "var(--foreground-muted)", marginTop: 2 }}>לוגו: {(v as any).overlay.logoPlacement || '—'} · מרחב טקסט: {(v as any).overlay.textSafeArea || '—'}</div>
+                                </div>
+                              )}
                               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                                 <button onClick={() => useCreativeImage(selectedItem, v.url, 'approve')} title="אשר → התאמת גדלים" style={{ flex: 1, fontSize: "0.66rem", fontWeight: 700, color: "#16a34a", background: "#16a34a15", border: "none", borderRadius: 6, padding: "3px 4px", cursor: "pointer" }}>✓ אשר</button>
                                 <button onClick={() => useCreativeImage(selectedItem, v.url, 'reference')} title="שלח כרפרנס לעובד" style={{ flex: 1, fontSize: "0.66rem", fontWeight: 700, color: "#0095D0", background: "#00B5FE15", border: "none", borderRadius: 6, padding: "3px 4px", cursor: "pointer" }}>📌 לעובד</button>
@@ -3027,16 +3033,12 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                       </div>
                     ) : creative && !busy ? (
                       <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", marginTop: 6 }}>
-                        האפיון נוצר. {creative.genError === 'openai_not_configured'
-                          ? 'חסר OPENAI_API_KEY ב-Vercel — נדרש כדי לייצר את הפוסטים.'
-                          : creative.genError === 'openai_quota'
-                          ? 'חרגת ממכסת OpenAI / אין יתרה — הוסף קרדיט ב-platform.openai.com.'
-                          : creative.genError === 'openai_not_verified'
-                          ? 'הארגון ב-OpenAI לא מאומת ל-gpt-image-1 — בדוק את החשבון.'
-                          : <>הפוסטים לא נוצרו{creative.genError ? <> — סיבה: <code style={{ color: '#dc2626', direction: 'ltr', display: 'inline-block' }}>{String(creative.genError)}</code></> : ''}. נסה "צור מחדש".</>}
+                        האפיון נוצר. {creative.genError === 'higgsfield_not_configured'
+                          ? 'הגדר Higgsfield ב-Vercel כדי לקבל את הוויזואלים.'
+                          : <>הוויזואלים לא נוצרו{creative.genError ? <> — סיבה: <code style={{ color: '#dc2626', direction: 'ltr', display: 'inline-block' }}>{String(creative.genError)}</code></> : ''}. נסה "צור מחדש".</>}
                       </div>
                     ) : !creative && !busy ? (
-                      <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>לחץ "צור אפיון" — המערכת תייצר 4 פוסטים מוגמרים (ויזואל + מסר + מיתוג) על בסיס שפת המותג.</div>
+                      <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>לחץ "צור אפיון" — המערכת תייצר קונספטים פרסומיים פרימיום (ויזואל בלבד) + הנחיות שכבת טקסט להוספה בעיצוב.</div>
                     ) : null}
                   </div>
                 );
