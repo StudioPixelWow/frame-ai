@@ -225,6 +225,23 @@ app.post('/seen', auth, async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Download the media attached to one message (returns a data URL).
+app.get('/message-media', auth, async (req, res) => {
+  if (state !== 'ready') return res.status(409).json({ error: 'not_connected', state });
+  const { chatId, msgId } = req.query;
+  if (!chatId || !msgId) return res.status(400).json({ error: 'missing' });
+  try {
+    const chat = await client.getChatById(String(chatId));
+    const msgs = await chat.fetchMessages({ limit: 50 });
+    const m = msgs.find((x) => x.id && (x.id.id === msgId || x.id._serialized === msgId));
+    if (!m) return res.status(404).json({ error: 'not_found' });
+    if (!m.hasMedia) return res.status(204).end();
+    const media = await m.downloadMedia();
+    if (!media || !media.data) return res.status(404).json({ error: 'no_media' });
+    res.json({ mimetype: media.mimetype, dataUrl: `data:${media.mimetype};base64,${media.data}` });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Log incoming messages (useful for debugging / future webhooks).
 client.on('message', (m) => { try { console.log(`[wa] ⬅ ${m.from}: ${(m.body || '').slice(0, 40)}`); } catch { /* */ } });
 

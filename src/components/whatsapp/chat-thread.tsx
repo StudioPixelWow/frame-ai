@@ -17,6 +17,30 @@ function roleHeaders(): Record<string, string> {
 
 interface Msg { id: string; body: string; fromMe: boolean; timestamp: number; type: string; hasMedia: boolean }
 
+// Lazily downloads + renders a message's media (image/video) inline. Cached per id.
+const mediaCache = new Map<string, string>();
+function MediaBubble({ chatId, msgId }: { chatId: string; msgId: string }) {
+  const [url, setUrl] = useState<string | null>(mediaCache.get(`${chatId}|${msgId}`) || null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const key = `${chatId}|${msgId}`;
+    if (mediaCache.has(key)) { setUrl(mediaCache.get(key)!); return; }
+    let cancelled = false;
+    fetch(`/api/whatsapp/qr-media?chatId=${encodeURIComponent(chatId)}&msgId=${encodeURIComponent(msgId)}`, { headers: roleHeaders(), cache: "no-store" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (cancelled) return; if (d?.dataUrl) { mediaCache.set(key, d.dataUrl); setUrl(d.dataUrl); } else setFailed(true); })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, [chatId, msgId]);
+  if (failed) return <span style={{ color: "#555" }}>📎 מדיה</span>;
+  if (!url) return <span style={{ color: "#999", fontSize: "0.75rem" }}>⏳ טוען מדיה…</span>;
+  const isVideo = /^data:video/i.test(url);
+  return isVideo
+    ? <video src={url} controls style={{ maxWidth: 220, borderRadius: 8, display: "block", marginBottom: 4 }} />
+    /* eslint-disable-next-line @next/next/no-img-element */
+    : <img src={url} alt="media" style={{ maxWidth: 220, borderRadius: 8, display: "block", marginBottom: 4 }} />;
+}
+
 export default function ChatThread({ chatId, phone, name, height = 420 }: { chatId?: string; phone?: string; name?: string; height?: number }) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,6 +48,7 @@ export default function ChatThread({ chatId, phone, name, height = 420 }: { chat
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [resolvedChatId, setResolvedChatId] = useState<string | undefined>(chatId);
   const scrollRef = useRef<HTMLDivElement>(null);
   const target = chatId ? `chatId=${encodeURIComponent(chatId)}` : `phone=${encodeURIComponent(phone || "")}`;
 
@@ -32,7 +57,7 @@ export default function ChatThread({ chatId, phone, name, height = 420 }: { chat
       const r = await fetch(`/api/whatsapp/qr-chat?${target}`, { headers: roleHeaders(), cache: "no-store" });
       const d = await r.json();
       if (!r.ok) { setError(d.error === "not_connected" ? "הוואטסאפ לא מחובר" : (d.error || "טעינה נכשלה")); setMessages([]); }
-      else { setError(null); setMessages(Array.isArray(d.messages) ? d.messages : []); }
+      else { setError(null); setMessages(Array.isArray(d.messages) ? d.messages : []); if (d.chatId) setResolvedChatId(d.chatId); }
     } catch { setError("השירות לא נגיש"); }
     finally { setLoading(false); }
   }, [target]);
@@ -84,7 +109,7 @@ export default function ChatThread({ chatId, phone, name, height = 420 }: { chat
           : messages.length === 0 ? <div style={{ margin: "auto", color: "var(--foreground-muted)", fontSize: "0.85rem" }}>אין הודעות עדיין</div>
           : messages.map((m) => (
             <div key={m.id} style={{ alignSelf: m.fromMe ? "flex-start" : "flex-end", maxWidth: "78%", background: m.fromMe ? "#d9fdd3" : "#ffffff", color: "#111", border: "1px solid var(--border)", borderRadius: 10, padding: "0.4rem 0.6rem", fontSize: "0.85rem", lineHeight: 1.35, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-              {m.hasMedia && !m.body && <span style={{ color: "#555" }}>📎 מדיה</span>}
+              {m.hasMedia && resolvedChatId && <MediaBubble chatId={resolvedChatId} msgId={m.id} />}
               {m.body}
               <div style={{ fontSize: "0.62rem", color: "#667781", marginTop: 2, textAlign: "start" }}>{fmtTime(m.timestamp)}</div>
             </div>

@@ -7,6 +7,7 @@ import { PageTransition } from "@/components/ui/page-transition";
 import { DataErrorBoundary } from "@/components/ui/data-states";
 import DashboardShell from "@/components/dashboard-shell";
 import WeeklyDigestPrompt from "@/components/weekly-digest-prompt";
+import WaNotifier from "@/components/whatsapp/wa-notifier";
 
 export default function DashboardLayout({
   children,
@@ -44,6 +45,7 @@ export default function DashboardLayout({
             </div>
             <AICopilotContainer />
             <WeeklyDigestPrompt />
+            <WaNotifier />
           </div>
 
           {/* Responsive layout rules */}

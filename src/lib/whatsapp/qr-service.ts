@@ -41,3 +41,5 @@ export const waChatMessages = (q: { chatId?: string; phone?: string }) =>
 export const waSendMessage = (body: { phone?: string; chatId?: string; message?: string; mediaUrl?: string }) =>
   call('/send-message', { method: 'POST', body, timeoutMs: 25000 });
 export const waSeen = (body: { chatId?: string; phone?: string }) => call('/seen', { method: 'POST', body });
+export const waMessageMedia = (chatId: string, msgId: string) =>
+  call(`/message-media?chatId=${encodeURIComponent(chatId)}&msgId=${encodeURIComponent(msgId)}`, { timeoutMs: 25000 });
