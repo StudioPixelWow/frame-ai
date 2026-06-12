@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/toast';
 import { useAISettings, useEmployees, useGmailSettings } from '@/lib/api/use-entity';
 import type { GmailConnectionStatus } from '@/lib/db/schema';
 import { WhatsAppConnect } from '@/components/whatsapp-connect';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 type Section = 'general' | 'ai' | 'email' | 'gmail' | 'whatsapp' | 'notifications' | 'appearance' | 'automation' | 'team' | 'integrations' | 'stockmedia';
 
@@ -480,7 +481,7 @@ export default function SettingsPage() {
   // Styles
   const mainContainerStyle: React.CSSProperties = {
     display: 'flex',
-    minHeight: '100vh',
+    minHeight: 'calc(100vh - 110px)',
     backgroundColor: 'var(--surface)',
     direction: 'rtl',
   };
@@ -2197,6 +2198,10 @@ export default function SettingsPage() {
 
   // Main render
   return (
+    <div style={{ direction: 'rtl', backgroundColor: 'var(--surface)', minHeight: '100vh' }}>
+      <div style={{ padding: '1.5rem 2rem 0' }}>
+        <PageHeader title="הגדרות" subtitle="ניהול המערכת — מפתחות API, אינטגרציות, התראות והרשאות" />
+      </div>
     <div style={mainContainerStyle}>
       {/* Sidebar Navigation */}
       <nav style={sidebarStyle}>
@@ -2247,6 +2252,7 @@ export default function SettingsPage() {
         {activeSection === 'integrations' && renderIntegrationsSection()}
         {activeSection === 'stockmedia' && renderStockMediaSection()}
       </main>
+    </div>
     </div>
   );
 }
