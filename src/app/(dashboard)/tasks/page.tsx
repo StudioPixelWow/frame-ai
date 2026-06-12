@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from "rea
 import { useSearchParams } from "next/navigation";
 import { useTasks, useEmployees, useClients, useEmployeeTasks } from "@/lib/api/use-entity";
 import TaskWorkspaceModal from "@/components/tasks/task-workspace-modal";
+import Avatar from "@/components/ui/avatar";
 import TasksMissionControl from "@/components/tasks/mission-control";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
@@ -942,9 +943,9 @@ function TasksPageInner() {
                         const isUploading = uploadingTaskId === task.id;
                         const taskClientName = resolveClientName(task);
                         const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed" && task.status !== "approved";
-                        const assigneeNames = (Array.isArray(task.assigneeIds) ? task.assigneeIds : [])
-                          .map((id: any) => teamEmployees.find(e => e.id === id)?.name)
-                          .filter(Boolean);
+                        const assigneeEmps = (Array.isArray(task.assigneeIds) ? task.assigneeIds : [])
+                          .map((id: any) => (employees || []).find(e => e.id === id))
+                          .filter(Boolean) as any[];
                         return (
                           <div key={task.id} style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }} className="ux-stagger-item">
                             <div
@@ -965,9 +966,14 @@ function TasksPageInner() {
                                   </span>
                                 )}
                               </div>
-                              {assigneeNames.length > 0 && (
-                                <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)", marginTop: "0.2rem" }}>
-                                  👤 {assigneeNames.join(', ')}
+                              {assigneeEmps.length > 0 && (
+                                <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginTop: "0.3rem" }}>
+                                  {assigneeEmps.slice(0, 3).map((e: any) => (
+                                    <Avatar key={e.id} src={e.avatarUrl} name={e.name} size={20} ring={false} />
+                                  ))}
+                                  <span style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>
+                                    {assigneeEmps.map((e: any) => e.name).join(', ')}
+                                  </span>
                                 </div>
                               )}
                               {Array.isArray(task.tags) && task.tags.length > 0 && (
