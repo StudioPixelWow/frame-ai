@@ -231,6 +231,30 @@ export default function TabIntegrations({ client }: { client: Client }) {
   const [wpTestResult, setWpTestResult] = useState<{ success: boolean; siteName?: string; error?: string } | null>(null);
   const wpConnected = (c.wpConnectionStatus === 'connected' || c.wp_connection_status === 'connected') && !!(c.wpSiteUrl || c.wp_site_url);
 
+  // ── Google Business Profile state ──
+  const [gbp, setGbp] = useState<{ connected: boolean; businessName?: string; hasLocation?: boolean } | null>(null);
+  const [gbpPosting, setGbpPosting] = useState(false);
+  useEffect(() => {
+    fetch(`/api/clients/${client.id}/gbp`, { headers: getRoleHeaders() }).then((r) => r.json()).then(setGbp).catch(() => {});
+  }, [client.id]);
+  const connectGbp = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/auth/gbp/url?clientId=${client.id}`, { headers: getRoleHeaders() });
+      const d = await r.json();
+      if (d.url) window.location.href = d.url; else toast(d.error || 'GOOGLE_CLIENT_ID לא מוגדר', 'error');
+    } catch { toast('שגיאה בחיבור GBP', 'error'); }
+  }, [client.id, toast]);
+  const gbpPostNow = useCallback(async () => {
+    setGbpPosting(true);
+    try {
+      const r = await fetch(`/api/clients/${client.id}/gbp`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...getRoleHeaders() }, body: JSON.stringify({ type: 'UPDATE' }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'הפרסום נכשל');
+      toast('✓ פוסט פורסם ל-Google Business Profile', 'success');
+    } catch (e) { toast(e instanceof Error ? e.message : 'שגיאה', 'error'); }
+    finally { setGbpPosting(false); }
+  }, [client.id, toast]);
+
   const handleWpTest = useCallback(async () => {
     if (!wpForm.siteUrl || !wpForm.username || !wpForm.applicationPassword) return;
     setWpTesting(true);
@@ -736,6 +760,49 @@ export default function TabIntegrations({ client }: { client: Client }) {
           </div>
         );
       })}
+
+      {/* ═══ GOOGLE BUSINESS PROFILE ═══ */}
+      <div style={{
+        background: "var(--surface-raised)",
+        border: `1px solid ${gbp?.connected ? "rgba(34, 197, 94, 0.25)" : "var(--border)"}`,
+        borderRadius: "0.75rem", padding: "1.25rem", marginBottom: "0.75rem",
+        borderRight: "4px solid #4285F4",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <span style={{ fontSize: "1.5rem" }}>📍</span>
+            <div>
+              <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--foreground)" }}>
+                Google Business Profile
+                <span style={{ fontSize: "0.72rem", fontWeight: 400, color: "var(--foreground-muted)", marginRight: "0.5rem" }}>דירוג מקומי</span>
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", marginTop: "0.1rem" }}>
+                {gbp?.connected
+                  ? `✅ מחובר${gbp.businessName ? ` — ${gbp.businessName}` : ""}${gbp.hasLocation ? "" : " (ממתין לזיהוי מיקום)"}`
+                  : "חיבור לפרופיל העסק בגוגל — לפרסום פוסטים אוטומטי ושיפור דירוג מקומי"}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {gbp?.connected ? (
+              <button onClick={gbpPostNow} disabled={gbpPosting || !gbp.hasLocation}
+                style={{ fontSize: "0.82rem", fontWeight: 700, padding: "0.45rem 1rem", borderRadius: 8, border: "none", background: (gbpPosting || !gbp.hasLocation) ? "#9ca3af" : "#4285F4", color: "#fff", cursor: (gbpPosting || !gbp.hasLocation) ? "not-allowed" : "pointer" }}>
+                {gbpPosting ? "⏳ מפרסם…" : "📤 פרסם פוסט עכשיו"}
+              </button>
+            ) : (
+              <button onClick={connectGbp}
+                style={{ fontSize: "0.82rem", fontWeight: 700, padding: "0.45rem 1rem", borderRadius: 8, border: "1px solid #4285F4", background: "#4285F415", color: "#1a73e8", cursor: "pointer" }}>
+                🔗 חבר עם Google
+              </button>
+            )}
+          </div>
+        </div>
+        {gbp?.connected && !gbp.hasLocation && (
+          <div style={{ marginTop: 10, fontSize: "0.74rem", color: "#b45309", background: "#fff7ed", border: "1px solid #f59e0b40", borderRadius: 8, padding: "0.5rem 0.7rem" }}>
+            ⚠️ החיבור נשמר, אך לא זוהה מיקום עסקי. פרסום פוסטים דורש גישה מאושרת ל-Google Business Profile API (בקשת גישה דרך Google Cloud).
+          </div>
+        )}
+      </div>
 
       {/* ═══ WORDPRESS CONNECTION (for SEO/GEO) ═══ */}
       <div style={{

@@ -29,6 +29,7 @@ const JOB_COST_CENTS: Record<string, number> = {
   citation_tracker: 8,
   answer_simulation: 6,
   monthly_report: 1,
+  gbp_publish: 2,        // AI post + publish to Google Business Profile (weekly)
 };
 
 export const FREQ_MS: Record<string, number> = {
@@ -127,6 +128,26 @@ const HANDLERS: Record<string, (plan: any, runId: string, jobId: string) => Prom
     } catch { /* best-effort */ }
     await log(runId, jobId, plan.id, 'info', `monthly report ${rep.month} emailed=${emailed}`);
     return { month: rep.month, emailed };
+  },
+
+  // Weekly Google Business Profile post — generate an AI update and publish it.
+  // Gated: only runs when the client has a connected GBP. Self-limits to weekly.
+  async gbp_publish(plan, runId, jobId) {
+    const clientId = plan.clientId;
+    if (!clientId) return { skipped: 'no_client' };
+    const { hydrateConnection, generateGBPPost, createPost } = await import('@/lib/seo/gbp-service');
+    const conn = await hydrateConnection(clientId);
+    if (!conn || !conn.locationId) { await log(runId, jobId, plan.id, 'info', 'GBP not connected — skipped'); return { skipped: 'no_gbp' }; }
+    const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
+    const { data: recent } = await getSb().from('geo_automation_runs').select('id').eq('plan_id', plan.id).eq('job_type', 'gbp_publish').eq('status', 'completed').gte('created_at', weekAgo).limit(1);
+    if (recent && recent.length) return { skipped: 'weekly_guard' };
+    const businessName = plan.businessName || plan.clientName || '';
+    const topic = `עדכון שבועי על ${businessName || 'העסק'} — חדשות, שירותים, וערך ללקוח`;
+    const gen = await generateGBPPost(clientId, 'UPDATE', topic, businessName);
+    if (!gen.post) { await log(runId, jobId, plan.id, 'info', `GBP generate failed: ${gen.error}`); return { skipped: 'gen_failed', error: gen.error }; }
+    const res = await createPost(conn.locationId, gen.post, clientId);
+    await log(runId, jobId, plan.id, 'info', `GBP post ${res.success ? 'published' : 'failed'}: ${res.error || res.postId || ''}`);
+    return { published: res.success, postId: res.postId, error: res.error };
   },
 };
 
