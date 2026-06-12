@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState } from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 const C = {
   primary: '#00B5FE', primaryDark: '#0095D0', bg: '#F7F9FC', card: '#FFFFFF',
@@ -39,11 +40,10 @@ export default function QualityCheckPage() {
 
   return (
     <div dir="rtl" style={{ maxWidth: 920, margin: '0 auto', padding: '1.5rem 1.25rem 4rem', color: C.text, background: C.bg, minHeight: '100vh' }}>
-      <div style={{ marginBottom: 18 }}>
-        <div style={{ fontSize: 12, color: C.primary, letterSpacing: 2, fontWeight: 800 }}>QUALITY CONTROL</div>
-        <h1 style={{ fontSize: 24, fontWeight: 900, margin: '2px 0' }}>✅ בקרת איכות AI</h1>
-        <p style={{ color: C.sub, fontSize: 13.5, margin: 0 }}>בדוק כל תוכן ללקוח לפני שליחה — עברית, טון, מותג, שלמות — וקבל גרסה משופרת.</p>
-      </div>
+      <PageHeader
+        title="✅ בקרת איכות AI"
+        subtitle="בדוק כל תוכן ללקוח לפני שליחה — עברית, טון, מותג, שלמות — וקבל גרסה משופרת."
+      />
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '1rem 1.2rem', marginBottom: 16 }}>
         <input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="שם הלקוח (אופציונלי)" style={{ width: '100%', border: `1px solid ${C.border}`, borderRadius: 10, padding: '0.55rem 0.8rem', fontSize: 13.5, marginBottom: 10 }} />

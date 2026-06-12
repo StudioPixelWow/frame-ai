@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useMemo } from "react";
+import { PageHeader } from "@/components/ui/saas-kit";
 import { AdminOnly } from "@/components/role-gate";
 import {
   useClients,
@@ -134,27 +135,7 @@ export default function WorkloadPage() {
     <AdminOnly fallback={<AccessDenied />}>
       <div style={{ direction: "rtl", minHeight: "100vh", padding: "24px" }}>
         {/* Header */}
-        <div style={{ marginBottom: "32px" }}>
-          <h1
-            style={{
-              fontSize: "32px",
-              fontWeight: "700",
-              color: "var(--foreground)",
-              margin: "0 0 8px 0",
-            }}
-          >
-            עומס עבודה ורווחיות
-          </h1>
-          <p
-            style={{
-              fontSize: "14px",
-              color: "var(--foreground-muted)",
-              margin: 0,
-            }}
-          >
-            מבט על ביצועי הצוות והעסק
-          </p>
-        </div>
+        <PageHeader title="עומס עבודה ורווחיות" subtitle="מבט על ביצועי הצוות והעסק" />
 
         {/* Section 1: Employee Workload */}
         <div style={{ marginBottom: "48px" }}>

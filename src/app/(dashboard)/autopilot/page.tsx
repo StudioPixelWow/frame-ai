@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 import Link from 'next/link';
 import { PremiumStatGrid, PremiumKpiCard, BRAND } from '@/components/charts';
 
@@ -127,32 +128,11 @@ export default function AutopilotPage() {
   return (
     <main dir="rtl" style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--foreground)', margin: 0 }}>
-            🤖 אוטופיילוט — Agency Autopilot
-          </h1>
-          <p style={{ fontSize: '0.82rem', color: 'var(--foreground-muted)', margin: '0.3rem 0 0' }}>
-            AI Growth Manager שעובד בשבילך
-          </p>
-        </div>
-        <button
-          onClick={runScan}
-          disabled={scanning}
-          style={{
-            padding: '0.6rem 1.2rem',
-            borderRadius: '0.5rem',
-            border: 'none',
-            background: scanning ? '#9ca3af' : '#2563eb',
-            color: '#fff',
-            fontWeight: 600,
-            fontSize: '0.82rem',
-            cursor: scanning ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {scanning ? '⏳ סורק...' : '🔍 הרץ סריקה אוטונומית עכשיו'}
-        </button>
-      </div>
+      <PageHeader
+        title="🤖 אוטופיילוט — Agency Autopilot"
+        subtitle="AI Growth Manager שעובד בשבילך"
+        primaryAction={{ label: scanning ? '⏳ סורק...' : '🔍 הרץ סריקה אוטונומית עכשיו', onClick: () => { if (!scanning) runScan(); } }}
+      />
 
       {/* Safety Banner */}
       <div style={{

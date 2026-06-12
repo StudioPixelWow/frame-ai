@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useCallback } from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 import { useApprovals, useTasks, useEmployeeTasks } from '@/lib/api/use-entity';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -424,17 +425,11 @@ export default function ApprovalsPage() {
 
   return (
     <div dir="rtl" className="apr-page">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
-        <div>
-          <h1 className="mod-page-title">מערכת אישורים</h1>
-          <p style={{ fontSize: '0.8rem', color: 'var(--foreground-muted)', marginTop: '0.25rem' }}>
-            ניהול בקשות אישור — תוכן, גאנטים, עיצובים ופעולות שדורשות אישור
-          </p>
-        </div>
-        <button className="mod-btn-primary ux-btn ux-btn-glow" onClick={openCreateModal}>
-          + אישור חדש
-        </button>
-      </div>
+      <PageHeader
+        title="מערכת אישורים"
+        subtitle="ניהול בקשות אישור — תוכן, גאנטים, עיצובים ופעולות שדורשות אישור"
+        primaryAction={{ label: "+ אישור חדש", onClick: openCreateModal }}
+      />
 
       {/* KPI Row */}
       <div className="apr-kpi-row">

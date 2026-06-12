@@ -2,6 +2,7 @@
 export const dynamic = "force-dynamic";
 
 import React, { useMemo, useState } from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 import { useSystemEvents, useAutomationRuns } from '@/lib/api/use-entity';
 import type { AutomationRun } from '@/lib/db/schema';
 
@@ -320,14 +321,7 @@ function ActivityPage() {
   return (
     <div style={{ direction: 'rtl', padding: '32px 24px', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '28px', fontWeight: '700', color: 'var(--foreground)', margin: '0 0 8px 0' }}>
-          פעילות אוטומציות
-        </h1>
-        <p style={{ fontSize: '14px', color: 'var(--foreground-muted)', margin: 0 }}>
-          מעקב בזמן אמת אחר פעולות אוטומטיות
-        </p>
-      </div>
+      <PageHeader title="פעילות אוטומציות" subtitle="מעקב בזמן אמת אחר פעולות אוטומטיות" />
 
       {/* Stats Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '32px' }}>

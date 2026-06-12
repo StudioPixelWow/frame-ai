@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import React from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 export default function PerformancePage() {
   const kpis = [
@@ -80,10 +81,10 @@ export default function PerformancePage() {
 
   return (
     <div dir="rtl" className="perf-page">
-      <h1 className="mod-page-title">📈 Performance AI</h1>
-      <p style={{ color: '#6b7280', marginBottom: '2rem' }}>
-        ניתוח ביצועי סרטונים קודמים — למד מה עובד ויצר תוכן טוב יותר
-      </p>
+      <PageHeader
+        title="📈 Performance AI"
+        subtitle="ניתוח ביצועי סרטונים קודמים — למד מה עובד ויצר תוכן טוב יותר"
+      />
 
       <div className="vs-perf-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
         {kpis.map((kpi) => (

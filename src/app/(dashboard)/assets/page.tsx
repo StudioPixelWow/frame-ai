@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import React, { useState } from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 export default function AssetsPage() {
   const [filter, setFilter] = useState('הכל');
@@ -77,7 +78,7 @@ export default function AssetsPage() {
 
   return (
     <div dir="rtl" className="ast-page">
-      <h1 className="mod-page-title">ניהול נכסים</h1>
+      <PageHeader title="ניהול נכסים" subtitle="ספריית נכסים, מדיה וקבצים" />
 
       <div className="ast-toolbar">
         <input

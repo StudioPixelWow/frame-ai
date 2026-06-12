@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import React, { useState } from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 export default function ViralPage() {
   const [platform, setPlatform] = useState('TikTok');
@@ -55,7 +56,7 @@ export default function ViralPage() {
 
   return (
     <div dir="rtl" className="vrl-page">
-      <h1 className="mod-page-title">מצב ויראלי</h1>
+      <PageHeader title="מצב ויראלי" subtitle="טרנדים ויראליים לפי פלטפורמה" />
 
       <div className="vrl-platform-tabs">
         {platforms.map((p) => (

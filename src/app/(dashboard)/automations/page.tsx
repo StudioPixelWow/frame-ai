@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useMemo } from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 import Link from 'next/link';
 import type { AutomationRule, AutomationTrigger, AutomationAction, SystemEvent } from '@/lib/db/schema';
 import { useAutomationRules, useSystemEvents } from '@/lib/api/use-entity';
@@ -258,39 +259,12 @@ export default function AutomationsPage() {
     <div dir="rtl" className="min-h-screen" style={{ backgroundColor: 'var(--background)' }}>
       <div className="p-8">
         {/* Header */}
-        <div className="mb-8 flex items-start justify-between">
-          <div>
-            <h1
-              className="text-5xl font-bold mb-2 ux-stagger"
-              style={{ color: 'var(--foreground)' }}
-            >
-              מרכז אוטומציות
-            </h1>
-            <p className="text-lg ux-stagger" style={{ color: 'var(--foreground-muted)' }}>
-              צור ונהל אוטומציות חכמות שחוסכות לך שעות של עבודה ידנית
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <Link
-              href="/automations/templates"
-              className="px-6 py-3 rounded-lg font-medium transition-all ux-stagger"
-              style={{
-                backgroundColor: 'var(--surface)',
-                color: 'var(--accent)',
-                border: '2px solid var(--accent)',
-              }}
-            >
-              בחר תבנית
-            </Link>
-            <Link
-              href="/automations/new"
-              className="px-6 py-3 rounded-lg font-medium text-white transition-all ux-stagger"
-              style={{ backgroundColor: 'var(--accent)' }}
-            >
-              צור אוטומציה
-            </Link>
-          </div>
-        </div>
+        <PageHeader
+          title="מרכז אוטומציות"
+          subtitle="צור ונהל אוטומציות חכמות שחוסכות לך שעות של עבודה ידנית"
+          secondaryActions={[{ label: "בחר תבנית", href: "/automations/templates" }]}
+          primaryAction={{ label: "צור אוטומציה", href: "/automations/new" }}
+        />
 
         {/* KPI Strip */}
         {!handleEmptyState && (

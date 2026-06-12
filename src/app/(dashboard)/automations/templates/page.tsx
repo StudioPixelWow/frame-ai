@@ -2,6 +2,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from 'next/link';
+import { PageHeader } from '@/components/ui/saas-kit';
 import { useState } from 'react';
 
 const TEMPLATES = [
@@ -136,26 +137,7 @@ export default function TemplatesPage() {
   return (
     <div style={{ padding: 'var(--spacing-6)', maxWidth: '1400px', margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ marginBottom: 'var(--spacing-8)' }}>
-        <h1 style={{
-          fontSize: '2.5rem',
-          fontWeight: 'bold',
-          color: 'var(--foreground)',
-          marginBottom: 'var(--spacing-2)',
-          direction: 'rtl',
-          textAlign: 'right',
-        }}>
-          תבניות אוטומציה
-        </h1>
-        <p style={{
-          fontSize: '1.125rem',
-          color: 'var(--foreground-muted)',
-          direction: 'rtl',
-          textAlign: 'right',
-        }}>
-          בחר תבנית מוכנה והתאם לצרכים שלך
-        </p>
-      </div>
+      <PageHeader title="תבניות אוטומציה" subtitle="בחר תבנית מוכנה והתאם לצרכים שלך" />
 
       {/* Category Tabs */}
       <div style={{

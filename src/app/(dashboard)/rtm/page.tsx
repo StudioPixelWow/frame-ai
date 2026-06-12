@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { PageHeader } from '@/components/ui/saas-kit';
 
 const C = {
   primary: '#00B5FE', primaryDark: '#0095D0', primaryLight: '#E6F7FF',
@@ -161,21 +162,11 @@ export default function RtmBroadcastPage() {
 
   return (
     <div dir="rtl" style={{ maxWidth: 1100, margin: '0 auto', padding: '1.5rem 1.25rem 4rem', color: C.text, background: C.bg, minHeight: '100vh' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
-        <div>
-          <div style={{ fontSize: 12, color: C.primary, letterSpacing: 2, fontWeight: 800 }}>REAL-TIME MARKETING</div>
-          <h1 style={{ fontSize: 26, fontWeight: 900, margin: '2px 0' }}>⚡ שיבוץ RTM לכל הלקוחות</h1>
-          <p style={{ color: C.sub, fontSize: 13.5, margin: 0 }}>
-            קרה משהו עכשיו? שבץ תוכן RTM בתאריך אחד — המערכת מפתחת את הרעיון בנפרד לכל לקוח פרסום ומחליפה את התוכן שתוכנן לאותו יום.
-          </p>
-        </div>
-        <button
-          onClick={() => setOpen(true)}
-          disabled={loading || eligible.length === 0}
-          style={{ background: C.primary, color: '#fff', border: 'none', borderRadius: 12, padding: '0.7rem 1.3rem', fontWeight: 800, fontSize: 14.5, cursor: eligible.length ? 'pointer' : 'not-allowed', boxShadow: '0 4px 14px rgba(0,181,254,0.3)' }}>
-          + שיבוץ תוכן RTM
-        </button>
-      </div>
+      <PageHeader
+        title="⚡ שיבוץ RTM לכל הלקוחות"
+        subtitle="קרה משהו עכשיו? שבץ תוכן RTM בתאריך אחד — המערכת מפתחת את הרעיון בנפרד לכל לקוח פרסום ומחליפה את התוכן שתוכנן לאותו יום."
+        primaryAction={{ label: "+ שיבוץ תוכן RTM", onClick: () => { if (!loading && eligible.length) setOpen(true); } }}
+      />
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '1.2rem 1.4rem' }}>
         <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10 }}>לקוחות פרסום פעילים שיקבלו שיבוץ</div>
