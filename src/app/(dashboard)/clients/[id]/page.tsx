@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/toast";
 import type { Client, Employee } from "@/lib/db/schema";
 import TabOverview from "./tab-overview";
 import TabSocial from "./tab-social";
+import ChatThread from "@/components/whatsapp/chat-thread";
 import TabFiles from "./tab-files";
 import TabBrandKit from "./tab-brand-kit";
 import TabAccounting from "./tab-accounting";
@@ -168,6 +169,7 @@ function ClientDetailContent() {
   const [activeTab, setActiveTab] = useState<TabName>((searchParams.get("tab") as TabName) || "overview");
   const [client, setClient] = useState<Client | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [showWaChat, setShowWaChat] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Client>>({});
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
@@ -1131,8 +1133,23 @@ function ClientDetailContent() {
                 >
                   🗑️ מחק לקוח
                 </button>
+                {client.phone && (
+                  <button
+                    onClick={() => setShowWaChat((v) => !v)}
+                    style={{ fontSize: "0.875rem", padding: "0.5rem 1.125rem", display: "inline-flex", alignItems: "center", gap: "0.375rem", borderRadius: "0.5rem", border: "1px solid #25D366", background: showWaChat ? "#25D366" : "#25D36615", color: showWaChat ? "#fff" : "#128C7E", fontWeight: 700, cursor: "pointer" }}
+                  >
+                    💬 וואטסאפ
+                  </button>
+                )}
               </div>
             </div>
+
+            {/* WhatsApp chat with this client */}
+            {showWaChat && client.phone && (
+              <div style={{ marginTop: "1rem", maxWidth: 520 }}>
+                <ChatThread phone={client.phone} name={`${client.name} · ${client.phone}`} height={460} />
+              </div>
+            )}
 
             {/* Status and Type Badges */}
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>

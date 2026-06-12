@@ -232,6 +232,7 @@ const navGroups: NavGroup[] = [
     { href: "/seo-geo/results", label: "תוצאות SEO", id: "nav-seo-results", icon: Icons.TrendingUp, allowedRoles: ['admin'] },
   ]},
   { id: "g-outreach", label: "דיוור ותקשורת", icon: Icons.Mail, items: [
+    { href: "/whatsapp-inbox", label: "תיבת וואטסאפ", id: "nav-whatsapp-inbox", icon: Icons.MessageCircle, allowedRoles: ['admin'] },
     { href: "/whatsapp", label: "וואטסאפ", id: "nav-whatsapp", icon: Icons.MessageCircle, allowedRoles: ['admin'] },
     { href: "/whatsapp-broadcast", label: "דיוור וואטסאפ", id: "nav-whatsapp-broadcast", icon: Icons.MessageCircle, allowedRoles: ['admin'] },
     { href: "/mailing", label: "דיוור", id: "nav-mailing", icon: Icons.Mail, allowedRoles: ['admin'] },

@@ -158,4 +158,74 @@ app.get('/batch/:id', auth, (req, res) => {
   res.json(job);
 });
 
+// ── Two-way inbox: conversations, history, single send, mark-read ─────────
+
+// List recent 1:1 conversations with unread counts.
+app.get('/chats', auth, async (_req, res) => {
+  if (state !== 'ready') return res.status(409).json({ error: 'not_connected', state });
+  try {
+    const chats = await client.getChats();
+    const list = chats
+      .filter((c) => !c.isGroup)
+      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+      .slice(0, 50)
+      .map((c) => ({
+        chatId: c.id._serialized,
+        phone: c.id.user,
+        name: c.name || c.id.user,
+        unread: c.unreadCount || 0,
+        timestamp: c.timestamp || 0,
+        lastMessage: (c.lastMessage && c.lastMessage.body) || '',
+      }));
+    const totalUnread = list.reduce((s, c) => s + c.unread, 0);
+    res.json({ chats: list, totalUnread });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Message history for one conversation (by chatId or phone).
+app.get('/chat-messages', auth, async (req, res) => {
+  if (state !== 'ready') return res.status(409).json({ error: 'not_connected', state });
+  const chatId = req.query.chatId || toChatId(req.query.phone);
+  if (!chatId) return res.status(400).json({ error: 'invalid_target' });
+  try {
+    const chat = await client.getChatById(String(chatId));
+    const msgs = await chat.fetchMessages({ limit: 40 });
+    const out = msgs.map((m) => ({
+      id: (m.id && (m.id.id || m.id._serialized)) || String(m.timestamp),
+      body: m.body || '',
+      fromMe: !!m.fromMe,
+      timestamp: m.timestamp || 0,
+      type: m.type || 'chat',
+      hasMedia: !!m.hasMedia,
+    }));
+    res.json({ chatId: String(chatId), messages: out });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Send a single message (text and/or media) to one recipient.
+app.post('/send-message', auth, async (req, res) => {
+  if (state !== 'ready') return res.status(409).json({ error: 'not_connected', state });
+  const { phone, chatId, message, mediaUrl } = req.body || {};
+  const target = chatId || toChatId(phone);
+  if (!target) return res.status(400).json({ error: 'invalid_target' });
+  if (!message && !mediaUrl) return res.status(400).json({ error: 'empty_message' });
+  try {
+    let media = null;
+    if (mediaUrl) { try { media = await MessageMedia.fromUrl(mediaUrl, { unsafeMime: true }); } catch (e) { console.log('[wa] media load failed:', e.message); } }
+    const sent = media ? await client.sendMessage(target, media, { caption: message || '' }) : await client.sendMessage(target, message || '');
+    res.json({ ok: true, id: sent && sent.id && sent.id._serialized });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Mark a conversation as read.
+app.post('/seen', auth, async (req, res) => {
+  const chatId = (req.body && req.body.chatId) || toChatId(req.body && req.body.phone);
+  if (!chatId) return res.status(400).json({ error: 'invalid_target' });
+  try { const chat = await client.getChatById(String(chatId)); await chat.sendSeen(); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Log incoming messages (useful for debugging / future webhooks).
+client.on('message', (m) => { try { console.log(`[wa] ⬅ ${m.from}: ${(m.body || '').slice(0, 40)}`); } catch { /* */ } });
+
 app.listen(PORT, () => console.log(`[wa] service listening on :${PORT}`));

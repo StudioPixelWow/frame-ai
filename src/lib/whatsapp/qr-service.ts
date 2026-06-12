@@ -33,3 +33,11 @@ export const waLogout = () => call('/logout', { method: 'POST' });
 export const waSendBatch = (body: { recipients: { phone: string; name?: string; message?: string; mediaUrl?: string }[]; message?: string; mediaUrl?: string; intervalSeconds: number }) =>
   call('/send-batch', { method: 'POST', body, timeoutMs: 25000 });
 export const waBatch = (id: string) => call(`/batch/${encodeURIComponent(id)}`);
+
+// ── Two-way inbox ──
+export const waChats = () => call('/chats');
+export const waChatMessages = (q: { chatId?: string; phone?: string }) =>
+  call(`/chat-messages?${q.chatId ? `chatId=${encodeURIComponent(q.chatId)}` : `phone=${encodeURIComponent(q.phone || '')}`}`);
+export const waSendMessage = (body: { phone?: string; chatId?: string; message?: string; mediaUrl?: string }) =>
+  call('/send-message', { method: 'POST', body, timeoutMs: 25000 });
+export const waSeen = (body: { chatId?: string; phone?: string }) => call('/seen', { method: 'POST', body });
