@@ -630,7 +630,21 @@ function TasksPageInner() {
     const returnedCount = byStatus.find((s) => s.id === "returned")?.count || 0;
     if (returnedCount > 0) insights.push(`${returnedCount} משימות הוחזרו לתיקון`);
     if (insights.length === 0) insights.push("המערכת בריאה — אין חריגות כרגע 🎉");
+    // recent activity (derived from latest task changes)
+    const actionFor = (t: any) => {
+      if (t.status === "completed" || t.status === "approved") return { icon: "✅", verb: "הושלמה" };
+      if (t.status === "under_review") return { icon: "🔍", verb: "נשלחה לבדיקה" };
+      if (t.status === "returned") return { icon: "↩️", verb: "הוחזרה לתיקון" };
+      if (t.status === "in_progress") return { icon: "⚙️", verb: "בעבודה" };
+      return { icon: "✨", verb: "נוצרה" };
+    };
+    const recent = [...all, ...((employeeTasks || []) as any[])]
+      .filter((t) => t.updatedAt || t.createdAt)
+      .sort((a, b) => +new Date(b.updatedAt || b.createdAt) - +new Date(a.updatedAt || a.createdAt))
+      .slice(0, 8)
+      .map((t) => { const a = actionFor(t); return { id: t.id, icon: a.icon, title: t.title || "משימה", verb: a.verb, at: t.updatedAt || t.createdAt }; });
     return {
+      recent,
       active: open.length, high: open.filter((t) => t.priority === "urgent" || t.priority === "high").length,
       inProgress: byStatus.find((s) => s.id === "in_progress")?.count || 0, review: reviewCount,
       overdue: overdue.length, completedWeek, mine, total: all.length,
@@ -775,6 +789,22 @@ function TasksPageInner() {
           })}
         </div>
       </div>
+
+      {/* ═══ ZONE 6 — RECENT ACTIVITY ═══ */}
+      {mc.recent.length > 0 && (
+        <div className="premium-card" style={{ padding: "1.1rem 1.2rem", marginBottom: "1.5rem" }}>
+          <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "var(--foreground)", marginBottom: 12 }}>🕒 פעילות אחרונה</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: "0.5rem 1.25rem" }}>
+            {mc.recent.map((a: any) => (
+              <div key={a.id} onClick={() => { const t = (tasks || []).find((x: any) => x.id === a.id) || (employeeTasks || []).find((x: any) => x.id === a.id); if (t) openEdit(t as Task); }} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 9, padding: "0.35rem 0", borderBottom: "1px solid var(--border)" }}>
+                <span style={{ fontSize: "0.95rem" }}>{a.icon}</span>
+                <span style={{ fontSize: "0.68rem", color: "var(--foreground-subtle)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{a.at ? new Date(a.at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }) : ""}</span>
+                <span style={{ fontSize: "0.78rem", color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><b style={{ fontWeight: 600 }}>{a.verb}</b> · {a.title}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <style>{`@media (max-width:980px){.tasks-mc-2col{grid-template-columns:1fr !important}}`}</style>
 
