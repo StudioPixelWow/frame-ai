@@ -26,8 +26,12 @@ const EMPLOYEE_MSGS = [
   "פותחים דשבורד, מביאים אנרגיה, יוצאים לדרך 🔥",
 ];
 
+// Role labels that must never be shown as a person's name.
+const ROLE_WORDS = ["מנהל", "עובד", "מנהל מחלקה", "admin", "employee", "manager", "owner", "team_lead", "super_admin", "לקוח", "client", "user", "משתמש"];
+const isRoleWord = (s: string) => ROLE_WORDS.includes((s || "").trim().toLowerCase()) || ROLE_WORDS.includes((s || "").trim());
+
 export default function WelcomePopup() {
-  const { role, employeeId, displayName } = useAuth();
+  const { role, employeeId, displayName, email } = useAuth();
   const { data: employees } = useEmployees();
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<{ name: string; avatar: string; message: string } | null>(null);
@@ -39,8 +43,23 @@ export default function WelcomePopup() {
     const key = `frameai_welcome_shown_${uid}`;
     if (sessionStorage.getItem(key)) return; // already shown this session
 
-    const emp = (employees || []).find((e: any) => e.id === employeeId);
-    const name = (emp?.name || displayName || localStorage.getItem("frameai_display_name") || "").trim();
+    // Resolve the real person from the employees list — by linked id first,
+    // then by matching the logged-in email (covers accounts where employeeId
+    // isn't linked). Never fall back to a bare role label like "מנהל"/"עובד".
+    const authEmail = (email || localStorage.getItem("frameai_email") || "").trim().toLowerCase();
+    const emp =
+      (employees || []).find((e: any) => e.id === employeeId) ||
+      (authEmail ? (employees || []).find((e: any) => String((e as any).email || "").trim().toLowerCase() === authEmail) : undefined);
+
+    // Prefer the employee's real name; only use displayName if it's an actual
+    // name (not the role word the account may have been seeded with).
+    const candidates = [emp?.name, displayName, localStorage.getItem("frameai_display_name")];
+    let name = (candidates.find((c) => c && c.trim() && !isRoleWord(c)) || "").trim();
+    // Last resort: derive a readable name from the email local-part, so we never
+    // greet someone with a role word.
+    if (!name && authEmail) {
+      name = authEmail.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (m) => m.toUpperCase()).trim();
+    }
     const first = name.split(/\s+/)[0] || name;
     const empRole = (emp as any)?.role || role;
     const isManager = ["admin", "manager", "owner", "super_admin", "team_lead"].includes(String(empRole));
@@ -48,14 +67,14 @@ export default function WelcomePopup() {
     const pool = personal.length ? personal : (isManager ? MANAGER_MSGS : EMPLOYEE_MSGS);
     const message = (pool[Math.floor(Math.random() * pool.length)] || "").replace(/\{name\}/g, first || "");
 
-    // Wait until employees have loaded (so personal messages/avatar are available),
-    // but don't block forever — show after data resolves or a short delay.
-    if (!employees && personal.length === 0 && !name) return;
+    // Wait until employees have loaded so we can resolve the real name (by id or
+    // email) before showing — prevents a flash of a role-word/empty greeting.
+    if (!employees && !name) return;
 
     setData({ name, avatar: (emp as any)?.avatarUrl || "", message });
     const t = setTimeout(() => { setOpen(true); sessionStorage.setItem(key, "1"); }, 600);
     return () => clearTimeout(t);
-  }, [role, employeeId, displayName, employees]);
+  }, [role, employeeId, displayName, email, employees]);
 
   if (!open || !data) return null;
 
