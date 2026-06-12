@@ -8,6 +8,7 @@ import { useEmployees, useEmployeeTasks, useTasks } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import Avatar from "@/components/ui/avatar";
+import { PageHeader } from "@/components/ui/saas-kit";
 import type { Employee } from "@/lib/db/schema";
 
 const ROLE_CONFIG: Record<string, { labelHe: string; color: string; bg: string; iconColor: string }> = {
@@ -23,25 +24,6 @@ const ACCESS_RULES: Record<string, { title: string; description: string }> = {
   employee: { title: "עובד", description: "גישה למשימות שהוקצו ויומן אישי" },
   viewer: { title: "צופה", description: "צפייה בלבד" },
 };
-
-function getInitials(name: string): string {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
-}
-
-function getAvatarBg(name: string): string {
-  const colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8", "#F38181", "#AA96DA"];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = ((hash << 5) - hash) + name.charCodeAt(i);
-    hash = hash & hash;
-  }
-  return colors[Math.abs(hash) % colors.length];
-}
 
 function getDaysUntilDue(dueDate: string | null): number {
   if (!dueDate) return 0;
@@ -302,44 +284,12 @@ export default function EmployeesPage() {
         direction: "rtl",
       }}
     >
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1.5rem" }}>
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.5rem" }}>
-            <h1 style={{ fontSize: "2rem", fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>
-              ניהול צוות
-            </h1>
-            <div
-              style={{
-                background: "var(--accent)",
-                color: "#fff",
-                padding: "0.35rem 0.75rem",
-                borderRadius: "9999px",
-                fontSize: "0.85rem",
-                fontWeight: 600,
-              }}
-            >
-              {filteredEmployees.length}
-            </div>
-          </div>
-          <p style={{ fontSize: "0.95rem", color: "var(--foreground-muted)", margin: 0 }}>
-            {roleSummary.admin} מנהלים, {roleSummary.manager} מנהלי מחלקה, {roleSummary.employee} עובדים
-          </p>
-        </div>
-        <button
-          onClick={handleOpenCreateModal}
-          disabled={loading}
-          className="btn-cta"
-          style={{
-            padding: "0.6rem 1.25rem",
-            fontSize: "0.9rem",
-            cursor: "pointer",
-            whiteSpace: "nowrap",
-          }}
-        >
-          + הוסף עובד
-        </button>
-      </div>
+      {/* Header (aligned to shared design-system PageHeader) */}
+      <PageHeader
+        title="ניהול צוות"
+        subtitle={`${filteredEmployees.length} אנשי צוות · ${roleSummary.admin} מנהלים, ${roleSummary.manager} מנהלי מחלקה, ${roleSummary.employee} עובדים`}
+        primaryAction={{ label: "+ הוסף עובד", onClick: handleOpenCreateModal }}
+      />
 
       {/* Access Rules Banner */}
       <div
@@ -498,23 +448,7 @@ export default function EmployeesPage() {
               >
                 {/* Avatar & Header */}
                 <div style={{ display: "flex", gap: "1rem", alignItems: "flex-start", justifyContent: "space-between" }}>
-                  <div
-                    style={{
-                      width: "56px",
-                      height: "56px",
-                      borderRadius: "50%",
-                      background: getAvatarBg(employee.name),
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "#fff",
-                      fontWeight: 700,
-                      fontSize: "1.1rem",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {getInitials(employee.name)}
-                  </div>
+                  <Avatar src={(employee as any).avatarUrl} name={employee.name} size={56} />
                   <div style={{ flex: 1 }}>
                     <h3 style={{ fontSize: "1.1rem", fontWeight: 700, margin: 0, marginBottom: "0.25rem" }}>
                       {employee.name}
