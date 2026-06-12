@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { PageHeader } from "@/components/ui/saas-kit";
 
 // ── Types ──
 
@@ -162,32 +163,14 @@ export default function KnowledgePage() {
   return (
     <div dir="rtl" style={{ padding: "24px 32px", maxWidth: 1400, margin: "0 auto" }}>
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: "#111827" }}>
-            🧠 בסיס ידע סוכנותי
-          </h1>
-          <p style={{ color: "#6B7280", margin: "4px 0 0", fontSize: 14 }}>
-            ידע מצטבר מכל הלקוחות, הקמפיינים, והמודעות — מתעדכן אוטומטית
-          </p>
-        </div>
-        <button
-          onClick={handleExtract}
-          disabled={extracting}
-          style={{
-            padding: "10px 20px",
-            borderRadius: 8,
-            border: "none",
-            background: extracting ? "#9CA3AF" : "#3B82F6",
-            color: "#fff",
-            fontSize: 14,
-            fontWeight: 600,
-            cursor: extracting ? "not-allowed" : "pointer",
-          }}
-        >
-          {extracting ? "מפיק ידע..." : "🔍 הפק ידע חדש"}
-        </button>
-      </div>
+      <PageHeader
+        title="🧠 בסיס ידע סוכנותי"
+        subtitle="ידע מצטבר מכל הלקוחות, הקמפיינים, והמודעות — מתעדכן אוטומטית"
+        primaryAction={{
+          label: extracting ? "מפיק ידע..." : "🔍 הפק ידע חדש",
+          onClick: () => { if (!extracting) handleExtract(); },
+        }}
+      />
 
       {/* KPI strip */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 16, marginBottom: 24 }}>
