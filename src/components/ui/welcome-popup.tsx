@@ -84,7 +84,10 @@ export default function WelcomePopup() {
     // employee — and crucially their avatar — BEFORE showing. Otherwise the popup
     // fires from displayName alone, locks the session flag, and never picks up the
     // avatar once employees arrive (the bug where everyone saw initials).
-    if (!employees) return;
+    // An empty array is truthy — wait for the list to actually populate, else the
+    // popup fires before the avatar is known, locks the session flag, and the
+    // later update (with the photo) is blocked by the "already shown" guard.
+    if (!employees || employees.length === 0) return;
 
     setData({ name, avatar: avatarUrl, message });
     const t = setTimeout(() => { setOpen(true); sessionStorage.setItem(key, "1"); }, 600);
