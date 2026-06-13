@@ -3,6 +3,8 @@
 import { useState, useMemo, useEffect } from "react";
 import type { Client, Employee } from "@/lib/db/schema";
 import Avatar from "@/components/ui/avatar";
+import ClientLogo from "@/components/ui/client-logo";
+import { Sparkline } from "@/components/ui/saas-kit";
 import {
   computeClientHealth,
   inferClientStatus,
@@ -178,899 +180,358 @@ export default function TabOverview({ client, assignedManager, color, onUpdateCl
 
   const fmt = (n: number) => new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", minimumFractionDigits: 0 }).format(n);
 
+  // ══ Client Command Center derivations (real data only) ══
+  const now2 = new Date();
+  const empById = (id: string) => employees.find((e: any) => e.id === id);
+  const sinceStr = formatDate((client as any).createdAt || null);
+  const servicesCount = (client as any).services?.length || cmd.activeCampaigns || 0;
+
+  // Marketing funnel (this client's content pipeline)
+  const gi = (ganttItems || []).filter((g: any) => g.clientId === client.id);
+  const funnel = [
+    { label: "מתוכנן", n: gi.filter((g: any) => ["new_idea", "draft", "planned"].includes(g.status)).length, color: "#c4b5fd" },
+    { label: "בעיצוב", n: gi.filter((g: any) => ["in_progress", "returned_for_changes"].includes(g.status)).length, color: "#93c5fd" },
+    { label: "ממתין לאישור", n: gi.filter((g: any) => ["submitted_for_approval", "scheduled"].includes(g.status)).length, color: "#fcd34d" },
+    { label: "אושר", n: gi.filter((g: any) => g.status === "approved").length, color: "#86efac" },
+    { label: "פורסם", n: gi.filter((g: any) => g.status === "published").length, color: "#4ade80" },
+  ];
+  const funnelMax = Math.max(1, ...funnel.map((f) => f.n));
+  const publishedCount = funnel[4].n;
+  const monthlyGoal = Number((client as any).monthlyContentGoal || 0);
+
+  // Active projects (this client's active campaigns rendered as project cards)
+  const PCT_BY_CSTATUS: Record<string, number> = { planning: 20, draft: 25, in_progress: 55, active: 60, review: 80, scheduled: 70, completed: 100 };
+  const clientProjects = (campaigns || []).filter((c: any) => c.clientId === client.id && c.status !== "completed" && c.status !== "archived").slice(0, 5).map((c: any) => ({ id: c.id, name: c.name || "קמפיין", status: c.status, pct: typeof c.progress === "number" ? c.progress : (PCT_BY_CSTATUS[c.status] || 40), deadline: c.endDate || c.scheduledDate, mgr: assignedManager }));
+
+  // Team operations (employees with open work for this client)
+  const teamOps = (() => {
+    const counts: Record<string, number> = {};
+    tasks.filter((t: any) => t.clientId === client.id && t.status !== "completed" && t.status !== "approved").forEach((t: any) => (t.assigneeIds || []).forEach((id: string) => { counts[id] = (counts[id] || 0) + 1; }));
+    return employees.map((e: any) => ({ id: e.id, name: e.name, role: (e as any).role, avatarUrl: (e as any).avatarUrl, open: counts[e.id] || 0 })).filter((e) => e.open > 0).sort((a, b) => b.open - a.open).slice(0, 5);
+  })();
+
+  // Task command columns (this client)
+  const ctAll = tasks.filter((t: any) => t.clientId === client.id);
+  const taskCols = [
+    { label: "דחוף", color: "#ef4444", items: ctAll.filter((t: any) => t.status !== "completed" && t.status !== "approved" && t.dueDate && new Date(t.dueDate) < new Date(now2.toDateString())) },
+    { label: "בתהליך", color: "#3b82f6", items: ctAll.filter((t: any) => t.status === "in_progress") },
+    { label: "ממתין ללקוח", color: "#f59e0b", items: ctAll.filter((t: any) => t.status === "under_review" || t.status === "returned" || t.status === "approved") },
+    { label: "הושלם", color: "#22c55e", items: ctAll.filter((t: any) => t.status === "completed") },
+  ];
+
+  // Finance center (this client)
+  const cpAll = [...payments.filter((p: any) => p.clientId === client.id), ...projectPayments.filter((p: any) => p.clientId === client.id)];
+  const paidTotal = cpAll.filter((p: any) => p.status === "paid").reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
+  const overdueTotalC = cpAll.filter((p: any) => p.status === "overdue").reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
+  const upcomingTotal = cpAll.filter((p: any) => p.dueDate && new Date(p.dueDate) > now2 && new Date(p.dueDate) <= new Date(now2.getTime() + 30 * 864e5) && ["pending", "collection_needed"].includes(p.status)).reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
+  const paidPayments = cpAll.filter((p: any) => p.status === "paid" && (p.paidAt || p.dueDate));
+  const latePays = paidPayments.filter((p: any) => p.paidAt && p.dueDate && new Date(p.paidAt) > new Date(p.dueDate)).length;
+  const collectionAI: string[] = [];
+  if (latePays >= 2) collectionAI.push("הלקוח נוטה לשלם באיחור — מומלץ לתזכר מראש");
+  else if (paidPayments.length > 0) collectionAI.push("הלקוח משלם בזמן ✓");
+  const nextDue = cpAll.filter((p: any) => p.dueDate && new Date(p.dueDate) >= now2 && ["pending", "collection_needed"].includes(p.status)).sort((a: any, b: any) => +new Date(a.dueDate) - +new Date(b.dueDate))[0];
+  if (nextDue) { const days = Math.ceil((+new Date(nextDue.dueDate) - +now2) / 864e5); collectionAI.push(`תשלום קרוב בעוד ${days} ימים · ${fmt(Number(nextDue.amount) || 0)}`); }
+  if (overdueTotalC > 0) collectionAI.push(`${fmt(overdueTotalC)} בפיגור — סיכון גבייה`);
+  if (collectionAI.length === 0) collectionAI.push("אין סיכון גבייה כרגע");
+
+  // AI insight cards (executive)
+  const aiCards = [
+    { tone: "#22c55e", icon: "✅", title: "מצב לקוח", body: healthScore.score >= 70 ? "הלקוח במצב טוב — המשך תחזוקה שוטפת." : healthScore.score >= 40 ? "מצב בינוני — שווה לחזק מעורבות." : "מצב חלש — דורש טיפול מיידי.", bg: "rgba(34,197,94,0.06)" },
+    ...((funnel[0].n + funnel[1].n) < 4 ? [{ tone: "#f59e0b", icon: "⚠️", title: "חוסר תוכן", body: "מלאי התוכן נמוך לחודש הקרוב — מומלץ ליצור תוכנית.", bg: "rgba(245,158,11,0.06)" }] : []),
+    ...(cmd.openApprovals > 0 ? [{ tone: "#ef4444", icon: "⏳", title: "צוואר בקבוק באישורים", body: `${cmd.openApprovals} אישורים ממתינים — תזכר את הלקוח.`, bg: "rgba(239,68,68,0.06)" }] : []),
+    ...(cmd.activeCampaigns === 0 && cmd.monthlyValue > 0 ? [{ tone: "#8b5cf6", icon: "📈", title: "הזדמנות מכירה", body: "אין קמפיין פעיל — הצעה להרחבת שירות.", bg: "rgba(139,92,246,0.06)" }] : []),
+    { tone: "#00B5FE", icon: "🧭", title: "הצעדים הבאים", body: (cmd.risks[0] || cmd.opps[0] || "הכל תקין — המשך כרגיל."), bg: "rgba(0,181,254,0.06)" },
+  ].slice(0, 5);
+
+  const ccCard: React.CSSProperties = { background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 16, padding: "1.25rem" };
+  const ccTitle: React.CSSProperties = { fontSize: "0.92rem", fontWeight: 800, color: "var(--foreground)", marginBottom: 14 };
+  const pColorCC = (p: number) => (p < 40 ? "#ef4444" : p < 70 ? "#f59e0b" : "#22c55e");
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", marginBottom: "2rem" }}>
-      {/* ═══ COMMAND-CENTER KPI STRIP ═══ */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: "0.85rem" }}>
-        {[
-          { icon: "❤️", label: "בריאות לקוח", val: `${healthScore.score}/100`, color: healthScore.color },
-          { icon: "💰", label: "ערך חודשי", val: cmd.monthlyValue > 0 ? fmt(cmd.monthlyValue) : "—", color: "#10b981" },
-          { icon: "✅", label: "משימות פתוחות", val: cmd.openTasks, color: "#3b82f6", onClick: () => onNavigateTab?.("tasks") },
-          { icon: "🔍", label: "בבדיקה", val: cmd.reviewTasks, color: "#00B5FE", onClick: () => onNavigateTab?.("tasks") },
-          { icon: "🧾", label: "גבייה פתוחה", val: cmd.openCollections > 0 ? fmt(cmd.openCollections) : "—", color: "#f59e0b", onClick: () => onNavigateTab?.("accounting") },
-          { icon: "📅", label: "פגישות החודש", val: cmd.meetingsThisMonth, color: "#06b6d4", onClick: () => onNavigateTab?.("activity") },
-          { icon: "✋", label: "אישורים פתוחים", val: cmd.openApprovals, color: "#ef4444", onClick: () => onNavigateTab?.("activity") },
-          { icon: "💬", label: "וואטסאפ", val: clientChats.reduce((s: number, c: any) => s + (c.unread || 0), 0), color: "#25D366", onClick: () => onNavigateTab?.("portal") },
-        ].map((k, i) => (
-          <div key={i} onClick={k.onClick} style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "0.9rem 1rem", borderTop: `3px solid ${k.color}`, cursor: k.onClick ? "pointer" : "default" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: "1.1rem" }}>{k.icon}</span>
-              <span style={{ fontSize: "1.35rem", fontWeight: 900, color: k.color, lineHeight: 1 }}>{k.val}</span>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", marginBottom: "2.5rem", direction: "rtl" }}>
+
+      {/* ═══════════ 1 · CLIENT HERO ═══════════ */}
+      <div style={{ ...ccCard, padding: "1.5rem 1.7rem", display: "flex", gap: "1.4rem", alignItems: "center", flexWrap: "wrap" }}>
+        <ClientLogo src={(client as any).logoUrl} name={client.name} size={84} />
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <h1 style={{ fontSize: "1.7rem", fontWeight: 900, margin: 0, color: "var(--foreground)" }}>{client.name}</h1>
+            <span style={{ color: "#3b82f6", fontSize: "1rem" }}>✔️</span>
+            <span style={{ fontSize: "0.7rem", fontWeight: 800, color: statusInfo.color, background: statusInfo.color + "1a", borderRadius: 999, padding: "2px 10px" }}>{statusInfo.label}</span>
+          </div>
+          <div style={{ fontSize: "0.85rem", color: "var(--foreground-muted)", marginTop: 3 }}>{(client as any).businessField || CLIENT_TYPE_LABELS[(client as any).clientType]?.label || ""}</div>
+          <div style={{ display: "flex", gap: 22, flexWrap: "wrap", marginTop: 16 }}>
+            {[
+              { l: "מנהל לקוח", v: assignedManager?.name || "—", avatar: assignedManager },
+              { l: "לקוח מאז", v: sinceStr || "—" },
+              { l: "שירותים פעילים", v: `${servicesCount} שירותים` },
+              { l: "חיוב חודשי", v: cmd.monthlyValue > 0 ? fmt(cmd.monthlyValue) : "—" },
+            ].map((c, i) => (
+              <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontSize: "0.66rem", color: "var(--foreground-subtle)" }}>{c.l}</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.88rem", fontWeight: 800, color: "var(--foreground)" }}>
+                  {c.avatar && <Avatar src={(c.avatar as any).avatarUrl} name={(c.avatar as any).name} size={22} ring={false} />}{c.v}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Health gauge */}
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ position: "relative", width: 96, height: 96, borderRadius: "50%", background: `conic-gradient(${healthScore.color} ${healthScore.score * 3.6}deg, var(--border) 0deg)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: 74, height: 74, borderRadius: "50%", background: "var(--surface-raised)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+              <span style={{ fontSize: "1.5rem", fontWeight: 900, color: healthScore.color, lineHeight: 1 }}>{healthScore.score}</span>
+              <span style={{ fontSize: "0.6rem", color: "var(--foreground-subtle)" }}>/100</span>
             </div>
-            <div style={{ fontSize: "0.74rem", color: "var(--foreground-muted)", marginTop: 4 }}>{k.label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* ═══ AI ACCOUNT MANAGER ═══ */}
-      <div style={{ borderRadius: 16, padding: "1.2rem 1.4rem", background: "linear-gradient(135deg,#eef2ff,#ecfeff)", border: "1px solid #c7d2fe" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <span style={{ fontSize: "1.05rem", fontWeight: 900, background: "linear-gradient(90deg,#6366f1,#06b6d4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>🤖 מנהל לקוח AI</span>
-          <span style={{ fontSize: "0.7rem", fontWeight: 700, color: statusInfo.color, background: `${statusInfo.color}15`, borderRadius: 999, padding: "2px 9px" }}>{statusInfo.label}</span>
-        </div>
-        <div style={{ fontSize: "0.86rem", color: "#334155", lineHeight: 1.6, marginBottom: 12 }}>
-          {`${client.name} — ציון בריאות ${healthScore.score}/100. `}
-          {cmd.risks.length ? `נדרש טיפול: ${cmd.risks.slice(0, 2).join(", ")}. ` : "אין סיכונים פתוחים. "}
-          {cmd.opps.length ? `הזדמנות: ${cmd.opps[0]}.` : ""}
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }} className="ovw-2col">
-          <div>
-            <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "#ef4444", marginBottom: 6 }}>⚠️ סיכונים</div>
-            {cmd.risks.length === 0 ? <div style={{ fontSize: "0.78rem", color: "var(--foreground-subtle)" }}>אין סיכונים מזוהים 🎉</div> :
-              cmd.risks.map((r, i) => <div key={i} style={{ fontSize: "0.8rem", color: "#334155", marginBottom: 3 }}>• {r}</div>)}
           </div>
           <div>
-            <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "#16a34a", marginBottom: 6 }}>💡 הזדמנויות</div>
-            {cmd.opps.length === 0 ? <div style={{ fontSize: "0.78rem", color: "var(--foreground-subtle)" }}>—</div> :
-              cmd.opps.map((o, i) => <div key={i} style={{ fontSize: "0.8rem", color: "#334155", marginBottom: 3 }}>• {o}</div>)}
+            <div style={{ fontSize: "0.66rem", color: "var(--foreground-subtle)" }}>ציון בריאות</div>
+            <div style={{ fontSize: "0.78rem", fontWeight: 700, color: healthScore.color }}>מצב: {healthScore.score >= 70 ? "טוב" : healthScore.score >= 40 ? "בינוני" : "דורש טיפול"}</div>
           </div>
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-          <button onClick={() => onNavigateTab?.("tasks")} style={{ background: "#fff", border: "1px solid #c7d2fe", color: "#4f46e5", borderRadius: 999, padding: "0.4rem 0.85rem", fontSize: "0.76rem", fontWeight: 700, cursor: "pointer" }}>פתח משימות</button>
-          <button onClick={() => onNavigateTab?.("accounting")} style={{ background: "#fff", border: "1px solid #c7d2fe", color: "#4f46e5", borderRadius: 999, padding: "0.4rem 0.85rem", fontSize: "0.76rem", fontWeight: 700, cursor: "pointer" }}>גבייה</button>
-          <button onClick={() => onNavigateTab?.("content")} style={{ background: "#fff", border: "1px solid #c7d2fe", color: "#4f46e5", borderRadius: 999, padding: "0.4rem 0.85rem", fontSize: "0.76rem", fontWeight: 700, cursor: "pointer" }}>לוח תוכן</button>
         </div>
       </div>
 
-      {/* ═══ WHATSAPP CENTER + CLIENT TIMELINE ═══ */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }} className="ovw-2col">
-        <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1.25rem" }}>
+      {/* ═══════════ 2 · WHATSAPP CENTER + AI CLIENT MANAGER ═══════════ */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.1rem" }} className="cc-2col">
+        {/* WhatsApp Center */}
+        <div style={ccCard}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>💬 מרכז וואטסאפ</span>
-            <a href="/whatsapp-inbox" style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--accent)", textDecoration: "none" }}>פתח תיבה ←</a>
+            <span style={ccTitle}>💬 WhatsApp Center</span>
+            <span onClick={() => onNavigateTab?.("whatsapp")} style={{ fontSize: "0.74rem", fontWeight: 700, color: "#25D366", cursor: "pointer" }}>פתח WhatsApp ←</span>
           </div>
           {waState === "off" ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>הוואטסאפ לא מחובר.</div>
-            : !(client as any).phone ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>לא הוגדר מספר טלפון ללקוח.</div>
-            : clientChats.length === 0 ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>אין שיחות עם לקוח זה עדיין.</div>
-            : clientChats.slice(0, 5).map((c: any, i: number) => (
-              <a key={i} href="/whatsapp-inbox" style={{ display: "flex", gap: 10, alignItems: "center", padding: "0.5rem 0", textDecoration: "none", borderBottom: "1px solid var(--border)" }}>
+            : clientChats.length === 0 ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>אין שיחות עם הלקוח הזה.</div>
+            : clientChats.slice(0, 4).map((c: any, i: number) => (
+              <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", padding: "0.55rem 0", borderBottom: "1px solid var(--border)" }}>
+                <Avatar name={c.name || c.phone} size={34} ring={false} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                    <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--foreground)" }}>{c.name || c.phone}</span>
-                    <span style={{ fontSize: "0.66rem", color: "var(--foreground-subtle)" }}>{waTimeSince(c.timestamp)}</span>
-                  </div>
+                  <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--foreground)" }}>{c.name || c.phone}</div>
                   <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.lastMessage || ""}</div>
                 </div>
-                {c.unread > 0 && <span style={{ background: "#25D366", color: "#fff", fontSize: "0.64rem", fontWeight: 800, borderRadius: 999, padding: "1px 7px" }}>{c.unread}</span>}
-              </a>
-            ))}
-        </div>
-        <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1.25rem" }}>
-          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)", marginBottom: 12 }}>🕒 ציר זמן לקוח</div>
-          {cmd.timeline.length === 0 ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>אין פעילות מתועדת עדיין.</div> :
-            cmd.timeline.map((e: any, i: number) => (
-              <div key={i} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "0.4rem 0", borderBottom: "1px solid var(--border)" }}>
-                <span style={{ fontSize: "0.95rem" }}>{e.icon}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: "0.8rem", color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.text}</div>
-                  <div style={{ fontSize: "0.66rem", color: "var(--foreground-subtle)" }}>{new Date(e.at).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "2-digit" })}</div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+                  <span style={{ fontSize: "0.64rem", color: "var(--foreground-subtle)" }}>{waTimeSince(c.timestamp)}</span>
+                  {(c.unread || 0) > 0 && <span style={{ background: "#25D366", color: "#fff", fontSize: "0.62rem", fontWeight: 800, borderRadius: 999, padding: "1px 7px" }}>{c.unread}</span>}
                 </div>
               </div>
             ))}
-        </div>
-      </div>
-
-      {/* Health Score + Snapshot Row */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
-        {/* Health Score Card */}
-        <div
-          className="agd-card"
-          style={{
-            background: "var(--surface-raised)",
-            border: `2px solid ${healthScore.color}30`,
-            borderRadius: "0.75rem",
-            padding: "1.5rem",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-            <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground-muted)", margin: 0 }}>
-              בריאות לקוח
-            </h3>
-            <div style={{
-              padding: "0.25rem 0.75rem",
-              borderRadius: "1rem",
-              fontSize: "0.75rem",
-              fontWeight: 600,
-              background: `${statusInfo.color}15`,
-              color: statusInfo.color,
-              border: `1px solid ${statusInfo.color}30`,
-            }}>
-              {statusInfo.label}
-            </div>
+          <div style={{ display: "flex", gap: 16, justifyContent: "space-around", marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+            {[{ i: "📥", l: "צפה בכל השיחות", t: "whatsapp" }, { i: "📋", l: "צור משימה", t: "tasks" }, { i: "✅", l: "תגובה מהירה", t: "whatsapp" }, { i: "✨", l: "תגובה עם AI", t: "whatsapp" }].map((a, i) => (
+              <button key={i} onClick={() => onNavigateTab?.(a.t)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, color: "var(--foreground-muted)", fontSize: "0.66rem" }}>
+                <span style={{ fontSize: "1.1rem" }}>{a.i}</span>{a.l}
+              </button>
+            ))}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
-            <div style={{
-              width: 64,
-              height: 64,
-              borderRadius: "50%",
-              background: `conic-gradient(${healthScore.color} ${healthScore.score * 3.6}deg, var(--border) 0deg)`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              position: "relative",
-            }}>
-              <div style={{
-                width: 52,
-                height: 52,
-                borderRadius: "50%",
-                background: "var(--surface-raised)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontWeight: 700,
-                fontSize: "1.1rem",
-                color: healthScore.color,
-              }}>
-                {healthScore.score}
+        </div>
+
+        {/* Pixel AI Client Manager (dark premium) */}
+        <div style={{ position: "relative", overflow: "hidden", borderRadius: 16, padding: "1.4rem", background: "linear-gradient(140deg,#1e1b4b,#312e81 55%,#0c4a6e)", border: "1px solid #4338ca", color: "#fff", direction: "rtl" }}>
+          <div style={{ position: "absolute", insetInlineEnd: -20, top: 10, width: 150, height: 150, borderRadius: "50%", background: "radial-gradient(circle, rgba(129,140,248,0.45), transparent 70%)" }} />
+          <div style={{ position: "relative", zIndex: 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: "1.05rem" }}>✨</span>
+                <span style={{ fontSize: "1.02rem", fontWeight: 900 }}>Pixel AI Client Manager</span>
               </div>
+              <span style={{ fontSize: "0.66rem", color: "#a5b4fc" }}>AI המלצות</span>
             </div>
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-              {healthScore.factors.slice(0, 3).map((factor, i) => (
-                <div key={i} style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                  <span style={{ color: healthScore.color }}>•</span> {factor}
+            <div style={{ fontSize: "0.9rem", fontWeight: 800, margin: "12px 0 8px", color: healthScore.score >= 70 ? "#86efac" : "#fcd34d" }}>
+              {healthScore.score >= 70 ? "הלקוח במצב טוב" : healthScore.score >= 40 ? "הלקוח במצב בינוני" : "הלקוח דורש טיפול"}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+              {[
+                cmd.openApprovals > 0 ? `${cmd.openApprovals} אישורים ממתינים לאישור` : "אין אישורים תקועים ✓",
+                `${cmd.activeCampaigns} שירותים/קמפיינים פעילים`,
+                (funnel[0].n + funnel[1].n) < 4 ? "חסר תוכן מתוכנן לחודש הבא" : "מלאי תוכן תקין לחודש הקרוב",
+                ...collectionAI.slice(0, 2),
+              ].slice(0, 5).map((t, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: "0.78rem", color: "#e0e7ff" }}>
+                  <span style={{ color: "#67e8f9" }}>✓</span>{t}
                 </div>
+              ))}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
+              {[{ i: "🗓️", l: "צור תוכנית תוכן", t: "content" }, { i: "📷", l: "קבע יום צילום", t: "calendar" }, { i: "🔔", l: "שלח תזכורת", t: "accounting" }, { i: "📝", l: "פתח משימה", t: "tasks" }].map((a, i) => (
+                <button key={i} onClick={() => onNavigateTab?.(a.t)} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10, padding: "0.6rem 0.4rem", cursor: "pointer", color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", gap: 5, fontSize: "0.64rem", fontWeight: 600 }}>
+                  <span style={{ fontSize: "1.05rem" }}>{a.i}</span>{a.l}
+                </button>
               ))}
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Client Snapshot Card */}
-        <div
-          className="agd-card"
-          style={{
-            background: "var(--surface-raised)",
-            border: "1px solid var(--border)",
-            borderRadius: "0.75rem",
-            padding: "1.5rem",
-          }}
-        >
-          <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground-muted)", margin: "0 0 1rem 0" }}>
-            תמונת מצב
-          </h3>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-            {[
-              { label: "קמפיינים פעילים", value: snapshot.activeCampaigns, color: "#00B5FE", tab: "campaigns" },
-              { label: "לידים פתוחים", value: snapshot.openLeads, color: "#a78bfa", tab: "leads" },
-              { label: "משימות בטיפול", value: snapshot.pendingTasks, color: "#f59e0b", tab: "tasks" },
-              { label: "תוכן קרוב", value: snapshot.upcomingContent, color: "#22c55e", tab: "content" },
-            ].map((item) => (
-              <button
-                key={item.label}
-                onClick={() => onNavigateTab?.(item.tab)}
-                style={{
-                  background: `${item.color}08`,
-                  border: `1px solid ${item.color}20`,
-                  borderRadius: "0.5rem",
-                  padding: "0.75rem",
-                  cursor: "pointer",
-                  textAlign: "right",
-                  transition: "all 150ms",
-                }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = `${item.color}50`; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = `${item.color}20`; }}
-              >
-                <div style={{ fontSize: "1.25rem", fontWeight: 700, color: item.color }}>{item.value}</div>
-                <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>{item.label}</div>
-              </button>
+      {/* ═══════════ 3 · CLIENT TIMELINE ═══════════ */}
+      <div style={ccCard}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <span style={ccTitle}>🕒 ציר זמן</span>
+          <span style={{ fontSize: "0.7rem", color: "var(--foreground-subtle)" }}>הימים האחרונים</span>
+        </div>
+        {cmd.timeline.length === 0 ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>אין פעילות מתועדת עדיין.</div> : (
+          <div style={{ display: "flex", gap: "1rem", overflowX: "auto", paddingBottom: 6 }}>
+            {cmd.timeline.map((e: any, i: number) => (
+              <div key={i} style={{ minWidth: 150, textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--surface)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.1rem" }}>{e.icon}</span>
+                <div style={{ fontSize: "0.74rem", fontWeight: 600, color: "var(--foreground)", lineHeight: 1.35 }}>{e.text}</div>
+                <div style={{ fontSize: "0.66rem", color: "var(--foreground-subtle)" }}>{new Date(e.at).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" })}</div>
+              </div>
             ))}
           </div>
-          {snapshot.totalPosts > 0 && (
-            <div style={{ marginTop: "0.75rem", fontSize: "0.8rem", color: "var(--foreground-muted)", textAlign: "center", borderTop: "1px solid var(--border)", paddingTop: "0.5rem" }}>
-              סה״כ {snapshot.totalPosts} פוסטים פורסמו
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Main Overview Grid */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "1.5rem",
-        }}
-      >
-      {/* Left Column */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-        {/* Identity Card */}
-        <div
-          className="agd-card"
-          style={{
-            background: "var(--surface-raised)",
-            border: "1px solid var(--border)",
-            borderRadius: "0.75rem",
-            padding: "1.5rem",
-          }}
-        >
-          <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground-muted)", margin: "0 0 1rem 0" }}>
-            קובץ זהות
-          </h3>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.5rem" }}>
-            <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: client.logoUrl ? "0.5rem" : "50%",
-                background: client.logoUrl ? "transparent" : `${color}20`,
-                border: client.logoUrl ? "none" : `2px solid ${color}40`,
-                color,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontWeight: 700,
-                fontSize: "0.9rem",
-                flexShrink: 0,
-                backgroundImage: client.logoUrl ? `url(${client.logoUrl})` : undefined,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-              }}
-            >
-              {!client.logoUrl && initials(client.name)}
-            </div>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: "0.95rem", color: "var(--foreground)" }}>
-                {client.name}
-              </div>
-              {client.company && (
-                <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)" }}>
-                  {client.company}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
-            {client.clientType && (
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
-                <span style={{ color: "var(--foreground-muted)" }}>סוג:</span>
-                <span style={{ fontWeight: 500, color: "var(--foreground)" }}>
-                  {CLIENT_TYPE_LABELS[client.clientType]?.label}
-                </span>
-              </div>
-            )}
-            {client.businessField && (
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
-                <span style={{ color: "var(--foreground-muted)" }}>תחום:</span>
-                <span style={{ fontWeight: 500, color: "var(--foreground)" }}>
-                  {client.businessField}
-                </span>
-              </div>
-            )}
-            {client.status && (
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
-                <span style={{ color: "var(--foreground-muted)" }}>סטטוס:</span>
-                <span style={{ fontWeight: 500, color: STATUS_LABELS[client.status]?.color }}>
-                  {STATUS_LABELS[client.status]?.label}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Business Summary */}
-        {(client.marketingGoals || client.keyMarketingMessages) && (
-          <div
-            className="agd-card"
-            style={{
-              background: "var(--surface-raised)",
-              border: "1px solid var(--border)",
-              borderRadius: "0.75rem",
-              padding: "1.5rem",
-            }}
-          >
-            <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground-muted)", margin: "0 0 1rem 0" }}>
-              סיכום עסקי
-            </h3>
-
-            {client.marketingGoals && (
-              <div style={{ marginBottom: "1rem" }}>
-                <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.5rem" }}>
-                  יעדי מרקטינג
-                </div>
-                <div style={{ fontSize: "0.85rem", color: "var(--foreground)", lineHeight: "1.5" }}>
-                  {client.marketingGoals}
-                </div>
-              </div>
-            )}
-
-            {client.keyMarketingMessages && (
-              <div style={{ borderTop: client.marketingGoals ? "1px solid var(--border)" : "none", paddingTop: client.marketingGoals ? "1rem" : 0 }}>
-                <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.5rem" }}>
-                  מסרים מרקטינגיים עיקריים
-                </div>
-                <div style={{ fontSize: "0.85rem", color: "var(--foreground)", lineHeight: "1.5" }}>
-                  {client.keyMarketingMessages}
-                </div>
-              </div>
-            )}
-          </div>
         )}
+      </div>
 
-        {/* Assigned Responsible Employee */}
-        <div
-          className="agd-card"
-          style={{
-            background: "var(--surface-raised)",
-            border: "1px solid var(--border)",
-            borderRadius: "0.75rem",
-            padding: "1.5rem",
-            position: "relative",
-          }}
-        >
-          <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground-muted)", margin: "0 0 1rem 0" }}>
-            עובד אחראי
-          </h3>
-
-          {assignedManager ? (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <Avatar src={(assignedManager as any).avatarUrl} name={assignedManager.name} size={40} ring={false} />
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: "0.9rem", color: "var(--foreground)" }}>
-                    {assignedManager.name}
+      {/* ═══════════ 4 · MARKETING PIPELINE  +  5 · ACTIVE PROJECTS ═══════════ */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.3fr", gap: "1.1rem" }} className="cc-2col">
+        <div style={ccCard}>
+          <span style={ccTitle}>🪣 משפך השיווק</span>
+          <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 7 }}>
+              {funnel.map((s, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ flex: 1, height: 26, borderRadius: 6, background: s.color + "55", position: "relative", overflow: "hidden", width: `${40 + (s.n / funnelMax) * 60}%`, minWidth: 60 }}>
+                    <span style={{ position: "absolute", insetInlineStart: 8, top: "50%", transform: "translateY(-50%)", fontSize: "0.7rem", color: "#334155" }}>{s.label}</span>
                   </div>
-                  {assignedManager.email && (
-                    <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
-                      {assignedManager.email}
+                  <span style={{ fontSize: "0.85rem", fontWeight: 900, color: "var(--foreground)", minWidth: 22, textAlign: "left" }}>{s.n}</span>
+                </div>
+              ))}
+            </div>
+            {monthlyGoal > 0 && (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ position: "relative", width: 72, height: 72, borderRadius: "50%", background: `conic-gradient(var(--accent) ${Math.min(100, (publishedCount / monthlyGoal) * 100) * 3.6}deg, var(--border) 0deg)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ width: 56, height: 56, borderRadius: "50%", background: "var(--surface-raised)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.85rem", fontWeight: 900, color: "var(--accent)" }}>{Math.round((publishedCount / monthlyGoal) * 100)}%</div>
+                </div>
+                <div style={{ fontSize: "0.64rem", color: "var(--foreground-subtle)", marginTop: 4 }}>יעד חודשי</div>
+                <div style={{ fontSize: "0.72rem", fontWeight: 800 }}>{monthlyGoal} / {publishedCount}</div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={ccCard}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <span style={ccTitle}>📁 פרויקטים פעילים</span>
+            <span onClick={() => onNavigateTab?.("campaigns")} style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--accent)", cursor: "pointer" }}>צפה בכל הפרויקטים ←</span>
+          </div>
+          {clientProjects.length === 0 ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>אין פרויקטים פעילים.</div> :
+            clientProjects.map((p: any) => (
+              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "0.55rem 0", borderBottom: "1px solid var(--border)" }}>
+                <span style={{ fontSize: "0.82rem", fontWeight: 800, color: pColorCC(p.pct), minWidth: 38 }}>{p.pct}%</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--foreground)" }}>{p.name}</div>
+                  <div style={{ height: 6, background: "var(--surface)", borderRadius: 999, overflow: "hidden", marginTop: 4 }}><div style={{ width: `${p.pct}%`, height: "100%", background: pColorCC(p.pct), borderRadius: 999 }} /></div>
+                </div>
+                {p.mgr && <Avatar src={(p.mgr as any).avatarUrl} name={(p.mgr as any).name} size={26} ring={false} />}
+                <span style={{ fontSize: "0.66rem", color: p.pct < 40 ? "#ef4444" : "var(--foreground-muted)", minWidth: 64, textAlign: "left" }}>{p.deadline ? new Date(p.deadline).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "2-digit" }) : ""}{p.pct < 40 ? " · בסיכון" : ""}</span>
+              </div>
+            ))}
+        </div>
+      </div>
+
+      {/* ═══════════ 6 · TASK COMMAND CENTER ═══════════ */}
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={ccTitle}>✅ משימות</span>
+          <span onClick={() => onNavigateTab?.("tasks")} style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--accent)", cursor: "pointer" }}>צפה בכל המשימות ←</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "0.9rem" }} className="cc-4col">
+          {taskCols.map((col, ci) => (
+            <div key={ci} style={{ ...ccCard, padding: "1rem", borderTop: `3px solid ${col.color}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <span style={{ fontSize: "0.8rem", fontWeight: 800, color: "var(--foreground)" }}>{col.label}</span>
+                <span style={{ fontSize: "0.66rem", fontWeight: 800, color: col.color, background: col.color + "1a", borderRadius: 999, padding: "2px 8px" }}>{col.items.length}</span>
+              </div>
+              {col.items.length === 0 ? <div style={{ fontSize: "0.72rem", color: "var(--foreground-subtle)" }}>—</div> :
+                col.items.slice(0, 4).map((t: any, i: number) => {
+                  const emp = empById((t.assigneeIds || [])[0]);
+                  return (
+                    <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", padding: "0.4rem 0", borderBottom: "1px solid var(--border)" }}>
+                      {emp ? <Avatar src={(emp as any).avatarUrl} name={emp.name} size={22} ring={false} /> : <span style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--surface)", display: "inline-block" }} />}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "0.74rem", fontWeight: 600, color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</div>
+                        {t.dueDate && <div style={{ fontSize: "0.62rem", color: "var(--foreground-subtle)" }}>{new Date(t.dueDate).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" })}</div>}
+                      </div>
                     </div>
-                  )}
-                </div>
-              </div>
-              {onUpdateClient && (
-                <button
-                  onClick={() => setIsAssigneeDropdownOpen(!isAssigneeDropdownOpen)}
-                  style={{
-                    padding: "0.4rem 0.75rem",
-                    background: "var(--surface)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "0.375rem",
-                    fontSize: "0.75rem",
-                    fontWeight: 500,
-                    color: "var(--foreground)",
-                    cursor: "pointer",
-                    transition: "all 150ms",
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = "var(--accent)";
-                    (e.currentTarget as HTMLElement).style.color = "white";
-                    (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = "var(--surface)";
-                    (e.currentTarget as HTMLElement).style.color = "var(--foreground)";
-                    (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
-                  }}
-                >
-                  שנה עובד
-                </button>
-              )}
+                  );
+                })}
+              <button onClick={() => onNavigateTab?.("tasks")} style={{ marginTop: 8, width: "100%", background: "none", border: "1px dashed var(--border)", borderRadius: 8, padding: "0.4rem", fontSize: "0.7rem", color: "var(--foreground-muted)", cursor: "pointer" }}>+ משימה חדשה</button>
             </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              <div style={{
-                padding: "0.75rem",
-                background: "#f59e0b15",
-                border: "1px solid #f59e0b30",
-                borderRadius: "0.5rem",
-                color: "#f59e0b",
-                fontSize: "0.8rem",
-                fontWeight: 500,
-              }}>
-                ⚠️ לא הוקצה עובד אחראי
-              </div>
-              {onUpdateClient && (
-                <button
-                  onClick={() => setIsAssigneeDropdownOpen(!isAssigneeDropdownOpen)}
-                  className="mod-btn-primary"
-                  style={{
-                    fontSize: "0.8rem",
-                    padding: "0.6rem 0.75rem",
-                    width: "100%",
-                  }}
-                >
-                  הקצה עובד
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Assignee Dropdown */}
-          {isAssigneeDropdownOpen && onUpdateClient && (
-            <div
-              style={{
-                position: "absolute",
-                top: "100%",
-                right: 0,
-                background: "var(--surface-raised)",
-                border: "1px solid var(--border)",
-                borderRadius: "0.5rem",
-                marginTop: "0.5rem",
-                minWidth: "200px",
-                zIndex: 10,
-                boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-              }}
-            >
-              {employees.length > 0 ? (
-                employees.filter(e => TEAM_MEMBERS.includes(e.name)).map((emp) => (
-                  <button
-                    key={emp.id}
-                    onClick={() => handleAssignEmployee(emp.id)}
-                    disabled={isUpdating}
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      padding: "0.75rem 1rem",
-                      background: "transparent",
-                      border: "none",
-                      borderBottom: "1px solid var(--border)",
-                      textAlign: "right",
-                      cursor: isUpdating ? "not-allowed" : "pointer",
-                      color: "var(--foreground)",
-                      fontSize: "0.85rem",
-                      transition: "background 150ms",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isUpdating) {
-                        (e.currentTarget as HTMLElement).style.background = "var(--accent-muted)";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.background = "transparent";
-                    }}
-                  >
-                    {emp.name}
-                  </button>
-                ))
-              ) : (
-                <div style={{ padding: "0.75rem 1rem", color: "var(--foreground-muted)", fontSize: "0.8rem" }}>
-                  אין עובדים זמינים
-                </div>
-              )}
-            </div>
-          )}
+          ))}
         </div>
+      </div>
 
-        {/* External Links Section */}
-        <div
-          className="agd-card"
-          style={{
-            background: "var(--surface-raised)",
-            border: "1px solid var(--border)",
-            borderRadius: "0.75rem",
-            padding: "1.5rem",
-          }}
-        >
-          <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground-muted)", margin: "0 0 1rem 0" }}>
-            קישורים חיצוניים
-          </h3>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            {client.websiteUrl && (
-              <a
-                href={client.websiteUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.75rem",
-                  padding: "0.75rem 1rem",
-                  background: "var(--surface)",
-                  border: "1px solid #00B5FE30",
-                  borderRadius: "0.5rem",
-                  textDecoration: "none",
-                  color: "var(--foreground)",
-                  transition: "all 150ms",
-                  cursor: "pointer",
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = "#00B5FE10";
-                  (e.currentTarget as HTMLElement).style.borderColor = "#00B5FE50";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = "var(--surface)";
-                  (e.currentTarget as HTMLElement).style.borderColor = "#00B5FE30";
-                }}
-              >
-                <span style={{ fontSize: "1.25rem" }}>🌐</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: "0.85rem", fontWeight: 500, color: "var(--foreground)" }}>אתר</div>
-                  <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", wordBreak: "break-all" }}>
-                    {client.websiteUrl}
-                  </div>
-                </div>
-                <span style={{ fontSize: "1rem", opacity: 0.6 }}>↗</span>
-              </a>
-            )}
-
-            {client.facebookPageUrl && (
-              <a
-                href={client.facebookPageUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.75rem",
-                  padding: "0.75rem 1rem",
-                  background: "var(--surface)",
-                  border: "1px solid #1877F230",
-                  borderRadius: "0.5rem",
-                  textDecoration: "none",
-                  color: "var(--foreground)",
-                  transition: "all 150ms",
-                  cursor: "pointer",
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = "#1877F210";
-                  (e.currentTarget as HTMLElement).style.borderColor = "#1877F250";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = "var(--surface)";
-                  (e.currentTarget as HTMLElement).style.borderColor = "#1877F230";
-                }}
-              >
-                <span style={{ fontSize: "1.25rem" }}>📘</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: "0.85rem", fontWeight: 500, color: "var(--foreground)" }}>Facebook</div>
-                  <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", wordBreak: "break-all" }}>
-                    {client.facebookPageUrl}
-                  </div>
-                </div>
-                <span style={{ fontSize: "1rem", opacity: 0.6 }}>↗</span>
-              </a>
-            )}
-
-            {client.instagramProfileUrl && (
-              <a
-                href={client.instagramProfileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.75rem",
-                  padding: "0.75rem 1rem",
-                  background: "var(--surface)",
-                  border: "1px solid #E4405F30",
-                  borderRadius: "0.5rem",
-                  textDecoration: "none",
-                  color: "var(--foreground)",
-                  transition: "all 150ms",
-                  cursor: "pointer",
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = "#E4405F10";
-                  (e.currentTarget as HTMLElement).style.borderColor = "#E4405F50";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = "var(--surface)";
-                  (e.currentTarget as HTMLElement).style.borderColor = "#E4405F30";
-                }}
-              >
-                <span style={{ fontSize: "1.25rem" }}>📷</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: "0.85rem", fontWeight: 500, color: "var(--foreground)" }}>Instagram</div>
-                  <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", wordBreak: "break-all" }}>
-                    {client.instagramProfileUrl}
-                  </div>
-                </div>
-                <span style={{ fontSize: "1rem", opacity: 0.6 }}>↗</span>
-              </a>
-            )}
-
-            {client.tiktokProfileUrl && (
-              <a
-                href={client.tiktokProfileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.75rem",
-                  padding: "0.75rem 1rem",
-                  background: "var(--surface)",
-                  border: "1px solid #69C9D030",
-                  borderRadius: "0.5rem",
-                  textDecoration: "none",
-                  color: "var(--foreground)",
-                  transition: "all 150ms",
-                  cursor: "pointer",
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = "#69C9D010";
-                  (e.currentTarget as HTMLElement).style.borderColor = "#69C9D050";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = "var(--surface)";
-                  (e.currentTarget as HTMLElement).style.borderColor = "#69C9D030";
-                }}
-              >
-                <span style={{ fontSize: "1.25rem" }}>🎵</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: "0.85rem", fontWeight: 500, color: "var(--foreground)" }}>TikTok</div>
-                  <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", wordBreak: "break-all" }}>
-                    {client.tiktokProfileUrl}
-                  </div>
-                </div>
-                <span style={{ fontSize: "1rem", opacity: 0.6 }}>↗</span>
-              </a>
-            )}
-
-            {!client.websiteUrl && !client.facebookPageUrl && !client.instagramProfileUrl && !client.tiktokProfileUrl && (
-              <div style={{ fontSize: "0.85rem", color: "var(--foreground-muted)", textAlign: "center", padding: "1rem" }}>
-                אין קישורים חיצוניים מוגדרים
+      {/* ═══════════ 7 · CLIENT OPERATIONS (team) ═══════════ */}
+      <div style={ccCard}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={ccTitle}>👥 צוות העובד על הלקוח</span>
+          <span onClick={() => onNavigateTab?.("tasks")} style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--accent)", cursor: "pointer" }}>צפה בכל הצוות ←</span>
+        </div>
+        {teamOps.length === 0 ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>אין צוות משובץ למשימות פתוחות.</div> :
+          teamOps.map((e: any) => (
+            <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "0.6rem 0", borderBottom: "1px solid var(--border)" }}>
+              <Avatar src={e.avatarUrl} name={e.name} size={38} ring={false} />
+              <div style={{ minWidth: 130 }}>
+                <div style={{ fontSize: "0.84rem", fontWeight: 700, color: "var(--foreground)" }}>{e.name}</div>
+                <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>{e.role || "צוות"}</div>
               </div>
-            )}
+              <div style={{ flex: 1, maxWidth: 200 }}>
+                <div style={{ fontSize: "0.66rem", color: "var(--foreground-subtle)", marginBottom: 3 }}>עומס עבודה</div>
+                <div style={{ height: 6, background: "var(--surface)", borderRadius: 999, overflow: "hidden" }}><div style={{ width: `${Math.min(100, e.open * 15)}%`, height: "100%", background: e.open >= 6 ? "#ef4444" : "var(--accent)", borderRadius: 999 }} /></div>
+              </div>
+              <span style={{ fontSize: "0.74rem", color: "var(--foreground-muted)" }}>{e.open} משימות פעילות</span>
+            </div>
+          ))}
+      </div>
+
+      {/* ═══════════ 8 · FINANCE CENTER ═══════════ */}
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={ccTitle}>💰 מרכז פיננסי</span>
+          <span onClick={() => onNavigateTab?.("accounting")} style={{ fontSize: "0.74rem", fontWeight: 700, color: "#22c55e", cursor: "pointer" }}>צפה בכל החשבונות ←</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1.1rem" }} className="cc-2col">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: "0.7rem" }}>
+            {[
+              { l: "חיוב חודשי", v: cmd.monthlyValue > 0 ? fmt(cmd.monthlyValue) : "—", c: "#22c55e", sub: "קבוע" },
+              { l: "סה\"כ הכנסות", v: fmt(paidTotal), c: "var(--foreground)", sub: "שולם" },
+              { l: "גבייה פתוחה", v: fmt(cmd.openCollections), c: "#f59e0b", sub: "ממתין" },
+              { l: "חובות פתוחים", v: fmt(overdueTotalC), c: overdueTotalC > 0 ? "#ef4444" : "var(--foreground)", sub: "בפיגור" },
+              { l: "גבייה צפויה", v: fmt(upcomingTotal), c: "#3b82f6", sub: "30 יום" },
+              { l: "ציון גבייה", v: `${Math.max(0, 100 - latePays * 20 - (overdueTotalC > 0 ? 20 : 0))}/100`, c: "#22c55e", sub: latePays >= 2 ? "בינוני" : "טוב" },
+            ].map((k, i) => (
+              <div key={i} style={{ ...ccCard, padding: "0.9rem" }}>
+                <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>{k.l}</div>
+                <div style={{ fontSize: "1.15rem", fontWeight: 900, color: k.c, lineHeight: 1.2 }}>{k.v}</div>
+                <div style={{ fontSize: "0.62rem", color: "var(--foreground-subtle)" }}>{k.sub}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ ...ccCard, background: "rgba(139,92,246,0.06)", border: "1px solid #ddd6fe" }}>
+            <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#7c3aed", marginBottom: 10 }}>🤖 תובנות גבייה AI</div>
+            {collectionAI.map((t, i) => (
+              <div key={i} style={{ display: "flex", gap: 7, alignItems: "flex-start", fontSize: "0.76rem", color: "#4c1d95", marginBottom: 7 }}>
+                <span style={{ color: "#7c3aed" }}>✓</span>{t}
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Right Column */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-        {/* Financial Summary */}
-        <div
-          className="agd-card"
-          style={{
-            background: "var(--surface-raised)",
-            border: "1px solid var(--border)",
-            borderRadius: "0.75rem",
-            padding: "1.5rem",
-          }}
-        >
-          <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground-muted)", margin: "0 0 1rem 0" }}>
-            סיכום כספי
-          </h3>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            {client.retainerAmount > 0 && (
-              <div>
-                <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.35rem" }}>
-                  ריטיינר (לפני מע״מ)
-                </div>
-                <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--foreground)" }}>
-                  ₪{client.retainerAmount.toLocaleString()}
-                </div>
-                <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginTop: "0.5rem", marginBottom: "0.2rem" }}>
-                  כולל מע״מ (18%)
-                </div>
-                <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--foreground)" }}>
-                  ₪{Math.round(client.retainerAmount * 1.18).toLocaleString()}
-                </div>
-                {client.retainerDay > 0 && (
-                  <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", marginTop: "0.25rem" }}>
-                    תאריך תשלום: ה-{client.retainerDay} בחודש
-                  </div>
-                )}
+      {/* ═══════════ 9 · AI INSIGHTS ═══════════ */}
+      <div>
+        <div style={ccTitle}>🧠 תובנות AI ופעולות מומלצות</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "0.85rem" }}>
+          {aiCards.map((c, i) => (
+            <div key={i} style={{ ...ccCard, background: c.bg, borderInlineStart: `4px solid ${c.tone}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
+                <span style={{ fontSize: "1rem" }}>{c.icon}</span>
+                <span style={{ fontSize: "0.8rem", fontWeight: 800, color: c.tone }}>{c.title}</span>
               </div>
-            )}
-
-            {client.nextPaymentDate && (
-              <div style={{ borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
-                <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.35rem" }}>
-                  התשלום הבא
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <div
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: "50%",
-                      background: PAYMENT_STATUS_COLORS[client.paymentStatus] || PAYMENT_STATUS_COLORS.none,
-                    }}
-                  />
-                  <div style={{ fontSize: "0.9rem", fontWeight: 500, color: "var(--foreground)" }}>
-                    {formatDate(client.nextPaymentDate)}
-                  </div>
-                </div>
-                <div
-                  style={{
-                    fontSize: "0.7rem",
-                    fontWeight: 600,
-                    padding: "0.25rem 0.5rem",
-                    borderRadius: 4,
-                    background: `${PAYMENT_STATUS_COLORS[client.paymentStatus] || PAYMENT_STATUS_COLORS.none}15`,
-                    color: PAYMENT_STATUS_COLORS[client.paymentStatus] || PAYMENT_STATUS_COLORS.none,
-                    border: `1px solid ${PAYMENT_STATUS_COLORS[client.paymentStatus] || PAYMENT_STATUS_COLORS.none}30`,
-                    display: "inline-block",
-                    marginTop: "0.35rem",
-                  }}
-                >
-                  {client.paymentStatus === "current"
-                    ? "עדכני"
-                    : client.paymentStatus === "overdue"
-                      ? "חריג"
-                      : client.paymentStatus === "pending"
-                        ? "ממתין"
-                        : "לא חל"}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Planning Summary */}
-        <div
-          className="agd-card"
-          style={{
-            background: "var(--surface-raised)",
-            border: "1px solid var(--border)",
-            borderRadius: "0.75rem",
-            padding: "1.5rem",
-          }}
-        >
-          <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground-muted)", margin: "0 0 1rem 0" }}>
-            סיכום תכנון
-          </h3>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            {client.monthlyGanttStatus && client.monthlyGanttStatus !== "none" && (
-              <div>
-                <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.35rem" }}>
-                  גאנט חודשי
-                </div>
-                <div
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    padding: "0.35rem 0.75rem",
-                    borderRadius: 4,
-                    background: `${GANTT_STATUS_COLORS[client.monthlyGanttStatus]?.color}15`,
-                    color: GANTT_STATUS_COLORS[client.monthlyGanttStatus]?.color,
-                    border: `1px solid ${GANTT_STATUS_COLORS[client.monthlyGanttStatus]?.color}30`,
-                    display: "inline-block",
-                  }}
-                >
-                  {GANTT_STATUS_COLORS[client.monthlyGanttStatus]?.label}
-                </div>
-              </div>
-            )}
-
-            {client.annualGanttStatus && client.annualGanttStatus !== "none" && (
-              <div style={{ borderTop: client.monthlyGanttStatus && client.monthlyGanttStatus !== "none" ? "1px solid var(--border)" : "none", paddingTop: client.monthlyGanttStatus && client.monthlyGanttStatus !== "none" ? "1rem" : 0 }}>
-                <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground-muted)", marginBottom: "0.35rem" }}>
-                  גאנט שנתי
-                </div>
-                <div
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    padding: "0.35rem 0.75rem",
-                    borderRadius: 4,
-                    background: `${GANTT_STATUS_COLORS[client.annualGanttStatus]?.color}15`,
-                    color: GANTT_STATUS_COLORS[client.annualGanttStatus]?.color,
-                    border: `1px solid ${GANTT_STATUS_COLORS[client.annualGanttStatus]?.color}30`,
-                    display: "inline-block",
-                  }}
-                >
-                  {GANTT_STATUS_COLORS[client.annualGanttStatus]?.label}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Quick Actions Card */}
-        <div
-          className="agd-card"
-          style={{
-            background: "var(--surface-raised)",
-            border: "1px solid var(--border)",
-            borderRadius: "0.75rem",
-            padding: "1.5rem",
-          }}
-        >
-          <h3 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground-muted)", margin: "0 0 1rem 0" }}>
-            פעולות מהירות
-          </h3>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            <button
-              className="mod-btn-primary"
-              style={{
-                fontSize: "0.8rem",
-                padding: "0.6rem 0.75rem",
-                width: "100%",
-                textAlign: "center",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.375rem",
-              }}
-              onClick={() => onNavigateTab?.("content")}
-            >
-              📋 תוכן חדש
-            </button>
-            <button
-              className="mod-btn-ghost"
-              style={{
-                fontSize: "0.8rem",
-                padding: "0.6rem 0.75rem",
-                width: "100%",
-                textAlign: "center",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.375rem",
-              }}
-              onClick={() => onNavigateTab?.("content")}
-            >
-              📅 גאנט חודשי
-            </button>
-            <button
-              className="mod-btn-ghost"
-              style={{
-                fontSize: "0.8rem",
-                padding: "0.6rem 0.75rem",
-                width: "100%",
-                textAlign: "center",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.375rem",
-              }}
-              onClick={() => onNavigateTab?.("content")}
-            >
-              📆 גאנט שנתי
-            </button>
-            <button
-              className="mod-btn-ghost"
-              style={{
-                fontSize: "0.8rem",
-                padding: "0.6rem 0.75rem",
-                width: "100%",
-                textAlign: "center",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.375rem",
-              }}
-              onClick={() => onNavigateTab?.("tasks")}
-            >
-              ✓ משימה חדשה
-            </button>
-            {client.portalEnabled && (
-              <button
-                className="mod-btn-ghost"
-                style={{
-                  fontSize: "0.8rem",
-                  padding: "0.6rem 0.75rem",
-                  width: "100%",
-                  textAlign: "center",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "0.375rem",
-                }}
-              >
-                🌐 פורטל לקוח
-              </button>
-            )}
-          </div>
+              <div style={{ fontSize: "0.76rem", color: "var(--foreground)", lineHeight: 1.5 }}>{c.body}</div>
+            </div>
+          ))}
         </div>
       </div>
-      </div>
+
+      <style>{`@media (max-width:1000px){.cc-2col,.cc-4col{grid-template-columns:1fr 1fr !important}}@media (max-width:680px){.cc-2col,.cc-4col{grid-template-columns:1fr !important}}`}</style>
     </div>
   );
 }
