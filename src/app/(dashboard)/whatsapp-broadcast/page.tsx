@@ -170,9 +170,31 @@ export default function WhatsAppBroadcastPage() {
             <button onClick={async () => { await fetch("/api/whatsapp/qr-status", { headers: roleHeaders() }); pollConn(); }} style={{ ...seg(false) }}>רענן</button>
           </div>
         ) : conn.state === "unreachable" ? (
-          <div style={{ fontSize: "0.85rem", color: "#dc2626" }}>השירות לא נגיש — בדוק שהשירות רץ ושה-URL נכון.</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ fontSize: "0.85rem", color: "#dc2626", lineHeight: 1.6 }}>
+              שירות ה-QR לא מגיב כרגע — ייתכן שהשרת ישן/כבוי או שה-URL/Secret שגויים.
+              {conn.error ? <> <span style={{ direction: "ltr", display: "inline-block", color: "#991b1b", fontFamily: "monospace", fontSize: "0.78rem" }}>({String(conn.error)})</span></> : null}
+            </div>
+            <div style={{ fontSize: "0.78rem", color: "var(--foreground-muted)" }}>ודא שהשירות (תיקיית <code>whatsapp-service</code>) רץ על שרת always-on, ושב-Vercel מוגדרים <code>WHATSAPP_SERVICE_URL</code> ו-<code>WHATSAPP_SERVICE_SECRET</code>.</div>
+            <button onClick={pollConn} style={{ ...seg(false), width: "fit-content" }}>🔄 נסה שוב</button>
+          </div>
+        ) : conn.state === "disconnected" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ fontSize: "0.85rem", color: "#b45309" }}>החיבור נותק. השירות מנסה להתחבר מחדש — בעוד כמה שניות אמור להופיע קוד QR חדש לסריקה.</div>
+            <button onClick={pollConn} style={{ ...seg(false), width: "fit-content" }}>🔄 רענן מצב</button>
+          </div>
+        ) : conn.state === "starting" || conn.state === "authenticated" || conn.state === "loading" ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ fontSize: "0.85rem", color: "var(--foreground-muted)" }}>
+              ⏳ {conn.state === "authenticated" ? "מאמת חיבור…" : "מאתחל את שירות הוואטסאפ… (עד דקה)"}
+            </span>
+            <button onClick={pollConn} style={{ ...seg(false) }}>🔄 רענן</button>
+          </div>
         ) : (
-          <div style={{ fontSize: "0.85rem", color: "var(--foreground-muted)" }}>⏳ מתחבר…</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ fontSize: "0.85rem", color: "var(--foreground-muted)" }}>⏳ מתחבר…{conn.state ? <span style={{ color: "var(--foreground-subtle)", fontSize: "0.75rem" }}> ({String(conn.state)})</span> : null}</span>
+            <button onClick={pollConn} style={{ ...seg(false) }}>🔄 רענן</button>
+          </div>
         )}
       </div>
 
