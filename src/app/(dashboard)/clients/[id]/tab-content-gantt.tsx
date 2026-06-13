@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import Avatar from "@/components/ui/avatar";
 import ContentWorkspaceShell from "@/components/content/content-workspace-shell";
 import type { Client, Employee, ClientGanttItem } from "@/lib/db/schema";
@@ -1313,6 +1313,150 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
 
       {/* List View */}
       {activeView === "list" && (
+        <>
+        {(() => {
+          const items = monthlyItems;
+          const st = (s: string) => items.filter((i: any) => i.status === s).length;
+          const today0 = new Date(new Date().toDateString());
+          const total = items.length;
+          const published = st("published");
+          const awaiting = st("submitted_for_approval");
+          const inDesign = st("in_progress");
+          const inWriting = st("draft") + st("new_idea") + st("planned");
+          const overdue = items.filter((i: any) => i.date && new Date(i.date) < today0 && !["published", "approved", "scheduled", "cancelled"].includes(i.status)).length;
+          const health = total ? Math.max(0, Math.min(100, Math.round(100 - (overdue / total) * 55 - (awaiting / total) * 10))) : 100;
+          const reels = items.filter((i: any) => i.format === "reel" || i.itemType === "reel").length;
+          const goal = Number((client as any).monthlyContentGoal || 0) || total || 1;
+          const approvedAll = published + st("approved") + st("scheduled");
+          const submittedAll = approvedAll + awaiting + st("returned_for_changes");
+          const pipeline = [
+            { l: "רעיון", c: "#f59e0b", n: st("new_idea") },
+            { l: "כתיבה", c: "#3b82f6", n: st("draft") + st("planned") },
+            { l: "עיצוב", c: "#8b5cf6", n: inDesign },
+            { l: "בדיקה", c: "#ec4899", n: st("returned_for_changes") + st("needs_revision") },
+            { l: "אישור לקוח", c: "#06b6d4", n: awaiting },
+            { l: "מתוזמן", c: "#10b981", n: st("scheduled") + st("approved") },
+            { l: "פורסם", c: "#22c55e", n: published },
+          ];
+          const rings = [
+            { l: "תוכנית חודשית", c: "#22c55e", pct: Math.min(100, Math.round((approvedAll / (goal || 1)) * 100)) },
+            { l: "אישור", c: "#3b82f6", pct: submittedAll ? Math.round((approvedAll / submittedAll) * 100) : 0 },
+            { l: "רילסים", c: "#8b5cf6", pct: total ? Math.round((reels / total) * 100) : 0 },
+            { l: "מוכנות", c: "#f59e0b", pct: total ? Math.round(((total - overdue) / total) * 100) : 100 },
+            { l: "גיוון", c: "#06b6d4", pct: Math.min(100, new Set(items.map((i: any) => i.itemType || i.format)).size * 20) },
+          ];
+          const ai: { t: string; w: boolean }[] = [];
+          if (awaiting > 0) ai.push({ t: `${awaiting} פוסטים ממתינים לאישור לקוח`, w: false });
+          if (overdue > 0) ai.push({ t: `${overdue} פוסטים בפיגור`, w: true });
+          const gap = Math.max(0, goal - total);
+          if (gap > 0) ai.push({ t: `${gap} פוסטים חסרים החודש`, w: true });
+          if (reels === 0) ai.push({ t: "המלצה: להפיק ריל נוסף החודש", w: false });
+          ai.push({ t: "המלצה: לקבוע יום צילום נוסף", w: true });
+          const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+          const heroStats = [
+            { n: overdue, l: "באיחור", sub: "דורש טיפול", c: "#ef4444" },
+            { n: awaiting, l: "דורשים אישור", c: "#06b6d4", sub: "מהלקוח" },
+            { n: inDesign, l: "בעיצוב", c: "#8b5cf6", sub: "בתהליך" },
+            { n: inWriting, l: "בכתיבה", c: "#3b82f6", sub: "ממתין" },
+            { n: published, l: "פורסמו", c: "#22c55e", sub: "החודש" },
+            { n: total, l: 'סה"כ תכנים', c: "var(--foreground)", sub: "ביוני" },
+          ];
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 18 }}>
+              {/* 1 · Command Center */}
+              <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 16, padding: "1.2rem 1.4rem", display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ position: "relative", width: 64, height: 64, borderRadius: "50%", background: `conic-gradient(${health >= 70 ? "#22c55e" : health >= 40 ? "#f59e0b" : "#ef4444"} ${health * 3.6}deg, var(--border) 0deg)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ width: 50, height: 50, borderRadius: "50%", background: "var(--surface-raised)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.9rem", fontWeight: 900, color: health >= 70 ? "#22c55e" : "#f59e0b" }}>{health}%</div>
+                  </div>
+                  <div><div style={{ fontSize: "0.82rem", fontWeight: 800 }}>בריאות תוכן</div><div style={{ fontSize: "0.7rem", color: "#22c55e" }}>מצב {health >= 70 ? "מצוין" : health >= 40 ? "בינוני" : "דורש טיפול"}</div></div>
+                </div>
+                <div style={{ flex: 1, display: "flex", justifyContent: "space-around", gap: 10, flexWrap: "wrap" }}>
+                  {heroStats.map((s, i) => (
+                    <div key={i} style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: "1.6rem", fontWeight: 900, color: s.c, lineHeight: 1 }}>{s.n}</div>
+                      <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--foreground)", marginTop: 4 }}>{s.l}</div>
+                      <div style={{ fontSize: "0.62rem", color: "var(--foreground-subtle)" }}>{s.sub}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2 · Pipeline */}
+              <div style={{ background: "linear-gradient(135deg,#eff6ff,#f5f3ff)", border: "1px solid #dbeafe", borderRadius: 16, padding: "1.1rem 1.3rem" }}>
+                <div style={{ fontSize: "0.85rem", fontWeight: 800, marginBottom: 12 }}>צינור תוכן</div>
+                <div style={{ display: "flex", alignItems: "stretch", gap: 6, overflowX: "auto" }}>
+                  {pipeline.map((p, i) => (
+                    <React.Fragment key={p.l}>
+                      <div style={{ flex: 1, minWidth: 92, background: "var(--surface-raised)", border: `1px solid ${p.c}33`, borderRadius: 12, padding: "0.7rem 0.5rem", textAlign: "center" }}>
+                        <div style={{ fontSize: "1.5rem", fontWeight: 900, color: p.c }}>{p.n}</div>
+                        <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--foreground)", marginTop: 3 }}>{p.l}</div>
+                      </div>
+                      {i < pipeline.length - 1 && <div style={{ display: "flex", alignItems: "center", color: "var(--foreground-subtle)" }}>←</div>}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+
+              {/* 3 + 4 · AI Content Manager  +  Content Health rings */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr", gap: 16 }} className="cog-2col">
+                <div style={{ position: "relative", overflow: "hidden", borderRadius: 16, padding: "1.2rem", background: "linear-gradient(145deg,#1e1b4b,#312e81 55%,#0c4a6e)", border: "1px solid #4338ca", color: "#fff" }}>
+                  <div style={{ position: "absolute", insetInlineStart: -10, top: 0, width: 150, height: 150, borderRadius: "50%", background: "radial-gradient(circle, rgba(129,140,248,0.4), transparent 70%)" }} />
+                  <div style={{ position: "relative", zIndex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}><span>🤖</span><span style={{ fontSize: "1rem", fontWeight: 900 }}>Pixel AI Content Manager</span></div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 14 }}>
+                      {ai.slice(0, 5).map((a, i) => (
+                        <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: "0.79rem", color: "#e0e7ff" }}>
+                          <span style={{ color: a.w ? "#fcd34d" : "#67e8f9" }}>{a.w ? "⚠️" : "✓"}</span>{a.t}
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
+                      {[{ i: "📅", l: "תוכן חודשי", on: () => setShowMonthlyGenModal(true) }, { i: "📷", l: "קבע יום צילום", on: () => setShowManualEntryModal(true) }, { i: "📤", l: "שלח תזכורת", on: () => toast("שלח תזכורת ללקוח מתוך מרכז הוואטסאפ", "info") }, { i: "➕", l: "צור תוכן", on: () => setShowManualEntryModal(true) }].map((a, i) => (
+                        <button key={i} onClick={a.on} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10, padding: "0.6rem 0.3rem", cursor: "pointer", color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", gap: 5, fontSize: "0.62rem", fontWeight: 600 }}>
+                          <span style={{ fontSize: "1.05rem" }}>{a.i}</span>{a.l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 16, padding: "1.2rem" }}>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 800, marginBottom: 14 }}>בריאות תוכן</div>
+                  <div style={{ display: "flex", justifyContent: "space-around", gap: 8, flexWrap: "wrap" }}>
+                    {rings.map((r) => (
+                      <div key={r.l} style={{ textAlign: "center" }}>
+                        <div style={{ position: "relative", width: 58, height: 58, borderRadius: "50%", background: `conic-gradient(${r.c} ${r.pct * 3.6}deg, var(--border) 0deg)`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
+                          <div style={{ width: 44, height: 44, borderRadius: "50%", background: "var(--surface-raised)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.78rem", fontWeight: 800, color: r.c }}>{r.pct}%</div>
+                        </div>
+                        <div style={{ fontSize: "0.66rem", color: "var(--foreground-muted)", marginTop: 6 }}>{r.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 5 · Month content strip */}
+              <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 16, padding: "0.9rem 1.1rem" }}>
+                <div style={{ fontSize: "0.78rem", fontWeight: 800, marginBottom: 10 }}>📅 לוח תוכן — {HEB_MONTHS[selectedMonth]} {selectedYear}</div>
+                <div style={{ display: "flex", gap: 4, overflowX: "auto", paddingBottom: 4 }}>
+                  {Array.from({ length: daysInMonth }, (_, di) => {
+                    const day = di + 1;
+                    const dayItems = items.filter((i: any) => i.date && new Date(i.date).getDate() === day && new Date(i.date).getMonth() === selectedMonth);
+                    const has = dayItems.length > 0;
+                    return (
+                      <div key={day} title={`${day} · ${dayItems.length} תכנים`} style={{ minWidth: 26, textAlign: "center", padding: "4px 2px", borderRadius: 8, background: has ? "var(--accent-muted)" : "transparent" }}>
+                        <div style={{ fontSize: "0.62rem", color: "var(--foreground-subtle)" }}>{day}</div>
+                        <div style={{ display: "flex", gap: 2, justifyContent: "center", marginTop: 3, minHeight: 6 }}>
+                          {dayItems.slice(0, 3).map((it: any, k: number) => <span key={k} style={{ width: 5, height: 5, borderRadius: "50%", background: (GANTT_STATUS_COLORS[it.status]?.color || "var(--accent)") }} />)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
         <div
           style={{
             background: "var(--surface-raised)",
@@ -2264,6 +2408,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
             </div>
           )}
         </div>
+        </>
       )}
 
       {/* Calendar View */}
