@@ -26,6 +26,7 @@ import {
 } from "@/lib/api/use-entity";
 import { KpiRow, KpiCard, SectionCard, Sparkline, StatusBadge } from "@/components/ui/saas-kit";
 import Avatar from "@/components/ui/avatar";
+import ClientLogo from "@/components/ui/client-logo";
 import { useOperationalAlerts } from "@/lib/alerts/use-alerts";
 import { SkeletonKPIRow, SkeletonGrid } from "@/components/ui/skeleton";
 import { AIInsightsPanel, generateInsights } from "@/components/ai-insights-panel";
@@ -590,6 +591,55 @@ function AdminDashboard() {
   const waitingClient = tasks.filter((t: any) => t.status === "approved").slice(0, 6).map((t: any) => ({ icon: "⏳", title: t.title || "משימה", sub: t.clientName || "", href: "/tasks" }));
   const pColor = (p: number) => (p < 40 ? "#ef4444" : p < 70 ? "#f59e0b" : "#22c55e");
 
+  // ── Content produced this month ──
+  const contentThisMonth = socialPosts.filter((p: any) => { const d = p.createdAt ? new Date(p.createdAt) : null; if (!d) return false; const n = new Date(); return d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear(); }).length;
+
+  // ── Today's collections (due today) ──
+  const todayCollections = (() => {
+    const t = new Date().toDateString();
+    const sum = (arr: any[]) => arr.filter((p: any) => p.dueDate && new Date(p.dueDate).toDateString() === t && ["pending", "overdue", "collection_needed"].includes(p.status)).reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
+    return sum(payments) + sum(projectPayments || []);
+  })();
+
+  // ── Open debt (overdue total) ──
+  const openDebt = analytics?.overdueTotal || 0;
+
+  // ── 6-month revenue trend (paid) ──
+  const revenueSeries = (() => {
+    const months = [...Array(6)].map((_, i) => { const d = new Date(); d.setMonth(d.getMonth() - (5 - i)); return { y: d.getFullYear(), m: d.getMonth() }; });
+    const all = [...payments, ...(projectPayments || [])];
+    return months.map((mm) => all.filter((p: any) => p.status === "paid" && p.paidAt && new Date(p.paidAt).getMonth() === mm.m && new Date(p.paidAt).getFullYear() === mm.y).reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0));
+  })();
+
+  // ── Client Health — active clients needing attention, with real reasons ──
+  const clientHealth = useMemo(() => {
+    const now = new Date();
+    return clients.filter((c: any) => c.status === "active").map((c: any) => {
+      const reasons: string[] = [];
+      let severity = 0;
+      const owe = [...payments, ...(projectPayments || [])].filter((p: any) => p.clientId === c.id && p.status === "overdue");
+      if (owe.length) { reasons.push("תשלום באיחור"); severity += 3; }
+      const ap = approvals.filter((a: any) => a.clientId === c.id && a.status === "pending_approval");
+      if (ap.length) { const oldest = ap.map((a: any) => a.createdAt ? Math.floor((+now - +new Date(a.createdAt)) / 864e5) : 0).sort((x: number, y: number) => y - x)[0] || 0; reasons.push(oldest > 0 ? `${oldest} ימים ללא אישור` : "אישור ממתין"); severity += Math.min(3, Math.ceil((oldest || 1) / 7)); }
+      if (!c.monthlyGanttStatus || c.monthlyGanttStatus === "none" || c.monthlyGanttStatus === "draft") { reasons.push("חסר תוכן חודשי"); severity += 2; }
+      if (!c.assignedManagerId) { reasons.push("ללא מנהל מטפל"); severity += 1; }
+      return { id: c.id, name: c.name, logo: (c as any).logoUrl, reasons, severity };
+    }).filter((r: any) => r.reasons.length > 0).sort((a: any, b: any) => b.severity - a.severity).slice(0, 6);
+  }, [clients, payments, projectPayments, approvals]);
+
+  // ── Floating quick actions ──
+  const [fabOpen, setFabOpen] = useState(false);
+  const fabActions = [
+    { icon: "👤", label: "לקוח חדש", href: "/clients" },
+    { icon: "✅", label: "משימה חדשה", href: "/tasks" },
+    { icon: "📝", label: "תוכן חדש", href: "/projects/new" },
+    { icon: "📋", label: "פרויקט חדש", href: "/business-projects" },
+    { icon: "💳", label: "חשבונית", href: "/accounting" },
+    { icon: "📷", label: "יום צילום", href: "/business-calendar" },
+    { icon: "🗓️", label: "תוכנית חודשית", href: "/clients" },
+    { icon: "🎨", label: "לוח תוכן", href: "/campaigns" },
+  ];
+
   return (
     <div className="mhd-root">
       <div className="mhd-content stagger-in" style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
@@ -597,107 +647,152 @@ function AdminDashboard() {
           <div style={{ padding: "4rem", textAlign: "center", color: "var(--foreground-muted)" }}>טוען מרכז פיקוד…</div>
         ) : (
           <>
-            {/* ═══ 1 · MORNING BRIEFING HERO ═══ */}
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(280px,1fr) 2fr", gap: "1.1rem", alignItems: "stretch" }} className="dash-2col">
-              <div style={{ borderRadius: 22, padding: "1.5rem 1.7rem", background: "linear-gradient(135deg,#eff6ff 0%,#f5f3ff 45%,#ecfeff 100%)", border: "1px solid #dbeafe", direction: "rtl" }}>
-                <h1 style={{ fontSize: "1.7rem", fontWeight: 900, margin: 0, color: "#0f172a" }}>{greeting}, טל 👋</h1>
-                <div style={{ fontSize: "0.85rem", color: "#64748b", marginTop: 2 }}>{todayLabel}</div>
-                <div style={{ fontSize: "0.92rem", color: "#334155", lineHeight: 1.6, margin: "0.9rem 0" }}>
-                  יש לך יום עמוס, אבל יש שליטה. {analytics.openTasks} משימות, {analytics.pendingApprovals} אישורים ו-{waUnread.length} שיחות ממתינות. בוא נעשה אותו מעולה. 💪
+            {/* ═══════════════ 1 · DAILY COMMAND CENTER (HERO) ═══════════════ */}
+            <div style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr", gap: "1.1rem", alignItems: "stretch" }} className="dash-2col">
+              {/* Greeting + today's must-knows */}
+              <div style={{ borderRadius: 22, padding: "1.6rem 1.8rem", background: "linear-gradient(135deg,#eff6ff 0%,#f5f3ff 45%,#ecfeff 100%)", border: "1px solid #dbeafe", direction: "rtl" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+                  <div>
+                    <h1 style={{ fontSize: "1.85rem", fontWeight: 900, margin: 0, color: "#0f172a" }}>{greeting}, טל! 👋</h1>
+                    <div style={{ fontSize: "0.85rem", color: "#64748b", marginTop: 3 }}>{todayLabel}</div>
+                  </div>
+                  <div style={{ fontSize: "0.82rem", color: "#475569", maxWidth: 320, textAlign: "start" }}>הנה מה שמחכה לך היום</div>
                 </div>
-                <Link href="/tasks" style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "linear-gradient(135deg,#6366f1,#06b6d4)", color: "#fff", borderRadius: 12, padding: "0.6rem 1.1rem", fontWeight: 800, fontSize: "0.85rem", textDecoration: "none" }}>✨ סיכום חכם של היום</Link>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: "0.7rem", margin: "1.2rem 0" }}>
+                  {[
+                    { v: clientHealth.length, l: "לקוחות לטיפול", c: "#ef4444", href: "/clients" },
+                    { v: analytics.overdueTasks, l: "משימות דחופות", c: "#f97316", href: "/tasks" },
+                    { v: analytics.pendingApprovals, l: "אישורים ממתינים", c: "#3b82f6", href: "/approvals" },
+                    { v: formatCurrency(todayCollections || analytics.pendingPayments), l: "גבייה להיום", c: "#8b5cf6", href: "/accounting" },
+                    { v: schedule.today[0]?.time || "—", l: schedule.today[0]?.title || "אין אירוע", c: "#06b6d4", href: "/business-calendar" },
+                  ].map((m, i) => (
+                    <Link key={i} href={m.href} style={{ background: "rgba(255,255,255,0.75)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 14, padding: "0.7rem 0.6rem", textAlign: "center", textDecoration: "none", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                      <div style={{ fontSize: "1.35rem", fontWeight: 900, color: m.c, lineHeight: 1.1 }}>{m.v}</div>
+                      <div style={{ fontSize: "0.66rem", color: "#64748b", marginTop: 3 }}>{m.l}</div>
+                    </Link>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <Link href="/tasks" style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "linear-gradient(135deg,#6366f1,#06b6d4)", color: "#fff", borderRadius: 12, padding: "0.65rem 1.3rem", fontWeight: 800, fontSize: "0.88rem", textDecoration: "none" }}>← פתח את היום שלי</Link>
+                  <Link href="/exec-dashboard" style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "#fff", color: "#4f46e5", border: "1px solid #c7d2fe", borderRadius: 12, padding: "0.65rem 1.1rem", fontWeight: 700, fontSize: "0.82rem", textDecoration: "none" }}>סדר עדיפויות →</Link>
+                </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: "0.85rem" }}>
-                {[
-                  { icon: "💬", color: "#25D366", val: waUnread.length, label: "הודעות וואטסאפ", sub: "ממתינות למענה", href: "/whatsapp-inbox" },
-                  { icon: "✋", color: "#f59e0b", val: analytics.pendingApprovals, label: "אישורים ממתינים", sub: "דורש טיפול", href: "/approvals" },
-                  { icon: "✅", color: "#3b82f6", val: analytics.openTasks, label: "משימות פתוחות", sub: `מתוכן ${analytics.overdueTasks} בפיגור`, href: "/tasks" },
-                  { icon: "💰", color: "#8b5cf6", val: formatCurrency(analytics.pendingPayments), label: "גבייה פתוחה", sub: "מ-לקוחות", href: "/accounting" },
-                  { icon: "👤", color: "#ef4444", val: analytics.clientsMissingGantt, label: "לקוחות בטיפול", sub: "דורש מעקב", href: "/clients" },
-                ].map((m, i) => (
-                  <Link key={i} href={m.href} className="premium-card" style={{ padding: "1rem", textDecoration: "none", display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span style={{ width: 38, height: 38, borderRadius: 11, background: m.color + "1a", color: m.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.1rem" }}>{m.icon}</span>
-                    <span style={{ fontSize: "1.5rem", fontWeight: 900, color: "var(--foreground)", lineHeight: 1 }}>{m.val}</span>
-                    <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--foreground)" }}>{m.label}</span>
-                    <span style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>{m.sub}</span>
-                  </Link>
-                ))}
+              {/* Dark Pixel AI Chief of Staff hero card */}
+              <div style={{ position: "relative", overflow: "hidden", borderRadius: 22, padding: "1.6rem", background: "linear-gradient(145deg,#1e1b4b 0%,#312e81 50%,#0c4a6e 100%)", border: "1px solid #4338ca", direction: "rtl", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", minHeight: 230 }}>
+                <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle at 50% 30%, rgba(99,102,241,0.45), transparent 60%)" }} />
+                <div style={{ position: "relative", zIndex: 1 }}>
+                  <div style={{ fontSize: "1.25rem", fontWeight: 900, color: "#fff", letterSpacing: 0.5 }}>Pixel AI</div>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 700, background: "linear-gradient(90deg,#a5b4fc,#67e8f9)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Chief of Staff</div>
+                  <div style={{ width: 92, height: 92, borderRadius: "50%", margin: "1rem auto", background: "radial-gradient(circle at 35% 30%, #818cf8, #3730a3 70%)", boxShadow: "0 0 40px rgba(129,140,248,0.7), inset 0 -8px 20px rgba(0,0,0,0.3)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+                    <span style={{ position: "absolute", top: 32, left: 26, width: 12, height: 12, borderRadius: "50%", background: "#22d3ee", boxShadow: "0 0 10px #22d3ee" }} />
+                    <span style={{ position: "absolute", top: 32, right: 26, width: 12, height: 12, borderRadius: "50%", background: "#22d3ee", boxShadow: "0 0 10px #22d3ee" }} />
+                    <span style={{ position: "absolute", bottom: 26, width: 26, height: 7, borderRadius: 6, background: "rgba(255,255,255,0.55)" }} />
+                  </div>
+                  <div style={{ fontSize: "0.82rem", color: "#c7d2fe", lineHeight: 1.5, maxWidth: 230 }}>העוזר האישי שלך לניהול הסטודיו — עוקב, מתריע וממליץ.</div>
+                </div>
               </div>
             </div>
 
-            {/* ═══ 2·3·4 · TODAY · COMMS · PIXEL AI ═══ */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "1rem" }} className="dash-3col">
-              <SectionCard title="📆 היום שלך" action={<Link href="/business-calendar" style={linkSmall}>ביומן המלא ←</Link>}>
-                {schedule.today.length === 0 ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-subtle)" }}>אין אירועים היום</div> :
-                  schedule.today.map((e: any, i: number) => (
-                    <Link key={i} href={e.href} style={{ display: "flex", gap: 9, alignItems: "center", padding: "0.5rem 0", textDecoration: "none", borderBottom: "1px solid var(--border)" }}>
-                      <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "var(--accent)", minWidth: 42 }}>{e.time || "—"}</span>
-                      <span style={{ fontSize: "0.95rem" }}>{e.icon}</span>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.title}</div>
-                        <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>{e.sub}</div>
-                      </div>
-                    </Link>
-                  ))}
-              </SectionCard>
+            {/* ═══════════════ 2 · TOP KPI CARDS ═══════════════ */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(155px,1fr))", gap: "0.85rem" }}>
+              {[
+                { icon: "👥", c: "#38bdf8", val: analytics.activeClients, label: "לקוחות פעילים", sub: `${clients.length} סה"כ`, href: "/clients", series: undefined as number[] | undefined },
+                { icon: "💰", c: "#8b5cf6", val: formatCurrency(analytics.revenue), label: "הכנסה חודשית", sub: "החודש", href: "/accounting", series: revenueSeries },
+                { icon: "📋", c: "#f97316", val: openProjects, label: "פרויקטים פתוחים", sub: `${analytics.activeCampaigns} קמפיינים`, href: "/business-projects", series: undefined },
+                { icon: "✋", c: "#3b82f6", val: analytics.pendingApprovals, label: "אישורים ממתינים", sub: "דורש טיפול", href: "/approvals", series: undefined },
+                { icon: "💬", c: "#25D366", val: waUnread.length, label: "וואטסאפ שלא נענה", sub: waState === "off" ? "לא מחובר" : "ממתין", href: "/whatsapp-inbox", series: undefined },
+                { icon: "🧾", c: "#10b981", val: formatCurrency(todayCollections), label: "גבייה להיום", sub: formatCurrency(analytics.pendingPayments) + " פתוח", href: "/accounting", series: undefined },
+              ].map((k, i) => (
+                <Link key={i} href={k.href} className="premium-card" style={{ padding: "1rem", textDecoration: "none", display: "flex", flexDirection: "column", gap: 5 }}>
+                  <span style={{ width: 34, height: 34, borderRadius: 10, background: k.c + "1a", color: k.c, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem" }}>{k.icon}</span>
+                  <span style={{ fontSize: "1.35rem", fontWeight: 900, color: "var(--foreground)", lineHeight: 1.05 }}>{k.val}</span>
+                  <span style={{ fontSize: "0.76rem", fontWeight: 700, color: "var(--foreground)" }}>{k.label}</span>
+                  <span style={{ fontSize: "0.66rem", color: "var(--foreground-muted)" }}>{k.sub}</span>
+                  {k.series && k.series.some((n) => n > 0) && <Sparkline values={k.series} />}
+                </Link>
+              ))}
+            </div>
 
-              <SectionCard title="💬 מרכז תקשורת" action={<Link href="/whatsapp-inbox" style={linkSmall}>ראה הכל ←</Link>}>
-                {waState === "off" ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>הוואטסאפ לא מחובר. <Link href="/whatsapp-broadcast" style={{ color: "var(--accent)", fontWeight: 700 }}>חבר</Link></div>
-                  : waUnread.length === 0 ? <div style={{ fontSize: "0.85rem", color: "var(--foreground-muted)" }}>אין הודעות שלא נענו 🎉</div>
-                  : waUnread.slice(0, 4).map((c: any, i: number) => (
-                    <Link key={i} href="/whatsapp-inbox" style={{ display: "flex", gap: 10, alignItems: "center", padding: "0.5rem 0", textDecoration: "none", borderBottom: "1px solid var(--border)" }}>
-                      <span style={{ fontSize: "0.66rem", color: "var(--foreground-subtle)", minWidth: 38 }}>{timeSince(c.timestamp)}</span>
+            {/* ═══════════════ 3 · WHATSAPP COMMAND CENTER  +  4 · AI RECOMMENDATIONS ═══════════════ */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }} className="dash-2col">
+              <SectionCard title="💬 מרכז וואטסאפ" action={<Link href="/whatsapp-inbox" style={linkSmall}>פתח את כל השיחות ←</Link>}>
+                {waState === "off" ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>הוואטסאפ לא מחובר. <Link href="/whatsapp-broadcast" style={{ color: "var(--accent)", fontWeight: 700 }}>חבר עכשיו</Link></div>
+                  : waChats.length === 0 ? <div style={{ fontSize: "0.85rem", color: "var(--foreground-muted)" }}>אין שיחות אחרונות</div>
+                  : waChats.slice(0, 5).map((c: any, i: number) => (
+                    <Link key={i} href="/whatsapp-inbox" style={{ display: "flex", gap: 11, alignItems: "center", padding: "0.55rem 0", textDecoration: "none", borderBottom: "1px solid var(--border)" }}>
+                      <Avatar name={c.name || c.phone} size={36} ring={false} />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--foreground)" }}>{c.name || c.phone}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
+                          <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--foreground)" }}>{c.name || c.phone}</span>
+                          <span style={{ fontSize: "0.64rem", color: "var(--foreground-subtle)" }}>{timeSince(c.timestamp)}</span>
+                        </div>
                         <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.lastMessage || ""}</div>
                       </div>
-                      <span style={{ background: "#25D366", color: "#fff", fontSize: "0.64rem", fontWeight: 800, borderRadius: 999, padding: "1px 7px" }}>{c.unread}</span>
+                      {(c.unread || 0) > 0 ? <span style={{ background: "#25D366", color: "#fff", fontSize: "0.64rem", fontWeight: 800, borderRadius: 999, padding: "1px 8px" }}>{c.unread}</span> : <span style={{ width: 9, height: 9, borderRadius: "50%", background: "var(--border)" }} />}
                     </Link>
                   ))}
               </SectionCard>
 
-              <div style={{ borderRadius: 16, padding: "1.1rem 1.2rem", background: "linear-gradient(135deg,#eef2ff,#ecfeff)", border: "1px solid #c7d2fe", direction: "rtl" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: "1rem", fontWeight: 900, background: "linear-gradient(90deg,#6366f1,#06b6d4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Pixel AI</span>
-                  <span style={{ fontSize: "0.7rem", color: "#64748b" }}>· Chief of Staff</span>
-                </div>
-                <div style={{ fontSize: "0.74rem", color: "#64748b", margin: "2px 0 10px" }}>הנה מה שחשוב שתדע לדעת היום:</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 12 }}>
-                  {[...opInsights, ...aiInsights].slice(0, 4).map((ins: any, i: number) => (
-                    <div key={i} style={{ fontSize: "0.76rem", color: "#334155", background: "rgba(255,255,255,0.7)", borderRadius: 8, padding: "0.4rem 0.6rem" }}>{ins.icon || "💡"} {ins.title || ins.description}</div>
+              <SectionCard title="✨ Pixel AI — Chief of Staff" action={<Link href="/exec-dashboard" style={linkSmall}>המלצות נוספות ←</Link>}>
+                {[...opInsights, ...aiInsights].slice(0, 4).map((ins: any, i: number) => (
+                  <Link key={i} href={(ins as any).href || "/exec-dashboard"} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "0.5rem 0", textDecoration: "none", borderBottom: "1px solid var(--border)" }}>
+                    <span style={{ fontSize: "1rem", marginTop: 1 }}>{ins.icon || "💡"}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--foreground)" }}>{ins.title || ins.description}</div>
+                      {ins.title && ins.description && <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>{ins.description}</div>}
+                    </div>
+                    <span style={{ color: "var(--foreground-subtle)" }}>›</span>
+                  </Link>
+                ))}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                  {recommended.slice(0, 2).map((r, i) => (
+                    <Link key={i} href={r.href} style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4f46e5", background: "#eef2ff", border: "1px solid #c7d2fe", borderRadius: 999, padding: "0.35rem 0.8rem", textDecoration: "none" }}>{r.icon} {r.label}</Link>
                   ))}
                 </div>
-                {recommended.length > 0 && (<>
-                  <div style={{ fontSize: "0.7rem", fontWeight: 800, color: "#6366f1", marginBottom: 6 }}>המלצות להיום:</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                    {recommended.map((r, i) => (<Link key={i} href={r.href} style={{ fontSize: "0.76rem", color: "#4f46e5", textDecoration: "none", fontWeight: 600 }}>{i + 1}. {r.label}</Link>))}
-                  </div>
-                </>)}
-              </div>
+              </SectionCard>
             </div>
 
-            {/* ═══ 5 · ACTION CENTER (4 columns) ═══ */}
+            {/* ═══════════════ 5 · TODAY TIMELINE (control tower) ═══════════════ */}
             <div>
-              <div style={sectionLabel}>⚡ מרכז טיפול — מה דורש את תשומת הלב שלך</div>
+              <div style={sectionLabel}>📆 היום שלך</div>
+              {schedule.today.length === 0 ? (
+                <div className="premium-card" style={{ padding: "1.2rem", fontSize: "0.82rem", color: "var(--foreground-muted)" }}>אין אירועים מתוכננים להיום</div>
+              ) : (
+                <div style={{ display: "flex", gap: "0.8rem", overflowX: "auto", paddingBottom: 6 }}>
+                  {schedule.today.map((e: any, i: number) => (
+                    <Link key={i} href={e.href} className="premium-card" style={{ minWidth: 160, padding: "0.95rem 1rem", textDecoration: "none", display: "flex", flexDirection: "column", gap: 5, borderTop: "3px solid var(--accent)" }}>
+                      <span style={{ fontSize: "0.95rem", fontWeight: 900, color: "var(--accent)" }}>{e.time || "—"}</span>
+                      <span style={{ fontSize: "1.1rem" }}>{e.icon}</span>
+                      <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--foreground)" }}>{e.title}</span>
+                      <span style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>{e.sub}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ═══════════════ 6 · TASK COMMAND CENTER (4 columns) ═══════════════ */}
+            <div>
+              <div style={sectionLabel}>✅ משימות — מרכז הביצוע</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "0.9rem" }} className="dash-4col">
                 {[
-                  { label: "דורש טיפול עכשיו", color: "#ef4444", items: actionCenter.needs, href: "/tasks" },
-                  { label: "ממתין ללקוח", color: "#f59e0b", items: waitingClient, href: "/approvals" },
+                  { label: "לטיפול", color: "#ef4444", items: actionCenter.needs, href: "/tasks" },
                   { label: "בתהליך", color: "#3b82f6", items: actionCenter.inProgress, href: "/tasks" },
+                  { label: "ממתין לאישור", color: "#f59e0b", items: waitingClient, href: "/approvals" },
                   { label: "הושלם השבוע", color: "#22c55e", items: actionCenter.done, href: "/tasks" },
                 ].map((col, ci) => (
-                  <div key={ci} className="premium-card" style={{ padding: "1rem" }}>
+                  <div key={ci} className="premium-card" style={{ padding: "1rem", borderTop: `3px solid ${col.color}` }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                       <span style={{ fontSize: "0.8rem", fontWeight: 800, color: "var(--foreground)" }}>{col.label}</span>
                       <span style={{ fontSize: "0.68rem", fontWeight: 800, color: col.color, background: col.color + "1a", borderRadius: 999, padding: "2px 9px" }}>{col.items.length}</span>
                     </div>
-                    {col.items.length === 0 ? <div style={{ fontSize: "0.76rem", color: "var(--foreground-subtle)" }}>—</div> :
+                    {col.items.length === 0 ? <div style={{ fontSize: "0.74rem", color: "var(--foreground-subtle)" }}>—</div> :
                       col.items.slice(0, 4).map((it: any, i: number) => (
-                        <Link key={i} href={it.href || col.href} style={{ display: "flex", gap: 7, alignItems: "flex-start", padding: "0.38rem 0", textDecoration: "none", borderBottom: "1px solid var(--border)" }}>
+                        <Link key={i} href={it.href || col.href} style={{ display: "flex", gap: 7, alignItems: "flex-start", padding: "0.4rem 0", textDecoration: "none", borderBottom: "1px solid var(--border)" }}>
                           <span style={{ fontSize: "0.85rem" }}>{it.icon || "•"}</span>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.title}</div>
-                            {it.sub && <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>{it.sub}</div>}
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontSize: "0.77rem", fontWeight: 600, color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.title}</div>
+                            {it.sub && <div style={{ fontSize: "0.66rem", color: "var(--foreground-muted)" }}>{it.sub}</div>}
                           </div>
                         </Link>
                       ))}
@@ -707,128 +802,133 @@ function AdminDashboard() {
               </div>
             </div>
 
-            {/* ═══ 6 · BUSINESS SNAPSHOT ═══ */}
+            {/* ═══════════════ 7 · BUSINESS OVERVIEW ═══════════════ */}
             <div>
-              <div style={sectionLabel}>📊 מצב עסקי — מבט מהיר</div>
+              <div style={sectionLabel}>📊 סקירת עסק</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: "0.85rem" }}>
                 {[
-                  { label: "שיעור סגירה", val: `${closeRate}%`, series: undefined as number[] | undefined, href: "/leads" },
-                  { label: "פרויקטים מעוכבים", val: delayedProjects, series: undefined, href: "/business-projects" },
-                  { label: "לקוחות פעילים", val: analytics.activeClients, series: undefined, href: "/clients" },
-                  { label: "הכנסה חודשית", val: formatCurrency(analytics.revenue), series: undefined, href: "/accounting" },
+                  { label: "לקוחות פעילים", val: analytics.activeClients, series: undefined as number[] | undefined, href: "/clients" },
+                  { label: "הכנסות החודש", val: formatCurrency(analytics.revenue), series: revenueSeries, href: "/accounting" },
                   { label: "גבייה פתוחה", val: formatCurrency(analytics.pendingPayments), series: undefined, href: "/accounting" },
-                  { label: "משימות פתוחות", val: analytics.openTasks, series: doneSeries, href: "/tasks" },
-                  { label: "לידים פעילים", val: analytics.activeLeads, series: leadsSeries, href: "/leads" },
+                  { label: "חובות פתוחים", val: formatCurrency(openDebt), series: undefined, href: "/accounting" },
+                  { label: "תכנים החודש", val: contentThisMonth, series: doneSeries, href: "/campaigns" },
+                  { label: "שיעור סגירה", val: `${closeRate}%`, series: leadsSeries, href: "/leads" },
                 ].map((k, i) => (
                   <Link key={i} href={k.href} className="premium-card" style={{ padding: "0.95rem 1rem", textDecoration: "none", display: "flex", flexDirection: "column", gap: 4 }}>
                     <span style={{ fontSize: "0.74rem", color: "var(--foreground-muted)" }}>{k.label}</span>
-                    <span style={{ fontSize: "1.5rem", fontWeight: 900, color: "var(--foreground)", lineHeight: 1.1 }}>{k.val}</span>
+                    <span style={{ fontSize: "1.45rem", fontWeight: 900, color: "var(--foreground)", lineHeight: 1.1 }}>{k.val}</span>
                     {k.series && k.series.some((n) => n > 0) && <Sparkline values={k.series} />}
                   </Link>
                 ))}
               </div>
             </div>
 
-            {/* ═══ 7 · PROJECTS STATUS CENTER ═══ */}
+            {/* ═══════════════ 8 · PROJECTS CENTER ═══════════════ */}
             {projectsStatus.length > 0 && (
               <div>
-                <div style={sectionLabel}>📁 פרויקטים — תמונת מצב</div>
+                <div style={sectionLabel}>📁 פרויקטים פעילים</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: "0.9rem" }}>
-                  {projectsStatus.map((p: any) => (
-                    <Link key={p.id} href="/business-projects" className="premium-card" style={{ padding: "1.05rem 1.1rem", textDecoration: "none", display: "flex", flexDirection: "column", gap: 8 }}>
-                      <div>
-                        <div style={{ fontSize: "0.88rem", fontWeight: 800, color: "var(--foreground)" }}>{p.name}</div>
-                        <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>{p.clientName}</div>
+                  {projectsStatus.map((p: any) => {
+                    const cl = clients.find((c: any) => c.name === p.clientName);
+                    return (
+                    <Link key={p.id} href="/business-projects" className="premium-card" style={{ padding: "1.05rem 1.1rem", textDecoration: "none", display: "flex", flexDirection: "column", gap: 9 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <ClientLogo src={cl ? (cl as any).logoUrl : undefined} name={p.clientName || p.name} size={34} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: "0.88rem", fontWeight: 800, color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                          <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>{p.clientName}</div>
+                        </div>
                       </div>
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--foreground-muted)" }}>
                         <span>התקדמות</span><span style={{ fontWeight: 800, color: pColor(p.pct) }}>{p.pct}%</span>
                       </div>
-                      <div style={{ height: 7, background: "var(--surface)", borderRadius: 999, overflow: "hidden" }}><div style={{ width: `${p.pct}%`, height: "100%", background: pColor(p.pct), borderRadius: 999 }} /></div>
+                      <div style={{ height: 8, background: "var(--surface)", borderRadius: 999, overflow: "hidden" }}><div style={{ width: `${p.pct}%`, height: "100%", background: pColor(p.pct), borderRadius: 999 }} /></div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>{p.deadline ? `יעד ${new Date(p.deadline).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "2-digit" })}` : ""}</span>
+                        <span style={{ fontSize: "0.68rem", color: p.pct < 40 ? "#ef4444" : "var(--foreground-muted)" }}>{p.deadline ? `יעד ${new Date(p.deadline).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" })}` : ""}{p.pct < 40 ? " · בסיכון" : ""}</span>
                         {p.mgr && <Avatar src={p.mgr.avatarUrl} name={p.mgr.name} size={24} ring={false} />}
                       </div>
                     </Link>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
 
-            {/* ═══ 8·9·10 · TEAM · LEADS · COLLECTIONS ═══ */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "1rem" }} className="dash-3col">
-              <SectionCard title="👥 פעילות צוות" action={<Link href="/workload" style={linkSmall}>ראה הכל ←</Link>}>
-                {teamLoad.length === 0 ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>אין משימות פתוחות</div> :
-                  teamLoad.map((e: any, i: number) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 9, padding: "0.4rem 0", borderBottom: "1px solid var(--border)" }}>
-                      <Avatar src={e.avatarUrl} name={e.name} size={28} ring={false} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--foreground)" }}>{e.name}</div>
-                        <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>{e.open} משימות{e.overdue > 0 ? ` · ${e.overdue} בפיגור` : ""}</div>
-                      </div>
-                      {e.overdue > 0 && <span style={{ fontSize: "0.6rem", fontWeight: 800, color: "#ef4444", background: "#fef2f2", borderRadius: 999, padding: "2px 7px" }}>עומס</span>}
-                    </div>
-                  ))}
-              </SectionCard>
-
-              <SectionCard title="🎯 לידים — מעקב חכם" action={<Link href="/leads" style={linkSmall}>ראה הכל ←</Link>}>
-                {leadsTop.length === 0 ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>אין לידים פעילים</div> :
-                  leadsTop.map((l: any) => (
-                    <div key={l.id} style={{ padding: "0.45rem 0", borderBottom: "1px solid var(--border)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", marginBottom: 4 }}><span style={{ fontWeight: 700, color: "var(--foreground)" }}>{l.name}</span><span style={{ fontWeight: 800, color: "var(--accent)" }}>{l.pct}%</span></div>
-                      <div style={{ height: 6, background: "var(--surface)", borderRadius: 999, overflow: "hidden" }}><div style={{ width: `${l.pct}%`, height: "100%", background: "var(--accent)", borderRadius: 999 }} /></div>
-                    </div>
-                  ))}
-              </SectionCard>
-
-              <SectionCard title="💰 בנייה ותשלומים" action={<Link href="/accounting" style={linkSmall}>ראה הכל ←</Link>}>
-                {collections.length === 0 ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>אין תשלומים פתוחים 🎉</div> :
-                  collections.map((c: any, i: number) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.45rem 0", borderBottom: "1px solid var(--border)" }}>
-                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: c.overdue ? "#ef4444" : "#f59e0b", flexShrink: 0 }} />
-                      <span style={{ flex: 1, fontSize: "0.8rem", fontWeight: 700, color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
-                      <span style={{ fontSize: "0.84rem", fontWeight: 800, color: "var(--foreground)" }}>{formatCurrency(c.amount)}</span>
-                    </div>
-                  ))}
-              </SectionCard>
+            {/* ═══════════════ 9 · CLIENT HEALTH CENTER ═══════════════ */}
+            <div>
+              <div style={sectionLabel}>🩺 לקוחות הדורשים תשומת לב</div>
+              {clientHealth.length === 0 ? (
+                <div className="premium-card" style={{ padding: "1.2rem", fontSize: "0.85rem", color: "#16a34a", fontWeight: 700 }}>כל הלקוחות בטיפול תקין 🎉</div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "0.85rem" }}>
+                  {clientHealth.map((c: any) => {
+                    const tone = c.severity >= 5 ? "#ef4444" : c.severity >= 3 ? "#f59e0b" : "#64748b";
+                    return (
+                      <Link key={c.id} href={`/clients/${c.id}`} className="premium-card" style={{ padding: "1rem", textDecoration: "none", display: "flex", flexDirection: "column", gap: 8, borderInlineStart: `4px solid ${tone}`, background: tone === "#ef4444" ? "rgba(239,68,68,0.05)" : "var(--surface-raised)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                          <ClientLogo src={c.logo} name={c.name} size={30} />
+                          <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          {c.reasons.slice(0, 3).map((r: string, i: number) => (
+                            <span key={i} style={{ fontSize: "0.72rem", color: tone, fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}><span style={{ width: 5, height: 5, borderRadius: "50%", background: tone }} />{r}</span>
+                          ))}
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {/* ═══ 11 · AI INSIGHTS + ACTIVITY ═══ */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }} className="dash-2col">
-              <SectionCard title="🧠 תובנות AI לעסק שלך">
-                {[...opInsights, ...aiInsights].slice(0, 4).map((ins: any, i: number) => (
+            {/* ═══════════════ 10·11 · AI INSIGHTS · MONTHLY CHART · ACTIVITY ═══════════════ */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }} className="dash-3col">
+              <SectionCard title="🧠 תובנות AI לעסק">
+                {[...opInsights, ...aiInsights].slice(0, 5).map((ins: any, i: number) => (
                   <div key={i} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "0.45rem 0", borderBottom: "1px solid var(--border)" }}>
                     <span style={{ fontSize: "1rem" }}>{ins.icon || "💡"}</span>
-                    <div><div style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--foreground)" }}>{ins.title}</div>{ins.description && <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>{ins.description}</div>}</div>
+                    <div><div style={{ fontSize: "0.79rem", fontWeight: 700, color: "var(--foreground)" }}>{ins.title || ins.description}</div>{ins.title && ins.description && <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>{ins.description}</div>}</div>
                   </div>
                 ))}
               </SectionCard>
+
+              <SectionCard title="📈 ביצועים — 6 חודשים" action={<Link href="/accounting" style={linkSmall}>פירוט ←</Link>}>
+                <div style={{ fontSize: "1.5rem", fontWeight: 900, color: "var(--foreground)" }}>{formatCurrency(revenueSeries[revenueSeries.length - 1] || 0)}</div>
+                <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", marginBottom: 10 }}>הכנסות החודש הנוכחי</div>
+                {revenueSeries.some((n) => n > 0) ? <Sparkline values={revenueSeries} /> : <div style={{ fontSize: "0.78rem", color: "var(--foreground-subtle)" }}>אין נתוני הכנסה עדיין</div>}
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, fontSize: "0.72rem" }}>
+                  <div><div style={{ color: "var(--foreground-muted)" }}>לידים</div><div style={{ fontWeight: 800, color: "var(--accent)" }}>{analytics.activeLeads}</div></div>
+                  <div><div style={{ color: "var(--foreground-muted)" }}>נסגרו</div><div style={{ fontWeight: 800, color: "#22c55e" }}>{analytics.wonLeads}</div></div>
+                  <div><div style={{ color: "var(--foreground-muted)" }}>תכנים</div><div style={{ fontWeight: 800, color: "#8b5cf6" }}>{contentThisMonth}</div></div>
+                </div>
+              </SectionCard>
+
               <SectionCard title="🕒 פעילות אחרונה">
                 {activities.length === 0 ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>אין פעילות אחרונה</div> :
                   activities.slice(0, 7).map((a: any, i: number) => (
                     <div key={i} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "0.4rem 0", borderBottom: "1px solid var(--border)" }}>
                       <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--accent)", marginTop: 6, flexShrink: 0 }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: "0.78rem", color: "var(--foreground)" }}>{a.description || a.title || a.action || "פעילות"}</div>
-                        <div style={{ fontSize: "0.66rem", color: "var(--foreground-subtle)" }}>{a.userName ? a.userName + " · " : ""}{a.createdAt ? new Date(a.createdAt).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</div>
+                        <div style={{ fontSize: "0.77rem", color: "var(--foreground)" }}>{a.description || a.title || a.action || "פעילות"}</div>
+                        <div style={{ fontSize: "0.65rem", color: "var(--foreground-subtle)" }}>{a.userName ? a.userName + " · " : ""}{a.createdAt ? new Date(a.createdAt).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</div>
                       </div>
                     </div>
                   ))}
               </SectionCard>
             </div>
 
-            {/* ═══ 12 · QUICK ACCESS TOOLS ═══ */}
-            <div>
-              <div style={sectionLabel}>🔗 גישה מהירה</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
-                {[
-                  { t: "SEO/GEO", icon: "🔍", href: "/seo-geo" }, { t: "פודקאסט", icon: "🎙️", href: "/accounting/podcast/calendar" },
-                  { t: "אחסון", icon: "🌐", href: "/business-projects/hosting" }, { t: "מסמכים", icon: "📄", href: "/accounting/documents" },
-                  { t: "קריאייטיב AI", icon: "✨", href: "/creative-pixelai" }, { t: "דוחות", icon: "📑", href: "/reports" },
-                  { t: "אוטומציות", icon: "⚙️", href: "/automations" }, { t: "הגדרות", icon: "🔧", href: "/settings" },
-                ].map((s, i) => (
-                  <Link key={i} href={s.href} style={{ display: "flex", alignItems: "center", gap: 7, background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 10, padding: "0.5rem 0.85rem", fontSize: "0.8rem", fontWeight: 600, color: "var(--foreground)", textDecoration: "none" }}><span>{s.icon}</span>{s.t}</Link>
-                ))}
-              </div>
+            {/* ═══════════════ 12 · FLOATING QUICK ACTIONS ═══════════════ */}
+            <div style={{ position: "fixed", insetInlineEnd: 24, bottom: 24, zIndex: 50, direction: "rtl" }}>
+              {fabOpen && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12, alignItems: "flex-end" }}>
+                  {fabActions.map((a, i) => (
+                    <Link key={i} href={a.href} onClick={() => setFabOpen(false)} style={{ display: "flex", alignItems: "center", gap: 9, background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 999, padding: "0.5rem 0.95rem", fontSize: "0.8rem", fontWeight: 700, color: "var(--foreground)", textDecoration: "none", boxShadow: "0 4px 14px rgba(0,0,0,0.12)" }}>
+                      <span>{a.icon}</span>{a.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+              <button onClick={() => setFabOpen((o) => !o)} aria-label="פעולות מהירות" style={{ width: 56, height: 56, borderRadius: "50%", border: "none", cursor: "pointer", background: "linear-gradient(135deg,#6366f1,#06b6d4)", color: "#fff", fontSize: "1.6rem", boxShadow: "0 6px 22px rgba(99,102,241,0.5)", transition: "transform 0.2s", transform: fabOpen ? "rotate(45deg)" : "none" }}>+</button>
             </div>
           </>
         )}
