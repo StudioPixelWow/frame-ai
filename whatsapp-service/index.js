@@ -18,6 +18,7 @@
 
 const express = require('express');
 const QRCode = require('qrcode');
+const fs = require('fs');
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 
 const PORT = process.env.PORT || 8080;
@@ -29,30 +30,52 @@ let state = 'starting';          // starting | qr | authenticated | ready | disc
 let lastQrDataUrl = null;        // PNG data URL of the current QR (when state === 'qr')
 let meInfo = null;               // connected account info
 
-const client = new Client({
-  authStrategy: new LocalAuth({ dataPath: SESSION_DIR }),
-  puppeteer: {
-    headless: true,
-    // Use the system Chromium installed by the Dockerfile when present.
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-  },
-});
+let client;            // rebuildable so a hard restart can issue a fresh QR
+let restarting = false;
 
-client.on('qr', async (qr) => {
-  state = 'qr';
-  try { lastQrDataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 320 }); } catch { lastQrDataUrl = null; }
-  console.log('[wa] QR ready — scan to connect');
-});
-client.on('authenticated', () => { state = 'authenticated'; lastQrDataUrl = null; console.log('[wa] authenticated'); });
-client.on('ready', () => {
-  state = 'ready'; lastQrDataUrl = null;
-  meInfo = client.info ? { pushname: client.info.pushname, wid: client.info.wid?._serialized } : null;
-  console.log('[wa] READY as', meInfo?.pushname);
-});
-client.on('disconnected', (r) => { state = 'disconnected'; meInfo = null; console.log('[wa] disconnected:', r); setTimeout(() => client.initialize().catch(() => {}), 5000); });
-client.on('auth_failure', (m) => { state = 'disconnected'; console.log('[wa] auth_failure:', m); });
+function buildClient() {
+  const c = new Client({
+    authStrategy: new LocalAuth({ dataPath: SESSION_DIR }),
+    puppeteer: {
+      headless: true,
+      // Use the system Chromium installed by the Dockerfile when present.
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+    },
+  });
+  c.on('qr', async (qr) => {
+    state = 'qr';
+    try { lastQrDataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 320 }); } catch { lastQrDataUrl = null; }
+    console.log('[wa] QR ready — scan to connect');
+  });
+  c.on('authenticated', () => { state = 'authenticated'; lastQrDataUrl = null; console.log('[wa] authenticated'); });
+  c.on('ready', () => {
+    state = 'ready'; lastQrDataUrl = null;
+    meInfo = c.info ? { pushname: c.info.pushname, wid: c.info.wid?._serialized } : null;
+    console.log('[wa] READY as', meInfo?.pushname);
+  });
+  c.on('disconnected', (r) => { state = 'disconnected'; meInfo = null; console.log('[wa] disconnected:', r); setTimeout(() => { client.initialize().catch(() => {}); }, 5000); });
+  c.on('auth_failure', (m) => { state = 'disconnected'; console.log('[wa] auth_failure:', m); });
+  return c;
+}
 
+// Hard restart: destroy the client, optionally wipe the saved session so a
+// brand-new QR is generated (instead of silently reconnecting), then re-init.
+async function hardRestart({ wipe } = { wipe: true }) {
+  if (restarting) return;
+  restarting = true;
+  state = 'starting'; meInfo = null; lastQrDataUrl = null;
+  try { await client.destroy(); } catch (e) { console.log('[wa] destroy err', e?.message); }
+  if (wipe) {
+    try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); console.log('[wa] session wiped'); }
+    catch (e) { console.error('[wa] wipe err', e?.message); }
+  }
+  client = buildClient();
+  client.initialize().catch((e) => console.error('[wa] reinit error', e));
+  restarting = false;
+}
+
+client = buildClient();
 client.initialize().catch((e) => console.error('[wa] init error', e));
 
 // ── Phone normalization → WhatsApp chat id ───────────────────────────────
@@ -128,11 +151,10 @@ app.get('/status', auth, (_req, res) => {
   res.json({ state, connected: state === 'ready', me: meInfo, qr: state === 'qr' ? lastQrDataUrl : null });
 });
 
-// Force a fresh QR / re-login.
+// Force a fresh QR / re-login — wipes the saved session and rebuilds the client
+// so a brand-new QR is emitted (a plain logout would just reconnect silently).
 app.post('/logout', auth, async (_req, res) => {
-  try { await client.logout(); } catch { /* */ }
-  state = 'starting'; meInfo = null; lastQrDataUrl = null;
-  client.initialize().catch(() => {});
+  hardRestart({ wipe: true });
   res.json({ ok: true });
 });
 
