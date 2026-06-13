@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from "react";
+import Avatar from "@/components/ui/avatar";
 import type { Client, Employee, ClientGanttItem } from "@/lib/db/schema";
 import { useClientGanttItems, useTasks, useEmployees, useProjects, useEmployeeTasks } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
@@ -2849,6 +2850,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                 width: "min(640px, 54vw)",
                 maxWidth: "96vw",
                 overflowY: "auto",
+                paddingBottom: "5rem",
                 boxShadow: "8px 0 40px rgba(0,0,0,0.25)",
                 animation: "cid-slide 0.28s ease",
               }}
@@ -2930,6 +2932,56 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                   ✕
                 </button>
               </div>
+
+              {/* ── AI Content Manager + Workflow progress ── */}
+              {(() => {
+                const owner = (allEmployees || []).find((e: any) => e.id === selectedItem.assigneeId);
+                const st = selectedItem.status;
+                const stageIdx = st === "published" ? 4 : (st === "approved" || st === "scheduled") ? 3 : st === "submitted_for_approval" ? 3 : (st === "in_progress" || st === "returned_for_changes") ? 2 : st === "new_idea" ? 0 : 1;
+                const prog = ({ new_idea: 10, draft: 15, in_progress: 50, submitted_for_approval: 75, scheduled: 85, approved: 90, published: 100, returned_for_changes: 40 } as Record<string, number>)[st] ?? 20;
+                const stages = ["בריף", "כתיבה", "עיצוב", "אישור", "פרסום"];
+                const daysWaiting = selectedItem.updatedAt ? Math.floor((Date.now() - new Date(selectedItem.updatedAt).getTime()) / 864e5) : 0;
+                const ai: string[] = [];
+                if (st === "submitted_for_approval") ai.push(daysWaiting >= 3 ? `ממתין לאישור הלקוח כבר ${daysWaiting} ימים — מומלץ לתזכר` : "ממתין לאישור הלקוח — שווה לעקוב");
+                if (st === "returned_for_changes") ai.push("הוחזר לתיקון — טפל בהערות והחזר לאישור");
+                if (selectedItem.date && new Date(selectedItem.date) < new Date(new Date().toDateString()) && st !== "published") ai.push("תאריך הפרסום עבר — עדכן תאריך או פרסם");
+                if (!owner) ai.push("לא שובץ אחראי לפריט הזה");
+                if (st === "approved") ai.push("מאושר ומוכן לפרסום — קבע מועד פרסום");
+                if (ai.length === 0) ai.push("הפריט בקצב טוב — אין חסמים כרגע ✨");
+                return (
+                  <>
+                    <div style={{ borderRadius: 12, padding: "0.85rem 1rem", background: "linear-gradient(135deg,#eef2ff,#ecfeff)", border: "1px solid #c7d2fe", marginBottom: "0.85rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                        <span style={{ fontSize: "0.85rem", fontWeight: 900, background: "linear-gradient(90deg,#6366f1,#06b6d4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>✨ מנהל תוכן AI</span>
+                        {owner && <span style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 5, fontSize: "0.7rem", color: "#475569" }}><Avatar src={(owner as any).avatarUrl} name={owner.name} size={20} ring={false} />{owner.name}</span>}
+                      </div>
+                      {ai.map((t, i) => <div key={i} style={{ display: "flex", gap: 7, alignItems: "flex-start", fontSize: "0.78rem", color: "#334155", marginBottom: 3 }}><span style={{ width: 6, height: 6, borderRadius: "50%", background: i === 0 ? "#f59e0b" : "#22c55e", marginTop: 6, flexShrink: 0 }} />{t}</div>)}
+                    </div>
+                    <div style={{ border: "1px solid var(--border)", borderRadius: 12, padding: "0.85rem 1rem", marginBottom: "0.85rem" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.74rem", color: "var(--foreground-muted)", marginBottom: 8 }}><span>התקדמות הפקה</span><span style={{ fontWeight: 800, color: statusInfo.color }}>{prog}%</span></div>
+                      <div style={{ display: "flex", alignItems: "center" }}>
+                        {stages.map((s, i) => (
+                          <div key={s} style={{ flex: 1, textAlign: "center", position: "relative" }}>
+                            {i > 0 && <div style={{ position: "absolute", top: 11, insetInlineEnd: "50%", width: "100%", height: 2, background: i <= stageIdx ? "#22c55e" : "var(--border)" }} />}
+                            <div style={{ position: "relative", zIndex: 1, width: 24, height: 24, borderRadius: "50%", margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.66rem", color: "#fff", background: i < stageIdx ? "#22c55e" : i === stageIdx ? "var(--accent)" : "var(--border)" }}>{i < stageIdx ? "✓" : i + 1}</div>
+                            <div style={{ fontSize: "0.62rem", color: i <= stageIdx ? "var(--foreground)" : "var(--foreground-subtle)", marginTop: 4 }}>{s}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Sticky action footer */}
+                    <div className="cid-drawer" style={{ position: "fixed", bottom: 0, insetInlineStart: 0, width: "min(640px, 54vw)", maxWidth: "96vw", background: "var(--surface-raised)", borderTop: "1px solid var(--border)", padding: "0.7rem 1.5rem", display: "flex", gap: 8, flexWrap: "wrap", zIndex: 2, direction: "rtl" }}>
+                      {selectedItem.status === "submitted_for_approval" && <button onClick={() => handleChangeStatus(selectedItem.id, "approved")} style={{ background: "#22c55e", color: "#fff", border: "none", borderRadius: 10, padding: "0.5rem 1rem", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer" }}>אשר</button>}
+                      {selectedItem.status === "submitted_for_approval" && <button onClick={() => handleChangeStatus(selectedItem.id, "returned_for_changes")} style={{ background: "#fff7ed", color: "#c2410c", border: "1px solid #fed7aa", borderRadius: 10, padding: "0.5rem 1rem", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer" }}>בקש שינויים</button>}
+                      {(selectedItem.status === "in_progress" || selectedItem.status === "draft" || selectedItem.status === "new_idea" || selectedItem.status === "returned_for_changes") && <button onClick={() => handleChangeStatus(selectedItem.id, "submitted_for_approval")} style={{ background: "var(--accent)", color: "#fff", border: "none", borderRadius: 10, padding: "0.5rem 1rem", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer" }}>שלח לאישור לקוח</button>}
+                      {selectedItem.status === "approved" && <button onClick={() => handleChangeStatus(selectedItem.id, "published")} style={{ background: "var(--accent)", color: "#fff", border: "none", borderRadius: 10, padding: "0.5rem 1rem", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer" }}>סמן כפורסם</button>}
+                      <button onClick={async () => { try { const { id: _id, createdAt: _c, updatedAt: _u, ...rest } = selectedItem as any; await createGanttItem({ ...rest, title: `${selectedItem.title || "תוכן"} (עותק)`, status: "draft" } as any); toast("הפריט שוכפל", "success"); } catch { toast("שגיאה בשכפול", "error"); } }} style={{ background: "transparent", color: "var(--foreground-muted)", border: "1px solid var(--border)", borderRadius: 10, padding: "0.5rem 1rem", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer" }}>שכפל</button>
+                      <button onClick={async () => { if (confirm("למחוק את הפריט?")) { try { await removeGanttItem(selectedItem.id); setEditingItemId(null); toast("הפריט נמחק", "success"); } catch { toast("שגיאה במחיקה", "error"); } } }} style={{ marginInlineStart: "auto", background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", borderRadius: 10, padding: "0.5rem 1rem", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer" }}>מחק</button>
+                    </div>
+                  </>
+                );
+              })()}
 
               {/* Research origin — show which idea this came from */}
               {selectedItem.researchReason && (
