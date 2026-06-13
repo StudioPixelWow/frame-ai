@@ -86,7 +86,23 @@ export default function FinancialCommandCenter({ payments = [], projectPayments 
     if (topClient && recurring > 0 && topClient.amount / recurring > 0.2) risks.push({ icon: "⚠️", text: `${topClient.name} מהווה ${Math.round((topClient.amount / recurring) * 100)}% מההכנסה הקבועה — ריכוז גבוה` });
     if (overdue > 0) risks.push({ icon: "💸", text: `${cur(overdue)} בפיגור גבייה כולל` });
 
-    return { monthRevenue, recurring, outstanding, overdue, revSeries, action, pipeline, categories, catTotal, retainers, renewals, risks, overdueCount: overdueItems.length, topClient };
+    // ── Client financial health (per-client, real data) ──
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).getTime();
+    const clientHealth = (clients || []).filter((c: any) => c.status !== "inactive").map((c: any) => {
+      const cps = all.filter((p: any) => p.clientId === c.id);
+      const mrr = num(c.retainerAmount);
+      const monthIncome = cps.filter((p: any) => p.status === "paid" && p.paidAt && new Date(p.paidAt).getTime() >= monthStart && new Date(p.paidAt).getTime() <= monthEnd).reduce((s: number, p: any) => s + num(p.amount), 0) || mrr;
+      const openPs = cps.filter(isOpen);
+      const out = openPs.reduce((s: number, p: any) => s + num(p.amount), 0);
+      const overdueDays = Math.max(0, ...openPs.map((p: any) => (p.dueDate && new Date(p.dueDate) < now) ? Math.floor((now.getTime() - new Date(p.dueDate).getTime()) / 864e5) : 0));
+      const status = overdueDays > 0 ? "באיחור" : out > 0 ? "שולם חלקית" : "שולם";
+      const statusColor = overdueDays > 0 ? "#ef4444" : out > 0 ? "#f59e0b" : "#22c55e";
+      const health = overdueDays > 14 ? { label: "בסיכון", color: "#ef4444" } : overdueDays > 0 || out > 0 ? { label: "במעקב", color: "#f59e0b" } : { label: "בריא", color: "#22c55e" };
+      return { id: c.id, name: c.name, mrr, monthIncome, out, overdueDays, status, statusColor, health, annual: mrr * 12 };
+    }).filter((c: any) => c.mrr > 0 || c.out > 0 || c.monthIncome > 0).sort((a: any, b: any) => b.mrr - a.mrr).slice(0, 10);
+    const arr = recurring * 12;
+    return { monthRevenue, recurring, arr, outstanding, overdue, revSeries, action, pipeline, categories, catTotal, retainers, renewals, risks, overdueCount: overdueItems.length, topClient, clientHealth };
   }, [payments, projectPayments, clients, hostingRecords]);
 
   const insights: string[] = [];
@@ -202,6 +218,44 @@ export default function FinancialCommandCenter({ payments = [], projectPayments 
           </div>
         </div>
       </div>
+
+      {/* Client financial health */}
+      {m.clientHealth.length > 0 && (
+        <div style={card}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div style={{ fontWeight: 800, fontSize: "0.95rem" }}>בריאות לקוחות פיננסית</div>
+            <span style={{ fontSize: "0.74rem", color: "var(--foreground-muted)" }}>MRR {cur(m.recurring)} · ARR {cur(m.arr)}</span>
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
+              <thead>
+                <tr style={{ color: "var(--foreground-muted)", fontSize: "0.72rem", textAlign: "right" }}>
+                  <th style={{ padding: "0.4rem 0.5rem", fontWeight: 600 }}>לקוח</th>
+                  <th style={{ padding: "0.4rem 0.5rem", fontWeight: 600 }}>MRR</th>
+                  <th style={{ padding: "0.4rem 0.5rem", fontWeight: 600 }}>הכנסה חודשית</th>
+                  <th style={{ padding: "0.4rem 0.5rem", fontWeight: 600 }}>מצב תשלום</th>
+                  <th style={{ padding: "0.4rem 0.5rem", fontWeight: 600 }}>איחור</th>
+                  <th style={{ padding: "0.4rem 0.5rem", fontWeight: 600 }}>הכנסה שנתית</th>
+                  <th style={{ padding: "0.4rem 0.5rem", fontWeight: 600 }}>סטטוס</th>
+                </tr>
+              </thead>
+              <tbody>
+                {m.clientHealth.map((c: any) => (
+                  <tr key={c.id} style={{ borderTop: "1px solid var(--border)" }}>
+                    <td style={{ padding: "0.5rem", fontWeight: 700, color: "var(--foreground)" }}>{c.name}</td>
+                    <td style={{ padding: "0.5rem", color: "var(--foreground)" }}>{c.mrr > 0 ? cur(c.mrr) : "—"}</td>
+                    <td style={{ padding: "0.5rem", color: "var(--foreground)" }}>{cur(c.monthIncome)}</td>
+                    <td style={{ padding: "0.5rem" }}><span style={{ fontSize: "0.72rem", fontWeight: 700, color: c.statusColor, background: c.statusColor + "1a", borderRadius: 999, padding: "2px 9px" }}>{c.status}</span></td>
+                    <td style={{ padding: "0.5rem", color: c.overdueDays > 0 ? "#ef4444" : "var(--foreground-muted)", fontWeight: c.overdueDays > 0 ? 700 : 400 }}>{c.overdueDays > 0 ? `${c.overdueDays} ימים` : "0 ימים"}</td>
+                    <td style={{ padding: "0.5rem", color: "var(--foreground-muted)" }}>{c.annual > 0 ? cur(c.annual) : "—"}</td>
+                    <td style={{ padding: "0.5rem" }}><span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "0.72rem", fontWeight: 700, color: c.health.color }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: c.health.color }} />{c.health.label}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Risks */}
       {m.risks.length > 0 && (
