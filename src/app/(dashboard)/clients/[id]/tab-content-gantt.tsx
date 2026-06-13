@@ -1364,7 +1364,11 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                   {true && (
                     <>
                       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", marginBottom: "0.75rem" }}>
-                        <div style={{ flex: 1 }}>
+                        <div
+                          style={{ flex: 1, cursor: "pointer" }}
+                          onClick={() => setEditingItemId(item.id)}
+                          title="פתח את חלל העבודה של התוכן"
+                        >
                           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
                             <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--foreground)" }}>
                               {item.title || "ללא כותרת"}
