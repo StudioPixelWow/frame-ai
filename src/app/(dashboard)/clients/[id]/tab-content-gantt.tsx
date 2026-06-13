@@ -2860,6 +2860,10 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
               {/* Header */}
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1rem" }}>
                 <div>
+                  {(() => {
+                    const src: Record<string, string> = { list: "📋 רשימת תוכן", calendar: "📅 לוח חודשי", annual: "🗓️ לוח שנתי", queue: "📥 תור תוכן" };
+                    return <div style={{ fontSize: "0.66rem", color: "var(--foreground-subtle)", marginBottom: 4 }}>נפתח מ: {src[activeView] || "תוכן"}</div>;
+                  })()}
                   <h4 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--foreground)", margin: "0 0 0.5rem 0" }}>
                     {typeInfo.emoji} {selectedItem.title || "ללא כותרת"}
                   </h4>
