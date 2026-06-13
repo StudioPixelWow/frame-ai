@@ -230,10 +230,11 @@ function DashboardContentInner() {
   const findEmp = (names: string[]) => (employees || []).find((e: any) => names.some((n) => String(e.name || '').includes(n)));
   const tal = findEmp(['טל זטלמן', 'טל ']);
   const maya = findEmp(['מאיה']);
-  const waLink = (emp: any, msg: string) => { const d = digits((emp as any)?.phone || ''); return d ? `https://wa.me/${d}?text=${encodeURIComponent(msg)}` : '#'; };
+  const waLink = (phone: string, msg: string) => `https://wa.me/${digits(phone)}?text=${encodeURIComponent(msg)}`;
+  const telLink = (phone: string) => `tel:${String(phone).replace(/\D/g, '')}`;
   const team = [
-    { emp: tal, name: tal?.name || 'טל זטלמן', title: 'מייסד ומנהל אסטרטגי' },
-    { emp: maya, name: maya?.name || 'מאיה זטלמן', title: 'מנהלת הלקוח שלך' },
+    { name: tal?.name || 'טל זטלמן', title: 'מייסד ומנהל אסטרטגי', phone: '0546365333' },
+    { name: maya?.name || 'מאיה זטלמן', title: 'מנהלת הלקוח שלך', phone: '0546759941' },
   ];
   const greet = now.getHours() < 12 ? 'בוקר טוב' : now.getHours() < 18 ? 'צהריים טובים' : 'ערב טוב';
   const delivered = [
@@ -262,8 +263,8 @@ function DashboardContentInner() {
     { ic: '🎨', l: 'בקשת גרפיקה', href: '/client-portal/tasks?clientId=' + (clientId || '') },
     { ic: '🎥', l: 'בקשת סרטון', href: '/client-portal/tasks?clientId=' + (clientId || '') },
     { ic: '📢', l: 'בקשת קמפיין', href: '/client-portal/tasks?clientId=' + (clientId || '') },
-    { ic: '📅', l: 'קביעת פגישה', href: waLink(maya, 'היי, אשמח לקבוע פגישה') },
-    { ic: '💬', l: 'שליחת הודעה', href: waLink(maya, 'היי מאיה,') },
+    { ic: '📅', l: 'קביעת פגישה', href: waLink('0546759941', 'היי, אשמח לקבוע פגישה') },
+    { ic: '💬', l: 'שליחת הודעה', href: waLink('0546759941', 'היי מאיה,') },
     { ic: '📊', l: 'בקשת דוח', href: '/client-portal/reports?clientId=' + (clientId || '') },
   ];
   const sCard: React.CSSProperties = { background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: 18, padding: '1.4rem' };
@@ -308,8 +309,8 @@ function DashboardContentInner() {
               <div style={{ fontWeight: 800, fontSize: '1rem' }}>{m.name}</div>
               <div style={{ fontSize: '0.74rem', color: 'var(--foreground-muted)', marginBottom: 12 }}>{m.title}</div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-                <a href={waLink(m.emp, `היי ${m.name.split(' ')[0]},`)} target="_blank" rel="noopener noreferrer" style={{ flex: 1, fontSize: '0.78rem', fontWeight: 700, color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '0.5rem', textDecoration: 'none' }}>💬 שלח הודעה</a>
-                <a href={waLink(m.emp, `היי ${m.name.split(' ')[0]}, אשמח לקבוע שיחה`)} target="_blank" rel="noopener noreferrer" style={{ flex: 1, fontSize: '0.78rem', fontWeight: 700, color: '#4f46e5', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, padding: '0.5rem', textDecoration: 'none' }}>📞 קביעת שיחה</a>
+                <a href={waLink(m.phone, `היי ${m.name.split(' ')[0]},`)} target="_blank" rel="noopener noreferrer" style={{ flex: 1, fontSize: '0.78rem', fontWeight: 700, color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '0.5rem', textDecoration: 'none' }}>💬 שלח הודעה</a>
+                <a href={telLink(m.phone)} style={{ flex: 1, fontSize: '0.78rem', fontWeight: 700, color: '#4f46e5', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, padding: '0.5rem', textDecoration: 'none' }}>📞 חייג עכשיו</a>
               </div>
             </div>
           ))}
