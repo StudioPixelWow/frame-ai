@@ -18,6 +18,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/saas-kit";
+import Avatar from "@/components/ui/avatar";
 import type { EmployeeTask, EmployeeTaskStatus, EmployeeTaskPriority, Meeting, MeetingStatus } from "@/lib/db/schema";
 
 /* ── Hebrew helpers ────────────────────────────────────────────── */
@@ -74,6 +75,32 @@ type ViewMode = "calendar" | "tasks" | "completed";
 /* ================================================================
    MAIN PAGE
    ================================================================ */
+/* ── planning command-center helpers ── */
+const calLink: React.CSSProperties = { fontSize: "0.72rem", fontWeight: 700, color: "var(--accent)", textDecoration: "none" };
+function ColCard({ title, link, children }: { title: string; link?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="premium-card" style={{ padding: "1rem 1.1rem", display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--foreground)" }}>{title}</span>{link}
+      </div>
+      <div style={{ flex: 1 }}>{children}</div>
+    </div>
+  );
+}
+function CalEmpty({ children }: { children: React.ReactNode }) { return <div style={{ fontSize: "0.78rem", color: "var(--foreground-subtle)", padding: "0.3rem 0" }}>{children}</div>; }
+function CalRow({ e }: { e: any }) {
+  const time = String(e.subtitle || "").match(/\d{1,2}:\d{2}/)?.[0] || "";
+  return (
+    <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "0.4rem 0", borderBottom: "1px solid var(--border)" }}>
+      {time ? <span style={{ fontSize: "0.7rem", fontWeight: 800, color: "var(--accent)", minWidth: 40 }}>{time}</span> : <span style={{ fontSize: "0.9rem", minWidth: 22 }}>{e.icon}</span>}
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.icon} {e.title}</div>
+        {e.subtitle && <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>{e.clientName || e.subtitle}</div>}
+      </div>
+    </div>
+  );
+}
+
 export default function BusinessCalendarPage() {
   const today = new Date();
   const [year, setYear]     = useState(today.getFullYear());
@@ -458,6 +485,60 @@ export default function BusinessCalendarPage() {
     return { total: activeTasks.length, overdue, todayTasks, thisWeek, completed: completedTasks.length };
   }, [activeTasks, completedTasks]);
 
+  /* ── Planning command-center model ─────────────────────────── */
+  const cc = useMemo(() => {
+    const now = new Date();
+    const tmr = new Date(now.getTime() + 86400000);
+    const sameDay = (e: any, d: Date) => e.day === d.getDate() && e.month === d.getMonth() && e.year === d.getFullYear();
+    const evDate = (e: any) => new Date(e.year, e.month, e.day);
+    const tmin = (e: any) => { const m = String(e.subtitle || "").match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 9999; };
+    const byTime = (a: any, b: any) => tmin(a) - tmin(b);
+    const todayEvents = events.filter((e) => sameDay(e, now)).sort(byTime);
+    const tomorrowEvents = events.filter((e) => sameDay(e, tmr)).sort(byTime);
+    const t0 = new Date(now.toDateString()).getTime();
+    const weekEvents = events.filter((e) => { const d = evDate(e).getTime(); return d >= t0 && d < t0 + 7 * 86400000; }).length;
+
+    // workload
+    const counts: Record<string, number> = {};
+    activeTasks.forEach((t: any) => { if (t.assignedEmployeeId) counts[t.assignedEmployeeId] = (counts[t.assignedEmployeeId] || 0) + 1; });
+    const maxLoad = Math.max(1, ...Object.values(counts));
+    const workload = (employees || []).map((e: any) => ({ id: e.id, name: e.name, avatarUrl: e.avatarUrl, role: e.role, open: counts[e.id] || 0, pct: Math.round(((counts[e.id] || 0) / maxLoad) * 100) })).filter((e) => e.open > 0).sort((a, b) => b.pct - a.pct).slice(0, 5);
+    const avgWorkload = workload.length ? Math.round(workload.reduce((s, e) => s + e.pct, 0) / workload.length) : 0;
+
+    // conflicts (overlapping meetings same day)
+    const meetingsByDate: Record<string, any[]> = {};
+    (allMeetings || []).filter((m: any) => m.status !== "cancelled" && m.date).forEach((m: any) => { const k = new Date(m.date).toDateString(); (meetingsByDate[k] = meetingsByDate[k] || []).push(m); });
+    const conflictList: any[] = [];
+    Object.values(meetingsByDate).forEach((list) => {
+      const ms = list.sort((a, b) => String(a.startTime || "").localeCompare(String(b.startTime || "")));
+      for (let i = 1; i < ms.length; i++) if (String(ms[i].startTime || "") < String(ms[i - 1].endTime || "99:99")) conflictList.push({ a: ms[i - 1], b: ms[i], date: ms[i].date });
+    });
+
+    // critical deadlines (next 14 days)
+    const deadlineTypes = new Set(["task", "employee_task", "milestone", "payment"]);
+    const critical = events.filter((e) => deadlineTypes.has(e.type) && e.status !== "completed").map((e) => ({ ...e, _d: evDate(e).getTime() })).filter((e) => e._d >= t0 && e._d < t0 + 14 * 86400000).sort((a, b) => a._d - b._d).slice(0, 6)
+      .map((e) => { const days = Math.round((e._d - t0) / 86400000); return { ...e, daysLabel: days <= 0 ? "היום" : days === 1 ? "מחר" : `${days} ימים` }; });
+
+    // upcoming tasks
+    const upcoming = activeTasks.filter((t: any) => t.dueDate && new Date(t.dueDate).getTime() >= t0).sort((a: any, b: any) => +new Date(a.dueDate) - +new Date(b.dueDate)).slice(0, 5);
+
+    // recent activity
+    const recent = [...(employeeTasks || []), ...(allMeetings || [])].filter((x: any) => x.updatedAt || x.createdAt)
+      .sort((a: any, b: any) => +new Date(b.updatedAt || b.createdAt) - +new Date(a.updatedAt || a.createdAt)).slice(0, 5)
+      .map((x: any) => ({ title: x.title || "פריט", at: x.updatedAt || x.createdAt, who: (employees || []).find((e: any) => e.id === x.assignedEmployeeId)?.name || "" }));
+
+    // AI insights
+    const insights: string[] = [];
+    if (conflictList.length) insights.push(`${conflictList.length} התנגשויות ביומן השבוע`);
+    if (workload[0] && workload[0].pct >= 85) insights.push(`${workload[0].name} בעומס ${workload[0].pct}% — שקול להעביר משימות`);
+    const free = workload.find((e) => e.pct <= 45);
+    if (free) insights.push(`${free.name} פנוי/ה לקבל עבודה נוספת`);
+    if (critical[0] && critical[0].daysLabel === "היום") insights.push(`דדליין קריטי היום: ${critical[0].title}`);
+    if (insights.length === 0) insights.push("היומן מאוזן — אין חריגות כרגע 🎉");
+
+    return { todayEvents, tomorrowEvents, weekEvents, workload, avgWorkload, conflictList, critical, upcoming, recent, insights, meetingsToday: todayEvents.filter((e: any) => e.type === "meeting").length };
+  }, [events, activeTasks, employees, allMeetings, employeeTasks]);
+
   /* ================================================================
      RENDER
      ================================================================ */
@@ -471,24 +552,60 @@ export default function BusinessCalendarPage() {
         primaryAction={{ label: "+ משימה חדשה", onClick: () => openCreateTask() }}
       />
 
-      {/* ── Stats cards ─────────────────────────────────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.75rem", marginBottom: "1.5rem" }}>
+      {/* ── KPI strip ─────────────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.85rem", marginBottom: "1.25rem" }}>
         {[
-          { label: "משימות פעילות", value: stats.total, color: "#3b82f6" },
-          { label: "להיום", value: stats.todayTasks, color: "#0092cc" },
-          { label: "השבוע", value: stats.thisWeek, color: "#22c55e" },
-          { label: "באיחור", value: stats.overdue, color: "#ef4444" },
-          { label: "הושלמו", value: stats.completed, color: "#10b981" },
-        ].map(s => (
-          <div key={s.label} style={{
-            background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "0.75rem",
-            padding: "1rem", display: "flex", flexDirection: "column", gap: "0.25rem",
-            borderTop: `3px solid ${s.color}`,
-          }}>
-            <span style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>{s.label}</span>
-            <span style={{ fontSize: "1.6rem", fontWeight: 700 }}>{s.value}</span>
+          { icon: "🗓️", label: "פגישות היום", value: cc.meetingsToday, sub: cc.todayEvents[0] && cc.todayEvents[0].subtitle ? `הבא: ${String(cc.todayEvents[0].subtitle).match(/\d{1,2}:\d{2}/)?.[0] || ""}` : "—", color: "#3b82f6" },
+          { icon: "✅", label: "משימות היום", value: stats.todayTasks, sub: `${stats.overdue} באיחור`, color: "#22c55e" },
+          { icon: "📆", label: "אירועים השבוע", value: cc.weekEvents, sub: "ב-7 ימים", color: "#f59e0b" },
+          { icon: "⚡", label: "עומס יומי ממוצע", value: `${cc.avgWorkload}%`, sub: cc.avgWorkload > 80 ? "גבוה" : "בריא", color: "#8b5cf6" },
+          { icon: "⚠️", label: "התנגשויות", value: cc.conflictList.length, sub: cc.conflictList.length ? "דורש טיפול" : "אין", color: "#ef4444" },
+        ].map((s) => (
+          <div key={s.label} className="premium-card" style={{ padding: "1rem 1.1rem", borderTop: `3px solid ${s.color}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "1.2rem" }}>{s.icon}</span>
+              <span style={{ fontSize: "1.7rem", fontWeight: 900, color: s.color, lineHeight: 1 }}>{s.value}</span>
+            </div>
+            <div style={{ fontSize: "0.8rem", color: "var(--foreground)", fontWeight: 700, marginTop: 4 }}>{s.label}</div>
+            <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>{s.sub}</div>
           </div>
         ))}
+      </div>
+
+      {/* ── Planning row: AI · tomorrow · today · workload ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "1rem", marginBottom: "1.5rem" }} className="cal-4col">
+        {/* AI assistant */}
+        <div style={{ borderRadius: 16, padding: "1.1rem 1.2rem", background: "linear-gradient(135deg,#eef2ff,#ecfeff)", border: "1px solid #c7d2fe" }}>
+          <div style={{ fontSize: "1rem", fontWeight: 900, background: "linear-gradient(90deg,#6366f1,#06b6d4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>✨ עוזר יומן</div>
+          <div style={{ fontSize: "0.74rem", color: "#64748b", margin: "4px 0 10px" }}>טל, הנה התובנות לתכנון השבוע:</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {cc.insights.map((t, i) => (
+              <div key={i} style={{ display: "flex", gap: 7, alignItems: "flex-start", fontSize: "0.78rem", color: "#334155" }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: i === 0 ? "#ef4444" : i === 1 ? "#f59e0b" : "#22c55e", marginTop: 6, flexShrink: 0 }} />{t}
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Tomorrow */}
+        <ColCard title={`מחר · ${new Date(Date.now() + 86400000).toLocaleDateString("he-IL", { day: "numeric", month: "long" })}`} link={<a onClick={() => { const d = new Date(Date.now() + 86400000); setSelectedDay(d.getDate()); setMonth(d.getMonth()); setYear(d.getFullYear()); }} style={{ ...calLink, cursor: "pointer" }}>כל יום המחר ←</a>}>
+          {cc.tomorrowEvents.length === 0 ? <CalEmpty>אין אירועים מחר</CalEmpty> : cc.tomorrowEvents.slice(0, 4).map((e: any, i: number) => <CalRow key={i} e={e} />)}
+        </ColCard>
+        {/* Today */}
+        <ColCard title="היום" link={<a onClick={() => setSelectedDay(new Date().getDate())} style={{ ...calLink, cursor: "pointer" }}>כל היום ←</a>}>
+          {cc.todayEvents.length === 0 ? <CalEmpty>אין אירועים היום</CalEmpty> : cc.todayEvents.slice(0, 4).map((e: any, i: number) => <CalRow key={i} e={e} />)}
+        </ColCard>
+        {/* Workload */}
+        <ColCard title="עומס צוות" link={<a href="/workload" style={calLink}>דוח עומסים ←</a>}>
+          {cc.workload.length === 0 ? <CalEmpty>אין נתוני עומס</CalEmpty> : cc.workload.map((e: any) => (
+            <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 9 }}>
+              <Avatar src={e.avatarUrl} name={e.name} size={28} ring={false} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.76rem", marginBottom: 3 }}><span style={{ fontWeight: 700, color: "var(--foreground)" }}>{e.name}</span><span style={{ color: "var(--foreground-muted)" }}>{e.pct}%</span></div>
+                <div style={{ height: 6, background: "var(--surface)", borderRadius: 999, overflow: "hidden" }}><div style={{ width: `${e.pct}%`, height: "100%", background: e.pct > 80 ? "#ef4444" : e.pct > 50 ? "#f59e0b" : "#22c55e", borderRadius: 999 }} /></div>
+              </div>
+            </div>
+          ))}
+        </ColCard>
       </div>
 
       {/* ── View tabs ───────────────────────────────────────── */}
@@ -952,6 +1069,49 @@ export default function BusinessCalendarPage() {
             </div>
           </div>
         </Modal>
+
+        {/* ── Planning bottom row: recent · upcoming · conflicts · critical deadlines ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "1rem", marginTop: "1.5rem" }} className="cal-4col">
+          <ColCard title="פעילות אחרונה">
+            {cc.recent.length === 0 ? <CalEmpty>אין פעילות</CalEmpty> : cc.recent.map((a: any, i: number) => (
+              <div key={i} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "0.4rem 0", borderBottom: "1px solid var(--border)" }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--accent)", marginTop: 6, flexShrink: 0 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: "0.78rem", color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.title}</div>
+                  <div style={{ fontSize: "0.66rem", color: "var(--foreground-subtle)" }}>{a.who ? a.who + " · " : ""}{a.at ? new Date(a.at).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</div>
+                </div>
+              </div>
+            ))}
+          </ColCard>
+          <ColCard title="משימות קרובות">
+            {cc.upcoming.length === 0 ? <CalEmpty>אין משימות קרובות</CalEmpty> : cc.upcoming.map((t: any) => (
+              <div key={t.id} onClick={() => openCreateTask()} style={{ cursor: "pointer", display: "flex", justifyContent: "space-between", gap: 8, padding: "0.4rem 0", borderBottom: "1px solid var(--border)" }}>
+                <span style={{ fontSize: "0.78rem", color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</span>
+                <span style={{ fontSize: "0.68rem", color: "var(--foreground-muted)", whiteSpace: "nowrap" }}>{t.dueDate ? new Date(t.dueDate).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" }) : ""}</span>
+              </div>
+            ))}
+          </ColCard>
+          <ColCard title={`התנגשויות${cc.conflictList.length ? ` · ${cc.conflictList.length}` : ""}`}>
+            {cc.conflictList.length === 0 ? <CalEmpty>אין התנגשויות 🎉</CalEmpty> : cc.conflictList.slice(0, 4).map((c: any, i: number) => (
+              <div key={i} style={{ padding: "0.4rem 0", borderBottom: "1px solid var(--border)" }}>
+                <div style={{ fontSize: "0.7rem", color: "#ef4444", fontWeight: 700 }}>{new Date(c.date).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" })}</div>
+                <div style={{ fontSize: "0.76rem", color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.a.startTime} {c.a.title} ↔ {c.b.startTime} {c.b.title}</div>
+              </div>
+            ))}
+          </ColCard>
+          <ColCard title="דדליינים קריטיים">
+            {cc.critical.length === 0 ? <CalEmpty>אין דדליינים קרובים</CalEmpty> : cc.critical.map((e: any, i: number) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "0.4rem 0", borderBottom: "1px solid var(--border)" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: "0.76rem", color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.icon} {e.title}</div>
+                  {e.clientName && <div style={{ fontSize: "0.66rem", color: "var(--foreground-muted)" }}>{e.clientName}</div>}
+                </div>
+                <span style={{ fontSize: "0.66rem", fontWeight: 800, color: e.daysLabel === "היום" ? "#ef4444" : "var(--foreground-muted)", whiteSpace: "nowrap" }}>{e.daysLabel}</span>
+              </div>
+            ))}
+          </ColCard>
+        </div>
+        <style>{`@media (max-width:1100px){.cal-4col{grid-template-columns:1fr 1fr !important}}@media (max-width:680px){.cal-4col{grid-template-columns:1fr !important}}`}</style>
     </div>
   );
 }
