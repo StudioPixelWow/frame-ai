@@ -43,17 +43,22 @@ export default function WelcomePopup() {
     const key = `frameai_welcome_shown_${uid}`;
     if (sessionStorage.getItem(key)) return; // already shown this session
 
-    // Resolve the real person from the employees list — by linked id first,
-    // then by matching the logged-in email (covers accounts where employeeId
-    // isn't linked). Never fall back to a bare role label like "מנהל"/"עובד".
+    // Resolve the real person from the employees list — by linked id, then by the
+    // logged-in email, then by name (covers accounts where employeeId isn't linked
+    // and the login email differs from the employee record's email). The name match
+    // is what surfaces the avatar when only displayName is known. Never fall back to
+    // a bare role label like "מנהל"/"עובד".
     const authEmail = (email || localStorage.getItem("frameai_email") || "").trim().toLowerCase();
+    const dispName = [displayName, localStorage.getItem("frameai_display_name")].find((c) => c && c.trim() && !isRoleWord(c))?.trim() || "";
+    const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
     const emp =
       (employees || []).find((e: any) => e.id === employeeId) ||
-      (authEmail ? (employees || []).find((e: any) => String((e as any).email || "").trim().toLowerCase() === authEmail) : undefined);
+      (authEmail ? (employees || []).find((e: any) => String((e as any).email || "").trim().toLowerCase() === authEmail) : undefined) ||
+      (dispName ? (employees || []).find((e: any) => norm(String(e.name || "")) === norm(dispName)) : undefined);
 
     // Prefer the employee's real name; only use displayName if it's an actual
     // name (not the role word the account may have been seeded with).
-    const candidates = [emp?.name, displayName, localStorage.getItem("frameai_display_name")];
+    const candidates = [emp?.name, dispName];
     let name = (candidates.find((c) => c && c.trim() && !isRoleWord(c)) || "").trim();
     // Last resort: derive a readable name from the email local-part, so we never
     // greet someone with a role word.
