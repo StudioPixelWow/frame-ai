@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import Avatar from "@/components/ui/avatar";
+import ContentWorkspaceShell from "@/components/content/content-workspace-shell";
 import type { Client, Employee, ClientGanttItem } from "@/lib/db/schema";
 import { useClientGanttItems, useTasks, useEmployees, useProjects, useEmployeeTasks } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
@@ -2831,161 +2832,56 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
         const typeInfo = ITEM_TYPE_CONFIG[selectedItem.itemType] || ITEM_TYPE_CONFIG.social_post;
         const platformLabel = selectedItem.platform === 'facebook' ? 'Facebook' : selectedItem.platform === 'instagram' ? 'Instagram' : selectedItem.platform === 'tiktok' ? 'TikTok' : selectedItem.platform || '';
         const formatLabel = FORMAT_CONFIG[selectedItem.format || ''] || selectedItem.format || '';
+        const _owner = (allEmployees || []).find((e: any) => e.id === selectedItem.assigneeId);
+        const _st = selectedItem.status;
+        const _stageIdx = _st === "published" ? 4 : (_st === "approved" || _st === "scheduled") ? 3 : _st === "submitted_for_approval" ? 3 : (_st === "in_progress" || _st === "returned_for_changes") ? 2 : _st === "new_idea" ? 0 : 1;
+        const _prog = ({ new_idea: 10, draft: 15, in_progress: 50, submitted_for_approval: 75, scheduled: 85, approved: 90, published: 100, returned_for_changes: 40 } as Record<string, number>)[_st] ?? 20;
+        const _dw = selectedItem.updatedAt ? Math.floor((Date.now() - new Date(selectedItem.updatedAt).getTime()) / 864e5) : 0;
+        const _ai: string[] = [];
+        if (_st === "submitted_for_approval") _ai.push(_dw >= 3 ? `ממתין לאישור הלקוח כבר ${_dw} ימים — מומלץ לתזכר` : "ממתין לאישור הלקוח — שווה לעקוב");
+        if (_st === "returned_for_changes") _ai.push("הוחזר לתיקון — טפל בהערות והחזר לאישור");
+        if (selectedItem.date && new Date(selectedItem.date) < new Date(new Date().toDateString()) && _st !== "published") _ai.push("תאריך הפרסום עבר — עדכן תאריך או פרסם");
+        if (!_owner) _ai.push("לא שובץ אחראי לפריט הזה");
+        if (_st === "approved") _ai.push("מאושר ומוכן לפרסום — קבע מועד פרסום");
+        if (_ai.length === 0) _ai.push("הפריט בקצב טוב — אין חסמים כרגע ✨");
+        const _badges: any[] = [
+          { label: statusInfo.label, bg: `${statusInfo.color}20`, color: statusInfo.color },
+          { label: typeInfo.label, bg: `${typeInfo.color}20`, color: typeInfo.color },
+        ];
+        if (platformLabel) _badges.push({ label: platformLabel, bg: `${PLATFORM_COLORS[selectedItem.platform || ''] || '#6b7280'}20`, color: PLATFORM_COLORS[selectedItem.platform || ''] || '#6b7280' });
+        if (formatLabel) _badges.push({ label: formatLabel, bg: "var(--accent-muted)", color: "var(--foreground-muted)" });
+        const _actions: any[] = [];
+        if (selectedItem.status === "submitted_for_approval") { _actions.push({ label: "אשר", kind: "success", onClick: () => handleChangeStatus(selectedItem.id, "approved") }); _actions.push({ label: "בקש שינויים", kind: "warn", onClick: () => handleChangeStatus(selectedItem.id, "returned_for_changes") }); }
+        if (selectedItem.status === "in_progress" || selectedItem.status === "draft" || selectedItem.status === "new_idea" || selectedItem.status === "returned_for_changes") _actions.push({ label: "שלח לאישור לקוח", kind: "primary", onClick: () => handleChangeStatus(selectedItem.id, "submitted_for_approval") });
+        if (selectedItem.status === "approved") _actions.push({ label: "סמן כפורסם", kind: "primary", onClick: () => handleChangeStatus(selectedItem.id, "published") });
+        _actions.push({ label: "שכפל", kind: "ghost", onClick: async () => { try { const { id: _id, createdAt: _c, updatedAt: _u, ...rest } = selectedItem as any; await createGanttItem({ ...rest, title: `${selectedItem.title || "תוכן"} (עותק)`, status: "draft" } as any); toast("הפריט שוכפל", "success"); } catch { toast("שגיאה בשכפול", "error"); } } });
+        _actions.push({ label: "מחק", kind: "danger", alignEnd: true, onClick: async () => { if (confirm("למחוק את הפריט?")) { try { await removeGanttItem(selectedItem.id); setEditingItemId(null); toast("הפריט נמחק", "success"); } catch { toast("שגיאה במחיקה", "error"); } } } });
         return (
-          <div
-            style={{
-              position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)",
-              zIndex: 1000,
-            }}
-            onClick={(e) => { if (e.target === e.currentTarget) setEditingItemId(null); }}
+          <ContentWorkspaceShell
+            source={(["list", "calendar", "annual", "queue"].includes(activeView) ? activeView : "list") as any}
+            emoji={typeInfo.emoji}
+            title={selectedItem.title || ""}
+            badges={_badges}
+            owner={_owner ? { name: _owner.name, avatarUrl: (_owner as any).avatarUrl } : null}
+            aiInsights={_ai}
+            stages={["בריף", "כתיבה", "עיצוב", "אישור", "פרסום"]}
+            stageIdx={_stageIdx}
+            percent={_prog}
+            accentColor={statusInfo.color}
+            actions={_actions}
+            onClose={() => setEditingItemId(null)}
+            headerExtra={
+              <span style={{ fontSize: "0.68rem", color: "var(--foreground-muted)", padding: "0.15rem 0", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                📅
+                <input
+                  type="date"
+                  value={selectedItem.date || ""}
+                  onChange={async (e) => { const newDate = e.target.value; try { await updateGanttItem(selectedItem.id, { date: newDate } as any); toast("התאריך עודכן בהצלחה", "success"); } catch (err) { console.error(err); toast("שגיאה בעדכון התאריך", "error"); } }}
+                  style={{ fontSize: "0.68rem", border: "1px solid var(--border)", borderRadius: "0.25rem", padding: "0.15rem 0.35rem", background: "var(--surface-raised)", color: "var(--foreground)", direction: "rtl", cursor: "pointer" }}
+                />
+              </span>
+            }
           >
-            <div
-              className="cid-drawer"
-              style={{
-                position: "fixed", top: 0, bottom: 0, insetInlineStart: 0,
-                background: "var(--surface-raised)",
-                borderInlineEnd: "1px solid var(--border)",
-                padding: "1.5rem",
-                direction: "rtl",
-                width: "min(640px, 54vw)",
-                maxWidth: "96vw",
-                overflowY: "auto",
-                paddingBottom: "5rem",
-                boxShadow: "8px 0 40px rgba(0,0,0,0.25)",
-                animation: "cid-slide 0.28s ease",
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <style>{`@keyframes cid-slide{from{transform:translateX(-100%)}to{transform:translateX(0)}}@media(max-width:760px){.cid-drawer{width:100vw !important}}`}</style>
-              {/* Header */}
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1rem" }}>
-                <div>
-                  {(() => {
-                    const src: Record<string, string> = { list: "📋 רשימת תוכן", calendar: "📅 לוח חודשי", annual: "🗓️ לוח שנתי", queue: "📥 תור תוכן" };
-                    return <div style={{ fontSize: "0.66rem", color: "var(--foreground-subtle)", marginBottom: 4 }}>נפתח מ: {src[activeView] || "תוכן"}</div>;
-                  })()}
-                  <h4 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--foreground)", margin: "0 0 0.5rem 0" }}>
-                    {typeInfo.emoji} {selectedItem.title || "ללא כותרת"}
-                  </h4>
-                  <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-                    <span style={{
-                      fontSize: "0.68rem", padding: "0.15rem 0.5rem", borderRadius: "0.25rem",
-                      background: `${statusInfo.color}20`, color: statusInfo.color, fontWeight: 600,
-                    }}>
-                      {statusInfo.label}
-                    </span>
-                    <span style={{
-                      fontSize: "0.68rem", padding: "0.15rem 0.5rem", borderRadius: "0.25rem",
-                      background: `${typeInfo.color}20`, color: typeInfo.color, fontWeight: 500,
-                    }}>
-                      {typeInfo.label}
-                    </span>
-                    {platformLabel && (
-                      <span style={{
-                        fontSize: "0.68rem", padding: "0.15rem 0.5rem", borderRadius: "0.25rem",
-                        background: `${PLATFORM_COLORS[selectedItem.platform || ''] || '#6b7280'}20`,
-                        color: PLATFORM_COLORS[selectedItem.platform || ''] || '#6b7280', fontWeight: 500,
-                      }}>
-                        {platformLabel}
-                      </span>
-                    )}
-                    {formatLabel && (
-                      <span style={{
-                        fontSize: "0.68rem", padding: "0.15rem 0.5rem", borderRadius: "0.25rem",
-                        background: "var(--accent-muted)", color: "var(--foreground-muted)", fontWeight: 500,
-                      }}>
-                        {formatLabel}
-                      </span>
-                    )}
-                    <span style={{ fontSize: "0.68rem", color: "var(--foreground-muted)", padding: "0.15rem 0", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-                      📅
-                      <input
-                        type="date"
-                        value={selectedItem.date || ""}
-                        onChange={async (e) => {
-                          const newDate = e.target.value;
-                          try {
-                            await updateGanttItem(selectedItem.id, { date: newDate } as any);
-                            toast("התאריך עודכן בהצלחה", "success");
-                          } catch (err) {
-                            console.error(err);
-                            toast("שגיאה בעדכון התאריך", "error");
-                          }
-                        }}
-                        style={{
-                          fontSize: "0.68rem",
-                          border: "1px solid var(--border)",
-                          borderRadius: "0.25rem",
-                          padding: "0.15rem 0.35rem",
-                          background: "var(--surface-raised)",
-                          color: "var(--foreground)",
-                          direction: "rtl",
-                          cursor: "pointer",
-                        }}
-                      />
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setEditingItemId(null)}
-                  style={{
-                    background: "none", border: "none", fontSize: "1.2rem",
-                    color: "var(--foreground-muted)", cursor: "pointer", padding: "0.25rem",
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* ── AI Content Manager + Workflow progress ── */}
-              {(() => {
-                const owner = (allEmployees || []).find((e: any) => e.id === selectedItem.assigneeId);
-                const st = selectedItem.status;
-                const stageIdx = st === "published" ? 4 : (st === "approved" || st === "scheduled") ? 3 : st === "submitted_for_approval" ? 3 : (st === "in_progress" || st === "returned_for_changes") ? 2 : st === "new_idea" ? 0 : 1;
-                const prog = ({ new_idea: 10, draft: 15, in_progress: 50, submitted_for_approval: 75, scheduled: 85, approved: 90, published: 100, returned_for_changes: 40 } as Record<string, number>)[st] ?? 20;
-                const stages = ["בריף", "כתיבה", "עיצוב", "אישור", "פרסום"];
-                const daysWaiting = selectedItem.updatedAt ? Math.floor((Date.now() - new Date(selectedItem.updatedAt).getTime()) / 864e5) : 0;
-                const ai: string[] = [];
-                if (st === "submitted_for_approval") ai.push(daysWaiting >= 3 ? `ממתין לאישור הלקוח כבר ${daysWaiting} ימים — מומלץ לתזכר` : "ממתין לאישור הלקוח — שווה לעקוב");
-                if (st === "returned_for_changes") ai.push("הוחזר לתיקון — טפל בהערות והחזר לאישור");
-                if (selectedItem.date && new Date(selectedItem.date) < new Date(new Date().toDateString()) && st !== "published") ai.push("תאריך הפרסום עבר — עדכן תאריך או פרסם");
-                if (!owner) ai.push("לא שובץ אחראי לפריט הזה");
-                if (st === "approved") ai.push("מאושר ומוכן לפרסום — קבע מועד פרסום");
-                if (ai.length === 0) ai.push("הפריט בקצב טוב — אין חסמים כרגע ✨");
-                return (
-                  <>
-                    <div style={{ borderRadius: 12, padding: "0.85rem 1rem", background: "linear-gradient(135deg,#eef2ff,#ecfeff)", border: "1px solid #c7d2fe", marginBottom: "0.85rem" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                        <span style={{ fontSize: "0.85rem", fontWeight: 900, background: "linear-gradient(90deg,#6366f1,#06b6d4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>✨ מנהל תוכן AI</span>
-                        {owner && <span style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 5, fontSize: "0.7rem", color: "#475569" }}><Avatar src={(owner as any).avatarUrl} name={owner.name} size={20} ring={false} />{owner.name}</span>}
-                      </div>
-                      {ai.map((t, i) => <div key={i} style={{ display: "flex", gap: 7, alignItems: "flex-start", fontSize: "0.78rem", color: "#334155", marginBottom: 3 }}><span style={{ width: 6, height: 6, borderRadius: "50%", background: i === 0 ? "#f59e0b" : "#22c55e", marginTop: 6, flexShrink: 0 }} />{t}</div>)}
-                    </div>
-                    <div style={{ border: "1px solid var(--border)", borderRadius: 12, padding: "0.85rem 1rem", marginBottom: "0.85rem" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.74rem", color: "var(--foreground-muted)", marginBottom: 8 }}><span>התקדמות הפקה</span><span style={{ fontWeight: 800, color: statusInfo.color }}>{prog}%</span></div>
-                      <div style={{ display: "flex", alignItems: "center" }}>
-                        {stages.map((s, i) => (
-                          <div key={s} style={{ flex: 1, textAlign: "center", position: "relative" }}>
-                            {i > 0 && <div style={{ position: "absolute", top: 11, insetInlineEnd: "50%", width: "100%", height: 2, background: i <= stageIdx ? "#22c55e" : "var(--border)" }} />}
-                            <div style={{ position: "relative", zIndex: 1, width: 24, height: 24, borderRadius: "50%", margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.66rem", color: "#fff", background: i < stageIdx ? "#22c55e" : i === stageIdx ? "var(--accent)" : "var(--border)" }}>{i < stageIdx ? "✓" : i + 1}</div>
-                            <div style={{ fontSize: "0.62rem", color: i <= stageIdx ? "var(--foreground)" : "var(--foreground-subtle)", marginTop: 4 }}>{s}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Sticky action footer */}
-                    <div className="cid-drawer" style={{ position: "fixed", bottom: 0, insetInlineStart: 0, width: "min(640px, 54vw)", maxWidth: "96vw", background: "var(--surface-raised)", borderTop: "1px solid var(--border)", padding: "0.7rem 1.5rem", display: "flex", gap: 8, flexWrap: "wrap", zIndex: 2, direction: "rtl" }}>
-                      {selectedItem.status === "submitted_for_approval" && <button onClick={() => handleChangeStatus(selectedItem.id, "approved")} style={{ background: "#22c55e", color: "#fff", border: "none", borderRadius: 10, padding: "0.5rem 1rem", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer" }}>אשר</button>}
-                      {selectedItem.status === "submitted_for_approval" && <button onClick={() => handleChangeStatus(selectedItem.id, "returned_for_changes")} style={{ background: "#fff7ed", color: "#c2410c", border: "1px solid #fed7aa", borderRadius: 10, padding: "0.5rem 1rem", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer" }}>בקש שינויים</button>}
-                      {(selectedItem.status === "in_progress" || selectedItem.status === "draft" || selectedItem.status === "new_idea" || selectedItem.status === "returned_for_changes") && <button onClick={() => handleChangeStatus(selectedItem.id, "submitted_for_approval")} style={{ background: "var(--accent)", color: "#fff", border: "none", borderRadius: 10, padding: "0.5rem 1rem", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer" }}>שלח לאישור לקוח</button>}
-                      {selectedItem.status === "approved" && <button onClick={() => handleChangeStatus(selectedItem.id, "published")} style={{ background: "var(--accent)", color: "#fff", border: "none", borderRadius: 10, padding: "0.5rem 1rem", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer" }}>סמן כפורסם</button>}
-                      <button onClick={async () => { try { const { id: _id, createdAt: _c, updatedAt: _u, ...rest } = selectedItem as any; await createGanttItem({ ...rest, title: `${selectedItem.title || "תוכן"} (עותק)`, status: "draft" } as any); toast("הפריט שוכפל", "success"); } catch { toast("שגיאה בשכפול", "error"); } }} style={{ background: "transparent", color: "var(--foreground-muted)", border: "1px solid var(--border)", borderRadius: 10, padding: "0.5rem 1rem", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer" }}>שכפל</button>
-                      <button onClick={async () => { if (confirm("למחוק את הפריט?")) { try { await removeGanttItem(selectedItem.id); setEditingItemId(null); toast("הפריט נמחק", "success"); } catch { toast("שגיאה במחיקה", "error"); } } }} style={{ marginInlineStart: "auto", background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", borderRadius: 10, padding: "0.5rem 1rem", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer" }}>מחק</button>
-                    </div>
-                  </>
-                );
-              })()}
 
               {/* Research origin — show which idea this came from */}
               {selectedItem.researchReason && (
@@ -3292,8 +3188,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                   ✏️ ערוך בתצוגת רשימה
                 </button>
               </div>
-            </div>
-          </div>
+          </ContentWorkspaceShell>
         );
       })()}
 
