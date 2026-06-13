@@ -2268,6 +2268,66 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
             padding: "1.5rem",
           }}
         >
+          {/* ── Month Overview bar + AI Marketing Manager ── */}
+          {(() => {
+            const items = calendarItems;
+            const total = items.length;
+            const cnt = (fn: (s: string) => boolean) => items.filter((it: any) => fn(it.status || "")).length;
+            const published = cnt((s) => s === "published");
+            const approved = cnt((s) => s === "approved");
+            const waiting = cnt((s) => s === "submitted_for_approval");
+            const attention = items.filter((it: any) => ["returned", "needs_revision", "rejected"].includes(it.status) || (it.date && new Date(it.date) < new Date(new Date().toDateString()) && !["published", "approved"].includes(it.status))).length;
+            const done = published + approved;
+            const pct = total ? Math.round((done / total) * 100) : 0;
+            const ring = (() => { const r = 30, c = 2 * Math.PI * r; return { c, off: c - (pct / 100) * c }; })();
+            // empty future days + overloaded days
+            const dim = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+            const byDay: Record<number, number> = {};
+            items.forEach((it: any) => { if (it.date) { const d = new Date(it.date).getDate(); byDay[d] = (byDay[d] || 0) + 1; } });
+            const overloadedDay = Object.entries(byDay).filter(([, n]) => (n as number) >= 4).map(([d]) => d)[0];
+            const todayD = (new Date().getMonth() === selectedMonth && new Date().getFullYear() === selectedYear) ? new Date().getDate() : 0;
+            const emptyFuture = Array.from({ length: dim }, (_, i) => i + 1).filter((d) => d >= todayD && !byDay[d]);
+            const insights: string[] = [];
+            if (attention > 0) insights.push(`${attention} פריטים דורשים טיפול (הוחזרו/באיחור)`);
+            if (waiting > 0) insights.push(`${waiting} ממתינים לאישור הלקוח — שווה לתזכר`);
+            if (overloadedDay) insights.push(`עומס תוכן ב-${overloadedDay} בחודש — שקול לפזר`);
+            if (emptyFuture.length) insights.push(`${emptyFuture.length} ימים ללא תוכן (${emptyFuture.slice(0, 3).join(", ")}${emptyFuture.length > 3 ? "…" : ""}). מומלץ להוסיף תוכן`);
+            if (insights.length === 0) insights.push("התוכן החודשי מאוזן — אין חריגות 🎉");
+            const kpis = [
+              { n: total, l: "סה״כ תוכן", c: "#6366f1" },
+              { n: published, l: "פורסמו", c: "#22c55e" },
+              { n: approved, l: "מאושרים", c: "#3b82f6" },
+              { n: waiting, l: "ממתינים לאישור", c: "#f59e0b" },
+              { n: attention, l: "דורש טיפול", c: "#ef4444" },
+            ];
+            return (
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(280px,1.4fr) 1fr", gap: "1rem", marginBottom: "1.25rem" }} className="cg-2col">
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "1rem 1.1rem", display: "flex", alignItems: "center", gap: 16 }}>
+                  <svg width={74} height={74} viewBox="0 0 74 74" style={{ flexShrink: 0 }}>
+                    <circle cx={37} cy={37} r={30} fill="none" stroke="var(--border)" strokeWidth={8} />
+                    <circle cx={37} cy={37} r={30} fill="none" stroke="#22c55e" strokeWidth={8} strokeLinecap="round" strokeDasharray={ring.c} strokeDashoffset={ring.off} transform="rotate(-90 37 37)" />
+                    <text x={37} y={42} textAnchor="middle" fontSize={16} fontWeight={800} fill="var(--foreground)">{pct}%</text>
+                  </svg>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(74px,1fr))", gap: 10, flex: 1 }}>
+                    {kpis.map((k, i) => (
+                      <div key={i}><div style={{ fontSize: "1.3rem", fontWeight: 900, color: k.c, lineHeight: 1 }}>{k.n}</div><div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>{k.l}</div></div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ borderRadius: 14, padding: "1rem 1.1rem", background: "linear-gradient(135deg,#eef2ff,#ecfeff)", border: "1px solid #c7d2fe" }}>
+                  <div style={{ fontSize: "0.92rem", fontWeight: 900, background: "linear-gradient(90deg,#6366f1,#06b6d4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", marginBottom: 6 }}>✨ מנהל שיווק AI</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                    {insights.slice(0, 4).map((t, i) => (
+                      <div key={i} style={{ display: "flex", gap: 7, alignItems: "flex-start", fontSize: "0.78rem", color: "#334155" }}>
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: i === 0 ? "#ef4444" : i === 1 ? "#f59e0b" : "#22c55e", marginTop: 6, flexShrink: 0 }} />{t}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
             <h3 style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--foreground)", margin: 0 }}>
               {HEB_MONTHS[selectedMonth]} {selectedYear}
