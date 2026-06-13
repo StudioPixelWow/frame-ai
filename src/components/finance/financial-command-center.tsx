@@ -116,7 +116,31 @@ export default function FinancialCommandCenter({ payments = [], projectPayments 
     const oppList = opportunities.slice(0, 5);
     const oppPotential = oppList.reduce((s, o) => s + o.est, 0);
 
-    return { monthRevenue, recurring, arr, outstanding, overdue, revSeries, action, pipeline, categories, catTotal, retainers, renewals, risks, overdueCount: overdueItems.length, topClient, clientHealth, opportunities: oppList, oppPotential };
+    // ── Today Collections Center (actionable, per client) ──
+    const phoneOf = (id: string) => (clients.find((c) => c.id === id) as any)?.phone || "";
+    const today0 = new Date(now.toDateString()).getTime();
+    const day = 864e5;
+    const openForCollection = all.filter((p) => isOpen(p) && p.status !== "draft");
+    const colRow = (p: any) => {
+      const due = p.dueDate ? new Date(p.dueDate).getTime() : null;
+      const days = due !== null ? Math.round((due - today0) / day) : null;
+      return { id: p.id, clientId: p.clientId, name: p.clientName || clientName(p.clientId), amount: num(p.amount), days, phone: phoneOf(p.clientId), status: p.status };
+    };
+    const colAll = openForCollection.map(colRow);
+    const collections = {
+      dueToday: colAll.filter((r) => r.days === 0).sort((a, b) => b.amount - a.amount),
+      late: colAll.filter((r) => r.days !== null && r.days < 0).sort((a, b) => (a.days || 0) - (b.days || 0)),
+      dueWeek: colAll.filter((r) => r.days !== null && r.days > 0 && r.days <= 7).sort((a, b) => (a.days || 0) - (b.days || 0)),
+      upcoming: colAll.filter((r) => r.days !== null && r.days > 7 && r.days <= 30).sort((a, b) => (a.days || 0) - (b.days || 0)),
+    };
+
+    // ── Forecast (run-rate based, real history) ──
+    const last3 = revSeries.slice(-3);
+    const avg3 = last3.reduce((s, n) => s + n, 0) / (last3.length || 1);
+    const nextMonth = Math.round(Math.max(recurring, avg3));
+    const forecast = { nextMonth, nextQuarter: nextMonth * 3, yearly: Math.round(Math.max(arr, avg3 * 12)) };
+
+    return { monthRevenue, recurring, arr, outstanding, overdue, revSeries, action, pipeline, categories, catTotal, retainers, renewals, risks, overdueCount: overdueItems.length, topClient, clientHealth, opportunities: oppList, oppPotential, collections, forecast };
   }, [payments, projectPayments, clients, hostingRecords]);
 
   const insights: string[] = [];
@@ -231,6 +255,64 @@ export default function FinancialCommandCenter({ payments = [], projectPayments 
             {m.renewals.length === 0 && <span style={{ fontSize: "0.78rem", color: "var(--foreground-muted)" }}>אין חידושים קרובים</span>}
           </div>
         </div>
+      </div>
+
+      {/* ── Today Collections Center (actionable) ── */}
+      <div style={{ ...card, background: "linear-gradient(135deg,#fff7ed,#fffbeb)", border: "1px solid #fed7aa" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ fontWeight: 900, fontSize: "1rem", color: "#c2410c" }}>🧾 מרכז גבייה</div>
+          <span style={{ fontSize: "0.74rem", color: "#9a3412" }}>היום {cur(m.collections.dueToday.reduce((s: number, r: any) => s + r.amount, 0))} · באיחור {cur(m.collections.late.reduce((s: number, r: any) => s + r.amount, 0))}</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "0.8rem" }} className="fcc-4col">
+          {[
+            { key: "dueToday", label: "לגבייה היום", color: "#f59e0b", rows: m.collections.dueToday },
+            { key: "late", label: "באיחור", color: "#ef4444", rows: m.collections.late },
+            { key: "dueWeek", label: "השבוע", color: "#3b82f6", rows: m.collections.dueWeek },
+            { key: "upcoming", label: "צפוי (30 יום)", color: "#22c55e", rows: m.collections.upcoming },
+          ].map((col) => (
+            <div key={col.key} style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 12, padding: "0.85rem", borderTop: `3px solid ${col.color}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--foreground)" }}>{col.label}</span>
+                <span style={{ fontSize: "0.66rem", fontWeight: 800, color: col.color, background: col.color + "1a", borderRadius: 999, padding: "1px 8px" }}>{col.rows.length}</span>
+              </div>
+              {col.rows.length === 0 ? <div style={{ fontSize: "0.72rem", color: "var(--foreground-subtle)" }}>—</div> :
+                col.rows.slice(0, 5).map((r: any) => {
+                  const digits = String(r.phone || "").replace(/\D/g, "");
+                  const wa = digits ? `https://wa.me/${digits.startsWith("0") ? "972" + digits.slice(1) : digits}?text=${encodeURIComponent(`שלום ${r.name}, תזכורת ידידותית לתשלום על סך ${cur(r.amount)}. תודה!`)}` : "";
+                  return (
+                    <div key={r.id} style={{ padding: "0.4rem 0", borderBottom: "1px solid var(--border)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
+                        <span style={{ fontSize: "0.76rem", fontWeight: 700, color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
+                        <span style={{ fontSize: "0.78rem", fontWeight: 800, color: col.color, flexShrink: 0 }}>{cur(r.amount)}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 3 }}>
+                        <span style={{ fontSize: "0.64rem", color: "var(--foreground-subtle)" }}>{r.days === 0 ? "היום" : r.days! < 0 ? `${Math.abs(r.days!)} ימי איחור` : `בעוד ${r.days} ימים`}</span>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {wa && <a href={wa} target="_blank" rel="noopener noreferrer" title="שלח תזכורת בוואטסאפ" style={{ fontSize: "0.64rem", fontWeight: 700, color: "#16a34a", textDecoration: "none" }}>תזכורת</a>}
+                          <Link href="/accounting" title="פתח חשבון" style={{ fontSize: "0.64rem", fontWeight: 700, color: BRAND, textDecoration: "none" }}>חשבון</Link>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Revenue forecast ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "0.9rem" }} className="fcc-3col">
+        {[
+          { l: "תחזית חודש הבא", v: m.forecast.nextMonth, sub: "לפי run-rate" },
+          { l: "תחזית רבעון", v: m.forecast.nextQuarter, sub: "3 חודשים" },
+          { l: "תחזית שנתית", v: m.forecast.yearly, sub: "ARR + פרויקטים" },
+        ].map((f, i) => (
+          <div key={i} style={{ ...card, background: "linear-gradient(135deg,#eff6ff,#eef2ff)", border: "1px solid #bfdbfe" }}>
+            <div style={{ fontSize: "0.74rem", color: "#1e40af" }}>{f.l}</div>
+            <div style={{ fontSize: "1.5rem", fontWeight: 900, color: "#1d4ed8", lineHeight: 1.2 }}>{cur(f.v)}</div>
+            <div style={{ fontSize: "0.64rem", color: "#3b82f6" }}>{f.sub}</div>
+          </div>
+        ))}
       </div>
 
       {/* Client financial health */}
