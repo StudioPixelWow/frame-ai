@@ -10,6 +10,7 @@ import {
   useAdSets,
   useActivities,
   useClientNotifications,
+  useEmployees,
 } from '@/lib/api/use-entity';
 import { useMemo, useState, useCallback, useEffect, Suspense } from 'react';
 import WelcomeBand from '@/components/ui/welcome-band';
@@ -126,8 +127,11 @@ function DashboardContentInner() {
   const { data: adSets } = useAdSets();
   const { data: activities } = useActivities();
   const { data: notifications } = useClientNotifications();
+  const { data: employees } = useEmployees();
 
   const [showNotifs, setShowNotifs] = useState(false);
+  const [aiQ, setAiQ] = useState('');
+  const [aiA, setAiA] = useState('');
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -220,380 +224,220 @@ function DashboardContentInner() {
   const status = getClientStatus(pendingApprovals.length, activeCampaigns.length);
   const now = new Date();
 
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const leadsThisMonth = clientLeads.filter((l: any) => l.createdAt && new Date(l.createdAt).getTime() >= monthStart).length;
+  const digits = (s: string) => { const d = String(s || '').replace(/\D/g, ''); return d.startsWith('0') ? '972' + d.slice(1) : d; };
+  const findEmp = (names: string[]) => (employees || []).find((e: any) => names.some((n) => String(e.name || '').includes(n)));
+  const tal = findEmp(['טל זטלמן', 'טל ']);
+  const maya = findEmp(['מאיה']);
+  const waLink = (emp: any, msg: string) => { const d = digits((emp as any)?.phone || ''); return d ? `https://wa.me/${d}?text=${encodeURIComponent(msg)}` : '#'; };
+  const team = [
+    { emp: tal, name: tal?.name || 'טל זטלמן', title: 'מייסד ומנהל אסטרטגי' },
+    { emp: maya, name: maya?.name || 'מאיה זטלמן', title: 'מנהלת הלקוח שלך' },
+  ];
+  const greet = now.getHours() < 12 ? 'בוקר טוב' : now.getHours() < 18 ? 'צהריים טובים' : 'ערב טוב';
+  const delivered = [
+    { ic: '📣', n: activeCampaigns.length, l: 'קמפיינים פעילים' },
+    { ic: '🎯', n: leadsThisMonth, l: 'לידים החודש' },
+    { ic: '✅', n: recentActivities.length, l: 'עדכונים השבוע' },
+    { ic: '🔔', n: pendingApprovals.length, l: 'ממתינים לאישורך' },
+  ];
+  const aiRecs: string[] = [];
+  if (pendingApprovals.length) aiRecs.push(`יש ${pendingApprovals.length} פריטים שממתינים לאישורך`);
+  if (activeCampaigns.length === 0) aiRecs.push('מומלץ להפעיל קמפיין חדש להגדלת לידים');
+  else aiRecs.push('הקמפיינים פעילים — מומלץ לשקול הגדלת תקציב למוביל');
+  aiRecs.push('מומלץ להוסיף סרטון נוסף החודש להגברת מעורבות');
+  const askAI = () => {
+    const q = aiQ.trim(); if (!q) return;
+    let a = '';
+    if (/אישור/.test(q)) a = pendingApprovals.length ? `יש ${pendingApprovals.length} פריטים הממתינים לאישורך כרגע — תוכל לאשר אותם בקטע "דורש את תשומת הלב שלך".` : 'אין כרגע פריטים הממתינים לאישורך 🎉';
+    else if (/שבוע|מתוכנן|הבא|הקרוב/.test(q)) a = `לשבוע הקרוב: ${activeCampaigns.length} קמפיינים פעילים נמשכים${leadsThisMonth ? `, ועד כה נכנסו ${leadsThisMonth} לידים החודש` : ''}. הצוות ממשיך בהפקת התוכן המתוכנן.`;
+    else if (/ביצוע|מצב|איך/.test(q)) a = `סטטוס החשבון: ${activeCampaigns.length} קמפיינים פעילים, ${clientLeads.length} לידים סה"כ, ${leadsThisMonth} החודש. ${pendingApprovals.length ? `${pendingApprovals.length} פריטים ממתינים לאישורך.` : 'הכל מאושר ומעודכן.'}`;
+    else a = `הנה תמונת מצב: ${activeCampaigns.length} קמפיינים פעילים, ${leadsThisMonth} לידים החודש, ${pendingApprovals.length} ממתינים לאישורך. לכל שאלה נוספת אפשר לפנות לצוות הליווי.`;
+    setAiA(a);
+  };
+  const quickActions = [
+    { ic: '➕', l: 'משימה חדשה', href: '/client-portal/tasks?clientId=' + (clientId || '') },
+    { ic: '📎', l: 'העלאת חומרים', href: '/client-portal/tasks?clientId=' + (clientId || '') },
+    { ic: '🎨', l: 'בקשת גרפיקה', href: '/client-portal/tasks?clientId=' + (clientId || '') },
+    { ic: '🎥', l: 'בקשת סרטון', href: '/client-portal/tasks?clientId=' + (clientId || '') },
+    { ic: '📢', l: 'בקשת קמפיין', href: '/client-portal/tasks?clientId=' + (clientId || '') },
+    { ic: '📅', l: 'קביעת פגישה', href: waLink(maya, 'היי, אשמח לקבוע פגישה') },
+    { ic: '💬', l: 'שליחת הודעה', href: waLink(maya, 'היי מאיה,') },
+    { ic: '📊', l: 'בקשת דוח', href: '/client-portal/reports?clientId=' + (clientId || '') },
+  ];
+  const sCard: React.CSSProperties = { background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: 18, padding: '1.4rem' };
+  const sTitle: React.CSSProperties = { fontSize: '1.1rem', fontWeight: 800, color: 'var(--foreground)', marginBottom: 14 };
+
   return (
-    <div style={{ direction: 'rtl', maxWidth: '900px', margin: '0 auto', position: 'relative' }}>
+    <div style={{ direction: 'rtl', maxWidth: 1120, margin: '0 auto', position: 'relative', display: 'flex', flexDirection: 'column', gap: 22, paddingBottom: 40 }}>
       <style>{STYLES}</style>
 
-      {/* ═══ UNIFIED WELCOME BAND ═══ */}
-      <div style={{ marginTop: '1.5rem', marginBottom: '0.5rem' }}>
-        <WelcomeBand
-          name={client.contactPerson || client.name}
-          subtitle={`${activeCampaigns.length} קמפיינים פעילים · ${kpis.totalLeads} לידים`}
-        />
+      {/* 1 · HERO */}
+      <div style={{ borderRadius: 24, padding: '2rem 2.2rem', background: 'linear-gradient(120deg,#4F46E5,#2563EB 55%,#06B6D4)', color: '#fff', display: 'flex', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{ fontSize: '1.9rem', fontWeight: 900, margin: 0 }}>👋 {greet}, {client.name}</h1>
+          <div style={{ fontSize: '0.9rem', opacity: 0.9, marginTop: 4 }}>ברוך הבא לפורטל הלקוח שלך</div>
+          <div style={{ marginTop: 16, display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+            {delivered.map((d, i) => (
+              <div key={i} style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 14, padding: '0.7rem 1rem', textAlign: 'center', minWidth: 96 }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 900 }}>{d.n}</div>
+                <div style={{ fontSize: '0.66rem', opacity: 0.9 }}>{d.ic} {d.l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          {(client as any).logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={(client as any).logoUrl} alt={client.name} style={{ width: 72, height: 72, borderRadius: 16, objectFit: 'contain', background: '#fff', padding: 6 }} />
+          ) : <div style={{ width: 72, height: 72, borderRadius: 16, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '1.5rem', margin: '0 auto' }}>{initials}</div>}
+          <div style={{ marginTop: 10, fontSize: '0.82rem', fontWeight: 700 }}>{now.toLocaleDateString('he-IL', { day: 'numeric', month: 'long' })}</div>
+          <div style={{ fontSize: '0.7rem', opacity: 0.9 }} suppressHydrationWarning>{mounted ? now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+          <div style={{ marginTop: 8, display: 'inline-block', fontSize: '0.7rem', fontWeight: 700, background: 'rgba(255,255,255,0.18)', borderRadius: 999, padding: '2px 10px' }}>מצב חשבון: {status.text}</div>
+        </div>
       </div>
 
-      {/* ═══ SUBMIT TASK REQUEST + CALENDAR + SITE/SOCIAL PREVIEW + CONTACT ═══ */}
-      <div style={{ marginBottom: '1rem' }}>
+      {/* 2 · CLIENT SUCCESS TEAM */}
+      <div style={{ ...sCard, background: 'linear-gradient(135deg,#eff6ff,#f5f3ff)', border: '1px solid #dbeafe' }}>
+        <div style={sTitle}>💬 צוות הליווי שלך</div>
+        <div style={{ fontSize: '0.78rem', color: 'var(--foreground-muted)', marginTop: -8, marginBottom: 14 }}>אנחנו כאן בשבילך, בכל שאלה ופנייה.</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }} className="cp-2col">
+          {team.map((m, i) => (
+            <div key={i} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: 14, padding: '1.1rem', textAlign: 'center' }}>
+              <div style={{ fontWeight: 800, fontSize: '1rem' }}>{m.name}</div>
+              <div style={{ fontSize: '0.74rem', color: 'var(--foreground-muted)', marginBottom: 12 }}>{m.title}</div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                <a href={waLink(m.emp, `היי ${m.name.split(' ')[0]},`)} target="_blank" rel="noopener noreferrer" style={{ flex: 1, fontSize: '0.78rem', fontWeight: 700, color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '0.5rem', textDecoration: 'none' }}>💬 שלח הודעה</a>
+                <a href={waLink(m.emp, `היי ${m.name.split(' ')[0]}, אשמח לקבוע שיחה`)} target="_blank" rel="noopener noreferrer" style={{ flex: 1, fontSize: '0.78rem', fontWeight: 700, color: '#4f46e5', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, padding: '0.5rem', textDecoration: 'none' }}>📞 קביעת שיחה</a>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 12, fontSize: '0.78rem', color: 'var(--foreground-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>🟢 זמן תגובה ממוצע: עד שעה</div>
+      </div>
+
+      {/* 3 · REQUIRES YOUR ATTENTION */}
+      <div>
+        <div style={sTitle}>🔔 דורש את תשומת הלב שלך {pendingApprovals.length > 0 && <span style={{ fontSize: '0.7rem', color: '#fff', background: '#ef4444', borderRadius: 999, padding: '1px 9px' }}>{pendingApprovals.length}</span>}</div>
+        {pendingApprovals.length === 0 ? (
+          <div style={{ ...sCard, color: '#16a34a', fontWeight: 700 }}>אין פריטים הממתינים לאישורך — הכל מעודכן 🎉</div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 12 }}>
+            {pendingApprovals.slice(0, 6).map((a: any, i: number) => {
+              const tone = i % 3 === 0 ? '#ef4444' : i % 3 === 1 ? '#f59e0b' : '#eab308';
+              return (
+                <a key={a.id} href={'/client-portal/approvals?clientId=' + (clientId || '')} style={{ ...sCard, padding: '1.1rem', textDecoration: 'none', display: 'block', borderInlineStart: `4px solid ${tone}`, background: tone + '0d' }}>
+                  <div style={{ fontSize: '0.66rem', fontWeight: 800, color: tone }}>● ממתין לאישור</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--foreground)', margin: '6px 0 4px' }}>{a.title || a.itemTitle || 'פריט לאישור'}</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--foreground-muted)' }}>{a.clientName || client.name}{a.createdAt ? ` · ${formatRelativeDate(a.createdAt)}` : ''}</div>
+                  <div style={{ marginTop: 10, fontSize: '0.76rem', fontWeight: 700, color: '#fff', background: tone, borderRadius: 8, padding: '0.4rem', textAlign: 'center' }}>אשר עכשיו</div>
+                </a>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 4 · QUICK ACTIONS */}
+      <div>
+        <div style={sTitle}>⚡ פעולות מהירות</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 10, marginBottom: 16 }}>
+          {quickActions.map((q, i) => (
+            <a key={i} href={q.href} target={q.href.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" style={{ ...sCard, padding: '1rem 0.6rem', textAlign: 'center', textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7 }} className="cp-qa">
+              <span style={{ fontSize: '1.5rem' }}>{q.ic}</span>
+              <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--foreground)' }}>{q.l}</span>
+            </a>
+          ))}
+        </div>
         <PortalTaskRequest clientId={clientId || ''} />
+      </div>
+
+      {/* 5 · MONTHLY CALENDAR + CONTENT VISIBILITY */}
+      <div>
+        <div style={sTitle}>📅 לוח התוכן החודשי</div>
         <PortalVisibility clientId={clientId || ''} />
+      </div>
+
+      {/* 6 · MARKETING GANTT */}
+      <a href={'/client-portal/gantt?clientId=' + (clientId || '')} style={{ ...sCard, textDecoration: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg,#eef2ff,#faf5ff)', border: '1px solid #ddd6fe' }}>
+        <div><div style={{ ...sTitle, marginBottom: 4 }}>📊 גאנט שיווקי</div><div style={{ fontSize: '0.78rem', color: 'var(--foreground-muted)' }}>צפה בלוח הזמנים המלא של התוכן והקמפיינים שלך</div></div>
+        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#7c3aed' }}>פתח גאנט ←</span>
+      </a>
+
+      {/* 7 · REAL-TIME ACTIVITY FEED */}
+      <div style={sCard}>
+        <div style={sTitle}>🔄 פעילות בזמן אמת</div>
+        {recentActivities.length === 0 ? <div style={{ fontSize: '0.82rem', color: 'var(--foreground-muted)' }}>אין פעילות אחרונה</div> :
+          recentActivities.map((a: any, i: number) => (
+            <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '0.55rem 0', borderBottom: '1px solid var(--border)' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#06b6d4', marginTop: 6, flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '0.82rem', color: 'var(--foreground)' }}>{a.description || a.title || a.action || 'עדכון'}</div>
+                <div style={{ fontSize: '0.66rem', color: 'var(--foreground-subtle)' }}>{a.userName ? a.userName + ' · ' : ''}{a.createdAt ? formatRelativeDate(a.createdAt) : ''}</div>
+              </div>
+            </div>
+          ))}
+      </div>
+
+      {/* 8 · CONTENT CENTER */}
+      <div>
+        <div style={sTitle}>📱 מרכז התוכן שלך</div>
         <PortalHighlights client={client} clientId={clientId || ''} />
       </div>
 
-      {/* ══════════════════════════════════════
-          HERO HEADER
-          ══════════════════════════════════════ */}
-      <div className={mounted ? 'client-fade-in' : ''} style={{
-        padding: '2.5rem 0 2rem', marginBottom: '0.5rem',
-      }}>
-        {/* Notification Bell — top left */}
-        <div style={{ position: 'absolute', top: '2rem', left: 0 }}>
-          <button
-            onClick={() => { setShowNotifs(!showNotifs); if (!showNotifs) markAllRead(); }}
-            className="client-btn"
-            style={{
-              background: 'var(--surface)', border: '1px solid rgba(0,0,0,0.06)',
-              borderRadius: '0.875rem', width: '2.75rem', height: '2.75rem',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', fontSize: '1.1rem', position: 'relative',
-              boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-            }}
-          >
-            🔔
-            {unreadCount > 0 && (
-              <span style={{
-                position: 'absolute', top: '-3px', right: '-3px',
-                background: '#ef4444', color: '#fff', fontSize: '0.55rem', fontWeight: 800,
-                width: '16px', height: '16px', borderRadius: '50%',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 2px 6px rgba(239,68,68,0.3)',
-              }}>{unreadCount > 9 ? '9+' : unreadCount}</span>
-            )}
-          </button>
-
-          {showNotifs && (
-            <div className="client-fade-in" style={{
-              position: 'absolute', top: '3.25rem', left: 0, zIndex: 50,
-              width: '320px', maxHeight: '380px', overflowY: 'auto',
-              background: 'var(--surface)', border: '1px solid rgba(0,0,0,0.06)',
-              borderRadius: '1rem', boxShadow: '0 12px 40px rgba(0,0,0,0.1)',
-            }}>
-              <div style={{ padding: '0.85rem 1.15rem', borderBottom: '1px solid rgba(0,0,0,0.05)', fontWeight: 700, fontSize: '0.85rem' }}>
-                התראות
-              </div>
-              {clientNotifs.length > 0 ? clientNotifs.slice(0, 8).map(n => (
-                <div key={n.id} style={{
-                  padding: '0.75rem 1.15rem', borderBottom: '1px solid rgba(0,0,0,0.03)',
-                  background: n.read ? 'transparent' : 'rgba(0,181,254,0.03)',
-                  transition: 'background 0.2s',
-                }}>
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
-                    <span style={{ fontSize: '1rem', marginTop: '0.1rem' }}>{n.icon || '📌'}</span>
-                    <div>
-                      <div style={{ fontSize: '0.8rem', fontWeight: 600, lineHeight: 1.4 }}>{n.title}</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)', marginTop: '0.1rem' }}>{n.body}</div>
-                      <div style={{ fontSize: '0.62rem', color: 'var(--foreground-subtle)', marginTop: '0.2rem' }}>{formatRelativeDate(n.createdAt)}</div>
-                    </div>
-                  </div>
-                </div>
-              )) : (
-                <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--foreground-muted)', fontSize: '0.8rem' }}>
-                  אין התראות חדשות
-                </div>
-              )}
+      {/* 9 · PIXEL AI ACCOUNT MANAGER */}
+      <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 20, padding: '1.6rem', background: 'linear-gradient(145deg,#1e1b4b,#312e81 55%,#4c1d95)', color: '#fff' }}>
+        <div style={{ position: 'absolute', insetInlineStart: -20, top: 0, width: 180, height: 180, borderRadius: '50%', background: 'radial-gradient(circle, rgba(167,139,250,0.4), transparent 70%)' }} />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}><span>🤖</span><span style={{ fontSize: '1.1rem', fontWeight: 900 }}>Pixel AI — מנהל החשבון שלך</span></div>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 14 }}>
+            {[{ n: activeCampaigns.length, l: 'קמפיינים פעילים' }, { n: clientLeads.length, l: 'לידים' }, { n: leadsThisMonth, l: 'לידים החודש' }, { n: pendingApprovals.length, l: 'ממתינים לאישור' }].map((s, i) => (
+              <div key={i}><div style={{ fontSize: '1.6rem', fontWeight: 900 }}>{s.n}</div><div style={{ fontSize: '0.66rem', color: '#c4b5fd' }}>{s.l}</div></div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+            {aiRecs.slice(0, 3).map((r, i) => <div key={i} style={{ fontSize: '0.78rem', color: '#ede9fe', display: 'flex', gap: 7 }}><span style={{ color: '#a5b4fc' }}>✦</span>{r}</div>)}
+          </div>
+          <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 12, padding: '0.7rem' }}>
+            <div style={{ fontSize: '0.74rem', fontWeight: 700, marginBottom: 6 }}>שאל את Pixel AI</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input value={aiQ} onChange={(e) => setAiQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') askAI(); }} placeholder="איך החשבון שלי מתפקד? מה מתוכנן לשבוע הבא?" style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 9, padding: '0.5rem 0.7rem', color: '#fff', fontSize: '0.78rem', direction: 'rtl' }} />
+              <button onClick={askAI} style={{ background: '#a78bfa', color: '#1e1b4b', border: 'none', borderRadius: 9, padding: '0.5rem 1rem', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>שאל</button>
             </div>
-          )}
-        </div>
-
-        {/* Name + Status */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-          {client.logoUrl ? (
-            <img src={client.logoUrl} alt="" style={{
-              height: '3.5rem', width: '3.5rem', borderRadius: '1rem', objectFit: 'cover',
-              border: '1px solid rgba(0,0,0,0.06)',
-            }} onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} />
-          ) : (
-            <div style={{
-              width: '3.5rem', height: '3.5rem', borderRadius: '1rem',
-              background: `${color}10`, color, fontWeight: 800, fontSize: '1rem',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>{initials}</div>
-          )}
-          <div>
-            <h1 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-              {client.company || client.name}
-            </h1>
-            <p style={{ fontSize: '0.85rem', color: 'var(--foreground-muted)', margin: '0.2rem 0 0 0' }}>
-              סקירת הפעילות שלך
-            </p>
+            {aiA && <div style={{ marginTop: 10, fontSize: '0.8rem', color: '#ede9fe', lineHeight: 1.6, background: 'rgba(0,0,0,0.2)', borderRadius: 9, padding: '0.7rem' }}>{aiA}</div>}
           </div>
-        </div>
-
-        {/* Status Bubble */}
-        <div className={mounted ? 'client-fade-in client-fade-in-d1' : ''} style={{
-          display: 'inline-flex', alignItems: 'center', gap: '0.4rem', marginTop: '1rem',
-          background: status.bg, padding: '0.45rem 1rem', borderRadius: '999px',
-        }}>
-          <span style={{
-            width: '7px', height: '7px', borderRadius: '50%', background: status.color,
-            animation: 'clientStatusDot 2s ease infinite', color: status.color,
-          }} />
-          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: status.color }}>{status.text}</span>
-          <span style={{ fontSize: '0.72rem', color: 'var(--foreground-muted)', marginRight: '0.25rem' }}>
-            · {activeCampaigns.length} קמפיינים · {kpis.totalLeads} לידים
-          </span>
         </div>
       </div>
 
-      {/* ══════════════════════════════════════
-          PENDING APPROVALS (if any)
-          ══════════════════════════════════════ */}
-      {pendingApprovals.length > 0 && (
-        <div className={mounted ? 'client-fade-in client-fade-in-d2' : ''} style={{ marginBottom: '2rem' }}>
-          <a href={`/client-portal/approvals?clientId=${clientId}`} className="client-card" style={{
-            display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.15rem 1.5rem',
-            textDecoration: 'none', color: 'var(--foreground)',
-            background: 'rgba(251,191,36,0.04)', borderColor: 'rgba(251,191,36,0.15)',
-          }}>
-            <span style={{ fontSize: '1.35rem' }}>✋</span>
-            <div style={{ flex: 1 }}>
-              <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>
-                {pendingApprovals.length === 1 ? 'פריט אחד ממתין לאישורך' : `${pendingApprovals.length} פריטים ממתינים לאישורך`}
-              </span>
+      {/* 10 · RESULTS */}
+      <div style={{ ...sCard, background: 'linear-gradient(135deg,#eff6ff,#ecfeff)', border: '1px solid #bfdbfe' }}>
+        <div style={sTitle}>📈 התוצאות שלך</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 12 }}>
+          {[
+            { l: 'לידים', v: clientLeads.length },
+            { l: 'חשיפות', v: clientAds.reduce((s: number, a: any) => s + (a.impressions || 0), 0).toLocaleString('he-IL') },
+            { l: 'קליקים', v: clientAds.reduce((s: number, a: any) => s + (a.clicks || 0), 0).toLocaleString('he-IL') },
+            { l: 'המרות', v: clientLeads.filter((l: any) => l.status === 'won' || l.convertedClientId).length },
+            { l: 'קמפיינים פעילים', v: activeCampaigns.length },
+            { l: 'לידים החודש', v: leadsThisMonth },
+          ].map((r, i) => (
+            <div key={i} style={{ background: 'var(--surface-raised)', borderRadius: 12, padding: '0.9rem 1rem' }}>
+              <div style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)' }}>{r.l}</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#1d4ed8' }}>{r.v}</div>
             </div>
-            <span style={{ fontSize: '0.8rem', color: '#f59e0b', fontWeight: 600 }}>צפה ←</span>
-          </a>
+          ))}
         </div>
-      )}
-
-      {/* ══════════════════════════════════════
-          KPI STRIP
-          ══════════════════════════════════════ */}
-      <div className={mounted ? 'client-fade-in client-fade-in-d2' : ''} style={{
-        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '2.5rem',
-      }}>
-        {[
-          { icon: '🎯', val: String(kpis.totalLeads), label: 'לידים שהתקבלו', sub: kpis.totalLeads > 0 ? 'מכל הקמפיינים' : 'עדיין לא הגיעו — נעבוד על זה' },
-          { icon: '💰', val: kpis.cpl > 0 ? `₪${kpis.cpl.toFixed(0)}` : '—', label: 'עלות לליד', sub: kpis.cpl > 0 ? (kpis.cpl < 50 ? 'עלות טובה מאוד' : kpis.cpl < 100 ? 'בטווח הנורמלי' : 'עובדים על הורדה') : 'אין מספיק נתונים' },
-          { icon: '📊', val: kpis.totalSpend > 0 ? `₪${kpis.totalSpend.toLocaleString('he-IL')}` : '—', label: 'הוצאה כוללת', sub: kpis.totalSpend > 0 ? 'סה״כ השקעה פעילה' : 'לא התחלנו עדיין' },
-          { icon: '⭐', val: kpis.bestAd ? (kpis.bestAd.name || kpis.bestAd.headline || '✓').slice(0, 18) : '—', label: 'מודעה מובילה', sub: kpis.bestAd ? 'מביאה את התוצאות הכי טובות' : 'נזהה בקרוב' },
-        ].map((kpi, i) => (
-          <div key={i} className="client-card" style={{ padding: '1.25rem 1rem', textAlign: 'center' }}>
-            <div style={{ fontSize: '1.35rem', marginBottom: '0.65rem' }}>{kpi.icon}</div>
-            <div style={{
-              fontSize: i === 3 ? '0.95rem' : '1.5rem', fontWeight: 800, letterSpacing: '-0.02em',
-              color: 'var(--foreground)', marginBottom: '0.25rem', lineHeight: 1.2,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>{kpi.val}</div>
-            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--foreground-muted)', marginBottom: '0.15rem' }}>{kpi.label}</div>
-            <div style={{ fontSize: '0.65rem', color: 'var(--foreground-subtle)', lineHeight: 1.4 }}>{kpi.sub}</div>
-          </div>
-        ))}
       </div>
 
-      {/* ══════════════════════════════════════
-          "מה עשינו בשבילך השבוע"
-          ══════════════════════════════════════ */}
-      <div className={mounted ? 'client-fade-in client-fade-in-d3' : ''} style={{ marginBottom: '2.5rem' }}>
-        <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 1rem 0', letterSpacing: '-0.01em' }}>
-          מה עשינו בשבילך השבוע
-        </h2>
-        {recentActivities.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {recentActivities.map((activity, idx) => {
-              const iconMap: Record<string, string> = {
-                campaign_created: '🚀', ad_created: '🎨', optimization: '⚡',
-                approval: '✅', recommendation: '💡', report: '📊',
-              };
-              return (
-                <div key={activity.id} className="client-card" style={{
-                  display: 'flex', gap: '0.85rem', padding: '1rem 1.25rem', alignItems: 'center',
-                  animationDelay: `${0.15 + idx * 0.04}s`,
-                }}>
-                  <div style={{
-                    width: '2.25rem', height: '2.25rem', borderRadius: '0.65rem',
-                    background: 'rgba(0,181,254,0.06)', display: 'flex', alignItems: 'center',
-                    justifyContent: 'center', fontSize: '1rem', flexShrink: 0,
-                  }}>
-                    {iconMap[(activity as any).type] || activity.icon || '📌'}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.85rem', lineHeight: 1.3 }}>
-                      {(activity as any).clientFriendlyTitle || activity.title}
-                    </div>
-                    {activity.description && (
-                      <div style={{ fontSize: '0.73rem', color: 'var(--foreground-muted)', marginTop: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {activity.description}
-                      </div>
-                    )}
-                  </div>
-                  <span style={{ fontSize: '0.68rem', color: 'var(--foreground-subtle)', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                    {formatRelativeDate(activity.createdAt)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="client-card" style={{ padding: '3rem', textAlign: 'center' }}>
-            <div style={{ fontSize: '2rem', marginBottom: '0.75rem', opacity: 0.7 }}>🌱</div>
-            <p style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--foreground-muted)', margin: '0 0 0.2rem 0' }}>
-              אנחנו רק מתחילים
-            </p>
-            <p style={{ fontSize: '0.8rem', color: 'var(--foreground-subtle)', margin: 0 }}>
-              בקרוב תראה כאן את כל מה שעשינו בשבילך
-            </p>
-          </div>
-        )}
-        <a href={`/client-portal/timeline?clientId=${clientId}`} className="client-btn" style={{
-          display: 'block', textAlign: 'center', marginTop: '0.85rem',
-          fontSize: '0.8rem', color, fontWeight: 600, textDecoration: 'none',
-          padding: '0.5rem', borderRadius: '0.5rem',
-        }}>
-          צפה בכל הפעילות ←
-        </a>
-      </div>
+      {/* 11 · DOCUMENTS & FILES */}
+      <a href={'/client-portal/files?clientId=' + (clientId || '')} style={{ ...sCard, textDecoration: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div><div style={{ ...sTitle, marginBottom: 4 }}>📁 מסמכים וקבצים</div><div style={{ fontSize: '0.78rem', color: 'var(--foreground-muted)' }}>חוזים, חשבוניות, דוחות, בריפים וסיכומי פגישות</div></div>
+        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--accent)' }}>פתח מסמכים ←</span>
+      </a>
 
-      {/* ══════════════════════════════════════
-          TOP ADS
-          ══════════════════════════════════════ */}
-      {topAds.length > 0 && (
-        <div className={mounted ? 'client-fade-in client-fade-in-d4' : ''} style={{ marginBottom: '2.5rem' }}>
-          <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 1rem 0', letterSpacing: '-0.01em' }}>
-            מודעות מובילות
-          </h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
-            {topAds.map((ad: any, idx) => {
-              const ctr = ad.ctr || (ad.impressions > 0 ? (ad.clicks / ad.impressions) * 100 : 0);
-              const perfLabel = ctr > 3 ? 'ביצועים מצוינים' : ctr > 1.5 ? 'ביצועים טובים' : 'פעילה';
-              const perfColor = ctr > 3 ? '#22c55e' : ctr > 1.5 ? '#3b82f6' : '#6b7280';
-              return (
-                <div key={ad.id} className="client-card" style={{ overflow: 'hidden' }}>
-                  {(ad.imageUrl || ad.thumbnailUrl) && (
-                    <div style={{ height: '130px', overflow: 'hidden', background: 'rgba(0,0,0,0.02)' }}>
-                      <img src={ad.imageUrl || ad.thumbnailUrl} alt="" style={{
-                        width: '100%', height: '100%', objectFit: 'cover',
-                        transition: 'transform 0.4s ease',
-                      }} onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} />
-                    </div>
-                  )}
-                  <div style={{ padding: '1rem 1.15rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                      <span style={{
-                        fontSize: '0.62rem', fontWeight: 700, padding: '0.2rem 0.55rem', borderRadius: '999px',
-                        background: `${perfColor}08`, color: perfColor,
-                      }}>{perfLabel}</span>
-                      {idx === 0 && <span style={{ fontSize: '0.85rem' }}>🏆</span>}
-                    </div>
-                    <div style={{ fontWeight: 600, fontSize: '0.85rem', lineHeight: 1.3, marginBottom: '0.25rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {ad.name || ad.headline || 'מודעה'}
-                    </div>
-                    {(ad.primaryText || ad.description) && (
-                      <div style={{ fontSize: '0.72rem', color: 'var(--foreground-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {(ad.primaryText || ad.description || '').slice(0, 55)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════
-          AI RECOMMENDATIONS
-          ══════════════════════════════════════ */}
-      <div className={mounted ? 'client-fade-in client-fade-in-d5' : ''} style={{ marginBottom: '2.5rem' }}>
-        <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 1rem 0', letterSpacing: '-0.01em' }}>
-          מה מומלץ לעשות עכשיו
-        </h2>
-        {activeCampaigns.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {activeCampaigns.slice(0, 3).map((campaign: any) => {
-              const cLeads = clientLeads.filter(l => l.campaignId === campaign.id).length;
-              const spend = campaign.spend || 0;
-              const cpl = cLeads > 0 ? spend / cLeads : 0;
-
-              let text = '', action = '', icon = '💡';
-              if (cpl > 100 && cLeads > 0) {
-                text = `העלות לליד בקמפיין "${campaign.campaignName}" גבוהה מהרגיל — עובדים על הורדה`;
-                action = 'בדוק'; icon = '🔍';
-              } else if (cLeads === 0 && spend > 50) {
-                text = `קמפיין "${campaign.campaignName}" עדיין לא הביא לידים — נבדוק ונשפר`;
-                action = 'בדוק'; icon = '⚠️';
-              } else if (cLeads > 5) {
-                text = `קמפיין "${campaign.campaignName}" מביא תוצאות יפות — שווה לשקול להגדיל תקציב`;
-                action = 'אשר שינוי'; icon = '🚀';
-              } else {
-                text = `קמפיין "${campaign.campaignName}" פעיל ועובד — ממשיכים לעקוב`;
-                action = 'בסדר'; icon = '✅';
-              }
-
-              return (
-                <div key={campaign.id} className="client-card" style={{
-                  display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '1rem 1.25rem',
-                }}>
-                  <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>{icon}</span>
-                  <div style={{ flex: 1, fontSize: '0.85rem', lineHeight: 1.5 }}>{text}</div>
-                  <button className="client-btn" style={{
-                    padding: '0.4rem 0.85rem', borderRadius: '0.6rem',
-                    border: '1px solid rgba(0,0,0,0.08)', background: 'var(--surface)',
-                    color: 'var(--foreground)', fontSize: '0.78rem', fontWeight: 600,
-                    cursor: 'pointer', whiteSpace: 'nowrap',
-                  }}>
-                    {action}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="client-card" style={{ padding: '3rem', textAlign: 'center' }}>
-            <div style={{ fontSize: '2rem', marginBottom: '0.75rem', opacity: 0.7 }}>💡</div>
-            <p style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--foreground-muted)', margin: '0 0 0.2rem 0' }}>
-              המלצות מותאמות אישית
-            </p>
-            <p style={{ fontSize: '0.8rem', color: 'var(--foreground-subtle)', margin: 0 }}>
-              ברגע שהקמפיינים יתחילו לעבוד, נציג כאן רעיונות לשיפור
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* ══════════════════════════════════════
-          REPORTS + QUICK NAV
-          ══════════════════════════════════════ */}
-      <div className={mounted ? 'client-fade-in client-fade-in-d5' : ''} style={{
-        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginBottom: '2.5rem',
-      }}>
-        {[
-          { label: 'פעילות', href: 'timeline', icon: '📋' },
-          { label: 'אישורים', href: 'approvals', icon: '✅' },
-          { label: 'דוחות', href: 'reports', icon: '📊' },
-          { label: 'לידים', href: 'leads', icon: '🎯' },
-        ].map(link => (
-          <a key={link.href} href={`/client-portal/${link.href}?clientId=${clientId}`}
-            className="client-card client-btn"
-            style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem',
-              padding: '1rem 0.5rem', textDecoration: 'none', color: 'var(--foreground)',
-              fontSize: '0.82rem', fontWeight: 600,
-            }}
-          >
-            <span style={{ fontSize: '1.2rem' }}>{link.icon}</span>
-            {link.label}
-          </a>
-        ))}
-      </div>
-
-      {/* Footer */}
-      <div style={{
-        textAlign: 'center', padding: '1.5rem 0',
-        borderTop: '1px solid rgba(0,0,0,0.04)',
-        color: 'var(--foreground-subtle)', fontSize: '0.7rem',
-      }}>
-        Studio Pixel &copy; {now.getFullYear()}
-      </div>
+      <div style={{ textAlign: 'center', padding: '1rem 0', color: 'var(--foreground-subtle)', fontSize: '0.7rem' }}>Studio Pixel &copy; {now.getFullYear()}</div>
+      <style>{`@media (max-width:760px){.cp-2col{grid-template-columns:1fr !important}}`}</style>
     </div>
   );
 }
