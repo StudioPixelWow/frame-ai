@@ -1358,7 +1358,8 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                       {protectionBadge.label}
                     </span>
                   )}
-                  {editingItemId !== item.id && (
+                  {/* Row always shows its summary; details now open in the side drawer */}
+                  {true && (
                     <>
                       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", marginBottom: "0.75rem" }}>
                         <div style={{ flex: 1 }}>
@@ -1786,7 +1787,8 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                     </>
                   )}
 
-                  {editingItemId === item.id && (
+                  {/* Inline editor replaced by the premium side drawer (rendered globally below) */}
+                  {false && editingItemId === item.id && (
                     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                       <div>
                         <label style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
@@ -2813,7 +2815,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
       )}
 
       {/* ── Selected Item Detail Panel (for non-list views) ── */}
-      {activeView !== "list" && editingItemId && (() => {
+      {editingItemId && (() => {
         const selectedItem = ganttItems.find((i) => i.id === editingItemId);
         if (!selectedItem) return null;
         // Ensure references are loaded for this item
@@ -2831,27 +2833,28 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
         return (
           <div
             style={{
-              position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
-              display: "flex", alignItems: "center", justifyContent: "center",
+              position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)",
               zIndex: 1000,
             }}
             onClick={(e) => { if (e.target === e.currentTarget) setEditingItemId(null); }}
           >
             <div
+              className="cid-drawer"
               style={{
+                position: "fixed", top: 0, bottom: 0, insetInlineStart: 0,
                 background: "var(--surface-raised)",
-                border: "1px solid var(--border)",
-                borderRadius: "0.75rem",
+                borderInlineEnd: "1px solid var(--border)",
                 padding: "1.5rem",
                 direction: "rtl",
-                width: "95%",
-                maxWidth: "600px",
-                maxHeight: "85vh",
+                width: "min(640px, 54vw)",
+                maxWidth: "96vw",
                 overflowY: "auto",
-                boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+                boxShadow: "8px 0 40px rgba(0,0,0,0.25)",
+                animation: "cid-slide 0.28s ease",
               }}
               onClick={(e) => e.stopPropagation()}
             >
+              <style>{`@keyframes cid-slide{from{transform:translateX(-100%)}to{transform:translateX(0)}}@media(max-width:760px){.cid-drawer{width:100vw !important}}`}</style>
               {/* Header */}
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1rem" }}>
                 <div>
