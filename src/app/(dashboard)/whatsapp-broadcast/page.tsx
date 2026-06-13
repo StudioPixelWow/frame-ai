@@ -39,6 +39,19 @@ export default function WhatsAppBroadcastPage() {
   }, []);
   useEffect(() => { pollConn(); const t = setInterval(pollConn, 4000); return () => clearInterval(t); }, [pollConn]);
 
+  const [restarting, setRestarting] = useState(false);
+  const restartConn = useCallback(async () => {
+    if (restarting) return;
+    setRestarting(true);
+    try {
+      const r = await fetch("/api/whatsapp/qr-restart", { method: "POST", headers: roleHeaders(), cache: "no-store" });
+      const d = await r.json();
+      if (d?.ok) { toast("מאתחל חיבור מחדש — קוד QR חדש יופיע בעוד מספר שניות", "info"); setConn({ state: "starting" }); }
+      else toast(d?.error ? `אתחול נכשל: ${d.error}` : "אתחול נכשל — בדוק שהשירות רץ", "error");
+    } catch { toast("השירות לא נגיש", "error"); }
+    finally { setRestarting(false); setTimeout(pollConn, 2500); }
+  }, [restarting, pollConn, toast]);
+
   // ── Recipients ──
   // Coerce to string (some phones come back as numbers) and accept any phone-like field.
   const phoneOf = (c: any) => String(c?.phone ?? c?.phoneNumber ?? c?.mobile ?? c?.whatsapp ?? "").trim();
@@ -176,12 +189,18 @@ export default function WhatsAppBroadcastPage() {
               {conn.error ? <> <span style={{ direction: "ltr", display: "inline-block", color: "#991b1b", fontFamily: "monospace", fontSize: "0.78rem" }}>({String(conn.error)})</span></> : null}
             </div>
             <div style={{ fontSize: "0.78rem", color: "var(--foreground-muted)" }}>ודא שהשירות (תיקיית <code>whatsapp-service</code>) רץ על שרת always-on, ושב-Vercel מוגדרים <code>WHATSAPP_SERVICE_URL</code> ו-<code>WHATSAPP_SERVICE_SECRET</code>.</div>
-            <button onClick={pollConn} style={{ ...seg(false), width: "fit-content" }}>🔄 נסה שוב</button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={pollConn} style={{ ...seg(false), width: "fit-content" }}>🔄 נסה שוב</button>
+              <button onClick={restartConn} disabled={restarting} style={{ ...seg(false), width: "fit-content" }}>{restarting ? "⏳ מאתחל…" : "♻️ אתחל חיבור מחדש"}</button>
+            </div>
           </div>
         ) : conn.state === "disconnected" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ fontSize: "0.85rem", color: "#b45309" }}>החיבור נותק. השירות מנסה להתחבר מחדש — בעוד כמה שניות אמור להופיע קוד QR חדש לסריקה.</div>
-            <button onClick={pollConn} style={{ ...seg(false), width: "fit-content" }}>🔄 רענן מצב</button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={pollConn} style={{ ...seg(false), width: "fit-content" }}>🔄 רענן מצב</button>
+              <button onClick={restartConn} disabled={restarting} style={{ ...seg(false), width: "fit-content" }}>{restarting ? "⏳ מאתחל…" : "♻️ אתחל חיבור מחדש"}</button>
+            </div>
           </div>
         ) : conn.state === "starting" || conn.state === "authenticated" || conn.state === "loading" ? (
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -189,6 +208,7 @@ export default function WhatsAppBroadcastPage() {
               ⏳ {conn.state === "authenticated" ? "מאמת חיבור…" : "מאתחל את שירות הוואטסאפ… (עד דקה)"}
             </span>
             <button onClick={pollConn} style={{ ...seg(false) }}>🔄 רענן</button>
+            <button onClick={restartConn} disabled={restarting} style={{ ...seg(false) }}>{restarting ? "⏳ מאתחל…" : "♻️ אתחל חיבור מחדש"}</button>
           </div>
         ) : (
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>

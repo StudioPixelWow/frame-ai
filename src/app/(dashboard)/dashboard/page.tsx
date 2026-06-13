@@ -673,7 +673,7 @@ function AdminDashboard() {
                   ))}
                 </div>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <Link href="/tasks" style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "linear-gradient(135deg,#6366f1,#06b6d4)", color: "#fff", borderRadius: 12, padding: "0.65rem 1.3rem", fontWeight: 800, fontSize: "0.88rem", textDecoration: "none" }}>← פתח את היום שלי</Link>
+                  <Link href="/calendar" style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "linear-gradient(135deg,#6366f1,#06b6d4)", color: "#fff", borderRadius: 12, padding: "0.65rem 1.3rem", fontWeight: 800, fontSize: "0.88rem", textDecoration: "none" }}>← פתח את היום שלי</Link>
                   <Link href="/exec-dashboard" style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "#fff", color: "#4f46e5", border: "1px solid #c7d2fe", borderRadius: 12, padding: "0.65rem 1.1rem", fontWeight: 700, fontSize: "0.82rem", textDecoration: "none" }}>סדר עדיפויות →</Link>
                 </div>
               </div>
