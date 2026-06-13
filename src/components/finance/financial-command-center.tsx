@@ -102,7 +102,21 @@ export default function FinancialCommandCenter({ payments = [], projectPayments 
       return { id: c.id, name: c.name, mrr, monthIncome, out, overdueDays, status, statusColor, health, annual: mrr * 12 };
     }).filter((c: any) => c.mrr > 0 || c.out > 0 || c.monthIncome > 0).sort((a: any, b: any) => b.mrr - a.mrr).slice(0, 10);
     const arr = recurring * 12;
-    return { monthRevenue, recurring, arr, outstanding, overdue, revSeries, action, pipeline, categories, catTotal, retainers, renewals, risks, overdueCount: overdueItems.length, topClient, clientHealth };
+
+    // ── Financial opportunities (rule-based on real client signals) ──
+    const retAmts = (clients || []).map((c: any) => num(c.retainerAmount)).filter((x: number) => x > 0).sort((a: number, b: number) => a - b);
+    const median = retAmts.length ? retAmts[Math.floor(retAmts.length / 2)] : 0;
+    const opportunities: { name: string; text: string; est: number; prob: string }[] = [];
+    (clients || []).filter((c: any) => c.status !== "inactive").forEach((c: any) => {
+      const ret = num(c.retainerAmount);
+      const hasHosting = (hostingRecords || []).some((h: any) => h.clientId === c.id && h.status !== "cancelled");
+      if (hasHosting && ret === 0) opportunities.push({ name: c.name, text: "לקוח אחסון ללא ריטיינר שיווק — הזדמנות לניהול שיווקי", est: 2500, prob: "בינונית" });
+      else if (ret > 0 && median > 0 && ret < median * 0.8) opportunities.push({ name: c.name, text: "ריטיינר נמוך מהחציון — הזדמנות להרחבת שירות", est: Math.round(median - ret), prob: "גבוהה" });
+    });
+    const oppList = opportunities.slice(0, 5);
+    const oppPotential = oppList.reduce((s, o) => s + o.est, 0);
+
+    return { monthRevenue, recurring, arr, outstanding, overdue, revSeries, action, pipeline, categories, catTotal, retainers, renewals, risks, overdueCount: overdueItems.length, topClient, clientHealth, opportunities: oppList, oppPotential };
   }, [payments, projectPayments, clients, hostingRecords]);
 
   const insights: string[] = [];
@@ -253,6 +267,30 @@ export default function FinancialCommandCenter({ payments = [], projectPayments 
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Financial opportunities */}
+      {m.opportunities.length > 0 && (
+        <div style={{ ...card, background: "linear-gradient(135deg,#f0fdf4,#ecfeff)", borderColor: "#bbf7d0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div style={{ fontWeight: 800, fontSize: "0.95rem", color: "#15803d" }}>💡 הזדמנויות פיננסיות</div>
+            <span style={{ fontSize: "0.74rem", fontWeight: 700, color: "#15803d" }}>פוטנציאל ~{cur(m.oppPotential)}/ח׳</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {m.opportunities.map((o, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "0.5rem 0.65rem", background: "rgba(255,255,255,0.7)", border: "1px solid #d1fae5", borderRadius: 8 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--foreground)" }}>{o.name}</div>
+                  <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>{o.text}</div>
+                </div>
+                <div style={{ textAlign: "center", flexShrink: 0 }}>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "#15803d" }}>+{cur(o.est)}</div>
+                  <div style={{ fontSize: "0.64rem", color: "var(--foreground-muted)" }}>סבירות {o.prob}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
