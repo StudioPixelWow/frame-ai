@@ -130,145 +130,275 @@ function EmployeeDashboard({ employeeId }: { employeeId: string }) {
   const { data: employees } = useEmployees();
   const { data: tasks } = useTasks();
   const { data: employeeTasks } = useEmployeeTasks();
+  const [focusMode, setFocusMode] = useState(false);
 
-  const employee = employees.find(e => e.id === employeeId);
+  const employee = employees.find((e) => e.id === employeeId);
   const employeeName = employee?.name || "עובד";
-
-  // Tasks assigned to this employee (both global tasks and employee-tasks).
-  // This view is intentionally scoped to the employee's own work only —
-  // no client lists, payments, projects, or other agency/admin data.
-  const myGlobalTasks = useMemo(() =>
-    tasks.filter(t => t.assigneeIds?.includes(employeeId) && t.status !== "completed"),
-    [tasks, employeeId]
-  );
-  const myEmployeeTasks = useMemo(() =>
-    employeeTasks.filter(t => t.assignedEmployeeId === employeeId && t.status !== "completed"),
-    [employeeTasks, employeeId]
-  );
-  const allMyTaskCount = myGlobalTasks.length + myEmployeeTasks.length;
-
-  // Group all my tasks by urgency for a clean, calm layout.
+  const greeting = (() => { const h = new Date().getHours(); return h < 12 ? "בוקר טוב" : h < 18 ? "צהריים טובים" : "ערב טוב"; })();
+  const todayLabel = new Date().toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long" });
   const today = new Date().toISOString().split("T")[0];
-  // De-duplicate: a task may exist in both stores (gantt + client-tab create both).
-  // Employee-tasks win the dedup so the assignedEmployeeId match is preserved.
-  const dedupKey = (t: any) =>
-    t.ganttItemId ? `g:${t.ganttItemId}` : `k:${String(t.clientName || "").trim()}|${String(t.title || "").trim()}|${t.dueDate || ""}`;
-  const myTasks = (() => {
-    const merged = [...myEmployeeTasks, ...myGlobalTasks];
-    const seen = new Set<string>();
-    const unique: any[] = [];
-    for (const t of merged) {
-      const k = dedupKey(t);
-      if (seen.has(k)) continue;
-      seen.add(k);
-      unique.push(t);
-    }
-    return unique;
-  })();
-  const byDate = (a: any, b: any) => {
-    const da = a.dueDate || "9999-99-99"; const db = b.dueDate || "9999-99-99";
-    return da < db ? -1 : da > db ? 1 : 0;
-  };
-  const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })();
-  const overdue = myTasks.filter(t => t.dueDate && t.dueDate < today).sort(byDate);
-  const todayList = myTasks.filter(t => t.dueDate && t.dueDate === today).sort(byDate);
-  const upcoming = myTasks.filter(t => !t.dueDate || t.dueDate > today).sort(byDate);
-  // Next 48 hours: today + tomorrow (the employee's focus list).
-  const next48 = myTasks.filter(t => t.dueDate && t.dueDate >= today && t.dueDate <= tomorrow).sort(byDate);
-  const overdueCount = overdue.length;
-  const todayTaskCount = todayList.length;
+  const todayStart = new Date(new Date().toDateString()).getTime();
 
-  const STATUS_LABEL: Record<string, string> = { new: "חדש", in_progress: "בביצוע", under_review: "בביקורת", returned: "הוחזר", pending: "ממתין" };
-  const PRIO_COLOR: Record<string, string> = { urgent: "#ef4444", high: "#f97316", medium: "#fbbf24", low: "#22c55e" };
+  // Merge this employee's tasks from both stores (including completed), de-duplicated.
+  const dedupKey = (t: any) => (t.ganttItemId ? `g:${t.ganttItemId}` : `k:${String(t.clientName || "").trim()}|${String(t.title || "").trim()}|${t.dueDate || ""}`);
+  const myAll = useMemo(() => {
+    const g = tasks.filter((t: any) => t.assigneeIds?.includes(employeeId));
+    const e = employeeTasks.filter((t: any) => t.assignedEmployeeId === employeeId);
+    const merged = [...e, ...g]; const seen = new Set<string>(); const out: any[] = [];
+    for (const t of merged) { const k = dedupKey(t); if (seen.has(k)) continue; seen.add(k); out.push(t); }
+    return out;
+  }, [tasks, employeeTasks, employeeId]);
 
-  const renderTask = (task: any) => {
-    const overdueRow = task.dueDate && task.dueDate < today;
+  const isDone = (t: any) => t.status === "completed" || t.status === "approved";
+  const open = myAll.filter((t) => !isDone(t));
+  const overdue = open.filter((t) => t.dueDate && t.dueDate < today);
+  const todayList = open.filter((t) => t.dueDate && t.dueDate === today);
+  const urgent = open.filter((t) => t.priority === "urgent" || t.priority === "high");
+  const completed = myAll.filter(isDone);
+  const weekAgo = todayStart - 7 * 864e5;
+  const completedWeek = completed.filter((t) => { const d = t.completedAt || t.updatedAt; return d && new Date(d).getTime() >= weekAgo; });
+
+  const PRIO_COLOR: Record<string, string> = { urgent: "#ef4444", high: "#f97316", medium: "#f59e0b", low: "#22c55e" };
+  const PRIO_LABEL: Record<string, string> = { urgent: "דחוף", high: "גבוה", medium: "בינוני", low: "נמוך" };
+  const estMin = (t: any) => (t.priority === "urgent" ? 30 : t.priority === "high" ? 25 : t.priority === "low" ? 15 : 20);
+  const timeLeft = (t: any) => { if (!t.dueDate) return "ללא יעד"; if (t.dueDate < today) { const d = Math.round((todayStart - new Date(t.dueDate).getTime()) / 864e5); return `${d} ימי איחור`; } if (t.dueDate === today) return "היום"; const d = Math.round((new Date(t.dueDate).getTime() - todayStart) / 864e5); return `בעוד ${d} ימים`; };
+  const ownerAvatar = <Avatar src={(employee as any)?.avatarUrl} name={employeeName} size={26} ring={false} />;
+
+  // Focus cards
+  const byUrgency = (a: any, b: any) => { const da = a.dueDate || "9999"; const db = b.dueDate || "9999"; return da < db ? -1 : da > db ? 1 : 0; };
+  const highest = [...overdue, ...urgent].sort(byUrgency)[0] || open.sort(byUrgency)[0];
+  const attention = open.find((t) => t.status === "returned" || t.status === "under_review");
+  const quickWin = [...open].filter((t) => t.id !== highest?.id).sort((a, b) => estMin(a) - estMin(b))[0];
+
+  // Pipeline
+  const pipe = [
+    { l: "דורש טיפול", c: "#ef4444", n: overdue.length + open.filter((t) => t.status === "returned").length },
+    { l: "בביצוע", c: "#3b82f6", n: open.filter((t) => t.status === "in_progress").length },
+    { l: "ממתין", c: "#8b5cf6", n: open.filter((t) => t.status === "under_review" || t.status === "pending").length },
+    { l: "הושלם השבוע", c: "#22c55e", n: completedWeek.length },
+  ];
+
+  // Performance
+  const weeklyTarget = completedWeek.length + todayList.length + overdue.length;
+  const weeklyPct = weeklyTarget ? Math.round((completedWeek.length / weeklyTarget) * 100) : (completedWeek.length ? 100 : 0);
+  const weeklyRemaining = Math.max(0, weeklyTarget - completedWeek.length);
+  const dueCompleted = completed.filter((t) => t.dueDate && (t.completedAt || t.updatedAt));
+  const onTimeN = dueCompleted.filter((t) => new Date(t.completedAt || t.updatedAt) <= new Date(t.dueDate + "T23:59:59")).length;
+  const onTimeRate = dueCompleted.length ? Math.round((onTimeN / dueCompleted.length) * 100) : null;
+  const returnedN = myAll.filter((t) => t.status === "returned").length;
+  const reviewedN = completed.length + returnedN;
+  const qualityScore = reviewedN ? Math.round((completed.length / reviewedN) * 100) : null;
+  const lateEvents = [...overdue.map((t: any) => t.dueDate), ...dueCompleted.filter((t) => new Date(t.completedAt || t.updatedAt) > new Date(t.dueDate + "T23:59:59")).map((t: any) => t.dueDate)].filter(Boolean).sort();
+  const lastLate = lateEvents[lateEvents.length - 1];
+  const streak = overdue.length > 0 ? 0 : lastLate ? Math.min(60, Math.round((todayStart - new Date(lastLate).getTime()) / 864e5)) : Math.min(30, completedWeek.length * 2);
+  const completionRate = myAll.length ? Math.round((completed.length / myAll.length) * 100) : 0;
+
+  // Quick wins + recent completions
+  const quickWins = [...open].sort((a, b) => estMin(a) - estMin(b)).slice(0, 5);
+  const recent = [...completed].filter((t) => t.completedAt || t.updatedAt).sort((a, b) => +new Date(b.completedAt || b.updatedAt) - +new Date(a.completedAt || a.updatedAt)).slice(0, 5);
+
+  // AI coach insights
+  const ai: string[] = [];
+  if (overdue.length) ai.push(`יש ${overdue.length} משימות באיחור — מומלץ להתחיל מהן`);
+  if (completedWeek.length) ai.push(`השלמת ${completedWeek.length} משימות השבוע — כל הכבוד! 💪`);
+  const under1h = open.filter((t) => estMin(t) <= 20).length;
+  if (under1h) ai.push(`${under1h} משימות ניתן לסיים בפחות משעה`);
+  if (highest) ai.push(`התחל מ: ${highest.title}`);
+  if (ai.length === 0) ai.push("אין משימות דחופות — שיהיה יום מעולה! ☕");
+
+  const card: React.CSSProperties = { background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 16, padding: "1.2rem" };
+  const secTitle: React.CSSProperties = { fontSize: "1rem", fontWeight: 800, color: "var(--foreground)", marginBottom: 14 };
+  const taskRow = (t: any, action?: { l: string }) => (
+    <Link key={t.id} href={`/tasks?task=${t.id}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.6rem 0.8rem", background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 10, textDecoration: "none" }}>
+      <span style={{ width: 8, height: 8, borderRadius: "50%", background: PRIO_COLOR[t.priority] || "#94a3b8", flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div>
+        <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>{t.clientName || "כללי"} · ~{estMin(t)} דק׳</div>
+      </div>
+      {action && <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--accent)", background: "var(--accent-muted)", borderRadius: 8, padding: "0.25rem 0.6rem" }}>{action.l}</span>}
+    </Link>
+  );
+
+  // ── FOCUS MODE — hide everything but current/next/upcoming ──
+  if (focusMode) {
+    const focusList = [...overdue, ...todayList, ...open].filter((t, i, a) => a.findIndex((x) => x.id === t.id) === i).slice(0, 3);
+    const labels = ["המשימה הנוכחית", "הבאה בתור", "אחר כך"];
     return (
-      <Link key={task.id} href={`/tasks?task=${task.id}`} style={{
-        textDecoration: "none", display: "flex", alignItems: "center", gap: "0.85rem",
-        padding: "0.85rem 1rem", background: "var(--surface-raised)", border: "1px solid var(--border)",
-        borderRadius: "0.6rem", direction: "rtl", transition: "all 150ms ease",
-      }}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)"; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}
-      >
-        <span style={{ width: 9, height: 9, borderRadius: "50%", background: PRIO_COLOR[task.priority] || "#94a3b8", flexShrink: 0 }} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.title}</div>
-          <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", marginTop: 2 }}>
-            {task.clientName || "כללי"}
+      <div className="mhd-root">
+        <div className="mhd-content" style={{ maxWidth: 640, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16, direction: "rtl" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: "1.2rem", fontWeight: 900 }}>🎯 מצב פוקוס</span>
+            <button onClick={() => setFocusMode(false)} style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--foreground-muted)", background: "transparent", border: "1px solid var(--border)", borderRadius: 999, padding: "0.4rem 0.9rem", cursor: "pointer" }}>צא ממצב פוקוס</button>
           </div>
-        </div>
-        <span style={{ fontSize: "0.65rem", fontWeight: 600, padding: "0.2rem 0.6rem", borderRadius: 999, background: "var(--surface)", color: "var(--foreground-muted)", whiteSpace: "nowrap" }}>
-          {STATUS_LABEL[task.status] || task.status}
-        </span>
-        {task.dueDate && (
-          <span style={{ fontSize: "0.7rem", fontWeight: 700, whiteSpace: "nowrap", color: overdueRow ? "#ef4444" : "var(--foreground-muted)", minWidth: 54, textAlign: "left" }}>
-            {new Date(task.dueDate).toLocaleDateString("he-IL", { day: "numeric", month: "short" })}
-          </span>
-        )}
-      </Link>
-    );
-  };
-
-  const Section = ({ title, color, items }: { title: string; color: string; items: any[] }) => (
-    items.length === 0 ? null : (
-      <div style={{ marginBottom: "1.5rem" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: "0.6rem", direction: "rtl" }}>
-          <span style={{ width: 4, height: 16, borderRadius: 2, background: color }} />
-          <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--foreground)" }}>{title}</span>
-          <span style={{ fontSize: "0.75rem", color: "var(--foreground-muted)" }}>({items.length})</span>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          {items.map(renderTask)}
+          {focusList.length === 0 ? <div style={{ ...card, textAlign: "center", padding: "3rem" }}>אין משימות פתוחות — שיהיה יום מעולה! ✨</div> :
+            focusList.map((t, i) => (
+              <Link key={t.id} href={`/tasks?task=${t.id}`} style={{ ...card, textDecoration: "none", display: "block", borderInlineStart: `4px solid ${i === 0 ? "var(--accent)" : "var(--border)"}`, opacity: i === 0 ? 1 : 0.7 }}>
+                <div style={{ fontSize: "0.72rem", color: "var(--foreground-subtle)" }}>{labels[i]}</div>
+                <div style={{ fontSize: i === 0 ? "1.3rem" : "1rem", fontWeight: 800, color: "var(--foreground)", margin: "4px 0" }}>{t.title}</div>
+                <div style={{ fontSize: "0.78rem", color: "var(--foreground-muted)" }}>{t.clientName || "כללי"} · {timeLeft(t)} · ~{estMin(t)} דק׳</div>
+              </Link>
+            ))}
         </div>
       </div>
-    )
-  );
+    );
+  }
 
   return (
     <div className="mhd-root">
-      <div className="mhd-content stagger-in" style={{ maxWidth: 860, margin: "0 auto" }}>
-        {/* ═══ UNIFIED WELCOME BAND ═══ */}
-        <div style={{ marginBottom: "1.75rem" }}>
-          <WelcomeBand
-            name={employeeName}
-            subtitle={overdueCount > 0 ? `יש ${overdueCount} משימות שמחכות לך — אתה על זה! 💪` : todayTaskCount > 0 ? `${todayTaskCount} משימות להיום — קדימה לעבודה! ✨` : "אין משימות דחופות — שיהיה יום מעולה! ☕"}
-          />
-        </div>
+      <div className="mhd-content stagger-in" style={{ display: "flex", flexDirection: "column", gap: 22, direction: "rtl", maxWidth: 1100, margin: "0 auto" }}>
 
-        {/* ═══ 3 CLEAN STATS ═══ */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.75rem", marginBottom: "1.75rem", direction: "rtl" }}>
-          {[
-            { value: allMyTaskCount, label: "משימות פתוחות", color: "#2dd4bf" },
-            { value: overdueCount, label: "באיחור", color: "#ef4444" },
-            { value: todayTaskCount, label: "להיום", color: "#38bdf8" },
-          ].map((s) => (
-            <div key={s.label} style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1rem", textAlign: "center" }}>
-              <div style={{ fontSize: "1.8rem", fontWeight: 800, color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", marginTop: 2 }}>{s.label}</div>
+        {/* ═══ 1 · PERSONAL HERO ═══ */}
+        <div style={{ borderRadius: 22, padding: "1.6rem 1.8rem", background: "linear-gradient(135deg,#eff6ff,#f5f3ff 55%,#eef2ff)", border: "1px solid #dbeafe" }}>
+          <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
+            <Avatar src={(employee as any)?.avatarUrl} name={employeeName} size={84} />
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <h1 style={{ fontSize: "1.7rem", fontWeight: 900, margin: 0, color: "#0f172a" }}>{greeting}, {employeeName.split(" ")[0]}! 👋</h1>
+              <div style={{ fontSize: "0.82rem", color: "#64748b", marginTop: 2 }}>{todayLabel}</div>
+              <div style={{ marginTop: 12, background: "rgba(255,255,255,0.7)", borderRadius: 12, padding: "0.7rem 0.9rem", border: "1px solid #e0e7ff" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}><span style={{ fontWeight: 800, fontSize: "0.8rem", color: "#6d28d9" }}>🤖 Pixel AI Coach</span></div>
+                <div style={{ fontSize: "0.78rem", color: "#475569", lineHeight: 1.5 }}>{ai[0]}{weeklyRemaining > 0 ? ` · עוד ${weeklyRemaining} להשגת היעד השבועי` : ""}</div>
+              </div>
+              <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+                <button onClick={() => setFocusMode(true)} style={{ background: "linear-gradient(135deg,#6366f1,#06b6d4)", color: "#fff", border: "none", borderRadius: 12, padding: "0.6rem 1.3rem", fontWeight: 800, fontSize: "0.85rem", cursor: "pointer" }}>← התחל עבודה (מצב פוקוס)</button>
+                <Link href="/tasks" style={{ background: "#fff", color: "#4f46e5", border: "1px solid #c7d2fe", borderRadius: 12, padding: "0.6rem 1.1rem", fontWeight: 700, fontSize: "0.82rem", textDecoration: "none" }}>כל המשימות →</Link>
+              </div>
             </div>
-          ))}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              {[
+                { n: urgent.length, l: "משימות דחופות", c: "#ef4444" },
+                { n: todayList.length, l: "משימות להיום", c: "#3b82f6" },
+                { n: overdue.length, l: "משימות באיחור", c: "#f59e0b" },
+                { n: open.length, l: "משימות פתוחות", c: "var(--foreground)" },
+              ].map((s, i) => (
+                <div key={i} style={{ background: "rgba(255,255,255,0.8)", borderRadius: 14, padding: "0.85rem 1.1rem", minWidth: 110, textAlign: "center" }}>
+                  <div style={{ fontSize: "1.7rem", fontWeight: 900, color: s.c, lineHeight: 1 }}>{s.n}</div>
+                  <div style={{ fontSize: "0.66rem", color: "#64748b", marginTop: 4 }}>{s.l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* ═══ NEXT 48 HOURS — the employee's focus list ═══ */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.8rem", direction: "rtl" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: "1rem", fontWeight: 800, color: "var(--foreground)" }}>⚡ המשימות שלי ל-48 השעות הקרובות</span>
-            <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#fff", background: "#00B5FE", borderRadius: 999, padding: "1px 9px" }}>{next48.length}</span>
+        {/* ═══ 2 · FOCUS FOR TODAY ═══ */}
+        <div>
+          <div style={secTitle}>⭐ המשימות החשובות לך היום</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }} className="emp-3col">
+            {[
+              { t: highest, tag: "דחוף", emoji: "🔥", tone: "#ef4444", bg: "rgba(239,68,68,0.05)" },
+              { t: attention, tag: "דורש טיפול", emoji: "⚠️", tone: "#f59e0b", bg: "rgba(245,158,11,0.05)" },
+              { t: quickWin, tag: "ניצחון מהיר", emoji: "⚡", tone: "#22c55e", bg: "rgba(34,197,94,0.05)" },
+            ].map((c, i) => (
+              <div key={i} style={{ ...card, background: c.bg, borderColor: c.tone + "40", minHeight: 180, display: "flex", flexDirection: "column" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "0.74rem", fontWeight: 800, color: c.tone }}>{c.emoji} {c.tag}</span>
+                </div>
+                {c.t ? (
+                  <>
+                    <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--foreground)", margin: "12px 0 4px" }}>{c.t.title}</div>
+                    <div style={{ fontSize: "0.76rem", color: "var(--foreground-muted)" }}>{c.t.clientName || "כללי"}</div>
+                    <div style={{ display: "inline-block", marginTop: 10, fontSize: "0.7rem", fontWeight: 700, color: c.tone, background: c.tone + "1a", borderRadius: 999, padding: "0.2rem 0.7rem", width: "fit-content" }}>{i === 2 ? `~${estMin(c.t)} דקות עבודה` : timeLeft(c.t)}</div>
+                    <div style={{ flex: 1 }} />
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
+                      {ownerAvatar}
+                      <Link href={`/tasks?task=${c.t.id}`} style={{ fontSize: "0.78rem", fontWeight: 700, color: c.tone, border: `1px solid ${c.tone}55`, borderRadius: 10, padding: "0.4rem 1rem", textDecoration: "none" }}>פתח משימה</Link>
+                    </div>
+                  </>
+                ) : <div style={{ fontSize: "0.82rem", color: "var(--foreground-subtle)", marginTop: 20 }}>אין משימה מתאימה ✨</div>}
+              </div>
+            ))}
           </div>
-          <Link href="/tasks" style={{ fontSize: "0.78rem", fontWeight: 700, color: "#00B5FE", textDecoration: "none" }}>כל המשימות ←</Link>
         </div>
-        {next48.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "3rem 1.5rem", color: "var(--foreground-muted)", background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem" }}>
-            <div style={{ fontSize: "2.5rem", marginBottom: "0.75rem" }}>✨</div>
-            <div style={{ fontSize: "0.95rem", fontWeight: 600 }}>אין משימות ל-48 השעות הקרובות — שיהיה יום מעולה!</div>
+
+        {/* ═══ 3 · MY WORK PIPELINE ═══ */}
+        <div>
+          <div style={secTitle}>מצב עבודה</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }} className="emp-4col">
+            {pipe.map((p, i) => (
+              <div key={i} style={{ ...card, borderTop: `3px solid ${p.c}`, textAlign: "center" }}>
+                <div style={{ fontSize: "0.8rem", fontWeight: 700, color: p.c, marginBottom: 6 }}>{p.l}</div>
+                <div style={{ fontSize: "2rem", fontWeight: 900, color: "var(--foreground)" }}>{p.n}</div>
+                <div style={{ fontSize: "0.66rem", color: "var(--foreground-muted)" }}>משימות</div>
+                <div style={{ height: 4, background: "var(--surface)", borderRadius: 999, marginTop: 8, overflow: "hidden" }}><div style={{ width: `${Math.min(100, p.n * 12)}%`, height: "100%", background: p.c }} /></div>
+              </div>
+            ))}
           </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            {next48.map(renderTask)}
+        </div>
+
+        {/* ═══ 4 · PIXEL AI WORK COACH  +  5 · PERFORMANCE ═══ */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: 16 }} className="emp-2col">
+          <div style={{ position: "relative", overflow: "hidden", borderRadius: 16, padding: "1.4rem", background: "linear-gradient(145deg,#1e1b4b,#312e81 55%,#4c1d95)", border: "1px solid #6d28d9", color: "#fff" }}>
+            <div style={{ position: "absolute", insetInlineStart: -10, top: 0, width: 160, height: 160, borderRadius: "50%", background: "radial-gradient(circle, rgba(167,139,250,0.45), transparent 70%)" }} />
+            <div style={{ position: "relative", zIndex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}><span>🤖</span><span style={{ fontSize: "1rem", fontWeight: 900 }}>Pixel AI Work Coach</span></div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {ai.slice(0, 4).map((t, i) => <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: "0.8rem", color: "#ede9fe" }}><span style={{ color: "#c4b5fd" }}>›</span>{t}</div>)}
+              </div>
+              <Link href="/tasks" style={{ display: "inline-block", marginTop: 14, fontSize: "0.78rem", fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 10, padding: "0.5rem 1rem", textDecoration: "none" }}>← ראה כל ההמלצות</Link>
+            </div>
           </div>
-        )}
+          <div style={card}>
+            <div style={secTitle}>ביצועים אישיים</div>
+            <div style={{ display: "flex", justifyContent: "space-around", gap: 10, flexWrap: "wrap" }}>
+              {[
+                { l: "יעד שבועי", v: weeklyPct, suf: "%", c: "#3b82f6", sub: weeklyRemaining > 0 ? `דרוש ${weeklyRemaining} משימות` : "הושג! 🎉" },
+                { l: "עמידה בזמן", v: onTimeRate, suf: "%", c: "#06b6d4", sub: onTimeRate === null ? "אין נתונים" : "כל הכבוד!" },
+                { l: "ציון איכות", v: qualityScore, suf: "%", c: "#8b5cf6", sub: qualityScore === null ? "אין נתונים" : "מעולה!" },
+                { l: "רצף הצלחות", v: streak, suf: "", c: "#22c55e", sub: "ימים ללא איחור" },
+              ].map((r, i) => (
+                <div key={i} style={{ textAlign: "center" }}>
+                  <div style={{ position: "relative", width: 68, height: 68, borderRadius: "50%", margin: "0 auto", background: r.v === null ? "var(--border)" : `conic-gradient(${r.c} ${Math.min(100, Number(r.v)) * 3.6}deg, var(--border) 0deg)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ width: 54, height: 54, borderRadius: "50%", background: "var(--surface-raised)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.95rem", fontWeight: 900, color: r.v === null ? "var(--foreground-subtle)" : r.c }}>{r.v === null ? "—" : `${r.v}${r.suf}`}</div>
+                  </div>
+                  <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--foreground)", marginTop: 8 }}>{r.l}</div>
+                  <div style={{ fontSize: "0.6rem", color: "var(--foreground-subtle)" }}>{r.sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ═══ 6 · QUICK WINS  +  7 · RECENT COMPLETIONS ═══ */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }} className="emp-2col">
+          <div style={card}>
+            <div style={secTitle}>⚡ משימות קצרות לסגירה</div>
+            {quickWins.length === 0 ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>אין משימות פתוחות 🎉</div> :
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{quickWins.map((t) => taskRow(t, { l: "התחל" }))}</div>}
+          </div>
+          <div style={card}>
+            <div style={secTitle}>✅ הושלם לאחרונה</div>
+            {recent.length === 0 ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>עדיין אין משימות שהושלמו</div> :
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {recent.map((t) => (
+                  <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.5rem 0.2rem", borderBottom: "1px solid var(--border)" }}>
+                    <span style={{ color: "#22c55e" }}>✓</span>
+                    <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: "0.8rem", color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div><div style={{ fontSize: "0.66rem", color: "var(--foreground-subtle)" }}>{t.clientName || "כללי"}</div></div>
+                    <span style={{ fontSize: "0.66rem", color: "var(--foreground-subtle)" }}>{(t.completedAt || t.updatedAt) ? new Date(t.completedAt || t.updatedAt).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" }) : ""}</span>
+                  </div>
+                ))}
+              </div>}
+          </div>
+        </div>
+
+        {/* ═══ 8 · WORKLOAD ANALYSIS ═══ */}
+        <div style={{ ...card, background: "linear-gradient(135deg,#ecfeff,#f0fdfa)", border: "1px solid #99f6e4" }}>
+          <div style={secTitle}>📊 ניתוח עומס</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12 }}>
+            {[
+              { l: "עומס נוכחי", v: `${open.length} משימות`, c: open.length >= 12 ? "#ef4444" : "#0d9488" },
+              { l: "זמן עבודה משוער", v: `${Math.round(open.reduce((s, t) => s + estMin(t), 0) / 60)} שעות`, c: "#0d9488" },
+              { l: "להיום + מחר", v: `${todayList.length + open.filter((t) => { const tm = new Date(todayStart + 864e5).toISOString().slice(0, 10); return t.dueDate === tm; }).length} משימות`, c: "#3b82f6" },
+              { l: "סיכון עומס יתר", v: open.length >= 12 || overdue.length >= 5 ? "גבוה" : open.length >= 7 ? "בינוני" : "נמוך", c: open.length >= 12 || overdue.length >= 5 ? "#ef4444" : open.length >= 7 ? "#f59e0b" : "#22c55e" },
+            ].map((r, i) => (
+              <div key={i} style={{ background: "rgba(255,255,255,0.7)", borderRadius: 12, padding: "0.9rem 1rem" }}>
+                <div style={{ fontSize: "0.7rem", color: "#64748b" }}>{r.l}</div>
+                <div style={{ fontSize: "1.2rem", fontWeight: 900, color: r.c }}>{r.v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: "0.76rem", color: "#0f766e", marginTop: 12 }}>🤖 {overdue.length >= 5 ? "יש עומס גבוה — מומלץ להתמקד במשימות באיחור ולבקש סיוע במידת הצורך." : open.length >= 12 ? "עומס מתון-גבוה — תכנן את היום לפי עדיפויות." : "העומס מאוזן — המשך כך! 💪"}</div>
+        </div>
+
+        <style>{`@media (max-width:980px){.emp-3col,.emp-4col,.emp-2col{grid-template-columns:1fr 1fr !important}}@media (max-width:620px){.emp-3col,.emp-4col,.emp-2col{grid-template-columns:1fr !important}}`}</style>
       </div>
     </div>
   );
