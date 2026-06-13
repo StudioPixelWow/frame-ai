@@ -51,10 +51,18 @@ export default function WelcomePopup() {
     const authEmail = (email || localStorage.getItem("frameai_email") || "").trim().toLowerCase();
     const dispName = [displayName, localStorage.getItem("frameai_display_name")].find((c) => c && c.trim() && !isRoleWord(c))?.trim() || "";
     const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
-    const emp =
-      (employees || []).find((e: any) => e.id === employeeId) ||
-      (authEmail ? (employees || []).find((e: any) => String((e as any).email || "").trim().toLowerCase() === authEmail) : undefined) ||
-      (dispName ? (employees || []).find((e: any) => norm(String(e.name || "")) === norm(dispName)) : undefined);
+    const byId = (employees || []).find((e: any) => e.id === employeeId);
+    const byEmail = authEmail ? (employees || []).find((e: any) => String((e as any).email || "").trim().toLowerCase() === authEmail) : undefined;
+    const byName = dispName ? (employees || []).filter((e: any) => norm(String(e.name || "")) === norm(dispName)) : [];
+    const emp = byId || byEmail || byName[0];
+    // Among EVERY record that matches this person, prefer one that actually has a
+    // photo. This covers duplicate employee rows (the avatar saved on one row but
+    // the popup matching another) and email/name mismatches where the matched row
+    // happens to be the empty one.
+    const avatarUrl =
+      [byId, byEmail, ...byName, emp]
+        .map((e: any) => (e && typeof (e as any).avatarUrl === "string" ? (e as any).avatarUrl.trim() : ""))
+        .find((u: string) => u) || "";
 
     // Prefer the employee's real name; only use displayName if it's an actual
     // name (not the role word the account may have been seeded with).
@@ -78,7 +86,7 @@ export default function WelcomePopup() {
     // avatar once employees arrive (the bug where everyone saw initials).
     if (!employees) return;
 
-    setData({ name, avatar: (emp as any)?.avatarUrl || "", message });
+    setData({ name, avatar: avatarUrl, message });
     const t = setTimeout(() => { setOpen(true); sessionStorage.setItem(key, "1"); }, 600);
     return () => clearTimeout(t);
   }, [role, employeeId, displayName, email, employees]);
