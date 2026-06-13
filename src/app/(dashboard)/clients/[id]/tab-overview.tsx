@@ -104,8 +104,85 @@ export default function TabOverview({ client, assignedManager, color, onUpdateCl
 
   const statusInfo = STATUS_LABELS_EXTENDED[extendedStatus] || STATUS_LABELS_EXTENDED.active;
 
+  // ── Command-center model (real data already passed to this tab) ──
+  const cmd = useMemo(() => {
+    const now = new Date();
+    const ct = tasks.filter((t: any) => t.clientId === client.id);
+    const openTasks = ct.filter((t: any) => t.status !== "completed" && t.status !== "approved");
+    const overdueTasks = openTasks.filter((t: any) => t.dueDate && new Date(t.dueDate) < new Date(now.toDateString()));
+    const reviewTasks = ct.filter((t: any) => t.status === "under_review").length;
+    const cp = [...payments.filter((p: any) => p.clientId === client.id), ...projectPayments.filter((p: any) => p.clientId === client.id)];
+    const openCollections = cp.filter((p: any) => ["pending", "overdue", "collection_needed"].includes(p.status)).reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
+    const overdueCollections = cp.filter((p: any) => p.status === "overdue").reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
+    const monthlyValue = Number((client as any).retainerAmount || (client as any).monthlyValue || 0);
+    const activeCampaigns = (campaigns || []).filter((c: any) => c.clientId === client.id && c.status === "active").length;
+    const activeLeads = (leads || []).filter((l: any) => l.clientId === client.id && !["won", "lost", "not_relevant", "duplicate"].includes(l.status || "")).length;
+    // AI account-manager insights (derived, no fake data)
+    const risks: string[] = [];
+    const opps: string[] = [];
+    if (overdueTasks.length) risks.push(`${overdueTasks.length} משימות בפיגור`);
+    if (overdueCollections > 0) risks.push(`₪${overdueCollections.toLocaleString()} בפיגור גבייה`);
+    if (!assignedManager) risks.push("לא הוקצה מנהל לקוח");
+    (healthScore.factors || []).slice(0, 2).forEach((f: string) => { if (/חוב|איחור|נמוך|ללא|חסר/.test(f)) risks.push(f); });
+    if (activeLeads > 0) opps.push(`${activeLeads} לידים פעילים לקידום`);
+    if (monthlyValue > 0 && activeCampaigns === 0) opps.push("אין קמפיין פעיל — הזדמנות להרחבה");
+    return { openTasks: openTasks.length, overdueTasks: overdueTasks.length, reviewTasks, openCollections, monthlyValue, activeCampaigns, activeLeads, risks, opps };
+  }, [client, tasks, payments, projectPayments, campaigns, leads, assignedManager, healthScore]);
+
+  const fmt = (n: number) => new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", minimumFractionDigits: 0 }).format(n);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", marginBottom: "2rem" }}>
+      {/* ═══ COMMAND-CENTER KPI STRIP ═══ */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: "0.85rem" }}>
+        {[
+          { icon: "❤️", label: "בריאות לקוח", val: `${healthScore.score}/100`, color: healthScore.color },
+          { icon: "💰", label: "ערך חודשי", val: cmd.monthlyValue > 0 ? fmt(cmd.monthlyValue) : "—", color: "#10b981" },
+          { icon: "✅", label: "משימות פתוחות", val: cmd.openTasks, color: "#3b82f6", onClick: () => onNavigateTab?.("tasks") },
+          { icon: "🔍", label: "בבדיקה", val: cmd.reviewTasks, color: "#00B5FE", onClick: () => onNavigateTab?.("tasks") },
+          { icon: "🧾", label: "גבייה פתוחה", val: cmd.openCollections > 0 ? fmt(cmd.openCollections) : "—", color: "#f59e0b", onClick: () => onNavigateTab?.("accounting") },
+          { icon: "📣", label: "קמפיינים פעילים", val: cmd.activeCampaigns, color: "#a78bfa", onClick: () => onNavigateTab?.("campaigns") },
+        ].map((k, i) => (
+          <div key={i} onClick={k.onClick} style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "0.9rem 1rem", borderTop: `3px solid ${k.color}`, cursor: k.onClick ? "pointer" : "default" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "1.1rem" }}>{k.icon}</span>
+              <span style={{ fontSize: "1.35rem", fontWeight: 900, color: k.color, lineHeight: 1 }}>{k.val}</span>
+            </div>
+            <div style={{ fontSize: "0.74rem", color: "var(--foreground-muted)", marginTop: 4 }}>{k.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ═══ AI ACCOUNT MANAGER ═══ */}
+      <div style={{ borderRadius: 16, padding: "1.2rem 1.4rem", background: "linear-gradient(135deg,#eef2ff,#ecfeff)", border: "1px solid #c7d2fe" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <span style={{ fontSize: "1.05rem", fontWeight: 900, background: "linear-gradient(90deg,#6366f1,#06b6d4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>🤖 מנהל לקוח AI</span>
+          <span style={{ fontSize: "0.7rem", fontWeight: 700, color: statusInfo.color, background: `${statusInfo.color}15`, borderRadius: 999, padding: "2px 9px" }}>{statusInfo.label}</span>
+        </div>
+        <div style={{ fontSize: "0.86rem", color: "#334155", lineHeight: 1.6, marginBottom: 12 }}>
+          {`${client.name} — ציון בריאות ${healthScore.score}/100. `}
+          {cmd.risks.length ? `נדרש טיפול: ${cmd.risks.slice(0, 2).join(", ")}. ` : "אין סיכונים פתוחים. "}
+          {cmd.opps.length ? `הזדמנות: ${cmd.opps[0]}.` : ""}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }} className="ovw-2col">
+          <div>
+            <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "#ef4444", marginBottom: 6 }}>⚠️ סיכונים</div>
+            {cmd.risks.length === 0 ? <div style={{ fontSize: "0.78rem", color: "var(--foreground-subtle)" }}>אין סיכונים מזוהים 🎉</div> :
+              cmd.risks.map((r, i) => <div key={i} style={{ fontSize: "0.8rem", color: "#334155", marginBottom: 3 }}>• {r}</div>)}
+          </div>
+          <div>
+            <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "#16a34a", marginBottom: 6 }}>💡 הזדמנויות</div>
+            {cmd.opps.length === 0 ? <div style={{ fontSize: "0.78rem", color: "var(--foreground-subtle)" }}>—</div> :
+              cmd.opps.map((o, i) => <div key={i} style={{ fontSize: "0.8rem", color: "#334155", marginBottom: 3 }}>• {o}</div>)}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+          <button onClick={() => onNavigateTab?.("tasks")} style={{ background: "#fff", border: "1px solid #c7d2fe", color: "#4f46e5", borderRadius: 999, padding: "0.4rem 0.85rem", fontSize: "0.76rem", fontWeight: 700, cursor: "pointer" }}>פתח משימות</button>
+          <button onClick={() => onNavigateTab?.("accounting")} style={{ background: "#fff", border: "1px solid #c7d2fe", color: "#4f46e5", borderRadius: 999, padding: "0.4rem 0.85rem", fontSize: "0.76rem", fontWeight: 700, cursor: "pointer" }}>גבייה</button>
+          <button onClick={() => onNavigateTab?.("content")} style={{ background: "#fff", border: "1px solid #c7d2fe", color: "#4f46e5", borderRadius: 999, padding: "0.4rem 0.85rem", fontSize: "0.76rem", fontWeight: 700, cursor: "pointer" }}>לוח תוכן</button>
+        </div>
+      </div>
+
       {/* Health Score + Snapshot Row */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
         {/* Health Score Card */}
