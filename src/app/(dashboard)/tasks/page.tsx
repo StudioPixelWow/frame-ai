@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from "rea
 import { useSearchParams } from "next/navigation";
 import { useTasks, useEmployees, useClients, useEmployeeTasks } from "@/lib/api/use-entity";
 import TaskWorkspaceModal from "@/components/tasks/task-workspace-modal";
+import EmployeeTasksWorkspace from "@/components/tasks/employee-tasks-workspace";
 import Avatar from "@/components/ui/avatar";
 import TasksMissionControl from "@/components/tasks/mission-control";
 import { useToast } from "@/components/ui/toast";
@@ -660,6 +661,38 @@ function TasksPageInner() {
     { label: "🔍 ממתינות לבדיקה", run: () => { setFilterStatus("under_review"); setShowWork(true); } },
     { label: "📋 פתח לוח מלא", run: () => setShowWork(true) },
   ];
+
+  // ── Employee execution center (replaces the manager board for employees) ──
+  if (isEmployee && authEmployeeId) {
+    return (
+      <div className="tasks-page">
+        <EmployeeTasksWorkspace
+          tasks={tasks || []}
+          employeeTasks={employeeTasks || []}
+          employees={employees || []}
+          employeeId={authEmployeeId}
+          displayName={displayName || undefined}
+          onOpenTask={(t) => openEdit(t as Task)}
+          onComplete={(t) => updateAny(t.id, { status: "completed" })}
+        />
+        {workspaceTask && (() => {
+          const live = [...(tasks || []), ...(employeeTasks || [])].find((t: any) => t.id === workspaceTask.id) || workspaceTask;
+          return (
+            <TaskWorkspaceModal
+              task={live}
+              employees={employees || []}
+              clients={clients || []}
+              role={(role as any) || "employee"}
+              displayName={displayName || undefined}
+              onClose={() => { setWorkspaceTask(null); setEditingTask(null); }}
+              onUpdate={(id, patch) => updateAny(id, patch)}
+              onDelete={undefined}
+            />
+          );
+        })()}
+      </div>
+    );
+  }
 
   return (
     <div className="tasks-page">
