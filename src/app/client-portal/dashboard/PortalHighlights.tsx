@@ -76,17 +76,6 @@ export default function PortalHighlights({ client, clientId }: { client: any; cl
 
   return (
     <div style={{ direction: 'rtl' }}>
-      {/* ── Contact buttons ── */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: '1rem' }}>
-        <a href={waLink('0546365333')} target="_blank" rel="noopener noreferrer"
-          style={{ flex: 1, minWidth: 180, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0.7rem 1rem', borderRadius: 12, background: '#25D366', color: '#fff', fontWeight: 800, fontSize: 14, textDecoration: 'none' }}>
-          💬 צור קשר עם טל
-        </a>
-        <a href={waLink('0546759941')} target="_blank" rel="noopener noreferrer"
-          style={{ flex: 1, minWidth: 180, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0.7rem 1rem', borderRadius: 12, background: '#25D366', color: '#fff', fontWeight: 800, fontSize: 14, textDecoration: 'none' }}>
-          💬 צור קשר עם מאיה
-        </a>
-      </div>
 
       {/* ── Monthly content calendar ── */}
       <div style={card}>
