@@ -133,6 +133,27 @@ function DashboardContentInner() {
   const [aiQ, setAiQ] = useState('');
   const [aiA, setAiA] = useState('');
   const [mounted, setMounted] = useState(false);
+  const [taskReq, setTaskReq] = useState<{ type: string } | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [contactPick, setContactPick] = useState(false);
+  const [upBusy, setUpBusy] = useState(false);
+  const [upMsg, setUpMsg] = useState('');
+
+  const uploadMaterial = useCallback(async (file: File) => {
+    if (!file) return; setUpBusy(true); setUpMsg('');
+    try {
+      const sign = await fetch('/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fileName: file.name, contentType: file.type, fileSize: file.size }) });
+      const s = await sign.json().catch(() => ({}));
+      if (!sign.ok || !s.uploadUrl) throw new Error(s.error || 'שגיאת העלאה');
+      const put = await fetch(s.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
+      if (!put.ok) throw new Error('העלאת הקובץ נכשלה');
+      const ext = (file.name.split('.').pop() || '').toLowerCase();
+      const fileType = /(mp4|mov|avi|webm)/.test(ext) ? 'video' : /(png|jpe?g|gif|webp|svg)/.test(ext) ? 'image' : ext === 'pdf' ? 'pdf' : 'document';
+      const res = await fetch('/api/data/client-files', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-role': 'client', 'x-app-client-id': clientId || '' }, body: JSON.stringify({ clientId, fileName: file.name, fileUrl: s.publicUrl, fileType, category: 'general', fileSize: file.size, uploadedBy: 'client', notes: 'הועלה ע"י הלקוח מהפורטל', linkedTaskId: null, linkedGanttItemId: null }) });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || 'שמירת הקובץ נכשלה'); }
+      setUpMsg('✅ הקובץ נשמר בהצלחה בקבצי הלקוח');
+    } catch (e) { setUpMsg('⚠️ ' + (e instanceof Error ? e.message : 'שגיאה בהעלאה')); } finally { setUpBusy(false); }
+  }, [clientId]);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -257,15 +278,15 @@ function DashboardContentInner() {
     else a = `הנה תמונת מצב: ${activeCampaigns.length} קמפיינים פעילים, ${leadsThisMonth} לידים החודש, ${pendingApprovals.length} ממתינים לאישורך. לכל שאלה נוספת אפשר לפנות לצוות הליווי.`;
     setAiA(a);
   };
-  const quickActions = [
-    { ic: '➕', l: 'משימה חדשה', href: '/client-portal/tasks?clientId=' + (clientId || '') },
-    { ic: '📎', l: 'העלאת חומרים', href: '/client-portal/tasks?clientId=' + (clientId || '') },
-    { ic: '🎨', l: 'בקשת גרפיקה', href: '/client-portal/tasks?clientId=' + (clientId || '') },
-    { ic: '🎥', l: 'בקשת סרטון', href: '/client-portal/tasks?clientId=' + (clientId || '') },
-    { ic: '📢', l: 'בקשת קמפיין', href: '/client-portal/tasks?clientId=' + (clientId || '') },
-    { ic: '📅', l: 'קביעת פגישה', href: waLink('0546759941', 'היי, אשמח לקבוע פגישה') },
-    { ic: '💬', l: 'שליחת הודעה', href: waLink('0546759941', 'היי מאיה,') },
-    { ic: '📊', l: 'בקשת דוח', href: '/client-portal/reports?clientId=' + (clientId || '') },
+  const quickActions: { ic: string; l: string; href?: string; onClick?: () => void }[] = [
+    { ic: '➕', l: 'משימה חדשה', onClick: () => setTaskReq({ type: 'other' }) },
+    { ic: '📎', l: 'העלאת חומרים', onClick: () => { setUpMsg(''); setUploadOpen(true); } },
+    { ic: '🎨', l: 'בקשת גרפיקה', onClick: () => setTaskReq({ type: 'design' }) },
+    { ic: '🎥', l: 'בקשת סרטון', onClick: () => setTaskReq({ type: 'video' }) },
+    { ic: '📢', l: 'בקשת קמפיין', onClick: () => setTaskReq({ type: 'campaign' }) },
+    { ic: '📅', l: 'קביעת פגישה', href: waLink('0546759941', 'היי אשמח שנתאם לנו פגישה לתאריך: ') },
+    { ic: '💬', l: 'שליחת הודעה', onClick: () => setContactPick(true) },
+    { ic: '📊', l: 'בקשת דוח', href: waLink('0546759941', 'היי אשמח לקבל דוח סיכום תקופתי') },
   ];
   const sCard: React.CSSProperties = { background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: 18, padding: '1.4rem' };
   const sTitle: React.CSSProperties = { fontSize: '1.1rem', fontWeight: 800, color: 'var(--foreground)', marginBottom: 14 };
@@ -343,15 +364,15 @@ function DashboardContentInner() {
       {/* 4 · QUICK ACTIONS */}
       <div>
         <div style={sTitle}>⚡ פעולות מהירות</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 10, marginBottom: 16 }}>
-          {quickActions.map((q, i) => (
-            <a key={i} href={q.href} target={q.href.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" style={{ ...sCard, padding: '1rem 0.6rem', textAlign: 'center', textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7 }} className="cp-qa">
-              <span style={{ fontSize: '1.5rem' }}>{q.ic}</span>
-              <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--foreground)' }}>{q.l}</span>
-            </a>
-          ))}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 10 }}>
+          {quickActions.map((q, i) => {
+            const inner = (<><span style={{ fontSize: '1.5rem' }}>{q.ic}</span><span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--foreground)' }}>{q.l}</span></>);
+            const st: React.CSSProperties = { ...sCard, padding: '1rem 0.6rem', textAlign: 'center', textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, cursor: 'pointer', border: '1px solid var(--border)' };
+            return q.onClick
+              ? <button key={i} onClick={q.onClick} style={st} className="cp-qa">{inner}</button>
+              : <a key={i} href={q.href} target="_blank" rel="noopener noreferrer" style={st} className="cp-qa">{inner}</a>;
+          })}
         </div>
-        <PortalTaskRequest clientId={clientId || ''} />
       </div>
 
       {/* 5 · MONTHLY CALENDAR + CONTENT VISIBILITY */}
@@ -436,6 +457,42 @@ function DashboardContentInner() {
         <div><div style={{ ...sTitle, marginBottom: 4 }}>📁 מסמכים וקבצים</div><div style={{ fontSize: '0.78rem', color: 'var(--foreground-muted)' }}>חוזים, חשבוניות, דוחות, בריפים וסיכומי פגישות</div></div>
         <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--accent)' }}>פתח מסמכים ←</span>
       </a>
+
+      {/* Controlled task request (opened by quick actions with preset type) */}
+      <PortalTaskRequest clientId={clientId || ''} hideTrigger open={!!taskReq} initialType={taskReq?.type} onClose={() => setTaskReq(null)} />
+
+      {/* Upload materials popup (saved to client files, not tied to a task) */}
+      {uploadOpen && (
+        <div onClick={() => !upBusy && setUploadOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} dir="rtl" style={{ background: 'var(--surface,#fff)', borderRadius: 18, padding: '1.5rem', maxWidth: 460, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>📎 העלאת חומרים</h2>
+              <button onClick={() => setUploadOpen(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#888' }}>×</button>
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--foreground-muted)', marginBottom: 14 }}>העלה קבצים (תמונות, סרטונים, מסמכים) שיישמרו ישירות בקבצי הלקוח שלך — ללא קשר למשימה מסוימת.</div>
+            <input type="file" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadMaterial(f); e.currentTarget.value = ''; }} disabled={upBusy} style={{ fontSize: 13, width: '100%' }} />
+            {upBusy && <div style={{ fontSize: 13, color: '#0066FF', marginTop: 10 }}>⏳ מעלה ושומר…</div>}
+            {upMsg && <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, color: upMsg.startsWith('✅') ? '#16a34a' : '#dc2626' }}>{upMsg}</div>}
+            <a href={'/client-portal/files?clientId=' + (clientId || '')} style={{ display: 'inline-block', marginTop: 14, fontSize: 13, fontWeight: 700, color: 'var(--accent)', textDecoration: 'none' }}>צפה בכל הקבצים שלך ←</a>
+          </div>
+        </div>
+      )}
+
+      {/* Contact picker — WhatsApp to Tal or Maya */}
+      {contactPick && (
+        <div onClick={() => setContactPick(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} dir="rtl" style={{ background: 'var(--surface,#fff)', borderRadius: 18, padding: '1.5rem', maxWidth: 400, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>💬 למי לשלוח הודעה?</h2>
+              <button onClick={() => setContactPick(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#888' }}>×</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <a href={waLink('0546365333', 'היי טל,')} target="_blank" rel="noopener noreferrer" onClick={() => setContactPick(false)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.9rem 1.1rem', borderRadius: 12, border: '1px solid #bbf7d0', background: '#f0fdf4', textDecoration: 'none', color: 'var(--foreground)', fontWeight: 700 }}><span>טל זטלמן · מייסד ומנהל אסטרטגי</span><span style={{ color: '#16a34a' }}>💬</span></a>
+              <a href={waLink('0546759941', 'היי מאיה,')} target="_blank" rel="noopener noreferrer" onClick={() => setContactPick(false)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.9rem 1.1rem', borderRadius: 12, border: '1px solid #bbf7d0', background: '#f0fdf4', textDecoration: 'none', color: 'var(--foreground)', fontWeight: 700 }}><span>מאיה זטלמן · מנהלת הלקוח שלך</span><span style={{ color: '#16a34a' }}>💬</span></a>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ textAlign: 'center', padding: '1rem 0', color: 'var(--foreground-subtle)', fontSize: '0.7rem' }}>Studio Pixel &copy; {now.getFullYear()}</div>
       <style>{`@media (max-width:760px){.cp-2col{grid-template-columns:1fr !important}}`}</style>

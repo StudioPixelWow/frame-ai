@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const TYPES = [
   { value: 'social', label: 'סושיאל' },
@@ -12,10 +12,15 @@ const TYPES = [
   { value: 'other', label: 'אחר' },
 ];
 
-export default function PortalTaskRequest({ clientId }: { clientId: string }) {
-  const [open, setOpen] = useState(false);
+export default function PortalTaskRequest({ clientId, open: controlledOpen, onClose, initialType, hideTrigger }: { clientId: string; open?: boolean; onClose?: () => void; initialType?: string; hideTrigger?: boolean }) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const controlled = controlledOpen !== undefined;
+  const open = controlled ? controlledOpen : internalOpen;
+  const setOpen = (v: boolean) => { if (controlled) { if (!v) onClose?.(); } else { setInternalOpen(v); } };
   const [title, setTitle] = useState('');
   const [type, setType] = useState('social');
+  // When opened with a preset type (from a quick action), apply it.
+  useEffect(() => { if (open && initialType) setType(initialType); }, [open, initialType]);
   const [desc, setDesc] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [files, setFiles] = useState<string[]>([]);
@@ -60,10 +65,12 @@ export default function PortalTaskRequest({ clientId }: { clientId: string }) {
 
   return (
     <>
-      <button onClick={() => setOpen(true)}
-        style={{ width: '100%', padding: '0.85rem 1rem', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#00B5FE,#0066FF)', color: '#fff', fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: '1rem', boxShadow: '0 4px 14px rgba(0,102,255,0.25)' }}>
-        📋 הגש משימה לביצוע
-      </button>
+      {!hideTrigger && (
+        <button onClick={() => setInternalOpen(true)}
+          style={{ width: '100%', padding: '0.85rem 1rem', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#00B5FE,#0066FF)', color: '#fff', fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: '1rem', boxShadow: '0 4px 14px rgba(0,102,255,0.25)' }}>
+          📋 הגש משימה לביצוע
+        </button>
+      )}
 
       {open && (
         <div onClick={() => !sending && setOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
