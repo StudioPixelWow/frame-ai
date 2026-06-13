@@ -2469,6 +2469,62 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
               ));
             })()}
           </div>
+
+          {/* ── Content funnel + Approval center ── */}
+          {(() => {
+            const items = calendarItems;
+            const has = (arr: string[]) => items.filter((it: any) => arr.includes(it.status)).length;
+            const planned = items.length;
+            const created = has(["in_progress", "submitted_for_approval", "approved", "scheduled", "published"]);
+            const approved = has(["approved", "published"]);
+            const published = has(["published"]);
+            const funnel = [
+              { l: "מתוכננים", n: planned, c: "#6366f1" },
+              { l: "בהפקה", n: created, c: "#f59e0b" },
+              { l: "מאושרים", n: approved, c: "#3b82f6" },
+              { l: "פורסמו", n: published, c: "#22c55e" },
+            ];
+            const fmax = Math.max(1, planned);
+            const waitingItems = items.filter((it: any) => it.status === "submitted_for_approval");
+            const revisionItems = items.filter((it: any) => ["returned", "needs_revision", "rejected"].includes(it.status));
+            const phone = String((client as any).phone || "").replace(/\D/g, "");
+            return (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "1rem", marginTop: "1.5rem" }} className="cg-2col">
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "1.1rem 1.2rem" }}>
+                  <div style={{ fontWeight: 800, fontSize: "0.9rem", marginBottom: 12, color: "var(--foreground)" }}>משפך הפקת תוכן</div>
+                  {funnel.map((f) => (
+                    <div key={f.l} style={{ marginBottom: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", marginBottom: 3 }}><span style={{ color: "var(--foreground)" }}>{f.l}</span><span style={{ fontWeight: 800, color: f.c }}>{f.n}</span></div>
+                      <div style={{ height: 9, background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 999, overflow: "hidden" }}><div style={{ width: `${Math.round((f.n / fmax) * 100)}%`, height: "100%", background: f.c, borderRadius: 999 }} /></div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "1.1rem 1.2rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <span style={{ fontWeight: 800, fontSize: "0.9rem", color: "var(--foreground)" }}>מרכז אישורים</span>
+                    <span style={{ fontSize: "0.72rem", color: "var(--foreground-muted)" }}>{waitingItems.length} ממתינים · {revisionItems.length} לתיקון</span>
+                  </div>
+                  {waitingItems.length === 0 && revisionItems.length === 0 ? (
+                    <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)" }}>אין פריטים שממתינים לאישור 🎉</div>
+                  ) : (
+                    [...waitingItems, ...revisionItems].slice(0, 6).map((it: any) => {
+                      const rev = ["returned", "needs_revision", "rejected"].includes(it.status);
+                      return (
+                        <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.5rem 0", borderBottom: "1px solid var(--border)" }}>
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: rev ? "#ef4444" : "#f59e0b", flexShrink: 0 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.title || it.contentType || "פריט תוכן"}</div>
+                            <div style={{ fontSize: "0.68rem", color: rev ? "#ef4444" : "#f59e0b" }}>{rev ? "דרוש תיקון" : "ממתין לאישור לקוח"}{it.date ? ` · ${new Date(it.date).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" })}` : ""}</div>
+                          </div>
+                          {phone && <a href={`https://wa.me/${phone.startsWith("0") ? "972" + phone.slice(1) : phone}`} target="_blank" rel="noreferrer" style={{ fontSize: "0.7rem", fontWeight: 700, color: "#16a34a", textDecoration: "none", flexShrink: 0 }}>וואטסאפ</a>}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
