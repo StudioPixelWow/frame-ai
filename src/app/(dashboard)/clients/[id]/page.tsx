@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useClients, useEmployees, useClientGanttItems, useClientTasks, useTasks, useEmployeeTasks, useClientFiles, useSocialPosts, usePayments, useProjectPayments, useCampaigns, useLeads } from "@/lib/api/use-entity";
+import { useClients, useEmployees, useClientGanttItems, useClientTasks, useTasks, useEmployeeTasks, useClientFiles, useSocialPosts, usePayments, useProjectPayments, useCampaigns, useLeads, useMeetings, useApprovals, useActivities } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import type { Client, Employee } from "@/lib/db/schema";
 import TabOverview from "./tab-overview";
@@ -177,6 +177,9 @@ function ClientDetailContent() {
   const { data: overviewLeads } = useLeads();
   const { data: overviewTasks, remove: removeTask } = useTasks();
   const { data: overviewGanttItems, remove: removeGanttItem } = useClientGanttItems();
+  const { data: overviewMeetings } = useMeetings();
+  const { data: overviewApprovals } = useApprovals();
+  const { data: overviewActivities } = useActivities();
   const toast = useToast();
 
   const searchParams = useSearchParams();
@@ -1388,6 +1391,9 @@ function ClientDetailContent() {
               leads={overviewLeads || []}
               ganttItems={overviewGanttItems || []}
               socialPosts={allSocialPosts || []}
+              meetings={overviewMeetings || []}
+              approvals={overviewApprovals || []}
+              activities={overviewActivities || []}
             />
             {/* AI Insights widget below overview */}
             <div style={{ marginTop: "2rem" }}>

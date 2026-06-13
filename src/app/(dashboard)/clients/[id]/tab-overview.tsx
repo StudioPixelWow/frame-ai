@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { Client, Employee } from "@/lib/db/schema";
 import Avatar from "@/components/ui/avatar";
 import {
@@ -68,9 +68,12 @@ interface TabOverviewProps {
   leads?: any[];
   ganttItems?: any[];
   socialPosts?: any[];
+  meetings?: any[];
+  approvals?: any[];
+  activities?: any[];
 }
 
-export default function TabOverview({ client, assignedManager, color, onUpdateClient, employees = [], onNavigateTab, tasks = [], payments = [], projectPayments = [], campaigns = [], leads = [], ganttItems = [], socialPosts = [] }: TabOverviewProps) {
+export default function TabOverview({ client, assignedManager, color, onUpdateClient, employees = [], onNavigateTab, tasks = [], payments = [], projectPayments = [], campaigns = [], leads = [], ganttItems = [], socialPosts = [], meetings = [], approvals = [], activities = [] }: TabOverviewProps) {
   const [isAssigneeDropdownOpen, setIsAssigneeDropdownOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -126,8 +129,52 @@ export default function TabOverview({ client, assignedManager, color, onUpdateCl
     (healthScore.factors || []).slice(0, 2).forEach((f: string) => { if (/חוב|איחור|נמוך|ללא|חסר/.test(f)) risks.push(f); });
     if (activeLeads > 0) opps.push(`${activeLeads} לידים פעילים לקידום`);
     if (monthlyValue > 0 && activeCampaigns === 0) opps.push("אין קמפיין פעיל — הזדמנות להרחבה");
-    return { openTasks: openTasks.length, overdueTasks: overdueTasks.length, reviewTasks, openCollections, monthlyValue, activeCampaigns, activeLeads, risks, opps };
-  }, [client, tasks, payments, projectPayments, campaigns, leads, assignedManager, healthScore]);
+
+    // meetings this month (for this client)
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).getTime();
+    const clientMeetings = (meetings || []).filter((m: any) => m.clientId === client.id && m.status !== "cancelled");
+    const meetingsThisMonth = clientMeetings.filter((m: any) => m.date && new Date(m.date).getTime() >= monthStart && new Date(m.date).getTime() <= monthEnd).length;
+    const lastMeeting = clientMeetings.filter((m: any) => m.date && new Date(m.date) <= now).sort((a: any, b: any) => +new Date(b.date) - +new Date(a.date))[0];
+    const daysSinceMeeting = lastMeeting ? Math.floor((now.getTime() - new Date(lastMeeting.date).getTime()) / 86400000) : null;
+    if (daysSinceMeeting !== null && daysSinceMeeting > 30) risks.push(`לא נערכה פגישה ${daysSinceMeeting} ימים`);
+    else if (daysSinceMeeting === null && clientMeetings.length === 0) opps.push("קבעו פגישת היכרות/סטטוס");
+
+    // open approvals for this client
+    const clientApprovals = (approvals || []).filter((a: any) => a.clientId === client.id);
+    const openApprovals = clientApprovals.filter((a: any) => a.status === "pending_approval").length;
+    if (openApprovals > 0) risks.push(`${openApprovals} אישורים ממתינים`);
+
+    // client timeline (real events from completed tasks, payments, meetings, activities)
+    const tl: { icon: string; text: string; at: string }[] = [];
+    ct.filter((t: any) => (t.status === "completed" || t.status === "approved") && (t.updatedAt || t.createdAt)).forEach((t: any) => tl.push({ icon: "✅", text: `הושלמה: ${t.title}`, at: t.updatedAt || t.createdAt }));
+    cp.filter((p: any) => p.status === "paid" && (p.paidAt || p.updatedAt)).forEach((p: any) => tl.push({ icon: "💰", text: `תשלום שולם · ₪${(Number(p.amount) || 0).toLocaleString()}`, at: p.paidAt || p.updatedAt }));
+    clientMeetings.filter((m: any) => m.status === "completed" && m.date).forEach((m: any) => tl.push({ icon: "🤝", text: `פגישה: ${m.title}`, at: m.date }));
+    (activities || []).filter((a: any) => a.clientId === client.id && (a.createdAt)).forEach((a: any) => tl.push({ icon: "📌", text: a.description || a.title || a.action || "פעילות", at: a.createdAt }));
+    const timeline = tl.filter((x) => x.at).sort((a, b) => +new Date(b.at) - +new Date(a.at)).slice(0, 8);
+
+    return { openTasks: openTasks.length, overdueTasks: overdueTasks.length, reviewTasks, openCollections, monthlyValue, activeCampaigns, activeLeads, risks, opps, meetingsThisMonth, openApprovals, timeline };
+  }, [client, tasks, payments, projectPayments, campaigns, leads, assignedManager, healthScore, meetings, approvals, activities]);
+
+  // ── WhatsApp Center (live chats filtered to this client's phone) ──
+  const [waChats, setWaChats] = useState<any[]>([]);
+  const [waState, setWaState] = useState<"loading" | "ok" | "off">("loading");
+  useEffect(() => {
+    let alive = true;
+    const headers: Record<string, string> = {};
+    try { const r = localStorage.getItem("frameai_role"); if (r) headers["x-app-role"] = r; const u = localStorage.getItem("frameai_user_id"); if (u) headers["x-app-user-id"] = u; } catch {}
+    fetch("/api/whatsapp/qr-chats", { headers, cache: "no-store" }).then((r) => r.json())
+      .then((d) => { if (!alive) return; if (d?.state === "ok" && Array.isArray(d.chats)) { setWaChats(d.chats); setWaState("ok"); } else setWaState("off"); })
+      .catch(() => { if (alive) setWaState("off"); });
+    return () => { alive = false; };
+  }, []);
+  const clientChats = useMemo(() => {
+    const digits = (s: string) => String(s || "").replace(/\D/g, "").slice(-9);
+    const phone = digits((client as any).phone || "");
+    if (!phone) return [];
+    return waChats.filter((c: any) => digits(c.phone).includes(phone) || phone.includes(digits(c.phone))).sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0));
+  }, [waChats, client]);
+  const waTimeSince = (ts: number) => { if (!ts) return ""; const m = Math.floor((Date.now() - ts * 1000) / 60000); if (m < 60) return `לפני ${m} ד׳`; const h = Math.floor(m / 60); return h < 24 ? `לפני ${h} ש׳` : `לפני ${Math.floor(h / 24)} ימים`; };
 
   const fmt = (n: number) => new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", minimumFractionDigits: 0 }).format(n);
 
@@ -141,7 +188,9 @@ export default function TabOverview({ client, assignedManager, color, onUpdateCl
           { icon: "✅", label: "משימות פתוחות", val: cmd.openTasks, color: "#3b82f6", onClick: () => onNavigateTab?.("tasks") },
           { icon: "🔍", label: "בבדיקה", val: cmd.reviewTasks, color: "#00B5FE", onClick: () => onNavigateTab?.("tasks") },
           { icon: "🧾", label: "גבייה פתוחה", val: cmd.openCollections > 0 ? fmt(cmd.openCollections) : "—", color: "#f59e0b", onClick: () => onNavigateTab?.("accounting") },
-          { icon: "📣", label: "קמפיינים פעילים", val: cmd.activeCampaigns, color: "#a78bfa", onClick: () => onNavigateTab?.("campaigns") },
+          { icon: "📅", label: "פגישות החודש", val: cmd.meetingsThisMonth, color: "#06b6d4", onClick: () => onNavigateTab?.("activity") },
+          { icon: "✋", label: "אישורים פתוחים", val: cmd.openApprovals, color: "#ef4444", onClick: () => onNavigateTab?.("activity") },
+          { icon: "💬", label: "וואטסאפ", val: clientChats.reduce((s: number, c: any) => s + (c.unread || 0), 0), color: "#25D366", onClick: () => onNavigateTab?.("portal") },
         ].map((k, i) => (
           <div key={i} onClick={k.onClick} style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "0.9rem 1rem", borderTop: `3px solid ${k.color}`, cursor: k.onClick ? "pointer" : "default" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -180,6 +229,44 @@ export default function TabOverview({ client, assignedManager, color, onUpdateCl
           <button onClick={() => onNavigateTab?.("tasks")} style={{ background: "#fff", border: "1px solid #c7d2fe", color: "#4f46e5", borderRadius: 999, padding: "0.4rem 0.85rem", fontSize: "0.76rem", fontWeight: 700, cursor: "pointer" }}>פתח משימות</button>
           <button onClick={() => onNavigateTab?.("accounting")} style={{ background: "#fff", border: "1px solid #c7d2fe", color: "#4f46e5", borderRadius: 999, padding: "0.4rem 0.85rem", fontSize: "0.76rem", fontWeight: 700, cursor: "pointer" }}>גבייה</button>
           <button onClick={() => onNavigateTab?.("content")} style={{ background: "#fff", border: "1px solid #c7d2fe", color: "#4f46e5", borderRadius: 999, padding: "0.4rem 0.85rem", fontSize: "0.76rem", fontWeight: 700, cursor: "pointer" }}>לוח תוכן</button>
+        </div>
+      </div>
+
+      {/* ═══ WHATSAPP CENTER + CLIENT TIMELINE ═══ */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }} className="ovw-2col">
+        <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1.25rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)" }}>💬 מרכז וואטסאפ</span>
+            <a href="/whatsapp-inbox" style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--accent)", textDecoration: "none" }}>פתח תיבה ←</a>
+          </div>
+          {waState === "off" ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>הוואטסאפ לא מחובר.</div>
+            : !(client as any).phone ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>לא הוגדר מספר טלפון ללקוח.</div>
+            : clientChats.length === 0 ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>אין שיחות עם לקוח זה עדיין.</div>
+            : clientChats.slice(0, 5).map((c: any, i: number) => (
+              <a key={i} href="/whatsapp-inbox" style={{ display: "flex", gap: 10, alignItems: "center", padding: "0.5rem 0", textDecoration: "none", borderBottom: "1px solid var(--border)" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--foreground)" }}>{c.name || c.phone}</span>
+                    <span style={{ fontSize: "0.66rem", color: "var(--foreground-subtle)" }}>{waTimeSince(c.timestamp)}</span>
+                  </div>
+                  <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.lastMessage || ""}</div>
+                </div>
+                {c.unread > 0 && <span style={{ background: "#25D366", color: "#fff", fontSize: "0.64rem", fontWeight: 800, borderRadius: 999, padding: "1px 7px" }}>{c.unread}</span>}
+              </a>
+            ))}
+        </div>
+        <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1.25rem" }}>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--foreground)", marginBottom: 12 }}>🕒 ציר זמן לקוח</div>
+          {cmd.timeline.length === 0 ? <div style={{ fontSize: "0.82rem", color: "var(--foreground-muted)" }}>אין פעילות מתועדת עדיין.</div> :
+            cmd.timeline.map((e: any, i: number) => (
+              <div key={i} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "0.4rem 0", borderBottom: "1px solid var(--border)" }}>
+                <span style={{ fontSize: "0.95rem" }}>{e.icon}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "0.8rem", color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.text}</div>
+                  <div style={{ fontSize: "0.66rem", color: "var(--foreground-subtle)" }}>{new Date(e.at).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "2-digit" })}</div>
+                </div>
+              </div>
+            ))}
         </div>
       </div>
 
