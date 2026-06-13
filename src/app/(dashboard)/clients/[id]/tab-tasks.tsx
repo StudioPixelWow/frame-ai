@@ -17,6 +17,7 @@ import type { Client, Employee } from "@/lib/db/schema";
 import { useTasks, useEmployeeTasks } from "@/lib/api/use-entity";
 import { useAuth } from "@/lib/auth/auth-context";
 import Avatar from "@/components/ui/avatar";
+import ContentWorkspaceShell from "@/components/content/content-workspace-shell";
 
 const TYPE_CONFIG: Record<string, { emoji: string; label: string; color: string }> = {
   social: { emoji: "📱", label: "סושיאל", color: "#3b82f6" },
@@ -325,137 +326,98 @@ function TaskWorkspace({ task, owner, employees, isClient, isManager, onClose, u
     return { summary, next, blockers };
   })();
 
+  const taskActions: any[] = [];
+  if (!isClient) {
+    if (task.status === "under_review") {
+      if (isManager) taskActions.push({ label: "אשר", kind: "success", onClick: () => setStatus("approved") });
+      taskActions.push({ label: "החזר עם הערות", kind: "warn", onClick: () => setStatus("returned") });
+    } else if (task.status === "approved") {
+      taskActions.push({ label: "סמן כהושלם", kind: "primary", onClick: () => setStatus("completed") });
+    } else if (task.status !== "completed") {
+      if (task.status !== "in_progress") taskActions.push({ label: "התחל עבודה", kind: "ghost", onClick: () => setStatus("in_progress") });
+      taskActions.push({ label: "שלח לבדיקה", kind: "primary", onClick: () => setStatus("under_review") });
+    }
+  }
+
   return (
-    <div onClick={onClose} style={scrim}>
-      <div onClick={(e) => e.stopPropagation()} style={{ position: "fixed", insetInlineStart: 0, top: 0, bottom: 0, width: "min(620px,96vw)", background: "var(--surface)", boxShadow: "8px 0 40px rgba(0,0,0,0.25)", overflowY: "auto", direction: "rtl", animation: "tw-slide 0.28s ease" }}>
-        {/* Header */}
-        <div style={{ padding: "1.2rem 1.4rem", borderBottom: "1px solid var(--border)", background: "var(--surface-raised)", position: "sticky", top: 0, zIndex: 2 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-            <div>
-              <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-                <span style={{ fontSize: "0.66rem", fontWeight: 800, color: sc.color, background: sc.color + "1a", borderRadius: 999, padding: "2px 9px" }}>{sc.label}</span>
-                <span style={{ fontSize: "0.66rem", fontWeight: 800, color: pc.color, background: pc.color + "1a", borderRadius: 999, padding: "2px 9px" }}>{pc.label}</span>
-                <span style={{ fontSize: "0.66rem", fontWeight: 700, color: tc.color, background: tc.color + "1a", borderRadius: 999, padding: "2px 9px" }}>{tc.emoji} {tc.label}</span>
-              </div>
-              <div style={{ fontSize: "1.15rem", fontWeight: 900, color: "var(--foreground)" }}>{task.title}</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8, fontSize: "0.78rem", color: "var(--foreground-muted)" }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{owner ? <><Avatar src={(owner as any).avatarUrl} name={owner.name} size={22} ring={false} />{owner.name}</> : "ללא אחראי"}</span>
-                <span style={{ color: od ? "#ef4444" : "inherit", fontWeight: od ? 700 : 400 }}>📅 {ILDate(task.dueDate)}</span>
-              </div>
-            </div>
-            <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "1.4rem", cursor: "pointer", color: "var(--foreground-muted)", lineHeight: 1 }}>✕</button>
-          </div>
-          <div style={{ marginTop: 12, height: 7, background: "var(--surface)", borderRadius: 999, overflow: "hidden" }}>
-            <div style={{ width: `${prog}%`, height: "100%", background: "linear-gradient(90deg,#00B5FE,#22c55e)", borderRadius: 999 }} />
-          </div>
-        </div>
-
-        <div style={{ padding: "1.2rem 1.4rem", display: "flex", flexDirection: "column", gap: "1.3rem" }}>
-          {/* AI assistant */}
-          <Card title="🤖 עוזר AI לניהול המשימה" accent>
-            <Row label="סיכום">{ai.summary}</Row>
-            <Row label="הצעד הבא">{ai.next}</Row>
-            {!isClient && ai.blockers.length > 0 && <Row label="חסמים"><span style={{ color: "#ef4444" }}>{ai.blockers.join(" · ")}</span></Row>}
+    <ContentWorkspaceShell
+      source="tasks"
+      emoji={tc.emoji}
+      title={task.title}
+      badges={[
+        { label: sc.label, bg: sc.color + "1a", color: sc.color },
+        { label: pc.label, bg: pc.color + "1a", color: pc.color },
+        { label: `${tc.emoji} ${tc.label}`, bg: tc.color + "1a", color: tc.color },
+      ]}
+      headerExtra={<span style={{ fontSize: "0.7rem", color: od ? "#ef4444" : "var(--foreground-muted)", fontWeight: od ? 700 : 500 }}>📅 {ILDate(task.dueDate)}</span>}
+      owner={owner ? { name: owner.name, avatarUrl: (owner as any).avatarUrl } : null}
+      aiInsights={[...(!isClient ? ai.blockers : []), ai.next, ai.summary].filter(Boolean)}
+      aiTitle="עוזר AI לניהול המשימה"
+      stages={TIMELINE_STAGES.map((s) => s.label)}
+      stageIdx={curStage}
+      percent={prog}
+      actions={taskActions}
+      onClose={onClose}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: "1.3rem" }}>
+        {task.description && (
+          <Card title="📝 תיאור">
+            <div style={{ fontSize: "0.85rem", color: "var(--foreground)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{task.description}</div>
           </Card>
+        )}
 
-          {/* Timeline */}
-          <Card title="⏱️ מסלול המשימה">
-            <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-              {TIMELINE_STAGES.map((s, i) => (
-                <div key={s.key} style={{ flex: 1, textAlign: "center", position: "relative" }}>
-                  {i > 0 && <div style={{ position: "absolute", top: 11, insetInlineEnd: "50%", width: "100%", height: 2, background: i <= curStage ? "#22c55e" : "var(--border)" }} />}
-                  <div style={{ position: "relative", zIndex: 1, width: 24, height: 24, borderRadius: "50%", margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", color: "#fff", background: i < curStage ? "#22c55e" : i === curStage ? "#00B5FE" : "var(--border)" }}>{i < curStage ? "✓" : i + 1}</div>
-                  <div style={{ fontSize: "0.62rem", color: i <= curStage ? "var(--foreground)" : "var(--foreground-subtle)", marginTop: 4 }}>{s.label}</div>
+        {/* Files & deliverables */}
+        <Card title="📎 קבצים ותוצרים" action={!isClient ? <button onClick={() => fileRef.current?.click()} style={btnGhostSm}>+ העלה</button> : undefined}>
+          <input ref={fileRef} type="file" hidden onChange={onUpload} />
+          {(task.files || []).length === 0 ? <Empty>אין קבצים עדיין</Empty> : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {(task.files || []).map((url: string, i: number) => {
+                const nm = decodeURIComponent(String(url).split("/").pop() || "קובץ").replace(/^\d+_/, "");
+                const isImg = /\.(png|jpe?g|gif|webp|svg)$/i.test(url);
+                return (
+                  <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.5rem 0.6rem", border: "1px solid var(--border)", borderRadius: 10, textDecoration: "none", background: "var(--surface-raised)" }}>
+                    {isImg ? <div style={{ width: 36, height: 36, borderRadius: 8, backgroundImage: `url(${url})`, backgroundSize: "cover", backgroundPosition: "center", flexShrink: 0 }} /> : <span style={{ fontSize: "1.2rem" }}>📄</span>}
+                    <span style={{ fontSize: "0.8rem", color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nm}</span>
+                  </a>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
+        {/* Collaboration */}
+        <Card title="💬 שיתוף פעולה">
+          {visibleThread.length === 0 ? <Empty>אין עדיין הודעות</Empty> : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
+              {visibleThread.map((c) => (
+                <div key={c.id} style={{ display: "flex", gap: 9 }}>
+                  <Avatar name={c.author} size={28} ring={false} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--foreground)" }}>{c.author}</span>
+                      {c.audience === "client" ? <span style={{ fontSize: "0.6rem", color: "#0ea5e9", background: "#e0f2fe", borderRadius: 999, padding: "1px 6px" }}>גלוי ללקוח</span> : <span style={{ fontSize: "0.6rem", color: "#64748b", background: "var(--surface)", borderRadius: 999, padding: "1px 6px" }}>פנימי</span>}
+                      {c.at && <span style={{ fontSize: "0.64rem", color: "var(--foreground-subtle)" }}>{new Date(c.at).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>}
+                    </div>
+                    <div style={{ fontSize: "0.82rem", color: "var(--foreground)", lineHeight: 1.5, marginTop: 2 }}>{c.text}</div>
+                  </div>
                 </div>
               ))}
             </div>
-          </Card>
-
-          {/* Description */}
-          {task.description && (
-            <Card title="📝 תיאור">
-              <div style={{ fontSize: "0.85rem", color: "var(--foreground)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{task.description}</div>
-            </Card>
           )}
-
-          {/* Approval center */}
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+            <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={isClient ? "כתוב הודעה לצוות…" : "כתוב הודעה…"} rows={2} style={{ ...inp, marginBottom: 0, resize: "vertical", flex: 1 }} />
+            <button disabled={busy || !text.trim()} onClick={addComment} style={btnPrimary}>שלח</button>
+          </div>
           {!isClient && (
-            <Card title="✅ מרכז אישורים">
-              {task.status === "under_review" ? (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {isManager && <button disabled={busy} onClick={() => setStatus("approved")} style={btnSuccess}>אשר</button>}
-                  <button disabled={busy} onClick={() => setStatus("returned")} style={btnDanger}>החזר עם הערות</button>
-                </div>
-              ) : task.status === "approved" ? (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <span style={{ fontSize: "0.82rem", color: "#22c55e", fontWeight: 700 }}>✓ אושר — מוכן ללקוח</span>
-                  <button disabled={busy} onClick={() => setStatus("completed")} style={btnPrimary}>סמן כהושלם</button>
-                </div>
-              ) : task.status === "completed" ? (
-                <span style={{ fontSize: "0.82rem", color: "#10b981", fontWeight: 700 }}>✓ המשימה הושלמה</span>
-              ) : (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {task.status !== "in_progress" && <button disabled={busy} onClick={() => setStatus("in_progress")} style={btnGhost}>התחל עבודה</button>}
-                  <button disabled={busy} onClick={() => setStatus("under_review")} style={btnPrimary}>שלח לבדיקה</button>
-                </div>
-              )}
-            </Card>
-          )}
-
-          {/* Files & deliverables */}
-          <Card title="📎 קבצים ותוצרים" action={!isClient ? <button onClick={() => fileRef.current?.click()} style={btnGhostSm}>+ העלה</button> : undefined}>
-            <input ref={fileRef} type="file" hidden onChange={onUpload} />
-            {(task.files || []).length === 0 ? <Empty>אין קבצים עדיין</Empty> : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {(task.files || []).map((url: string, i: number) => {
-                  const nm = decodeURIComponent(String(url).split("/").pop() || "קובץ").replace(/^\d+_/, "");
-                  const isImg = /\.(png|jpe?g|gif|webp|svg)$/i.test(url);
-                  return (
-                    <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.5rem 0.6rem", border: "1px solid var(--border)", borderRadius: 10, textDecoration: "none", background: "var(--surface-raised)" }}>
-                      {isImg ? <div style={{ width: 36, height: 36, borderRadius: 8, backgroundImage: `url(${url})`, backgroundSize: "cover", backgroundPosition: "center", flexShrink: 0 }} /> : <span style={{ fontSize: "1.2rem" }}>📄</span>}
-                      <span style={{ fontSize: "0.8rem", color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nm}</span>
-                    </a>
-                  );
-                })}
-              </div>
-            )}
-          </Card>
-
-          {/* Collaboration */}
-          <Card title="💬 שיתוף פעולה">
-            {visibleThread.length === 0 ? <Empty>אין עדיין הודעות</Empty> : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
-                {visibleThread.map((c) => (
-                  <div key={c.id} style={{ display: "flex", gap: 9 }}>
-                    <Avatar name={c.author} size={28} ring={false} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--foreground)" }}>{c.author}</span>
-                        {c.audience === "client" ? <span style={{ fontSize: "0.6rem", color: "#0ea5e9", background: "#e0f2fe", borderRadius: 999, padding: "1px 6px" }}>גלוי ללקוח</span> : <span style={{ fontSize: "0.6rem", color: "#64748b", background: "var(--surface)", borderRadius: 999, padding: "1px 6px" }}>פנימי</span>}
-                        {c.at && <span style={{ fontSize: "0.64rem", color: "var(--foreground-subtle)" }}>{new Date(c.at).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>}
-                      </div>
-                      <div style={{ fontSize: "0.82rem", color: "var(--foreground)", lineHeight: 1.5, marginTop: 2 }}>{c.text}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-              <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={isClient ? "כתוב הודעה לצוות…" : "כתוב הודעה…"} rows={2} style={{ ...inp, marginBottom: 0, resize: "vertical", flex: 1 }} />
-              <button disabled={busy || !text.trim()} onClick={addComment} style={btnPrimary}>שלח</button>
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              {(["internal", "client"] as const).map((a) => (
+                <button key={a} onClick={() => setAudience(a)} style={{ fontSize: "0.68rem", fontWeight: 700, padding: "0.25rem 0.7rem", borderRadius: 999, cursor: "pointer", border: `1px solid ${audience === a ? "var(--accent)" : "var(--border)"}`, background: audience === a ? "var(--accent)" : "transparent", color: audience === a ? "#fff" : "var(--foreground-muted)" }}>{a === "internal" ? "פנימי" : "גלוי ללקוח"}</button>
+              ))}
             </div>
-            {!isClient && (
-              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                {(["internal", "client"] as const).map((a) => (
-                  <button key={a} onClick={() => setAudience(a)} style={{ fontSize: "0.68rem", fontWeight: 700, padding: "0.25rem 0.7rem", borderRadius: 999, cursor: "pointer", border: `1px solid ${audience === a ? "var(--accent)" : "var(--border)"}`, background: audience === a ? "var(--accent)" : "transparent", color: audience === a ? "#fff" : "var(--foreground-muted)" }}>{a === "internal" ? "פנימי" : "גלוי ללקוח"}</button>
-                ))}
-              </div>
-            )}
-          </Card>
-        </div>
-        <style>{`@keyframes tw-slide{from{transform:translateX(-100%)}to{transform:translateX(0)}}`}</style>
+          )}
+        </Card>
       </div>
-    </div>
+    </ContentWorkspaceShell>
   );
 }
 
