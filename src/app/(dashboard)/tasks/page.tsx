@@ -119,7 +119,7 @@ function TasksPageInner() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [defaultStatus, setDefaultStatus] = useState<Task["status"]>("new");
   const [viewMode, setViewMode] = useState<'board' | 'by_employee'>('board');
-  const [showWork, setShowWork] = useState(false); // Kanban is a secondary, collapsible view
+  const [showWork, setShowWork] = useState(true); // Kanban is the PRIMARY view (concept: kanban-first)
   const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
   const [filterEmployee, setFilterEmployee] = useState("");
   const [filterClient, setFilterClient] = useState("");
@@ -690,11 +690,11 @@ function TasksPageInner() {
       {/* ═══ ZONE 2 — EXECUTIVE KPI STRIP ═══ */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: "0.85rem", marginBottom: "1.25rem" }}>
         {[
-          { icon: "🙋", label: "המשימות שלי", val: mc.mine, color: "#6366f1" },
-          { icon: "🔥", label: "עדיפות גבוהה", val: mc.high, color: "#ef4444" },
-          { icon: "⚙️", label: "בעבודה", val: mc.inProgress, color: "#f59e0b" },
-          { icon: "⏰", label: "באיחור", val: mc.overdue, color: "#f97316" },
           { icon: "✅", label: "הושלמו השבוע", val: mc.completedWeek, color: "#22c55e" },
+          { icon: "⚙️", label: "בתהליך", val: mc.inProgress, color: "#f59e0b" },
+          { icon: "⏳", label: "ממתינות ללקוח", val: mc.review, color: "#00B5FE" },
+          { icon: "🚩", label: "תקועות", val: mc.overdue, color: "#ef4444" },
+          { icon: "🗂️", label: "משימות כללית", val: mc.total, color: "#6366f1" },
         ].map((k, i) => (
           <div key={i} className="premium-card" style={{ padding: "1rem 1.1rem", borderTop: `3px solid ${k.color}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -706,42 +706,48 @@ function TasksPageInner() {
         ))}
       </div>
 
-      {/* ═══ ZONE 3 + 4 — HEALTH + AI COMMAND CENTER ═══ */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.15fr 1fr", gap: "1rem", marginBottom: "1.25rem" }} className="tasks-mc-2col">
-        {/* Health */}
+      {/* ═══ ZONE 3 — WORKFLOW ANALYTICS (overall progress + priority) ═══ */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.25rem" }} className="tasks-mc-2col">
+        {/* Overall progress donut + status legend */}
         <div className="premium-card" style={{ padding: "1.1rem 1.2rem" }}>
-          <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "var(--foreground)", marginBottom: 12 }}>📊 בריאות הביצוע</div>
-          <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
-            <Ring label="השלמה" value={mc.completionRate} color="#22c55e" />
-            <Ring label="איחור" value={mc.overdueRate} color="#ef4444" />
+          <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "var(--foreground)", marginBottom: 12 }}>התקדמות כללית</div>
+          <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
+            <Ring label="התקדמות כללית" value={mc.completionRate} color="#22c55e" />
             <div style={{ flex: 1, minWidth: 160 }}>
-              <div style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", marginBottom: 6 }}>פילוח לפי סטטוס</div>
               {mc.byStatus.filter((s) => s.count > 0).map((s) => {
                 const pct = mc.total ? Math.round((s.count / mc.total) * 100) : 0;
                 return (
-                  <div key={s.id} style={{ marginBottom: 6 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "var(--foreground-muted)", marginBottom: 2 }}><span>{s.label}</span><span>{s.count}</span></div>
-                    <div style={{ height: 6, background: "var(--surface)", borderRadius: 999, overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: s.color, borderRadius: 999 }} /></div>
+                  <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
+                    <span style={{ width: 9, height: 9, borderRadius: "50%", background: s.color, flexShrink: 0 }} />
+                    <span style={{ fontSize: "0.78rem", color: "var(--foreground)", flex: 1 }}>{s.label}</span>
+                    <span style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--foreground-muted)" }}>{pct}%</span>
                   </div>
                 );
               })}
             </div>
           </div>
         </div>
-        {/* AI command center */}
-        <div style={{ borderRadius: 16, padding: "1.1rem 1.2rem", background: "linear-gradient(135deg,#eef2ff,#ecfeff)", border: "1px solid #c7d2fe" }}>
-          <div style={{ fontSize: "1.05rem", fontWeight: 900, background: "linear-gradient(90deg,#6366f1,#06b6d4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>✨ Pixel AI</div>
-          <div style={{ fontSize: "0.74rem", color: "#64748b", marginBottom: 10 }}>עוזר התבונה למשימות</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-            {mc.insights.slice(0, 3).map((t, i) => (
-              <div key={i} style={{ fontSize: "0.8rem", color: "#334155", background: "rgba(255,255,255,0.7)", borderRadius: 8, padding: "0.45rem 0.7rem" }}>💡 {t}</div>
-            ))}
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-            {aiQuickActions.map((a, i) => (
-              <button key={i} onClick={a.run} style={{ background: "#fff", border: "1px solid #c7d2fe", color: "#4f46e5", borderRadius: 999, padding: "0.4rem 0.85rem", fontSize: "0.76rem", fontWeight: 700, cursor: "pointer" }}>{a.label}</button>
-            ))}
-          </div>
+        {/* Priority distribution bars */}
+        <div className="premium-card" style={{ padding: "1.1rem 1.2rem" }}>
+          <div style={{ fontSize: "0.9rem", fontWeight: 800, color: "var(--foreground)", marginBottom: 16 }}>משימות לפי עדיפות</div>
+          {(() => {
+            const high = mc.byPriority.filter((p) => p.id === "urgent" || p.id === "high").reduce((s, p) => s + p.count, 0);
+            const med = mc.byPriority.find((p) => p.id === "medium")?.count || 0;
+            const low = mc.byPriority.find((p) => p.id === "low")?.count || 0;
+            const tot = Math.max(1, high + med + low);
+            const rows = [{ label: "גבוהה", count: high, color: "#ef4444" }, { label: "בינונית", count: med, color: "#f59e0b" }, { label: "נמוכה", count: low, color: "#22c55e" }];
+            return rows.map((r) => {
+              const pct = Math.round((r.count / tot) * 100);
+              return (
+                <div key={r.label} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                  <span style={{ fontSize: "0.92rem", fontWeight: 800, color: "var(--foreground)", minWidth: 28 }}>{r.count}</span>
+                  <div style={{ flex: 1, height: 9, background: "var(--surface)", borderRadius: 999, overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: r.color, borderRadius: 999 }} /></div>
+                  <span style={{ fontSize: "0.74rem", color: "var(--foreground-muted)", minWidth: 36, textAlign: "left" }}>{pct}%</span>
+                  <span style={{ fontSize: "0.78rem", color: "var(--foreground)", minWidth: 52 }}>{r.label}</span>
+                </div>
+              );
+            });
+          })()}
         </div>
       </div>
 
