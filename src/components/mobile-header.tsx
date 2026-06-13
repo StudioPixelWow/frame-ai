@@ -23,7 +23,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/leads', label: 'לידים', allowedRoles: ['admin'] },
   { href: '/campaigns', label: 'קמפיינים', allowedRoles: ['admin', 'employee'] },
   { href: '/tasks', label: 'משימות', allowedRoles: ['admin', 'employee'] },
-  { href: '/business-calendar', label: 'יומן', allowedRoles: ['admin', 'employee'] },
+  { href: '/business-calendar', label: 'יומן', allowedRoles: ['admin'] },
   { href: '/employees', label: 'צוות', allowedRoles: ['admin'] },
   { href: '/business-projects', label: 'פרויקטים', allowedRoles: ['admin', 'employee'] },
   { href: '/accounting', label: 'חשבונות', allowedRoles: ['admin'] },

@@ -202,7 +202,7 @@ const pinnedItems: NavItem[] = [
   { href: "/dashboard", label: "דשבורד", id: "nav-dashboard", icon: Icons.Dashboard, allowedRoles: ['admin', 'employee'] },
   { href: "/clients", label: "לקוחות", id: "nav-clients", icon: Icons.Clients, allowedRoles: ['admin'] },
   { href: "/tasks", label: "משימות", id: "nav-tasks", icon: Icons.Tasks, allowedRoles: ['admin', 'employee'] },
-  { href: "/business-calendar", label: "יומן", id: "nav-biz-calendar", icon: Icons.Calendar, allowedRoles: ['admin', 'employee'] },
+  { href: "/business-calendar", label: "יומן", id: "nav-biz-calendar", icon: Icons.Calendar, allowedRoles: ['admin'] },
 ];
 
 interface NavGroup { id: string; label: string; icon: React.ReactNode; items: NavItem[]; }

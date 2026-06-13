@@ -25,7 +25,7 @@ const mainNavItems: NavItem[] = [
   { href: "/leads",             label: "לידים",           id: "nav-leads", allowedRoles: ['admin', 'employee'] },
   { href: "/campaigns",         label: "קמפיינים",        id: "nav-campaigns", allowedRoles: ['admin', 'employee'] },
   { href: "/tasks",             label: "משימות",          id: "nav-tasks", allowedRoles: ['admin', 'employee'] },
-  { href: "/business-calendar", label: "יומן",            id: "nav-biz-calendar", allowedRoles: ['admin', 'employee'] },
+  { href: "/business-calendar", label: "יומן",            id: "nav-biz-calendar", allowedRoles: ['admin'] },
   { href: "/employees",         label: "צוות",            id: "nav-employees", allowedRoles: ['admin'] },
   { href: "/business-projects", label: "פרויקטים",        id: "nav-otp" },
   { href: "/business-projects/dashboard", label: "דשבורד פרויקטים", id: "nav-biz-dash" },
