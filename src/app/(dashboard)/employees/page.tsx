@@ -230,8 +230,10 @@ export default function EmployeesPage() {
   };
 
   const handleSaveEmployee = async () => {
-    if (!formData.name.trim() || !formData.email.trim()) {
-      toast("אנא מלא את כל השדות הנדרשים", "success");
+    // Only the name is required. Email is optional — requiring it silently
+    // blocked saving (e.g. editing the avatar of an employee with no email).
+    if (!formData.name.trim()) {
+      toast("יש להזין שם עובד", "error");
       return;
     }
 
