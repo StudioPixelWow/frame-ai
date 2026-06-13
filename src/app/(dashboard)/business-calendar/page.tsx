@@ -107,7 +107,9 @@ export default function BusinessCalendarPage() {
   const [month, setMonth]   = useState(today.getMonth());
   const [view, setView]     = useState<ViewMode>("calendar");
   const [filters, setFilters] = useState<Set<EventType>>(
-    new Set(["employee_task","task","payment","lead","podcast","milestone","meeting"])
+    // Task toggles ("משימות עובדים" / "משימות כלליות") start OFF so they aren't
+    // auto-selected in the calendar — the user opts in by clicking them.
+    new Set(["payment","lead","podcast","milestone","meeting"])
   );
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
