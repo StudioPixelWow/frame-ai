@@ -176,6 +176,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
   const tasks = tasksAll.filter((t) => t.clientId === client.id);
 
   const [activeView, setActiveView] = useState<ViewType>("list");
+  const [listDensity, setListDensity] = useState<"compact" | "comfortable" | "expanded">("comfortable");
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -1469,944 +1470,110 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
             פריטי תוכן — {HEB_MONTHS[selectedMonth]} {selectedYear}
           </h3>
 
-          {monthlyItems.length > 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              {monthlyItems.map((item) => {
-                const protectionBadge = getProtectionBadge(item, sentToTaskIds);
-                const itemIsProtected = isItemProtected(item, sentToTaskIds);
-                return (
-                <div
-                  key={item.id}
-                  style={{
-                    padding: "1rem",
-                    // Outer color gestures to the workflow STAGE (e.g. approved → green).
-                    border: `1px solid ${(GANTT_STATUS_COLORS[item.status]?.color || 'var(--border)')}${GANTT_STATUS_COLORS[item.status] ? '55' : ''}`,
-                    borderRadius: "0.5rem",
-                    borderRight: `5px solid ${GANTT_STATUS_COLORS[item.status]?.color || ITEM_TYPE_CONFIG[item.itemType]?.color || "#6b7280"}`,
-                    background: editingItemId === item.id ? "var(--accent-muted)" : (GANTT_STATUS_COLORS[item.status] ? `${GANTT_STATUS_COLORS[item.status].color}0d` : item.holidayTag ? "rgba(245, 158, 11, 0.06)" : "transparent"),
-                    position: "relative",
-                  }}
-                >
-                  {/* Protection badge for locked items */}
-                  {protectionBadge && (
-                    <span style={{
-                      position: "absolute",
-                      top: "0.5rem",
-                      left: "0.5rem",
-                      fontSize: "0.65rem",
-                      fontWeight: 600,
-                      padding: "0.1rem 0.4rem",
-                      borderRadius: "0.2rem",
-                      background: `${protectionBadge.color}15`,
-                      color: protectionBadge.color,
-                      border: `1px solid ${protectionBadge.color}30`,
-                    }}>
-                      {protectionBadge.label}
-                    </span>
-                  )}
-                  {/* Row always shows its summary; details now open in the side drawer */}
-                  {true && (
-                    <>
-                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", marginBottom: "0.75rem" }}>
-                        <div
-                          style={{ flex: 1, cursor: "pointer" }}
-                          onClick={() => setEditingItemId(item.id)}
-                          title="פתח את חלל העבודה של התוכן"
-                        >
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
-                            <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--foreground)" }}>
-                              {item.title || "ללא כותרת"}
-                            </span>
-                            {getAttachmentIndicator(item) && (
-                              <span style={{ fontSize: "0.8rem" }}>{getAttachmentIndicator(item)}</span>
-                            )}
-                          </div>
-                          {item.ideaSummary && (
-                            <div style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", marginBottom: "0.5rem" }}>
-                              {item.ideaSummary}
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
-                          {item.status === "new_idea" && (
-                            <button
-                              className="mod-btn-ghost"
-                              onClick={() => {
-                                handleChangeStatus(item.id, "in_progress");
-                                handleSendToTask(item);
-                              }}
-                              style={{
-                                fontSize: "0.75rem",
-                                padding: "0.4rem 0.75rem",
-                                color: "#22c55e",
-                                fontWeight: 600,
-                              }}
-                              title="העבר לעבודה ויצור משימה"
-                            >
-                              ▶️ העבר לעבודה
-                            </button>
-                          )}
-                          {item.status === "in_progress" && (
-                            <button
-                              className="mod-btn-ghost"
-                              onClick={() => handleChangeStatus(item.id, "submitted_for_approval")}
-                              style={{
-                                fontSize: "0.75rem",
-                                padding: "0.4rem 0.75rem",
-                              }}
-                              title="שלח לאישור"
-                            >
-                              🔍
-                            </button>
-                          )}
-                          {item.status === "submitted_for_approval" && (
-                            <>
-                              <button
-                                className="mod-btn-ghost"
-                                onClick={() => handleChangeStatus(item.id, "approved")}
-                                style={{
-                                  fontSize: "0.75rem",
-                                  padding: "0.4rem 0.75rem",
-                                }}
-                                title="אשר"
-                              >
-                                ✅
-                              </button>
-                              <button
-                                className="mod-btn-ghost"
-                                onClick={() => handleChangeStatus(item.id, "in_progress")}
-                                style={{
-                                  fontSize: "0.75rem",
-                                  padding: "0.4rem 0.75rem",
-                                }}
-                                title="החזר לתיקון"
-                              >
-                                ↩️
-                              </button>
-                            </>
-                          )}
-                          <button
-                            className="mod-btn-ghost"
-                            onClick={() => setEditingItemId(item.id)}
-                            style={{
-                              fontSize: "0.8rem",
-                              padding: "0.4rem 0.75rem",
-                            }}
-                            title="עריכה"
-                          >
-                            ✏️
-                          </button>
-                          {!sentToTaskIds.has(item.id) ? (
-                            <button
-                              className="mod-btn-ghost"
-                              onClick={() => handleSendToTask(item)}
-                              style={{
-                                fontSize: "0.8rem",
-                                padding: "0.4rem 0.75rem",
-                                color: "#3b82f6",
-                              }}
-                              title="העבר למשימה"
-                            >
-                              📋
-                            </button>
-                          ) : (
-                            <button
-                              className="mod-btn-ghost"
-                              disabled
-                              style={{
-                                fontSize: "0.8rem",
-                                padding: "0.4rem 0.75rem",
-                                color: "#22c55e",
-                                opacity: 0.7,
-                              }}
-                              title="הועבר למשימה"
-                            >
-                              ✓
-                            </button>
-                          )}
-                        </div>
-                      </div>
+          {(() => {
+            const D = ({
+              compact: { thumb: 38, pad: "0.4rem 0.7rem", gap: 10, showProg: false, showMeta: false, showDesc: false, title: "0.8rem" },
+              comfortable: { thumb: 52, pad: "0.6rem 0.85rem", gap: 12, showProg: true, showMeta: true, showDesc: false, title: "0.85rem" },
+              expanded: { thumb: 68, pad: "0.85rem 1rem", gap: 14, showProg: true, showMeta: true, showDesc: true, title: "0.9rem" },
+            } as const)[listDensity];
+            const PROG: Record<string, number> = { new_idea: 10, draft: 15, planned: 15, in_progress: 50, returned_for_changes: 40, needs_revision: 40, submitted_for_approval: 75, scheduled: 85, approved: 90, published: 100 };
+            const PRIO: Record<string, string> = { urgent: "#ef4444", high: "#f97316", medium: "#f59e0b", low: "#22c55e" };
+            const today0 = new Date(new Date().toDateString()).getTime();
+            const order = ["submitted_for_approval", "returned_for_changes", "needs_revision", "in_progress", "draft", "new_idea", "planned", "scheduled", "approved", "published", "missed", "cancelled"];
+            const groups = order.map((s) => ({ s, items: monthlyItems.filter((i: any) => i.status === s) })).filter((g) => g.items.length > 0);
+            const leftover = monthlyItems.filter((i: any) => !order.includes(i.status));
+            if (leftover.length) groups.push({ s: "__other", items: leftover });
 
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
-                        <span style={{ fontSize: "0.8rem", fontWeight: 500, color: "var(--foreground-muted)" }}>
-                          📅 {formatDate(item.date)}
-                        </span>
-                        {renderTypeBadge(item.itemType)}
-                        {renderPlatformBadge(item.platform)}
-                        {renderFormatBadge(item.format)}
-                        {renderStatusBadge(item.status)}
-                        {item.researchSource && RESEARCH_SOURCE_LABELS[item.researchSource] && (
-                          <span
-                            title={item.researchReason || ''}
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "0.25rem",
-                              padding: "0.15rem 0.5rem",
-                              borderRadius: "0.375rem",
-                              fontSize: "0.7rem",
-                              fontWeight: 500,
-                              backgroundColor: `${RESEARCH_SOURCE_LABELS[item.researchSource].color}15`,
-                              color: RESEARCH_SOURCE_LABELS[item.researchSource].color,
-                              border: `1px solid ${RESEARCH_SOURCE_LABELS[item.researchSource].color}30`,
-                            }}
-                          >
-                            {RESEARCH_SOURCE_LABELS[item.researchSource].emoji} {RESEARCH_SOURCE_LABELS[item.researchSource].label}
-                          </span>
-                        )}
-                      </div>
-
-                      {item.researchReason && (
-                        <div style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", fontStyle: "italic", marginBottom: "0.25rem", paddingRight: "0.25rem" }}>
-                          🔗 {item.researchReason}
-                        </div>
-                      )}
-
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", fontSize: "0.75rem", color: "var(--foreground-muted)" }}>
-                        {item.assigneeId && (
-                          <span>👤 {allEmployees.find((e) => e.id === item.assigneeId)?.name || "Unknown"}</span>
-                        )}
-                        {item.holidayTag && <span>🎉 {item.holidayTag}</span>}
-                        {item.campaignTag && <span>📌 {item.campaignTag}</span>}
-                        {item.relatedVideoId && (
-                          <a
-                            href={`/projects/${item.relatedVideoId}`}
-                            style={{ color: "var(--accent)", textDecoration: "none" }}
-                          >
-                            🎬 וידאו מקושר
-                          </a>
-                        )}
-                        {(item.imageUrls?.length > 0 || item.attachedFiles?.length > 0) && (
-                          <span>📎 {(item.imageUrls?.length || 0) + (item.attachedFiles?.length || 0)} קבצים</span>
-                        )}
-                      </div>
-
-                      {/* Deliverable thumbnails (incl. 1:1 / 4:5 / 9:16 size versions) */}
-                      {(() => {
-                        const parse = (e: string) => { const i = e.indexOf('|'); return i === -1 ? { name: (e.split('/').pop() || e).split('?')[0], url: e } : { name: e.slice(0, i), url: e.slice(i + 1) }; };
-                        const isImg = (u: string) => /\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(u);
-                        const seen = new Set<string>();
-                        const abcdUrls = ((item as any).creative?.abcd || []).map((v: any) => ({ name: `וריאציה ${v.label}`, url: v.url }));
-                        const imgs = [...abcdUrls, ...(item.imageUrls || []).map(parse), ...(item.attachedFiles || []).map(parse)].filter((f) => f.url && isImg(f.url) && !seen.has(f.url) && seen.add(f.url)).slice(0, 8);
-                        if (imgs.length === 0) return null;
-                        return (
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                            {imgs.map((im, i) => (
-                              <a key={i} href={im.url} target="_blank" rel="noopener noreferrer" title={im.name} onClick={(e) => e.stopPropagation()} style={{ display: 'block', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', width: 64 }}>
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={im.url} alt={im.name} loading="lazy" style={{ width: 64, height: 64, objectFit: 'cover', display: 'block', background: '#fff' }} />
-                                {im.name.replace(/^🎨\s*/, '').match(/1:1|4:5|9:16/) && <div style={{ fontSize: 8.5, textAlign: 'center', fontWeight: 700, color: 'var(--foreground-muted)', padding: '1px 0' }}>{(im.name.match(/1:1|4:5|9:16/) || [''])[0]}</div>}
-                              </a>
-                            ))}
-                          </div>
-                        );
-                      })()}
-
-                      {/* Caption / Social Copy — Structured Preview */}
-                      {item.caption && (() => {
-                        const lines = item.caption.split("\n").filter((l: string) => l.trim());
-                        const hookLine = lines[0] || "";
-                        const hashtagLines = lines.filter((l: string) => l.trim().startsWith("#"));
-                        const bodyLines = lines.slice(1).filter((l: string) => !l.trim().startsWith("#"));
-                        const ctaLine = bodyLines.find((l: string) => l.includes("←") || l.includes("→") || l.includes("קישור") || l.includes("לינק") || l.includes("ביו") || l.includes("וואטסאפ") || l.includes("WhatsApp") || l.includes("שלחו"));
-                        const contentLines = bodyLines.filter((l: string) => l !== ctaLine);
-                        const platformIcon = (item.platform as string) === "instagram" ? "📸" : (item.platform as string) === "facebook" ? "📘" : (item.platform as string) === "tiktok" ? "🎵" : (item.platform as string) === "linkedin" ? "💼" : "📱";
-
-                        return (
-                          <div style={{
-                            marginTop: "0.75rem",
-                            padding: "0.75rem",
-                            background: "var(--surface-raised, #fff)",
-                            borderRadius: "0.6rem",
-                            border: "1px solid var(--border)",
-                            boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
-                            direction: "rtl",
-                          }}>
-                            {/* Mini header */}
-                            <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginBottom: "0.5rem", paddingBottom: "0.4rem", borderBottom: "1px solid var(--border)" }}>
-                              <span style={{ fontSize: "0.85rem" }}>{platformIcon}</span>
-                              <span style={{ fontWeight: 600, fontSize: "0.7rem", color: "var(--foreground-muted)" }}>תצוגה מקדימה</span>
-                              <span style={{ marginRight: "auto", fontSize: "0.65rem", color: "var(--foreground-muted)", background: "var(--surface)", padding: "0.1rem 0.4rem", borderRadius: "1rem" }}>
-                                {item.caption.length} תווים
-                              </span>
-                            </div>
-
-                            {/* Hook */}
-                            {hookLine && (
-                              <div style={{ fontWeight: 700, fontSize: "0.85rem", lineHeight: 1.5, color: "var(--foreground)", marginBottom: "0.4rem" }}>
-                                {hookLine}
-                              </div>
-                            )}
-
-                            {/* Body */}
-                            {contentLines.length > 0 && (
-                              <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.6, color: "var(--foreground)", fontSize: "0.78rem", fontFamily: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif", marginBottom: ctaLine || hashtagLines.length > 0 ? "0.4rem" : 0 }}>
-                                {contentLines.join("\n")}
-                              </div>
-                            )}
-
-                            {/* CTA */}
-                            {ctaLine && (
-                              <div style={{ padding: "0.3rem 0.5rem", background: "rgba(34, 197, 94, 0.08)", borderRadius: "0.3rem", fontSize: "0.78rem", fontWeight: 600, color: "#16a34a", marginBottom: hashtagLines.length > 0 ? "0.4rem" : 0 }}>
-                                {ctaLine}
-                              </div>
-                            )}
-
-                            {/* Hashtags */}
-                            {hashtagLines.length > 0 && (
-                              <div style={{ fontSize: "0.72rem", color: "#3b82f6", lineHeight: 1.5, wordBreak: "break-word" }}>
-                                {hashtagLines.join(" ")}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()}
-
-                      {item.visualConcept && (
-                        <div style={{
-                          marginTop: "0.75rem",
-                          padding: "0.75rem",
-                          background: "var(--accent-muted)",
-                          borderRadius: "0.375rem",
-                          borderRight: "3px solid var(--accent)",
-                          fontSize: "0.75rem",
-                          color: "var(--foreground)"
-                        }}>
-                          <div style={{ fontWeight: 600, marginBottom: "0.5rem" }}>🎨 קונספט ויזואלי:</div>
-                          <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.4 }}>
-                            {item.visualConcept}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* ── Reference Previews (REAL DATA ONLY) ── */}
-                      {(() => {
-                        const refs = itemRefsMap[item.id] || [];
-                        const isExpanded = expandedRefIds.has(item.id);
-                        const visibleRefs = isExpanded ? refs : refs.slice(0, 3);
-                        return (
-                          <div style={{ marginTop: "0.75rem" }}>
-                            {refs.length === 0 ? (
-                              <div style={{
-                                padding: "0.6rem 0.75rem",
-                                background: "var(--surface)",
-                                borderRadius: "0.375rem",
-                                border: "1px dashed var(--border)",
-                                textAlign: "center",
-                              }}>
-                                <p style={{ fontSize: "0.72rem", color: "var(--foreground-muted)", margin: "0 0 0.4rem 0" }}>
-                                  אין רפרנסים מספריית מודעות למשימה זו
-                                </p>
-                                <a
-                                  href="/settings/references"
-                                  style={{
-                                    fontSize: "0.7rem", color: "var(--accent)",
-                                    textDecoration: "none", fontWeight: 600,
-                                  }}
-                                >
-                                  חפש רפרנסים בספריית המודעות →
-                                </a>
-                              </div>
-                            ) : (
-                              <>
-                                {/* No references message */}
-                                {refs.length === 0 && (
-                                  <div style={{
-                                    padding: "0.4rem 0.6rem", marginBottom: "0.4rem",
-                                    background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.3)",
-                                    borderRadius: "0.375rem", fontSize: "0.65rem", color: "#b45309",
-                                    textAlign: "center",
-                                  }}>
-                                    חבר Meta Ads Library בהגדרות כדי לראות מודעות אמיתיות
-                                  </div>
-                                )}
-                                <div
-                                  style={{
-                                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                                    marginBottom: "0.4rem",
-                                  }}
-                                >
-                                  <span style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--foreground-muted)" }}>
-                                    {refs.length > 0 ? `🔍 רפרנסים (${refs.length})` : '🔍 רפרנסים'}
-                                  </span>
-                                  {refs.length > 3 && (
-                                    <button
-                                      className="mod-btn-ghost"
-                                      onClick={() => {
-                                        setExpandedRefIds(prev => {
-                                          const next = new Set(prev);
-                                          if (next.has(item.id)) next.delete(item.id); else next.add(item.id);
-                                          return next;
-                                        });
-                                      }}
-                                      style={{ fontSize: "0.65rem", padding: "0.15rem 0.4rem", color: "var(--accent)" }}
-                                    >
-                                      {isExpanded ? "הצג פחות" : `הצג הכל (${refs.length})`}
-                                    </button>
-                                  )}
-                                </div>
-                                <div style={{
-                                  display: "grid",
-                                  gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))",
-                                  gap: "0.4rem",
-                                }}>
-                                  {visibleRefs.map((ref) => (
-                                    <div
-                                      key={ref.id}
-                                      onClick={() => { setRefModalItem(ref); setRefModalOpen(true); }}
-                                      className="gantt-ref-thumb"
-                                      style={{
-                                        position: "relative",
-                                        borderRadius: "0.375rem",
-                                        overflow: "hidden",
-                                        border: "1px solid var(--border)",
-                                        cursor: "pointer",
-                                        aspectRatio: "5 / 4",
-                                        background: "var(--surface)",
-                                      }}
-                                    >
-                                      <img
-                                        src={ref.imageUrl}
-                                        alt={ref.description}
-                                        style={{
-                                          width: "100%", height: "100%",
-                                          objectFit: "cover",
-                                          display: "block",
-                                          transition: "transform 200ms ease",
-                                        }}
-                                        loading="lazy"
-                                      />
-                                      <div style={{
-                                        position: "absolute", bottom: 0, left: 0, right: 0,
-                                        padding: "0.15rem 0.3rem",
-                                        background: "linear-gradient(transparent, rgba(0,0,0,0.65))",
-                                        fontSize: "0.55rem", fontWeight: 600,
-                                        color: "#fff", lineHeight: 1.3,
-                                        pointerEvents: "none",
-                                      }}>
-                                        {ref.advertiserName || getStyleLabel(ref.style)}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        );
-                      })()}
-
-                      {/* Approval action buttons */}
-                      {item.status === "in_progress" && (
-                        <div style={{ marginTop: "0.5rem" }}>
-                          <button
-                            className="mod-btn-ghost"
-                            onClick={async () => {
-                              await updateGanttItem(item.id, { status: "submitted_for_approval" } as any);
-                              toast("נשלח לאישור", "success");
-                            }}
-                            style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem", color: "#0092cc" }}
-                          >
-                            🔍 שלח לאישור
-                          </button>
-                        </div>
-                      )}
-                      {item.status === "submitted_for_approval" && (
-                        <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem" }}>
-                          <button
-                            className="mod-btn-ghost"
-                            onClick={async () => {
-                              await updateGanttItem(item.id, { status: "approved" } as any);
-                              toast("הפריט אושר", "success");
-                            }}
-                            style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem", color: "#22c55e" }}
-                          >
-                            ✅ אשר
-                          </button>
-                          <button
-                            className="mod-btn-ghost"
-                            onClick={async () => {
-                              await updateGanttItem(item.id, { status: "returned_for_changes" } as any);
-                              toast("הפריט הוחזר לתיקון", "success");
-                            }}
-                            style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem", color: "#f97316" }}
-                          >
-                            ↩️ החזר לתיקון
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {/* Inline editor replaced by the premium side drawer (rendered globally below) */}
-                  {false && editingItemId === item.id && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                      <div>
-                        <label style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
-                          כותרת
-                        </label>
-                        <input
-                          type="text"
-                          value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
-                          className="form-input"
-                          style={{ width: "100%" }}
-                        />
-                      </div>
-
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-                        <div>
-                          <label style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
-                            תאריך
-                          </label>
-                          <input
-                            type="date"
-                            value={editDate}
-                            onChange={(e) => setEditDate(e.target.value)}
-                            className="form-input"
-                            style={{ width: "100%" }}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
-                            סוג פריט
-                          </label>
-                          <select
-                            value={editItemType}
-                            onChange={(e) => setEditItemType(e.target.value)}
-                            className="form-select"
-                            style={{ width: "100%" }}
-                          >
-                            {Object.entries(ITEM_TYPE_CONFIG).map(([key, val]) => (
-                              <option key={key} value={key}>
-                                {val.emoji} {val.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem" }}>
-                        <div>
-                          <label style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
-                            פלטפורמה
-                          </label>
-                          <select
-                            value={editPlatform}
-                            onChange={(e) => setEditPlatform(e.target.value)}
-                            className="form-select"
-                            style={{ width: "100%" }}
-                          >
-                            <option value="facebook">Facebook</option>
-                            <option value="instagram">Instagram</option>
-                            <option value="tiktok">TikTok</option>
-                            <option value="all">הכל</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
-                            פורמט
-                          </label>
-                          <select
-                            value={editFormat}
-                            onChange={(e) => setEditFormat(e.target.value)}
-                            className="form-select"
-                            style={{ width: "100%" }}
-                          >
-                            {Object.entries(FORMAT_CONFIG).map(([key, label]) => (
-                              <option key={key} value={key}>
-                                {label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
-                            סטטוס
-                          </label>
-                          <select
-                            value={editStatus}
-                            onChange={(e) => setEditStatus(e.target.value)}
-                            className="form-select"
-                            style={{ width: "100%" }}
-                          >
-                            {Object.entries(GANTT_STATUS_COLORS).map(([key, val]) => (
-                              <option key={key} value={key}>
-                                {val.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-                        <div>
-                          <label style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
-                            מקצוע
-                          </label>
-                          <select
-                            value={editAssignee}
-                            onChange={(e) => setEditAssignee(e.target.value)}
-                            className="form-select"
-                            style={{ width: "100%" }}
-                          >
-                            <option value="">ללא</option>
-                            {allEmployees.filter(e => TEAM_MEMBERS.includes(e.name)).map((emp) => (
-                              <option key={emp.id} value={emp.id}>
-                                {emp.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
-                            תג חג
-                          </label>
-                          <input
-                            type="text"
-                            value={editHolidayTag}
-                            onChange={(e) => setEditHolidayTag(e.target.value)}
-                            placeholder="למשל: חנוכה"
-                            className="form-input"
-                            style={{ width: "100%" }}
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
-                          רעיון
-                        </label>
-                        <textarea
-                          value={editIdea}
-                          onChange={(e) => setEditIdea(e.target.value)}
-                          className="form-input"
-                          style={{ width: "100%", minHeight: "60px" }}
-                        />
-                      </div>
-
-                      <div>
-                        <label style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
-                          טקסט לגרפיקה (עד שתי שורות)
-                        </label>
-                        <textarea
-                          value={editGraphicText}
-                          onChange={(e) => setEditGraphicText(e.target.value)}
-                          className="form-input"
-                          style={{ width: "100%", minHeight: "50px" }}
-                        />
-                      </div>
-
-                      <div>
-                        <label style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
-                          כיתוביות
-                        </label>
-                        <textarea
-                          value={editCaption}
-                          onChange={(e) => setEditCaption(e.target.value)}
-                          className="form-input"
-                          style={{ width: "100%", minHeight: "80px" }}
-                        />
-                      </div>
-
-                      <div>
-                        <label style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
-                          🎨 קונספט ויזואלי
-                        </label>
-                        <textarea
-                          value={editVisualConcept}
-                          onChange={(e) => setEditVisualConcept(e.target.value)}
-                          className="form-input"
-                          placeholder="תיאור מדויק של הויזואל: רקע, צבעים, אובייקטים, זווית צילום, מצב רוח"
-                          style={{ width: "100%", minHeight: "60px" }}
-                        />
-                      </div>
-
-                      <div>
-                        <label style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
-                          הערות פנימיות
-                        </label>
-                        <textarea
-                          value={editInternalNotes}
-                          onChange={(e) => setEditInternalNotes(e.target.value)}
-                          className="form-input"
-                          style={{ width: "100%", minHeight: "50px" }}
-                        />
-                      </div>
-
-                      <div>
-                        <label style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
-                          הערות ללקוח
-                        </label>
-                        <textarea
-                          value={editClientNotes}
-                          onChange={(e) => setEditClientNotes(e.target.value)}
-                          className="form-input"
-                          style={{ width: "100%", minHeight: "50px" }}
-                        />
-                      </div>
-
-                      <div>
-                        <label style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
-                          תג קמפיין
-                        </label>
-                        <input
-                          type="text"
-                          value={editCampaignTag}
-                          onChange={(e) => setEditCampaignTag(e.target.value)}
-                          placeholder="למשל: Black Friday"
-                          className="form-input"
-                          style={{ width: "100%" }}
-                        />
-                      </div>
-
-                      {/* Video & Campaign Connection */}
-                      <div
-                        style={{
-                          background: "linear-gradient(135deg, #3b82f610, #0092cc10)",
-                          padding: "1rem",
-                          borderRadius: "0.5rem",
-                          border: "1px solid var(--border)",
-                        }}
-                      >
-                        <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--foreground)", display: "block", marginBottom: "0.75rem" }}>
-                          🔗 חיבורים
-                        </label>
-
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-                          <div>
-                            <label style={{ fontSize: "0.7rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
-                              🎬 פרויקט וידאו מקושר
-                            </label>
-                            <div style={{ display: "flex", gap: "0.5rem" }}>
-                              <input
-                                type="text"
-                                value={editRelatedVideoId}
-                                onChange={(e) => setEditRelatedVideoId(e.target.value)}
-                                placeholder="מזהה פרויקט"
-                                className="form-input"
-                                style={{ width: "100%", fontSize: "0.75rem" }}
-                              />
-                            </div>
-                            {!editRelatedVideoId && (
-                              <button
-                                className="mod-btn-ghost"
-                                onClick={async () => {
-                                  try {
-                                    const project = await createVideoProject({
-                                      name: editTitle || "פרויקט חדש",
-                                      clientId: client.id,
-                                      clientName: client.name,
-                                      status: "draft",
-                                      format: editFormat === "reel" || editFormat === "story" ? "9:16" : "16:9",
-                                      preset: "default",
-                                      durationSec: 30,
-                                      segments: 1,
-                                    } as any);
-                                    setEditRelatedVideoId(project.id);
-                                    toast("פרויקט וידאו נוצר בהצלחה", "success");
-                                  } catch {
-                                    toast("שגיאה ביצירת פרויקט", "error");
-                                  }
-                                }}
-                                style={{
-                                  fontSize: "0.7rem",
-                                  padding: "0.3rem 0.5rem",
-                                  marginTop: "0.35rem",
-                                  width: "100%",
-                                }}
-                              >
-                                + צור פרויקט וידאו חדש
-                              </button>
-                            )}
-                            {editRelatedVideoId && (
-                              <a
-                                href={`/projects/${editRelatedVideoId}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  fontSize: "0.7rem",
-                                  color: "var(--accent)",
-                                  marginTop: "0.35rem",
-                                  display: "inline-block",
-                                }}
-                              >
-                                🔗 פתח פרויקט →
-                              </a>
-                            )}
-                          </div>
-
-                          <div>
-                            <label style={{ fontSize: "0.7rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.25rem" }}>
-                              📣 קמפיין מקושר
-                            </label>
-                            <input
-                              type="text"
-                              value={editCampaignTag}
-                              readOnly
-                              className="form-input"
-                              style={{ width: "100%", fontSize: "0.75rem", opacity: 0.7 }}
-                            />
-                            {editCampaignTag && (
-                              <span style={{ fontSize: "0.7rem", color: "var(--foreground-muted)", marginTop: "0.25rem", display: "block" }}>
-                                📌 {editCampaignTag}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* File Upload Section */}
-                      <div
-                        style={{
-                          background: "var(--foreground-muted-opacity)",
-                          padding: "1rem",
-                          borderRadius: "0.5rem",
-                          border: "1px solid var(--border)",
-                        }}
-                      >
-                        <label style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--foreground-muted)", display: "block", marginBottom: "0.5rem" }}>
-                          📎 קבצים מצורפים
-                        </label>
-
-                        {(editAttachedFiles.length > 0 || editImageUrls.length > 0) && (
-                          <div style={{ marginBottom: "0.5rem", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                            {editAttachedFiles.map((file, idx) => (
-                              <div
-                                key={`attached-${idx}`}
-                                style={{
-                                  fontSize: "0.7rem",
-                                  padding: "0.35rem 0.5rem",
-                                  borderRadius: "3px",
-                                  background: "var(--accent-muted)",
-                                  color: "var(--accent)",
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "0.5rem",
-                                }}
-                              >
-                                📄 {file.split("/").pop()}
-                                <button
-                                  onClick={() => setEditAttachedFiles(editAttachedFiles.filter((_, i) => i !== idx))}
-                                  style={{
-                                    background: "none",
-                                    border: "none",
-                                    color: "var(--accent)",
-                                    cursor: "pointer",
-                                    padding: "0",
-                                    fontSize: "0.75rem",
-                                  }}
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            ))}
-                            {editImageUrls.map((url, idx) => (
-                              <div
-                                key={`image-${idx}`}
-                                style={{
-                                  fontSize: "0.7rem",
-                                  padding: "0.35rem 0.5rem",
-                                  borderRadius: "3px",
-                                  background: "#ec48991a",
-                                  color: "#ec4899",
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "0.5rem",
-                                }}
-                              >
-                                🖼️ {url.split("/").pop()}
-                                <button
-                                  onClick={() => setEditImageUrls(editImageUrls.filter((_, i) => i !== idx))}
-                                  style={{
-                                    background: "none",
-                                    border: "none",
-                                    color: "#ec4899",
-                                    cursor: "pointer",
-                                    padding: "0",
-                                    fontSize: "0.75rem",
-                                  }}
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.5rem" }}>
-                          <input
-                            type="text"
-                            placeholder="הדבק קישור לקובץ..."
-                            value={newAttachedFilePath}
-                            onChange={(e) => setNewAttachedFilePath(e.target.value)}
-                            className="form-input"
-                            style={{ fontSize: "0.75rem" }}
-                          />
-                          <button
-                            className="mod-btn-ghost"
-                            onClick={() => {
-                              if (newAttachedFilePath) {
-                                setEditAttachedFiles([...editAttachedFiles, newAttachedFilePath]);
-                                setNewAttachedFilePath("");
-                              }
-                            }}
-                            style={{
-                              fontSize: "0.75rem",
-                              padding: "0.4rem 0.75rem",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            + הוסף
-                          </button>
-                        </div>
-                      </div>
-
-                      <div style={{ display: "flex", gap: "0.5rem" }}>
-                        <button
-                          className="mod-btn-primary"
-                          onClick={handleSaveGanttItem}
-                          style={{
-                            fontSize: "0.75rem",
-                            padding: "0.5rem 1rem",
-                            flex: 1,
-                          }}
-                        >
-                          💾 שמור
-                        </button>
-                        <button
-                          className="mod-btn-ghost"
-                          onClick={() => handleDeleteGanttItem(item.id)}
-                          style={{
-                            fontSize: "0.75rem",
-                            padding: "0.5rem 1rem",
-                            color: "#ef4444",
-                          }}
-                        >
-                          🗑 מחק
-                        </button>
-                        <button
-                          className="mod-btn-ghost"
-                          onClick={() => setEditingItemId(null)}
-                          style={{
-                            fontSize: "0.75rem",
-                            padding: "0.5rem 1rem",
-                          }}
-                        >
-                          ביטול
-                        </button>
-                      </div>
+            const Card = (item: any) => {
+              const sInfo = GANTT_STATUS_COLORS[item.status] || GANTT_STATUS_COLORS.draft;
+              const tInfo = ITEM_TYPE_CONFIG[item.itemType] || ITEM_TYPE_CONFIG.social_post;
+              const owner = allEmployees.find((e: any) => e.id === item.assigneeId);
+              const media = [...((item.imageUrls as any[]) || []), ...((item.attachedFiles as any[]) || [])];
+              const firstMedia = media[0] ? (String(media[0]).includes("|") ? String(media[0]).split("|")[1] : String(media[0])) : null;
+              const mediaCount = media.length;
+              const commentCount = (() => { try { const n = item.notes ? JSON.parse(item.notes) : null; return Array.isArray(n?.thread) ? n.thread.length : 0; } catch { return 0; } })();
+              const prog = PROG[item.status] ?? 20;
+              const aiScore = Math.min(100, Math.round((item.title ? 15 : 0) + (item.caption ? 25 : 0) + (mediaCount > 0 ? 25 : 0) + prog * 0.35));
+              const prio = (item as any).priority as string | undefined;
+              const days = item.date ? Math.round((new Date(item.date).getTime() - today0) / 864e5) : null;
+              const overdue = days !== null && days < 0 && item.status !== "published";
+              const sla = days === null ? null : overdue ? { t: `${Math.abs(days)} ימי איחור`, c: "#ef4444" } : days === 0 ? { t: "היום", c: "#f59e0b" } : days <= 3 ? { t: `בעוד ${days} ימים`, c: "#f59e0b" } : { t: `בעוד ${days} ימים`, c: "#22c55e" };
+              const nextAction = item.status === "new_idea" || item.status === "planned" ? { l: "התחל", to: "in_progress" }
+                : ["draft", "in_progress", "returned_for_changes", "needs_revision"].includes(item.status) ? { l: "לאישור", to: "submitted_for_approval" }
+                : item.status === "submitted_for_approval" ? { l: "אשר", to: "approved" }
+                : item.status === "approved" || item.status === "scheduled" ? { l: "פרסם", to: "published" } : null;
+              return (
+                <div key={item.id} onClick={() => setEditingItemId(item.id)} className="cog-row"
+                  style={{ display: "flex", alignItems: "center", gap: D.gap, padding: D.pad, background: "var(--surface-raised)", border: "1px solid var(--border)", borderInlineStart: `3px solid ${sInfo.color}`, borderRadius: 10, cursor: "pointer" }}>
+                  {/* thumbnail */}
+                  <div style={{ width: D.thumb, height: D.thumb, borderRadius: 8, flexShrink: 0, background: firstMedia ? `center/cover url(${firstMedia})` : `${tInfo.color}1a`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: D.thumb * 0.4, color: tInfo.color }}>
+                    {!firstMedia && (tInfo.emoji || "📄")}
+                  </div>
+                  {/* title + meta */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                      {prio && PRIO[prio] && <span title={prio} style={{ width: 7, height: 7, borderRadius: "50%", background: PRIO[prio], flexShrink: 0 }} />}
+                      <span style={{ fontSize: D.title, fontWeight: 700, color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title || "ללא כותרת"}</span>
+                      <span style={{ fontSize: "0.62rem", fontWeight: 700, color: sInfo.color, background: sInfo.color + "1a", borderRadius: 999, padding: "1px 7px", flexShrink: 0 }}>{sInfo.label}</span>
                     </div>
-                  )}
+                    {D.showMeta && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 5, fontSize: "0.66rem", color: "var(--foreground-muted)", flexWrap: "wrap" }}>
+                        <span>{tInfo.label}</span>
+                        {item.date && <span>📅 {new Date(item.date).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" })}</span>}
+                        {mediaCount > 0 && <span>🖼️ {mediaCount}</span>}
+                        {commentCount > 0 && <span>💬 {commentCount}</span>}
+                        <span title="ציון AI" style={{ color: aiScore >= 70 ? "#22c55e" : aiScore >= 40 ? "#f59e0b" : "#ef4444", fontWeight: 700 }}>AI {aiScore}</span>
+                      </div>
+                    )}
+                    {D.showDesc && item.ideaSummary && <div style={{ fontSize: "0.7rem", color: "var(--foreground-subtle)", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.ideaSummary}</div>}
+                    {D.showProg && (
+                      <div style={{ height: 4, background: "var(--surface)", borderRadius: 999, overflow: "hidden", marginTop: 6, maxWidth: 240 }}>
+                        <div style={{ width: `${prog}%`, height: "100%", background: sInfo.color, borderRadius: 999 }} />
+                      </div>
+                    )}
+                  </div>
+                  {/* SLA */}
+                  {sla && <span style={{ fontSize: "0.64rem", fontWeight: 700, color: sla.c, flexShrink: 0, minWidth: 64, textAlign: "center" }}>{sla.t}</span>}
+                  {/* owner */}
+                  {owner ? <Avatar src={(owner as any).avatarUrl} name={owner.name} size={D.thumb >= 52 ? 30 : 24} ring={false} /> : <span style={{ width: 24, height: 24, borderRadius: "50%", background: "var(--surface)", flexShrink: 0 }} />}
+                  {/* quick actions */}
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                    {nextAction && <button onClick={() => handleChangeStatus(item.id, nextAction.to)} style={{ fontSize: "0.66rem", fontWeight: 700, color: "var(--accent)", background: "var(--accent-muted)", border: "none", borderRadius: 8, padding: "0.3rem 0.6rem", cursor: "pointer" }}>{nextAction.l}</button>}
+                    <button onClick={() => setEditingItemId(item.id)} title="פתח" style={{ fontSize: "0.8rem", color: "var(--foreground-muted)", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, padding: "0.2rem 0.5rem", cursor: "pointer" }}>⋯</button>
+                  </div>
                 </div>
               );
-              })}
-            </div>
-          ) : (
-            <div style={{ textAlign: "center", padding: "2rem 1rem", color: "var(--foreground-muted)" }}>
-              <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>📭</div>
-              <p style={{ fontSize: "0.9rem", margin: 0 }}>אין פריטים בגאנט זה</p>
-            </div>
-          )}
+            };
+
+            return (
+              <div>
+                {/* density toggle */}
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginBottom: 12 }}>
+                  {([["compact", "קומפקטי"], ["comfortable", "רגיל"], ["expanded", "מורחב"]] as const).map(([v, l]) => (
+                    <button key={v} onClick={() => setListDensity(v)} style={{ fontSize: "0.7rem", fontWeight: 700, padding: "0.3rem 0.7rem", borderRadius: 999, cursor: "pointer", border: `1px solid ${listDensity === v ? "var(--accent)" : "var(--border)"}`, background: listDensity === v ? "var(--accent)" : "transparent", color: listDensity === v ? "#fff" : "var(--foreground-muted)" }}>{l}</button>
+                  ))}
+                </div>
+                {/* status-grouped cards */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                  {groups.map((g) => {
+                    const gi = g.s === "__other" ? { label: "אחר", color: "#94a3b8" } : (GANTT_STATUS_COLORS[g.s] || { label: g.s, color: "#94a3b8" });
+                    return (
+                      <div key={g.s}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                          <span style={{ width: 9, height: 9, borderRadius: 3, background: gi.color }} />
+                          <span style={{ fontSize: "0.8rem", fontWeight: 800, color: "var(--foreground)" }}>{gi.label}</span>
+                          <span style={{ fontSize: "0.66rem", fontWeight: 800, color: gi.color, background: gi.color + "1a", borderRadius: 999, padding: "1px 8px" }}>{g.items.length}</span>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                          {g.items.map((it: any) => Card(it))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
         </>
       )}
