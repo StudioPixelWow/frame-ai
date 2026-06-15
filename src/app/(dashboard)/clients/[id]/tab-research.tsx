@@ -101,6 +101,10 @@ export default function TabResearch({ client }: TabResearchProps) {
   // Focus-ideas popup: up to 3 free-text directions that re-focus all 25 ideas.
   const [showFocusPopup, setShowFocusPopup] = useState(false);
   const [focusInputs, setFocusInputs] = useState<string[]>(['', '', '']);
+  // Services brand-awareness popup: manually list the business's services and
+  // generate premium social ideas that strengthen brand awareness per service.
+  const [showServicesPopup, setShowServicesPopup] = useState(false);
+  const [servicesInput, setServicesInput] = useState('');
 
   const messages = [
     'מנתח את העסק...',
@@ -411,6 +415,31 @@ export default function TabResearch({ client }: TabResearchProps) {
       setTimeout(() => setSyncSuccess(null), 4000);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'שגיאה במיקוד הרעיונות');
+    } finally {
+      setIsGeneratingIdeas(false);
+    }
+  };
+
+  // ---- Generate premium brand-awareness ideas from the business's services ----
+  const handleGenerateServices = async () => {
+    const list = servicesInput.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
+    if (list.length === 0) { alert('הזן לפחות שירות אחד'); return; }
+    setIsGeneratingIdeas(true);
+    setShowServicesPopup(false);
+    setSyncSuccess(null);
+    try {
+      const res = await fetch('/api/ai/generate-content-ideas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: client.id, servicesMode: true, services: list }),
+      });
+      const result = await res.json();
+      if (!res.ok || !result.success) throw new Error(result.error || 'Failed to generate service ideas');
+      setResearch(result.data);
+      setSyncSuccess(`✨ נוספו רעיונות פרימיום לחיזוק מותג סביב: ${list.join(' · ')}`);
+      setTimeout(() => setSyncSuccess(null), 5000);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'שגיאה ביצירת רעיונות לשירותים');
     } finally {
       setIsGeneratingIdeas(false);
     }
@@ -1023,6 +1052,24 @@ export default function TabResearch({ client }: TabResearchProps) {
                     >
                       🎯 מיקוד רעיונות תוכן{research?.contentFocus && research.contentFocus.length > 0 ? ` (${research.contentFocus.length})` : ''}
                     </button>
+                    {/* Services brand-awareness button — opens the services popup */}
+                    <button
+                      onClick={() => setShowServicesPopup(true)}
+                      disabled={isGeneratingIdeas}
+                      title="צור רעיונות לחיזוק תודעת מותג לפי שירותי העסק"
+                      style={{
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        padding: '0.3rem 0.8rem',
+                        borderRadius: '0.375rem',
+                        border: '1px solid #0891b2',
+                        background: '#0891b212',
+                        color: '#0891b2',
+                        cursor: isGeneratingIdeas ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      🛠️ רעיונות לפי שירותים
+                    </button>
                   </>
                 )}
                 {/* Add to gantt button — ALWAYS visible when ideas exist */}
@@ -1231,6 +1278,49 @@ export default function TabResearch({ client }: TabResearchProps) {
                   </button>
                   <button
                     onClick={() => setShowFocusPopup(false)}
+                    style={{ padding: '0.6rem 1rem', borderRadius: '0.5rem', border: '1px solid var(--border)', background: 'transparent', color: 'var(--foreground-muted)', fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    ביטול
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Services brand-awareness popup ── */}
+          {showServicesPopup && (
+            <div
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+              onClick={() => setShowServicesPopup(false)}
+            >
+              <div
+                style={{ background: 'var(--surface-raised)', borderRadius: '0.85rem', padding: '1.6rem', maxWidth: '480px', width: '92%', direction: 'rtl', border: '1px solid var(--border)' }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0891b2', marginBottom: '0.4rem' }}>🛠️ רעיונות לפי שירותי העסק</div>
+                <div style={{ fontSize: '0.83rem', color: 'var(--foreground-muted)', marginBottom: '1rem', lineHeight: 1.5 }}>
+                  הזן את שירותי העסק (שורה לכל שירות, או מופרדים בפסיק). המערכת תייצר רעיונות תוכן פרימיום לחיזוק תודעת מותג סביב כל שירות — לא קשור ל-RTM/חגים.
+                </div>
+                <textarea
+                  value={servicesInput}
+                  onChange={(e) => setServicesInput(e.target.value)}
+                  rows={6}
+                  placeholder={'לדוגמה:\nייעוץ משכנתאות\nמחזור הלוואות\nליווי משפחות צעירות\nתכנון פיננסי'}
+                  style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--foreground)', fontSize: '0.9rem', boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.6 }}
+                />
+                <div style={{ fontSize: '0.74rem', color: 'var(--foreground-muted)', marginTop: '0.4rem' }}>
+                  💡 הרעיונות יתווספו לרשימת הרעיונות הקיימת (קטגוריית "מותג").
+                </div>
+                <div style={{ display: 'flex', gap: '0.6rem', marginTop: '1.2rem' }}>
+                  <button
+                    onClick={handleGenerateServices}
+                    disabled={isGeneratingIdeas}
+                    style={{ flex: 1, padding: '0.6rem', borderRadius: '0.5rem', border: 'none', background: '#0891b2', color: '#fff', fontWeight: 800, fontSize: '0.9rem', cursor: isGeneratingIdeas ? 'wait' : 'pointer' }}
+                  >
+                    {isGeneratingIdeas ? '⏳ יוצר...' : '✨ צור רעיונות לשירותים'}
+                  </button>
+                  <button
+                    onClick={() => setShowServicesPopup(false)}
                     style={{ padding: '0.6rem 1rem', borderRadius: '0.5rem', border: '1px solid var(--border)', background: 'transparent', color: 'var(--foreground-muted)', fontWeight: 600, cursor: 'pointer' }}
                   >
                     ביטול

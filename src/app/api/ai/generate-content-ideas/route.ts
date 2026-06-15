@@ -20,14 +20,24 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { clientId, keepIdeaIds, addCategory, addCount, focusDirections } = body as {
+    const { clientId, keepIdeaIds, addCategory, addCount, focusDirections, servicesMode, services, servicesCount } = body as {
       clientId?: string; keepIdeaIds?: string[]; addCategory?: string; addCount?: number;
       focusDirections?: string[];
+      servicesMode?: boolean; services?: string[]; servicesCount?: number;
     };
 
     if (!clientId) {
       return NextResponse.json({ error: 'Missing clientId' }, { status: 400 });
     }
+
+    // Services brand-awareness mode: user manually lists the business's services,
+    // and we generate premium, sharp social ideas that strengthen brand awareness
+    // around each service (independent of RTM/holidays). Appends to existing ideas.
+    const svcList = (Array.isArray(services) ? services : [])
+      .map((s) => (typeof s === 'string' ? s.trim() : ''))
+      .filter(Boolean)
+      .slice(0, 20);
+    const svcMode = !!servicesMode && svcList.length > 0;
 
     // Focus directions: up to 3 free-text directions the user wants ALL ideas to
     // orbit around (e.g. "טעינה ביתית", "צי רכבים עסקי", "חיסכון בחשמל").
@@ -158,11 +168,13 @@ export async function POST(req: NextRequest) {
 
     // Preserve kept ideas from the existing research (must be before prompts)
     const existingIdeas = research.contentIdeas25 || [];
-    // Append-mode keeps ALL existing ideas and adds `addCount` of one category.
-    const keptIdeas = appendMode
+    // Append-mode (and services-mode) keep ALL existing ideas and add more.
+    const keptIdeas = (appendMode || svcMode)
       ? existingIdeas
       : (idsToKeep.size > 0 ? existingIdeas.filter((i: any) => idsToKeep.has(i.id)) : []);
-    const neededCount = appendMode
+    const neededCount = svcMode
+      ? Math.min(Math.max(Number(servicesCount) || svcList.length * 2, 1), 16)
+      : appendMode
       ? Math.min(Math.max(Number(addCount) || 6, 1), 12)
       : 25 - keptIdeas.length;
 
@@ -170,7 +182,7 @@ export async function POST(req: NextRequest) {
       ? `כל הרעיונות חייבים להיות מקטגוריה אחת בלבד: "${CATEGORY_LABELS_HE[lockCategory]}" (category = "${lockCategory}"). אסור לייצר רעיונות מקטגוריה אחרת.`
       : `מגוון קטגוריות: weakness, opportunity, audience, competitor, trend, seasonal, brand, engagement.`;
 
-    const systemPrompt = `אתה אסטרטג תוכן ישראלי ברמה הגבוהה ביותר.
+    const systemPromptDefault = `אתה אסטרטג תוכן ישראלי ברמה הגבוהה ביותר.
 אתה מקבל מידע על עסק וחקר לקוח שכבר בוצע, ואתה צריך לייצר בדיוק ${neededCount} רעיונות תוכן אסטרטגיים.
 
 כללים:
@@ -186,7 +198,7 @@ export async function POST(req: NextRequest) {
 ${focus.map((f, i) => `   (${i + 1}) ${f}`).join('\n')}
    כל רעיון חייב לקדם לפחות אחד מהכיוונים האלה בזווית אסטרטגית אחרת. גוון את הזוויות בין הכיוונים, אבל אל תסטה מהם. אם רעיון לא משרת אף אחד מהכיוונים — אל תייצר אותו.` : ''}`;
 
-    const userPrompt = `${hasFocus ? `## 🎯 מיקוד הרעיונות (הכי חשוב — גובר על הכל):
+    const userPromptDefault = `${hasFocus ? `## 🎯 מיקוד הרעיונות (הכי חשוב — גובר על הכל):
 המשתמש הגדיר ${focus.length} כיוונים שכל הרעיונות חייבים לסוב סביבם:
 ${focus.map((f, i) => `${i + 1}. ${f}`).join('\n')}
 חלק את ${neededCount} הרעיונות בין הכיוונים האלה, כל רעיון בזווית אחרת. אסור לייצר רעיון שלא קשור לאף כיוון.
@@ -217,7 +229,43 @@ ${lockCategory ? `חובה: category של כל פריט = "${lockCategory}" (כ�
 חשוב: רעיונות עונתיים חייבים להתבסס על התקופה הנוכחית והחגים הקרובים שמפורטים למעלה. אסור להתייחס לפסח, ראש השנה, או כל חג שלא מופיע ברשימת החגים הקרובים.
 ${keptIdeas.length > 0 ? `\nחשוב: הרעיונות הבאים כבר נבחרו ונשמרים — אל תייצר רעיונות דומים או זהים:\n${keptIdeas.map((i: any) => `- ${i.title}`).join('\n')}` : ''}`;
 
-    console.log(`[GenerateIdeas] Generating ${neededCount} ideas for client: ${client.name} (${clientId}), keeping ${keptIdeas.length}`);
+    // ── Services brand-awareness prompts (premium, sharp social ideas per service) ──
+    const svcSystemPrompt = `אתה מנהל קריאייטיב ותוכן ישראלי ברמה עולמית, מומחה לחיזוק תודעת מותג בסושיאל.
+אתה מקבל רשימת שירותים של עסק, ואתה מייצר בדיוק ${neededCount} רעיונות תוכן פרימיום — חדים, חכמים ומקוריים — שכל אחד מחזק את המותג סביב שירות ספציפי.
+
+כללים מחייבים:
+1. בדיוק ${neededCount} רעיונות — לא יותר ולא פחות.
+2. כל רעיון קשור לשירות אחד מהרשימה (חלק את הרעיונות בין השירותים בצורה מאוזנת).
+3. רעיונות ברמה גבוהה בלבד — זווית מפתיעה, hook חזק, ערך אמיתי לצופה. אסור רעיונות גנריים, שטוחים או משעממים ("5 סיבות לבחור בנו", "אנחנו הכי טובים" — אסור!).
+4. גוון בין זוויות: חינוכי/טיפ מומחה, מאחורי הקלעים, ניפוץ מיתוס, לפני/אחרי וטרנספורמציה, סיפור לקוח/הוכחה חברתית, השוואה חכמה, שאלה מעוררת, הדגמה ויזואלית, "טעות נפוצה".
+5. המיקוד הוא חיזוק תודעת מותג — לא מכירה אגרסיבית, לא RTM/חגים.
+6. עברית בלבד. הכותרת קצרה וקולעת; ההסבר משפט אחד שמסביר את הזווית ואת השירות שאליו היא מתחברת.
+7. category של כל רעיון = "brand".
+8. החזר JSON תקין בלבד — בלי markdown, בלי backticks, בלי הסברים.`;
+
+    const svcUserPrompt = `## שירותי העסק (המוקד של כל הרעיונות):
+${svcList.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+
+## נתוני העסק:
+תחום: ${client.businessField || '(לא הוגדר)'}
+מטרות שיווקיות: ${client.marketingGoals || '(לא הוגדר)'}
+מסרים שיווקיים: ${client.keyMarketingMessages || '(לא הוגדר)'}
+
+צור בדיוק ${neededCount} רעיונות תוכן פרימיום לחיזוק תודעת מותג, מחולקים בין השירותים שלמעלה. כל רעיון בזווית שונה ויצירתית.
+
+## פורמט JSON בדיוק — מערך של ${neededCount} אובייקטים:
+[
+  { "id": "new_1", "title": "כותרת חדה וקצרה", "explanation": "הזווית + השירות שאליו מתחבר — משפט אחד", "category": "brand" },
+  ...
+  { "id": "new_${neededCount}", "title": "...", "explanation": "...", "category": "brand" }
+]
+חובה: בדיוק ${neededCount} פריטים, id מ-new_1 עד new_${neededCount}, category="brand".
+${keptIdeas.length > 0 ? `\nאל תחזור על הרעיונות הקיימים:\n${keptIdeas.slice(0, 30).map((i: any) => `- ${i.title}`).join('\n')}` : ''}`;
+
+    const systemPrompt = svcMode ? svcSystemPrompt : systemPromptDefault;
+    const userPrompt = svcMode ? svcUserPrompt : userPromptDefault;
+
+    console.log(`[GenerateIdeas] Generating ${neededCount} ideas for client: ${client.name} (${clientId}), keeping ${keptIdeas.length}${svcMode ? `, servicesMode (${svcList.length} services)` : ''}`);
 
     const MAX_ATTEMPTS = 3;
     let ideas: Array<{ id: string; title: string; explanation: string; category: string }> = [];
@@ -285,8 +333,8 @@ ${keptIdeas.length > 0 ? `\nחשוב: הרעיונות הבאים כבר נבח�
       });
     }
 
-    // Append-mode: if the AI produced no new ideas, leave the list untouched.
-    if (appendMode && ideas.length === 0) {
+    // Append / services mode: if the AI produced no new ideas, leave the list untouched.
+    if ((appendMode || svcMode) && ideas.length === 0) {
       return NextResponse.json({ error: 'לא הצלחנו לייצר רעיונות נוספים כרגע, נסה שוב' }, { status: 502 });
     }
 
