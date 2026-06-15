@@ -261,7 +261,7 @@ export default function TaskWorkspaceModal({ task, employees, clients = [], role
                     <div key={i} style={{ border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", background: "var(--surface-raised)" }}>
                       <FileThumb url={u} big />
                       <div style={{ padding: "0.5rem 0.6rem", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-                        <a href={u} target="_blank" rel="noreferrer" style={{ fontSize: "0.7rem", color: "var(--accent)", textDecoration: "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>הורד</a>
+                        <a href={fileUrlOf(u)} target="_blank" rel="noreferrer" style={{ fontSize: "0.7rem", color: "var(--accent)", textDecoration: "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>הורד</a>
                         {!isClient && <button onClick={() => removeFile(u)} style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", fontSize: "0.72rem" }}>מחק</button>}
                       </div>
                     </div>
@@ -397,11 +397,17 @@ function Badge({ color, children }: { color: string; children: React.ReactNode }
   return <span style={{ fontSize: "0.64rem", fontWeight: 800, color, background: color + "1a", borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap" }}>{children}</span>;
 }
 function Empty({ children }: { children: React.ReactNode }) { return <div style={{ fontSize: "0.8rem", color: "var(--foreground-subtle)", padding: "0.3rem 0" }}>{children}</div>; }
+// Files may be stored as "name|url" (client uploads) or a bare url.
+export function fileUrlOf(entry: string): string {
+  const raw = String(entry); const sep = raw.indexOf("|");
+  return sep === -1 ? raw : raw.slice(sep + 1);
+}
 function FileThumb({ url, big }: { url: string; big?: boolean }) {
-  const isImg = /\.(png|jpe?g|gif|webp|svg)$/i.test(url);
+  const u = fileUrlOf(url);
+  const isImg = /\.(png|jpe?g|gif|webp|svg|avif)(\?|$)/i.test(u);
   const h = big ? 96 : 56;
   return isImg
-    ? <div style={{ width: big ? "100%" : 56, height: h, borderRadius: big ? 0 : 8, backgroundImage: `url(${url})`, backgroundSize: "cover", backgroundPosition: "center" }} />
+    ? <div style={{ width: big ? "100%" : 56, height: h, borderRadius: big ? 0 : 8, backgroundImage: `url(${u})`, backgroundSize: "cover", backgroundPosition: "center" }} />
     : <div style={{ width: big ? "100%" : 56, height: h, background: "var(--surface)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem" }}>📄</div>;
 }
 

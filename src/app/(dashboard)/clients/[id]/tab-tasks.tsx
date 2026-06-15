@@ -371,12 +371,18 @@ function TaskWorkspace({ task, owner, employees, isClient, isManager, onClose, u
           <input ref={fileRef} type="file" hidden onChange={onUpload} />
           {(task.files || []).length === 0 ? <Empty>אין קבצים עדיין</Empty> : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {(task.files || []).map((url: string, i: number) => {
-                const nm = decodeURIComponent(String(url).split("/").pop() || "קובץ").replace(/^\d+_/, "");
-                const isImg = /\.(png|jpe?g|gif|webp|svg)$/i.test(url);
+              {(task.files || []).map((entry: string, i: number) => {
+                // Files may be stored as "name|url" (client uploads) or a bare url.
+                const raw = String(entry);
+                const sep = raw.indexOf("|");
+                const fileUrl = sep === -1 ? raw : raw.slice(sep + 1);
+                const nm = sep === -1
+                  ? decodeURIComponent((fileUrl.split("/").pop() || "קובץ").split("?")[0]).replace(/^\d+_/, "")
+                  : raw.slice(0, sep);
+                const isImg = /\.(png|jpe?g|gif|webp|svg|avif)(\?|$)/i.test(fileUrl);
                 return (
-                  <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.5rem 0.6rem", border: "1px solid var(--border)", borderRadius: 10, textDecoration: "none", background: "var(--surface-raised)" }}>
-                    {isImg ? <div style={{ width: 36, height: 36, borderRadius: 8, backgroundImage: `url(${url})`, backgroundSize: "cover", backgroundPosition: "center", flexShrink: 0 }} /> : <span style={{ fontSize: "1.2rem" }}>📄</span>}
+                  <a key={i} href={fileUrl} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.5rem 0.6rem", border: "1px solid var(--border)", borderRadius: 10, textDecoration: "none", background: "var(--surface-raised)" }}>
+                    {isImg ? <div style={{ width: 36, height: 36, borderRadius: 8, backgroundImage: `url(${fileUrl})`, backgroundSize: "cover", backgroundPosition: "center", flexShrink: 0 }} /> : <span style={{ fontSize: "1.2rem" }}>📄</span>}
                     <span style={{ fontSize: "0.8rem", color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nm}</span>
                   </a>
                 );
