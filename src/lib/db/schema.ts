@@ -682,6 +682,7 @@ export interface ClientGanttItem {
   // Research traceability
   researchSource?: 'weakness' | 'opportunity' | 'competitor' | 'audience' | 'campaign_concept' | 'content_angle' | 'action_plan' | 'manual_note' | '';
   researchReason?: string; // short explanation why this item was created based on research
+  topicLocked?: boolean; // manual entry: lock the title/topic so AI never rephrases it (even on refresh)
   // Research snapshot metadata (set at generation time)
   researchVersionUsed?: string; // research record ID used for generation
   researchSavedAt?: string; // when the research was last saved (snapshot)

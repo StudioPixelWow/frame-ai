@@ -73,6 +73,8 @@ interface SyncRequest {
   manualTopic?: string;
   manualDate?: string; // ISO date string
   manualContentType?: string; // post / reel / story
+  topicLocked?: boolean; // lock the title to the manual topic (AI won't rephrase it, even on refresh)
+  lockedTitle?: string; // exact title to keep when topicLocked (used on refresh of a locked item)
   // Holiday injection mode
   injectHolidays?: boolean;
 }
@@ -175,6 +177,14 @@ export async function POST(
         undefined, itemType, creative.platform || 'instagram', format as ContentFormat,
         client
       );
+      // Manual entries lock the topic: the user's exact topic is the title and AI
+      // never rephrases it — not now and not on a later "refresh content".
+      const locked = body.topicLocked === true;
+      if (locked) {
+        (ganttItem as any).title = (body.lockedTitle && body.lockedTitle.trim()) || (body.manualTopic || '').trim();
+        (ganttItem as any).topicLocked = true;
+        (ganttItem as any).researchReason = (body.manualTopic || '').trim();
+      }
       const createdItem = await clientGanttItems.createAsync(ganttItem);
 
       return NextResponse.json({

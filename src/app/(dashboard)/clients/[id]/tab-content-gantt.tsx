@@ -883,6 +883,8 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
           manualTopic: manualTopic.trim(),
           manualDate: manualDate || undefined,
           manualContentType: manualContentType,
+          topicLocked: true,
+          lockedTitle: manualTopic.trim(),
         }),
       });
       const data = await res.json();
@@ -2166,6 +2168,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
         ];
         if (platformLabel) _badges.push({ label: platformLabel, bg: `${PLATFORM_COLORS[selectedItem.platform || ''] || '#6b7280'}20`, color: PLATFORM_COLORS[selectedItem.platform || ''] || '#6b7280' });
         if (formatLabel) _badges.push({ label: formatLabel, bg: "var(--accent-muted)", color: "var(--foreground-muted)" });
+        if ((selectedItem as any).topicLocked) _badges.push({ label: "🔒 נושא נעול", bg: "#fef9c3", color: "#a16207" });
         const _actions: any[] = [];
         if (selectedItem.status === "submitted_for_approval") { _actions.push({ label: "אשר", kind: "success", onClick: () => handleChangeStatus(selectedItem.id, "approved") }); _actions.push({ label: "בקש שינויים", kind: "warn", onClick: () => handleChangeStatus(selectedItem.id, "returned_for_changes") }); }
         if (selectedItem.status === "in_progress" || selectedItem.status === "draft" || selectedItem.status === "new_idea" || selectedItem.status === "returned_for_changes") _actions.push({ label: "שלח לאישור לקוח", kind: "primary", onClick: () => handleChangeStatus(selectedItem.id, "submitted_for_approval") });
@@ -2453,6 +2456,9 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                           manualContentType: selectedItem.format === 'reel' ? 'reel' : selectedItem.format === 'story' ? 'story' : 'post',
                           month: selectedItem.month,
                           year: selectedItem.year,
+                          // If the topic is locked, keep the exact title on refresh — AI only refreshes the body.
+                          topicLocked: (selectedItem as any).topicLocked === true,
+                          lockedTitle: selectedItem.title,
                         }),
                       });
                       const data = await res.json();
