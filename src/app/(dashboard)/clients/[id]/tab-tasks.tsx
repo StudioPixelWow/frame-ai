@@ -18,6 +18,7 @@ import { useTasks, useEmployeeTasks } from "@/lib/api/use-entity";
 import { useAuth } from "@/lib/auth/auth-context";
 import Avatar from "@/components/ui/avatar";
 import ContentWorkspaceShell from "@/components/content/content-workspace-shell";
+import { isStaleOverdue } from "@/lib/tasks/stale";
 
 const TYPE_CONFIG: Record<string, { emoji: string; label: string; color: string }> = {
   social: { emoji: "📱", label: "סושיאל", color: "#3b82f6" },
@@ -81,7 +82,7 @@ export default function TabTasks({ client, employees }: Props) {
   const { data: allTasks, create: createTask, update: updateTask } = useTasks();
   const { create: createEmployeeTask } = useEmployeeTasks();
 
-  const clientTasks = useMemo(() => (allTasks || []).filter((t: any) => t.clientId === client.id), [allTasks, client.id]);
+  const clientTasks = useMemo(() => (allTasks || []).filter((t: any) => t.clientId === client.id && !isStaleOverdue(t)), [allTasks, client.id]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const selected = clientTasks.find((t: any) => t.id === selectedId) || null;

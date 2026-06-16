@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { useTasks, useEmployees, useClients, useEmployeeTasks } from "@/lib/api/use-entity";
 import TaskWorkspaceModal from "@/components/tasks/task-workspace-modal";
 import EmployeeTasksWorkspace from "@/components/tasks/employee-tasks-workspace";
+import { isStaleOverdue } from "@/lib/tasks/stale";
 import Avatar from "@/components/ui/avatar";
 import TasksMissionControl from "@/components/tasks/mission-control";
 import { useToast } from "@/components/ui/toast";
@@ -493,6 +494,8 @@ function TasksPageInner() {
   // Filter function with all criteria
   const applyFilters = (tasksToFilter: any[]) => {
     return tasksToFilter.filter((t) => {
+      // Hide tasks whose due date passed by 48h+ (kept in DB, just not shown).
+      if (isStaleOverdue(t)) return false;
       // Search filter
       if (search) {
         const q = search.toLowerCase();
@@ -670,6 +673,7 @@ function TasksPageInner() {
           tasks={tasks || []}
           employeeTasks={employeeTasks || []}
           employees={employees || []}
+          clients={clients || []}
           employeeId={authEmployeeId}
           displayName={displayName || undefined}
           onOpenTask={(t) => openEdit(t as Task)}

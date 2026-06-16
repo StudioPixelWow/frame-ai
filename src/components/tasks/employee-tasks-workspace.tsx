@@ -12,11 +12,13 @@
 
 import { useMemo, useState } from "react";
 import Avatar from "@/components/ui/avatar";
+import { isStaleOverdue } from "@/lib/tasks/stale";
 
 interface Props {
   tasks: any[];
   employeeTasks: any[];
   employees: any[];
+  clients?: any[];
   employeeId: string;
   displayName?: string;
   onOpenTask: (task: any) => void;
@@ -32,7 +34,7 @@ function Spark({ values, color }: { values: number[]; color: string }) {
   return <svg width={w} height={h} style={{ display: "block" }}><polyline points={pts} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
-export default function EmployeeTasksWorkspace({ tasks, employeeTasks, employees, employeeId, displayName, onOpenTask, onComplete }: Props) {
+export default function EmployeeTasksWorkspace({ tasks, employeeTasks, employees, clients = [], employeeId, displayName, onOpenTask, onComplete }: Props) {
   const [focusMode, setFocusMode] = useState(false);
   const [filter, setFilter] = useState<"all" | "today" | "overdue" | "urgent" | "high" | "medium" | "low">("all");
 
@@ -41,6 +43,8 @@ export default function EmployeeTasksWorkspace({ tasks, employeeTasks, employees
   const today = new Date().toISOString().split("T")[0];
   const todayStart = new Date(new Date().toDateString()).getTime();
   const getEmp = (id?: string) => employees.find((e) => e.id === id);
+  // Resolve the client name for a task (clientName, else lookup by clientId).
+  const clientOf = (t: any) => t.clientName || (clients.find((c: any) => c.id === t.clientId) as any)?.name || "כללי";
 
   const myAll = useMemo(() => {
     const dedupKey = (t: any) => (t.ganttItemId ? `g:${t.ganttItemId}` : `k:${String(t.clientName || "").trim()}|${String(t.title || "").trim()}|${t.dueDate || ""}`);
@@ -52,7 +56,8 @@ export default function EmployeeTasksWorkspace({ tasks, employeeTasks, employees
   }, [tasks, employeeTasks, employeeId]);
 
   const isDone = (t: any) => t.status === "completed" || t.status === "approved";
-  const open = myAll.filter((t) => !isDone(t));
+  // Open tasks, EXCLUDING ones whose due date passed by 48h+ (hidden, not deleted).
+  const open = myAll.filter((t) => !isDone(t) && !isStaleOverdue(t));
   const overdue = open.filter((t) => t.dueDate && t.dueDate < today);
   const todayList = open.filter((t) => t.dueDate && t.dueDate === today);
   const urgent = open.filter((t) => t.priority === "urgent" || t.priority === "high");
@@ -135,7 +140,7 @@ export default function EmployeeTasksWorkspace({ tasks, employeeTasks, employees
             <div key={t.id} onClick={() => onOpenTask(t)} style={{ ...card, cursor: "pointer", borderInlineStart: `4px solid ${i === 0 ? "var(--accent)" : "var(--border)"}`, opacity: i === 0 ? 1 : 0.7 }}>
               <div style={{ fontSize: "0.72rem", color: "var(--foreground-subtle)" }}>{labels[i]}</div>
               <div style={{ fontSize: i === 0 ? "1.3rem" : "1rem", fontWeight: 800, color: "var(--foreground)", margin: "4px 0" }}>{t.title}</div>
-              <div style={{ fontSize: "0.78rem", color: "var(--foreground-muted)" }}>{t.clientName || "כללי"} · {situation(t).l} · {fmtEst(t)}</div>
+              <div style={{ fontSize: "0.78rem", color: "var(--foreground-muted)" }}>{clientOf(t)} · {situation(t).l} · {fmtEst(t)}</div>
               {i === 0 && <button onClick={(e) => { e.stopPropagation(); onComplete(t); }} style={{ marginTop: 12, background: "#22c55e", color: "#fff", border: "none", borderRadius: 10, padding: "0.5rem 1.1rem", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer" }}>✓ סמן כהושלם</button>}
             </div>
           ))}
@@ -212,7 +217,7 @@ export default function EmployeeTasksWorkspace({ tasks, employeeTasks, employees
                   return (
                     <tr key={t.id} onClick={() => onOpenTask(t)} style={{ cursor: "pointer", borderTop: "1px solid var(--border)" }}>
                       <td style={{ padding: "0.6rem 0.5rem", fontWeight: 700, color: "var(--foreground)" }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: PRIO_COLOR[t.priority] || "#94a3b8", marginInlineStart: 7 }} />{t.title}</td>
-                      <td style={{ padding: "0.6rem 0.5rem", color: "var(--foreground-muted)" }}>{t.clientName || "כללי"}</td>
+                      <td style={{ padding: "0.6rem 0.5rem", color: "var(--foreground-muted)" }}>{clientOf(t)}</td>
                       <td style={{ padding: "0.6rem 0.5rem", color: sit.c, fontWeight: 700 }}>{dueLabel(t)}</td>
                       <td style={{ padding: "0.6rem 0.5rem" }}><span style={{ fontSize: "0.68rem", fontWeight: 700, color: sit.c, background: sit.c + "1a", borderRadius: 999, padding: "1px 8px" }}>{sit.l}</span></td>
                       <td style={{ padding: "0.6rem 0.5rem" }}>{assigner ? <Avatar src={(assigner as any).avatarUrl} name={assigner.name} size={26} ring={false} /> : <span style={{ fontSize: "0.7rem", color: "var(--foreground-subtle)" }}>—</span>}</td>
@@ -239,7 +244,7 @@ export default function EmployeeTasksWorkspace({ tasks, employeeTasks, employees
               {quickWins.map((t) => (
                 <div key={t.id} onClick={() => onOpenTask(t)} style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 10, padding: "0.55rem 0.7rem", cursor: "pointer" }}>
                   <span style={{ fontSize: "0.66rem", fontWeight: 700, color: "#16a34a", background: "#dcfce7", borderRadius: 8, padding: "0.2rem 0.5rem", flexShrink: 0 }}>{estMin(t)} דק׳</span>
-                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div><div style={{ fontSize: "0.66rem", color: "var(--foreground-muted)" }}>{t.clientName || "כללי"}</div></div>
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div><div style={{ fontSize: "0.66rem", color: "var(--foreground-muted)" }}>{clientOf(t)}</div></div>
                   <button onClick={(e) => { e.stopPropagation(); onComplete(t); }} title="סמן כהושלם" style={{ color: "#16a34a", background: "transparent", border: "none", cursor: "pointer", fontSize: "1rem" }}>✓</button>
                 </div>
               ))}
@@ -262,7 +267,7 @@ export default function EmployeeTasksWorkspace({ tasks, employeeTasks, employees
                     return (
                       <div key={t.id} onClick={() => onOpenTask(t)} style={{ background: "var(--surface-raised)", border: "1px solid var(--border)", borderRadius: 9, padding: "0.5rem 0.6rem", cursor: "pointer" }}>
                         <div style={{ fontSize: "0.74rem", fontWeight: 600, color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div>
-                        <div style={{ fontSize: "0.62rem", color: "var(--foreground-muted)", marginBottom: 4 }}>{t.clientName || "כללי"}</div>
+                        <div style={{ fontSize: "0.62rem", color: "var(--foreground-muted)", marginBottom: 4 }}>{clientOf(t)}</div>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           {ci === 0 ? <span style={{ color: "#22c55e" }}>✓</span> : (
                             <div style={{ flex: 1, height: 4, background: "var(--surface)", borderRadius: 999, overflow: "hidden" }}><div style={{ width: `${prog}%`, height: "100%", background: col.c }} /></div>
@@ -313,7 +318,7 @@ export default function EmployeeTasksWorkspace({ tasks, employeeTasks, employees
                 <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.5rem 0.2rem", borderBottom: "1px solid var(--border)" }}>
                   <span style={{ color: "#22c55e" }}>✓</span>
                   <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: "0.8rem", color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div></div>
-                  <span style={{ fontSize: "0.66rem", color: "var(--foreground-muted)" }}>{t.clientName || "כללי"}</span>
+                  <span style={{ fontSize: "0.66rem", color: "var(--foreground-muted)" }}>{clientOf(t)}</span>
                   <span style={{ fontSize: "0.64rem", color: "var(--foreground-subtle)", minWidth: 50, textAlign: "left" }}>{(t.completedAt || t.updatedAt) ? new Date(t.completedAt || t.updatedAt).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" }) : ""}</span>
                 </div>
               ))}
