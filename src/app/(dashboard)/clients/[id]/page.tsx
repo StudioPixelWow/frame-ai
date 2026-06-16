@@ -7,6 +7,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useClients, useEmployees, useClientGanttItems, useClientTasks, useTasks, useEmployeeTasks, useClientFiles, useSocialPosts, usePayments, useProjectPayments, useCampaigns, useLeads, useMeetings, useApprovals, useActivities } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
+import Avatar from "@/components/ui/avatar";
 import type { Client, Employee } from "@/lib/db/schema";
 import TabOverview from "./tab-overview";
 import TabTasks from "./tab-tasks";
@@ -1283,6 +1284,25 @@ function ClientDetailContent() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Responsible employee — assign / change */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "0.75rem 1rem", marginBottom: "1rem", borderRadius: 12, border: `1px solid ${client.assignedManagerId ? "var(--border)" : "#fed7aa"}`, background: client.assignedManagerId ? "var(--surface-raised)" : "rgba(245,158,11,0.06)" }}>
+        <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--foreground)" }}>👤 עובד אחראי:</span>
+        {assignedManager && (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: "0.85rem", fontWeight: 600, color: "var(--foreground)" }}>
+            <Avatar src={(assignedManager as any).avatarUrl} name={assignedManager.name} size={26} ring={false} />
+            {assignedManager.name}
+          </span>
+        )}
+        <select
+          value={client.assignedManagerId || ""}
+          onChange={async (e) => { try { await updateClient(client.id, { assignedManagerId: e.target.value || null } as any); } catch (err) { console.error('[assign manager]', err); } }}
+          style={{ marginInlineStart: "auto", fontSize: "0.82rem", padding: "0.4rem 0.7rem", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--foreground)", cursor: "pointer", direction: "rtl" }}
+        >
+          <option value="">— ללא עובד אחראי —</option>
+          {(employees || []).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+        </select>
       </div>
 
       {/* Client Alerts */}
