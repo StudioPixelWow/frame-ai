@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import Avatar from "@/components/ui/avatar";
 import ContentWorkspaceShell from "@/components/content/content-workspace-shell";
 import type { Client, Employee, ClientGanttItem } from "@/lib/db/schema";
@@ -514,6 +514,25 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
       }
     }
   }, [editingItemId]);
+
+  // ── Auto-assign every unassigned gantt item to the client's responsible
+  //    employee (runs once per client+manager) so all the client's content
+  //    items/tasks are routed to the אחראי automatically. ──
+  const autoAssignRef = useRef<string>("");
+  useEffect(() => {
+    const mgr = client.assignedManagerId;
+    if (!mgr || !ganttItems || ganttItems.length === 0) return;
+    const key = `${client.id}:${mgr}`;
+    if (autoAssignRef.current === key) return;
+    const unassigned = ganttItems.filter((i: any) => !i.assigneeId);
+    autoAssignRef.current = key; // mark handled (prevents re-runs / loops)
+    if (unassigned.length === 0) return;
+    (async () => {
+      for (const it of unassigned) {
+        try { await updateGanttItem(it.id, { assigneeId: mgr, assignedManagerId: mgr } as any); } catch { /* skip */ }
+      }
+    })();
+  }, [ganttItems, client.id, client.assignedManagerId, updateGanttItem]);
 
   const handleSaveGanttItem = async () => {
     if (!editingItem) return;
