@@ -40,7 +40,10 @@ export default function EmployeeTasksWorkspace({ tasks, employeeTasks, employees
 
   const me = employees.find((e) => e.id === employeeId);
   const meName = me?.name || displayName || "עובד";
-  const today = new Date().toISOString().split("T")[0];
+  // LOCAL today (not UTC) + normalize any dueDate (which may be a full ISO ts) to YYYY-MM-DD.
+  const _now = new Date();
+  const today = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
+  const ymd = (d?: string | null) => (d || "").slice(0, 10);
   const todayStart = new Date(new Date().toDateString()).getTime();
   const getEmp = (id?: string) => employees.find((e) => e.id === id);
   // Resolve the client name for a task (clientName, else lookup by clientId).
@@ -58,8 +61,8 @@ export default function EmployeeTasksWorkspace({ tasks, employeeTasks, employees
   const isDone = (t: any) => t.status === "completed" || t.status === "approved";
   // Open tasks, EXCLUDING ones whose due date passed by 48h+ (hidden, not deleted).
   const open = myAll.filter((t) => !isDone(t) && !isStaleOverdue(t));
-  const overdue = open.filter((t) => t.dueDate && t.dueDate < today);
-  const todayList = open.filter((t) => t.dueDate && t.dueDate === today);
+  const overdue = open.filter((t) => t.dueDate && ymd(t.dueDate) < today);
+  const todayList = open.filter((t) => t.dueDate && ymd(t.dueDate) === today);
   const urgent = open.filter((t) => t.priority === "urgent" || t.priority === "high");
   const completed = myAll.filter(isDone);
   const weekAgo = todayStart - 7 * 864e5;
@@ -68,21 +71,24 @@ export default function EmployeeTasksWorkspace({ tasks, employeeTasks, employees
   const estMin = (t: any) => Number(t.estimatedMinutes) || (t.priority === "urgent" ? 180 : t.priority === "high" ? 120 : t.priority === "low" ? 30 : 60);
   const fmtEst = (t: any) => { const m = estMin(t); return m >= 60 ? `${Math.round(m / 60)} שעות` : `${m} דקות`; };
   const situation = (t: any) => {
-    if (t.dueDate && t.dueDate < today) { const d = Math.round((todayStart - new Date(t.dueDate).getTime()) / 864e5); return { l: `באיחור ${d} ימים`, c: "#ef4444" }; }
-    if (t.dueDate === today) return { l: "דדליין היום", c: "#f59e0b" };
+    if (t.dueDate && ymd(t.dueDate) < today) { const d = Math.round((todayStart - new Date(ymd(t.dueDate)).getTime()) / 864e5); return { l: `באיחור ${d} ימים`, c: "#ef4444" }; }
+    if (ymd(t.dueDate) === today) return { l: "דדליין היום", c: "#f59e0b" };
     if (t.status === "returned") return { l: "הוחזר אליך", c: "#ef4444" };
     if (t.status === "under_review") return { l: "ממתין ממך", c: "#f59e0b" };
     if (t.status === "in_progress") return { l: "בביצוע", c: "#3b82f6" };
     return { l: "פתוח", c: "#64748b" };
   };
-  const dueLabel = (t: any) => { if (!t.dueDate) return "ללא יעד"; const d = new Date(t.dueDate); const isToday = t.dueDate === today; const isPast = t.dueDate < today; return `${isToday ? "היום" : isPast ? "אתמול" : d.toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" })}`; };
+  const dueLabel = (t: any) => { if (!t.dueDate) return "ללא יעד"; const d = new Date(t.dueDate); const isToday = ymd(t.dueDate) === today; const isPast = ymd(t.dueDate) < today; return `${isToday ? "היום" : isPast ? "אתמול" : d.toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" })}`; };
 
-  // Requires-attention list (sorted by urgency) + filter
-  const byUrgency = (a: any, b: any) => { const da = a.dueDate || "9999"; const db = b.dueDate || "9999"; return da < db ? -1 : da > db ? 1 : 0; };
-  const attentionAll = [...open].sort(byUrgency);
+  // Requires-attention list — sort by priority first (urgent → high → …), then by
+  // due state (overdue → today → future), so an URGENT-DUE-TODAY task surfaces at the top.
+  const prioW: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+  const dueState = (t: any) => (!t.dueDate ? 3 : ymd(t.dueDate) < today ? 0 : ymd(t.dueDate) === today ? 1 : 2);
+  const attnScore = (t: any) => (prioW[t.priority] ?? 4) * 10 + dueState(t);
+  const attentionAll = [...open].sort((a, b) => attnScore(a) - attnScore(b));
   const attention = attentionAll.filter((t) => {
-    if (filter === "today") return t.dueDate === today;
-    if (filter === "overdue") return t.dueDate && t.dueDate < today;
+    if (filter === "today") return ymd(t.dueDate) === today;
+    if (filter === "overdue") return t.dueDate && ymd(t.dueDate) < today;
     if (filter === "urgent") return t.priority === "urgent";
     if (filter === "high") return t.priority === "high";
     if (filter === "medium") return t.priority === "medium";
@@ -204,15 +210,15 @@ export default function EmployeeTasksWorkspace({ tasks, employeeTasks, employees
           <div style={{ fontSize: "0.74rem", color: "var(--foreground-muted)", marginTop: 2 }}>המשימות הדחופות והחשובות ביותר שדורשות את תשומת הלב שלך</div>
         </div>
         {attention.length === 0 ? <div style={{ fontSize: "0.85rem", color: "var(--foreground-muted)" }}>אין משימות בקטגוריה זו 🎉</div> : (
-          <div style={{ overflowX: "auto" }}>
+          <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 460 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
-              <thead>
+              <thead style={{ position: "sticky", top: 0, background: "var(--surface-raised)", zIndex: 1 }}>
                 <tr style={{ color: "var(--foreground-muted)", fontSize: "0.68rem", textAlign: "right" }}>
                   {["משימה", "פרויקט", "דדליין", "סטטוס", "הוקצה על ידי", "זמן משוער", "פעולות"].map((h) => <th key={h} style={{ padding: "0.4rem 0.5rem", fontWeight: 600 }}>{h}</th>)}
                 </tr>
               </thead>
               <tbody>
-                {attention.slice(0, 8).map((t) => {
+                {attention.map((t) => {
                   const sit = situation(t); const assigner = getEmp(t.assignedById || t.createdBy);
                   return (
                     <tr key={t.id} onClick={() => onOpenTask(t)} style={{ cursor: "pointer", borderTop: "1px solid var(--border)" }}>
