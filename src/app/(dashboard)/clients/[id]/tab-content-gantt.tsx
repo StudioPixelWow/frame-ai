@@ -235,6 +235,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
   const [newTaskStatus, setNewTaskStatus] = useState("backlog");
 
   // Item edit modal state
+  const [drawerEdit, setDrawerEdit] = useState(false); // inline edit mode inside the content drawer
   const [editTitle, setEditTitle] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editIdea, setEditIdea] = useState("");
@@ -488,6 +489,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
   // Edit item initialization — useEffect keyed on editingItemId
   const editingItem = editingItemId ? ganttItems.find((i) => i.id === editingItemId) : null;
   useEffect(() => {
+    setDrawerEdit(false);
     if (editingItemId) {
       const item = ganttItems.find((i) => i.id === editingItemId);
       if (item) {
@@ -2201,6 +2203,37 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
               </span>
             }
           >
+
+              {/* ── Manual edit toggle + panel (edit content after creation & save) ── */}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+                {!drawerEdit ? (
+                  <button onClick={() => setDrawerEdit(true)} style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--accent)", background: "var(--accent-muted)", border: "1px solid var(--border)", borderRadius: 8, padding: "0.4rem 0.9rem", cursor: "pointer" }}>✏️ ערוך ידנית</button>
+                ) : (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      onClick={async () => { try { await updateGanttItem(selectedItem.id, { title: editTitle, ideaSummary: editIdea, graphicText: editGraphicText, caption: editCaption, visualConcept: editVisualConcept } as any); setDrawerEdit(false); toast("השינויים נשמרו", "success"); } catch { toast("שגיאה בשמירה", "error"); } }}
+                      style={{ fontSize: "0.78rem", fontWeight: 800, color: "#fff", background: "#22c55e", border: "none", borderRadius: 8, padding: "0.4rem 1rem", cursor: "pointer" }}>💾 שמור</button>
+                    <button
+                      onClick={() => { setEditTitle(selectedItem.title); setEditIdea(selectedItem.ideaSummary || ""); setEditGraphicText(selectedItem.graphicText || ""); setEditCaption(selectedItem.caption || ""); setEditVisualConcept(selectedItem.visualConcept || ""); setDrawerEdit(false); }}
+                      style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--foreground-muted)", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, padding: "0.4rem 0.9rem", cursor: "pointer" }}>בטל</button>
+                  </div>
+                )}
+              </div>
+              {drawerEdit && (() => {
+                const lbl: React.CSSProperties = { fontSize: "0.72rem", fontWeight: 700, color: "var(--foreground-muted)", marginBottom: 3, display: "block" };
+                const inp: React.CSSProperties = { width: "100%", border: "1px solid var(--border)", borderRadius: 8, padding: "0.5rem 0.65rem", fontSize: "0.84rem", background: "var(--surface)", color: "var(--foreground)", boxSizing: "border-box", fontFamily: "inherit", direction: "rtl" };
+                const ta: React.CSSProperties = { ...inp, resize: "vertical", lineHeight: 1.6 };
+                return (
+                  <div style={{ border: "1px solid var(--accent)", borderRadius: 12, padding: "1rem", marginBottom: 16, display: "flex", flexDirection: "column", gap: 10, background: "var(--surface)" }}>
+                    <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent)" }}>✏️ עריכה ידנית</div>
+                    <div><label style={lbl}>כותרת</label><input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={inp} /></div>
+                    <div><label style={lbl}>סיכום הרעיון</label><textarea value={editIdea} onChange={(e) => setEditIdea(e.target.value)} rows={2} style={ta} /></div>
+                    <div><label style={lbl}>טקסט לגרפיקה</label><textarea value={editGraphicText} onChange={(e) => setEditGraphicText(e.target.value)} rows={2} style={ta} /></div>
+                    <div><label style={lbl}>קופי לפוסט</label><textarea value={editCaption} onChange={(e) => setEditCaption(e.target.value)} rows={7} style={ta} /></div>
+                    <div><label style={lbl}>קונספט ויזואלי</label><textarea value={editVisualConcept} onChange={(e) => setEditVisualConcept(e.target.value)} rows={3} style={ta} /></div>
+                  </div>
+                );
+              })()}
 
               {/* Research origin — show which idea this came from */}
               {selectedItem.researchReason && (
