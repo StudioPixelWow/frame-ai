@@ -605,13 +605,14 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
     }
   };
 
-  const handleSendToTask = async (ganttItem: ClientGanttItem) => {
+  const handleSendToTask = async (ganttItem: ClientGanttItem, opts?: { silent?: boolean }) => {
+    const silent = !!opts?.silent;
     try {
       // === Duplicate prevention ===
       // Check local state
       if (sentToTaskIds.has(ganttItem.id)) {
         console.warn(`[SendToTask] Duplicate blocked (local): ganttItem ${ganttItem.id}`);
-        toast("משימה כבר נוצרה עבור פריט זה", "warning");
+        if (!silent) toast("משימה כבר נוצרה עבור פריט זה", "warning");
         return;
       }
       // Check DB for existing task with this ganttItemId
@@ -619,7 +620,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
       if (existingTask) {
         console.warn(`[SendToTask] Duplicate blocked (DB): ganttItem ${ganttItem.id} → task ${existingTask.id}`);
         setSentToTaskIds(new Set([...sentToTaskIds, ganttItem.id]));
-        toast("משימה כבר קיימת עבור פריט זה", "warning");
+        if (!silent) toast("משימה כבר קיימת עבור פריט זה", "warning");
         return;
       }
 
@@ -639,7 +640,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
 
       if (!assigneeId) {
         console.warn(`[SendToTask] No assignee found for ganttItem ${ganttItem.id}. Client ${client.id} has no assignedManagerId.`);
-        toast("⚠️ לא נמצא עובד מוקצה — המשימה נוצרה ללא שיוך", "warning");
+        if (!silent) toast("⚠️ לא נמצא עובד מוקצה — המשימה נוצרה ללא שיוך", "warning");
       }
 
       console.log(`[SendToTask] Creating task for ganttItem ${ganttItem.id}:`, {
@@ -707,17 +708,40 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
       }
 
       setSentToTaskIds(new Set([...sentToTaskIds, ganttItem.id]));
-      const successMsg = assigneeId
-        ? `✅ משימה נוצרה ושויכה ל-${assigneeName}`
-        : `✅ משימה נוצרה (ללא שיוך עובד)`;
-      toast(successMsg, "success");
+      if (!silent) {
+        const successMsg = assigneeId
+          ? `✅ משימה נוצרה ושויכה ל-${assigneeName}`
+          : `✅ משימה נוצרה (ללא שיוך עובד)`;
+        toast(successMsg, "success");
+      }
 
       console.log(`[SendToTask] ✅ Task created successfully for ganttItem ${ganttItem.id} → assignee: ${assigneeId || 'NONE'}`);
     } catch (err) {
       console.error('[SendToTask] Error creating task:', err);
-      toast("שגיאה בהעברת הפריט למשימה", "error");
+      if (!silent) toast("שגיאה בהעברת הפריט למשימה", "error");
     }
   };
+
+  // ── Auto-create a task for EVERY gantt item (once), routed to the client's
+  //    responsible employee, so all the client's content appears on their board.
+  //    Deduped via sentToTaskIds + existing employee tasks (no duplicates). ──
+  const autoTaskRef = useRef<string>("");
+  useEffect(() => {
+    const mgr = client.assignedManagerId;
+    if (!mgr || !ganttItems || ganttItems.length === 0) return;
+    const pending = ganttItems.filter((i: any) => !sentToTaskIds.has(i.id) && !employeeTasksAll.find((t: any) => t.ganttItemId === i.id));
+    const key = `${client.id}:${mgr}:${ganttItems.length}`;
+    if (autoTaskRef.current === key) return;
+    autoTaskRef.current = key; // guard against re-entry/loops for this snapshot
+    if (pending.length === 0) return;
+    (async () => {
+      for (const it of pending) {
+        await handleSendToTask(it as any, { silent: true });
+      }
+      toast(`נוצרו ${pending.length} משימות עבור ${pending.length === 1 ? "פריט" : "פריטים"} ושויכו לאחראי`, "success");
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ganttItems, client.id, client.assignedManagerId, sentToTaskIds, employeeTasksAll]);
 
   const handleSendForApproval = async () => {
     if (selectedItemsForApproval.size === 0) return;
