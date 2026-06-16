@@ -78,6 +78,7 @@ export function middleware(req: NextRequest) {
     pathname.startsWith('/favicon') ||
     pathname.includes('.') ||
     pathname.startsWith('/api/data') ||
+    pathname.startsWith('/api/portal') ||
     pathname.startsWith('/api/upload') ||
     pathname.startsWith('/api/accounting') ||
     pathname.startsWith('/api/render') ||
