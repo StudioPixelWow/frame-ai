@@ -2152,7 +2152,8 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
         const typeInfo = ITEM_TYPE_CONFIG[selectedItem.itemType] || ITEM_TYPE_CONFIG.social_post;
         const platformLabel = selectedItem.platform === 'facebook' ? 'Facebook' : selectedItem.platform === 'instagram' ? 'Instagram' : selectedItem.platform === 'tiktok' ? 'TikTok' : selectedItem.platform || '';
         const formatLabel = FORMAT_CONFIG[selectedItem.format || ''] || selectedItem.format || '';
-        const _owner = (allEmployees || []).find((e: any) => e.id === selectedItem.assigneeId);
+        // Owner = the item's assignee, else fall back to the client's responsible employee.
+        const _owner = (allEmployees || []).find((e: any) => e.id === (selectedItem.assigneeId || client.assignedManagerId));
         const _st = selectedItem.status;
         const _stageIdx = _st === "published" ? 4 : (_st === "approved" || _st === "scheduled") ? 3 : _st === "submitted_for_approval" ? 3 : (_st === "in_progress" || _st === "returned_for_changes") ? 2 : _st === "new_idea" ? 0 : 1;
         const _prog = ({ new_idea: 10, draft: 15, in_progress: 50, submitted_for_approval: 75, scheduled: 85, approved: 90, published: 100, returned_for_changes: 40 } as Record<string, number>)[_st] ?? 20;
