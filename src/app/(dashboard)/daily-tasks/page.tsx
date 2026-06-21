@@ -111,6 +111,7 @@ export default function DailyTasksPage() {
   const [generatingClientIds, setGeneratingClientIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [assigningIds, setAssigningIds] = useState<Set<string>>(new Set());
+  const [dateOffset, setDateOffset] = useState(0);
 
   /* ── Date computations ── */
   const todayStr = useMemo(() => {
@@ -122,12 +123,24 @@ export default function DailyTasksPage() {
     return `${y}-${m}-${d}`;
   }, []);
 
-  const todayDisplay = useMemo(() => {
-    const date = new Date(todayStr + "T12:00:00");
+  const selectedDateStr = useMemo(() => {
+    if (dateOffset === 0) return todayStr;
+    const base = new Date(todayStr + "T12:00:00");
+    base.setDate(base.getDate() + dateOffset);
+    const y = base.getFullYear();
+    const m = String(base.getMonth() + 1).padStart(2, "0");
+    const d = String(base.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }, [todayStr, dateOffset]);
+
+  const selectedDisplay = useMemo(() => {
+    const date = new Date(selectedDateStr + "T12:00:00");
     const dayName = DAY_NAMES_HE[date.getDay()];
     const formatted = date.toLocaleDateString("he-IL", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Jerusalem" });
     return `יום ${dayName}, ${formatted}`;
-  }, [todayStr]);
+  }, [selectedDateStr]);
+
+  const isToday = dateOffset === 0;
 
   /* ── Filtered data ── */
   const marketingClients = useMemo(() => {
@@ -136,15 +149,43 @@ export default function DailyTasksPage() {
 
   const todayItemsByClient = useMemo(() => {
     const map = new Map<string, ClientGanttItem[]>();
+    const selDate = new Date(selectedDateStr + "T12:00:00");
+    const selMonth = selDate.getMonth() + 1; // 1-12
+    const selYear = selDate.getFullYear();
+
     for (const item of ganttItems) {
-      if (item.date?.startsWith(todayStr)) {
+      // Skip already published or cancelled items
+      if (item.status === "published" || item.status === "cancelled") continue;
+
+      let include = false;
+
+      // 1. Items whose date matches the selected date exactly
+      if (item.date?.startsWith(selectedDateStr)) {
+        include = true;
+      }
+
+      // 2. Monthly gantt items for the selected date's month/year
+      if (item.ganttType === "monthly" && item.month === selMonth && item.year === selYear) {
+        include = true;
+      }
+
+      // 3. Overdue items from that month (date is before selected date but in same month)
+      if (item.date && !include) {
+        const dateOnly = item.date.split("T")[0];
+        const monthPrefix = `${selYear}-${String(selMonth).padStart(2, "0")}`;
+        if (dateOnly >= `${monthPrefix}-01` && dateOnly <= selectedDateStr) {
+          include = true;
+        }
+      }
+
+      if (include) {
         const arr = map.get(item.clientId) || [];
         arr.push(item);
         map.set(item.clientId, arr);
       }
     }
     return map;
-  }, [ganttItems, todayStr]);
+  }, [ganttItems, selectedDateStr]);
 
   const sortedClients = useMemo(() => {
     const filtered = marketingClients.filter((c: Client) => {
@@ -224,7 +265,7 @@ export default function DailyTasksPage() {
       const res = await fetch("/api/daily-tasks/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId, date: todayStr }),
+        body: JSON.stringify({ clientId, date: selectedDateStr }),
       });
       if (!res.ok) throw new Error("Generation failed");
       await refetchGantt();
@@ -238,7 +279,7 @@ export default function DailyTasksPage() {
         return next;
       });
     }
-  }, [todayStr, refetchGantt, toast]);
+  }, [selectedDateStr, refetchGantt, toast]);
 
   const openEditModal = useCallback((item: ClientGanttItem) => {
     setForm({
@@ -288,9 +329,12 @@ export default function DailyTasksPage() {
     }
     setSaving(true);
     try {
+      const selDate = new Date(selectedDateStr + "T12:00:00");
       await createGanttItem({
         clientId: createModal,
-        date: todayStr,
+        date: selectedDateStr,
+        month: selDate.getMonth() + 1,
+        year: selDate.getFullYear(),
         title: form.title,
         ideaSummary: form.ideaSummary,
         caption: form.caption,
@@ -308,7 +352,7 @@ export default function DailyTasksPage() {
     } finally {
       setSaving(false);
     }
-  }, [createModal, form, todayStr, createGanttItem, toast]);
+  }, [createModal, form, selectedDateStr, createGanttItem, toast]);
 
   const handleAssignEmployee = useCallback(async (taskId: string, employeeId: string | null) => {
     setAssigningIds((prev) => new Set(prev).add(taskId));
@@ -382,16 +426,62 @@ export default function DailyTasksPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
               <h1 className="mod-page-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <span style={{ fontSize: "1.6rem" }}>📋</span>
-                ניהול משימות היום
+                ניהול משימות יומי
               </h1>
-              <p style={{ fontSize: "0.9rem", color: "var(--foreground-muted)", fontWeight: 500 }}>
-                {todayDisplay}
-              </p>
+
+              {/* ── Day navigation ── */}
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <button
+                  onClick={() => setDateOffset((p) => p - 1)}
+                  className="ux-btn"
+                  style={{
+                    padding: "0.25rem 0.6rem", borderRadius: "6px", cursor: "pointer",
+                    border: "1px solid var(--border)", background: "var(--surface)",
+                    color: "var(--foreground)", fontSize: "0.9rem", fontWeight: 600,
+                    transition: "all 150ms ease",
+                  }}
+                  title="יום קודם"
+                >
+                  →
+                </button>
+                <p style={{ fontSize: "0.9rem", color: isToday ? "var(--accent)" : "var(--foreground)", fontWeight: 600, margin: 0, whiteSpace: "nowrap" }}>
+                  {selectedDisplay}
+                  {isToday && " (היום)"}
+                </p>
+                <button
+                  onClick={() => setDateOffset((p) => p + 1)}
+                  className="ux-btn"
+                  style={{
+                    padding: "0.25rem 0.6rem", borderRadius: "6px", cursor: "pointer",
+                    border: "1px solid var(--border)", background: "var(--surface)",
+                    color: "var(--foreground)", fontSize: "0.9rem", fontWeight: 600,
+                    transition: "all 150ms ease",
+                  }}
+                  title="יום הבא"
+                >
+                  ←
+                </button>
+                {!isToday && (
+                  <button
+                    onClick={() => setDateOffset(0)}
+                    className="ux-btn"
+                    style={{
+                      padding: "0.2rem 0.7rem", borderRadius: "9999px", cursor: "pointer",
+                      border: "1.5px solid var(--accent)", background: "rgba(0, 181, 254, 0.1)",
+                      color: "var(--accent)", fontSize: "0.75rem", fontWeight: 600,
+                      transition: "all 150ms ease",
+                    }}
+                  >
+                    חזור להיום
+                  </button>
+                )}
+              </div>
+
               <p style={{ fontSize: "0.8rem", color: "var(--foreground-muted)" }}>
                 <span style={{ fontWeight: 600, color: "var(--accent)" }}>{marketingClients.length}</span>
                 {" "}לקוחות פרסום{" · "}
                 <span style={{ fontWeight: 600, color: "var(--accent)" }}>{totalTasks}</span>
-                {" "}משימות להיום
+                {" "}משימות
               </p>
             </div>
             <button
