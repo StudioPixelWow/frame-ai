@@ -110,6 +110,7 @@ export default function DailyTasksPage() {
   const [regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
   const [generatingClientIds, setGeneratingClientIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [assigningIds, setAssigningIds] = useState<Set<string>>(new Set());
 
   /* ── Date computations ── */
   const todayStr = useMemo(() => {
@@ -308,6 +309,22 @@ export default function DailyTasksPage() {
       setSaving(false);
     }
   }, [createModal, form, todayStr, createGanttItem, toast]);
+
+  const handleAssignEmployee = useCallback(async (taskId: string, employeeId: string | null) => {
+    setAssigningIds((prev) => new Set(prev).add(taskId));
+    try {
+      await updateGanttItem(taskId, { assigneeId: employeeId });
+      toast(employeeId ? "העובד שויך למשימה בהצלחה" : "השיוך הוסר מהמשימה", "success");
+    } catch {
+      toast("שגיאה בשיוך עובד למשימה", "error");
+    } finally {
+      setAssigningIds((prev) => {
+        const next = new Set(prev);
+        next.delete(taskId);
+        return next;
+      });
+    }
+  }, [updateGanttItem, toast]);
 
   const handleRefresh = useCallback(async () => {
     await refetchGantt();
@@ -559,6 +576,45 @@ export default function DailyTasksPage() {
                               }}>
                                 {STATUS_LABELS[task.status]}
                               </span>
+                            )}
+                          </div>
+
+                          {/* Employee assignment */}
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                            <span style={{ fontSize: "0.75rem", color: "var(--foreground-muted)", fontWeight: 500, whiteSpace: "nowrap" }}>
+                              👤 עובד משויך:
+                            </span>
+                            <select
+                              value={task.assigneeId || ""}
+                              disabled={assigningIds.has(task.id)}
+                              onChange={(e) => handleAssignEmployee(task.id, e.target.value || null)}
+                              style={{
+                                flex: 1,
+                                fontSize: "0.75rem",
+                                padding: "0.25rem 0.5rem",
+                                borderRadius: "0.5rem",
+                                border: "1px solid var(--border)",
+                                background: "var(--surface)",
+                                color: task.assigneeId ? "var(--foreground)" : "var(--foreground-muted)",
+                                cursor: assigningIds.has(task.id) ? "not-allowed" : "pointer",
+                                opacity: assigningIds.has(task.id) ? 0.6 : 1,
+                                outline: "none",
+                                direction: "rtl",
+                                transition: "border-color 150ms ease",
+                                maxWidth: "200px",
+                              }}
+                            >
+                              <option value="">ללא שיוך</option>
+                              {employees.map((emp: any) => (
+                                <option key={emp.id} value={emp.id}>{emp.name}</option>
+                              ))}
+                            </select>
+                            {assigningIds.has(task.id) && (
+                              <span style={{
+                                display: "inline-block", width: 14, height: 14,
+                                border: "2px solid var(--accent)", borderTopColor: "transparent",
+                                borderRadius: "50%", animation: "spin 0.8s linear infinite",
+                              }} />
                             )}
                           </div>
 
