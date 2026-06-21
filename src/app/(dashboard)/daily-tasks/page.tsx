@@ -154,8 +154,8 @@ export default function DailyTasksPage() {
     const selYear = selDate.getFullYear();
 
     for (const item of ganttItems) {
-      // Skip already published or cancelled items
-      if (item.status === "published" || item.status === "cancelled") continue;
+      // Skip already published, cancelled, or missed items
+      if (item.status === "published" || item.status === "cancelled" || item.status === "missed") continue;
 
       let include = false;
 
@@ -606,7 +606,7 @@ export default function DailyTasksPage() {
                 </div>
 
                 {/* ── Tasks list ── */}
-                {hasTasks ? (
+                {hasTasks && (
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                     {clientTasks.map((task) => {
                       const isRegenerating = regeneratingIds.has(task.id);
@@ -781,63 +781,65 @@ export default function DailyTasksPage() {
                       );
                     })}
                   </div>
-                ) : (
-                  /* ── Empty state for client ── */
-                  <div style={{
-                    display: "flex", flexDirection: "column", alignItems: "center",
-                    padding: "1.5rem 1rem", gap: "0.75rem",
-                    background: "var(--surface-raised)", borderRadius: "0.75rem",
-                    border: "1px dashed var(--border)",
-                  }}>
+                )}
+
+                {/* ── Always show create buttons ── */}
+                <div style={{
+                  display: "flex", flexDirection: "column", alignItems: "center",
+                  padding: hasTasks ? "0.75rem 1rem" : "1.5rem 1rem", gap: "0.5rem",
+                  background: "var(--surface-raised)", borderRadius: "0.75rem",
+                  border: "1px dashed var(--border)",
+                }}>
+                  {!hasTasks && (
                     <p style={{ fontSize: "0.82rem", color: "var(--foreground-muted)", margin: 0, textAlign: "center" }}>
                       אין משימות מתוכננות להיום
                     </p>
-                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", justifyContent: "center" }}>
-                      <button
-                        className="ux-btn"
-                        onClick={() => handleGenerateForClient(client.id)}
-                        disabled={isGenerating}
-                        style={{
-                          padding: "0.35rem 0.85rem", borderRadius: "0.5rem", fontSize: "0.75rem",
-                          border: "1px solid rgba(0, 181, 254, 0.3)", background: "rgba(0, 181, 254, 0.08)",
-                          color: "var(--accent)", cursor: isGenerating ? "not-allowed" : "pointer",
-                          fontWeight: 600, transition: "all 150ms ease",
-                          display: "flex", alignItems: "center", gap: "0.3rem",
-                          opacity: isGenerating ? 0.6 : 1,
-                        }}
-                      >
-                        {isGenerating ? (
-                          <>
-                            <span style={{
-                              display: "inline-block", width: 12, height: 12,
-                              border: "2px solid var(--accent)", borderTopColor: "transparent",
-                              borderRadius: "50%", animation: "spin 0.8s linear infinite",
-                            }} />
-                            מייצר...
-                          </>
-                        ) : (
-                          <>
-                            <span style={{ fontSize: "0.85rem" }}>✨</span>
-                            צור משימה (AI)
-                          </>
-                        )}
-                      </button>
-                      <button
-                        className="ux-btn"
-                        onClick={() => openCreateModal(client.id)}
-                        style={{
-                          padding: "0.35rem 0.85rem", borderRadius: "0.5rem", fontSize: "0.75rem",
-                          border: "1px solid var(--border)", background: "var(--surface)",
-                          color: "var(--foreground-muted)", cursor: "pointer", fontWeight: 500,
-                          transition: "all 150ms ease", display: "flex", alignItems: "center", gap: "0.3rem",
-                        }}
-                      >
-                        <span style={{ fontSize: "0.85rem" }}>📝</span>
-                        צור משימה ידנית
-                      </button>
-                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", justifyContent: "center" }}>
+                    <button
+                      className="ux-btn"
+                      onClick={() => handleGenerateForClient(client.id)}
+                      disabled={isGenerating}
+                      style={{
+                        padding: "0.35rem 0.85rem", borderRadius: "0.5rem", fontSize: "0.75rem",
+                        border: "1px solid rgba(0, 181, 254, 0.3)", background: "rgba(0, 181, 254, 0.08)",
+                        color: "var(--accent)", cursor: isGenerating ? "not-allowed" : "pointer",
+                        fontWeight: 600, transition: "all 150ms ease",
+                        display: "flex", alignItems: "center", gap: "0.3rem",
+                        opacity: isGenerating ? 0.6 : 1,
+                      }}
+                    >
+                      {isGenerating ? (
+                        <>
+                          <span style={{
+                            display: "inline-block", width: 12, height: 12,
+                            border: "2px solid var(--accent)", borderTopColor: "transparent",
+                            borderRadius: "50%", animation: "spin 0.8s linear infinite",
+                          }} />
+                          מייצר...
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ fontSize: "0.85rem" }}>✨</span>
+                          הוסף משימה (AI)
+                        </>
+                      )}
+                    </button>
+                    <button
+                      className="ux-btn"
+                      onClick={() => openCreateModal(client.id)}
+                      style={{
+                        padding: "0.35rem 0.85rem", borderRadius: "0.5rem", fontSize: "0.75rem",
+                        border: "1px solid var(--border)", background: "var(--surface)",
+                        color: "var(--foreground-muted)", cursor: "pointer", fontWeight: 500,
+                        transition: "all 150ms ease", display: "flex", alignItems: "center", gap: "0.3rem",
+                      }}
+                    >
+                      <span style={{ fontSize: "0.85rem" }}>📝</span>
+                      הוסף משימה ידנית
+                    </button>
                   </div>
-                )}
+                </div>
               </div>
             );
           })}
