@@ -200,6 +200,7 @@ const Icons = {
 // Quick-access items pinned at the top (always visible, ungrouped).
 const pinnedItems: NavItem[] = [
   { href: "/dashboard", label: "דשבורד", id: "nav-dashboard", icon: Icons.Dashboard, allowedRoles: ['admin', 'employee'] },
+  { href: "/daily-tasks", label: "משימות היום", id: "nav-daily-tasks", icon: Icons.Calendar, allowedRoles: ['admin'] },
   { href: "/clients", label: "לקוחות", id: "nav-clients", icon: Icons.Clients, allowedRoles: ['admin'] },
   { href: "/tasks", label: "משימות", id: "nav-tasks", icon: Icons.Tasks, allowedRoles: ['admin', 'employee'] },
   { href: "/business-calendar", label: "יומן", id: "nav-biz-calendar", icon: Icons.Calendar, allowedRoles: ['admin'] },
