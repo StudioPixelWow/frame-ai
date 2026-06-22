@@ -1,7 +1,7 @@
 /**
  * GET /api/creative-studio/migrate  (also accepts POST for backward compat)
  *
- * Creates all 6 PIXEL Creative Studio JSONB tables in Supabase.
+ * Creates all 14 PIXEL Creative Studio JSONB tables in Supabase.
  * Safe to run multiple times — all DDL uses IF NOT EXISTS.
  *
  * If exec_sql RPC is not available, returns the full SQL for manual
@@ -107,6 +107,144 @@ const DDL_BLOCKS: Array<{ name: string; sql: string }> = [
         ON public.app_brand_analysis_jobs ((data->>'clientId'));
       CREATE INDEX IF NOT EXISTS idx_app_brand_analysis_jobs_status
         ON public.app_brand_analysis_jobs ((data->>'status'));
+    `,
+  },
+  {
+    name: 'app_creative_concepts',
+    sql: `
+      CREATE TABLE IF NOT EXISTS public.app_creative_concepts (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        data        JSONB NOT NULL DEFAULT '{}',
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_creative_concepts_entity
+        ON public.app_creative_concepts ((data->>'entityId'));
+      CREATE INDEX IF NOT EXISTS idx_app_creative_concepts_type
+        ON public.app_creative_concepts ((data->>'conceptType'));
+      CREATE INDEX IF NOT EXISTS idx_app_creative_concepts_approved
+        ON public.app_creative_concepts ((data->>'isApproved'));
+    `,
+  },
+  {
+    name: 'app_design_sets',
+    sql: `
+      CREATE TABLE IF NOT EXISTS public.app_design_sets (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        data        JSONB NOT NULL DEFAULT '{}',
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_design_sets_client
+        ON public.app_design_sets ((data->>'clientId'));
+      CREATE INDEX IF NOT EXISTS idx_app_design_sets_entity
+        ON public.app_design_sets ((data->>'entityId'));
+      CREATE INDEX IF NOT EXISTS idx_app_design_sets_concept
+        ON public.app_design_sets ((data->>'conceptId'));
+      CREATE INDEX IF NOT EXISTS idx_app_design_sets_status
+        ON public.app_design_sets ((data->>'status'));
+    `,
+  },
+  {
+    name: 'app_design_variants',
+    sql: `
+      CREATE TABLE IF NOT EXISTS public.app_design_variants (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        data        JSONB NOT NULL DEFAULT '{}',
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_design_variants_set
+        ON public.app_design_variants ((data->>'designSetId'));
+      CREATE INDEX IF NOT EXISTS idx_app_design_variants_approved
+        ON public.app_design_variants ((data->>'isApproved'));
+    `,
+  },
+  {
+    name: 'app_client_visual_assets',
+    sql: `
+      CREATE TABLE IF NOT EXISTS public.app_client_visual_assets (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        data        JSONB NOT NULL DEFAULT '{}',
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_client_visual_assets_client
+        ON public.app_client_visual_assets ((data->>'clientId'));
+      CREATE INDEX IF NOT EXISTS idx_app_client_visual_assets_concept
+        ON public.app_client_visual_assets ((data->>'conceptId'));
+      CREATE INDEX IF NOT EXISTS idx_app_client_visual_assets_design_set
+        ON public.app_client_visual_assets ((data->>'designSetId'));
+      CREATE INDEX IF NOT EXISTS idx_app_client_visual_assets_status
+        ON public.app_client_visual_assets ((data->>'status'));
+      CREATE INDEX IF NOT EXISTS idx_app_client_visual_assets_type
+        ON public.app_client_visual_assets ((data->>'assetType'));
+    `,
+  },
+  {
+    name: 'app_client_visual_generation_jobs',
+    sql: `
+      CREATE TABLE IF NOT EXISTS public.app_client_visual_generation_jobs (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        data        JSONB NOT NULL DEFAULT '{}',
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_client_visual_gen_jobs_client
+        ON public.app_client_visual_generation_jobs ((data->>'clientId'));
+      CREATE INDEX IF NOT EXISTS idx_app_client_visual_gen_jobs_status
+        ON public.app_client_visual_generation_jobs ((data->>'status'));
+    `,
+  },
+  {
+    name: 'app_campaign_factory_campaigns',
+    sql: `
+      CREATE TABLE IF NOT EXISTS public.app_campaign_factory_campaigns (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        data        JSONB NOT NULL DEFAULT '{}',
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_cf_campaigns_client
+        ON public.app_campaign_factory_campaigns ((data->>'clientId'));
+      CREATE INDEX IF NOT EXISTS idx_app_cf_campaigns_status
+        ON public.app_campaign_factory_campaigns ((data->>'status'));
+      CREATE INDEX IF NOT EXISTS idx_app_cf_campaigns_type
+        ON public.app_campaign_factory_campaigns ((data->>'campaignType'));
+    `,
+  },
+  {
+    name: 'app_campaign_factory_assets',
+    sql: `
+      CREATE TABLE IF NOT EXISTS public.app_campaign_factory_assets (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        data        JSONB NOT NULL DEFAULT '{}',
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_cf_assets_campaign
+        ON public.app_campaign_factory_assets ((data->>'campaignId'));
+      CREATE INDEX IF NOT EXISTS idx_app_cf_assets_client
+        ON public.app_campaign_factory_assets ((data->>'clientId'));
+      CREATE INDEX IF NOT EXISTS idx_app_cf_assets_status
+        ON public.app_campaign_factory_assets ((data->>'status'));
+      CREATE INDEX IF NOT EXISTS idx_app_cf_assets_format
+        ON public.app_campaign_factory_assets ((data->>'format'));
+    `,
+  },
+  {
+    name: 'app_campaign_copy_sets',
+    sql: `
+      CREATE TABLE IF NOT EXISTS public.app_campaign_copy_sets (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        data        JSONB NOT NULL DEFAULT '{}',
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_copy_sets_campaign
+        ON public.app_campaign_copy_sets ((data->>'campaignId'));
+      CREATE INDEX IF NOT EXISTS idx_app_copy_sets_client
+        ON public.app_campaign_copy_sets ((data->>'clientId'));
     `,
   },
 ];

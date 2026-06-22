@@ -2931,6 +2931,11 @@ export type BrandAssetType =
   | 'competitor'
   | 'photo'
   | 'campaign_visual'
+  | 'property_photo'
+  | 'floor_plan'
+  | 'project_render'
+  | 'neighborhood_reference'
+  | 'brochure'
   | 'other';
 
 export type BrandAssetCategory =
@@ -2974,40 +2979,125 @@ export interface BrandAsset {
 export interface BrandStyleProfile {
   id: string;
   clientId: string;
+  // ZONO entity model — future: agent_id, property_id, project_id, office_id
+  entityType?: string;             // 'client' | 'agent' | 'property' | 'project' | 'office'
+  entityId?: string;
+  entityName?: string;
   profileStatus: string;           // 'draft' | 'active' | 'locked'
-  brandSummary: string;
+  // ── Core Brand DNA ──
+  brandSummary: string;            // dna_summary
   visualPersonality: string;
   copywritingTone: string;
+  realEstatePositioning: string;   // NEW — positioning in RE market
+  // ── Color Palettes ──
   primaryColors: any[];            // jsonb
   secondaryColors: any[];
   accentColors: any[];
   forbiddenColors: any[];
+  // ── Typography ──
   preferredTypography: Record<string, any>;
   forbiddenTypography: Record<string, any>;
+  // ── Layouts ──
   preferredLayouts: any[];
   rejectedLayouts: any[];
+  // ── Visual / Image / Icon Styles ──
   preferredVisualStyles: any[];
   rejectedVisualStyles: any[];
   preferredImageStyles: any[];
   rejectedImageStyles: any[];
   preferredIconStyles: any[];
   rejectedIconStyles: any[];
+  // ── Campaign Angles ──
+  preferredCampaignAngles: any[];
+  rejectedCampaignAngles: any[];
+  // ── CTA Styles ──
+  preferredCtaStyles: any[];
+  whatsappCtaStyle: Record<string, any>;
+  // ── Target Audiences ──
+  targetAudiences: any[];
+  // ── Real Estate Marketing Styles ──
+  propertyMarketingStyle: Record<string, any>;
+  projectMarketingStyle: Record<string, any>;
+  agentMarketingStyle: Record<string, any>;
+  sellerRecruitmentStyle: Record<string, any>;
+  buyerRecruitmentStyle: Record<string, any>;
+  neighborhoodStorytellingStyle: Record<string, any>;
+  // ── Rules & Patterns ──
   brandRules: any[];
   avoidRules: any[];
-  luxuryScore: number;             // 0-100
+  approvedPatterns: any[];
+  rejectedPatterns: any[];
+  // ── Scores (0-100) ──
+  luxuryScore: number;
   minimalismScore: number;
   modernScore: number;
   salesAggressivenessScore: number;
   visualDensityScore: number;
   aiGeneratedScore: number;
-  approvedPatterns: any[];
-  rejectedPatterns: any[];
-  clientNotes: string;
-  talNotes: string;
+  urgencyScore: number;
+  investmentFocusScore: number;
+  lifestyleFocusScore: number;
+  sellerFocusScore: number;
+  buyerFocusScore: number;
+  // ── Confidence & Meta ──
   aiConfidenceScore: number;       // 0-100
   lastAnalyzedAt: string | null;
+  analysisProvider?: string;       // 'gemini' | 'openai' | 'mock'
+  // ── Manual Notes (preserved across re-analysis) ──
+  clientNotes: string;
+  talNotes: string;
+  agentNotes?: string;
+  officeNotes?: string;
+  sellerNotes?: string;
+  zonoNotes?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Normalized output returned by all Marketing DNA AI providers */
+export interface MarketingDNAResult {
+  dna_summary: string;
+  visual_personality: string;
+  copywriting_tone: string;
+  real_estate_positioning: string;
+  primary_colors: string[];
+  secondary_colors: string[];
+  accent_colors: string[];
+  forbidden_colors: string[];
+  preferred_typography: Record<string, any>;
+  forbidden_typography: Record<string, any>;
+  preferred_layouts: string[];
+  rejected_layouts: string[];
+  preferred_visual_styles: string[];
+  rejected_visual_styles: string[];
+  preferred_image_styles: string[];
+  rejected_image_styles: string[];
+  preferred_campaign_angles: string[];
+  rejected_campaign_angles: string[];
+  preferred_cta_styles: string[];
+  whatsapp_cta_style: Record<string, any>;
+  target_audiences: any[];
+  property_marketing_style: Record<string, any>;
+  project_marketing_style: Record<string, any>;
+  agent_marketing_style: Record<string, any>;
+  seller_recruitment_style: Record<string, any>;
+  buyer_recruitment_style: Record<string, any>;
+  neighborhood_storytelling_style: Record<string, any>;
+  brand_rules: string[];
+  avoid_rules: string[];
+  approved_patterns: string[];
+  rejected_patterns: string[];
+  luxury_score: number;
+  urgency_score: number;
+  modern_score: number;
+  sales_aggressiveness_score: number;
+  investment_focus_score: number;
+  lifestyle_focus_score: number;
+  seller_focus_score: number;
+  buyer_focus_score: number;
+  visual_density_score: number;
+  ai_generated_score: number;
+  ai_confidence_score: number;
 }
 
 export type CreativeFeedbackType =
@@ -3085,12 +3175,499 @@ export interface CreativeOutput {
 export interface BrandAnalysisJob {
   id: string;
   clientId: string;
+  entityType?: string;            // 'client' | 'agent' | 'property' | 'project' | 'office'
+  entityId?: string;
   status: string;                 // 'pending' | 'processing' | 'completed' | 'failed'
-  jobType: string;                // 'brand_dna_analysis' | 'single_asset_analysis' | 'comparative_analysis'
+  jobType: string;                // 'marketing_dna_analysis' | 'brand_dna_analysis' | 'single_asset_analysis' | 'comparative_analysis'
+  provider?: string;              // 'gemini' | 'openai' | 'mock'
+  assetCount?: number;
   inputAssetIds: string[];
   resultProfileId: string | null;
   errorMessage: string;
   startedAt: string | null;
   finishedAt: string | null;
+  createdAt: string;
+}
+
+/* ── ZONO Creative Concepts (Phase 3) ─────────────────────────────── */
+
+export type ConceptType =
+  | 'luxury_lifestyle'
+  | 'investment_opportunity'
+  | 'neighborhood_story'
+  | 'dream_home'
+  | 'family_living'
+  | 'exclusive_listing'
+  | 'premium_penthouse'
+  | 'garden_apartment'
+  | 'first_home'
+  | 'upgrade_your_life'
+  | 'seller_recruitment'
+  | 'buyer_recruitment'
+  | 'project_launch'
+  | 'pre_sale'
+  | 'authority_agent'
+  | 'neighborhood_expert'
+  | 'developer_prestige'
+  | 'community_living'
+  | 'location_advantage'
+  | 'urban_lifestyle'
+  | 'beach_lifestyle'
+  | 'high_roi'
+  | 'future_appreciation';
+
+export interface CreativeConcept {
+  id: string;
+  entityType: string;
+  entityId: string;
+  marketingDnaProfileId: string | null;
+  title: string;
+  conceptType: ConceptType;
+  description: string;
+  marketingAngle: string;
+  emotionalTrigger: string;
+  visualHook: string;
+  copyHook: string;
+  recommendedLayout: string;
+  recommendedCtaStyle: string;
+  recommendedAudience: string;
+  confidenceScore: number;
+  isFavorite: boolean;
+  isApproved: boolean;
+  isRejected: boolean;
+  generationMetadata: Record<string, any>;
+  reasoning: string;
+  createdAt: string;
+  updatedAt: string;
+  // Creative Director fields
+  internalPrompt?: string;
+  creativeStrategy?: string;
+  scrollStopReason?: string;
+  industryAnchor?: string;
+  typographyRecommendation?: string;
+  creativeDirectorMetadata?: Record<string, any>;
+  scrollStopScore?: number;
+  creativeDirectorScore?: number;
+  antiAiScore?: number;
+  rtlReadabilityScore?: number;
+  contrastScore?: number;
+  brandDnaMatchScore?: number;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Phase 4: PIXEL Design Generation Engine
+// ═══════════════════════════════════════════════════════════════════
+
+export type DesignOutputType =
+  | 'feed_post'       // 1080x1350
+  | 'story'           // 1080x1920
+  | 'carousel'        // 1080x1350 x N
+  | 'banner'          // 1200x628
+  | 'website_hero'    // 1920x600
+  | 'google_display'  // 300x250
+  | 'reel_cover';     // 1080x1920
+
+export type DesignLayoutType =
+  | 'editorial' | 'luxury' | 'minimal' | 'sales' | 'corporate'
+  | 'real_estate_premium' | 'magazine' | 'modern_tech'
+  | 'split_layout' | 'hero_image' | 'offer_layout';
+
+export type DesignElementType =
+  | 'image' | 'headline' | 'subtitle' | 'body_text'
+  | 'cta_button' | 'logo' | 'badge' | 'divider'
+  | 'feature_list' | 'contact_block' | 'offer_block'
+  | 'statistic_block' | 'testimonial_block' | 'property_highlights'
+  | 'agent_block' | 'map_block' | 'project_details'
+  | 'shape' | 'overlay';
+
+export type DesignSetStatus = 'draft' | 'generating' | 'ready' | 'approved' | 'rejected' | 'archived';
+
+export interface DesignElementStyle {
+  backgroundColor?: string;
+  color?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: string;
+  textAlign?: 'right' | 'center' | 'left';
+  borderRadius?: number;
+  padding?: number;
+  border?: string;
+  shadow?: string;
+  opacity?: number;
+  gradient?: string;
+}
+
+export interface DesignElement {
+  id: string;
+  type: DesignElementType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  zIndex: number;
+  visible: boolean;
+  rotation: number;
+  props: Record<string, any>;
+  style: DesignElementStyle;
+}
+
+export interface DesignCanvas {
+  width: number;
+  height: number;
+  backgroundColor: string;
+  backgroundImage?: string;
+  backgroundGradient?: string;
+  backgroundOverlay?: string;
+}
+
+export interface DesignJSON {
+  version: string;
+  canvas: DesignCanvas;
+  elements: DesignElement[];
+  metadata: {
+    layoutType: DesignLayoutType;
+    designType: DesignOutputType;
+    brandDNAApplied: boolean;
+    generatedBy: string;
+    conceptId?: string;
+    entityType?: string;
+    entityId?: string;
+  };
+}
+
+export interface DesignScore {
+  brandMatch: number;
+  readability: number;
+  mobileReadability: number;
+  visualHierarchy: number;
+  conversionPotential: number;
+  overall: number;
+}
+
+export interface DesignSet {
+  id: string;
+  clientId: string;
+  entityType: string;
+  entityId: string;
+  brandProfileId: string | null;
+  conceptId: string | null;
+  conceptTitle: string;
+  title: string;
+  description: string;
+  status: DesignSetStatus;
+  designType: DesignOutputType;
+  layoutType: DesignLayoutType;
+  thumbnailUrl: string | null;
+  totalVariants: number;
+  createdBy: string;
+  generationMetadata: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+  // Creative Director fields
+  internalPrompt?: string;
+  creativeStrategy?: string;
+  visualHook?: string;
+  scrollStopReason?: string;
+  industryAnchor?: string;
+  layoutRecommendation?: string;
+  typographyRecommendation?: string;
+  creativeDirectorMetadata?: Record<string, any>;
+  scrollStopScore?: number;
+  creativeDirectorScore?: number;
+  antiAiScore?: number;
+  rtlReadabilityScore?: number;
+  contrastScore?: number;
+  brandDnaMatchScore?: number;
+}
+
+export interface DesignVariant {
+  id: string;
+  designSetId: string;
+  variantName: string;
+  variantIndex: number;
+  designJson: DesignJSON;
+  previewHtml: string;
+  width: number;
+  height: number;
+  layoutType: DesignLayoutType;
+  scores: DesignScore;
+  isFavorite: boolean;
+  isApproved: boolean;
+  isRejected: boolean;
+  approvalNotes: string;
+  createdAt: string;
+  updatedAt: string;
+  // Creative Director fields
+  internalPrompt?: string;
+  creativeStrategy?: string;
+  creativeDirectorMetadata?: Record<string, any>;
+  creativeDirectorScore?: number;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Phase 5: PIXEL Visual Generation Engine
+// ═══════════════════════════════════════════════════════════════════
+
+export type VisualAssetType =
+  | 'hero_image'
+  | 'advertising_visual'
+  | 'background'
+  | 'project_render'
+  | 'lifestyle_imagery'
+  | 'scene_extension'
+  | 'image_variation'
+  | 'image_improvement'
+  | 'image_upscale'
+  | 'image_cleanup'
+  | 'object_replacement'
+  | 'brand_visual';
+
+export type VisualProvider = 'gemini' | 'openai' | 'mock';
+
+export type VisualJobStatus = 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
+
+export type VisualAssetStatus = 'generated' | 'approved' | 'rejected' | 'favorite' | 'injected';
+
+export interface VisualDNA {
+  photographyStyle: string;
+  lightingStyle: string;
+  compositionStyle: string;
+  realismLevel: number;      // 0-100
+  luxuryLevel: number;       // 0-100
+  visualDensity: number;     // 0-100
+  backgroundStyle: string;
+  preferredEnvironments: string[];
+  preferredMaterials: string[];
+  preferredCameraAngles: string[];
+  colorPalette: string[];
+  moodKeywords: string[];
+  avoidKeywords: string[];
+  industryContext: string;
+}
+
+export interface VisualScore {
+  brandMatch: number;
+  realismScore: number;
+  compositionScore: number;
+  readabilityCompatibility: number;
+  luxuryScore: number;
+  conversionPotential: number;
+  overall: number;
+}
+
+export interface VisualLearningWeights {
+  approvedStyles: string[];
+  rejectedStyles: string[];
+  favoritePatterns: string[];
+  approvalRate: number;
+  totalGenerated: number;
+  totalApproved: number;
+  totalRejected: number;
+  stylePreferences: Record<string, number>;
+  lastUpdated: string;
+}
+
+export interface ClientVisualAsset {
+  id: string;
+  clientId: string;
+  brandProfileId: string | null;
+  conceptId: string | null;
+  designSetId: string | null;
+  assetType: VisualAssetType;
+  title: string;
+  generationReason: string;
+  provider: VisualProvider;
+  promptVersion: string;
+  visualDnaSnapshot: VisualDNA | null;
+  imageUrl: string;
+  thumbnailUrl: string | null;
+  metadata: Record<string, any>;
+  scores: VisualScore | null;
+  status: VisualAssetStatus;
+  isApproved: boolean;
+  isRejected: boolean;
+  isFavorite: boolean;
+  variationOf: string | null;
+  createdAt: string;
+  updatedAt: string;
+  // Creative Director fields
+  internalPrompt?: string;
+  creativeStrategy?: string;
+  visualHook?: string;
+  scrollStopReason?: string;
+  industryAnchor?: string;
+  creativeDirectorMetadata?: Record<string, any>;
+  scrollStopScore?: number;
+  creativeDirectorScore?: number;
+  antiAiScore?: number;
+}
+
+export interface ClientVisualGenerationJob {
+  id: string;
+  clientId: string;
+  provider: VisualProvider;
+  status: VisualJobStatus;
+  assetType: VisualAssetType;
+  inputData: {
+    conceptId?: string;
+    designSetId?: string;
+    brandProfileId?: string;
+    visualDna?: VisualDNA;
+    variationOf?: string;
+    variationDirection?: string;
+    entityType?: string;
+    entityId?: string;
+    entityName?: string;
+  };
+  resultCount: number;
+  generatedAssetIds: string[];
+  errorMessage: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Phase 6: PIXEL Campaign Factory
+// ═══════════════════════════════════════════════════════════════════
+
+export type CampaignFactoryType =
+  | 'lead_generation'
+  | 'brand_awareness'
+  | 'launch_campaign'
+  | 'sales_campaign'
+  | 'project_marketing'
+  | 'real_estate_project_launch'
+  | 'property_marketing'
+  | 'holiday_campaign'
+  | 'recruitment_campaign'
+  | 'event_campaign'
+  | 'website_traffic'
+  | 'remarketing'
+  | 'custom';
+
+export type CampaignFactoryStatus =
+  | 'draft'
+  | 'generating'
+  | 'ready'
+  | 'in_review'
+  | 'approved'
+  | 'published'
+  | 'archived';
+
+export type CampaignAssetFormat =
+  | 'feed_post'
+  | 'story'
+  | 'carousel'
+  | 'reel_cover'
+  | 'banner'
+  | 'website_hero'
+  | 'email_header'
+  | 'google_display'
+  | 'property_story'
+  | 'property_carousel'
+  | 'seller_recruitment'
+  | 'buyer_recruitment'
+  | 'project_awareness'
+  | 'neighborhood_content'
+  | 'developer_asset';
+
+export type CampaignAssetStatus = 'pending' | 'generated' | 'approved' | 'rejected' | 'published';
+
+export interface CampaignDNA {
+  urgency: number;           // 0-100
+  emotionalAngle: string;
+  ctaLevel: number;          // 0-100
+  visualIntensity: number;   // 0-100
+  salesAggressiveness: number; // 0-100
+  contentHierarchy: string[];
+  campaignIdentity: string;
+  toneOfVoice: string;
+  colorAccent: string;
+  moodKeywords: string[];
+}
+
+export interface CampaignFactoryCampaign {
+  id: string;
+  clientId: string;
+  title: string;
+  objective: string;
+  campaignType: CampaignFactoryType;
+  industry: string;
+  targetAudience: string;
+  offer: string;
+  mainMessage: string;
+  status: CampaignFactoryStatus;
+  brandProfileId: string | null;
+  campaignDna: CampaignDNA | null;
+  totalAssets: number;
+  approvedAssets: number;
+  completionPercent: number;
+  generationMetadata: Record<string, any>;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  // Creative Director fields
+  internalPrompt?: string;
+  creativeStrategy?: string;
+  visualHook?: string;
+  scrollStopReason?: string;
+  industryAnchor?: string;
+  layoutRecommendation?: string;
+  typographyRecommendation?: string;
+  creativeDirectorMetadata?: Record<string, any>;
+  scrollStopScore?: number;
+  creativeDirectorScore?: number;
+}
+
+export interface CampaignFactoryAsset {
+  id: string;
+  campaignId: string;
+  clientId: string;
+  format: CampaignAssetFormat;
+  title: string;
+  purpose: string;
+  intelligenceNote: string;
+  designSetId: string | null;
+  visualAssetId: string | null;
+  imageUrl: string | null;
+  thumbnailUrl: string | null;
+  copy: {
+    headline: string;
+    subHeadline: string;
+    bodyText: string;
+    cta: string;
+    caption: string;
+    hashtags: string[];
+  };
+  dimensions: { width: number; height: number };
+  status: CampaignAssetStatus;
+  isApproved: boolean;
+  isRejected: boolean;
+  sortOrder: number;
+  metadata: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+  // Creative Director fields
+  internalPrompt?: string;
+  creativeStrategy?: string;
+  creativeDirectorMetadata?: Record<string, any>;
+  creativeDirectorScore?: number;
+}
+
+export interface CampaignCopySet {
+  id: string;
+  campaignId: string;
+  clientId: string;
+  headlines: string[];
+  subHeadlines: string[];
+  ctaVariations: string[];
+  offerVariations: string[];
+  socialCaptions: string[];
+  storyCaptions: string[];
+  carouselSlidesCopy: string[];
+  bannerCopy: string[];
+  websiteHeroCopy: string[];
+  emailSubjectIdeas: string[];
   createdAt: string;
 }

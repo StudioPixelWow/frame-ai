@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "plugins": [{"name": "next"}],
+    "paths": {"@/*": ["./src/*"]},
+    "baseUrl": "."
+  },
+  "include": [
+    "src/app/(dashboard)/clients/[id]/tab-creative-studio.tsx",
+    "src/lib/services/zono-creative/conceptPrompts.ts",
+    "src/lib/services/zono-creative/realEstateCreativeConceptEngine.ts",
+    "src/app/api/creative-studio/concepts/generate/route.ts",
+    "src/app/api/data/creative-concepts/route.ts",
+    "src/app/api/data/creative-concepts/[id]/route.ts",
+    "next-env.d.ts"
+  ],
+  "exclude": ["node_modules"]
+}

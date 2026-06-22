@@ -53,6 +53,14 @@ import type {
   CreativeBrief,
   CreativeOutput,
   BrandAnalysisJob,
+  CreativeConcept,
+  DesignSet,
+  DesignVariant,
+  ClientVisualAsset,
+  ClientVisualGenerationJob,
+  CampaignFactoryCampaign,
+  CampaignFactoryAsset,
+  CampaignCopySet,
 } from '@/lib/db/schema';
 
 // Core entities — relaxed polling (3 min) + no refetch on focus to avoid jankiness
@@ -109,3 +117,13 @@ export const useCreativeFeedback = () => useData<CreativeFeedback>('creative-fee
 export const useCreativeBriefs = () => useData<CreativeBrief>('creative-briefs', { refetchOnFocus: false });
 export const useCreativeOutputs = () => useData<CreativeOutput>('creative-outputs', { refetchOnFocus: false });
 export const useBrandAnalysisJobs = () => useData<BrandAnalysisJob>('brand-analysis-jobs', { refetchOnFocus: false });
+export const useCreativeConcepts = () => useData<CreativeConcept>('creative-concepts', { refetchOnFocus: false });
+export const useDesignSets = () => useData<DesignSet>('design-sets', { refetchOnFocus: false });
+export const useDesignVariants = () => useData<DesignVariant>('design-variants', { refetchOnFocus: false });
+export const useClientVisualAssets = () => useData<ClientVisualAsset>('client-visual-assets', { refetchOnFocus: false });
+export const useClientVisualGenerationJobs = () => useData<ClientVisualGenerationJob>('client-visual-generation-jobs', { refetchOnFocus: false });
+
+// PIXEL Campaign Factory
+export const useCampaignFactoryCampaigns = () => useData<CampaignFactoryCampaign>('campaign-factory-campaigns', { refetchOnFocus: false });
+export const useCampaignFactoryAssets = () => useData<CampaignFactoryAsset>('campaign-factory-assets', { refetchOnFocus: false });
+export const useCampaignCopySets = () => useData<CampaignCopySet>('campaign-copy-sets', { refetchOnFocus: false });

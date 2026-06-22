@@ -83,6 +83,14 @@ import type {
   CreativeBrief,
   CreativeOutput,
   BrandAnalysisJob,
+  CreativeConcept,
+  DesignSet,
+  DesignVariant,
+  ClientVisualAsset,
+  ClientVisualGenerationJob,
+  CampaignFactoryCampaign,
+  CampaignFactoryAsset,
+  CampaignCopySet,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -206,3 +214,13 @@ export const creativeFeedback = new SupabaseCrud<CreativeFeedback>('app_creative
 export const creativeBriefs = new SupabaseCrud<CreativeBrief>('app_creative_briefs', 'cbr');
 export const creativeOutputs = new SupabaseCrud<CreativeOutput>('app_creative_outputs', 'cou');
 export const brandAnalysisJobs = new SupabaseCrud<BrandAnalysisJob>('app_brand_analysis_jobs', 'baj');
+export const creativeConcepts = new SupabaseCrud<CreativeConcept>('app_creative_concepts', 'ccn');
+export const designSets = new SupabaseCrud<DesignSet>('app_design_sets', 'dsg');
+export const designVariants = new SupabaseCrud<DesignVariant>('app_design_variants', 'dvr');
+export const clientVisualAssets = new SupabaseCrud<ClientVisualAsset>('app_client_visual_assets', 'cva');
+export const clientVisualGenerationJobs = new SupabaseCrud<ClientVisualGenerationJob>('app_client_visual_generation_jobs', 'cvj');
+
+// PIXEL Campaign Factory
+export const campaignFactoryCampaigns = new SupabaseCrud<CampaignFactoryCampaign>('app_campaign_factory_campaigns', 'cfc');
+export const campaignFactoryAssets = new SupabaseCrud<CampaignFactoryAsset>('app_campaign_factory_assets', 'cfa');
+export const campaignCopySets = new SupabaseCrud<CampaignCopySet>('app_campaign_copy_sets', 'ccs');
