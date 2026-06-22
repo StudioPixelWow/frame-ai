@@ -2913,3 +2913,184 @@ export interface LeadResearch {
   createdAt: string;
   updatedAt: string;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PIXEL Creative Studio — Brand DNA & Creative Production
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export type BrandAssetType =
+  | 'logo'
+  | 'brand_guideline'
+  | 'approved_ad'
+  | 'rejected_ad'
+  | 'social_post'
+  | 'story'
+  | 'banner'
+  | 'website_screenshot'
+  | 'inspiration'
+  | 'competitor'
+  | 'photo'
+  | 'campaign_visual'
+  | 'other';
+
+export type BrandAssetCategory =
+  | 'brand'
+  | 'campaign'
+  | 'social'
+  | 'real_estate'
+  | 'website'
+  | 'reference'
+  | 'competitor';
+
+export interface BrandAsset {
+  id: string;
+  clientId: string;
+  uploadedBy: string | null;
+  assetType: BrandAssetType;
+  assetCategory: BrandAssetCategory | null;
+  title: string;
+  description: string;
+  fileUrl: string;
+  filePath: string;
+  fileName: string;
+  fileMimeType: string;
+  fileSize: number;
+  thumbnailUrl: string;
+  sourceType: string;           // 'manual_upload' | 'auto_imported'
+  status: string;               // 'active' | 'archived'
+  isApprovedReference: boolean;
+  isRejectedReference: boolean;
+  isCompetitorReference: boolean;
+  tags: string[];
+  aiSummary: string;
+  aiExtractedColors: any[];     // jsonb
+  aiDetectedStyle: Record<string, any>;   // jsonb
+  aiDetectedText: Record<string, any>;    // jsonb
+  aiVisualFeatures: Record<string, any>;  // jsonb
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BrandStyleProfile {
+  id: string;
+  clientId: string;
+  profileStatus: string;           // 'draft' | 'active' | 'locked'
+  brandSummary: string;
+  visualPersonality: string;
+  copywritingTone: string;
+  primaryColors: any[];            // jsonb
+  secondaryColors: any[];
+  accentColors: any[];
+  forbiddenColors: any[];
+  preferredTypography: Record<string, any>;
+  forbiddenTypography: Record<string, any>;
+  preferredLayouts: any[];
+  rejectedLayouts: any[];
+  preferredVisualStyles: any[];
+  rejectedVisualStyles: any[];
+  preferredImageStyles: any[];
+  rejectedImageStyles: any[];
+  preferredIconStyles: any[];
+  rejectedIconStyles: any[];
+  brandRules: any[];
+  avoidRules: any[];
+  luxuryScore: number;             // 0-100
+  minimalismScore: number;
+  modernScore: number;
+  salesAggressivenessScore: number;
+  visualDensityScore: number;
+  aiGeneratedScore: number;
+  approvedPatterns: any[];
+  rejectedPatterns: any[];
+  clientNotes: string;
+  talNotes: string;
+  aiConfidenceScore: number;       // 0-100
+  lastAnalyzedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreativeFeedbackType =
+  | 'liked'
+  | 'disliked'
+  | 'approved'
+  | 'rejected'
+  | 'more_luxury'
+  | 'less_luxury'
+  | 'more_modern'
+  | 'less_modern'
+  | 'more_minimal'
+  | 'less_minimal'
+  | 'more_sales'
+  | 'less_sales'
+  | 'less_ai'
+  | 'more_premium'
+  | 'too_busy'
+  | 'too_empty'
+  | 'wrong_colors'
+  | 'wrong_font'
+  | 'wrong_style'
+  | 'save_as_client_style';
+
+export interface CreativeFeedback {
+  id: string;
+  clientId: string;
+  assetId: string | null;
+  creativeOutputId: string | null;
+  feedbackSource: string;          // 'manual' | 'auto' | 'client_portal'
+  feedbackType: CreativeFeedbackType;
+  feedbackValue: string;
+  feedbackNote: string;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export interface CreativeBrief {
+  id: string;
+  clientId: string;
+  title: string;
+  objective: string;
+  platform: string;               // 'facebook' | 'instagram' | 'meta' | 'google' | 'website' | 'print'
+  format: string;                 // 'feed_4_5' | 'story_9_16' | 'square_1_1' | 'banner' | 'carousel' | 'reel_cover'
+  campaignType: string;
+  targetAudience: string;
+  mainMessage: string;
+  fullCopy: Record<string, any>;
+  requiredAssets: any[];
+  brandConstraints: Record<string, any>;
+  status: string;                 // 'draft' | 'active' | 'completed' | 'cancelled'
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreativeOutput {
+  id: string;
+  clientId: string;
+  briefId: string | null;
+  brandProfileId: string | null;
+  outputType: string;             // 'feed_post' | 'story' | 'carousel' | 'banner' | 'reel_cover' | 'print_ad'
+  variantName: string;
+  status: string;                 // 'draft' | 'pending_review' | 'approved' | 'rejected' | 'published'
+  previewUrl: string;
+  editableJson: Record<string, any>;
+  renderedFileUrl: string;
+  generationMetadata: Record<string, any>;
+  aiReasoningSummary: string;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BrandAnalysisJob {
+  id: string;
+  clientId: string;
+  status: string;                 // 'pending' | 'processing' | 'completed' | 'failed'
+  jobType: string;                // 'brand_dna_analysis' | 'single_asset_analysis' | 'comparative_analysis'
+  inputAssetIds: string[];
+  resultProfileId: string | null;
+  errorMessage: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+}

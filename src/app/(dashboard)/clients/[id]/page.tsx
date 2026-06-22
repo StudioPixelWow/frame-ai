@@ -34,6 +34,7 @@ import TabSeoGeo from "./tab-seo-geo";
 import TabGoogleAds from "./tab-google-ads";
 import DailyReportTab from "@/components/meta/daily-report-tab";
 import TabPublishingChannels from "./tab-publishing-channels";
+import TabCreativeStudio from "./tab-creative-studio";
 
 // ── BI Health Badge (inline component) ──
 
@@ -106,11 +107,12 @@ const GANTT_STATUS_COLORS: Record<string, { label: string; color: string }> = {
   none: { label: "לא יוצר", color: "#9ca3af" },
 };
 
-type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "campaigns" | "google-ads" | "seo" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos" | "automations" | "integrations" | "growth" | "daily-report" | "publishing-channels" | "competitors" | "brand-kit";
+type TabName = "overview" | "content" | "tasks" | "leads" | "social" | "ads" | "campaigns" | "google-ads" | "seo" | "files" | "accounting" | "portal" | "activity" | "dna" | "research" | "videos" | "automations" | "integrations" | "growth" | "daily-report" | "publishing-channels" | "competitors" | "brand-kit" | "creative-studio";
 
 const TABS: { id: TabName; label: string; showFor?: string }[] = [
   { id: "overview", label: "סקירה" },
   { id: "brand-kit", label: "🎨 ערכת מותג" },
+  { id: "creative-studio", label: "🎨 סטודיו קריאייטיב" },
   { id: "content", label: "תוכן וגאנט" },
   { id: "videos", label: "סרטונים" },
   { id: "research", label: "חקור לקוח" },
@@ -141,7 +143,7 @@ const TAB_GROUPS: { id: string; label: string; icon: string; tabs: TabName[] }[]
   { id: "g-marketing", label: "שיווק", icon: "📣", tabs: ["content", "social", "campaigns", "ads", "google-ads", "publishing-channels", "videos"] },
   { id: "g-seo", label: "SEO / GEO", icon: "🔍", tabs: ["seo", "growth"] },
   { id: "g-crm", label: "לידים ומשימות", icon: "🎯", tabs: ["leads", "tasks"] },
-  { id: "g-brand", label: "מותג ותוכן", icon: "🎨", tabs: ["brand-kit", "dna", "research", "competitors"] },
+  { id: "g-brand", label: "מותג ותוכן", icon: "🎨", tabs: ["brand-kit", "creative-studio", "dna", "research", "competitors"] },
   { id: "g-ops", label: "תפעול", icon: "⚙️", tabs: ["automations", "daily-report", "activity", "portal", "files", "integrations"] },
   { id: "g-finance", label: "פיננסים", icon: "💰", tabs: ["accounting"] },
 ];
@@ -1423,6 +1425,9 @@ function ClientDetailContent() {
         )}
         {activeTab === "brand-kit" && (
           <TabBrandKit client={client} />
+        )}
+        {activeTab === "creative-studio" && (
+          <TabCreativeStudio client={client} />
         )}
         {activeTab === "content" && (
           <TabContentGantt client={client} employees={employees || []} />

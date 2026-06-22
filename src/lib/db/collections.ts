@@ -77,6 +77,12 @@ import type {
   ApprovedClip,
   PodcastClipCandidate,
   LeadResearch,
+  BrandAsset,
+  BrandStyleProfile,
+  CreativeFeedback,
+  CreativeBrief,
+  CreativeOutput,
+  BrandAnalysisJob,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -192,3 +198,11 @@ export const aiVideoAnalyses = new SupabaseCrud<any>('app_ai_video_analyses', 'a
 
 // Lead Research & Growth Intelligence
 export const leadResearch = new SupabaseCrud<LeadResearch>('app_lead_research', 'lrs');
+
+// PIXEL Creative Studio
+export const brandAssets = new SupabaseCrud<BrandAsset>('app_brand_assets', 'bas');
+export const brandStyleProfiles = new SupabaseCrud<BrandStyleProfile>('app_brand_style_profiles', 'bsp');
+export const creativeFeedback = new SupabaseCrud<CreativeFeedback>('app_creative_feedback', 'cfb');
+export const creativeBriefs = new SupabaseCrud<CreativeBrief>('app_creative_briefs', 'cbr');
+export const creativeOutputs = new SupabaseCrud<CreativeOutput>('app_creative_outputs', 'cou');
+export const brandAnalysisJobs = new SupabaseCrud<BrandAnalysisJob>('app_brand_analysis_jobs', 'baj');

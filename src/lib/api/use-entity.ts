@@ -47,6 +47,12 @@ import type {
   AuditLog,
   PodcastStrategy,
   ClientNotification,
+  BrandAsset,
+  BrandStyleProfile,
+  CreativeFeedback,
+  CreativeBrief,
+  CreativeOutput,
+  BrandAnalysisJob,
 } from '@/lib/db/schema';
 
 // Core entities — relaxed polling (3 min) + no refetch on focus to avoid jankiness
@@ -95,3 +101,11 @@ export const useAuditLog = () => useData<AuditLog>('audit-log', { pollInterval: 
 export const useAutomationRuns = () => useData<AutomationRun>('automation-runs', { pollInterval: 300000, refetchOnFocus: false });
 export const useApprovalQueue = () => useData<ApprovalQueueItem>('approval-queue', { pollInterval: 300000, refetchOnFocus: false });
 export const useClientNotifications = () => useData<ClientNotification>('client-notifications', { pollInterval: 300000, refetchOnFocus: false });
+
+// PIXEL Creative Studio
+export const useBrandAssets = () => useData<BrandAsset>('brand-assets', { refetchOnFocus: false });
+export const useBrandStyleProfiles = () => useData<BrandStyleProfile>('brand-style-profiles', { refetchOnFocus: false });
+export const useCreativeFeedback = () => useData<CreativeFeedback>('creative-feedback', { refetchOnFocus: false });
+export const useCreativeBriefs = () => useData<CreativeBrief>('creative-briefs', { refetchOnFocus: false });
+export const useCreativeOutputs = () => useData<CreativeOutput>('creative-outputs', { refetchOnFocus: false });
+export const useBrandAnalysisJobs = () => useData<BrandAnalysisJob>('brand-analysis-jobs', { refetchOnFocus: false });
