@@ -4554,7 +4554,7 @@ export default function TabCreativeStudio({ client }: TabCreativeStudioProps) {
   // ── 11. Creative Director Debug Panel (Admin Only) ──────────────────────────
   const renderCreativeDirector = () => {
     // Check admin mode via localStorage
-    const isAdmin = typeof window !== 'undefined' && localStorage.getItem('role') === 'admin';
+    const isAdmin = typeof window !== 'undefined' && localStorage.getItem('frameai_role') === 'admin';
 
     // Gather CD metadata from existing concepts, designs, visuals
     const cdConcepts = concepts.filter((c: any) => c.creativeDirectorMetadata || c.creativeStrategy);
