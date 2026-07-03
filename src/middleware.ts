@@ -82,6 +82,8 @@ export function middleware(req: NextRequest) {
     pathname.startsWith('/api/upload') ||
     pathname.startsWith('/api/accounting') ||
     pathname.startsWith('/api/render') ||
+    pathname.startsWith('/api/cron') ||
+    pathname.startsWith('/api/admin/jobs') ||
     pathname.startsWith('/api/seo-geo-plans/cron') ||
     pathname.startsWith('/api/podcast/migration')
   ) {
