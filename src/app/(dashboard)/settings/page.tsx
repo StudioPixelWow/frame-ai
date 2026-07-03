@@ -150,6 +150,40 @@ export default function SettingsPage() {
     paymentReminderTiming: '3_days',
   });
 
+  // Email Automation Safety Switch
+  const [emailAutomationsEnabled, setEmailAutomationsEnabled] = useState(false);
+  const [emailToggleLoading, setEmailToggleLoading] = useState(false);
+
+  // Fetch email automations status on mount
+  useEffect(() => {
+    fetch('/api/settings/email-automations')
+      .then(r => r.json())
+      .then(data => setEmailAutomationsEnabled(data.enabled === true))
+      .catch(() => setEmailAutomationsEnabled(false));
+  }, []);
+
+  const toggleEmailAutomations = async () => {
+    setEmailToggleLoading(true);
+    const newValue = !emailAutomationsEnabled;
+    try {
+      const res = await fetch('/api/settings/email-automations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: newValue }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEmailAutomationsEnabled(newValue);
+        toast(newValue ? 'אוטומציות דיוור הופעלו' : 'אוטומציות דיוור כובו', newValue ? 'success' : 'info');
+      } else {
+        toast('שגיאה בעדכון הגדרה', 'error');
+      }
+    } catch {
+      toast('שגיאת רשת', 'error');
+    }
+    setEmailToggleLoading(false);
+  };
+
   // OpenAI / Whisper state
   const [aiProvider, setAiProvider] = useState<'openai' | 'anthropic'>('openai');
   const [aiApiKey, setAiApiKey] = useState('');
@@ -1610,6 +1644,59 @@ export default function SettingsPage() {
   const renderAutomationSection = () => (
     <div>
       <h2 style={sectionHeaderStyle}>ברירות מחדל אוטומציה</h2>
+
+      {/* ── Email Safety Switch ── */}
+      <div style={{
+        ...cardStyle,
+        border: emailAutomationsEnabled ? '1px solid #22c55e30' : '1px solid #ef444430',
+        background: emailAutomationsEnabled ? 'rgba(34, 197, 94, 0.04)' : 'rgba(239, 68, 68, 0.04)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{
+              width: 44, height: 44, borderRadius: 10,
+              background: emailAutomationsEnabled ? '#22c55e15' : '#ef444415',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '1.3rem',
+            }}>
+              {emailAutomationsEnabled ? '✅' : '🛑'}
+            </div>
+            <div>
+              <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--foreground)' }}>
+                הפעלת אוטומציות דיוור ושליחה
+              </div>
+              <div style={{
+                fontSize: '0.82rem', fontWeight: 600, marginTop: 2,
+                color: emailAutomationsEnabled ? '#22c55e' : '#ef4444',
+              }}>
+                {emailAutomationsEnabled ? 'פעיל — המערכת שולחת מיילים' : 'כבוי — כל שליחת מיילים חסומה'}
+              </div>
+            </div>
+          </div>
+          <button
+            style={{
+              ...toggleStyle(emailAutomationsEnabled),
+              opacity: emailToggleLoading ? 0.5 : 1,
+            }}
+            onClick={toggleEmailAutomations}
+            disabled={emailToggleLoading}
+          >
+            <div style={toggleCircleStyle(emailAutomationsEnabled)} />
+          </button>
+        </div>
+        <div style={{
+          background: 'rgba(239, 68, 68, 0.06)',
+          border: '1px solid rgba(239, 68, 68, 0.15)',
+          borderRadius: 8,
+          padding: '0.75rem 1rem',
+          fontSize: '0.82rem',
+          color: 'var(--foreground-muted)',
+          lineHeight: 1.7,
+        }}>
+          כאשר הכפתור כבוי, המערכת לא תשלח מיילים אוטומטיים כלל. ניתן להפעיל רק אחרי סיום ההגדרות והבדיקות.
+        </div>
+      </div>
+
       <div style={cardStyle}>
         <div style={formGroupStyle}>
           <div>

@@ -17,6 +17,69 @@
 
 import * as tls from 'tls';
 
+// ── Email Automation Safety Gate ─────────────────────────────────────────────
+
+let cachedEmailEnabled: boolean | null = null;
+let lastEmailEnabledCheck = 0;
+const EMAIL_ENABLED_CACHE_MS = 30_000; // Re-check every 30s
+
+/**
+ * Check if email automations are enabled in app_settings.
+ * Default: OFF (false) — if the setting is missing, treat as OFF.
+ */
+export async function isEmailAutomationsEnabled(): Promise<boolean> {
+  const now = Date.now();
+  if (cachedEmailEnabled !== null && (now - lastEmailEnabledCheck) < EMAIL_ENABLED_CACHE_MS) {
+    return cachedEmailEnabled;
+  }
+
+  try {
+    const { getSupabase } = await import('@/lib/db/store');
+    const sb = getSupabase();
+    const { data } = await sb
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'email_automations_enabled')
+      .maybeSingle();
+
+    cachedEmailEnabled = data?.value?.enabled === true;
+    lastEmailEnabledCheck = now;
+    return cachedEmailEnabled;
+  } catch (e) {
+    console.warn('[Email-Safety] Failed to check email_automations_enabled — defaulting to OFF:', e);
+    return false; // Default OFF if we can't read the setting
+  }
+}
+
+/** Clear cached email-enabled state (call after toggling in settings) */
+export function clearEmailEnabledCache() {
+  cachedEmailEnabled = null;
+  lastEmailEnabledCheck = 0;
+}
+
+/**
+ * Log a blocked email attempt to the email_blocked_log table.
+ */
+async function logBlockedEmail(options: EmailOptions, reason: string): Promise<void> {
+  try {
+    const { getSupabase } = await import('@/lib/db/store');
+    const sb = getSupabase();
+    await sb.from('app_settings').upsert({
+      key: `email_blocked_${Date.now()}`,
+      value: {
+        type: 'blocked_email_log',
+        status: 'blocked',
+        reason,
+        to: Array.isArray(options.to) ? options.to.join(', ') : options.to,
+        subject: options.subject,
+        timestamp: new Date().toISOString(),
+      },
+    }, { onConflict: 'key' });
+  } catch (e) {
+    console.warn('[Email-Safety] Failed to log blocked email:', e);
+  }
+}
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface EmailOptions {
@@ -280,6 +343,16 @@ async function sendViaSMTP(creds: GmailCredentials, options: EmailOptions): Prom
  * Falls back to console logging if no credentials are configured.
  */
 export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
+  // ── Email Safety Gate ──────────────────────────────────────────────────────
+  // Block ALL email sending when automations are disabled in Settings.
+  // Default: OFF. If setting is missing, treat as OFF.
+  const emailEnabled = await isEmailAutomationsEnabled();
+  if (!emailEnabled) {
+    console.warn(`[Email-Safety] BLOCKED — email automations disabled. To: ${options.to}, Subject: ${options.subject}`);
+    await logBlockedEmail(options, 'email_automations_disabled');
+    return { success: false, error: 'Email automations are disabled in Settings. הפעל אוטומציות דיוור בהגדרות.' };
+  }
+
   const creds = await getCredentials();
 
   if (!creds) {
