@@ -27,10 +27,9 @@ const TIME_BUDGET_MS = 250_000;
 const BATCH = 8;
 
 export async function GET(req: NextRequest) {
-  if (process.env.CRON_SECRET) {
-    const auth = req.headers.get('authorization');
-    // allow Vercel cron (no header) OR explicit secret
-    if (auth && auth !== `Bearer ${process.env.CRON_SECRET}`) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authHeader = req.headers.get('authorization');
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const started = Date.now();
   const worker = rid('tick');

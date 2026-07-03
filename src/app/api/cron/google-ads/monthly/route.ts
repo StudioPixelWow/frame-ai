@@ -1,12 +1,16 @@
 /** GET/POST /api/cron/google-ads/monthly — monthly Google Ads reports for all active connected clients. */
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 import { ensureSeeded } from '@/lib/db/seed';
 import { runGoogleAdsCron } from '@/lib/google-ads/report';
 
-async function run() {
+async function run(req: NextRequest) {
+  const authHeader = req.headers.get('authorization');
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   ensureSeeded();
   try {
     const result = await runGoogleAdsCron('monthly');

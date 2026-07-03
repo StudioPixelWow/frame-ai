@@ -24,6 +24,10 @@ const MAX_PLANS = 20;
 const rid = (p: string) => `${p}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 
 export async function GET(_req: NextRequest) {
+  const authHeader = _req.headers.get('authorization');
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   await ensureGeoTables();
   try { await ensureTable('geo_ai_monitoring_results', GEO_DDL_EXTRA.geo_ai_monitoring_results); } catch { /* noop */ }
   const sb = getSupabase();
