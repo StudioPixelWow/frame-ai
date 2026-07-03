@@ -91,6 +91,8 @@ import type {
   CampaignFactoryCampaign,
   CampaignFactoryAsset,
   CampaignCopySet,
+  ScheduledJob,
+  JobRun,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -224,3 +226,7 @@ export const clientVisualGenerationJobs = new SupabaseCrud<ClientVisualGeneratio
 export const campaignFactoryCampaigns = new SupabaseCrud<CampaignFactoryCampaign>('app_campaign_factory_campaigns', 'cfc');
 export const campaignFactoryAssets = new SupabaseCrud<CampaignFactoryAsset>('app_campaign_factory_assets', 'cfa');
 export const campaignCopySets = new SupabaseCrud<CampaignCopySet>('app_campaign_copy_sets', 'ccs');
+
+// Central Job System
+export const scheduledJobs = new SupabaseCrud<ScheduledJob>('scheduled_jobs', 'sjb');
+export const jobRuns = new SupabaseCrud<JobRun>('job_runs', 'jrn');

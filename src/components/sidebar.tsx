@@ -117,6 +117,7 @@ const sections = [
   { href: "/editor",          icon: <VideoEditorIcon />,     label: "Video Editor" },
   { href: "/projects/new/podcast", icon: <ClipEngineIcon />, label: "AI Clip Engine" },
   { href: "/settings/meta-business", icon: <MetaBusinessIcon />, label: "Meta Business" },
+  { href: "/admin/jobs",      icon: <AutomationsIcon />,     label: "🤖 אוטומציות" },
   { href: "/settings",        icon: <SettingsIcon />,        label: "Settings" },
 ];
 

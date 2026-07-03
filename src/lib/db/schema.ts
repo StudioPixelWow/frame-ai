@@ -3671,3 +3671,51 @@ export interface CampaignCopySet {
   emailSubjectIdeas: string[];
   createdAt: string;
 }
+
+// ═══════════════════════════════════════════════════════════
+// CENTRAL JOB SYSTEM
+// ═══════════════════════════════════════════════════════════
+
+export type JobStatus = 'active' | 'paused' | 'disabled';
+export type JobRunStatus = 'running' | 'completed' | 'failed' | 'timeout' | 'skipped';
+
+export interface ScheduledJob {
+  id: string;
+  name: string;              // e.g. "daily-seo"
+  displayName: string;       // Hebrew display name e.g. "SEO יומי"
+  description: string;       // Hebrew description
+  cronExpression: string;    // e.g. "0 5 * * *"
+  endpoint: string;          // e.g. "/api/cron/daily-seo"
+  status: JobStatus;
+  category: 'seo' | 'meta' | 'social' | 'email' | 'reports' | 'whatsapp' | 'google-ads' | 'geo' | 'system';
+  maxDurationSec: number;    // timeout in seconds
+  retryCount: number;        // how many retries on failure (0 = none)
+  retryDelaySec: number;     // delay between retries
+  lastRunAt: string | null;
+  lastRunStatus: JobRunStatus | null;
+  lastRunDurationMs: number | null;
+  lastRunError: string | null;
+  nextRunAt: string | null;
+  totalRuns: number;
+  totalFailures: number;
+  envVarsRequired: string[];     // e.g. ["CRON_SECRET", "OPENAI_API_KEY"]
+  dbTablesUsed: string[];        // e.g. ["seo_plans", "clients"]
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface JobRun {
+  id: string;
+  jobId: string;
+  jobName: string;
+  status: JobRunStatus;
+  startedAt: string;
+  completedAt: string | null;
+  durationMs: number | null;
+  result: Record<string, any> | null;  // response body from endpoint
+  error: string | null;
+  retryAttempt: number;        // 0 = first attempt
+  triggeredBy: 'cron' | 'manual' | 'retry';
+  metadata: Record<string, any> | null;
+  createdAt: string;
+}
