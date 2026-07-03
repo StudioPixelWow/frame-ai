@@ -23,6 +23,10 @@ let cachedEmailEnabled: boolean | null = null;
 let lastEmailEnabledCheck = 0;
 const EMAIL_ENABLED_CACHE_MS = 30_000; // Re-check every 30s
 
+// ── Test Mode Whitelist ──────────────────────────────────────────────────────
+// When set, ONLY these addresses can receive email. All others are blocked.
+const TEST_MODE_WHITELIST: string[] | null = ['office@s-pixel.co.il'];
+
 /**
  * Check if email automations are enabled in app_settings.
  * Default: OFF (false) — if the setting is missing, treat as OFF.
@@ -351,6 +355,23 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
     console.warn(`[Email-Safety] BLOCKED — email automations disabled. To: ${options.to}, Subject: ${options.subject}`);
     await logBlockedEmail(options, 'email_automations_disabled');
     return { success: false, error: 'Email automations are disabled in Settings. הפעל אוטומציות דיוור בהגדרות.' };
+  }
+
+  // ── Test-Mode Whitelist Guard ─────────────────────────────────────────────
+  // When TEST_MODE_WHITELIST is set, only whitelisted addresses can receive.
+  if (TEST_MODE_WHITELIST && TEST_MODE_WHITELIST.length > 0) {
+    const recipients = Array.isArray(options.to) ? options.to : [options.to];
+    const blocked = recipients.filter(
+      (r) => !TEST_MODE_WHITELIST.some((w) => r.trim().toLowerCase() === w.toLowerCase())
+    );
+    if (blocked.length > 0) {
+      console.warn(`[Email-Safety] BLOCKED — non-whitelisted recipient(s): ${blocked.join(', ')}. Subject: ${options.subject}`);
+      await logBlockedEmail(options, 'non_studio_pixel_test_recipient');
+      return {
+        success: false,
+        error: `מצב בדיקות: הנמען ${blocked.join(', ')} אינו ברשימת הבדיקות. רק office@s-pixel.co.il מורשה.`,
+      };
+    }
   }
 
   const creds = await getCredentials();
