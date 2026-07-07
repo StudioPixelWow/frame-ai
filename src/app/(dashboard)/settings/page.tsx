@@ -1697,25 +1697,6 @@ export default function SettingsPage() {
         </div>
 
         {/* Test Mode Notice */}
-        <div style={{
-          background: 'rgba(240, 255, 2, 0.08)',
-          border: '1px solid rgba(240, 255, 2, 0.3)',
-          borderRadius: 8,
-          padding: '0.75rem 1rem',
-          fontSize: '0.82rem',
-          color: 'var(--foreground)',
-          lineHeight: 1.7,
-          marginTop: '0.75rem',
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '0.5rem',
-        }}>
-          <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>🧪</span>
-          <span>
-            <strong style={{ color: '#F0FF02' }}>מצב בדיקות פעיל:</strong>{' '}
-            כל המיילים האוטומטיים נשלחים רק ל-office@s-pixel.co.il. כתובות לקוחות יוזנו מחדש לאחר סיום הבדיקות.
-          </span>
-        </div>
       </div>
 
       <div style={cardStyle}>

@@ -25,7 +25,7 @@ const EMAIL_ENABLED_CACHE_MS = 30_000; // Re-check every 30s
 
 // ── Test Mode Whitelist ──────────────────────────────────────────────────────
 // When set, ONLY these addresses can receive email. All others are blocked.
-const TEST_MODE_WHITELIST: string[] | null = ['office@s-pixel.co.il'];
+const TEST_MODE_WHITELIST: string[] | null = null;
 
 /**
  * Check if email automations are enabled in app_settings.
