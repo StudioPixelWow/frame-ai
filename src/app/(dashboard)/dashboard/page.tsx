@@ -8,26 +8,16 @@ import { wow } from '@/lib/wow';
 import { SmartTooltip } from '@/components/ui/smart-tooltip';
 import { KPIPopup } from '@/components/ui/kpi-popup';
 import {
-  useClients,
-  useTasks,
-  usePayments,
-  useLeads,
   useEmployees,
-  useCampaigns,
-  useApprovals,
-  usePodcastSessions,
-  useProjectPayments,
-  useBusinessProjects,
-  useSocialPosts,
+  useTasks,
   useEmployeeTasks,
-  useMeetings,
-  useActivities,
-  useHostingRecords,
 } from "@/lib/api/use-entity";
+import { useDashboardData } from "@/hooks/use-dashboard-data";
 import { KpiRow, KpiCard, SectionCard, Sparkline, StatusBadge } from "@/components/ui/saas-kit";
 import Avatar from "@/components/ui/avatar";
 import ClientLogo from "@/components/ui/client-logo";
-import { useOperationalAlerts } from "@/lib/alerts/use-alerts";
+import { computeAlerts } from "@/lib/alerts/engine";
+import { computeInsights } from "@/lib/ai/insights";
 import { SkeletonKPIRow, SkeletonGrid } from "@/components/ui/skeleton";
 import { AIInsightsPanel, generateInsights } from "@/components/ai-insights-panel";
 import SmartWeeklyCalendar from "@/components/ui/SmartWeeklyCalendar";
@@ -420,41 +410,37 @@ export default function DashboardPage() {
 }
 
 function AdminDashboard() {
-  const { data: rawClients, loading: cL } = useClients();
-  const { data: rawTasks, loading: tL } = useTasks();
-  const { data: rawPayments, loading: pL } = usePayments();
-  const { data: rawLeads, loading: lL } = useLeads();
-  const { data: rawEmployees, loading: eL } = useEmployees();
-  const { data: rawCampaigns, loading: caL } = useCampaigns();
-  const { data: rawApprovals, loading: aL } = useApprovals();
-  const { data: rawPodcastSessions, loading: poL } = usePodcastSessions();
-  const { data: rawProjectPayments, loading: ppL } = useProjectPayments();
-  const { data: rawBusinessProjects, loading: bpL } = useBusinessProjects();
-  const { data: rawSocialPosts, loading: spL } = useSocialPosts();
-  const { data: rawMeetings } = useMeetings();
-  const { data: rawActivities } = useActivities();
-  const { data: rawHosting } = useHostingRecords();
-  const { data: rawEmployeeTasks } = useEmployeeTasks();
+  // ── Single consolidated API call instead of 24+ separate ones ──
+  const { data: dashData, loading: isLoading, error: dashError } = useDashboardData();
 
   // Safe fallbacks — never let undefined reach .filter/.map/.reduce/.length
-  const clients = rawClients ?? [];
-  const meetings = rawMeetings ?? [];
-  const activities = rawActivities ?? [];
-  const hosting = rawHosting ?? [];
-  const allEmployeeTasks = rawEmployeeTasks ?? [];
-  const tasks = rawTasks ?? [];
-  const payments = rawPayments ?? [];
-  const leads = rawLeads ?? [];
-  const employees = rawEmployees ?? [];
-  const campaigns = rawCampaigns ?? [];
-  const approvals = rawApprovals ?? [];
-  const podcastSessions = rawPodcastSessions ?? [];
-  const projectPayments = rawProjectPayments ?? [];
-  const businessProjects = rawBusinessProjects ?? [];
-  const socialPosts = rawSocialPosts ?? [];
-  const { alerts, insights: opInsights } = useOperationalAlerts();
+  const clients = dashData.clients ?? [];
+  const tasks = dashData.tasks ?? [];
+  const payments = dashData.payments ?? [];
+  const leads = dashData.leads ?? [];
+  const employees = dashData.employees ?? [];
+  const campaigns = dashData.campaigns ?? [];
+  const approvals = dashData.approvals ?? [];
+  const podcastSessions = dashData.podcastSessions ?? [];
+  const meetings = dashData.meetings ?? [];
+  const activities = dashData.activities ?? [];
+  const hosting = dashData.hosting ?? [];
+  const allEmployeeTasks = dashData.employeeTasks ?? [];
+  const projectPayments = dashData.projectPayments ?? [];
+  const businessProjects = dashData.businessProjects ?? [];
+  const socialPosts = dashData.socialPosts ?? [];
+  const ganttItems = dashData.ganttItems ?? [];
 
-  const isLoading = cL || tL || pL || lL || eL || caL || aL || poL || ppL || bpL || spL;
+  // Compute alerts & insights from already-fetched data (no extra API calls)
+  const alerts = useMemo(() => {
+    if (isLoading) return [];
+    return computeAlerts({ clients, leads, employees, employeeTasks: allEmployeeTasks, payments, ganttItems, approvals, projectPayments });
+  }, [isLoading, clients, leads, employees, allEmployeeTasks, payments, ganttItems, approvals, projectPayments]);
+
+  const opInsights = useMemo(() => {
+    if (isLoading) return [];
+    return computeInsights({ clients, leads, employees, employeeTasks: allEmployeeTasks, payments, ganttItems, projectPayments });
+  }, [isLoading, clients, leads, employees, allEmployeeTasks, payments, ganttItems, projectPayments]);
 
   // Monthly reports state
   const [sendingReports, setSendingReports] = useState(false);
