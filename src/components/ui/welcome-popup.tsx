@@ -8,7 +8,7 @@
  */
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
-import { useEmployees } from "@/lib/api/use-entity";
+import { useDashboardData } from "@/hooks/use-dashboard-data";
 import Avatar from "@/components/ui/avatar";
 
 const MANAGER_MSGS = [
@@ -32,7 +32,8 @@ const isRoleWord = (s: string) => ROLE_WORDS.includes((s || "").trim().toLowerCa
 
 export default function WelcomePopup() {
   const { role, employeeId, displayName, email } = useAuth();
-  const { data: employees } = useEmployees();
+  const { data: dashData } = useDashboardData();
+  const employees = dashData.employees ?? [];
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<{ name: string; avatar: string; message: string } | null>(null);
 

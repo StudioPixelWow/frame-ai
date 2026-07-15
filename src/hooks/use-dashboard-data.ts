@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 
 /**
- * Consolidated dashboard data hook.
- * Fetches ALL dashboard data in a single API call instead of 24+ separate ones.
- * Reduces browser connection saturation and eliminates race conditions.
+ * Consolidated dashboard data hook with module-level shared cache.
+ * No matter how many components call useDashboardData(), only ONE fetch is made.
+ * All instances share the same data through a simple pub/sub store.
  */
 
 export interface DashboardData {
@@ -48,6 +48,32 @@ const EMPTY_DATA: DashboardData = {
   _meta: { fetchedAt: '', errors: [] },
 };
 
+/* ── Module-level shared store ──────────────────────────────────────── */
+
+interface StoreState {
+  data: DashboardData;
+  loading: boolean;
+  error: string | null;
+}
+
+let _state: StoreState = { data: EMPTY_DATA, loading: true, error: null };
+let _listeners: Set<() => void> = new Set();
+let _fetchPromise: Promise<void> | null = null;
+let _hasFetched = false;
+
+function _notify() {
+  _listeners.forEach((l) => l());
+}
+
+function _subscribe(listener: () => void) {
+  _listeners.add(listener);
+  return () => { _listeners.delete(listener); };
+}
+
+function _getSnapshot(): StoreState {
+  return _state;
+}
+
 function getRoleHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   try {
@@ -61,57 +87,75 @@ function getRoleHeaders(): Record<string, string> {
   return headers;
 }
 
-export function useDashboardData() {
-  const [data, setData] = useState<DashboardData>(EMPTY_DATA);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const isMounted = useRef(true);
+async function _doFetch() {
+  // If already fetching, don't start another
+  if (_fetchPromise) return _fetchPromise;
 
-  useEffect(() => {
-    isMounted.current = true;
-    return () => { isMounted.current = false; };
-  }, []);
-
-  const fetchData = useCallback(async () => {
+  _fetchPromise = (async () => {
     try {
-      setLoading(true);
+      _state = { ..._state, loading: true };
+      _notify();
+
       const res = await fetch('/api/data/dashboard-data', {
         cache: 'no-store',
         headers: getRoleHeaders(),
       });
       if (!res.ok) throw new Error(`Failed to fetch dashboard data (${res.status})`);
       const json = await res.json();
-      if (isMounted.current) {
-        setData(json);
-        setError(null);
-        if (json._meta?.errors?.length > 0) {
-          console.warn('[Dashboard] Some tables had errors:', json._meta.errors);
-        }
+
+      _state = { data: json, loading: false, error: null };
+      _hasFetched = true;
+
+      if (json._meta?.errors?.length > 0) {
+        console.warn('[Dashboard] Some tables had errors:', json._meta.errors);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
       console.error('[Dashboard] Failed to fetch data:', msg);
-      if (isMounted.current) {
-        setError(msg);
-      }
+      _state = { ..._state, loading: false, error: msg };
     } finally {
-      if (isMounted.current) {
-        setLoading(false);
-      }
+      _fetchPromise = null;
+      _notify();
+    }
+  })();
+
+  return _fetchPromise;
+}
+
+function _refetch() {
+  _doFetch();
+}
+
+/* ── Public hook ────────────────────────────────────────────────────── */
+
+export function useDashboardData() {
+  const state = useSyncExternalStore(_subscribe, _getSnapshot, () => _state);
+
+  // Trigger initial fetch once
+  useEffect(() => {
+    if (!_hasFetched && !_fetchPromise) {
+      _doFetch();
     }
   }, []);
 
-  // Initial fetch
+  // Refetch on window focus (debounced — at most once per 30s)
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  // Refetch on window focus
-  useEffect(() => {
-    const handleFocus = () => fetchData();
+    let lastFocus = 0;
+    const handleFocus = () => {
+      const now = Date.now();
+      if (now - lastFocus > 30000) {
+        lastFocus = now;
+        _doFetch();
+      }
+    };
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
-  }, [fetchData]);
+  }, []);
 
-  return { data, loading, error, refetch: fetchData };
+  return {
+    data: state.data,
+    loading: state.loading,
+    error: state.error,
+    refetch: _refetch,
+  };
 }

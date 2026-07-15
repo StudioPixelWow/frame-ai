@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useTasks, useMeetings } from "@/lib/api/use-entity";
+import { useDashboardData } from "@/hooks/use-dashboard-data";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Types
@@ -176,12 +176,11 @@ function calculateScore(days: DayData[], allTasks: any[]): { score: number; labe
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function SmartWeeklyCalendar() {
-  const { data: rawTasks } = useTasks();
-  const { data: rawMeetings } = useMeetings();
+  const { data: dashData } = useDashboardData();
 
   // Safe fallbacks — never let undefined reach .filter/.map/.reduce
-  const tasks = rawTasks ?? [];
-  const meetings = rawMeetings ?? [];
+  const tasks = dashData.tasks ?? [];
+  const meetings = dashData.meetings ?? [];
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 

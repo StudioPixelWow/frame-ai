@@ -9,7 +9,7 @@
  * most once per Sunday (localStorage gate).
  */
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useClients } from "@/lib/api/use-entity";
+import { useDashboardData } from "@/hooks/use-dashboard-data";
 import { useToast } from "@/components/ui/toast";
 
 function roleHeaders(): Record<string, string> {
@@ -23,7 +23,8 @@ const phoneOf = (c: any) => String(c?.phone ?? c?.phoneNumber ?? c?.mobile ?? c?
 const todayKey = () => `wa_weekly_prompt_${new Date().toISOString().slice(0, 10)}`;
 
 export default function WeeklyDigestPrompt() {
-  const { data: clients } = useClients();
+  const { data: dashData } = useDashboardData();
+  const clients = dashData.clients ?? [];
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");

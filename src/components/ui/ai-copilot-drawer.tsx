@@ -11,14 +11,7 @@ import React, {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useOperationalAlerts } from "@/lib/alerts/use-alerts";
-import {
-  useTasks,
-  useClients,
-  useCampaigns,
-  usePayments,
-  useApprovals,
-  useSocialPosts,
-} from "@/lib/api/use-entity";
+import { useDashboardData } from "@/hooks/use-dashboard-data";
 import { generateInsights } from "@/components/ai-insights-panel";
 
 // Types
@@ -102,22 +95,17 @@ const getSeverityIcon = (severity: "critical" | "warning" | "info"): string => {
 // Insights Tab Component
 const InsightsTab: React.FC = () => {
   const { alerts: rawAlerts, insights: rawInsights } = useOperationalAlerts();
-  const { data: rawTasks } = useTasks();
-  const { data: rawClients } = useClients();
-  const { data: rawCampaigns } = useCampaigns();
-  const { data: rawPayments } = usePayments();
-  const { data: rawApprovals } = useApprovals();
-  const { data: rawSocialPosts } = useSocialPosts();
+  const { data: dashData } = useDashboardData();
 
   // Safe fallbacks — never let undefined reach .filter/.map/.reduce
   const alerts = rawAlerts ?? [];
   const insights = rawInsights ?? [];
-  const tasks = rawTasks ?? [];
-  const clients = rawClients ?? [];
-  const campaigns = rawCampaigns ?? [];
-  const payments = rawPayments ?? [];
-  const approvals = rawApprovals ?? [];
-  const socialPosts = rawSocialPosts ?? [];
+  const tasks = dashData.tasks ?? [];
+  const clients = dashData.clients ?? [];
+  const campaigns = dashData.campaigns ?? [];
+  const payments = dashData.payments ?? [];
+  const approvals = dashData.approvals ?? [];
+  const socialPosts = dashData.socialPosts ?? [];
 
   const allAlerts = useMemo(() => {
     const mapped = alerts.map((alert) => ({
@@ -281,14 +269,12 @@ const InsightsTab: React.FC = () => {
 
 // Actions Tab Component
 const ActionsTab: React.FC = () => {
-  const { data: rawTasks } = useTasks();
-  const { data: rawClients } = useClients();
-  const { data: rawPayments } = usePayments();
+  const { data: dashData } = useDashboardData();
 
   // Safe fallbacks — never let undefined reach .filter/.map/.reduce
-  const tasks = rawTasks ?? [];
-  const clients = rawClients ?? [];
-  const payments = rawPayments ?? [];
+  const tasks = dashData.tasks ?? [];
+  const clients = dashData.clients ?? [];
+  const payments = dashData.payments ?? [];
 
   const stats = useMemo(() => {
     return {
