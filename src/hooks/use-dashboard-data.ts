@@ -15,6 +15,8 @@ export interface DashboardData {
   leads: any[];
   employees: any[];
   campaigns: any[];
+  adSets: any[];
+  ads: any[];
   approvals: any[];
   podcastSessions: any[];
   meetings: any[];
@@ -35,6 +37,8 @@ const EMPTY_DATA: DashboardData = {
   leads: [],
   employees: [],
   campaigns: [],
+  adSets: [],
+  ads: [],
   approvals: [],
   podcastSessions: [],
   meetings: [],

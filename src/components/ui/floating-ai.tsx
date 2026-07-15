@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { usePathname } from "next/navigation";
-import { useCampaigns, useLeads, useClients } from "@/lib/api/use-entity";
+import { useDashboardData } from "@/hooks/use-dashboard-data";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Floating AI Assistant — glowing orb + smart suggestions panel
@@ -221,14 +221,10 @@ const CATEGORY_LABELS = {
 export function FloatingAI() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const { data: rawCampaigns } = useCampaigns();
-  const { data: rawLeads } = useLeads();
-  const { data: rawClients } = useClients();
-
-  // Safe fallbacks — never let undefined reach .filter/.map/.reduce
-  const campaigns = rawCampaigns ?? [];
-  const leads = rawLeads ?? [];
-  const clients = rawClients ?? [];
+  const { data: dashData } = useDashboardData();
+  const campaigns = dashData?.campaigns ?? [];
+  const leads = dashData?.leads ?? [];
+  const clients = dashData?.clients ?? [];
 
   const suggestions = useMemo(
     () => generatePageSuggestions(pathname, campaigns, leads, clients),

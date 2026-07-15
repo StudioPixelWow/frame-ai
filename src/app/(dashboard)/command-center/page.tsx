@@ -6,14 +6,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { wow } from '@/lib/wow';
 import { PremiumKpiCard, PremiumRadialMetric, BRAND } from '@/components/charts';
-import {
-  useClients,
-  useCampaigns,
-  useLeads,
-  usePayments,
-  useAdSets,
-  useAds,
-} from "@/lib/api/use-entity";
+import { useDashboardData } from "@/hooks/use-dashboard-data";
 import { useOperationalAlerts } from "@/lib/alerts/use-alerts";
 import { SkeletonKPIRow, SkeletonGrid } from "@/components/ui/skeleton";
 import type {
@@ -245,12 +238,13 @@ function AlertRow({
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export default function CommandCenterPage() {
-  const { data: rawClients, loading: l1 } = useClients();
-  const { data: rawCampaigns, loading: l2 } = useCampaigns();
-  const { data: rawLeads, loading: l3 } = useLeads();
-  const { data: rawPayments, loading: l4 } = usePayments();
-  const { data: rawAdSets } = useAdSets();
-  const { data: rawAds } = useAds();
+  const { data: dashData, loading: dashLoading } = useDashboardData();
+  const rawClients = dashData.clients;
+  const rawCampaigns = dashData.campaigns;
+  const rawLeads = dashData.leads;
+  const rawPayments = dashData.payments;
+  const rawAdSets = dashData.adSets;
+  const rawAds = dashData.ads;
   const {
     alerts: rawAlerts,
     criticalCount,
@@ -293,7 +287,7 @@ export default function CommandCenterPage() {
     }
   }, []);
 
-  const loading = l1 || l2 || l3 || l4 || l5;
+  const loading = dashLoading || l5;
   const isInitialLoad =
     loading && campaigns.length === 0 && clients.length === 0;
 

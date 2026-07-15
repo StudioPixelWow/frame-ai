@@ -26,6 +26,8 @@ const QUERIES: TableQuery[] = [
   { key: 'leads', table: 'app_leads', orderBy: 'id' },
   { key: 'employees', table: 'employees', orderBy: 'id' },
   { key: 'campaigns', table: 'app_campaigns', orderBy: 'id' },
+  { key: 'adSets', table: 'app_ad_sets', orderBy: 'id' },
+  { key: 'ads', table: 'app_ads', orderBy: 'id' },
   { key: 'approvals', table: 'app_approvals', orderBy: 'id' },
   { key: 'podcastSessions', table: 'app_podcast_sessions', orderBy: 'id' },
   { key: 'meetings', table: 'app_meetings', orderBy: 'id' },
