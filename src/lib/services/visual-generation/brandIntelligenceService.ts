@@ -130,7 +130,39 @@ export async function gatherBrandIntelligence(clientId: string): Promise<BrandIn
     }
   } catch { /* optional — continue without */ }
 
-  // ── 3. BrandAssets ────────────────────────────────────────────────────
+  // ── 3a. Client record — logo_url lives on the clients table directly ──
+  let clientLogoUrl: string | null = null;
+  try {
+    const { data: clientRow } = await sb
+      .from('clients')
+      .select('logo_url')
+      .eq('id', clientId)
+      .single();
+    if (clientRow?.logo_url) {
+      clientLogoUrl = clientRow.logo_url;
+      console.log(`[brand-intel] Found logo_url on clients table: ${clientLogoUrl}`);
+    }
+  } catch { /* optional */ }
+
+  // ── 3b. ClientFiles (Brand Kit tab) — brand assets saved here ────────
+  let brandKitFileUrls: string[] = [];
+  try {
+    const { data: rows } = await sb
+      .from('app_client_files')
+      .select('id, data')
+      .limit(500);
+    if (rows) {
+      const clientFiles = rows
+        .map((r: any) => rowToEntity<{ id: string; clientId: string; category: string; fileUrl: string; fileName: string }>(r))
+        .filter((f) => f.clientId === clientId && f.category === 'brand_asset');
+      brandKitFileUrls = clientFiles.map((f) => f.fileUrl).filter(Boolean);
+      if (brandKitFileUrls.length) {
+        console.log(`[brand-intel] Found ${brandKitFileUrls.length} brand_asset files in app_client_files`);
+      }
+    }
+  } catch { /* optional */ }
+
+  // ── 3c. BrandAssets (Creative Studio table) — secondary source ───────
   let brandAssets: BrandAsset[] = [];
   try {
     const { data: rows } = await sb
@@ -193,17 +225,21 @@ export async function gatherBrandIntelligence(clientId: string): Promise<BrandIn
   const preferredLayouts = brandProfile?.preferredLayouts || [];
   const rejectedLayouts = brandProfile?.rejectedLayouts || [];
 
-  // ── Brand assets ──────────────────────────────────────────────────────
+  // ── Brand assets — merge from Brand Kit (clients + client_files) AND Creative Studio (brand_assets) ──
+  // Priority: clients.logo_url > app_brand_assets logo
   const logoAsset = brandAssets.find((a) => a.assetType === 'logo');
-  const logoUrl = logoAsset?.fileUrl || null;
+  const logoUrl = clientLogoUrl || logoAsset?.fileUrl || null;
 
   const brandBookAsset = brandAssets.find((a) => a.assetType === 'brand_guideline');
   const brandBookUrl = brandBookAsset?.fileUrl || null;
 
-  const approvedReferenceUrls = brandAssets
+  // Approved references: Brand Kit files + Creative Studio approved refs
+  const creativeStudioApproved = brandAssets
     .filter((a) => a.isApprovedReference)
     .map((a) => a.fileUrl)
     .filter(Boolean);
+  // All Brand Kit assets are considered approved references for the visual generator
+  const approvedReferenceUrls = [...brandKitFileUrls, ...creativeStudioApproved];
 
   const rejectedReferenceUrls = brandAssets
     .filter((a) => a.isRejectedReference)
@@ -215,6 +251,8 @@ export async function gatherBrandIntelligence(clientId: string): Promise<BrandIn
     .filter((a) => productImageTypes.includes(a.assetType))
     .map((a) => a.fileUrl)
     .filter(Boolean);
+
+  console.log(`[brand-intel] Final: logoUrl=${logoUrl ? 'YES' : 'NO'}, approvedRefs=${approvedReferenceUrls.length}, productImages=${productImageUrls.length}`);
 
   // ── Creative DNA ──────────────────────────────────────────────────────
   const toneOfVoice = creativeDna?.toneOfVoice || '';
