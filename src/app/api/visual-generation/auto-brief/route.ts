@@ -22,27 +22,27 @@ const AUTO_BRIEF_SYSTEM_PROMPT = `You are a senior Creative Director at Pixel, a
 
 Your job: Given a marketing brief, client data, and brand intelligence, write THREE DIFFERENT creative concepts in Hebrew. Each concept is a distinct creative direction for an AI image generation system. The system will generate 3 visual options simultaneously — one from each concept.
 
-The 3 concepts must be GENUINELY DIFFERENT from each other:
-- Concept 1: A bold, dramatic approach (e.g., close-up, high contrast, emotional)
-- Concept 2: A clean, professional approach (e.g., wide shot, organized layout, corporate)
+The 3 concepts must be GENUINELY DIFFERENT from each other — different composition, different mood, different visual approach:
+- Concept 1: A bold, dramatic approach (e.g., close-up, high contrast, emotional impact)
+- Concept 2: A clean, professional approach (e.g., wide shot, organized layout, minimal)
 - Concept 3: A creative/artistic approach (e.g., unusual angle, metaphorical, stylized)
 
-CRITICAL COLOR RULES:
-- You will receive a list of brand colors (primary, secondary, accent).
-- Use ONLY those exact colors. Do NOT invent, suggest, or reference ANY color not in the brand kit.
-- If the brand has 2 colors, use only those 2. Do not add a third.
-- Reference every color by its hex code from the brand kit.
-- FORBIDDEN colors are listed — NEVER mention them.
+ABSOLUTE COLOR RULE — THIS IS THE #1 PRIORITY RULE:
+- You will receive a section called "ALLOWED COLORS" with exact hex codes.
+- You may ONLY reference colors from that list. Copy the exact hex codes.
+- Do NOT invent ANY color. Do NOT approximate. Do NOT add colors like black, white, gray, blue, red, or any color not in the list.
+- If you write a hex code that is NOT in the ALLOWED COLORS list, the entire output is REJECTED.
+- If no colors are provided, describe the mood/atmosphere without mentioning any specific colors or hex codes.
 
 RULES:
 1. Write in Hebrew. The instruction is for an Israeli marketing team.
-2. Be specific about visual elements: what appears in the image, composition, colors, mood, styling.
-3. Reference ONLY brand colors by their hex codes. No other colors allowed.
-4. If people appear, describe their appearance, clothing (must match brand colors), and positioning.
+2. Be specific about visual elements: what appears in the image, composition, mood, styling.
+3. Every color reference must be an EXACT hex code from the ALLOWED COLORS list. No exceptions.
+4. If people appear, describe their appearance, clothing, and positioning.
 5. Describe the typography style — text should NEVER be on frames or banners, always elegant floating text.
 6. Include the emotional tone and atmosphere.
-7. Each concept should be 3-5 sentences.
-8. Do NOT include generic instructions. Every sentence should add specific creative direction.
+7. Each concept should be 3-5 sentences with specific, unique creative direction.
+8. The 3 concepts must look COMPLETELY DIFFERENT from each other — not variations of the same idea.
 
 OUTPUT FORMAT — write exactly in this structure:
 ---CONCEPT1---
@@ -95,17 +95,33 @@ export async function POST(req: NextRequest) {
     parts.push('\n=== BRAND INTELLIGENCE ===');
     parts.push(brandIntel.brandRulesSummary);
 
-    if (brandIntel.primaryColors.length) {
-      parts.push(`\nPrimary colors (MUST DOMINATE): ${brandIntel.primaryColors.join(', ')}`);
+    // Build explicit ALLOWED COLORS block — this is the #1 priority
+    const allAllowedColors = [
+      ...brandIntel.primaryColors,
+      ...brandIntel.secondaryColors,
+      ...brandIntel.accentColors,
+    ].filter(Boolean);
+
+    if (allAllowedColors.length > 0) {
+      parts.push(`\n=== ALLOWED COLORS (USE ONLY THESE — NO OTHER COLORS PERMITTED) ===`);
+      parts.push(allAllowedColors.join(', '));
+      parts.push(`ANY hex code not in this list = REJECTED OUTPUT.`);
+      if (brandIntel.primaryColors.length) {
+        parts.push(`Primary (must dominate): ${brandIntel.primaryColors.join(', ')}`);
+      }
+      if (brandIntel.secondaryColors.length) {
+        parts.push(`Secondary: ${brandIntel.secondaryColors.join(', ')}`);
+      }
+      if (brandIntel.accentColors.length) {
+        parts.push(`Accent: ${brandIntel.accentColors.join(', ')}`);
+      }
+    } else {
+      parts.push(`\n=== NO BRAND COLORS DEFINED ===`);
+      parts.push(`Do NOT mention any specific colors or hex codes. Describe mood and atmosphere only.`);
     }
-    if (brandIntel.secondaryColors.length) {
-      parts.push(`Secondary colors: ${brandIntel.secondaryColors.join(', ')}`);
-    }
-    if (brandIntel.accentColors.length) {
-      parts.push(`Accent colors (use prominently): ${brandIntel.accentColors.join(', ')}`);
-    }
+
     if (brandIntel.forbiddenColors.length) {
-      parts.push(`FORBIDDEN colors (NEVER use these): ${brandIntel.forbiddenColors.join(', ')}`);
+      parts.push(`\nFORBIDDEN colors (NEVER use): ${brandIntel.forbiddenColors.join(', ')}`);
     }
 
     const apiKey = getApiKey();

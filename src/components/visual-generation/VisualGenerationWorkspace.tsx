@@ -593,9 +593,13 @@ export default function VisualGenerationWorkspace({
         throw new Error(body.error || "שגיאה ביצירת הוראות אוטומטיות");
       }
       const data = await res.json();
-      if (data.instruction) setInstruction(data.instruction);
       if (data.concepts && Array.isArray(data.concepts) && data.concepts.length >= 3) {
         setConcepts(data.concepts);
+        // Show all 3 concepts in the textarea so user can see all creative directions
+        const combinedText = data.concepts.map((c: string, i: number) => `--- קונספט ${i + 1} ---\n${c}`).join('\n\n');
+        setInstruction(combinedText);
+      } else if (data.instruction) {
+        setInstruction(data.instruction);
       }
     } catch (err: any) {
       setError(err.message || "שגיאה ביצירת הוראות אוטומטיות");
