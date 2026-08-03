@@ -192,6 +192,19 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
   const [showVisualGenModal, setShowVisualGenModal] = useState(false);
   const [visualGenItemId, setVisualGenItemId] = useState<string | null>(null);
 
+  // Bulk visual generation state
+  const [isBulkGenerating, setIsBulkGenerating] = useState(false);
+  const [bulkGenProgress, setBulkGenProgress] = useState<{
+    totalItems: number;
+    currentIndex: number;
+    currentTitle: string;
+    currentStage: string;
+    completedItems: { id: string; success: boolean; error?: string }[];
+    finished: boolean;
+    totalSuccess: number;
+    totalFailed: number;
+  } | null>(null);
+
   // Drag & Drop state for calendar
   const [dragItemId, setDragItemId] = useState<string | null>(null);
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
@@ -536,6 +549,126 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
       }
     })();
   }, [ganttItems, client.id, client.assignedManagerId, updateGanttItem]);
+
+  // ── Bulk visual generation handler ──────────────────────────────────
+  const handleBulkGenerate = useCallback(async () => {
+    if (isBulkGenerating) return;
+
+    // Count items without graphics
+    const itemsWithoutGraphics = calendarItems.filter(
+      (i: any) => !i.imageUrls || i.imageUrls.length === 0
+    );
+
+    if (itemsWithoutGraphics.length === 0) {
+      toast.success("כל הפריטים כבר כוללים עיצובים גרפיים!");
+      return;
+    }
+
+    setIsBulkGenerating(true);
+    setBulkGenProgress({
+      totalItems: itemsWithoutGraphics.length,
+      currentIndex: 0,
+      currentTitle: "",
+      currentStage: "מתחיל...",
+      completedItems: [],
+      finished: false,
+      totalSuccess: 0,
+      totalFailed: 0,
+    });
+
+    try {
+      const resp = await fetch("/api/visual-generation/bulk-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId: client.id }),
+      });
+
+      if (!resp.ok) {
+        throw new Error(`Server error: ${resp.status}`);
+      }
+
+      const reader = resp.body?.getReader();
+      if (!reader) throw new Error("No response stream");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      const stageLabels: Record<string, string> = {
+        "auto-brief": "יצירת בריף AI...",
+        generate: "מייצר 3 אפשרויות...",
+        "pick-best": "בוחר את האפשרות הטובה...",
+        finalize: "יוצר התאמות (FB/IG/סטורי)...",
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line);
+
+            switch (event.type) {
+              case "start":
+                setBulkGenProgress((p) => p ? { ...p, totalItems: event.totalItems } : p);
+                break;
+              case "item_start":
+                setBulkGenProgress((p) => p ? {
+                  ...p,
+                  currentIndex: event.index,
+                  currentTitle: event.itemTitle || "",
+                  currentStage: "מתחיל...",
+                } : p);
+                break;
+              case "item_stage":
+                setBulkGenProgress((p) => p ? {
+                  ...p,
+                  currentStage: stageLabels[event.stage] || event.stage,
+                } : p);
+                break;
+              case "item_complete":
+                setBulkGenProgress((p) => p ? {
+                  ...p,
+                  completedItems: [...p.completedItems, { id: event.itemId, success: true }],
+                  totalSuccess: p.totalSuccess + 1,
+                } : p);
+                break;
+              case "item_error":
+                setBulkGenProgress((p) => p ? {
+                  ...p,
+                  completedItems: [...p.completedItems, { id: event.itemId, success: false, error: event.error }],
+                  totalFailed: p.totalFailed + 1,
+                } : p);
+                break;
+              case "complete":
+                setBulkGenProgress((p) => p ? {
+                  ...p,
+                  finished: true,
+                  totalSuccess: event.totalSuccess,
+                  totalFailed: event.totalFailed,
+                } : p);
+                break;
+            }
+          } catch { /* skip malformed lines */ }
+        }
+      }
+
+      // Refresh Gantt items after completion
+      refetchGanttItems();
+      toast.success("יצירת העיצובים הגרפיים הושלמה!");
+    } catch (err: any) {
+      console.error("[bulk-gen] Error:", err);
+      toast.error("שגיאה ביצירת עיצובים: " + (err.message || "Unknown error"));
+      setBulkGenProgress((p) => p ? { ...p, finished: true } : p);
+    } finally {
+      setIsBulkGenerating(false);
+    }
+  }, [isBulkGenerating, calendarItems, client.id, refetchGanttItems, toast]);
 
   const handleSaveGanttItem = async () => {
     if (!editingItem) return;
@@ -1702,7 +1835,37 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
             <h3 style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--foreground)", margin: 0 }}>
               {HEB_MONTHS[selectedMonth]} {selectedYear}
             </h3>
-            <div style={{ display: "flex", gap: "0.5rem" }}>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              {(() => {
+                const itemsWithoutGraphics = calendarItems.filter(
+                  (i: any) => !i.imageUrls || i.imageUrls.length === 0
+                );
+                if (itemsWithoutGraphics.length === 0) return null;
+                return (
+                  <button
+                    onClick={handleBulkGenerate}
+                    disabled={isBulkGenerating}
+                    style={{
+                      fontSize: "0.78rem",
+                      fontWeight: 700,
+                      padding: "0.4rem 0.9rem",
+                      borderRadius: 10,
+                      border: "none",
+                      background: isBulkGenerating
+                        ? "var(--foreground-muted)"
+                        : "linear-gradient(135deg, var(--accent), #6366f1)",
+                      color: "#fff",
+                      cursor: isBulkGenerating ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {isBulkGenerating ? "⏳ מייצר..." : `🎨 צור עיצובים גרפיים (${itemsWithoutGraphics.length})`}
+                  </button>
+                );
+              })()}
               <button
                 className="mod-btn-ghost"
                 onClick={() => setSelectedMonth(selectedMonth === 0 ? 11 : selectedMonth - 1)}
@@ -3634,6 +3797,106 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      {/* ── Bulk Visual Generation Progress Modal ── */}
+      {bulkGenProgress && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <div style={{
+            background: "var(--surface-raised)", border: "1px solid var(--border)",
+            borderRadius: 16, padding: "2rem", width: "100%", maxWidth: 520,
+            maxHeight: "80vh", overflow: "auto", direction: "rtl",
+          }}>
+            <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--foreground)", margin: "0 0 1rem 0" }}>
+              🎨 יצירת עיצובים גרפיים אוטומטית
+            </h3>
+
+            {/* Overall progress bar */}
+            <div style={{ marginBottom: "1rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--foreground-muted)", marginBottom: 6 }}>
+                <span>{bulkGenProgress.completedItems.length} / {bulkGenProgress.totalItems} פריטים</span>
+                <span>{bulkGenProgress.totalItems > 0 ? Math.round((bulkGenProgress.completedItems.length / bulkGenProgress.totalItems) * 100) : 0}%</span>
+              </div>
+              <div style={{ height: 8, background: "var(--surface)", borderRadius: 999, overflow: "hidden" }}>
+                <div style={{
+                  width: `${bulkGenProgress.totalItems > 0 ? (bulkGenProgress.completedItems.length / bulkGenProgress.totalItems) * 100 : 0}%`,
+                  height: "100%",
+                  background: "linear-gradient(90deg, var(--accent), #6366f1)",
+                  borderRadius: 999,
+                  transition: "width 0.4s ease",
+                }} />
+              </div>
+            </div>
+
+            {/* Current item being processed */}
+            {!bulkGenProgress.finished && (
+              <div style={{
+                background: "var(--accent-muted)", border: "1px solid var(--accent)",
+                borderRadius: 10, padding: "0.75rem 1rem", marginBottom: "1rem",
+              }}>
+                <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--accent)", marginBottom: 4 }}>
+                  מעבד: {bulkGenProgress.currentTitle || `פריט ${bulkGenProgress.currentIndex + 1}`}
+                </div>
+                <div style={{ fontSize: "0.74rem", color: "var(--foreground-muted)", display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", animation: "pulse 1s infinite" }} />
+                  {bulkGenProgress.currentStage}
+                </div>
+              </div>
+            )}
+
+            {/* Completed items list */}
+            {bulkGenProgress.completedItems.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: "1rem" }}>
+                {bulkGenProgress.completedItems.map((item, idx) => (
+                  <div key={idx} style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    fontSize: "0.76rem", color: "var(--foreground-muted)",
+                  }}>
+                    <span style={{ fontSize: "0.9rem" }}>{item.success ? "✅" : "❌"}</span>
+                    <span>{item.success ? "הושלם" : `נכשל: ${item.error || "שגיאה"}`}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Completion summary */}
+            {bulkGenProgress.finished && (
+              <div style={{
+                background: "linear-gradient(135deg, #ecfdf5, #f0fdf4)",
+                border: "1px solid #86efac", borderRadius: 10,
+                padding: "1rem", marginBottom: "1rem", textAlign: "center",
+              }}>
+                <div style={{ fontSize: "1.5rem", marginBottom: 6 }}>🎉</div>
+                <div style={{ fontSize: "0.88rem", fontWeight: 700, color: "#166534" }}>
+                  הושלם! {bulkGenProgress.totalSuccess} עיצובים נוצרו בהצלחה
+                </div>
+                {bulkGenProgress.totalFailed > 0 && (
+                  <div style={{ fontSize: "0.76rem", color: "#dc2626", marginTop: 4 }}>
+                    {bulkGenProgress.totalFailed} נכשלו
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Close button */}
+            {bulkGenProgress.finished && (
+              <button
+                onClick={() => setBulkGenProgress(null)}
+                style={{
+                  width: "100%", padding: "0.65rem",
+                  fontSize: "0.82rem", fontWeight: 700,
+                  background: "var(--accent)", color: "#fff",
+                  border: "none", borderRadius: 10, cursor: "pointer",
+                }}
+              >
+                סגור
+              </button>
+            )}
           </div>
         </div>
       )}
