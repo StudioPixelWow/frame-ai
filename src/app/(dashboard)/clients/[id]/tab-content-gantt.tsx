@@ -1791,7 +1791,11 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                         });
                         return (
                           <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", width: "100%", alignItems: "center" }}>
-                            {dayItems.slice(0, 2).map((item) => (
+                            {dayItems.slice(0, 2).map((item) => {
+                              const imgs = ((item as any).imageUrls as string[] | undefined) || [];
+                              const firstImg = imgs[0] ? (String(imgs[0]).includes("|") ? String(imgs[0]).split("|")[1] : String(imgs[0])) : null;
+                              const statusColor = GANTT_STATUS_COLORS[item.status]?.color || ITEM_TYPE_CONFIG[item.itemType]?.color || "#6b7280";
+                              return (
                               <div
                                 key={item.id}
                                 draggable
@@ -1805,26 +1809,51 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                                 }}
                                 style={{
                                   fontSize: "0.55rem",
-                                  padding: "0.15rem 0.3rem",
-                                  borderRadius: "2px",
-                                  // Pill color gestures to the workflow STAGE (approved → green).
-                                  background: `${GANTT_STATUS_COLORS[item.status]?.color || ITEM_TYPE_CONFIG[item.itemType]?.color || "#6b7280"}20`,
-                                  color: GANTT_STATUS_COLORS[item.status]?.color || ITEM_TYPE_CONFIG[item.itemType]?.color || "#6b7280",
-                                  borderRight: `3px solid ${GANTT_STATUS_COLORS[item.status]?.color || "#6b7280"}`,
+                                  borderRadius: firstImg ? "4px" : "2px",
+                                  background: firstImg ? "var(--surface)" : `${statusColor}20`,
+                                  color: statusColor,
+                                  borderRight: `3px solid ${statusColor}`,
                                   fontWeight: 500,
                                   maxWidth: "100%",
                                   overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
                                   cursor: "grab",
                                   opacity: dragItemId === item.id ? 0.5 : 1,
                                 }}
                                 onClick={() => setEditingItemId(item.id)}
-                                title={`${item.title} (גרור לשינוי תאריך)`}
+                                title={`${item.title}${imgs.length > 0 ? ` · ${imgs.length} תמונות` : ""} (גרור לשינוי תאריך)`}
                               >
-                                {ITEM_TYPE_CONFIG[item.itemType]?.emoji} {item.title}
+                                {firstImg ? (
+                                  <div style={{ display: "flex", flexDirection: "column" }}>
+                                    <div style={{
+                                      width: "100%",
+                                      height: 28,
+                                      borderRadius: "3px 0 0 0",
+                                      background: `center/cover url(${firstImg})`,
+                                      position: "relative",
+                                    }}>
+                                      {imgs.length > 1 && (
+                                        <span style={{ position: "absolute", top: 1, left: 1, fontSize: "0.42rem", background: "rgba(0,0,0,0.6)", color: "#fff", borderRadius: 3, padding: "0 3px", lineHeight: "1.4" }}>
+                                          🖼 {imgs.length}
+                                        </span>
+                                      )}
+                                      {item.status === "approved" && (
+                                        <span style={{ position: "absolute", top: 1, right: 1, fontSize: "0.42rem", background: "#22c55e", color: "#fff", borderRadius: 3, padding: "0 3px", lineHeight: "1.4" }}>
+                                          ✓
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span style={{ padding: "1px 3px 2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                      {item.title}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span style={{ padding: "0.15rem 0.3rem", display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    {ITEM_TYPE_CONFIG[item.itemType]?.emoji} {item.title}
+                                  </span>
+                                )}
                               </div>
-                            ))}
+                              );
+                            })}
                             {dayItems.length > 2 && (
                               <div style={{ fontSize: "0.5rem", color: "var(--foreground-muted)" }}>
                                 +{dayItems.length - 2}
@@ -3612,7 +3641,7 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
       {showVisualGenModal && visualGenItemId && (
         <VisualGenerationWorkspace
           open={showVisualGenModal}
-          onClose={() => { setShowVisualGenModal(false); setVisualGenItemId(null); }}
+          onClose={() => { setShowVisualGenModal(false); setVisualGenItemId(null); refetchGanttItems(); }}
           ganttItemId={visualGenItemId}
           clientId={client.id}
           itemTitle={ganttItems.find(i => i.id === visualGenItemId)?.title}
