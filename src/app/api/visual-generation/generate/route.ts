@@ -150,10 +150,17 @@ export async function POST(req: NextRequest) {
     // STAGE 4: Run Creative Director (LLM → creative strategy)
     // ═══════════════════════════════════════════════════════════════════════
     console.log('[visual-gen] Stage 3: Running Creative Director...');
+
+    // Permanent brand-kit instruction — always prepended to every generation
+    const BRAND_KIT_DIRECTIVE = 'צור את התמונה לפי ערכת המותג — לוגו, צבעוניות, צורות, טיפוגרפיה וכל מה שניתן ללמוד מהלוגו והמסר.';
+    const userInstruction = instruction
+      ? `${BRAND_KIT_DIRECTIVE}\n\n${instruction}`
+      : `${BRAND_KIT_DIRECTIVE}\n\nCreate a professional marketing visual based on the brief.`;
+
     const directorResult = await runCreativeDirector(
       context,
       brandIntel,
-      instruction || 'Create a professional marketing visual based on the brief.',
+      userInstruction,
       conversationHistory.length > 0 ? conversationHistory : undefined,
     );
 
@@ -167,7 +174,7 @@ export async function POST(req: NextRequest) {
     } else {
       // Fallback: build a basic prompt from context (same as before)
       console.warn('[visual-gen] Creative Director failed, using fallback prompt:', directorResult.error);
-      imagePrompt = `Professional marketing visual for "${context.ganttItem.title}". ${context.promptContext}. ${instruction || ''}`;
+      imagePrompt = `Professional marketing visual for "${context.ganttItem.title}". ${context.promptContext}. ${userInstruction}`;
     }
 
     // Build a brief summary for the quality gate
