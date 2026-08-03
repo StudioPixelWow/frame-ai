@@ -151,8 +151,35 @@ export async function POST(req: NextRequest) {
     // ═══════════════════════════════════════════════════════════════════════
     console.log('[visual-gen] Stage 3: Running Creative Director...');
 
-    // Permanent brand-kit instruction — always prepended to every generation
-    const BRAND_KIT_DIRECTIVE = 'צור את התמונה לפי ערכת המותג — לוגו, צבעוניות, צורות, טיפוגרפיה וכל מה שניתן ללמוד מהלוגו והמסר.';
+    // Dynamic brand-kit directive — built from actual brand intelligence data
+    const brandDirectiveParts: string[] = [];
+    brandDirectiveParts.push('BRAND KIT ENFORCEMENT:');
+    if (brandIntel.primaryColors.length) {
+      brandDirectiveParts.push(`- Primary brand colors that MUST dominate: ${brandIntel.primaryColors.join(', ')}`);
+    }
+    if (brandIntel.secondaryColors.length) {
+      brandDirectiveParts.push(`- Secondary colors: ${brandIntel.secondaryColors.join(', ')}`);
+    }
+    if (brandIntel.accentColors.length) {
+      brandDirectiveParts.push(`- Accent colors: ${brandIntel.accentColors.join(', ')}`);
+    }
+    if (brandIntel.forbiddenColors.length) {
+      brandDirectiveParts.push(`- FORBIDDEN colors (never use): ${brandIntel.forbiddenColors.join(', ')}`);
+    }
+    if (brandIntel.preferredTypography && Object.keys(brandIntel.preferredTypography).length) {
+      brandDirectiveParts.push(`- Typography: ${JSON.stringify(brandIntel.preferredTypography)}`);
+    }
+    if (brandIntel.visualPersonality) {
+      brandDirectiveParts.push(`- Visual personality: ${brandIntel.visualPersonality}`);
+    }
+    if (brandIntel.preferredVisualStyles.length) {
+      brandDirectiveParts.push(`- Visual styles: ${brandIntel.preferredVisualStyles.join(', ')}`);
+    }
+    brandDirectiveParts.push('- People in the image must wear clothing/uniforms in brand colors');
+    brandDirectiveParts.push('- Text must NEVER appear on frames or banners — only elegant floating typography');
+    brandDirectiveParts.push('- Brand colors should cover at least 60% of the visual surface');
+
+    const BRAND_KIT_DIRECTIVE = brandDirectiveParts.join('\n');
     const userInstruction = instruction
       ? `${BRAND_KIT_DIRECTIVE}\n\n${instruction}`
       : `${BRAND_KIT_DIRECTIVE}\n\nCreate a professional marketing visual based on the brief.`;
@@ -350,8 +377,8 @@ export async function POST(req: NextRequest) {
           const imgWidth = imgMeta.width || width;
           const imgHeight = imgMeta.height || height;
 
-          // Size the logo: ~20% of image width, maintain aspect ratio
-          const targetLogoWidth = Math.round(imgWidth * 0.20);
+          // Size the logo: ~35% of image width, maintain aspect ratio — prominent brand presence
+          const targetLogoWidth = Math.round(imgWidth * 0.35);
           const resizedLogo = await sharp(logoBuffer)
             .resize({ width: targetLogoWidth, withoutEnlargement: false })
             .png()

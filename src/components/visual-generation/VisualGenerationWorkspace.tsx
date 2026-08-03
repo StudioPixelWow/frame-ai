@@ -360,6 +360,7 @@ export default function VisualGenerationWorkspace({
   const [pipelineStage, setPipelineStage] = useState<PipelineStage>(null);
   const [pipelineDataMap, setPipelineDataMap] = useState<Record<string, PipelineData>>({});
   const [expandedStrategy, setExpandedStrategy] = useState<string | null>(null);
+  const [isAutoBriefing, setIsAutoBriefing] = useState(false);
 
   /* inject keyframes once */
   useEffect(() => {
@@ -523,6 +524,31 @@ export default function VisualGenerationWorkspace({
     handleGenerate(versionId);
   };
 
+  const handleAutoBrief = async () => {
+    if (isAutoBriefing || isGenerating) return;
+    setIsAutoBriefing(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/visual-generation/auto-brief", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ganttItemId, clientId }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "שגיאה ביצירת הוראות אוטומטיות");
+      }
+      const data = await res.json();
+      if (data.instruction) {
+        setInstruction(data.instruction);
+      }
+    } catch (err: any) {
+      setError(err.message || "שגיאה ביצירת הוראות אוטומטיות");
+    } finally {
+      setIsAutoBriefing(false);
+    }
+  };
+
   /* ---- Render helpers ---- */
 
   const formatDuration = (ms?: number) => {
@@ -616,7 +642,61 @@ export default function VisualGenerationWorkspace({
 
             {/* --- Instruction Input --- */}
             <div>
-              <p style={sectionLabel}>הוראה ליצירה</p>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.4rem" }}>
+                <p style={{ ...sectionLabel, marginBottom: 0 }}>הוראה ליצירה</p>
+                <button
+                  onClick={handleAutoBrief}
+                  disabled={isAutoBriefing || isGenerating}
+                  style={{
+                    background: isAutoBriefing ? "rgba(240,255,2,0.15)" : "rgba(240,255,2,0.1)",
+                    color: "var(--neon-yellow)",
+                    border: "1px solid rgba(240,255,2,0.3)",
+                    borderRadius: 8,
+                    padding: "0.3rem 0.75rem",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    cursor: isAutoBriefing || isGenerating ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.35rem",
+                    opacity: isAutoBriefing || isGenerating ? 0.6 : 1,
+                    transition: "all 150ms ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isAutoBriefing && !isGenerating) {
+                      (e.currentTarget as HTMLElement).style.background = "rgba(240,255,2,0.2)";
+                      (e.currentTarget as HTMLElement).style.borderColor = "rgba(240,255,2,0.5)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isAutoBriefing && !isGenerating) {
+                      (e.currentTarget as HTMLElement).style.background = "rgba(240,255,2,0.1)";
+                      (e.currentTarget as HTMLElement).style.borderColor = "rgba(240,255,2,0.3)";
+                    }
+                  }}
+                >
+                  {isAutoBriefing ? (
+                    <>
+                      <span
+                        style={{
+                          width: 12,
+                          height: 12,
+                          border: "2px solid rgba(240,255,2,0.3)",
+                          borderTopColor: "var(--neon-yellow)",
+                          borderRadius: "50%",
+                          animation: "vgw-spin 0.8s linear infinite",
+                          display: "inline-block",
+                        }}
+                      />
+                      חוקר בריף...
+                    </>
+                  ) : (
+                    <>
+                      {"🤖"} AI בנה הוראות
+                    </>
+                  )}
+                </button>
+              </div>
               <div
                 style={{
                   display: "flex",
