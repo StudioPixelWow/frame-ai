@@ -354,6 +354,7 @@ export default function VisualGenerationWorkspace({
   const [pipelineStage, setPipelineStage] = useState<PipelineStage>(null);
   const [pipelineDataMap, setPipelineDataMap] = useState<Record<string, PipelineData>>({});
   const [isAutoBriefing, setIsAutoBriefing] = useState(false);
+  const [concepts, setConcepts] = useState<string[]>([]);
   const [chosenVersionId, setChosenVersionId] = useState<string | null>(null);
   const [finalizeStageIdx, setFinalizeStageIdx] = useState(0);
   const [finalVariants, setFinalVariants] = useState<VariantResult[]>([]);
@@ -491,6 +492,7 @@ export default function VisualGenerationWorkspace({
           ganttItemId,
           clientId,
           instruction: instruction.trim(),
+          concepts: concepts.length >= 3 ? concepts : undefined,
           width: preset.width,
           height: preset.height,
           quality,
@@ -592,6 +594,9 @@ export default function VisualGenerationWorkspace({
       }
       const data = await res.json();
       if (data.instruction) setInstruction(data.instruction);
+      if (data.concepts && Array.isArray(data.concepts) && data.concepts.length >= 3) {
+        setConcepts(data.concepts);
+      }
     } catch (err: any) {
       setError(err.message || "שגיאה ביצירת הוראות אוטומטיות");
     } finally {

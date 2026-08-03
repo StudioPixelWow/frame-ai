@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
       ganttItemId,
       clientId,
       instruction,
+      concepts: userConcepts,
       width = 1024,
       height = 1024,
       quality = 'high' as const,
@@ -266,7 +267,39 @@ export async function POST(req: NextRequest) {
     if (mode === 'initial') {
       console.log('[visual-gen] MODE: INITIAL — generating 3 options in parallel...');
 
-      const prompts = VARIATION_SUFFIXES.map(suffix => imagePrompt + suffix);
+      // If auto-brief provided 3 distinct concepts, run Creative Director separately for each.
+      // Otherwise fall back to VARIATION_SUFFIXES on the single prompt.
+      const hasDistinctConcepts = Array.isArray(userConcepts) && userConcepts.length >= 3;
+
+      let prompts: string[];
+      if (hasDistinctConcepts) {
+        console.log('[visual-gen] Using 3 DISTINCT concepts from auto-brief');
+        // Each concept already has its own creative direction — run Creative Director
+        // on each one to get an optimized image prompt per concept.
+        const conceptPrompts = await Promise.all(
+          userConcepts.slice(0, 3).map(async (concept: string, idx: number) => {
+            try {
+              const conceptDirector = await runCreativeDirector(
+                context,
+                brandIntel,
+                concept,
+                conversationHistory,
+              );
+              if (conceptDirector.success && conceptDirector.strategy?.optimizedImagePrompt) {
+                console.log(`[visual-gen] Creative Director concept ${idx + 1} — optimized prompt ready`);
+                return conceptDirector.strategy.optimizedImagePrompt;
+              }
+            } catch (err: any) {
+              console.warn(`[visual-gen] Creative Director concept ${idx + 1} failed:`, err.message);
+            }
+            // Fallback: use the concept text directly as the prompt
+            return `Professional marketing visual. ${concept}. ${context.promptContext}`;
+          })
+        );
+        prompts = conceptPrompts;
+      } else {
+        prompts = VARIATION_SUFFIXES.map(suffix => imagePrompt + suffix);
+      }
 
       // Generate 3 images in parallel
       const genResults = await Promise.all(
@@ -367,7 +400,7 @@ export async function POST(req: NextRequest) {
           versionNumber,
           status: 'pending',
           userInstruction: instruction || '',
-          fullPrompt: imagePrompt + (VARIATION_SUFFIXES[i] || ''),
+          fullPrompt: prompts[i] || imagePrompt,
           model: 'gpt-image-2',
           quality,
           width,

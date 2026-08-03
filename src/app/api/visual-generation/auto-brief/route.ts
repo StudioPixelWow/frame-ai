@@ -20,22 +20,39 @@ function getApiKey(): string {
 
 const AUTO_BRIEF_SYSTEM_PROMPT = `You are a senior Creative Director at Pixel, a premium Israeli marketing agency.
 
-Your job: Given a marketing brief, client data, and brand intelligence, write a detailed CREATIVE INSTRUCTION in Hebrew that will guide AI image generation to produce a stunning, brand-accurate marketing visual.
+Your job: Given a marketing brief, client data, and brand intelligence, write THREE DIFFERENT creative concepts in Hebrew. Each concept is a distinct creative direction for an AI image generation system. The system will generate 3 visual options simultaneously — one from each concept.
 
-The instruction you write will be passed to another AI system that generates the image. Your goal is to translate the raw brief data into a rich, specific creative direction.
+The 3 concepts must be GENUINELY DIFFERENT from each other:
+- Concept 1: A bold, dramatic approach (e.g., close-up, high contrast, emotional)
+- Concept 2: A clean, professional approach (e.g., wide shot, organized layout, corporate)
+- Concept 3: A creative/artistic approach (e.g., unusual angle, metaphorical, stylized)
+
+CRITICAL COLOR RULES:
+- You will receive a list of brand colors (primary, secondary, accent).
+- Use ONLY those exact colors. Do NOT invent, suggest, or reference ANY color not in the brand kit.
+- If the brand has 2 colors, use only those 2. Do not add a third.
+- Reference every color by its hex code from the brand kit.
+- FORBIDDEN colors are listed — NEVER mention them.
 
 RULES:
 1. Write in Hebrew. The instruction is for an Israeli marketing team.
 2. Be specific about visual elements: what appears in the image, composition, colors, mood, styling.
-3. Reference the brand colors by their hex codes and describe how they should appear in the image.
+3. Reference ONLY brand colors by their hex codes. No other colors allowed.
 4. If people appear, describe their appearance, clothing (must match brand colors), and positioning.
 5. Describe the typography style — text should NEVER be on frames or banners, always elegant floating text.
 6. Include the emotional tone and atmosphere.
-7. Keep it concise but detailed — 3-6 sentences.
+7. Each concept should be 3-5 sentences.
 8. Do NOT include generic instructions. Every sentence should add specific creative direction.
-9. Think about what would make this specific visual stand out on social media.
 
-OUTPUT: Write ONLY the creative instruction text. No explanations, no prefixes, no quotes. Just the instruction itself.`;
+OUTPUT FORMAT — write exactly in this structure:
+---CONCEPT1---
+[Hebrew creative instruction for concept 1]
+---CONCEPT2---
+[Hebrew creative instruction for concept 2]
+---CONCEPT3---
+[Hebrew creative instruction for concept 3]
+
+No explanations, no prefixes, no quotes outside the concepts.`;
 
 export async function POST(req: NextRequest) {
   try {
@@ -118,16 +135,33 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await response.json();
-    const instruction = result.choices?.[0]?.message?.content?.trim();
+    const rawContent = result.choices?.[0]?.message?.content?.trim();
 
-    if (!instruction) {
+    if (!rawContent) {
       return NextResponse.json(
         { error: 'No instruction generated' },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ instruction });
+    // Parse 3 concepts from the structured output
+    const concepts: string[] = [];
+    const conceptMatches = rawContent.split(/---CONCEPT\d+---/).filter((s: string) => s.trim());
+
+    if (conceptMatches.length >= 3) {
+      concepts.push(conceptMatches[0].trim());
+      concepts.push(conceptMatches[1].trim());
+      concepts.push(conceptMatches[2].trim());
+    } else {
+      // Fallback: if format didn't parse, use the whole text as concept 1
+      concepts.push(rawContent);
+    }
+
+    // Return both the first concept as the textarea instruction AND all 3 concepts
+    return NextResponse.json({
+      instruction: concepts[0],
+      concepts,
+    });
   } catch (error: any) {
     console.error('[auto-brief] Error:', error);
     return NextResponse.json(

@@ -112,11 +112,14 @@ export async function POST(req: NextRequest) {
     for (const variant of SIZE_VARIANTS) {
       console.log(`[visual-gen/finalize] Generating ${variant.key}: ${variant.width}×${variant.height}...`);
       try {
-        // Use sharp cover mode — scales and center-crops to exact dimensions
+        // Use sharp contain mode with background — ensures ALL content (text, logo)
+        // is visible. Adds padding bars if aspect ratios differ rather than cropping.
+        // This preserves the visual integrity of every variant.
         const resizedBuffer = await sharp(originalBuffer)
           .resize(variant.width, variant.height, {
-            fit: 'cover',
+            fit: 'contain',
             position: 'centre',
+            background: { r: 0, g: 0, b: 0, alpha: 1 }, // black bars if needed
           })
           .png({ quality: 90 })
           .toBuffer();

@@ -2441,12 +2441,23 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
                     </div>
                     {images.length > 0 && (
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8, marginBottom: others.length ? 8 : 0 }}>
-                        {images.map((im, i) => (
-                          <a key={i} href={im.url} target="_blank" rel="noopener noreferrer" title={im.name} style={{ display: "block", borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)" }}>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={im.url} alt={im.name} style={{ width: "100%", height: 120, objectFit: "cover", display: "block" }} />
-                          </a>
-                        ))}
+                        {images.map((im, i) => {
+                          // Detect platform variant from finalize URL pattern
+                          const variantLabels: Record<string, string> = { final_original: 'מקור', final_facebook: 'פייסבוק', final_instagram: 'אינסטגרם', final_story: 'סטורי' };
+                          const variantKey = Object.keys(variantLabels).find(k => im.url.includes(k));
+                          const platformLabel = variantKey ? variantLabels[variantKey] : null;
+                          return (
+                            <a key={i} href={im.url} target="_blank" rel="noopener noreferrer" title={im.name} style={{ display: "block", borderRadius: 10, overflow: "hidden", border: approved ? "2px solid rgba(34,197,94,0.5)" : "1px solid var(--border)", position: "relative" }}>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={im.url} alt={im.name} style={{ width: "100%", height: 120, objectFit: "cover", display: "block" }} />
+                              {platformLabel && (
+                                <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.65)", color: "#fff", fontSize: "0.65rem", fontWeight: 700, textAlign: "center", padding: "3px 0" }}>
+                                  {platformLabel}
+                                </div>
+                              )}
+                            </a>
+                          );
+                        })}
                       </div>
                     )}
                     {others.map((o, i) => (
