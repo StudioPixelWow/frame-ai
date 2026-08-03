@@ -344,7 +344,6 @@ export default function VisualGenerationWorkspace({
 
   /* state */
   const [selectedPreset, setSelectedPreset] = useState(0);
-  const [instruction, setInstruction] = useState("");
   const [quality, setQuality] = useState<"auto" | "low" | "medium" | "high">("auto");
   const [versions, setVersions] = useState<VersionItem[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -354,7 +353,7 @@ export default function VisualGenerationWorkspace({
   const [pipelineStage, setPipelineStage] = useState<PipelineStage>(null);
   const [pipelineDataMap, setPipelineDataMap] = useState<Record<string, PipelineData>>({});
   const [isAutoBriefing, setIsAutoBriefing] = useState(false);
-  const [concepts, setConcepts] = useState<string[]>([]);
+  const [concepts, setConcepts] = useState<string[]>(["", "", ""]);
   const [chosenVersionId, setChosenVersionId] = useState<string | null>(null);
   const [finalizeStageIdx, setFinalizeStageIdx] = useState(0);
   const [finalVariants, setFinalVariants] = useState<VariantResult[]>([]);
@@ -485,14 +484,18 @@ export default function VisualGenerationWorkspace({
     stageTimers.push(setTimeout(() => setPipelineStage("uploading"), 50000));
 
     try {
+      // Build concepts array — filter out empties
+      const filledConcepts = concepts.filter((c) => c.trim());
+      const hasAllThree = filledConcepts.length >= 3;
+
       const res = await fetch("/api/visual-generation/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ganttItemId,
           clientId,
-          instruction: instruction.trim(),
-          concepts: concepts.length >= 3 ? concepts : undefined,
+          instruction: hasAllThree ? concepts[0].trim() : filledConcepts[0]?.trim() || "",
+          concepts: hasAllThree ? concepts.map((c) => c.trim()) : undefined,
           width: preset.width,
           height: preset.height,
           quality,
@@ -594,12 +597,15 @@ export default function VisualGenerationWorkspace({
       }
       const data = await res.json();
       if (data.concepts && Array.isArray(data.concepts) && data.concepts.length >= 3) {
-        setConcepts(data.concepts);
-        // Show all 3 concepts in the textarea so user can see all creative directions
-        const combinedText = data.concepts.map((c: string, i: number) => `--- קונספט ${i + 1} ---\n${c}`).join('\n\n');
-        setInstruction(combinedText);
+        // Fill each concept field separately
+        setConcepts([
+          data.concepts[0] || "",
+          data.concepts[1] || "",
+          data.concepts[2] || "",
+        ]);
       } else if (data.instruction) {
-        setInstruction(data.instruction);
+        // Fallback: put instruction in first concept
+        setConcepts([data.instruction, "", ""]);
       }
     } catch (err: any) {
       setError(err.message || "שגיאה ביצירת הוראות אוטומטיות");
@@ -792,17 +798,17 @@ export default function VisualGenerationWorkspace({
                   </div>
                 </div>
 
-                {/* Instruction */}
+                {/* 3 Concept Instructions */}
                 <div>
                   <div
                     style={{
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
-                      marginBottom: "0.4rem",
+                      marginBottom: "0.5rem",
                     }}
                   >
-                    <p style={{ ...sectionLabel, marginBottom: 0 }}>הוראה ליצירה</p>
+                    <p style={{ ...sectionLabel, marginBottom: 0 }}>הוראות ליצירה — 3 קונספטים</p>
                     <button
                       onClick={handleAutoBrief}
                       disabled={isAutoBriefing || isGenerating}
@@ -811,7 +817,7 @@ export default function VisualGenerationWorkspace({
                         color: "var(--neon-yellow)",
                         border: "1px solid rgba(240,255,2,0.3)",
                         borderRadius: 8,
-                        padding: "0.3rem 0.75rem",
+                        padding: "0.35rem 0.85rem",
                         fontSize: "0.72rem",
                         fontWeight: 700,
                         cursor: isAutoBriefing || isGenerating ? "not-allowed" : "pointer",
@@ -834,30 +840,68 @@ export default function VisualGenerationWorkspace({
                               display: "inline-block",
                             }}
                           />
-                          חוקר בריף...
+                          יוצר 3 קונספטים...
                         </>
                       ) : (
-                        <>{"🤖"} AI בנה הוראות</>
+                        <>{"🤖"} AI בנה 3 הוראות ליצירה</>
                       )}
                     </button>
                   </div>
-                  <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
-                    <textarea
-                      value={instruction}
-                      onChange={(e) => setInstruction(e.target.value)}
-                      placeholder="תאר את הויזואל שאתה רוצה..."
-                      rows={3}
-                      style={textareaStyle}
-                    />
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    {[0, 1, 2].map((idx) => (
+                      <div key={idx} style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
+                        <span
+                          style={{
+                            minWidth: 22,
+                            height: 22,
+                            borderRadius: "50%",
+                            background: concepts[idx]?.trim() ? "var(--accent)" : "var(--surface-hover)",
+                            color: concepts[idx]?.trim() ? "#fff" : "var(--text-secondary)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: "0.65rem",
+                            fontWeight: 700,
+                            marginTop: 6,
+                            border: "1px solid var(--border)",
+                          }}
+                        >
+                          {idx + 1}
+                        </span>
+                        <textarea
+                          value={concepts[idx] || ""}
+                          onChange={(e) => {
+                            const next = [...concepts];
+                            next[idx] = e.target.value;
+                            setConcepts(next);
+                          }}
+                          placeholder={`קונספט ${idx + 1} — תאר כיוון קריאייטיבי שונה...`}
+                          rows={2}
+                          style={{
+                            ...textareaStyle,
+                            flex: 1,
+                            fontSize: "0.78rem",
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ marginTop: "0.6rem", display: "flex", justifyContent: "flex-start" }}>
                     <button
                       onClick={handleGenerateInitial}
-                      disabled={isGenerating}
-                      style={isGenerating ? generateBtnDisabled : generateBtn}
+                      disabled={isGenerating || !concepts.some((c) => c.trim())}
+                      style={{
+                        ...(isGenerating || !concepts.some((c) => c.trim()) ? generateBtnDisabled : generateBtn),
+                        width: "auto",
+                        padding: "0.55rem 1.5rem",
+                      }}
                     >
                       {isGenerating ? (
                         <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
                           <span style={spinnerInline} />
-                          מייצר...
+                          מייצר 3 אפשרויות...
                         </span>
                       ) : (
                         "צור 3 אפשרויות"
