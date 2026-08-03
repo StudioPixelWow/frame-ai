@@ -79,10 +79,16 @@ export async function POST(req: NextRequest) {
     parts.push(brandIntel.brandRulesSummary);
 
     if (brandIntel.primaryColors.length) {
-      parts.push(`\nPrimary colors: ${brandIntel.primaryColors.join(', ')}`);
+      parts.push(`\nPrimary colors (MUST DOMINATE): ${brandIntel.primaryColors.join(', ')}`);
     }
     if (brandIntel.secondaryColors.length) {
       parts.push(`Secondary colors: ${brandIntel.secondaryColors.join(', ')}`);
+    }
+    if (brandIntel.accentColors.length) {
+      parts.push(`Accent colors (use prominently): ${brandIntel.accentColors.join(', ')}`);
+    }
+    if (brandIntel.forbiddenColors.length) {
+      parts.push(`FORBIDDEN colors (NEVER use these): ${brandIntel.forbiddenColors.join(', ')}`);
     }
 
     const apiKey = getApiKey();
