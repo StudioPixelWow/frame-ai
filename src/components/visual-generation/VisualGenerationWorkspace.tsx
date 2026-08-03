@@ -442,7 +442,7 @@ export default function VisualGenerationWorkspace({
 
   const handleGenerate = async (referenceVersionId?: string) => {
     if (isGenerating) return;
-    if (!instruction.trim() && !referenceVersionId) return;
+    // Allow empty instruction — server-side BRAND_KIT_DIRECTIVE provides fallback
 
     const preset = SIZE_PRESETS[selectedPreset];
     setIsGenerating(true);
@@ -639,19 +639,19 @@ export default function VisualGenerationWorkspace({
                 />
                 <button
                   onClick={() => handleGenerate()}
-                  disabled={isGenerating || !instruction.trim()}
+                  disabled={isGenerating}
                   style={
-                    isGenerating || !instruction.trim()
+                    isGenerating
                       ? generateBtnDisabled
                       : generateBtn
                   }
                   onMouseEnter={(e) => {
-                    if (!isGenerating && instruction.trim()) {
+                    if (!isGenerating) {
                       (e.currentTarget as HTMLElement).style.opacity = "0.85";
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (!isGenerating && instruction.trim()) {
+                    if (!isGenerating) {
                       (e.currentTarget as HTMLElement).style.opacity = "1";
                     }
                   }}
