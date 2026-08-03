@@ -1,6 +1,16 @@
 /**
  * POST /api/visual-generation/generate
- * Generate a visual for a Gantt item using OpenAI image generation.
+ *
+ * Multi-stage visual generation pipeline — ChatGPT-level creative quality.
+ *
+ * Pipeline stages:
+ * 1. Build Generation Context (brief, gantt item, client data)
+ * 2. Gather Brand Intelligence (colors, fonts, assets, feedback, DNA)
+ * 3. Run Creative Director (LLM → full creative strategy + optimized prompt)
+ * 4. Generate Image (gpt-image-2)
+ * 5. Visual Quality Gate (LLM vision → validate against strategy)
+ * 6. Auto-retry if quality gate fails (up to 1 retry with corrective prompt)
+ * 7. Upload to Storage + persist version record
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -8,7 +18,12 @@ import { getSupabase } from '@/lib/db/store';
 import { aiGenerationSessions, aiGenerationVersions } from '@/lib/db/collections';
 import type { AIGenerationSession, AIGenerationVersion } from '@/lib/db/schema';
 import { buildGenerationContext } from '@/lib/services/visual-generation/generationContextBuilder';
+import { gatherBrandIntelligence } from '@/lib/services/visual-generation/brandIntelligenceService';
+import { runCreativeDirector } from '@/lib/services/visual-generation/creativeDirectorService';
+import { runQualityGate } from '@/lib/services/visual-generation/visualQualityGate';
 import { generateImage, editImage } from '@/lib/services/visual-generation/openaiImageProvider';
+
+export const maxDuration = 120; // Allow up to 2 minutes for the full pipeline
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,10 +45,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Build generation context from gantt item + client data
+    const startTime = Date.now();
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // STAGE 1: Build Generation Context (brief understanding)
+    // ═══════════════════════════════════════════════════════════════════════
+    console.log('[visual-gen] Stage 1: Building generation context...');
     const context = await buildGenerationContext(ganttItemId, clientId);
 
-    // 2. Find or create a session for this gantt item
+    // ═══════════════════════════════════════════════════════════════════════
+    // STAGE 2: Gather Brand Intelligence
+    // ═══════════════════════════════════════════════════════════════════════
+    console.log('[visual-gen] Stage 2: Gathering brand intelligence...');
+    const brandIntel = await gatherBrandIntelligence(clientId);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // STAGE 3: Find or create session + load conversation history
+    // ═══════════════════════════════════════════════════════════════════════
     let session: AIGenerationSession | null = null;
     const existingSessions = await aiGenerationSessions.queryAsync(
       (s: AIGenerationSession) => s.ganttItemId === ganttItemId && s.status === 'active'
@@ -42,42 +70,60 @@ export async function POST(req: NextRequest) {
       session = existingSessions[0] as AIGenerationSession;
     }
 
-    // 3. Build the full prompt
-    const fullPrompt = `You are a professional graphic designer creating marketing visuals for an Israeli marketing agency.
-
-CONTEXT:
-${context.promptContext}
-
-USER REQUEST:
-${instruction || 'Create a professional marketing visual based on the context above.'}
-
-IMPORTANT RULES:
-- If Hebrew text is specified in graphicText, render it accurately in the image
-- The visual should look like a real professional ad, not AI-generated
-- Use the brand colors specified
-- Match the platform format exactly`;
-
-    // Create session if it doesn't exist
-    if (!session) {
-      session = await aiGenerationSessions.createAsync({
-        clientId,
-        ganttItemId,
-        status: 'active',
-        contextSnapshot: context.contextSnapshot,
-        systemPrompt: fullPrompt,
-        sizePreset: { label: `${width}x${height}`, width, height },
-        activeVersionId: null,
-        versionCount: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      } as Omit<AIGenerationSession, 'id'> as any);
+    // Load conversation history from previous versions in this session
+    let conversationHistory: Array<{ role: string; content: string }> = [];
+    if (session) {
+      try {
+        const prevVersions = await aiGenerationVersions.queryAsync(
+          (v: AIGenerationVersion) => v.sessionId === session!.id
+        );
+        // Sort by versionNumber and build conversation history
+        const sorted = (prevVersions as AIGenerationVersion[])
+          .sort((a, b) => (a.versionNumber || 0) - (b.versionNumber || 0));
+        for (const v of sorted) {
+          if (v.userInstruction) {
+            conversationHistory.push({ role: 'user', content: v.userInstruction });
+          }
+          if (v.revisedPrompt) {
+            conversationHistory.push({ role: 'assistant', content: `Generated image with prompt: ${v.revisedPrompt}` });
+          } else if (v.fullPrompt) {
+            conversationHistory.push({ role: 'assistant', content: `Generated image v${v.versionNumber}` });
+          }
+        }
+      } catch { /* conversation history is optional */ }
     }
 
-    const sessionId = session.id;
-    const versionNumber = session.versionCount + 1;
+    // ═══════════════════════════════════════════════════════════════════════
+    // STAGE 4: Run Creative Director (LLM → creative strategy)
+    // ═══════════════════════════════════════════════════════════════════════
+    console.log('[visual-gen] Stage 3: Running Creative Director...');
+    const directorResult = await runCreativeDirector(
+      context,
+      brandIntel,
+      instruction || 'Create a professional marketing visual based on the brief.',
+      conversationHistory.length > 0 ? conversationHistory : undefined,
+    );
 
-    // 4. Generate or edit the image
-    const startTime = Date.now();
+    // Determine the image prompt — use Creative Director output or fallback
+    let imagePrompt: string;
+    let creativeStrategy = directorResult.strategy;
+
+    if (directorResult.success && creativeStrategy?.optimizedImagePrompt) {
+      imagePrompt = creativeStrategy.optimizedImagePrompt;
+      console.log('[visual-gen] Creative Director produced optimized prompt');
+    } else {
+      // Fallback: build a basic prompt from context (same as before)
+      console.warn('[visual-gen] Creative Director failed, using fallback prompt:', directorResult.error);
+      imagePrompt = `Professional marketing visual for "${context.ganttItem.title}". ${context.promptContext}. ${instruction || ''}`;
+    }
+
+    // Build a brief summary for the quality gate
+    const briefSummary = `Title: ${context.ganttItem.title}. Client: ${context.clientName}. Industry: ${context.businessField}. Platform: ${context.platform}. Format: ${context.format}. Visual concept: ${context.ganttItem.visualConcept || 'not specified'}. Graphic text: ${context.ganttItem.graphicText || 'none'}.`;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // STAGE 5: Generate or Edit the image
+    // ═══════════════════════════════════════════════════════════════════════
+    console.log('[visual-gen] Stage 4: Generating image...');
     let resultBase64 = '';
     let resultRevisedPrompt: string | undefined;
     let referenceImageUrls: string[] = [];
@@ -92,7 +138,6 @@ IMPORTANT RULES:
         );
       }
       referenceImageUrls = [refVersion.imageUrl];
-      // Fetch the reference image and convert to Buffer
       const imgResponse = await fetch(refVersion.imageUrl);
       if (!imgResponse.ok) {
         return NextResponse.json(
@@ -104,7 +149,7 @@ IMPORTANT RULES:
       const imgBuffer = Buffer.from(imgArrayBuffer);
 
       const editResult = await editImage({
-        prompt: fullPrompt,
+        prompt: imagePrompt,
         referenceImages: [imgBuffer],
         width,
         height,
@@ -120,7 +165,7 @@ IMPORTANT RULES:
       resultRevisedPrompt = editResult.images[0].revisedPrompt;
     } else {
       const genResult = await generateImage({
-        prompt: fullPrompt,
+        prompt: imagePrompt,
         width,
         height,
         quality,
@@ -135,9 +180,101 @@ IMPORTANT RULES:
       resultRevisedPrompt = genResult.images[0].revisedPrompt;
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // STAGE 6: Visual Quality Gate
+    // ═══════════════════════════════════════════════════════════════════════
+    let qualityAssessment: any = null;
+    if (creativeStrategy) {
+      console.log('[visual-gen] Stage 5: Running Visual Quality Gate...');
+      const qgResult = await runQualityGate(resultBase64, creativeStrategy, briefSummary);
+      if (qgResult.success && qgResult.assessment) {
+        qualityAssessment = qgResult.assessment;
+
+        // Auto-retry if quality gate says to retry and we have a corrective prompt
+        if (!qgResult.assessment.passed && qgResult.assessment.shouldRetry && qgResult.assessment.correctivePrompt) {
+          console.log('[visual-gen] Stage 5b: Quality gate failed — auto-retrying with corrections...');
+          const correctedPrompt = `${imagePrompt}\n\nCRITICAL CORRECTIONS (from quality review):\n${qgResult.assessment.correctivePrompt}`;
+
+          if (referenceVersionId && referenceImageUrls.length) {
+            // Re-edit with corrected prompt
+            const imgResponse2 = await fetch(referenceImageUrls[0]);
+            if (imgResponse2.ok) {
+              const imgBuf2 = Buffer.from(await imgResponse2.arrayBuffer());
+              const retryResult = await editImage({
+                prompt: correctedPrompt,
+                referenceImages: [imgBuf2],
+                width,
+                height,
+                quality,
+              });
+              if (retryResult.success && retryResult.images.length) {
+                resultBase64 = retryResult.images[0].base64;
+                resultRevisedPrompt = retryResult.images[0].revisedPrompt;
+                // Run quality gate again on retried image
+                const qg2 = await runQualityGate(resultBase64, creativeStrategy, briefSummary);
+                if (qg2.success && qg2.assessment) {
+                  qualityAssessment = qg2.assessment;
+                }
+              }
+            }
+          } else {
+            // Re-generate with corrected prompt
+            const retryResult = await generateImage({
+              prompt: correctedPrompt,
+              width,
+              height,
+              quality,
+            });
+            if (retryResult.success && retryResult.images.length) {
+              resultBase64 = retryResult.images[0].base64;
+              resultRevisedPrompt = retryResult.images[0].revisedPrompt;
+              // Run quality gate again on retried image
+              const qg2 = await runQualityGate(resultBase64, creativeStrategy, briefSummary);
+              if (qg2.success && qg2.assessment) {
+                qualityAssessment = qg2.assessment;
+              }
+            }
+          }
+        }
+      }
+    }
+
     const durationMs = Date.now() - startTime;
 
-    // 5. Upload to Supabase Storage
+    // ═══════════════════════════════════════════════════════════════════════
+    // STAGE 7: Upload to Supabase Storage + persist records
+    // ═══════════════════════════════════════════════════════════════════════
+    console.log('[visual-gen] Stage 6: Uploading and persisting...');
+
+    // Create session if it doesn't exist
+    if (!session) {
+      session = await aiGenerationSessions.createAsync({
+        clientId,
+        ganttItemId,
+        status: 'active',
+        contextSnapshot: {
+          briefSummary,
+          brandRulesSummary: brandIntel.brandRulesSummary,
+          creativeStrategy: creativeStrategy ? {
+            centralMessage: creativeStrategy.centralMessage,
+            creativeIdea: creativeStrategy.creativeIdea,
+            style: creativeStrategy.style,
+            mood: creativeStrategy.mood,
+          } : null,
+        },
+        systemPrompt: imagePrompt,
+        sizePreset: { label: `${width}x${height}`, width, height },
+        activeVersionId: null,
+        versionCount: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as Omit<AIGenerationSession, 'id'> as any);
+    }
+
+    const sessionId = session.id;
+    const versionNumber = session.versionCount + 1;
+
+    // Upload image
     const sb = getSupabase();
     const buffer = Buffer.from(resultBase64, 'base64');
     const storagePath = `visual-generation/${clientId}/${sessionId}/${versionNumber}.png`;
@@ -157,7 +294,7 @@ IMPORTANT RULES:
     const { data: urlData } = sb.storage.from('project-files').getPublicUrl(storagePath);
     const imageUrl = urlData?.publicUrl || null;
 
-    // 6. Create version record
+    // Create version record with enriched metadata
     const version = await aiGenerationVersions.createAsync({
       sessionId,
       clientId,
@@ -165,7 +302,7 @@ IMPORTANT RULES:
       versionNumber,
       status: 'completed',
       userInstruction: instruction || '',
-      fullPrompt,
+      fullPrompt: imagePrompt,
       model: 'gpt-image-2',
       quality,
       width,
@@ -177,17 +314,57 @@ IMPORTANT RULES:
       cost: null,
       errorMessage: null,
       durationMs,
+      // Enriched metadata from the pipeline
+      creativeStrategy: creativeStrategy ? {
+        centralMessage: creativeStrategy.centralMessage,
+        creativeIdea: creativeStrategy.creativeIdea,
+        composition: creativeStrategy.composition,
+        style: creativeStrategy.style,
+        mood: creativeStrategy.mood,
+        visualType: creativeStrategy.visualType,
+        luxuryLevel: creativeStrategy.luxuryLevel,
+        directorNotes: creativeStrategy.directorNotes,
+      } : null,
+      qualityAssessment: qualityAssessment ? {
+        passed: qualityAssessment.passed,
+        score: qualityAssessment.score,
+        issues: qualityAssessment.issues,
+        suggestions: qualityAssessment.suggestions,
+        assessment: qualityAssessment.assessment,
+      } : null,
       createdAt: new Date().toISOString(),
     } as Omit<AIGenerationVersion, 'id'> as any);
 
-    // 7. Update session
+    // Update session
     await aiGenerationSessions.updateAsync(sessionId, {
       activeVersionId: version.id,
       versionCount: versionNumber,
       updatedAt: new Date().toISOString(),
     });
 
-    return NextResponse.json(version);
+    console.log(`[visual-gen] Complete — version ${versionNumber}, quality: ${qualityAssessment?.score ?? 'N/A'}, duration: ${durationMs}ms`);
+
+    return NextResponse.json({
+      ...version,
+      // Include pipeline metadata in response for the UI
+      _pipeline: {
+        creativeStrategy: creativeStrategy ? {
+          centralMessage: creativeStrategy.centralMessage,
+          creativeIdea: creativeStrategy.creativeIdea,
+          style: creativeStrategy.style,
+          mood: creativeStrategy.mood,
+          directorNotes: creativeStrategy.directorNotes,
+        } : null,
+        qualityAssessment: qualityAssessment ? {
+          passed: qualityAssessment.passed,
+          score: qualityAssessment.score,
+          issues: qualityAssessment.issues,
+          suggestions: qualityAssessment.suggestions,
+          assessment: qualityAssessment.assessment,
+        } : null,
+        durationMs,
+      },
+    });
   } catch (error: any) {
     console.error('[visual-generation] Generate error:', error);
     return NextResponse.json(

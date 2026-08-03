@@ -22,6 +22,24 @@ interface SizePreset {
   format: string;
 }
 
+interface PipelineData {
+  creativeStrategy: {
+    centralMessage: string;
+    creativeIdea: string;
+    style: string;
+    mood: string;
+    directorNotes: string;
+  } | null;
+  qualityAssessment: {
+    passed: boolean;
+    score: number;
+    issues: string[];
+    suggestions: string[];
+    assessment: string;
+  } | null;
+  durationMs: number;
+}
+
 interface VersionItem {
   id: string;
   sessionId: string;
@@ -30,12 +48,31 @@ interface VersionItem {
   durationMs?: number;
   status?: "pending" | "selected" | "rejected";
   instruction?: string;
+  _pipeline?: PipelineData;
 }
 
 interface SessionItem {
   id: string;
   ganttItemId: string;
 }
+
+type PipelineStage =
+  | "brief"
+  | "brand"
+  | "director"
+  | "generating"
+  | "quality"
+  | "uploading"
+  | null;
+
+const PIPELINE_STAGES: { key: PipelineStage; label: string; icon: string }[] = [
+  { key: "brief", label: "מנתח בריף", icon: "📋" },
+  { key: "brand", label: "אוסף מודיעין מותג", icon: "🎨" },
+  { key: "director", label: "מנהל קריאייטיב חושב", icon: "🧠" },
+  { key: "generating", label: "מייצר תמונה", icon: "✨" },
+  { key: "quality", label: "בדיקת איכות", icon: "🔍" },
+  { key: "uploading", label: "שומר ומעלה", icon: "💾" },
+];
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -80,6 +117,14 @@ function ensureKeyframes() {
     @keyframes vgw-glow {
       0%, 100% { box-shadow: 0 0 8px rgba(34,197,94,0.4); }
       50% { box-shadow: 0 0 20px rgba(34,197,94,0.7); }
+    }
+    @keyframes vgw-stage-enter {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes vgw-progress {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
     }
   `;
   document.head.appendChild(style);
@@ -312,6 +357,9 @@ export default function VisualGenerationWorkspace({
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pipelineStage, setPipelineStage] = useState<PipelineStage>(null);
+  const [pipelineDataMap, setPipelineDataMap] = useState<Record<string, PipelineData>>({});
+  const [expandedStrategy, setExpandedStrategy] = useState<string | null>(null);
 
   /* inject keyframes once */
   useEffect(() => {
@@ -400,6 +448,16 @@ export default function VisualGenerationWorkspace({
     setIsGenerating(true);
     setError(null);
 
+    // Simulate pipeline stage progression
+    // The actual pipeline runs server-side; we show estimated stages
+    const stageTimers: ReturnType<typeof setTimeout>[] = [];
+    setPipelineStage("brief");
+    stageTimers.push(setTimeout(() => setPipelineStage("brand"), 2000));
+    stageTimers.push(setTimeout(() => setPipelineStage("director"), 4500));
+    stageTimers.push(setTimeout(() => setPipelineStage("generating"), 9000));
+    stageTimers.push(setTimeout(() => setPipelineStage("quality"), 25000));
+    stageTimers.push(setTimeout(() => setPipelineStage("uploading"), 35000));
+
     try {
       const res = await fetch("/api/visual-generation/generate", {
         method: "POST",
@@ -415,21 +473,35 @@ export default function VisualGenerationWorkspace({
         }),
       });
 
+      // Clear stage timers
+      stageTimers.forEach(clearTimeout);
+
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || "שגיאה ביצירת ויזואל");
       }
 
       const result = await res.json();
+
+      // Store pipeline data for this version
+      if (result._pipeline && result.id) {
+        setPipelineDataMap((prev) => ({
+          ...prev,
+          [result.id]: result._pipeline,
+        }));
+      }
+
       const sid = result.sessionId || sessionId;
       if (sid) {
         setSessionId(sid);
         await fetchVersions(sid);
       }
     } catch (err: any) {
+      stageTimers.forEach(clearTimeout);
       setError(err.message || "שגיאה ביצירת ויזואל");
     } finally {
       setIsGenerating(false);
+      setPipelineStage(null);
     }
   };
 
@@ -663,38 +735,97 @@ export default function VisualGenerationWorkspace({
               </div>
             )}
 
-            {/* --- Loading State --- */}
+            {/* --- Pipeline Progress --- */}
             {isGenerating && (
               <div
                 style={{
                   display: "flex",
                   flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "1rem",
-                  padding: "2.5rem 1rem",
+                  gap: "0.75rem",
+                  padding: "1.5rem",
+                  background: "var(--surface)",
+                  borderRadius: 12,
+                  border: "1px solid var(--border)",
                 }}
               >
-                <div style={spinnerStyle} />
-                <p
+                {/* Animated progress bar */}
+                <div
                   style={{
-                    margin: 0,
-                    fontSize: "0.9rem",
-                    fontWeight: 600,
-                    color: "var(--accent)",
-                    animation: "vgw-pulse 1.5s ease-in-out infinite",
+                    height: 3,
+                    borderRadius: 2,
+                    background: "linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%)",
+                    backgroundSize: "200% 100%",
+                    animation: "vgw-progress 1.5s ease-in-out infinite",
                   }}
-                >
-                  מייצר ויזואל...
-                </p>
+                />
+                {/* Stage list */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                  {PIPELINE_STAGES.map((stage) => {
+                    const stageIdx = PIPELINE_STAGES.findIndex((s) => s.key === stage.key);
+                    const currentIdx = PIPELINE_STAGES.findIndex((s) => s.key === pipelineStage);
+                    const isDone = stageIdx < currentIdx;
+                    const isActive = stage.key === pipelineStage;
+                    const isPending = stageIdx > currentIdx;
+
+                    return (
+                      <div
+                        key={stage.key}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.6rem",
+                          padding: "0.3rem 0.5rem",
+                          borderRadius: 8,
+                          background: isActive ? "rgba(0,181,254,0.08)" : "transparent",
+                          opacity: isPending ? 0.35 : 1,
+                          transition: "all 300ms ease",
+                          ...(isActive ? { animation: "vgw-stage-enter 0.3s ease" } : {}),
+                        }}
+                      >
+                        <span style={{ fontSize: "0.85rem", width: 20, textAlign: "center" }}>
+                          {isDone ? "✓" : stage.icon}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "0.78rem",
+                            fontWeight: isActive ? 700 : 500,
+                            color: isDone
+                              ? "#22c55e"
+                              : isActive
+                              ? "var(--accent)"
+                              : "var(--foreground-muted)",
+                          }}
+                        >
+                          {stage.label}
+                        </span>
+                        {isActive && (
+                          <span
+                            style={{
+                              width: 10,
+                              height: 10,
+                              border: "2px solid transparent",
+                              borderTopColor: "var(--accent)",
+                              borderRadius: "50%",
+                              animation: "vgw-spin 0.6s linear infinite",
+                              display: "inline-block",
+                              marginRight: "auto",
+                            }}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
                 <p
                   style={{
                     margin: 0,
-                    fontSize: "0.72rem",
+                    fontSize: "0.7rem",
                     color: "var(--foreground-muted)",
+                    textAlign: "center",
+                    marginTop: "0.25rem",
                   }}
                 >
-                  זה עשוי לקחת מספר שניות
+                  איכות לפני מהירות — זה עשוי לקחת עד 2 דקות
                 </p>
               </div>
             )}
@@ -712,7 +843,13 @@ export default function VisualGenerationWorkspace({
                     gap: "1rem",
                   }}
                 >
-                  {versions.map((ver) => (
+                  {versions.map((ver) => {
+                    const pd = pipelineDataMap[ver.id];
+                    const qa = pd?.qualityAssessment;
+                    const cs = pd?.creativeStrategy;
+                    const isExpanded = expandedStrategy === ver.id;
+
+                    return (
                     <div
                       key={ver.id}
                       style={
@@ -787,6 +924,25 @@ export default function VisualGenerationWorkspace({
                             נבחר
                           </span>
                         )}
+                        {/* Quality score badge */}
+                        {qa && (
+                          <span
+                            style={{
+                              position: "absolute",
+                              bottom: 8,
+                              right: 8,
+                              background: qa.passed ? "rgba(34,197,94,0.85)" : "rgba(239,68,68,0.85)",
+                              color: "#fff",
+                              fontSize: "0.64rem",
+                              fontWeight: 700,
+                              padding: "0.15rem 0.55rem",
+                              borderRadius: 999,
+                              backdropFilter: "blur(4px)",
+                            }}
+                          >
+                            {qa.score}/100
+                          </span>
+                        )}
                       </div>
 
                       {/* Info + Actions */}
@@ -814,6 +970,22 @@ export default function VisualGenerationWorkspace({
                             >
                               {formatDuration(ver.durationMs)}
                             </span>
+                          )}
+                          {cs && (
+                            <button
+                              onClick={() => setExpandedStrategy(isExpanded ? null : ver.id)}
+                              style={{
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                fontSize: "0.68rem",
+                                fontWeight: 600,
+                                color: "var(--accent)",
+                                padding: "0.1rem 0.3rem",
+                              }}
+                            >
+                              {isExpanded ? "▲ אסטרטגיה" : "▼ אסטרטגיה"}
+                            </button>
                           )}
                         </div>
                         <div
@@ -858,8 +1030,71 @@ export default function VisualGenerationWorkspace({
                           </button>
                         </div>
                       </div>
+
+                      {/* Creative Strategy Panel (collapsible) */}
+                      {isExpanded && cs && (
+                        <div
+                          style={{
+                            padding: "0.75rem 0.85rem",
+                            borderTop: "1px solid var(--border)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "0.4rem",
+                            animation: "vgw-stage-enter 0.25s ease",
+                          }}
+                        >
+                          <div style={{ fontSize: "0.72rem", color: "var(--foreground)" }}>
+                            <span style={{ fontWeight: 700, color: "var(--accent)" }}>מסר מרכזי: </span>
+                            {cs.centralMessage}
+                          </div>
+                          <div style={{ fontSize: "0.72rem", color: "var(--foreground)" }}>
+                            <span style={{ fontWeight: 700, color: "var(--accent)" }}>רעיון קריאייטיבי: </span>
+                            {cs.creativeIdea}
+                          </div>
+                          <div style={{ fontSize: "0.72rem", color: "var(--foreground)" }}>
+                            <span style={{ fontWeight: 700, color: "var(--accent)" }}>סגנון: </span>
+                            {cs.style}
+                          </div>
+                          <div style={{ fontSize: "0.72rem", color: "var(--foreground)" }}>
+                            <span style={{ fontWeight: 700, color: "var(--accent)" }}>מצב רוח: </span>
+                            {cs.mood}
+                          </div>
+                          {cs.directorNotes && (
+                            <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)", fontStyle: "italic", marginTop: "0.15rem" }}>
+                              {cs.directorNotes}
+                            </div>
+                          )}
+                          {/* Quality assessment */}
+                          {qa && (
+                            <div
+                              style={{
+                                marginTop: "0.35rem",
+                                padding: "0.5rem",
+                                borderRadius: 8,
+                                background: qa.passed ? "rgba(34,197,94,0.06)" : "rgba(239,68,68,0.06)",
+                                border: `1px solid ${qa.passed ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)"}`,
+                              }}
+                            >
+                              <div style={{ fontSize: "0.7rem", fontWeight: 700, color: qa.passed ? "#22c55e" : "#ef4444", marginBottom: "0.25rem" }}>
+                                {qa.passed ? "✓ עבר בדיקת איכות" : "✗ נכשל בבדיקת איכות"} — ציון {qa.score}/100
+                              </div>
+                              {qa.assessment && (
+                                <div style={{ fontSize: "0.68rem", color: "var(--foreground-muted)" }}>
+                                  {qa.assessment}
+                                </div>
+                              )}
+                              {qa.issues.length > 0 && (
+                                <div style={{ fontSize: "0.66rem", color: "var(--foreground-muted)", marginTop: "0.2rem" }}>
+                                  בעיות: {qa.issues.join(" | ")}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

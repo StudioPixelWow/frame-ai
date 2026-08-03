@@ -1,0 +1,270 @@
+/**
+ * Creative Director Service
+ *
+ * Before any image is generated, this service acts as an AI Creative Director.
+ * It takes the raw brief + brand intelligence and produces a full Creative Strategy
+ * with an optimized prompt for the image generation model.
+ *
+ * Uses GPT-4.1 (chat completions) to transform a brief into a detailed
+ * creative direction — composition, lighting, color palette, mood, typography,
+ * element placement, and a refined image-generation prompt.
+ *
+ * Server-side only.
+ */
+
+import type { GenerationContext } from './generationContextBuilder';
+import type { BrandIntelligence } from './brandIntelligenceService';
+
+// ---------------------------------------------------------------------------
+// Public types
+// ---------------------------------------------------------------------------
+
+export interface CreativeStrategy {
+  /** The core message the visual should communicate */
+  centralMessage: string;
+  /** The creative concept / big idea */
+  creativeIdea: string;
+  /** Information hierarchy — what the eye should see first, second, third */
+  informationHierarchy: string[];
+  /** Composition direction */
+  composition: string;
+  /** Lighting style */
+  lighting: string;
+  /** Camera angle / perspective */
+  cameraAngle: string;
+  /** Color palette to use (derived from brand + creative intent) */
+  colorPalette: string[];
+  /** Overall visual style */
+  style: string;
+  /** Mood / atmosphere */
+  mood: string;
+  /** Type of visual — photo, illustration, 3D render, etc. */
+  visualType: string;
+  /** Element placement description */
+  elementPlacement: string;
+  /** Luxury / premium level (1-10) */
+  luxuryLevel: number;
+  /** Typography direction */
+  typographyStyle: string;
+  /** Elements that must NOT change */
+  immutableElements: string[];
+  /** Reference image descriptions if applicable */
+  referenceNotes: string;
+  /** The optimized prompt for the image generation model */
+  optimizedImagePrompt: string;
+  /** Quality assessment notes from the creative director */
+  directorNotes: string;
+}
+
+export interface CreativeDirectorResult {
+  success: boolean;
+  strategy: CreativeStrategy | null;
+  error?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function getApiKey(): string {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error('Missing OPENAI_API_KEY environment variable');
+  return key;
+}
+
+// ---------------------------------------------------------------------------
+// System prompt for the Creative Director
+// ---------------------------------------------------------------------------
+
+const CREATIVE_DIRECTOR_SYSTEM_PROMPT = `You are a world-class Creative Director and Art Director working for Pixel, a premium Israeli marketing agency.
+
+Your job: Take a marketing brief and brand intelligence, and produce a detailed Creative Strategy that will guide an AI image generation model to create a professional, commercial-grade marketing visual.
+
+You think like the best creative directors in Tel Aviv — bold, modern, commercially effective.
+
+RULES:
+1. The visual must look like a REAL professional ad — not AI-generated, not generic stock.
+2. Hebrew text (if specified) must be rendered accurately. Never transliterate or translate Hebrew text.
+3. Brand colors are NON-NEGOTIABLE — they must be incorporated naturally.
+4. Forbidden colors must NEVER appear.
+5. The composition must serve the marketing objective — what the viewer sees first matters.
+6. Every visual must have a clear focal point and visual hierarchy.
+7. Do NOT over-complicate. Commercial ads are clean, focused, and impactful.
+8. Consider the platform — Instagram 4:5 requires different composition than a Facebook banner.
+9. Think about text readability — if there's text overlay, ensure sufficient contrast.
+10. The visual should feel premium, not cheap or template-like.
+
+OUTPUT FORMAT — respond with ONLY a valid JSON object (no markdown, no code fences, no explanation):
+{
+  "centralMessage": "string — the one message this visual communicates",
+  "creativeIdea": "string — the creative concept / big idea",
+  "informationHierarchy": ["first thing eye sees", "second", "third"],
+  "composition": "string — detailed composition direction",
+  "lighting": "string — lighting style",
+  "cameraAngle": "string — camera angle / perspective",
+  "colorPalette": ["#hex1", "#hex2", "..."],
+  "style": "string — overall visual style",
+  "mood": "string — mood / atmosphere",
+  "visualType": "string — photo / illustration / 3D render / flat design / etc",
+  "elementPlacement": "string — where each element goes",
+  "luxuryLevel": 8,
+  "typographyStyle": "string — if text is needed, what typography style",
+  "immutableElements": ["element that must not change"],
+  "referenceNotes": "string — any reference direction",
+  "optimizedImagePrompt": "string — THE ACTUAL PROMPT to send to the image generation model. This must be extremely detailed, specific, and optimized for gpt-image-2. Include every visual detail: subject, composition, colors, lighting, camera angle, mood, style, text placement, and any specific elements. This is the most important field.",
+  "directorNotes": "string — any notes about potential issues or things to watch for"
+}`;
+
+// ---------------------------------------------------------------------------
+// Main function
+// ---------------------------------------------------------------------------
+
+export async function runCreativeDirector(
+  context: GenerationContext,
+  brandIntel: BrandIntelligence,
+  userInstruction: string,
+  conversationHistory?: Array<{ role: string; content: string }>,
+): Promise<CreativeDirectorResult> {
+  try {
+    const apiKey = getApiKey();
+
+    // Build the user message with all context
+    const userMessage = buildUserMessage(context, brandIntel, userInstruction, conversationHistory);
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4.1',
+        messages: [
+          { role: 'system', content: CREATIVE_DIRECTOR_SYSTEM_PROMPT },
+          { role: 'user', content: userMessage },
+        ],
+        temperature: 0.7,
+        max_tokens: 4000,
+        response_format: { type: 'json_object' },
+      }),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text();
+      return {
+        success: false,
+        strategy: null,
+        error: `Creative Director API error (${response.status}): ${errBody}`,
+      };
+    }
+
+    const result = await response.json();
+    const content = result.choices?.[0]?.message?.content;
+
+    if (!content) {
+      return { success: false, strategy: null, error: 'No response from Creative Director' };
+    }
+
+    // Parse the JSON response
+    let parsed: any;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      // Try to extract JSON from the response
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0]);
+      } else {
+        return { success: false, strategy: null, error: 'Invalid JSON from Creative Director' };
+      }
+    }
+
+    const strategy: CreativeStrategy = {
+      centralMessage: parsed.centralMessage || '',
+      creativeIdea: parsed.creativeIdea || '',
+      informationHierarchy: parsed.informationHierarchy || [],
+      composition: parsed.composition || '',
+      lighting: parsed.lighting || '',
+      cameraAngle: parsed.cameraAngle || '',
+      colorPalette: parsed.colorPalette || [],
+      style: parsed.style || '',
+      mood: parsed.mood || '',
+      visualType: parsed.visualType || '',
+      elementPlacement: parsed.elementPlacement || '',
+      luxuryLevel: parsed.luxuryLevel || 7,
+      typographyStyle: parsed.typographyStyle || '',
+      immutableElements: parsed.immutableElements || [],
+      referenceNotes: parsed.referenceNotes || '',
+      optimizedImagePrompt: parsed.optimizedImagePrompt || '',
+      directorNotes: parsed.directorNotes || '',
+    };
+
+    return { success: true, strategy };
+  } catch (err) {
+    return {
+      success: false,
+      strategy: null,
+      error: `Creative Director error: ${err instanceof Error ? err.message : 'Unknown'}`,
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// User message builder
+// ---------------------------------------------------------------------------
+
+function buildUserMessage(
+  context: GenerationContext,
+  brandIntel: BrandIntelligence,
+  userInstruction: string,
+  conversationHistory?: Array<{ role: string; content: string }>,
+): string {
+  const parts: string[] = [];
+
+  // ── Brief ──
+  parts.push('=== BRIEF ===');
+  parts.push(`Title: ${context.ganttItem.title}`);
+  if (context.ganttItem.ideaSummary) parts.push(`Concept: ${context.ganttItem.ideaSummary}`);
+  if (context.ganttItem.visualConcept) parts.push(`Visual direction: ${context.ganttItem.visualConcept}`);
+  if (context.ganttItem.graphicText) parts.push(`Text to appear on graphic (HEBREW — render exactly): "${context.ganttItem.graphicText}"`);
+  if (context.ganttItem.caption) parts.push(`Caption/copy: ${context.ganttItem.caption}`);
+  if (context.ganttItem.contentType) parts.push(`Content type: ${context.ganttItem.contentType}`);
+  if (context.monthTheme) parts.push(`Monthly theme: ${context.monthTheme}`);
+  if (context.campaignTag) parts.push(`Campaign: ${context.campaignTag}`);
+  if (context.ganttItem.holidayTag) parts.push(`Holiday/occasion: ${context.ganttItem.holidayTag}`);
+  if (context.platform) parts.push(`Platform: ${context.platform}`);
+  if (context.format) parts.push(`Format: ${context.format}`);
+
+  // ── Client ──
+  parts.push('\n=== CLIENT ===');
+  parts.push(`Name: ${context.clientName}`);
+  parts.push(`Industry: ${context.businessField}`);
+
+  // ── Brand Intelligence ──
+  parts.push('\n=== BRAND INTELLIGENCE ===');
+  parts.push(brandIntel.brandRulesSummary);
+
+  if (brandIntel.approvedReferenceUrls.length) {
+    parts.push(`\nApproved reference images (${brandIntel.approvedReferenceUrls.length} total) — draw visual inspiration from these.`);
+  }
+  if (brandIntel.rejectedReferenceUrls.length) {
+    parts.push(`Rejected references (${brandIntel.rejectedReferenceUrls.length} total) — avoid similar styles.`);
+  }
+
+  // ── User instruction ──
+  if (userInstruction) {
+    parts.push('\n=== USER INSTRUCTION ===');
+    parts.push(userInstruction);
+  }
+
+  // ── Conversation history (for refinements) ──
+  if (conversationHistory?.length) {
+    parts.push('\n=== CONVERSATION HISTORY (previous iterations) ===');
+    for (const msg of conversationHistory) {
+      parts.push(`[${msg.role}]: ${msg.content}`);
+    }
+    parts.push('Build upon the previous iterations. Improve based on the latest feedback.');
+  }
+
+  return parts.join('\n');
+}
