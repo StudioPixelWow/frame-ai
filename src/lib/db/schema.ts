@@ -3719,3 +3719,85 @@ export interface JobRun {
   metadata: Record<string, any> | null;
   createdAt: string;
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Visual Generation from Gantt — Sessions & Versions
+// ═══════════════════════════════════════════════════════════════════
+
+export type GenerationSessionStatus = 'active' | 'completed' | 'archived' | 'failed';
+export type GenerationVersionStatus = 'generating' | 'completed' | 'failed' | 'selected' | 'rejected';
+
+/** Platform-specific size presets */
+export interface VisualSizePreset {
+  label: string;
+  width: number;
+  height: number;
+  platform: ContentPlatform;
+  format: ContentFormat;
+}
+
+/** A generation session — one per Gantt item visual creation flow */
+export interface AIGenerationSession {
+  id: string;
+  clientId: string;
+  ganttItemId: string;
+  status: GenerationSessionStatus;
+  /** Snapshot of all context used for generation */
+  contextSnapshot: {
+    ganttItem: Partial<ClientGanttItem>;
+    clientName: string;
+    businessField: string;
+    logoUrl: string | null;
+    brandColors: string[];
+    creativeDna: Partial<CreativeDNA> | null;
+    brandProfile: Partial<BrandStyleProfile> | null;
+    monthTheme: string;
+    campaignTag: string;
+  };
+  /** The prompt sent to OpenAI (for debugging — hidden from normal users) */
+  systemPrompt: string;
+  /** Chosen size preset */
+  sizePreset: VisualSizePreset;
+  /** Active version ID — the one currently selected */
+  activeVersionId: string | null;
+  /** Total versions generated in this session */
+  versionCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A single generation version within a session */
+export interface AIGenerationVersion {
+  id: string;
+  sessionId: string;
+  clientId: string;
+  ganttItemId: string;
+  versionNumber: number;
+  status: GenerationVersionStatus;
+  /** The user instruction for this version (initial or edit) */
+  userInstruction: string;
+  /** Full prompt sent to OpenAI for this specific version */
+  fullPrompt: string;
+  /** OpenAI model used */
+  model: string;
+  /** OpenAI quality setting */
+  quality: 'low' | 'medium' | 'high' | 'auto';
+  /** Requested size */
+  width: number;
+  height: number;
+  /** Generated image URL (Supabase Storage) */
+  imageUrl: string | null;
+  /** Base64 thumbnail for quick preview */
+  thumbnailBase64: string | null;
+  /** OpenAI revised prompt (returned by API) */
+  revisedPrompt: string | null;
+  /** Reference images used (URLs of previous versions or brand assets) */
+  referenceImageUrls: string[];
+  /** Cost in tokens/dollars */
+  cost: { inputTokens?: number; outputTokens?: number; estimatedUsd?: number } | null;
+  /** Error message if generation failed */
+  errorMessage: string | null;
+  /** Duration in ms */
+  durationMs: number | null;
+  createdAt: string;
+}

@@ -7,6 +7,7 @@ import type { Client, Employee, ClientGanttItem } from "@/lib/db/schema";
 import { useClientGanttItems, useTasks, useEmployees, useProjects, useEmployeeTasks } from "@/lib/api/use-entity";
 import { useToast } from "@/components/ui/toast";
 import { fetchReferences, getStyleLabel, type ReferenceItem, type ReferenceQuery } from "@/lib/gantt/reference-engine";
+import VisualGenerationWorkspace from "@/components/visual-generation/VisualGenerationWorkspace";
 
 const HEB_MONTHS = [
   "ינואר",
@@ -188,6 +189,8 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [ganttVersion, setGanttVersion] = useState(1);
   const [showRegenConfirmModal, setShowRegenConfirmModal] = useState(false);
+  const [showVisualGenModal, setShowVisualGenModal] = useState(false);
+  const [visualGenItemId, setVisualGenItemId] = useState<string | null>(null);
 
   // Drag & Drop state for calendar
   const [dragItemId, setDragItemId] = useState<string | null>(null);
@@ -2248,8 +2251,9 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
             }
           >
 
-              {/* ── Manual edit toggle + panel (edit content after creation & save) ── */}
-              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+              {/* ── Manual edit toggle + visual generation + panel ── */}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 10 }}>
+                <button onClick={() => { setVisualGenItemId(selectedItem.id); setShowVisualGenModal(true); }} style={{ fontSize: "0.78rem", fontWeight: 700, color: "#fff", background: "var(--accent)", border: "none", borderRadius: 8, padding: "0.4rem 0.9rem", cursor: "pointer" }}>🎨 צור ויזואל מלא</button>
                 {!drawerEdit ? (
                   <button onClick={() => setDrawerEdit(true)} style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--accent)", background: "var(--accent-muted)", border: "1px solid var(--border)", borderRadius: 8, padding: "0.4rem 0.9rem", cursor: "pointer" }}>✏️ ערוך ידנית</button>
                 ) : (
@@ -3592,6 +3596,16 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
             </div>
           </div>
         </div>
+      )}
+      {/* ── Visual Generation Workspace Modal ── */}
+      {showVisualGenModal && visualGenItemId && (
+        <VisualGenerationWorkspace
+          open={showVisualGenModal}
+          onClose={() => { setShowVisualGenModal(false); setVisualGenItemId(null); }}
+          ganttItemId={visualGenItemId}
+          clientId={client.id}
+          itemTitle={ganttItems.find(i => i.id === visualGenItemId)?.title}
+        />
       )}
     </div>
   );

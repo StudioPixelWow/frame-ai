@@ -93,6 +93,8 @@ import type {
   CampaignCopySet,
   ScheduledJob,
   JobRun,
+  AIGenerationSession,
+  AIGenerationVersion,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -230,3 +232,7 @@ export const campaignCopySets = new SupabaseCrud<CampaignCopySet>('app_campaign_
 // Central Job System
 export const scheduledJobs = new SupabaseCrud<ScheduledJob>('scheduled_jobs', 'sjb');
 export const jobRuns = new SupabaseCrud<JobRun>('job_runs', 'jrn');
+
+// Visual Generation from Gantt
+export const aiGenerationSessions = new SupabaseCrud<AIGenerationSession>('ai_generation_sessions', 'ags');
+export const aiGenerationVersions = new SupabaseCrud<AIGenerationVersion>('ai_generation_versions', 'agv');
