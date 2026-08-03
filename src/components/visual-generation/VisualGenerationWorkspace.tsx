@@ -58,6 +58,16 @@ interface SessionItem {
   ganttItemId: string;
 }
 
+interface VariantResult {
+  key: string;
+  label: string;
+  labelHe: string;
+  width: number;
+  height: number;
+  platform: string;
+  imageUrl: string;
+}
+
 type PipelineStage =
   | "brief"
   | "brand"
@@ -67,7 +77,7 @@ type PipelineStage =
   | "uploading"
   | null;
 
-type WorkspacePhase = "setup" | "choosing" | "chat";
+type WorkspacePhase = "setup" | "choosing" | "finalizing" | "complete";
 
 const PIPELINE_STAGES: { key: PipelineStage; label: string; icon: string }[] = [
   { key: "brief", label: "מנתח בריף", icon: "📋" },
@@ -77,11 +87,12 @@ const PIPELINE_STAGES: { key: PipelineStage; label: string; icon: string }[] = [
   { key: "uploading", label: "שומר ומעלה", icon: "💾" },
 ];
 
-const REFINE_STAGES: { key: PipelineStage; label: string; icon: string }[] = [
-  { key: "brief", label: "מנתח הערות", icon: "📝" },
-  { key: "director", label: "מנהל קריאייטיב", icon: "🧠" },
-  { key: "generating", label: "מייצר שדרוג", icon: "✨" },
-  { key: "uploading", label: "שומר", icon: "💾" },
+const FINALIZE_STAGES: { key: string; label: string; icon: string }[] = [
+  { key: "select", label: "שומר בחירה", icon: "✓" },
+  { key: "facebook", label: "יוצר גודל פייסבוק", icon: "📘" },
+  { key: "instagram", label: "יוצר גודל אינסטגרם", icon: "📷" },
+  { key: "story", label: "יוצר גודל סטורי", icon: "📱" },
+  { key: "saving", label: "שומר בגאנט ומעדכן סטטוס", icon: "💾" },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -139,6 +150,11 @@ function ensureKeyframes() {
     @keyframes vgw-chosen-glow {
       0%, 100% { box-shadow: 0 0 12px rgba(0,181,254,0.3); }
       50% { box-shadow: 0 0 30px rgba(0,181,254,0.6); }
+    }
+    @keyframes vgw-success-pop {
+      0% { transform: scale(0.8); opacity: 0; }
+      60% { transform: scale(1.05); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
     }
   `;
   document.head.appendChild(style);
@@ -325,7 +341,6 @@ export default function VisualGenerationWorkspace({
   itemTitle,
 }: VisualGenerationWorkspaceProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const chatEndRef = useRef<HTMLDivElement>(null);
 
   /* state */
   const [selectedPreset, setSelectedPreset] = useState(0);
@@ -334,13 +349,14 @@ export default function VisualGenerationWorkspace({
   const [versions, setVersions] = useState<VersionItem[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isRefining, setIsRefining] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pipelineStage, setPipelineStage] = useState<PipelineStage>(null);
   const [pipelineDataMap, setPipelineDataMap] = useState<Record<string, PipelineData>>({});
   const [isAutoBriefing, setIsAutoBriefing] = useState(false);
   const [chosenVersionId, setChosenVersionId] = useState<string | null>(null);
-  const [chatInput, setChatInput] = useState("");
+  const [finalizeStageIdx, setFinalizeStageIdx] = useState(0);
+  const [finalVariants, setFinalVariants] = useState<VariantResult[]>([]);
 
   /* inject keyframes once */
   useEffect(() => {
@@ -385,14 +401,18 @@ export default function VisualGenerationWorkspace({
   const initialVersions = versions.filter(
     (v) => v.generationMode === "initial" || (!v.generationMode && !chosenVersionId)
   );
-  const refineVersions = versions.filter((v) => v.generationMode === "refine");
   const chosenVersion = versions.find((v) => v.id === chosenVersionId) || versions.find((v) => v.status === "selected");
 
   // Determine phase
   let phase: WorkspacePhase = "setup";
-  if (versions.length > 0) {
+  if (finalVariants.length > 0) {
+    phase = "complete";
+  } else if (isFinalizing) {
+    phase = "finalizing";
+  } else if (versions.length > 0) {
     if (chosenVersionId || chosenVersion) {
-      phase = "chat";
+      // If chosen but no variants yet and not finalizing, still show complete if we already finalized
+      phase = "finalizing";
     } else {
       phase = "choosing";
     }
@@ -407,12 +427,6 @@ export default function VisualGenerationWorkspace({
       }
     }
   }, [versions, chosenVersionId]);
-
-  // Latest version for refinement reference
-  const latestRefineVersion =
-    refineVersions.length > 0
-      ? refineVersions[refineVersions.length - 1]
-      : chosenVersion || null;
 
   /* ---- API helpers ---- */
 
@@ -452,13 +466,6 @@ export default function VisualGenerationWorkspace({
       loadExistingSessions();
     }
   }, [open, loadExistingSessions]);
-
-  /* scroll to bottom of chat when new messages arrive */
-  useEffect(() => {
-    if (phase === "chat" && chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [refineVersions.length, phase]);
 
   /* ---- Actions ---- */
 
@@ -500,7 +507,6 @@ export default function VisualGenerationWorkspace({
 
       const result = await res.json();
 
-      // Store pipeline data
       if (result._pipeline && result.versions) {
         for (const ver of result.versions) {
           setPipelineDataMap((prev) => ({
@@ -524,82 +530,49 @@ export default function VisualGenerationWorkspace({
     }
   };
 
-  // Choose one of the 3 options → enter chat mode
+  // Choose one of the 3 options → auto-finalize (generate all sizes)
   const handleChooseVersion = async (versionId: string) => {
     setChosenVersionId(versionId);
-    // Mark as selected in DB
-    try {
-      await fetch("/api/visual-generation/versions", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ versionId, status: "selected" }),
-      });
-      if (sessionId) await fetchVersions(sessionId);
-    } catch {
-      /* proceed anyway — local state is set */
-    }
-  };
-
-  // Send a refinement message in chat mode
-  const handleChatRefine = async () => {
-    const feedback = chatInput.trim();
-    if (!feedback || isRefining || !latestRefineVersion) return;
-
-    setIsRefining(true);
+    setIsFinalizing(true);
     setError(null);
-    setChatInput("");
+    setFinalizeStageIdx(0);
+    setFinalVariants([]);
 
+    // Animate through finalize stages
     const stageTimers: ReturnType<typeof setTimeout>[] = [];
-    setPipelineStage("brief");
-    stageTimers.push(setTimeout(() => setPipelineStage("director"), 2000));
-    stageTimers.push(setTimeout(() => setPipelineStage("generating"), 6000));
-    stageTimers.push(setTimeout(() => setPipelineStage("uploading"), 35000));
-
-    const preset = SIZE_PRESETS[selectedPreset];
+    stageTimers.push(setTimeout(() => setFinalizeStageIdx(1), 800));
+    stageTimers.push(setTimeout(() => setFinalizeStageIdx(2), 2500));
+    stageTimers.push(setTimeout(() => setFinalizeStageIdx(3), 4000));
+    stageTimers.push(setTimeout(() => setFinalizeStageIdx(4), 5500));
 
     try {
-      const res = await fetch("/api/visual-generation/generate", {
+      const res = await fetch("/api/visual-generation/finalize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ganttItemId,
-          clientId,
-          instruction: feedback,
-          width: preset.width,
-          height: preset.height,
-          quality,
-          mode: "refine",
-          selectedVersionId: latestRefineVersion.id,
-        }),
+        body: JSON.stringify({ versionId, ganttItemId, clientId }),
       });
 
       stageTimers.forEach(clearTimeout);
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "שגיאה בשדרוג");
+        throw new Error(body.error || "שגיאה ביצירת גרסאות גודל");
       }
 
       const result = await res.json();
+      setFinalVariants(result.variants || []);
 
-      if (result._pipeline && result.id) {
-        setPipelineDataMap((prev) => ({
-          ...prev,
-          [result.id]: result._pipeline,
-        }));
-      }
-
-      const sid = result.sessionId || sessionId;
-      if (sid) {
-        setSessionId(sid);
-        await fetchVersions(sid);
+      // Refresh versions
+      if (sessionId) {
+        await fetchVersions(sessionId);
       }
     } catch (err: any) {
       stageTimers.forEach(clearTimeout);
-      setError(err.message || "שגיאה בשדרוג");
+      setError(err.message || "שגיאה ביצירת גרסאות גודל");
+      setChosenVersionId(null);
     } finally {
-      setIsRefining(false);
-      setPipelineStage(null);
+      setIsFinalizing(false);
+      setFinalizeStageIdx(0);
     }
   };
 
@@ -626,10 +599,11 @@ export default function VisualGenerationWorkspace({
     }
   };
 
-  // Back to choosing phase
+  // Back to choosing phase — clear selection and variants
   const handleBackToChoosing = () => {
     setChosenVersionId(null);
-    setChatInput("");
+    setFinalVariants([]);
+    setIsFinalizing(false);
   };
 
   /* ---- Render helpers ---- */
@@ -639,7 +613,11 @@ export default function VisualGenerationWorkspace({
     return `${(ms / 1000).toFixed(1)} שניות`;
   };
 
-  const renderPipelineProgress = (stages: typeof PIPELINE_STAGES, label: string) => (
+  const renderPipelineProgress = (
+    stages: { key: string; label: string; icon: string }[],
+    currentIdx: number,
+    label: string,
+  ) => (
     <div
       style={{
         display: "flex",
@@ -661,12 +639,10 @@ export default function VisualGenerationWorkspace({
         }}
       />
       <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-        {stages.map((stage) => {
-          const stageIdx = stages.findIndex((s) => s.key === stage.key);
-          const currentIdx = stages.findIndex((s) => s.key === pipelineStage);
-          const isDone = stageIdx < currentIdx;
-          const isActive = stage.key === pipelineStage;
-          const isPending = stageIdx > currentIdx;
+        {stages.map((stage, idx) => {
+          const isDone = idx < currentIdx;
+          const isActive = idx === currentIdx;
+          const isPending = idx > currentIdx;
 
           return (
             <div
@@ -755,7 +731,7 @@ export default function VisualGenerationWorkspace({
               >
                 {"יצירת ויזואל" + (itemTitle ? ` — ${itemTitle}` : "")}
               </h2>
-              {phase === "chat" && (
+              {(phase === "complete" || phase === "choosing") && (
                 <button
                   onClick={handleBackToChoosing}
                   style={{
@@ -767,6 +743,7 @@ export default function VisualGenerationWorkspace({
                     fontWeight: 600,
                     color: "var(--foreground-muted)",
                     cursor: "pointer",
+                    display: phase === "choosing" ? "none" : undefined,
                   }}
                 >
                   {"←"} חזור לבחירה
@@ -928,14 +905,16 @@ export default function VisualGenerationWorkspace({
             {isGenerating &&
               renderPipelineProgress(
                 PIPELINE_STAGES,
+                PIPELINE_STAGES.findIndex((s) => s.key === pipelineStage),
                 "מייצר 3 אפשרויות שונות — זה עשוי לקחת עד 2 דקות"
               )}
 
-            {/* Pipeline Progress — refinement */}
-            {isRefining &&
+            {/* Pipeline Progress — finalization */}
+            {phase === "finalizing" && isFinalizing &&
               renderPipelineProgress(
-                REFINE_STAGES,
-                "משדרג את הויזואל לפי ההערות שלך..."
+                FINALIZE_STAGES,
+                finalizeStageIdx,
+                "יוצר גרסאות לכל הפלטפורמות ושומר בגאנט..."
               )}
 
             {/* ──────────────── CHOOSING PHASE ──────────────── */}
@@ -1067,306 +1046,159 @@ export default function VisualGenerationWorkspace({
               </div>
             )}
 
-            {/* ──────────────── CHAT PHASE ──────────────── */}
-            {phase === "chat" && !isGenerating && (
-              <div style={{ display: "flex", gap: "1.25rem", minHeight: 400 }}>
-                {/* Left: Selected image (large) */}
+            {/* ──────────────── COMPLETE PHASE ──────────────── */}
+            {phase === "complete" && finalVariants.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                {/* Success banner */}
                 <div
                   style={{
-                    flex: "0 0 55%",
+                    background: "linear-gradient(135deg, rgba(34,197,94,0.1) 0%, rgba(0,181,254,0.08) 100%)",
+                    border: "1px solid rgba(34,197,94,0.3)",
+                    borderRadius: 12,
+                    padding: "1rem 1.25rem",
                     display: "flex",
-                    flexDirection: "column",
+                    alignItems: "center",
                     gap: "0.75rem",
+                    animation: "vgw-success-pop 0.5s ease",
                   }}
                 >
-                  {/* Show latest version (or chosen if no refinements) */}
-                  {(() => {
-                    const displayVersion =
-                      refineVersions.length > 0
-                        ? refineVersions[refineVersions.length - 1]
-                        : chosenVersion;
-                    if (!displayVersion) return null;
-                    return (
-                      <div
-                        style={{
-                          borderRadius: 12,
-                          border: "2px solid var(--accent)",
-                          overflow: "hidden",
-                          background: "var(--surface-raised)",
-                          animation: "vgw-chosen-glow 3s ease-in-out infinite",
-                        }}
-                      >
-                        <div style={{ position: "relative" }}>
-                          {displayVersion.imageUrl && (
-                            <img
-                              src={displayVersion.imageUrl}
-                              alt="גרסה נוכחית"
-                              style={{
-                                width: "100%",
-                                height: "auto",
-                                maxHeight: 500,
-                                objectFit: "contain",
-                                display: "block",
-                              }}
-                            />
-                          )}
-                          <span
-                            style={{
-                              position: "absolute",
-                              top: 8,
-                              right: 8,
-                              background: "var(--accent)",
-                              color: "#fff",
-                              fontSize: "0.68rem",
-                              fontWeight: 700,
-                              padding: "0.2rem 0.6rem",
-                              borderRadius: 999,
-                            }}
-                          >
-                            {refineVersions.length > 0
-                              ? `שדרוג ${refineVersions.length}`
-                              : "נבחר"}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Thumbnail strip: chosen + all refinements */}
-                  {refineVersions.length > 0 && (
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "0.5rem",
-                        overflowX: "auto",
-                        paddingBottom: "0.25rem",
-                      }}
-                    >
-                      {chosenVersion && (
-                        <div
-                          style={{
-                            width: 60,
-                            height: 60,
-                            borderRadius: 8,
-                            border: "2px solid var(--border)",
-                            overflow: "hidden",
-                            flexShrink: 0,
-                            opacity: 0.7,
-                          }}
-                        >
-                          <img
-                            src={chosenVersion.imageUrl}
-                            alt="מקור"
-                            style={{
-                              width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
-                            }}
-                          />
-                        </div>
-                      )}
-                      {refineVersions.map((rv, idx) => (
-                        <div
-                          key={rv.id}
-                          style={{
-                            width: 60,
-                            height: 60,
-                            borderRadius: 8,
-                            border:
-                              idx === refineVersions.length - 1
-                                ? "2px solid var(--accent)"
-                                : "2px solid var(--border)",
-                            overflow: "hidden",
-                            flexShrink: 0,
-                          }}
-                        >
-                          <img
-                            src={rv.imageUrl}
-                            alt={`שדרוג ${idx + 1}`}
-                            style={{
-                              width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
-                            }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <span style={{ fontSize: "1.5rem" }}>{"✅"}</span>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: "0.9rem", color: "#22c55e" }}>
+                      הויזואל מוכן לפרסום!
+                    </p>
+                    <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--foreground-muted)", marginTop: "0.15rem" }}>
+                      {finalVariants.length} גרסאות נשמרו בגאנט — המשימה סומנה כמאושרת וממתינה לפרסום
+                    </p>
+                  </div>
                 </div>
 
-                {/* Right: Chat interface */}
+                {/* Variants grid */}
                 <div
                   style={{
-                    flex: 1,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "0.75rem",
-                    minWidth: 0,
+                    display: "grid",
+                    gridTemplateColumns: `repeat(${Math.min(finalVariants.length, 4)}, 1fr)`,
+                    gap: "1rem",
                   }}
                 >
-                  <p style={{ ...sectionLabel, marginBottom: 0 }}>
-                    הערות לשדרוג
-                  </p>
-
-                  {/* Chat messages */}
-                  <div
-                    style={{
-                      flex: 1,
-                      overflowY: "auto",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "0.6rem",
-                      minHeight: 120,
-                      maxHeight: 350,
-                      padding: "0.5rem",
-                      background: "var(--surface)",
-                      borderRadius: 10,
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    {refineVersions.length === 0 && !isRefining && (
+                  {finalVariants.map((variant) => (
+                    <div
+                      key={variant.key}
+                      style={{
+                        borderRadius: 12,
+                        border: variant.key === "original"
+                          ? "2px solid var(--accent)"
+                          : "1px solid var(--border)",
+                        background: "var(--surface)",
+                        overflow: "hidden",
+                        display: "flex",
+                        flexDirection: "column",
+                        animation: "vgw-success-pop 0.5s ease",
+                      }}
+                    >
+                      {/* Image */}
                       <div
                         style={{
-                          textAlign: "center",
-                          padding: "2rem 1rem",
-                          color: "var(--foreground-muted)",
-                          fontSize: "0.8rem",
+                          position: "relative",
+                          background: "var(--surface-raised)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          minHeight: 120,
                         }}
                       >
-                        <p style={{ margin: 0, marginBottom: "0.35rem" }}>
-                          {"💬"} כתוב הערה לשדרוג הויזואל
-                        </p>
-                        <p style={{ margin: 0, fontSize: "0.72rem", opacity: 0.7 }}>
-                          למשל: &quot;יותר ירוק&quot;, &quot;כותרת גדולה יותר&quot;, &quot;רקע בהיר&quot;
-                        </p>
-                      </div>
-                    )}
-
-                    {refineVersions.map((rv) => (
-                      <div key={rv.id} style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                        {/* User feedback bubble */}
-                        {rv.userInstruction && (
-                          <div
-                            style={{
-                              alignSelf: "flex-start",
-                              background: "var(--accent)",
-                              color: "#fff",
-                              borderRadius: "12px 12px 4px 12px",
-                              padding: "0.5rem 0.75rem",
-                              fontSize: "0.78rem",
-                              maxWidth: "85%",
-                            }}
-                          >
-                            {rv.userInstruction}
-                          </div>
-                        )}
-                        {/* AI response — small image */}
-                        <div
+                        <img
+                          src={variant.imageUrl}
+                          alt={variant.labelHe}
                           style={{
-                            alignSelf: "flex-end",
-                            borderRadius: "12px 12px 12px 4px",
-                            border: "1px solid var(--border)",
-                            overflow: "hidden",
-                            maxWidth: 120,
+                            width: "100%",
+                            height: "auto",
+                            maxHeight: 280,
+                            objectFit: "contain",
+                            display: "block",
+                          }}
+                        />
+                        <span
+                          style={{
+                            position: "absolute",
+                            top: 6,
+                            right: 6,
+                            background: variant.key === "original" ? "var(--accent)" : "rgba(0,0,0,0.65)",
+                            color: "#fff",
+                            fontSize: "0.68rem",
+                            fontWeight: 700,
+                            padding: "0.15rem 0.5rem",
+                            borderRadius: 999,
                           }}
                         >
-                          {rv.imageUrl && (
-                            <img
-                              src={rv.imageUrl}
-                              alt={`שדרוג`}
-                              style={{
-                                width: "100%",
-                                height: "auto",
-                                display: "block",
-                              }}
-                            />
-                          )}
-                        </div>
-                        {formatDuration(rv.durationMs) && (
-                          <span
-                            style={{
-                              alignSelf: "flex-end",
-                              fontSize: "0.62rem",
-                              color: "var(--foreground-muted)",
-                            }}
-                          >
-                            {formatDuration(rv.durationMs)}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                    <div ref={chatEndRef} />
-                  </div>
-
-                  {/* Refine pipeline mini-progress */}
-                  {isRefining && (
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.5rem",
-                        padding: "0.5rem 0.75rem",
-                        background: "rgba(0,181,254,0.06)",
-                        borderRadius: 8,
-                        border: "1px solid rgba(0,181,254,0.15)",
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: 14,
-                          height: 14,
-                          border: "2px solid rgba(0,181,254,0.3)",
-                          borderTopColor: "var(--accent)",
-                          borderRadius: "50%",
-                          animation: "vgw-spin 0.8s linear infinite",
-                          display: "inline-block",
-                          flexShrink: 0,
-                        }}
-                      />
-                      <span style={{ fontSize: "0.75rem", color: "var(--accent)", fontWeight: 600 }}>
-                        משדרג את הויזואל...
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Chat input */}
-                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end" }}>
-                    <textarea
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          handleChatRefine();
-                        }
-                      }}
-                      placeholder="כתוב הערה לשדרוג..."
-                      rows={2}
-                      style={{
-                        ...textareaStyle,
-                        minHeight: 50,
-                        fontSize: "0.82rem",
-                      }}
-                    />
-                    <button
-                      onClick={handleChatRefine}
-                      disabled={isRefining || !chatInput.trim()}
-                      style={{
-                        ...(isRefining || !chatInput.trim() ? generateBtnDisabled : generateBtn),
-                        padding: "0.5rem 1rem",
-                        fontSize: "0.8rem",
-                      }}
-                    >
-                      {isRefining ? (
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
-                          <span style={spinnerInline} />
+                          {variant.labelHe}
                         </span>
-                      ) : (
-                        "שדרג"
-                      )}
-                    </button>
-                  </div>
+                      </div>
+
+                      {/* Size info */}
+                      <div
+                        style={{
+                          padding: "0.5rem 0.75rem",
+                          borderTop: "1px solid var(--border)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <span style={{ fontSize: "0.7rem", color: "var(--foreground-muted)" }}>
+                          {variant.width}×{variant.height}
+                        </span>
+                        <a
+                          href={variant.imageUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            fontSize: "0.7rem",
+                            color: "var(--accent)",
+                            fontWeight: 600,
+                            textDecoration: "none",
+                          }}
+                        >
+                          {"⬇"} הורד
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Action buttons */}
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "0.75rem",
+                    justifyContent: "center",
+                    paddingTop: "0.5rem",
+                  }}
+                >
+                  <button
+                    onClick={handleBackToChoosing}
+                    style={{
+                      background: "none",
+                      border: "1px solid var(--border)",
+                      borderRadius: 8,
+                      padding: "0.5rem 1.25rem",
+                      fontSize: "0.82rem",
+                      fontWeight: 600,
+                      color: "var(--foreground-muted)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {"←"} חזור לבחירה
+                  </button>
+                  <button
+                    onClick={onClose}
+                    style={{
+                      ...generateBtn,
+                      background: "#22c55e",
+                    }}
+                  >
+                    {"✓"} סגור — המשימה מוכנה
+                  </button>
                 </div>
               </div>
             )}
