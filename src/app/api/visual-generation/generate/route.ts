@@ -22,6 +22,7 @@ import { gatherBrandIntelligence } from '@/lib/services/visual-generation/brandI
 import { runCreativeDirector } from '@/lib/services/visual-generation/creativeDirectorService';
 import { runQualityGate } from '@/lib/services/visual-generation/visualQualityGate';
 import { generateImage, editImage } from '@/lib/services/visual-generation/openaiImageProvider';
+import sharp from 'sharp';
 
 export const maxDuration = 300; // Allow up to 5 minutes — editImage() with brand assets + quality gate retry needs headroom
 
@@ -322,6 +323,58 @@ export async function POST(req: NextRequest) {
             }
           }
         }
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // STAGE 6b: Composite real logo onto generated image
+    // ═══════════════════════════════════════════════════════════════════════
+    if (brandIntel.logoUrl) {
+      try {
+        console.log('[visual-gen] Stage 6b: Compositing real logo onto image...');
+        // Fetch the real logo
+        const logoResp = await fetch(brandIntel.logoUrl);
+        if (logoResp.ok) {
+          const logoBuffer = Buffer.from(await logoResp.arrayBuffer());
+          const imgBuffer = Buffer.from(resultBase64, 'base64');
+
+          // Get the generated image dimensions
+          const imgMeta = await sharp(imgBuffer).metadata();
+          const imgWidth = imgMeta.width || width;
+          const imgHeight = imgMeta.height || height;
+
+          // Size the logo: ~20% of image width, maintain aspect ratio
+          const targetLogoWidth = Math.round(imgWidth * 0.20);
+          const resizedLogo = await sharp(logoBuffer)
+            .resize({ width: targetLogoWidth, withoutEnlargement: false })
+            .png()
+            .toBuffer();
+
+          // Get resized logo dimensions for positioning
+          const logoMeta = await sharp(resizedLogo).metadata();
+          const logoH = logoMeta.height || Math.round(targetLogoWidth * 0.5);
+
+          // Position: bottom-center with padding
+          const leftOffset = Math.round((imgWidth - targetLogoWidth) / 2);
+          const topOffset = imgHeight - logoH - Math.round(imgHeight * 0.03); // 3% padding from bottom
+
+          // Composite the logo onto the image
+          const compositedBuffer = await sharp(imgBuffer)
+            .composite([{
+              input: resizedLogo,
+              left: leftOffset,
+              top: topOffset,
+            }])
+            .png()
+            .toBuffer();
+
+          resultBase64 = compositedBuffer.toString('base64');
+          console.log(`[visual-gen] Stage 6b: Logo composited — ${targetLogoWidth}px wide, positioned at (${leftOffset}, ${topOffset})`);
+        } else {
+          console.warn(`[visual-gen] Stage 6b: Failed to fetch logo (${logoResp.status}) — skipping compositing`);
+        }
+      } catch (compErr) {
+        console.error('[visual-gen] Stage 6b: Logo compositing error — proceeding without logo:', compErr);
       }
     }
 

@@ -87,14 +87,14 @@ RULES:
 2. Hebrew text (if specified) must be rendered accurately. Never transliterate or translate Hebrew text.
 3. Brand colors are ABSOLUTELY NON-NEGOTIABLE — they must DOMINATE the visual. Include the exact hex values in the optimizedImagePrompt (e.g., "use #1B5E20 as the primary green color"). The generated image should be instantly identifiable as belonging to this brand through its colors alone.
 4. Forbidden colors must NEVER appear.
-5. If the brand has a logo being sent as a reference image, your optimizedImagePrompt MUST include an explicit instruction to use that logo from the reference image exactly as provided — same shape, same colors, same proportions. Never recreate or approximate it.
+5. DO NOT include any logo, wordmark, brand mark, or text resembling a logo in the generated image. The real logo will be composited onto the image programmatically AFTER generation. Leave clean visual space at the bottom of the image (roughly bottom 15-20%) for logo placement — avoid placing important elements there.
 6. The composition must serve the marketing objective — what the viewer sees first matters.
 7. Every visual must have a clear focal point and visual hierarchy.
 8. Do NOT over-complicate. Commercial ads are clean, focused, and impactful.
 9. Consider the platform — Instagram 4:5 requires different composition than a Facebook banner.
 10. Think about text readability — if there's text overlay, ensure sufficient contrast.
 11. The visual should feel premium, not cheap or template-like.
-12. Reference images are being sent directly to the image generator alongside your prompt. Your optimizedImagePrompt should explicitly mention "use the brand logo from the reference image" and "match the color palette from the brand assets".
+12. Reference images (brand assets, product photos, approved references) are being sent to the image generator for style/color reference. Your optimizedImagePrompt should mention "match the color palette and visual style from the brand assets". NEVER instruct the model to render or reproduce a logo — the logo is composited separately after generation.
 
 OUTPUT FORMAT — respond with ONLY a valid JSON object (no markdown, no code fences, no explanation):
 {
@@ -264,10 +264,9 @@ function buildUserMessage(
     parts.push('Include the exact hex values in your optimizedImagePrompt so the image generator uses the precise brand colors.');
   }
 
-  // ── Logo reference ──
+  // ── Logo reference — DO NOT RENDER, only use for color/style ──
   if (brandIntel.logoUrl) {
-    parts.push(`\n⚠️ BRAND LOGO: The client's logo is being sent as a reference image to the image generator. Your optimizedImagePrompt MUST instruct the model to incorporate the logo from the reference image exactly as-is — do not redesign, recreate, or approximate it. The logo should be placed prominently and legibly.`);
-    parts.push(`Logo URL: ${brandIntel.logoUrl}`);
+    parts.push(`\n⚠️ BRAND LOGO — DO NOT RENDER: The client's logo is being sent as a reference image ONLY for color and style reference. DO NOT include any logo, wordmark, brand mark, emblem, or text that resembles a logo in the generated image. The real logo will be composited programmatically AFTER generation. Leave clean, uncluttered space at the bottom ~15-20% of the image for the logo overlay.`);
   }
 
   // ── Approved reference images ──
