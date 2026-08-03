@@ -3,14 +3,21 @@
  *
  * Multi-stage visual generation pipeline — ChatGPT-level creative quality.
  *
+ * Supports 3 modes:
+ * - 'initial': Generate 3 different options in parallel for the user to choose from
+ * - 'refine':  Iterate on a selected version based on user feedback (chat-like)
+ * - 'single':  Legacy single-generation flow (backward compatibility)
+ *
  * Pipeline stages:
  * 1. Build Generation Context (brief, gantt item, client data)
  * 2. Gather Brand Intelligence (colors, fonts, assets, feedback, DNA)
- * 3. Run Creative Director (LLM → full creative strategy + optimized prompt)
- * 4. Generate Image (gpt-image-2)
- * 5. Visual Quality Gate (LLM vision → validate against strategy)
- * 6. Auto-retry if quality gate fails (up to 1 retry with corrective prompt)
- * 7. Upload to Storage + persist version record
+ * 2b. Fetch brand asset files as Buffers
+ * 3. Find/create session + load conversation history
+ * 4. Run Creative Director (LLM → full creative strategy + optimized prompt)
+ * 5. Generate Image(s) — 3 in parallel for initial, 1 for refine/single
+ * 6. Visual Quality Gate (single/refine only)
+ * 6b. Logo compositing with sharp
+ * 7. Upload to Storage + persist version records
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -24,7 +31,55 @@ import { runQualityGate } from '@/lib/services/visual-generation/visualQualityGa
 import { generateImage, editImage } from '@/lib/services/visual-generation/openaiImageProvider';
 import sharp from 'sharp';
 
-export const maxDuration = 300; // Allow up to 5 minutes — editImage() with brand assets + quality gate retry needs headroom
+export const maxDuration = 300;
+
+// ── Variation suffixes for the 3 initial options ──────────────────────────
+
+const VARIATION_SUFFIXES = [
+  '', // Option 1: Original Creative Director prompt as-is
+  '\n\nCOMPOSITION VARIATION: Use a completely different camera angle and framing — if the original concept implies a wide/establishing shot, try a close-up intimate view instead (or vice versa). Shift the subject positioning significantly. Keep all brand colors, message, and elements the same, but reimagine the visual composition from scratch.',
+  '\n\nSTYLE VARIATION: Shift the overall visual mood and atmosphere dramatically — change the lighting (e.g., warm golden hour vs cool blue hour vs dramatic high-contrast), the background environment, and the color temperature. Try a more graphic/stylized interpretation rather than photorealistic (or vice versa). Keep brand colors dominant and the marketing message identical, but create a distinctly different feel.',
+];
+
+// ── Reusable logo compositing helper ──────────────────────────────────────
+
+async function compositeLogoOnBase64(
+  base64: string,
+  logoUrl: string,
+  fallbackWidth: number,
+  fallbackHeight: number,
+): Promise<string> {
+  try {
+    const logoResp = await fetch(logoUrl);
+    if (!logoResp.ok) return base64;
+    const logoBuffer = Buffer.from(await logoResp.arrayBuffer());
+    const imgBuffer = Buffer.from(base64, 'base64');
+    const imgMeta = await sharp(imgBuffer).metadata();
+    const imgWidth = imgMeta.width || fallbackWidth;
+    const imgHeight = imgMeta.height || fallbackHeight;
+    const targetLogoWidth = Math.round(imgWidth * 0.35);
+    const resizedLogo = await sharp(logoBuffer)
+      .resize({ width: targetLogoWidth, withoutEnlargement: false })
+      .png()
+      .toBuffer();
+    const logoMeta = await sharp(resizedLogo).metadata();
+    const logoH = logoMeta.height || Math.round(targetLogoWidth * 0.5);
+    const leftOffset = Math.round((imgWidth - targetLogoWidth) / 2);
+    const topOffset = imgHeight - logoH - Math.round(imgHeight * 0.03);
+    const composited = await sharp(imgBuffer)
+      .composite([{ input: resizedLogo, left: leftOffset, top: topOffset }])
+      .png()
+      .toBuffer();
+    return composited.toString('base64');
+  } catch (err) {
+    console.error('[visual-gen] Logo compositing error:', err);
+    return base64;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Main handler
+// ═══════════════════════════════════════════════════════════════════════════
 
 export async function POST(req: NextRequest) {
   try {
@@ -36,8 +91,13 @@ export async function POST(req: NextRequest) {
       width = 1024,
       height = 1024,
       quality = 'high' as const,
-      referenceVersionId,
+      referenceVersionId: rawRefVersionId,
+      mode = 'single',
+      selectedVersionId,
     } = body;
+
+    // In refine mode, selectedVersionId acts as the reference version
+    const referenceVersionId = rawRefVersionId || (mode === 'refine' ? selectedVersionId : undefined);
 
     if (!ganttItemId || !clientId) {
       return NextResponse.json(
@@ -49,7 +109,7 @@ export async function POST(req: NextRequest) {
     const startTime = Date.now();
 
     // ═══════════════════════════════════════════════════════════════════════
-    // STAGE 1: Build Generation Context (brief understanding)
+    // STAGE 1: Build Generation Context
     // ═══════════════════════════════════════════════════════════════════════
     console.log('[visual-gen] Stage 1: Building generation context...');
     const context = await buildGenerationContext(ganttItemId, clientId);
@@ -61,19 +121,17 @@ export async function POST(req: NextRequest) {
     const brandIntel = await gatherBrandIntelligence(clientId);
 
     // ═══════════════════════════════════════════════════════════════════════
-    // STAGE 2b: Fetch brand assets as Buffers (logo + approved references)
+    // STAGE 2b: Fetch brand assets as Buffers
     // ═══════════════════════════════════════════════════════════════════════
     console.log('[visual-gen] Stage 2b: Fetching brand asset files...');
     const brandAssetBuffers: Buffer[] = [];
     const brandAssetUrls: string[] = [];
 
-    // Fetch logo
     if (brandIntel.logoUrl) {
       try {
         const logoResp = await fetch(brandIntel.logoUrl);
         if (logoResp.ok) {
-          const logoBuf = Buffer.from(await logoResp.arrayBuffer());
-          brandAssetBuffers.push(logoBuf);
+          brandAssetBuffers.push(Buffer.from(await logoResp.arrayBuffer()));
           brandAssetUrls.push(brandIntel.logoUrl);
           console.log('[visual-gen] Logo fetched as reference image');
         }
@@ -82,31 +140,27 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Fetch approved reference images (up to 10 to stay under the 16 limit)
     for (const refUrl of brandIntel.approvedReferenceUrls.slice(0, 10)) {
       try {
         const refResp = await fetch(refUrl);
         if (refResp.ok) {
-          const refBuf = Buffer.from(await refResp.arrayBuffer());
-          brandAssetBuffers.push(refBuf);
+          brandAssetBuffers.push(Buffer.from(await refResp.arrayBuffer()));
           brandAssetUrls.push(refUrl);
         }
       } catch (e) {
-        console.warn('[visual-gen] Failed to fetch reference image:', refUrl, e);
+        console.warn('[visual-gen] Failed to fetch reference:', refUrl, e);
       }
     }
 
-    // Fetch product images (up to 4)
     for (const prodUrl of brandIntel.productImageUrls.slice(0, 4)) {
       try {
         const prodResp = await fetch(prodUrl);
         if (prodResp.ok) {
-          const prodBuf = Buffer.from(await prodResp.arrayBuffer());
-          brandAssetBuffers.push(prodBuf);
+          brandAssetBuffers.push(Buffer.from(await prodResp.arrayBuffer()));
           brandAssetUrls.push(prodUrl);
         }
       } catch (e) {
-        console.warn('[visual-gen] Failed to fetch product image:', prodUrl, e);
+        console.warn('[visual-gen] Failed to fetch product:', prodUrl, e);
       }
     }
 
@@ -123,14 +177,12 @@ export async function POST(req: NextRequest) {
       session = existingSessions[0] as AIGenerationSession;
     }
 
-    // Load conversation history from previous versions in this session
     let conversationHistory: Array<{ role: string; content: string }> = [];
     if (session) {
       try {
         const prevVersions = await aiGenerationVersions.queryAsync(
           (v: AIGenerationVersion) => v.sessionId === session!.id
         );
-        // Sort by versionNumber and build conversation history
         const sorted = (prevVersions as AIGenerationVersion[])
           .sort((a, b) => (a.versionNumber || 0) - (b.versionNumber || 0));
         for (const v of sorted) {
@@ -151,7 +203,6 @@ export async function POST(req: NextRequest) {
     // ═══════════════════════════════════════════════════════════════════════
     console.log('[visual-gen] Stage 3: Running Creative Director...');
 
-    // Dynamic brand-kit directive — built from actual brand intelligence data
     const brandDirectiveParts: string[] = [];
     brandDirectiveParts.push('BRAND KIT ENFORCEMENT:');
     if (brandIntel.primaryColors.length) {
@@ -180,9 +231,16 @@ export async function POST(req: NextRequest) {
     brandDirectiveParts.push('- Brand colors should cover at least 60% of the visual surface');
 
     const BRAND_KIT_DIRECTIVE = brandDirectiveParts.join('\n');
-    const userInstruction = instruction
-      ? `${BRAND_KIT_DIRECTIVE}\n\n${instruction}`
-      : `${BRAND_KIT_DIRECTIVE}\n\nCreate a professional marketing visual based on the brief.`;
+
+    // For refine mode, frame the instruction as a targeted refinement request
+    let userInstruction: string;
+    if (mode === 'refine' && instruction) {
+      userInstruction = `${BRAND_KIT_DIRECTIVE}\n\nTHIS IS A REFINEMENT REQUEST. The user selected a previous version and wants these specific changes:\n\n${instruction}\n\nMake TARGETED changes based on this feedback. Do NOT redesign the entire visual — preserve the overall composition, subject, and brand identity. Only change what the user specifically requested.`;
+    } else if (instruction) {
+      userInstruction = `${BRAND_KIT_DIRECTIVE}\n\n${instruction}`;
+    } else {
+      userInstruction = `${BRAND_KIT_DIRECTIVE}\n\nCreate a professional marketing visual based on the brief.`;
+    }
 
     const directorResult = await runCreativeDirector(
       context,
@@ -191,7 +249,6 @@ export async function POST(req: NextRequest) {
       conversationHistory.length > 0 ? conversationHistory : undefined,
     );
 
-    // Determine the image prompt — use Creative Director output or fallback
     let imagePrompt: string;
     let creativeStrategy = directorResult.strategy;
 
@@ -199,25 +256,192 @@ export async function POST(req: NextRequest) {
       imagePrompt = creativeStrategy.optimizedImagePrompt;
       console.log('[visual-gen] Creative Director produced optimized prompt');
     } else {
-      // Fallback: build a basic prompt from context (same as before)
       console.warn('[visual-gen] Creative Director failed, using fallback prompt:', directorResult.error);
       imagePrompt = `Professional marketing visual for "${context.ganttItem.title}". ${context.promptContext}. ${userInstruction}`;
     }
 
-    // Build a brief summary for the quality gate
-    const briefSummary = `Title: ${context.ganttItem.title}. Client: ${context.clientName}. Industry: ${context.businessField}. Platform: ${context.platform}. Format: ${context.format}. Visual concept: ${context.ganttItem.visualConcept || 'not specified'}. Graphic text: ${context.ganttItem.graphicText || 'none'}.`;
+    // ═══════════════════════════════════════════════════════════════════════
+    // MODE: INITIAL — generate 3 options in parallel
+    // ═══════════════════════════════════════════════════════════════════════
+    if (mode === 'initial') {
+      console.log('[visual-gen] MODE: INITIAL — generating 3 options in parallel...');
+
+      const prompts = VARIATION_SUFFIXES.map(suffix => imagePrompt + suffix);
+
+      // Generate 3 images in parallel
+      const genResults = await Promise.all(
+        prompts.map(async (prompt, idx) => {
+          console.log(`[visual-gen] Generating option ${idx + 1}/3...`);
+          try {
+            if (brandAssetBuffers.length > 0) {
+              const r = await editImage({
+                prompt,
+                referenceImages: brandAssetBuffers,
+                width,
+                height,
+                quality,
+              });
+              if (!r.success || !r.images.length) throw new Error(r.error || `Option ${idx + 1} failed`);
+              return { base64: r.images[0].base64, revisedPrompt: r.images[0].revisedPrompt, error: null };
+            }
+            const r = await generateImage({ prompt, width, height, quality });
+            if (!r.success || !r.images.length) throw new Error(r.error || `Option ${idx + 1} failed`);
+            return { base64: r.images[0].base64, revisedPrompt: r.images[0].revisedPrompt, error: null };
+          } catch (err: any) {
+            console.error(`[visual-gen] Option ${idx + 1} error:`, err.message);
+            return { base64: '', revisedPrompt: undefined as string | undefined, error: err.message as string };
+          }
+        })
+      );
+
+      // Filter out failures
+      const successResults = genResults.filter(r => r.base64 && !r.error);
+      if (successResults.length === 0) {
+        return NextResponse.json(
+          { error: 'All options failed to generate. Please try again.' },
+          { status: 500 }
+        );
+      }
+
+      // Logo composite on all successes
+      if (brandIntel.logoUrl) {
+        for (const r of successResults) {
+          try {
+            r.base64 = await compositeLogoOnBase64(r.base64, brandIntel.logoUrl, width, height);
+          } catch { /* continue without logo */ }
+        }
+      }
+
+      // Create session if needed
+      if (!session) {
+        session = await aiGenerationSessions.createAsync({
+          clientId,
+          ganttItemId,
+          status: 'active',
+          contextSnapshot: {
+            briefSummary: `Title: ${context.ganttItem.title}. Client: ${context.clientName}. Industry: ${context.businessField}.`,
+            brandRulesSummary: brandIntel.brandRulesSummary,
+            creativeStrategy: creativeStrategy
+              ? {
+                  centralMessage: creativeStrategy.centralMessage,
+                  creativeIdea: creativeStrategy.creativeIdea,
+                  style: creativeStrategy.style,
+                  mood: creativeStrategy.mood,
+                }
+              : null,
+          },
+          systemPrompt: imagePrompt,
+          sizePreset: { label: `${width}x${height}`, width, height },
+          activeVersionId: null,
+          versionCount: 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        } as Omit<AIGenerationSession, 'id'> as any);
+      }
+
+      const durationMs = Date.now() - startTime;
+      const sb = getSupabase();
+      const versions: any[] = [];
+
+      for (let i = 0; i < successResults.length; i++) {
+        const versionNumber = (session.versionCount || 0) + i + 1;
+        const buffer = Buffer.from(successResults[i].base64, 'base64');
+        const storagePath = `visual-generation/${clientId}/${session.id}/${versionNumber}.png`;
+
+        const { error: uploadError } = await sb.storage
+          .from('project-files')
+          .upload(storagePath, buffer, { contentType: 'image/png', upsert: true });
+
+        if (uploadError) {
+          console.error(`[visual-gen] Upload error for option ${i + 1}:`, uploadError);
+          continue;
+        }
+
+        const { data: urlData } = sb.storage.from('project-files').getPublicUrl(storagePath);
+        const imageUrl = urlData?.publicUrl || null;
+
+        const version = await aiGenerationVersions.createAsync({
+          sessionId: session.id,
+          clientId,
+          ganttItemId,
+          versionNumber,
+          status: 'pending',
+          userInstruction: instruction || '',
+          fullPrompt: imagePrompt + (VARIATION_SUFFIXES[i] || ''),
+          model: 'gpt-image-2',
+          quality,
+          width,
+          height,
+          imageUrl,
+          thumbnailBase64: null,
+          revisedPrompt: successResults[i].revisedPrompt || null,
+          referenceImageUrls: brandAssetUrls,
+          cost: null,
+          errorMessage: null,
+          durationMs,
+          generationMode: 'initial',
+          creativeStrategy: creativeStrategy
+            ? {
+                centralMessage: creativeStrategy.centralMessage,
+                creativeIdea: creativeStrategy.creativeIdea,
+                composition: creativeStrategy.composition,
+                style: creativeStrategy.style,
+                mood: creativeStrategy.mood,
+                visualType: creativeStrategy.visualType,
+                luxuryLevel: creativeStrategy.luxuryLevel,
+                directorNotes: creativeStrategy.directorNotes,
+              }
+            : null,
+          qualityAssessment: null,
+          createdAt: new Date().toISOString(),
+        } as Omit<AIGenerationVersion, 'id'> as any);
+
+        versions.push(version);
+      }
+
+      // Update session version count
+      await aiGenerationSessions.updateAsync(session.id, {
+        versionCount: (session.versionCount || 0) + versions.length,
+        updatedAt: new Date().toISOString(),
+      });
+
+      console.log(
+        `[visual-gen] INITIAL complete — ${versions.length} options generated, ${durationMs}ms`
+      );
+
+      return NextResponse.json({
+        mode: 'initial',
+        versions,
+        sessionId: session.id,
+        _pipeline: {
+          creativeStrategy: creativeStrategy
+            ? {
+                centralMessage: creativeStrategy.centralMessage,
+                creativeIdea: creativeStrategy.creativeIdea,
+                style: creativeStrategy.style,
+                mood: creativeStrategy.mood,
+                directorNotes: creativeStrategy.directorNotes,
+              }
+            : null,
+          durationMs,
+        },
+      });
+    }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // STAGE 5: Generate or Edit the image
+    // EXISTING FLOW — single generation or refine
     // ═══════════════════════════════════════════════════════════════════════
+
+    const briefSummary = `Title: ${context.ganttItem.title}. Client: ${context.clientName}. Industry: ${context.businessField}. Platform: ${context.platform}. Format: ${context.format}. Visual concept: ${context.ganttItem.visualConcept || 'not specified'}. Graphic text: ${context.ganttItem.graphicText || 'none'}.`;
+
+    // ── STAGE 5: Generate or Edit the image ──
     console.log('[visual-gen] Stage 4: Generating image...');
     let resultBase64 = '';
     let resultRevisedPrompt: string | undefined;
     let referenceImageUrls: string[] = [];
 
     if (referenceVersionId) {
-      // Load reference version and use its image for editing
-      const refVersion = await aiGenerationVersions.getByIdAsync(referenceVersionId) as AIGenerationVersion | null;
+      const refVersion = (await aiGenerationVersions.getByIdAsync(referenceVersionId)) as AIGenerationVersion | null;
       if (!refVersion || !refVersion.imageUrl) {
         return NextResponse.json(
           { error: 'Reference version not found or has no image' },
@@ -227,17 +451,15 @@ export async function POST(req: NextRequest) {
       referenceImageUrls = [refVersion.imageUrl, ...brandAssetUrls];
       const imgResponse = await fetch(refVersion.imageUrl);
       if (!imgResponse.ok) {
-        return NextResponse.json(
-          { error: 'Failed to fetch reference image' },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: 'Failed to fetch reference image' }, { status: 500 });
       }
       const imgArrayBuffer = await imgResponse.arrayBuffer();
       const imgBuffer = Buffer.from(imgArrayBuffer);
 
-      // Combine previous version image with brand assets (logo, references, products)
       const allReferenceBuffers = [imgBuffer, ...brandAssetBuffers].slice(0, 16);
-      console.log(`[visual-gen] Editing with ${allReferenceBuffers.length} reference images (1 prev version + ${brandAssetBuffers.length} brand assets)`);
+      console.log(
+        `[visual-gen] Editing with ${allReferenceBuffers.length} reference images (1 prev version + ${brandAssetBuffers.length} brand assets)`
+      );
 
       const editResult = await editImage({
         prompt: imagePrompt,
@@ -255,8 +477,9 @@ export async function POST(req: NextRequest) {
       resultBase64 = editResult.images[0].base64;
       resultRevisedPrompt = editResult.images[0].revisedPrompt;
     } else if (brandAssetBuffers.length > 0) {
-      // Use editImage() with brand assets as reference images for brand-accurate results
-      console.log(`[visual-gen] Using editImage() with ${brandAssetBuffers.length} brand asset references`);
+      console.log(
+        `[visual-gen] Using editImage() with ${brandAssetBuffers.length} brand asset references`
+      );
       referenceImageUrls = brandAssetUrls;
       const editResult = await editImage({
         prompt: imagePrompt,
@@ -274,14 +497,8 @@ export async function POST(req: NextRequest) {
       resultBase64 = editResult.images[0].base64;
       resultRevisedPrompt = editResult.images[0].revisedPrompt;
     } else {
-      // Fallback: text-only generation (no brand assets available)
       console.log('[visual-gen] No brand assets available, using text-only generateImage()');
-      const genResult = await generateImage({
-        prompt: imagePrompt,
-        width,
-        height,
-        quality,
-      });
+      const genResult = await generateImage({ prompt: imagePrompt, width, height, quality });
       if (!genResult.success || !genResult.images.length) {
         return NextResponse.json(
           { error: genResult.error || 'Failed to generate image' },
@@ -292,23 +509,23 @@ export async function POST(req: NextRequest) {
       resultRevisedPrompt = genResult.images[0].revisedPrompt;
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // STAGE 6: Visual Quality Gate
-    // ═══════════════════════════════════════════════════════════════════════
+    // ── STAGE 6: Visual Quality Gate — skip for refine mode (fast feedback loop) ──
     let qualityAssessment: any = null;
-    if (creativeStrategy) {
+    if (mode !== 'refine' && creativeStrategy) {
       console.log('[visual-gen] Stage 5: Running Visual Quality Gate...');
       const qgResult = await runQualityGate(resultBase64, creativeStrategy, briefSummary);
       if (qgResult.success && qgResult.assessment) {
         qualityAssessment = qgResult.assessment;
 
-        // Auto-retry if quality gate says to retry and we have a corrective prompt
-        if (!qgResult.assessment.passed && qgResult.assessment.shouldRetry && qgResult.assessment.correctivePrompt) {
-          console.log('[visual-gen] Stage 5b: Quality gate failed — auto-retrying with corrections...');
+        if (
+          !qgResult.assessment.passed &&
+          qgResult.assessment.shouldRetry &&
+          qgResult.assessment.correctivePrompt
+        ) {
+          console.log('[visual-gen] Stage 5b: Quality gate failed — auto-retrying...');
           const correctedPrompt = `${imagePrompt}\n\nCRITICAL CORRECTIONS (from quality review):\n${qgResult.assessment.correctivePrompt}`;
 
           if (referenceVersionId && referenceImageUrls.length) {
-            // Re-edit with corrected prompt
             const imgResponse2 = await fetch(referenceImageUrls[0]);
             if (imgResponse2.ok) {
               const imgBuf2 = Buffer.from(await imgResponse2.arrayBuffer());
@@ -322,12 +539,10 @@ export async function POST(req: NextRequest) {
               if (retryResult.success && retryResult.images.length) {
                 resultBase64 = retryResult.images[0].base64;
                 resultRevisedPrompt = retryResult.images[0].revisedPrompt;
-                console.log('[visual-gen] Stage 5b: Retry succeeded (reference version) — skipping second quality gate to save time');
                 qualityAssessment = { ...qualityAssessment, retried: true };
               }
             }
           } else if (brandAssetBuffers.length > 0) {
-            // Re-generate with corrected prompt + brand assets
             const retryResult = await editImage({
               prompt: correctedPrompt,
               referenceImages: brandAssetBuffers,
@@ -338,11 +553,9 @@ export async function POST(req: NextRequest) {
             if (retryResult.success && retryResult.images.length) {
               resultBase64 = retryResult.images[0].base64;
               resultRevisedPrompt = retryResult.images[0].revisedPrompt;
-              console.log('[visual-gen] Stage 5b: Retry succeeded (brand assets) — skipping second quality gate to save time');
               qualityAssessment = { ...qualityAssessment, retried: true };
             }
           } else {
-            // Re-generate with corrected prompt (text-only fallback)
             const retryResult = await generateImage({
               prompt: correctedPrompt,
               width,
@@ -352,74 +565,30 @@ export async function POST(req: NextRequest) {
             if (retryResult.success && retryResult.images.length) {
               resultBase64 = retryResult.images[0].base64;
               resultRevisedPrompt = retryResult.images[0].revisedPrompt;
-              console.log('[visual-gen] Stage 5b: Retry succeeded (text-only) — skipping second quality gate to save time');
               qualityAssessment = { ...qualityAssessment, retried: true };
             }
           }
         }
       }
+    } else if (mode === 'refine') {
+      console.log('[visual-gen] Skipping quality gate for refine mode (fast feedback)');
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // STAGE 6b: Composite real logo onto generated image
-    // ═══════════════════════════════════════════════════════════════════════
+    // ── STAGE 6b: Composite real logo ──
     if (brandIntel.logoUrl) {
       try {
-        console.log('[visual-gen] Stage 6b: Compositing real logo onto image...');
-        // Fetch the real logo
-        const logoResp = await fetch(brandIntel.logoUrl);
-        if (logoResp.ok) {
-          const logoBuffer = Buffer.from(await logoResp.arrayBuffer());
-          const imgBuffer = Buffer.from(resultBase64, 'base64');
-
-          // Get the generated image dimensions
-          const imgMeta = await sharp(imgBuffer).metadata();
-          const imgWidth = imgMeta.width || width;
-          const imgHeight = imgMeta.height || height;
-
-          // Size the logo: ~35% of image width, maintain aspect ratio — prominent brand presence
-          const targetLogoWidth = Math.round(imgWidth * 0.35);
-          const resizedLogo = await sharp(logoBuffer)
-            .resize({ width: targetLogoWidth, withoutEnlargement: false })
-            .png()
-            .toBuffer();
-
-          // Get resized logo dimensions for positioning
-          const logoMeta = await sharp(resizedLogo).metadata();
-          const logoH = logoMeta.height || Math.round(targetLogoWidth * 0.5);
-
-          // Position: bottom-center with padding
-          const leftOffset = Math.round((imgWidth - targetLogoWidth) / 2);
-          const topOffset = imgHeight - logoH - Math.round(imgHeight * 0.03); // 3% padding from bottom
-
-          // Composite the logo onto the image
-          const compositedBuffer = await sharp(imgBuffer)
-            .composite([{
-              input: resizedLogo,
-              left: leftOffset,
-              top: topOffset,
-            }])
-            .png()
-            .toBuffer();
-
-          resultBase64 = compositedBuffer.toString('base64');
-          console.log(`[visual-gen] Stage 6b: Logo composited — ${targetLogoWidth}px wide, positioned at (${leftOffset}, ${topOffset})`);
-        } else {
-          console.warn(`[visual-gen] Stage 6b: Failed to fetch logo (${logoResp.status}) — skipping compositing`);
-        }
+        console.log('[visual-gen] Stage 6b: Compositing real logo...');
+        resultBase64 = await compositeLogoOnBase64(resultBase64, brandIntel.logoUrl, width, height);
       } catch (compErr) {
-        console.error('[visual-gen] Stage 6b: Logo compositing error — proceeding without logo:', compErr);
+        console.error('[visual-gen] Stage 6b: Logo compositing error:', compErr);
       }
     }
 
     const durationMs = Date.now() - startTime;
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // STAGE 7: Upload to Supabase Storage + persist records
-    // ═══════════════════════════════════════════════════════════════════════
+    // ── STAGE 7: Upload to Supabase Storage + persist records ──
     console.log('[visual-gen] Stage 6: Uploading and persisting...');
 
-    // Create session if it doesn't exist
     if (!session) {
       session = await aiGenerationSessions.createAsync({
         clientId,
@@ -428,12 +597,14 @@ export async function POST(req: NextRequest) {
         contextSnapshot: {
           briefSummary,
           brandRulesSummary: brandIntel.brandRulesSummary,
-          creativeStrategy: creativeStrategy ? {
-            centralMessage: creativeStrategy.centralMessage,
-            creativeIdea: creativeStrategy.creativeIdea,
-            style: creativeStrategy.style,
-            mood: creativeStrategy.mood,
-          } : null,
+          creativeStrategy: creativeStrategy
+            ? {
+                centralMessage: creativeStrategy.centralMessage,
+                creativeIdea: creativeStrategy.creativeIdea,
+                style: creativeStrategy.style,
+                mood: creativeStrategy.mood,
+              }
+            : null,
         },
         systemPrompt: imagePrompt,
         sizePreset: { label: `${width}x${height}`, width, height },
@@ -447,7 +618,6 @@ export async function POST(req: NextRequest) {
     const sessionId = session.id;
     const versionNumber = session.versionCount + 1;
 
-    // Upload image
     const sb = getSupabase();
     const buffer = Buffer.from(resultBase64, 'base64');
     const storagePath = `visual-generation/${clientId}/${sessionId}/${versionNumber}.png`;
@@ -458,16 +628,12 @@ export async function POST(req: NextRequest) {
 
     if (uploadError) {
       console.error('[visual-generation] Upload error:', uploadError);
-      return NextResponse.json(
-        { error: 'Failed to upload generated image' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to upload generated image' }, { status: 500 });
     }
 
     const { data: urlData } = sb.storage.from('project-files').getPublicUrl(storagePath);
     const imageUrl = urlData?.publicUrl || null;
 
-    // Create version record with enriched metadata
     const version = await aiGenerationVersions.createAsync({
       sessionId,
       clientId,
@@ -487,54 +653,62 @@ export async function POST(req: NextRequest) {
       cost: null,
       errorMessage: null,
       durationMs,
-      // Enriched metadata from the pipeline
-      creativeStrategy: creativeStrategy ? {
-        centralMessage: creativeStrategy.centralMessage,
-        creativeIdea: creativeStrategy.creativeIdea,
-        composition: creativeStrategy.composition,
-        style: creativeStrategy.style,
-        mood: creativeStrategy.mood,
-        visualType: creativeStrategy.visualType,
-        luxuryLevel: creativeStrategy.luxuryLevel,
-        directorNotes: creativeStrategy.directorNotes,
-      } : null,
-      qualityAssessment: qualityAssessment ? {
-        passed: qualityAssessment.passed,
-        score: qualityAssessment.score,
-        issues: qualityAssessment.issues,
-        suggestions: qualityAssessment.suggestions,
-        assessment: qualityAssessment.assessment,
-      } : null,
+      generationMode: mode === 'refine' ? 'refine' : 'single',
+      creativeStrategy: creativeStrategy
+        ? {
+            centralMessage: creativeStrategy.centralMessage,
+            creativeIdea: creativeStrategy.creativeIdea,
+            composition: creativeStrategy.composition,
+            style: creativeStrategy.style,
+            mood: creativeStrategy.mood,
+            visualType: creativeStrategy.visualType,
+            luxuryLevel: creativeStrategy.luxuryLevel,
+            directorNotes: creativeStrategy.directorNotes,
+          }
+        : null,
+      qualityAssessment: qualityAssessment
+        ? {
+            passed: qualityAssessment.passed,
+            score: qualityAssessment.score,
+            issues: qualityAssessment.issues,
+            suggestions: qualityAssessment.suggestions,
+            assessment: qualityAssessment.assessment,
+          }
+        : null,
       createdAt: new Date().toISOString(),
     } as Omit<AIGenerationVersion, 'id'> as any);
 
-    // Update session
     await aiGenerationSessions.updateAsync(sessionId, {
       activeVersionId: version.id,
       versionCount: versionNumber,
       updatedAt: new Date().toISOString(),
     });
 
-    console.log(`[visual-gen] Complete — version ${versionNumber}, quality: ${qualityAssessment?.score ?? 'N/A'}, duration: ${durationMs}ms`);
+    console.log(
+      `[visual-gen] Complete — v${versionNumber}, quality: ${qualityAssessment?.score ?? 'N/A'}, duration: ${durationMs}ms`
+    );
 
     return NextResponse.json({
       ...version,
-      // Include pipeline metadata in response for the UI
       _pipeline: {
-        creativeStrategy: creativeStrategy ? {
-          centralMessage: creativeStrategy.centralMessage,
-          creativeIdea: creativeStrategy.creativeIdea,
-          style: creativeStrategy.style,
-          mood: creativeStrategy.mood,
-          directorNotes: creativeStrategy.directorNotes,
-        } : null,
-        qualityAssessment: qualityAssessment ? {
-          passed: qualityAssessment.passed,
-          score: qualityAssessment.score,
-          issues: qualityAssessment.issues,
-          suggestions: qualityAssessment.suggestions,
-          assessment: qualityAssessment.assessment,
-        } : null,
+        creativeStrategy: creativeStrategy
+          ? {
+              centralMessage: creativeStrategy.centralMessage,
+              creativeIdea: creativeStrategy.creativeIdea,
+              style: creativeStrategy.style,
+              mood: creativeStrategy.mood,
+              directorNotes: creativeStrategy.directorNotes,
+            }
+          : null,
+        qualityAssessment: qualityAssessment
+          ? {
+              passed: qualityAssessment.passed,
+              score: qualityAssessment.score,
+              issues: qualityAssessment.issues,
+              suggestions: qualityAssessment.suggestions,
+              assessment: qualityAssessment.assessment,
+            }
+          : null,
         durationMs,
       },
     });
