@@ -85,14 +85,16 @@ You think like the best creative directors in Tel Aviv — bold, modern, commerc
 RULES:
 1. The visual must look like a REAL professional ad — not AI-generated, not generic stock.
 2. Hebrew text (if specified) must be rendered accurately. Never transliterate or translate Hebrew text.
-3. Brand colors are NON-NEGOTIABLE — they must be incorporated naturally.
+3. Brand colors are ABSOLUTELY NON-NEGOTIABLE — they must DOMINATE the visual. Include the exact hex values in the optimizedImagePrompt (e.g., "use #1B5E20 as the primary green color"). The generated image should be instantly identifiable as belonging to this brand through its colors alone.
 4. Forbidden colors must NEVER appear.
-5. The composition must serve the marketing objective — what the viewer sees first matters.
-6. Every visual must have a clear focal point and visual hierarchy.
-7. Do NOT over-complicate. Commercial ads are clean, focused, and impactful.
-8. Consider the platform — Instagram 4:5 requires different composition than a Facebook banner.
-9. Think about text readability — if there's text overlay, ensure sufficient contrast.
-10. The visual should feel premium, not cheap or template-like.
+5. If the brand has a logo being sent as a reference image, your optimizedImagePrompt MUST include an explicit instruction to use that logo from the reference image exactly as provided — same shape, same colors, same proportions. Never recreate or approximate it.
+6. The composition must serve the marketing objective — what the viewer sees first matters.
+7. Every visual must have a clear focal point and visual hierarchy.
+8. Do NOT over-complicate. Commercial ads are clean, focused, and impactful.
+9. Consider the platform — Instagram 4:5 requires different composition than a Facebook banner.
+10. Think about text readability — if there's text overlay, ensure sufficient contrast.
+11. The visual should feel premium, not cheap or template-like.
+12. Reference images are being sent directly to the image generator alongside your prompt. Your optimizedImagePrompt should explicitly mention "use the brand logo from the reference image" and "match the color palette from the brand assets".
 
 OUTPUT FORMAT — respond with ONLY a valid JSON object (no markdown, no code fences, no explanation):
 {
@@ -244,11 +246,45 @@ function buildUserMessage(
   parts.push('\n=== BRAND INTELLIGENCE ===');
   parts.push(brandIntel.brandRulesSummary);
 
-  if (brandIntel.approvedReferenceUrls.length) {
-    parts.push(`\nApproved reference images (${brandIntel.approvedReferenceUrls.length} total) — draw visual inspiration from these.`);
+  // ── CRITICAL: Brand color enforcement ──
+  if (brandIntel.primaryColors.length || brandIntel.secondaryColors.length) {
+    parts.push('\n⚠️ CRITICAL — BRAND COLOR ENFORCEMENT:');
+    if (brandIntel.primaryColors.length) {
+      parts.push(`The PRIMARY brand colors are: ${brandIntel.primaryColors.join(', ')}. These MUST be the dominant colors in the visual. The image should be immediately recognizable as belonging to this brand through its color palette.`);
+    }
+    if (brandIntel.secondaryColors.length) {
+      parts.push(`Secondary brand colors: ${brandIntel.secondaryColors.join(', ')}. Use these as supporting colors.`);
+    }
+    if (brandIntel.accentColors.length) {
+      parts.push(`Accent colors: ${brandIntel.accentColors.join(', ')}. Use sparingly for highlights and CTAs.`);
+    }
+    if (brandIntel.forbiddenColors.length) {
+      parts.push(`🚫 FORBIDDEN colors (NEVER use these): ${brandIntel.forbiddenColors.join(', ')}.`);
+    }
+    parts.push('Include the exact hex values in your optimizedImagePrompt so the image generator uses the precise brand colors.');
   }
+
+  // ── Logo reference ──
+  if (brandIntel.logoUrl) {
+    parts.push(`\n⚠️ BRAND LOGO: The client's logo is being sent as a reference image to the image generator. Your optimizedImagePrompt MUST instruct the model to incorporate the logo from the reference image exactly as-is — do not redesign, recreate, or approximate it. The logo should be placed prominently and legibly.`);
+    parts.push(`Logo URL: ${brandIntel.logoUrl}`);
+  }
+
+  // ── Approved reference images ──
+  if (brandIntel.approvedReferenceUrls.length) {
+    parts.push(`\nApproved reference images (${brandIntel.approvedReferenceUrls.length} total) — these are being sent as reference images to the generator. Draw visual inspiration from their style, composition, and brand language.`);
+    for (const url of brandIntel.approvedReferenceUrls.slice(0, 5)) {
+      parts.push(`  - ${url}`);
+    }
+  }
+
+  // ── Product images ──
+  if (brandIntel.productImageUrls.length) {
+    parts.push(`\nProduct images (${brandIntel.productImageUrls.length} total) — being sent as references. Use the actual product appearance from these images.`);
+  }
+
   if (brandIntel.rejectedReferenceUrls.length) {
-    parts.push(`Rejected references (${brandIntel.rejectedReferenceUrls.length} total) — avoid similar styles.`);
+    parts.push(`\n🚫 Rejected references (${brandIntel.rejectedReferenceUrls.length} total) — AVOID similar styles.`);
   }
 
   // ── User instruction ──

@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       instruction,
       width = 1024,
       height = 1024,
-      quality = 'auto' as const,
+      quality = 'high' as const,
       referenceVersionId,
     } = body;
 
@@ -58,6 +58,58 @@ export async function POST(req: NextRequest) {
     // ═══════════════════════════════════════════════════════════════════════
     console.log('[visual-gen] Stage 2: Gathering brand intelligence...');
     const brandIntel = await gatherBrandIntelligence(clientId);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // STAGE 2b: Fetch brand assets as Buffers (logo + approved references)
+    // ═══════════════════════════════════════════════════════════════════════
+    console.log('[visual-gen] Stage 2b: Fetching brand asset files...');
+    const brandAssetBuffers: Buffer[] = [];
+    const brandAssetUrls: string[] = [];
+
+    // Fetch logo
+    if (brandIntel.logoUrl) {
+      try {
+        const logoResp = await fetch(brandIntel.logoUrl);
+        if (logoResp.ok) {
+          const logoBuf = Buffer.from(await logoResp.arrayBuffer());
+          brandAssetBuffers.push(logoBuf);
+          brandAssetUrls.push(brandIntel.logoUrl);
+          console.log('[visual-gen] Logo fetched as reference image');
+        }
+      } catch (e) {
+        console.warn('[visual-gen] Failed to fetch logo:', e);
+      }
+    }
+
+    // Fetch approved reference images (up to 10 to stay under the 16 limit)
+    for (const refUrl of brandIntel.approvedReferenceUrls.slice(0, 10)) {
+      try {
+        const refResp = await fetch(refUrl);
+        if (refResp.ok) {
+          const refBuf = Buffer.from(await refResp.arrayBuffer());
+          brandAssetBuffers.push(refBuf);
+          brandAssetUrls.push(refUrl);
+        }
+      } catch (e) {
+        console.warn('[visual-gen] Failed to fetch reference image:', refUrl, e);
+      }
+    }
+
+    // Fetch product images (up to 4)
+    for (const prodUrl of brandIntel.productImageUrls.slice(0, 4)) {
+      try {
+        const prodResp = await fetch(prodUrl);
+        if (prodResp.ok) {
+          const prodBuf = Buffer.from(await prodResp.arrayBuffer());
+          brandAssetBuffers.push(prodBuf);
+          brandAssetUrls.push(prodUrl);
+        }
+      } catch (e) {
+        console.warn('[visual-gen] Failed to fetch product image:', prodUrl, e);
+      }
+    }
+
+    console.log(`[visual-gen] Total brand asset buffers: ${brandAssetBuffers.length}`);
 
     // ═══════════════════════════════════════════════════════════════════════
     // STAGE 3: Find or create session + load conversation history
@@ -137,7 +189,7 @@ export async function POST(req: NextRequest) {
           { status: 404 }
         );
       }
-      referenceImageUrls = [refVersion.imageUrl];
+      referenceImageUrls = [refVersion.imageUrl, ...brandAssetUrls];
       const imgResponse = await fetch(refVersion.imageUrl);
       if (!imgResponse.ok) {
         return NextResponse.json(
@@ -148,9 +200,13 @@ export async function POST(req: NextRequest) {
       const imgArrayBuffer = await imgResponse.arrayBuffer();
       const imgBuffer = Buffer.from(imgArrayBuffer);
 
+      // Combine previous version image with brand assets (logo, references, products)
+      const allReferenceBuffers = [imgBuffer, ...brandAssetBuffers].slice(0, 16);
+      console.log(`[visual-gen] Editing with ${allReferenceBuffers.length} reference images (1 prev version + ${brandAssetBuffers.length} brand assets)`);
+
       const editResult = await editImage({
         prompt: imagePrompt,
-        referenceImages: [imgBuffer],
+        referenceImages: allReferenceBuffers,
         width,
         height,
         quality,
@@ -163,7 +219,28 @@ export async function POST(req: NextRequest) {
       }
       resultBase64 = editResult.images[0].base64;
       resultRevisedPrompt = editResult.images[0].revisedPrompt;
+    } else if (brandAssetBuffers.length > 0) {
+      // Use editImage() with brand assets as reference images for brand-accurate results
+      console.log(`[visual-gen] Using editImage() with ${brandAssetBuffers.length} brand asset references`);
+      referenceImageUrls = brandAssetUrls;
+      const editResult = await editImage({
+        prompt: imagePrompt,
+        referenceImages: brandAssetBuffers,
+        width,
+        height,
+        quality,
+      });
+      if (!editResult.success || !editResult.images.length) {
+        return NextResponse.json(
+          { error: editResult.error || 'Failed to generate image with brand assets' },
+          { status: 500 }
+        );
+      }
+      resultBase64 = editResult.images[0].base64;
+      resultRevisedPrompt = editResult.images[0].revisedPrompt;
     } else {
+      // Fallback: text-only generation (no brand assets available)
+      console.log('[visual-gen] No brand assets available, using text-only generateImage()');
       const genResult = await generateImage({
         prompt: imagePrompt,
         width,
@@ -217,8 +294,25 @@ export async function POST(req: NextRequest) {
                 }
               }
             }
+          } else if (brandAssetBuffers.length > 0) {
+            // Re-generate with corrected prompt + brand assets
+            const retryResult = await editImage({
+              prompt: correctedPrompt,
+              referenceImages: brandAssetBuffers,
+              width,
+              height,
+              quality,
+            });
+            if (retryResult.success && retryResult.images.length) {
+              resultBase64 = retryResult.images[0].base64;
+              resultRevisedPrompt = retryResult.images[0].revisedPrompt;
+              const qg2 = await runQualityGate(resultBase64, creativeStrategy, briefSummary);
+              if (qg2.success && qg2.assessment) {
+                qualityAssessment = qg2.assessment;
+              }
+            }
           } else {
-            // Re-generate with corrected prompt
+            // Re-generate with corrected prompt (text-only fallback)
             const retryResult = await generateImage({
               prompt: correctedPrompt,
               width,
