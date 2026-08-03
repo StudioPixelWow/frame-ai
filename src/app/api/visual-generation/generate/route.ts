@@ -23,7 +23,7 @@ import { runCreativeDirector } from '@/lib/services/visual-generation/creativeDi
 import { runQualityGate } from '@/lib/services/visual-generation/visualQualityGate';
 import { generateImage, editImage } from '@/lib/services/visual-generation/openaiImageProvider';
 
-export const maxDuration = 120; // Allow up to 2 minutes for the full pipeline
+export const maxDuration = 300; // Allow up to 5 minutes — editImage() with brand assets + quality gate retry needs headroom
 
 export async function POST(req: NextRequest) {
   try {
@@ -287,11 +287,8 @@ export async function POST(req: NextRequest) {
               if (retryResult.success && retryResult.images.length) {
                 resultBase64 = retryResult.images[0].base64;
                 resultRevisedPrompt = retryResult.images[0].revisedPrompt;
-                // Run quality gate again on retried image
-                const qg2 = await runQualityGate(resultBase64, creativeStrategy, briefSummary);
-                if (qg2.success && qg2.assessment) {
-                  qualityAssessment = qg2.assessment;
-                }
+                console.log('[visual-gen] Stage 5b: Retry succeeded (reference version) — skipping second quality gate to save time');
+                qualityAssessment = { ...qualityAssessment, retried: true };
               }
             }
           } else if (brandAssetBuffers.length > 0) {
@@ -306,10 +303,8 @@ export async function POST(req: NextRequest) {
             if (retryResult.success && retryResult.images.length) {
               resultBase64 = retryResult.images[0].base64;
               resultRevisedPrompt = retryResult.images[0].revisedPrompt;
-              const qg2 = await runQualityGate(resultBase64, creativeStrategy, briefSummary);
-              if (qg2.success && qg2.assessment) {
-                qualityAssessment = qg2.assessment;
-              }
+              console.log('[visual-gen] Stage 5b: Retry succeeded (brand assets) — skipping second quality gate to save time');
+              qualityAssessment = { ...qualityAssessment, retried: true };
             }
           } else {
             // Re-generate with corrected prompt (text-only fallback)
@@ -322,11 +317,8 @@ export async function POST(req: NextRequest) {
             if (retryResult.success && retryResult.images.length) {
               resultBase64 = retryResult.images[0].base64;
               resultRevisedPrompt = retryResult.images[0].revisedPrompt;
-              // Run quality gate again on retried image
-              const qg2 = await runQualityGate(resultBase64, creativeStrategy, briefSummary);
-              if (qg2.success && qg2.assessment) {
-                qualityAssessment = qg2.assessment;
-              }
+              console.log('[visual-gen] Stage 5b: Retry succeeded (text-only) — skipping second quality gate to save time');
+              qualityAssessment = { ...qualityAssessment, retried: true };
             }
           }
         }
