@@ -556,7 +556,136 @@ async function runFinalize(
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { clientId, ganttItemId, action, versionId } = body;
+    const { clientId, ganttItemId, action, versionId, notes } = body;
+
+    // ── action: 'refine' ────────────────────────────────────────────────
+    if (action === 'refine') {
+      if (!versionId || !clientId || !notes) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'versionId, clientId and notes are required' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      console.log(`[bulk-gen-item] refine: versionId=${versionId}, notes="${notes.substring(0, 80)}"`);
+
+      const origVersion = (await aiGenerationVersions.getByIdAsync(versionId)) as AIGenerationVersion | null;
+      if (!origVersion || !origVersion.imageUrl) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Original version not found or has no image' }),
+          { status: 404, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      // Download the original image as a buffer for editImage reference
+      const origResp = await fetch(origVersion.imageUrl);
+      if (!origResp.ok) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Failed to download original image' }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      const origBuffer = Buffer.from(await origResp.arrayBuffer());
+
+      // Also fetch brand assets (logo) for compositing later
+      const brandIntel = await gatherBrandIntelligence(clientId);
+
+      // Build the refinement prompt from original prompt + user notes
+      const origPrompt = origVersion.fullPrompt || origVersion.userInstruction || '';
+      const refinePrompt = `${origPrompt}\n\nIMPORTANT CORRECTIONS FROM CLIENT:\n${notes}\n\nApply the corrections while keeping the overall composition and brand identity intact.`;
+
+      // Generate refined image using editImage with original as reference
+      const refResult = await editImage({
+        prompt: refinePrompt,
+        referenceImages: [origBuffer],
+        width: origVersion.width || 1024,
+        height: origVersion.height || 1024,
+        quality: 'high',
+      });
+
+      if (!refResult.success || !refResult.images.length) {
+        return new Response(
+          JSON.stringify({ success: false, error: refResult.error || 'Refinement generation failed' }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      let refinedBase64 = refResult.images[0].base64;
+
+      // Composite logo
+      if (brandIntel.logoUrl) {
+        try {
+          refinedBase64 = await compositeLogoOnBase64(
+            refinedBase64,
+            brandIntel.logoUrl,
+            origVersion.width || 1024,
+            origVersion.height || 1024,
+          );
+        } catch { /* continue without logo */ }
+      }
+
+      // Upload refined image
+      const sb = getSupabase();
+      const sessionId = origVersion.sessionId;
+      const newVersionNumber = (origVersion.versionNumber || 1) * 10 + 1; // e.g., 11, 21, 31
+      const buffer = Buffer.from(refinedBase64, 'base64');
+      const storagePath = `visual-generation/${clientId}/${sessionId}/refined_${versionId}_${Date.now()}.png`;
+
+      const { error: uploadError } = await sb.storage
+        .from('project-files')
+        .upload(storagePath, buffer, { contentType: 'image/png', upsert: true });
+
+      if (uploadError) {
+        console.error('[bulk-gen-item] Refined upload error:', uploadError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Failed to upload refined image' }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const { data: urlData } = sb.storage.from('project-files').getPublicUrl(storagePath);
+      const newImageUrl = urlData?.publicUrl || '';
+
+      // Create new version record
+      const newVersion = await aiGenerationVersions.createAsync({
+        sessionId,
+        clientId,
+        ganttItemId: origVersion.ganttItemId,
+        versionNumber: newVersionNumber,
+        status: 'pending',
+        userInstruction: notes,
+        fullPrompt: refinePrompt,
+        model: 'gpt-image-2',
+        quality: 'high',
+        width: origVersion.width || 1024,
+        height: origVersion.height || 1024,
+        imageUrl: newImageUrl,
+        thumbnailBase64: null,
+        revisedPrompt: refResult.images[0].revisedPrompt || null,
+        referenceImageUrls: [origVersion.imageUrl],
+        cost: null,
+        errorMessage: null,
+        durationMs: 0,
+        generationMode: 'refine',
+        creativeStrategy: null,
+        qualityAssessment: null,
+        createdAt: new Date().toISOString(),
+      } as any);
+
+      console.log(`[bulk-gen-item] refine complete — new version ${(newVersion as any).id}`);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          action: 'refine',
+          version: {
+            id: (newVersion as any).id,
+            imageUrl: newImageUrl,
+            versionNumber: newVersionNumber,
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
 
     // ── action: 'save-with-variants' ─────────────────────────────────────
     if (action === 'save-with-variants') {

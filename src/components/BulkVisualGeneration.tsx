@@ -62,6 +62,9 @@ export default function BulkVisualGeneration({ clientId, onClose, onComplete }: 
   const [isFinished, setIsFinished] = useState(false);
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [refiningVersionId, setRefiningVersionId] = useState<string | null>(null);
+  const [refineNotes, setRefineNotes] = useState("");
+  const [isRefining, setIsRefining] = useState(false);
   const abortRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const selectionResolverRef = useRef<(() => void) | null>(null);
@@ -172,6 +175,52 @@ export default function BulkVisualGeneration({ clientId, onClose, onComplete }: 
     if (selectionResolverRef.current) {
       selectionResolverRef.current();
       selectionResolverRef.current = null;
+    }
+  }, [clientId]);
+
+  const handleRefine = useCallback(async (itemId: string, versionId: string, userNotes: string) => {
+    if (!userNotes.trim()) return;
+    setIsRefining(true);
+
+    try {
+      const resp = await fetch("/api/visual-generation/bulk-generate-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId,
+          ganttItemId: itemId,
+          action: "refine",
+          versionId,
+          notes: userNotes.trim(),
+        }),
+      });
+
+      if (!resp.ok) {
+        const errText = await resp.text();
+        throw new Error(`Server error ${resp.status}: ${errText.substring(0, 200)}`);
+      }
+
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || "Refinement failed");
+
+      // Replace the refined version in the versions array
+      setProgress(prev => {
+        const curr = prev[itemId];
+        if (!curr?.versions) return prev;
+        const updatedVersions = curr.versions.map(v =>
+          v.id === versionId
+            ? { id: data.version.id, imageUrl: data.version.imageUrl, versionNumber: data.version.versionNumber }
+            : v
+        );
+        return { ...prev, [itemId]: { ...curr, versions: updatedVersions } };
+      });
+
+      setRefiningVersionId(null);
+      setRefineNotes("");
+    } catch (err: any) {
+      console.error(`[BulkVG] Refine failed:`, err.message);
+    } finally {
+      setIsRefining(false);
     }
   }, [clientId]);
 
@@ -667,6 +716,79 @@ export default function BulkVisualGeneration({ clientId, onClose, onComplete }: 
                       >
                         שמור כגודל בודד
                       </button>
+                      <button
+                        onClick={() => {
+                          setRefiningVersionId(refiningVersionId === ver.id ? null : ver.id);
+                          setRefineNotes("");
+                        }}
+                        disabled={isRefining}
+                        style={{
+                          width: "100%",
+                          padding: "0.5rem 0.6rem",
+                          background: refiningVersionId === ver.id ? "rgba(240,255,2,0.15)" : "transparent",
+                          color: "#6b7280",
+                          border: `1px solid ${refiningVersionId === ver.id ? "var(--neon-yellow, #F0FF02)" : "#e5e7eb"}`,
+                          borderRadius: "0.5rem",
+                          fontSize: "0.68rem",
+                          fontWeight: 500,
+                          cursor: isRefining ? "wait" : "pointer",
+                          transition: "all 0.2s",
+                        }}
+                      >
+                        ✏️ שלח הערות
+                      </button>
+
+                      {/* Inline notes input — shown when this version is selected for refinement */}
+                      {refiningVersionId === ver.id && (
+                        <div style={{
+                          width: "100%",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.4rem",
+                          marginTop: "0.2rem",
+                        }}>
+                          <textarea
+                            value={refineNotes}
+                            onChange={(e) => setRefineNotes(e.target.value)}
+                            placeholder="כתוב הערות לתיקון... (למשל: שנה צבע רקע, הגדל לוגו, הוסף טקסט)"
+                            disabled={isRefining}
+                            style={{
+                              width: "100%",
+                              minHeight: "60px",
+                              padding: "0.5rem",
+                              border: "1px solid #d1d5db",
+                              borderRadius: "0.4rem",
+                              fontSize: "0.72rem",
+                              fontFamily: "inherit",
+                              resize: "vertical",
+                              direction: "rtl",
+                              outline: "none",
+                            }}
+                          />
+                          <button
+                            onClick={() => handleRefine(currentItem.id, ver.id, refineNotes)}
+                            disabled={isRefining || !refineNotes.trim()}
+                            style={{
+                              width: "100%",
+                              padding: "0.5rem 0.6rem",
+                              background: isRefining
+                                ? "#9ca3af"
+                                : !refineNotes.trim()
+                                ? "#e5e7eb"
+                                : "linear-gradient(135deg, #F0FF02, #d4e000)",
+                              color: isRefining || !refineNotes.trim() ? "#9ca3af" : "#111",
+                              border: "none",
+                              borderRadius: "0.5rem",
+                              fontSize: "0.72rem",
+                              fontWeight: 700,
+                              cursor: isRefining || !refineNotes.trim() ? "not-allowed" : "pointer",
+                              transition: "all 0.2s",
+                            }}
+                          >
+                            {isRefining ? "מייצר תיקון..." : "שלח ויצר מחדש"}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
