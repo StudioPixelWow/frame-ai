@@ -1,5 +1,4 @@
 "use client";
-export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -915,7 +914,7 @@ function SeoGeoWizard() {
 
   return (
     <div style={{
-      position: "fixed", inset: 0, zIndex: 999,
+      minHeight: "100vh", width: "100%",
       display: "flex", flexDirection: "column",
       background: C.bg,
       direction: "rtl",

@@ -12,6 +12,13 @@ export function PageTransition({ children }: { children: ReactNode }) {
   const [key, setKey] = useState(pathname);
   const [phase, setPhase] = useState<"enter" | "exit" | "idle">("enter");
 
+  // Transition enter -> idle on initial mount (fixes position:fixed children
+  // that break when willChange/transform create a containing block)
+  useEffect(() => {
+    const t = setTimeout(() => setPhase("idle"), 350);
+    return () => clearTimeout(t);
+  }, []);
+
   useEffect(() => {
     if (pathname !== key) {
       // Exit phase
