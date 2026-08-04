@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { startScan, type ScanType } from '@/lib/seo/scan-pipeline';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /**
  * POST /api/seo/scan/start
@@ -16,7 +16,7 @@ export const maxDuration = 60;
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { url, scanType = 'quick', clientKeywords } = body;
+    const { url, scanType = 'quick', clientKeywords, businessName } = body;
 
     if (!url) {
       return NextResponse.json({ error: 'URL required' }, { status: 400 });
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     const validTypes: ScanType[] = ['quick', 'deep'];
     const type: ScanType = validTypes.includes(scanType) ? scanType : 'quick';
 
-    const jobId = await startScan(url, type, Array.isArray(clientKeywords) ? clientKeywords : undefined);
+    const jobId = await startScan(url, type, Array.isArray(clientKeywords) ? clientKeywords : undefined, typeof businessName === 'string' && businessName.trim() ? businessName.trim() : undefined);
 
     return NextResponse.json({
       jobId,

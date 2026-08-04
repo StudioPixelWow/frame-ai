@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { startScan, getJob, type ScanType } from '@/lib/seo/scan-pipeline';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /**
  * POST /api/seo/scan
@@ -20,9 +20,9 @@ export async function POST(req: NextRequest) {
   const reqId = Math.random().toString(36).slice(2, 8);
   try {
     const body = await req.json();
-    const { url, async: asyncMode, scanType = 'quick', clientKeywords } = body;
+    const { url, async: asyncMode, scanType = 'quick', clientKeywords, businessName } = body;
 
-    console.log(`${TAG} [${reqId}] INIT url=${url} scanType=${scanType} async=${!!asyncMode}`);
+    console.log(`${TAG} [${reqId}] INIT url=${url} scanType=${scanType} async=${!!asyncMode} businessName=${businessName || '(auto)'} clientKeywords=${Array.isArray(clientKeywords) ? clientKeywords.length : 0}`);
 
     if (!url) {
       console.warn(`${TAG} [${reqId}] REJECTED — no URL provided`);
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
     const validTypes: ScanType[] = ['quick', 'deep'];
     const type: ScanType = validTypes.includes(scanType) ? scanType : 'quick';
-    const jobId = await startScan(url, type, Array.isArray(clientKeywords) ? clientKeywords : undefined);
+    const jobId = await startScan(url, type, Array.isArray(clientKeywords) ? clientKeywords : undefined, typeof businessName === 'string' && businessName.trim() ? businessName.trim() : undefined);
     console.log(`${TAG} [${reqId}] JOB_CREATED jobId=${jobId} type=${type}`);
 
     if (asyncMode) {
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Legacy sync — poll until done
-    const maxWait = 55_000;
+    const maxWait = 280_000;
     const start = Date.now();
     let pollCount = 0;
     while (Date.now() - start < maxWait) {

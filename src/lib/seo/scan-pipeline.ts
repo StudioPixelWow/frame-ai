@@ -143,6 +143,7 @@ export interface ScanJob {
   result?: ScanResult | null;
   error?: string;
   clientKeywords?: string[];
+  businessName?: string;
 }
 
 export interface ParsedPage {
@@ -847,7 +848,7 @@ function validateScan(job: ScanJob, pages: ScannedPageInfo[], facts: WebsiteFact
 // PIPELINE ORCHESTRATOR
 // ══════════════════════════════════════════════════════════════════════════════
 
-export async function startScan(url: string, scanType: ScanType = 'quick', clientKeywords?: string[]): Promise<string> {
+export async function startScan(url: string, scanType: ScanType = 'quick', clientKeywords?: string[], businessName?: string): Promise<string> {
   let normalizedUrl = url.trim();
   if (!normalizedUrl.startsWith('http')) normalizedUrl = `https://${normalizedUrl}`;
 
@@ -865,6 +866,7 @@ export async function startScan(url: string, scanType: ScanType = 'quick', clien
     startedAt: new Date().toISOString(),
     result: null,
     clientKeywords: clientKeywords && clientKeywords.length > 0 ? clientKeywords : undefined,
+    businessName: businessName || undefined,
   };
 
   jobStore.set(jobId, job);
@@ -1122,7 +1124,7 @@ async function runPipeline(job: ScanJob, normalizedUrl: string): Promise<void> {
     const queries: Array<{ query: string; platform: PlatformId; intent: string }> = [];
     const uniqueQueries = new Set<string>();
 
-    const bName = websiteFacts.business_name.value;
+    const bName = job.businessName || websiteFacts.business_name.value;
     const industry = websiteFacts.detected_industry.value;
     const location = websiteFacts.detected_location?.value || '';
     const h1Tags = homepageParsed.h1Tags || [];

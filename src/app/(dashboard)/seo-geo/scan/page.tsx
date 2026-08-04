@@ -339,7 +339,12 @@ function ScanPageInner() {
       const res = await fetch("/api/seo/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: scanUrl, scanType }),
+        body: JSON.stringify({
+          url: scanUrl,
+          scanType,
+          clientKeywords: wizardDataRef.current.clientKeywords,
+          businessName: wizardDataRef.current.clientName || clientName || undefined,
+        }),
       });
 
       // Stop simulation
