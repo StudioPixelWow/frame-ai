@@ -357,6 +357,9 @@ export default function VisualGenerationWorkspace({
   const [chosenVersionId, setChosenVersionId] = useState<string | null>(null);
   const [finalizeStageIdx, setFinalizeStageIdx] = useState(0);
   const [finalVariants, setFinalVariants] = useState<VariantResult[]>([]);
+  const [refiningVersionId, setRefiningVersionId] = useState<string | null>(null);
+  const [refineNotes, setRefineNotes] = useState("");
+  const [isRefining, setIsRefining] = useState(false);
 
   /* inject keyframes once */
   useEffect(() => {
@@ -578,6 +581,87 @@ export default function VisualGenerationWorkspace({
     } finally {
       setIsFinalizing(false);
       setFinalizeStageIdx(0);
+    }
+  };
+
+  // Save single image without generating size variants
+  const handleSaveSingle = async (versionId: string) => {
+    setError(null);
+    setChosenVersionId(versionId);
+    try {
+      const res = await fetch("/api/visual-generation/bulk-generate-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId,
+          ganttItemId,
+          action: "save-single",
+          versionId,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "שגיאה בשמירה");
+      }
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "שגיאה בשמירה");
+
+      // Show complete phase with the single image
+      setFinalVariants([{
+        key: "single",
+        label: "Original",
+        labelHe: "מקור",
+        width: 0,
+        height: 0,
+        platform: "original",
+        imageUrl: versions.find(v => v.id === versionId)?.imageUrl || "",
+      }]);
+    } catch (err: any) {
+      setError(err.message || "שגיאה בשמירה");
+      setChosenVersionId(null);
+    }
+  };
+
+  // Refine a version with user notes
+  const handleRefine = async (versionId: string, userNotes: string) => {
+    if (!userNotes.trim()) return;
+    setIsRefining(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/visual-generation/bulk-generate-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId,
+          ganttItemId,
+          action: "refine",
+          versionId,
+          notes: userNotes.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "שגיאה בתיקון");
+      }
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "שגיאה בתיקון");
+
+      // Replace the refined version in the versions array
+      setVersions(prev =>
+        prev.map(v =>
+          v.id === versionId
+            ? { ...v, id: data.version.id, imageUrl: data.version.imageUrl, versionNumber: data.version.versionNumber }
+            : v
+        )
+      );
+
+      setRefiningVersionId(null);
+      setRefineNotes("");
+    } catch (err: any) {
+      setError(err.message || "שגיאה בתיקון");
+    } finally {
+      setIsRefining(false);
     }
   };
 
@@ -993,10 +1077,8 @@ export default function VisualGenerationWorkspace({
                         overflow: "hidden",
                         display: "flex",
                         flexDirection: "column",
-                        cursor: "pointer",
                         transition: "border-color 200ms, box-shadow 200ms",
                       }}
-                      onClick={() => handleChooseVersion(ver.id)}
                       onMouseEnter={(e) => {
                         (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)";
                         (e.currentTarget as HTMLElement).style.boxShadow = "0 0 20px rgba(0,181,254,0.15)";
@@ -1051,35 +1133,123 @@ export default function VisualGenerationWorkspace({
                         </span>
                       </div>
 
-                      {/* Choose button */}
+                      {/* 3 Action buttons */}
                       <div
                         style={{
-                          padding: "0.75rem",
+                          padding: "0.6rem",
                           display: "flex",
-                          justifyContent: "center",
+                          flexDirection: "column",
+                          gap: "0.4rem",
                           borderTop: "1px solid var(--border)",
                         }}
                       >
+                        {/* Button 1: Create size variants (accent) */}
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleChooseVersion(ver.id);
-                          }}
+                          onClick={() => handleChooseVersion(ver.id)}
                           style={{
                             background: "var(--accent)",
                             color: "#fff",
                             border: "none",
                             borderRadius: 8,
-                            padding: "0.45rem 1.5rem",
-                            fontSize: "0.82rem",
+                            padding: "0.45rem 1rem",
+                            fontSize: "0.78rem",
                             fontWeight: 700,
                             cursor: "pointer",
                             width: "100%",
                           }}
                         >
-                          {"✓"} בחר אפשרות זו
+                          צור התאמות גודל
+                        </button>
+
+                        {/* Button 2: Save as single size (ghost) */}
+                        <button
+                          onClick={() => handleSaveSingle(ver.id)}
+                          style={{
+                            background: "transparent",
+                            color: "var(--foreground)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 8,
+                            padding: "0.4rem 1rem",
+                            fontSize: "0.76rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            width: "100%",
+                          }}
+                        >
+                          שמור כגודל בודד
+                        </button>
+
+                        {/* Button 3: Send notes (ghost, neon yellow when active) */}
+                        <button
+                          onClick={() => {
+                            setRefiningVersionId(refiningVersionId === ver.id ? null : ver.id);
+                            setRefineNotes("");
+                          }}
+                          style={{
+                            background: refiningVersionId === ver.id ? "rgba(240,255,2,0.15)" : "transparent",
+                            color: "var(--foreground)",
+                            border: `1px solid ${refiningVersionId === ver.id ? "var(--neon-yellow, #F0FF02)" : "var(--border)"}`,
+                            borderRadius: 8,
+                            padding: "0.4rem 1rem",
+                            fontSize: "0.76rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            width: "100%",
+                          }}
+                        >
+                          {"✏️"} שלח הערות
                         </button>
                       </div>
+
+                      {/* Inline refine textarea */}
+                      {refiningVersionId === ver.id && (
+                        <div
+                          style={{
+                            padding: "0 0.6rem 0.6rem",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "0.35rem",
+                          }}
+                        >
+                          <textarea
+                            value={refineNotes}
+                            onChange={(e) => setRefineNotes(e.target.value)}
+                            placeholder="כתוב הערות לתיקון..."
+                            style={{
+                              width: "100%",
+                              minHeight: 60,
+                              resize: "vertical",
+                              borderRadius: 8,
+                              border: "1px solid var(--border)",
+                              background: "var(--surface)",
+                              color: "var(--foreground)",
+                              padding: "0.5rem",
+                              fontSize: "0.78rem",
+                              fontFamily: "inherit",
+                              direction: "rtl",
+                              outline: "none",
+                            }}
+                          />
+                          <button
+                            onClick={() => handleRefine(ver.id, refineNotes)}
+                            disabled={!refineNotes.trim() || isRefining}
+                            style={{
+                              background: isRefining ? "var(--border)" : "var(--neon-yellow, #F0FF02)",
+                              color: "#000",
+                              border: "none",
+                              borderRadius: 8,
+                              padding: "0.4rem 1rem",
+                              fontSize: "0.76rem",
+                              fontWeight: 700,
+                              cursor: isRefining ? "not-allowed" : "pointer",
+                              width: "100%",
+                              opacity: !refineNotes.trim() ? 0.5 : 1,
+                            }}
+                          >
+                            {isRefining ? "מייצר מחדש..." : "שלח ויצר מחדש"}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
