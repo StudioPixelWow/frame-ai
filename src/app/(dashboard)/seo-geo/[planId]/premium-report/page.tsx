@@ -1522,7 +1522,10 @@ export default function PremiumReportPage() {
 
   const scrollToSection = useCallback((id: string) => {
     const el = document.getElementById(`section-${id}`);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (el) {
+      const y = el.getBoundingClientRect().top + window.scrollY - 72;
+      window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+    }
   }, []);
 
   const handleRegenerate = useCallback(() => {
@@ -2013,13 +2016,12 @@ export default function PremiumReportPage() {
                 }}
               >
                 {filteredSections.map((s) => (
-                  <a
+                  <div
                     key={s.id}
-                    href={`#section-${s.id}`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      scrollToSection(s.id);
-                    }}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => scrollToSection(s.id)}
+                    onKeyDown={(e) => { if (e.key === "Enter") scrollToSection(s.id); }}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -2029,13 +2031,14 @@ export default function PremiumReportPage() {
                       textDecoration: "none",
                       color: C.text,
                       fontSize: 13,
+                      cursor: "pointer",
                       transition: "background 0.2s",
                     }}
                     onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLAnchorElement).style.background = C.primaryLight;
+                      (e.currentTarget as HTMLElement).style.background = C.primaryLight;
                     }}
                     onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLAnchorElement).style.background = "transparent";
+                      (e.currentTarget as HTMLElement).style.background = "transparent";
                     }}
                   >
                     <span
@@ -2057,7 +2060,7 @@ export default function PremiumReportPage() {
                     </span>
                     <span style={{ fontSize: 14 }}>{SECTION_ICONS[s.id] || ""}</span>
                     <span style={{ fontWeight: 500 }}>{he ? s.title : s.titleEn}</span>
-                  </a>
+                  </div>
                 ))}
               </div>
             </div>
