@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -220,7 +221,7 @@ export default function BulkVisualGeneration({ clientId, onClose, onComplete }: 
 
   // ── Render ───────────────────────────────────────────────────────────
 
-  return (
+  return createPortal(
     <div style={{
       position: "fixed",
       inset: 0,
@@ -711,6 +712,7 @@ export default function BulkVisualGeneration({ clientId, onClose, onComplete }: 
           50% { opacity: 0.5; }
         }
       `}</style>
-    </div>
+    </div>,
+    document.body
   );
 }
