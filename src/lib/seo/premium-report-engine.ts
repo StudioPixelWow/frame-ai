@@ -732,6 +732,76 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION 2.5: Market Context — "Where Exposure Is Located"
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Count queries per engine for distribution
+  const engineDistribution: Array<{ engine: string; queries: number; mentions: number; citations: number; share: string }> = [];
+  for (const [, eDef] of Object.entries(ENGINE_MAP)) {
+    const eqs = realQueries.filter((q: any) => eDef.ids.includes(q.platform));
+    if (eqs.length === 0) continue;
+    const eMentions = eqs.filter((q: any) => q.found).length;
+    const eCitations = eqs.filter((q: any) => (q.sources || []).some((s: any) => {
+      const sd = extractDomain(s.domain || s.url || "");
+      return sd === domain || sd.includes(domain);
+    })).length;
+    engineDistribution.push({
+      engine: eDef.nameHe || eDef.name,
+      queries: eqs.length,
+      mentions: eMentions,
+      citations: eCitations,
+      share: `${pct(eqs.length, realQueries.length)}%`,
+    });
+  }
+
+  // Sort by query count descending
+  engineDistribution.sort((a, b) => b.queries - a.queries);
+
+  const marketContextContent: PremiumReportBlock[] = [
+    { type: "paragraph", text: t(he,
+      `סקירת הנוף הדיגיטלי — היכן הקהל מחפש מידע ואילו פלטפורמות מספקות חשיפה עבור ${clientName}. הבנת התפלגות החשיפה מאפשרת תעדוף משאבים.`,
+      `Digital landscape overview — where audiences search for information and which platforms provide exposure for ${clientName}. Understanding exposure distribution enables resource prioritization.`) },
+    { type: "heading", text: t(he, "התפלגות חשיפה לפי מנוע", "Exposure Distribution by Engine"), level: 3 },
+    { type: "table",
+      headers: [t(he, "מנוע/פלטפורמה", "Engine/Platform"), t(he, "שאילתות", "Queries"), t(he, "נתח", "Share"), t(he, "אזכורים", "Mentions"), t(he, "ציטוטים", "Citations")],
+      rows: engineDistribution.map(ed => [ed.engine, `${ed.queries}`, ed.share, `${ed.mentions} (${pct(ed.mentions, ed.queries)}%)`, `${ed.citations} (${pct(ed.citations, ed.queries)}%)`]),
+      sortable: true,
+    },
+    { type: "divider" },
+    { type: "heading", text: t(he, "הקשר שוק — נתח פלטפורמות", "Market Context — Platform Share"), level: 3 },
+    { type: "paragraph", text: t(he,
+      `Google שולט ב-90%+ מחיפושי האינטרנט בישראל. לצד זאת, מנועי AI (ChatGPT, Gemini, Perplexity, Claude) צוברים נתח גדל, במיוחד בשאילתות אינפורמטיביות ומסחריות. Google AI Overview מופיע ביותר מ-40% מתוצאות החיפוש. ההמלצה: השקיעו ב-SEO קלאסי כבסיס, ובו-זמנית בנו נוכחות GEO בכל מנועי ה-AI.`,
+      `Google dominates 90%+ of internet searches in Israel. Meanwhile, AI engines (ChatGPT, Gemini, Perplexity, Claude) are gaining share, especially for informational and commercial queries. Google AI Overview appears in 40%+ of search results. Recommendation: invest in classic SEO as foundation while building GEO presence across all AI engines.`) },
+    { type: "heading", text: t(he, "סדר עדיפויות מומלץ", "Recommended Priority Order"), level: 3 },
+    { type: "list", items: [
+      t(he, "Google SEO — בסיס הנוכחות הדיגיטלית, נתח שוק 90%+", "Google SEO — digital presence foundation, 90%+ market share"),
+      t(he, "Google AI Overview — מופיע בתוצאות חיפוש רגילות, חשיפה גבוהה", "Google AI Overview — appears in regular search results, high exposure"),
+      t(he, "ChatGPT — הכלי הפופולרי ביותר לשאלות אינפורמטיביות", "ChatGPT — most popular tool for informational queries"),
+      t(he, "Gemini — אינטגרציה עמוקה עם Google Workspace ו-Android", "Gemini — deep integration with Google Workspace and Android"),
+      t(he, "Perplexity — מנוע מחקר מתקדם עם ציטוטים ישירים", "Perplexity — advanced research engine with direct citations"),
+      t(he, "Claude — פופולרי בקרב אנשי מקצוע ומפתחים", "Claude — popular among professionals and developers"),
+    ], ordered: true },
+  ];
+
+  // Add alert about AI engines where the brand is completely missing
+  const missingEngines = engineDistribution.filter(e => e.mentions === 0);
+  if (missingEngines.length > 0) {
+    marketContextContent.push(
+      { type: "alert", message: t(he,
+        `${clientName} לא מופיע כלל ב-${missingEngines.length} מנועים: ${missingEngines.map(e => e.engine).join(", ")}. אלו הזדמנויות חשיפה חסרות.`,
+        `${clientName} doesn't appear at all in ${missingEngines.length} engines: ${missingEngines.map(e => e.engine).join(", ")}. These are missed exposure opportunities.`), severity: "warning" }
+    );
+  }
+
+  sections.push({
+    id: "market_context", number: 19,
+    title: t(he, "היכן נמצאת החשיפה", "Where Exposure Is Located"),
+    titleEn: "Where Exposure Is Located",
+    icon: "🌐",
+    content: marketContextContent,
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // SECTION 3: PIXEL SEO Score
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -898,6 +968,32 @@ export function generatePremiumReport(
         { label: t(he, "ציטוטים", "Citations"), value: `${cited} (${pct(cited, queries.length)}%)`, color: scoreColor(pct(cited, queries.length)) },
       ]}
     );
+
+    // Per-engine breakdown within this language
+    const langEngineRows: string[][] = [];
+    for (const [eKey, eDef] of Object.entries(ENGINE_MAP)) {
+      const engLangQs = queries.filter((q: any) => eDef.ids.includes(q.platform));
+      if (engLangQs.length === 0) continue;
+      const engFound = engLangQs.filter((q: any) => q.found).length;
+      const engCited = engLangQs.filter((q: any) => (q.sources || []).some((s: any) => {
+        const sd = extractDomain(s.domain || s.url || "");
+        return sd === domain || sd.includes(domain);
+      })).length;
+      langEngineRows.push([
+        eDef.nameHe || eDef.name,
+        `${engLangQs.length}`,
+        `${engFound} (${pct(engFound, engLangQs.length)}%)`,
+        `${engCited} (${pct(engCited, engLangQs.length)}%)`,
+      ]);
+    }
+    if (langEngineRows.length > 0) {
+      langContent.push({
+        type: "table",
+        headers: [t(he, "מנוע", "Engine"), t(he, "שאילתות", "Queries"), t(he, "אזכורים", "Mentions"), t(he, "ציטוטים", "Citations")],
+        rows: langEngineRows,
+        caption: t(he, `פירוט לפי מנוע — ${langName}`, `Per-engine breakdown — ${langName}`),
+      });
+    }
   }
 
   if (Object.keys(langGroups).length === 0) {
@@ -1868,6 +1964,123 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION 20: Appendices — Per-Query Per-Engine Results Matrix
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const appendixBlocks: PremiumReportBlock[] = [
+    { type: "paragraph", text: t(he,
+      `נספח מלא — תוצאות כל שאילתה בכל מנוע. ◆ = ציטוט (האתר מצוטט כמקור), ✓ = אזכור (שם המותג מוזכר), ✗ = לא נמצא. זהו הבסיס הראייתי לכל הממצאים בדוח.`,
+      `Full appendix — results of every query in every engine. ◆ = citation (site cited as source), ✓ = mention (brand name mentioned), ✗ = not found. This is the evidence base for all findings in the report.`) },
+    { type: "divider" },
+  ];
+
+  // Group queries by category for organized display
+  const categorizedQueries = groupByCategory(realQueries.map((q: any) => ({
+    ...q,
+    detectedLang: detectLanguage(q.query || ""),
+    isBranded: isBrandedQuery(q.query || "", clientName, domain),
+  })), "category");
+
+  for (const [cat, catQueries] of Object.entries(categorizedQueries)) {
+    const catName = cat === "general" ? t(he, "כללי", "General") :
+                    cat === "informational" ? t(he, "אינפורמטיבי", "Informational") :
+                    cat === "commercial" ? t(he, "מסחרי", "Commercial") :
+                    cat === "comparison" ? t(he, "השוואה", "Comparison") :
+                    cat === "local" ? t(he, "מקומי", "Local") :
+                    cat === "transactional" ? t(he, "עסקאות", "Transactional") : cat;
+
+    appendixBlocks.push(
+      { type: "heading", text: `${catName} (${catQueries.length} ${t(he, "שאילתות", "queries")})`, level: 3 }
+    );
+
+    for (const q of catQueries) {
+      // Build per-engine results for this query
+      const engineResults: Array<{ engine: string; mentioned: boolean; cited: boolean; position?: number; snippet?: string; sources?: string[] }> = [];
+
+      for (const [, eDef] of Object.entries(ENGINE_MAP)) {
+        // Check if this query was tested on this engine
+        if (!eDef.ids.includes(q.platform)) continue;
+
+        const isCited = (q.sources || []).some((s: any) => {
+          const sd = extractDomain(s.domain || s.url || "");
+          return sd === domain || sd.includes(domain);
+        });
+
+        const citedSources = (q.sources || [])
+          .filter((s: any) => {
+            const sd = extractDomain(s.domain || s.url || "");
+            return sd === domain || sd.includes(domain);
+          })
+          .map((s: any) => s.url || s.domain || "");
+
+        engineResults.push({
+          engine: eDef.nameHe || eDef.name,
+          mentioned: !!q.found,
+          cited: isCited,
+          position: q.mentionPosition || undefined,
+          snippet: q.aiAnswer ? (q.aiAnswer as string).slice(0, 120) + (q.aiAnswer.length > 120 ? "..." : "") : undefined,
+          sources: citedSources.length > 0 ? citedSources : undefined,
+        });
+      }
+
+      // If no engine matched this query's platform, add it with a single result
+      if (engineResults.length === 0) {
+        // Find the display name for this platform
+        let engineName = q.platform || "Unknown";
+        for (const eDef of Object.values(ENGINE_MAP)) {
+          if (eDef.ids.includes(q.platform)) {
+            engineName = eDef.nameHe || eDef.name;
+            break;
+          }
+        }
+        const isCited = (q.sources || []).some((s: any) => {
+          const sd = extractDomain(s.domain || s.url || "");
+          return sd === domain || sd.includes(domain);
+        });
+        engineResults.push({
+          engine: engineName,
+          mentioned: !!q.found,
+          cited: isCited,
+        });
+      }
+
+      appendixBlocks.push({
+        type: "query_result",
+        query: q.query || "",
+        language: q.detectedLang === "he" ? t(he, "עברית", "Hebrew") : q.detectedLang === "en" ? t(he, "אנגלית", "English") : q.detectedLang || "",
+        category: catName,
+        branded: !!q.isBranded,
+        engines: engineResults,
+      });
+    }
+  }
+
+  // Add summary stats at the bottom of appendix
+  const totalMentioned = realQueries.filter((q: any) => q.found).length;
+  const totalCited = realQueries.filter((q: any) => (q.sources || []).some((s: any) => {
+    const sd = extractDomain(s.domain || s.url || "");
+    return sd === domain || sd.includes(domain);
+  })).length;
+
+  appendixBlocks.push(
+    { type: "divider" },
+    { type: "heading", text: t(he, "סיכום נספח", "Appendix Summary"), level: 3 },
+    { type: "stat_row", stats: [
+      { label: t(he, "סה״כ שאילתות", "Total Queries"), value: `${realQueries.length}`, color: "#00B5FE" },
+      { label: t(he, "אזכורים", "Mentions"), value: `${totalMentioned} (${pct(totalMentioned, realQueries.length)}%)`, color: scoreColor(pct(totalMentioned, realQueries.length)) },
+      { label: t(he, "ציטוטים", "Citations"), value: `${totalCited} (${pct(totalCited, realQueries.length)}%)`, color: scoreColor(pct(totalCited, realQueries.length)) },
+    ]},
+  );
+
+  sections.push({
+    id: "appendices", number: 20,
+    title: t(he, "נספחים — מטריצת תוצאות מלאה", "Appendices — Full Results Matrix"),
+    titleEn: "Appendices — Full Results Matrix",
+    icon: "📎",
+    content: appendixBlocks,
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // Assemble Final Report
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -2154,6 +2367,52 @@ function buildTechnicalFindings(
       detail: t(he, `נמצאו ${thinPages.length} דפים עם פחות מ-200 מילים. תוכן דק מפחית סיכויי דירוג ואזכור ב-AI.`, `Found ${thinPages.length} pages with fewer than 200 words. Thin content reduces ranking and AI mention chances.`),
       rec: t(he, "הרחב תוכן בדפים אלו לפחות 500 מילים עם תשובות ישירות.", "Expand content on these pages to at least 500 words with direct answers."),
       evidence: thinPages.slice(0, 3).map((p: any) => `${p.url} (${p.wordCount} words)`).join(", "),
+    });
+  }
+
+  // User-Agent crawl behavior
+  // Check if site serves different content to bot user agents
+  if (scan.userAgentTest) {
+    const uat = scan.userAgentTest;
+    if (uat.blockedBots?.length > 0) {
+      findings.push({
+        severity: "critical",
+        title: t(he, `חסימת User-Agent: ${uat.blockedBots.join(", ")}`, `User-Agent Blocking: ${uat.blockedBots.join(", ")}`),
+        detail: t(he,
+          `האתר חוסם את סוכני המשתמש הבאים: ${uat.blockedBots.join(", ")}. חסימת בוטים של מנועי AI מונעת אינדקוס ואזכור בתשובות.`,
+          `Site blocks the following user agents: ${uat.blockedBots.join(", ")}. Blocking AI engine bots prevents indexing and mentions in responses.`),
+        rec: t(he, "עדכן robots.txt ו-WAF להתיר גישה ל-GPTBot, Google-Extended, Anthropic ו-PerplexityBot.", "Update robots.txt and WAF to allow access for GPTBot, Google-Extended, Anthropic, and PerplexityBot."),
+        evidence: `Blocked user agents: ${uat.blockedBots.join(", ")}`,
+      });
+    }
+    if (uat.emptyBodyBots?.length > 0) {
+      findings.push({
+        severity: "critical",
+        title: t(he, `תוכן ריק ל-User-Agent: ${uat.emptyBodyBots.join(", ")}`, `Empty Body for User-Agent: ${uat.emptyBodyBots.join(", ")}`),
+        detail: t(he,
+          `האתר מחזיר HTTP 200 עם גוף ריק לסוכנים: ${uat.emptyBodyBots.join(", ")}. המשמעות: הדפים נראים "נגישים" אך למעשה ללא תוכן — מנועי AI רואים דף ריק.`,
+          `Site returns HTTP 200 with empty body for agents: ${uat.emptyBodyBots.join(", ")}. This means pages appear "accessible" but actually have no content — AI engines see a blank page.`),
+        rec: t(he, "בדוק WAF/CDN שלא מבצע cloaking. ודא שכל סוכני משתמש מקבלים את אותו תוכן HTML.", "Check WAF/CDN for cloaking. Ensure all user agents receive the same HTML content."),
+        evidence: `User agents receiving empty body: ${uat.emptyBodyBots.join(", ")}`,
+      });
+    }
+    if (!uat.blockedBots?.length && !uat.emptyBodyBots?.length) {
+      findings.push({
+        severity: "success",
+        title: t(he, "התנהגות User-Agent תקינה", "User-Agent Behavior OK"),
+        detail: t(he, "האתר מחזיר תוכן זהה לכל סוכני המשתמש — בוטים ודפדפנים מקבלים אותו HTML.", "Site returns identical content for all user agents — bots and browsers receive the same HTML."),
+        rec: t(he, "המשך לעקוב אחר שינויי WAF/CDN שעלולים לחסום בוטים.", "Continue monitoring WAF/CDN changes that may block bots."),
+      });
+    }
+  } else {
+    // No user-agent test data — report as info finding
+    findings.push({
+      severity: "info",
+      title: t(he, "בדיקת User-Agent לא בוצעה", "User-Agent Test Not Performed"),
+      detail: t(he,
+        "לא בוצעה בדיקת התנהגות per-User-Agent. מומלץ לבדוק שהאתר לא חוסם GPTBot, Google-Extended, Anthropic-AI או PerplexityBot.",
+        "No per-User-Agent behavior test was performed. Recommended to verify site doesn't block GPTBot, Google-Extended, Anthropic-AI, or PerplexityBot."),
+      rec: t(he, "הרץ בדיקת User-Agent עם curl -H 'User-Agent: GPTBot' לכל דף חשוב.", "Run User-Agent test with curl -H 'User-Agent: GPTBot' on each important page."),
     });
   }
 
