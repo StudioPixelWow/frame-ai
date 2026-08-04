@@ -6208,6 +6208,58 @@ export default function SeoPlanDetail() {
               </button>
             </div>
 
+            {/* Premium report card */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: 16,
+              padding: "18px 22px", borderRadius: 16, marginBottom: 16,
+              background: "linear-gradient(135deg, #0a1628 0%, #1a0f3a 50%, #0f172a 100%)",
+              border: "1px solid rgba(139,92,246,0.3)",
+              boxShadow: "0 4px 20px rgba(139,92,246,0.1)",
+            }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 14, flexShrink: 0,
+                background: "linear-gradient(135deg, rgba(139,92,246,0.2), rgba(0,181,254,0.2))",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 24,
+              }}>🏆</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>
+                  דוח PIXEL SEO/GEO פרימיום
+                </div>
+                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                  18 סעיפים • ציון PIXEL SEO + GEO • ניתוח מנועי AI • מתחרים • תוכנית פעולה
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setGeneratingReport(true);
+                  fetch("/api/seo/generate-report", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ planId: p.id, language: "he", premium: true }),
+                  })
+                    .then(res => res.ok ? res.json() : Promise.reject("failed"))
+                    .then(() => {
+                      router.push(`/seo-geo/${p.id}/premium-report`);
+                    })
+                    .catch(e => console.error("Premium report failed:", e))
+                    .finally(() => setGeneratingReport(false));
+                }}
+                disabled={generatingReport}
+                style={{
+                  padding: "10px 24px",
+                  background: "linear-gradient(135deg, #8B5CF6, #00B5FE)",
+                  color: "#fff", border: "none", borderRadius: 10,
+                  fontSize: 13, fontWeight: 700,
+                  cursor: generatingReport ? "wait" : "pointer",
+                  opacity: generatingReport ? 0.7 : 1,
+                  boxShadow: "0 2px 12px rgba(139,92,246,0.4)",
+                }}
+              >
+                {generatingReport ? "⏳ מייצר..." : "✨ הפק דוח פרימיום"}
+              </button>
+            </div>
+
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {reports.length > 0 ? reports.map((report) => (
                 <div key={report.id} style={{
