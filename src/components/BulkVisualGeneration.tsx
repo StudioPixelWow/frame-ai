@@ -1,0 +1,716 @@
+"use client";
+
+import { useState, useEffect, useCallback, useRef } from "react";
+
+// ── Types ────────────────────────────────────────────────────────────────
+
+interface BulkItem {
+  id: string;
+  title: string;
+  contentType?: string;
+  date?: string;
+}
+
+type ItemStatus = "pending" | "processing" | "success" | "error";
+type ItemStage = "init" | "auto-brief" | "generate" | "pick-best" | "finalize" | "done";
+
+interface ItemProgress {
+  status: ItemStatus;
+  stage: ItemStage;
+  error?: string;
+  imageUrl?: string;
+  variants?: { key: string; url: string }[];
+  startTime?: number;
+  endTime?: number;
+}
+
+interface Props {
+  clientId: string;
+  onClose: () => void;
+  onComplete: () => void;
+}
+
+const STAGE_LABELS: Record<ItemStage, string> = {
+  init: "מתחיל...",
+  "auto-brief": "יוצר בריף AI מותאם...",
+  generate: "מייצר 3 אפשרויות עיצוב...",
+  "pick-best": "AI בוחר את האפשרות הטובה...",
+  finalize: "יוצר התאמות FB / IG / סטורי...",
+  done: "הושלם!",
+};
+
+const STAGE_ORDER: ItemStage[] = ["auto-brief", "generate", "pick-best", "finalize", "done"];
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+// ── Component ────────────────────────────────────────────────────────────
+
+export default function BulkVisualGeneration({ clientId, onClose, onComplete }: Props) {
+  const [items, setItems] = useState<BulkItem[]>([]);
+  const [logoUrl, setLogoUrl] = useState("");
+  const [progress, setProgress] = useState<Record<string, ItemProgress>>({});
+  const [currentIndex, setCurrentIndex] = useState(-1);
+  const [isRunning, setIsRunning] = useState(false);
+  const [isFinished, setIsFinished] = useState(false);
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const abortRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Load items ───────────────────────────────────────────────────────
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const resp = await fetch(`/api/visual-generation/bulk-generate-item?clientId=${clientId}`);
+        if (!resp.ok) throw new Error("Failed to load items");
+        const data = await resp.json();
+        setItems(data.items || []);
+        setLogoUrl(data.logoUrl || "");
+
+        // Initialize progress
+        const init: Record<string, ItemProgress> = {};
+        for (const item of data.items || []) {
+          init[item.id] = { status: "pending", stage: "init" };
+        }
+        setProgress(init);
+      } catch (err) {
+        console.error("[BulkVG] Failed to load items:", err);
+      }
+    })();
+  }, [clientId]);
+
+  // ── Timer ────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (startTime) {
+      timerRef.current = setInterval(() => {
+        setElapsed(Math.floor((Date.now() - startTime) / 1000));
+      }, 1000);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [startTime]);
+
+  // ── Process items ────────────────────────────────────────────────────
+
+  const processAllItems = useCallback(async () => {
+    if (items.length === 0) return;
+    setIsRunning(true);
+    setStartTime(Date.now());
+    abortRef.current = false;
+
+    for (let i = 0; i < items.length; i++) {
+      if (abortRef.current) break;
+
+      const item = items[i];
+      setCurrentIndex(i);
+
+      // Update stage: auto-brief
+      setProgress(prev => ({
+        ...prev,
+        [item.id]: { status: "processing", stage: "auto-brief", startTime: Date.now() },
+      }));
+
+      try {
+        // Simulate stage progression via polling
+        const stageTimeout = (stage: ItemStage, delay: number) => {
+          return new Promise<void>(resolve => {
+            setTimeout(() => {
+              if (!abortRef.current) {
+                setProgress(prev => ({
+                  ...prev,
+                  [item.id]: { ...prev[item.id], stage },
+                }));
+              }
+              resolve();
+            }, delay);
+          });
+        };
+
+        // Start the API call
+        const fetchPromise = fetch("/api/visual-generation/bulk-generate-item", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clientId, ganttItemId: item.id }),
+        });
+
+        // Simulate stage transitions while waiting for the API
+        // Auto-brief: ~5s, Generate: ~30-60s, Pick: ~2s, Finalize: ~15s
+        const stagePromise = (async () => {
+          await stageTimeout("auto-brief", 0);
+          await stageTimeout("generate", 8000);
+          await stageTimeout("pick-best", 50000);
+          await stageTimeout("finalize", 55000);
+        })();
+
+        // Wait for API to complete (stages animate independently)
+        const [resp] = await Promise.all([fetchPromise, stagePromise.catch(() => {})]);
+
+        if (!resp.ok) {
+          const errText = await resp.text();
+          throw new Error(`Server error ${resp.status}: ${errText.substring(0, 200)}`);
+        }
+
+        const data = await resp.json();
+
+        if (data.success) {
+          setProgress(prev => ({
+            ...prev,
+            [item.id]: {
+              status: "success",
+              stage: "done",
+              imageUrl: data.imageUrls?.[0] || "",
+              variants: data.variants || [],
+              endTime: Date.now(),
+            },
+          }));
+        } else {
+          throw new Error(data.error || "Unknown error");
+        }
+      } catch (err: any) {
+        console.error(`[BulkVG] Item ${i + 1} failed:`, err.message);
+        setProgress(prev => ({
+          ...prev,
+          [item.id]: {
+            status: "error",
+            stage: prev[item.id]?.stage || "init",
+            error: err.message || "שגיאה לא צפויה",
+            endTime: Date.now(),
+          },
+        }));
+      }
+    }
+
+    setIsFinished(true);
+    setIsRunning(false);
+    if (timerRef.current) clearInterval(timerRef.current);
+  }, [items, clientId]);
+
+  // Auto-start when items load
+  useEffect(() => {
+    if (items.length > 0 && !isRunning && !isFinished && currentIndex === -1) {
+      processAllItems();
+    }
+  }, [items, isRunning, isFinished, currentIndex, processAllItems]);
+
+  // ── Computed values ──────────────────────────────────────────────────
+
+  const completedCount = Object.values(progress).filter(p => p.status === "success").length;
+  const failedCount = Object.values(progress).filter(p => p.status === "error").length;
+  const totalProcessed = completedCount + failedCount;
+  const pct = items.length > 0 ? Math.round((totalProcessed / items.length) * 100) : 0;
+
+  // ETA calculation
+  const avgTimePerItem = totalProcessed > 0 && startTime
+    ? (Date.now() - startTime) / totalProcessed / 1000
+    : 90; // default estimate: 90 seconds per item
+  const remainingItems = items.length - totalProcessed;
+  const estimatedRemaining = Math.round(remainingItems * avgTimePerItem);
+
+  const currentItem = currentIndex >= 0 && currentIndex < items.length ? items[currentIndex] : null;
+  const currentProgress = currentItem ? progress[currentItem.id] : null;
+
+  // ── Render ───────────────────────────────────────────────────────────
+
+  return (
+    <div style={{
+      position: "fixed",
+      inset: 0,
+      zIndex: 10000,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "rgba(0,0,0,0.75)",
+      backdropFilter: "blur(12px)",
+      direction: "rtl",
+    }}>
+      <div style={{
+        width: "min(95vw, 1100px)",
+        maxHeight: "90vh",
+        background: "#ffffff",
+        borderRadius: "1.2rem",
+        boxShadow: "0 40px 120px rgba(0,0,0,0.4), 0 0 0 1px rgba(0,181,254,0.2)",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+      }}>
+        {/* ── Header ─────────────────────────────────────── */}
+        <div style={{
+          padding: "1.5rem 2rem 1.2rem",
+          borderBottom: "1px solid #e5e7eb",
+          background: "linear-gradient(135deg, #f8faff 0%, #f0f7ff 100%)",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+              <span style={{ fontSize: "1.8rem" }}>🎨</span>
+              <div>
+                <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700, color: "#111" }}>
+                  יצירת עיצובים גרפיים אוטומטית
+                </h2>
+                <p style={{ margin: "0.15rem 0 0", fontSize: "0.78rem", color: "#6b7280" }}>
+                  {isFinished
+                    ? `הושלם! ${completedCount} הצליחו · ${failedCount} נכשלו`
+                    : `מעבד ${totalProcessed + 1} מתוך ${items.length} פריטים`}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                abortRef.current = true;
+                if (isFinished) onComplete();
+                onClose();
+              }}
+              style={{
+                background: isFinished ? "linear-gradient(135deg, #00B5FE, #0090cc)" : "#f3f4f6",
+                color: isFinished ? "#fff" : "#374151",
+                border: "none",
+                borderRadius: "0.6rem",
+                padding: "0.5rem 1.2rem",
+                fontSize: "0.82rem",
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.2s",
+              }}
+            >
+              {isFinished ? "סגור וחזור ללוח" : "ביטול"}
+            </button>
+          </div>
+
+          {/* Progress bar */}
+          <div style={{
+            height: "8px",
+            borderRadius: "4px",
+            background: "#e5e7eb",
+            overflow: "hidden",
+            position: "relative",
+          }}>
+            <div style={{
+              height: "100%",
+              width: `${pct}%`,
+              borderRadius: "4px",
+              background: isFinished
+                ? (failedCount === 0 ? "linear-gradient(90deg, #22c55e, #16a34a)" : "linear-gradient(90deg, #f59e0b, #d97706)")
+                : "linear-gradient(90deg, #00B5FE, #6366f1, #00B5FE)",
+              backgroundSize: "200% 100%",
+              animation: isFinished ? "none" : "shimmer 2s ease infinite",
+              transition: "width 0.6s ease-out",
+            }} />
+          </div>
+
+          {/* Stats row */}
+          <div style={{
+            display: "flex",
+            gap: "1.5rem",
+            marginTop: "0.7rem",
+            fontSize: "0.75rem",
+            color: "#6b7280",
+          }}>
+            <span>✅ {completedCount} הושלמו</span>
+            {failedCount > 0 && <span style={{ color: "#ef4444" }}>❌ {failedCount} נכשלו</span>}
+            <span>⏱ {formatTime(elapsed)}</span>
+            {!isFinished && remainingItems > 0 && (
+              <span>~{formatTime(estimatedRemaining)} נותרו</span>
+            )}
+            <span style={{ marginRight: "auto", fontWeight: 600, color: "#111" }}>{pct}%</span>
+          </div>
+        </div>
+
+        {/* ── Body ────────────────────────────────────────── */}
+        <div style={{
+          display: "flex",
+          flex: 1,
+          overflow: "hidden",
+          minHeight: "420px",
+        }}>
+          {/* Item list sidebar */}
+          <div style={{
+            width: "260px",
+            borderLeft: "1px solid #e5e7eb",
+            overflowY: "auto",
+            padding: "0.75rem 0",
+            background: "#fafbfc",
+          }}>
+            {items.map((item, idx) => {
+              const p = progress[item.id];
+              const isCurrent = idx === currentIndex && isRunning;
+              return (
+                <div key={item.id} style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.6rem",
+                  padding: "0.55rem 1rem",
+                  background: isCurrent ? "rgba(0,181,254,0.08)" : "transparent",
+                  borderRight: isCurrent ? "3px solid #00B5FE" : "3px solid transparent",
+                  transition: "all 0.3s",
+                }}>
+                  {/* Status icon */}
+                  <div style={{
+                    width: "24px",
+                    height: "24px",
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "0.7rem",
+                    flexShrink: 0,
+                    ...(p?.status === "success" ? {
+                      background: "#dcfce7",
+                      color: "#16a34a",
+                    } : p?.status === "error" ? {
+                      background: "#fef2f2",
+                      color: "#ef4444",
+                    } : p?.status === "processing" ? {
+                      background: "rgba(0,181,254,0.15)",
+                      color: "#00B5FE",
+                      animation: "pulse 1.5s ease infinite",
+                    } : {
+                      background: "#f3f4f6",
+                      color: "#9ca3af",
+                    }),
+                  }}>
+                    {p?.status === "success" ? "✓" :
+                     p?.status === "error" ? "✕" :
+                     p?.status === "processing" ? "⟳" :
+                     (idx + 1)}
+                  </div>
+
+                  {/* Title + status */}
+                  <div style={{ overflow: "hidden", flex: 1 }}>
+                    <div style={{
+                      fontSize: "0.72rem",
+                      fontWeight: isCurrent ? 600 : 400,
+                      color: isCurrent ? "#111" : "#374151",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}>
+                      {item.title}
+                    </div>
+                    {p?.status === "processing" && (
+                      <div style={{ fontSize: "0.62rem", color: "#00B5FE", marginTop: "0.1rem" }}>
+                        {STAGE_LABELS[p.stage]}
+                      </div>
+                    )}
+                    {p?.status === "error" && (
+                      <div style={{ fontSize: "0.62rem", color: "#ef4444", marginTop: "0.1rem" }}>
+                        שגיאה
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Thumbnail if completed */}
+                  {p?.status === "success" && p.imageUrl && (
+                    <img
+                      src={p.imageUrl}
+                      alt=""
+                      style={{
+                        width: "32px",
+                        height: "32px",
+                        borderRadius: "4px",
+                        objectFit: "cover",
+                        flexShrink: 0,
+                      }}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Main content area */}
+          <div style={{
+            flex: 1,
+            padding: "1.5rem 2rem",
+            overflowY: "auto",
+            display: "flex",
+            flexDirection: "column",
+            gap: "1.5rem",
+          }}>
+            {/* Current item processing card */}
+            {currentItem && currentProgress && isRunning && (
+              <div style={{
+                background: "linear-gradient(135deg, rgba(0,181,254,0.04), rgba(99,102,241,0.04))",
+                border: "1px solid rgba(0,181,254,0.2)",
+                borderRadius: "1rem",
+                padding: "1.5rem",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
+                  <div style={{
+                    width: "36px",
+                    height: "36px",
+                    borderRadius: "50%",
+                    background: "linear-gradient(135deg, #00B5FE, #6366f1)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#fff",
+                    fontSize: "1.1rem",
+                    animation: "spin 2s linear infinite",
+                  }}>⟳</div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 600, color: "#111" }}>
+                      {currentItem.title}
+                    </h3>
+                    <p style={{ margin: "0.1rem 0 0", fontSize: "0.72rem", color: "#6b7280" }}>
+                      פריט {currentIndex + 1} מתוך {items.length}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Stage pipeline */}
+                <div style={{ display: "flex", gap: "0.3rem", alignItems: "center" }}>
+                  {STAGE_ORDER.slice(0, 4).map((stage, si) => {
+                    const stageIdx = STAGE_ORDER.indexOf(currentProgress.stage);
+                    const thisIdx = si;
+                    const isActive = thisIdx === stageIdx;
+                    const isDone = thisIdx < stageIdx;
+                    const shortLabels = ["בריף AI", "3 אפשרויות", "בחירת הטובה", "התאמות גודל"];
+
+                    return (
+                      <div key={stage} style={{ display: "flex", alignItems: "center", gap: "0.3rem", flex: 1 }}>
+                        <div style={{
+                          flex: 1,
+                          background: isDone ? "#dcfce7" : isActive ? "rgba(0,181,254,0.12)" : "#f3f4f6",
+                          borderRadius: "0.5rem",
+                          padding: "0.5rem 0.6rem",
+                          textAlign: "center",
+                          border: isActive ? "1px solid rgba(0,181,254,0.3)" : "1px solid transparent",
+                          transition: "all 0.4s",
+                        }}>
+                          <div style={{
+                            fontSize: "0.85rem",
+                            marginBottom: "0.15rem",
+                          }}>
+                            {isDone ? "✅" : isActive ? "⏳" : "○"}
+                          </div>
+                          <div style={{
+                            fontSize: "0.62rem",
+                            fontWeight: isActive ? 600 : 400,
+                            color: isDone ? "#16a34a" : isActive ? "#00B5FE" : "#9ca3af",
+                          }}>
+                            {shortLabels[si]}
+                          </div>
+                        </div>
+                        {si < 3 && (
+                          <div style={{
+                            width: "12px",
+                            height: "2px",
+                            background: isDone ? "#22c55e" : "#e5e7eb",
+                            flexShrink: 0,
+                          }} />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Finished summary */}
+            {isFinished && (
+              <div style={{
+                textAlign: "center",
+                padding: "2rem",
+                background: failedCount === 0
+                  ? "linear-gradient(135deg, rgba(34,197,94,0.06), rgba(22,163,106,0.06))"
+                  : "linear-gradient(135deg, rgba(245,158,11,0.06), rgba(217,119,6,0.06))",
+                borderRadius: "1rem",
+                border: `1px solid ${failedCount === 0 ? "rgba(34,197,94,0.2)" : "rgba(245,158,11,0.2)"}`,
+              }}>
+                <div style={{ fontSize: "3rem", marginBottom: "0.5rem" }}>
+                  {failedCount === 0 ? "🎉" : "⚠️"}
+                </div>
+                <h3 style={{ margin: "0 0 0.5rem", fontSize: "1.3rem", fontWeight: 700, color: "#111" }}>
+                  {failedCount === 0 ? "כל העיצובים נוצרו בהצלחה!" : "התהליך הסתיים"}
+                </h3>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "#6b7280" }}>
+                  {completedCount} עיצובים נוצרו בהצלחה
+                  {failedCount > 0 ? ` · ${failedCount} נכשלו` : ""}
+                  {` · ${formatTime(elapsed)} סה"כ`}
+                </p>
+              </div>
+            )}
+
+            {/* Completed gallery */}
+            {completedCount > 0 && (
+              <div>
+                <h4 style={{
+                  margin: "0 0 0.75rem",
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  color: "#374151",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                }}>
+                  <span>📸</span>
+                  עיצובים שנוצרו ({completedCount})
+                </h4>
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                  gap: "1rem",
+                }}>
+                  {items.map(item => {
+                    const p = progress[item.id];
+                    if (p?.status !== "success" || !p.imageUrl) return null;
+
+                    return (
+                      <div key={item.id} style={{
+                        borderRadius: "0.75rem",
+                        overflow: "hidden",
+                        border: "1px solid #e5e7eb",
+                        background: "#fff",
+                        transition: "all 0.3s",
+                        cursor: "default",
+                      }}>
+                        <div style={{
+                          position: "relative",
+                          paddingTop: "52.5%",
+                          background: "#f9fafb",
+                          overflow: "hidden",
+                        }}>
+                          <img
+                            src={p.imageUrl}
+                            alt={item.title}
+                            style={{
+                              position: "absolute",
+                              inset: 0,
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                            }}
+                          />
+                          {/* Size variant badges */}
+                          {p.variants && p.variants.length > 0 && (
+                            <div style={{
+                              position: "absolute",
+                              bottom: "6px",
+                              left: "6px",
+                              display: "flex",
+                              gap: "3px",
+                            }}>
+                              {p.variants.map(v => (
+                                <span key={v.key} style={{
+                                  background: "rgba(0,0,0,0.65)",
+                                  color: "#fff",
+                                  fontSize: "0.55rem",
+                                  padding: "1px 5px",
+                                  borderRadius: "3px",
+                                  backdropFilter: "blur(4px)",
+                                }}>
+                                  {v.key === "facebook" ? "FB" : v.key === "instagram" ? "IG" : "Story"}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ padding: "0.5rem 0.65rem" }}>
+                          <div style={{
+                            fontSize: "0.68rem",
+                            fontWeight: 500,
+                            color: "#111",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}>
+                            {item.title}
+                          </div>
+                          <div style={{
+                            fontSize: "0.58rem",
+                            color: "#16a34a",
+                            marginTop: "0.15rem",
+                          }}>
+                            ✅ 3 גרסאות גודל נוצרו
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Error details */}
+            {failedCount > 0 && isFinished && (
+              <div>
+                <h4 style={{
+                  margin: "0 0 0.5rem",
+                  fontSize: "0.82rem",
+                  fontWeight: 600,
+                  color: "#ef4444",
+                }}>
+                  פריטים שנכשלו ({failedCount})
+                </h4>
+                {items.map(item => {
+                  const p = progress[item.id];
+                  if (p?.status !== "error") return null;
+                  return (
+                    <div key={item.id} style={{
+                      padding: "0.6rem 0.8rem",
+                      background: "#fef2f2",
+                      borderRadius: "0.5rem",
+                      marginBottom: "0.4rem",
+                      fontSize: "0.72rem",
+                    }}>
+                      <strong>{item.title}</strong>
+                      <span style={{ color: "#ef4444", marginRight: "0.5rem" }}>
+                        {p.error || "שגיאה לא ידועה"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Loading state */}
+            {items.length === 0 && (
+              <div style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "3rem",
+                gap: "1rem",
+              }}>
+                <div style={{
+                  width: "48px",
+                  height: "48px",
+                  border: "3px solid #e5e7eb",
+                  borderTopColor: "#00B5FE",
+                  borderRadius: "50%",
+                  animation: "spin 1s linear infinite",
+                }} />
+                <p style={{ fontSize: "0.85rem", color: "#6b7280" }}>טוען פריטים...</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Animations */}
+      <style>{`
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
+    </div>
+  );
+}
