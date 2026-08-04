@@ -555,8 +555,74 @@ async function runFinalize(
 
 export async function POST(req: NextRequest) {
   try {
-    const { clientId, ganttItemId } = await req.json();
+    const body = await req.json();
+    const { clientId, ganttItemId, action, versionId } = body;
 
+    // ── action: 'save-with-variants' ─────────────────────────────────────
+    if (action === 'save-with-variants') {
+      if (!versionId || !ganttItemId || !clientId) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'versionId, ganttItemId and clientId are required' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      console.log(`[bulk-gen-item] save-with-variants: versionId=${versionId}, ganttItemId=${ganttItemId}`);
+      const { imageUrls, variants } = await runFinalize(versionId, ganttItemId, clientId);
+      return new Response(
+        JSON.stringify({ success: true, action: 'save-with-variants', imageUrls, variants }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ── action: 'save-single' ────────────────────────────────────────────
+    if (action === 'save-single') {
+      if (!versionId || !ganttItemId || !clientId) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'versionId, ganttItemId and clientId are required' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      console.log(`[bulk-gen-item] save-single: versionId=${versionId}, ganttItemId=${ganttItemId}`);
+
+      const version = (await aiGenerationVersions.getByIdAsync(versionId)) as AIGenerationVersion | null;
+      if (!version || !version.imageUrl) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Version not found or has no image' }),
+          { status: 404, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      // Mark version as selected
+      await aiGenerationVersions.updateAsync(versionId, { status: 'selected' });
+      if (version.sessionId) {
+        await aiGenerationSessions.updateAsync(version.sessionId, {
+          activeVersionId: versionId,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      // Update Gantt item with single image URL
+      const ganttItem = (await clientGanttItems.getByIdAsync(ganttItemId)) as ClientGanttItem | null;
+      if (ganttItem) {
+        await clientGanttItems.updateAsync(ganttItemId, {
+          imageUrls: [version.imageUrl],
+          status: 'approved',
+        });
+        console.log(`[bulk-gen-item] save-single: Gantt item updated — 1 image, status=approved`);
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          action: 'save-single',
+          imageUrls: [version.imageUrl],
+          variants: [],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ── Common validation for 'generate' and legacy (no action) ──────────
     if (!clientId || !ganttItemId) {
       return new Response(
         JSON.stringify({ success: false, error: 'clientId and ganttItemId are required' }),
@@ -564,7 +630,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`[bulk-gen-item] Starting pipeline for ganttItemId=${ganttItemId}, clientId=${clientId}`);
+    console.log(`[bulk-gen-item] Starting pipeline for ganttItemId=${ganttItemId}, clientId=${clientId}, action=${action || 'legacy'}`);
 
     // ── Gather brand intelligence ────────────────────────────────────────
     const brandIntel = await gatherBrandIntelligence(clientId);
@@ -635,12 +701,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Step 3: Pick best (first successful, index 0) ───────────────────
+    // ── action: 'generate' — return versions, stop here ─────────────────
+    if (action === 'generate') {
+      console.log(`[bulk-gen-item] generate action complete — ${versions.length} versions`);
+      return new Response(
+        JSON.stringify({
+          success: true,
+          action: 'generate',
+          versions: versions.map((v: any) => ({
+            id: v.id,
+            imageUrl: v.imageUrl,
+            versionNumber: v.versionNumber,
+          })),
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ── Legacy flow (no action) — Steps 3 + 4 ──────────────────────────
     console.log('[bulk-gen-item] Step 3: Picking best version...');
     const chosenVersion = versions[0];
     console.log(`[bulk-gen-item] Picked version ${chosenVersion.id} (first successful)`);
 
-    // ── Step 4: Finalize — resize + upload + update Gantt ───────────────
     console.log('[bulk-gen-item] Step 4: Finalizing...');
     const { imageUrls, variants } = await runFinalize(chosenVersion.id, ganttItemId, clientId);
 

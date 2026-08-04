@@ -13,7 +13,7 @@ interface BulkItem {
 }
 
 type ItemStatus = "pending" | "processing" | "success" | "error";
-type ItemStage = "init" | "auto-brief" | "generate" | "pick-best" | "finalize" | "done";
+type ItemStage = "init" | "auto-brief" | "generate" | "awaiting-selection" | "saving" | "done";
 
 interface ItemProgress {
   status: ItemStatus;
@@ -21,6 +21,7 @@ interface ItemProgress {
   error?: string;
   imageUrl?: string;
   variants?: { key: string; url: string }[];
+  versions?: { id: string; imageUrl: string; versionNumber: number }[];
   startTime?: number;
   endTime?: number;
 }
@@ -35,12 +36,12 @@ const STAGE_LABELS: Record<ItemStage, string> = {
   init: "מתחיל...",
   "auto-brief": "יוצר בריף AI מותאם...",
   generate: "מייצר 3 אפשרויות עיצוב...",
-  "pick-best": "AI בוחר את האפשרות הטובה...",
-  finalize: "יוצר התאמות FB / IG / סטורי...",
+  "awaiting-selection": "בחר אפשרות מועדפת",
+  saving: "שומר...",
   done: "הושלם!",
 };
 
-const STAGE_ORDER: ItemStage[] = ["auto-brief", "generate", "pick-best", "finalize", "done"];
+const STAGE_ORDER: ItemStage[] = ["auto-brief", "generate", "saving", "done"];
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ export default function BulkVisualGeneration({ clientId, onClose, onComplete }: 
   const [elapsed, setElapsed] = useState(0);
   const abortRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const selectionResolverRef = useRef<(() => void) | null>(null);
 
   // ── Load items ───────────────────────────────────────────────────────
 
@@ -102,6 +104,77 @@ export default function BulkVisualGeneration({ clientId, onClose, onComplete }: 
 
   // ── Process items ────────────────────────────────────────────────────
 
+  function waitForSelection(): Promise<void> {
+    return new Promise(resolve => {
+      selectionResolverRef.current = resolve;
+    });
+  }
+
+  const handleSelectOption = useCallback(async (
+    itemId: string,
+    versionId: string,
+    mode: "save-with-variants" | "save-single",
+  ) => {
+    // Update stage to saving
+    setProgress(prev => ({
+      ...prev,
+      [itemId]: { ...prev[itemId], stage: "saving" },
+    }));
+
+    try {
+      const resp = await fetch("/api/visual-generation/bulk-generate-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId,
+          ganttItemId: itemId,
+          action: mode,
+          versionId,
+        }),
+      });
+
+      if (!resp.ok) {
+        const errText = await resp.text();
+        throw new Error(`Server error ${resp.status}: ${errText.substring(0, 200)}`);
+      }
+
+      const data = await resp.json();
+
+      if (!data.success) {
+        throw new Error(data.error || "Unknown error");
+      }
+
+      // Mark as done
+      setProgress(prev => ({
+        ...prev,
+        [itemId]: {
+          status: "success",
+          stage: "done",
+          imageUrl: data.imageUrls?.[0] || "",
+          variants: data.variants || [],
+          endTime: Date.now(),
+        },
+      }));
+    } catch (err: any) {
+      console.error(`[BulkVG] Save failed for ${itemId}:`, err.message);
+      setProgress(prev => ({
+        ...prev,
+        [itemId]: {
+          status: "error",
+          stage: "saving",
+          error: err.message || "שגיאה בשמירה",
+          endTime: Date.now(),
+        },
+      }));
+    }
+
+    // Resolve the waiting promise to continue to next item
+    if (selectionResolverRef.current) {
+      selectionResolverRef.current();
+      selectionResolverRef.current = null;
+    }
+  }, [clientId]);
+
   const processAllItems = useCallback(async () => {
     if (items.length === 0) return;
     setIsRunning(true);
@@ -114,46 +187,31 @@ export default function BulkVisualGeneration({ clientId, onClose, onComplete }: 
       const item = items[i];
       setCurrentIndex(i);
 
-      // Update stage: auto-brief
+      // Stage: auto-brief
       setProgress(prev => ({
         ...prev,
         [item.id]: { status: "processing", stage: "auto-brief", startTime: Date.now() },
       }));
 
       try {
-        // Simulate stage progression via polling
-        const stageTimeout = (stage: ItemStage, delay: number) => {
-          return new Promise<void>(resolve => {
-            setTimeout(() => {
-              if (!abortRef.current) {
-                setProgress(prev => ({
-                  ...prev,
-                  [item.id]: { ...prev[item.id], stage },
-                }));
-              }
-              resolve();
-            }, delay);
-          });
-        };
+        // After a short delay, show the generate stage while the API runs both steps
+        const stageTimer = setTimeout(() => {
+          if (!abortRef.current) {
+            setProgress(prev => ({
+              ...prev,
+              [item.id]: { ...prev[item.id], stage: "generate" },
+            }));
+          }
+        }, 8000);
 
-        // Start the API call
-        const fetchPromise = fetch("/api/visual-generation/bulk-generate-item", {
+        // Call generate API (steps 1 + 2)
+        const resp = await fetch("/api/visual-generation/bulk-generate-item", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ clientId, ganttItemId: item.id }),
+          body: JSON.stringify({ clientId, ganttItemId: item.id, action: "generate" }),
         });
 
-        // Simulate stage transitions while waiting for the API
-        // Auto-brief: ~5s, Generate: ~30-60s, Pick: ~2s, Finalize: ~15s
-        const stagePromise = (async () => {
-          await stageTimeout("auto-brief", 0);
-          await stageTimeout("generate", 8000);
-          await stageTimeout("pick-best", 50000);
-          await stageTimeout("finalize", 55000);
-        })();
-
-        // Wait for API to complete (stages animate independently)
-        const [resp] = await Promise.all([fetchPromise, stagePromise.catch(() => {})]);
+        clearTimeout(stageTimer);
 
         if (!resp.ok) {
           const errText = await resp.text();
@@ -162,20 +220,24 @@ export default function BulkVisualGeneration({ clientId, onClose, onComplete }: 
 
         const data = await resp.json();
 
-        if (data.success) {
-          setProgress(prev => ({
-            ...prev,
-            [item.id]: {
-              status: "success",
-              stage: "done",
-              imageUrl: data.imageUrls?.[0] || "",
-              variants: data.variants || [],
-              endTime: Date.now(),
-            },
-          }));
-        } else {
+        if (!data.success) {
           throw new Error(data.error || "Unknown error");
         }
+
+        // Set to awaiting-selection with versions
+        setProgress(prev => ({
+          ...prev,
+          [item.id]: {
+            ...prev[item.id],
+            stage: "awaiting-selection",
+            versions: data.versions || [],
+          },
+        }));
+
+        // PAUSE — wait for user to pick an option
+        await waitForSelection();
+
+        // After selection, the handler already marked the item as done or error
       } catch (err: any) {
         console.error(`[BulkVG] Item ${i + 1} failed:`, err.message);
         setProgress(prev => ({
@@ -435,8 +497,8 @@ export default function BulkVisualGeneration({ clientId, onClose, onComplete }: 
             flexDirection: "column",
             gap: "1.5rem",
           }}>
-            {/* Current item processing card */}
-            {currentItem && currentProgress && isRunning && (
+            {/* Current item processing card — pipeline stages (not shown during awaiting-selection) */}
+            {currentItem && currentProgress && isRunning && currentProgress.stage !== "awaiting-selection" && currentProgress.stage !== "done" && (
               <div style={{
                 background: "linear-gradient(135deg, rgba(0,181,254,0.04), rgba(99,102,241,0.04))",
                 border: "1px solid rgba(0,181,254,0.2)",
@@ -466,14 +528,15 @@ export default function BulkVisualGeneration({ clientId, onClose, onComplete }: 
                   </div>
                 </div>
 
-                {/* Stage pipeline */}
+                {/* Stage pipeline — 3 stages: בריף AI, 3 אפשרויות, שמירה */}
                 <div style={{ display: "flex", gap: "0.3rem", alignItems: "center" }}>
-                  {STAGE_ORDER.slice(0, 4).map((stage, si) => {
-                    const stageIdx = STAGE_ORDER.indexOf(currentProgress.stage);
+                  {(["auto-brief", "generate", "saving"] as ItemStage[]).map((stage, si) => {
+                    const pipelineStages: ItemStage[] = ["auto-brief", "generate", "saving"];
+                    const stageIdx = pipelineStages.indexOf(currentProgress.stage);
                     const thisIdx = si;
                     const isActive = thisIdx === stageIdx;
                     const isDone = thisIdx < stageIdx;
-                    const shortLabels = ["בריף AI", "3 אפשרויות", "בחירת הטובה", "התאמות גודל"];
+                    const shortLabels = ["בריף AI", "3 אפשרויות", "שמירה"];
 
                     return (
                       <div key={stage} style={{ display: "flex", alignItems: "center", gap: "0.3rem", flex: 1 }}>
@@ -500,7 +563,7 @@ export default function BulkVisualGeneration({ clientId, onClose, onComplete }: 
                             {shortLabels[si]}
                           </div>
                         </div>
-                        {si < 3 && (
+                        {si < 2 && (
                           <div style={{
                             width: "12px",
                             height: "2px",
@@ -512,6 +575,129 @@ export default function BulkVisualGeneration({ clientId, onClose, onComplete }: 
                     );
                   })}
                 </div>
+              </div>
+            )}
+
+            {/* 3-option selection grid — shown when awaiting-selection */}
+            {currentItem && currentProgress && currentProgress.stage === "awaiting-selection" && currentProgress.versions && (
+              <div style={{
+                background: "#fff",
+                border: "1px solid rgba(0,181,254,0.2)",
+                borderRadius: "1rem",
+                padding: "1.5rem",
+              }}>
+                <h3 style={{
+                  margin: "0 0 1.2rem",
+                  fontSize: "1rem",
+                  fontWeight: 700,
+                  color: "#111",
+                  textAlign: "center",
+                }}>
+                  {currentItem.title} — בחר אפשרות
+                </h3>
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${currentProgress.versions.length}, 1fr)`,
+                  gap: "1rem",
+                }}>
+                  {currentProgress.versions.map((ver, vi) => (
+                    <div key={ver.id} style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "0.6rem",
+                    }}>
+                      <div style={{
+                        width: "100%",
+                        aspectRatio: "1 / 1",
+                        borderRadius: "0.75rem",
+                        overflow: "hidden",
+                        boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+                        background: "#f9fafb",
+                      }}>
+                        <img
+                          src={ver.imageUrl}
+                          alt={`אפשרות ${vi + 1}`}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            display: "block",
+                          }}
+                        />
+                      </div>
+                      <div style={{
+                        fontSize: "0.78rem",
+                        fontWeight: 600,
+                        color: "#374151",
+                      }}>
+                        אפשרות {vi + 1}
+                      </div>
+                      <button
+                        onClick={() => handleSelectOption(currentItem.id, ver.id, "save-with-variants")}
+                        style={{
+                          width: "100%",
+                          padding: "0.5rem 0.6rem",
+                          background: "#00B5FE",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: "0.5rem",
+                          fontSize: "0.72rem",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          transition: "all 0.2s",
+                        }}
+                      >
+                        צור התאמות גודל
+                      </button>
+                      <button
+                        onClick={() => handleSelectOption(currentItem.id, ver.id, "save-single")}
+                        style={{
+                          width: "100%",
+                          padding: "0.5rem 0.6rem",
+                          background: "transparent",
+                          color: "#374151",
+                          border: "1px solid #d1d5db",
+                          borderRadius: "0.5rem",
+                          fontSize: "0.72rem",
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          transition: "all 0.2s",
+                        }}
+                      >
+                        שמור כגודל בודד
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Saving indicator — shown when saving after user selection */}
+            {currentItem && currentProgress && currentProgress.stage === "saving" && (
+              <div style={{
+                background: "linear-gradient(135deg, rgba(0,181,254,0.04), rgba(99,102,241,0.04))",
+                border: "1px solid rgba(0,181,254,0.2)",
+                borderRadius: "1rem",
+                padding: "2rem",
+                textAlign: "center",
+              }}>
+                <div style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "50%",
+                  background: "linear-gradient(135deg, #00B5FE, #6366f1)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#fff",
+                  fontSize: "1.1rem",
+                  animation: "spin 2s linear infinite",
+                  margin: "0 auto 0.75rem",
+                }}>⟳</div>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "#6b7280" }}>
+                  שומר את האפשרות שנבחרה...
+                </p>
               </div>
             )}
 
@@ -630,7 +816,9 @@ export default function BulkVisualGeneration({ clientId, onClose, onComplete }: 
                             color: "#16a34a",
                             marginTop: "0.15rem",
                           }}>
-                            ✅ 3 גרסאות גודל נוצרו
+                            {p.variants && p.variants.length > 0
+                              ? "✅ 3 גרסאות גודל נוצרו"
+                              : "✅ נשמר כגודל בודד"}
                           </div>
                         </div>
                       </div>
