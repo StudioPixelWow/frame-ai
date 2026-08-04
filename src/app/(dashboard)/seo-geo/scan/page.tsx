@@ -415,6 +415,25 @@ function ScanPageInner() {
           aiVisibility: {},
         }));
         console.log('[PIXEL-SEO-SCAN-UI] Including clientKeywords in plan:', mappedClientKeywords.length, 'keywords');
+
+        // ── Trim scan data to stay under PostgREST body limit (~2MB) ──
+        const MAX_RESPONSE_LEN = 500;
+        const MAX_SNIPPET_LEN = 150;
+        const trimmedAiQueries = (data.aiQueries || []).map((q: any) => ({
+          ...q,
+          response: typeof q.response === 'string' && q.response.length > MAX_RESPONSE_LEN
+            ? q.response.slice(0, MAX_RESPONSE_LEN) + '…'
+            : q.response || '',
+          sources: Array.isArray(q.sources)
+            ? q.sources.map((s: any) => ({
+                ...s,
+                snippet: typeof s.snippet === 'string' && s.snippet.length > MAX_SNIPPET_LEN
+                  ? s.snippet.slice(0, MAX_SNIPPET_LEN) + '…'
+                  : s.snippet || '',
+              }))
+            : [],
+        }));
+
         const planPayload = {
           clientId,
           clientName: clientName || wizardDataRef.current.clientName || data.websiteFacts?.business_name?.value || '',
@@ -444,7 +463,7 @@ function ScanPageInner() {
             issues: data.issues || [],
             websiteFacts: data.websiteFacts || null,
             scannedPages: data.scannedPages || [],
-            aiQueries: data.aiQueries || [],
+            aiQueries: trimmedAiQueries,
             platformStatuses: data.platformStatuses || [],
             metrics: data.metrics || {},
             scanDuration: data.scanDuration || {},

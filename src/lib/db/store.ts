@@ -371,11 +371,31 @@ export class SupabaseCrud<T extends { id: string }> {
     const entityWithoutId = { ...item, createdAt: now, updatedAt: now };
 
     const sb = getSupabase();
+
+    // Safely serialize — strip values that break JSON (undefined, circular refs, etc.)
+    let jsonData: any;
+    try {
+      const serialized = JSON.stringify(entityWithoutId, (_key, value) => {
+        if (typeof value === 'bigint') return Number(value);
+        if (value !== value) return null; // NaN
+        if (value === Infinity || value === -Infinity) return null;
+        return value;
+      });
+      jsonData = JSON.parse(serialized);
+    } catch (serErr) {
+      console.error(`[SupabaseCrud][${this.tableName}] JSON serialization failed:`, serErr);
+      // Fallback: deep-clone with structuredClone-style approach
+      jsonData = JSON.parse(JSON.stringify(entityWithoutId));
+    }
+
+    const payloadSize = JSON.stringify(jsonData).length;
+    console.log(`[SupabaseCrud][${this.tableName}] createAsync payload size: ${(payloadSize / 1024).toFixed(0)}KB`);
+
     const { data: inserted, error } = await sb
       .from(this.tableName)
       .insert({
         // Do NOT send id — let Postgres gen_random_uuid() handle it
-        data: JSON.parse(JSON.stringify(entityWithoutId)),
+        data: jsonData,
         created_at: now,
         updated_at: now,
       })
@@ -383,6 +403,36 @@ export class SupabaseCrud<T extends { id: string }> {
       .single();
 
     if (error || !inserted) {
+      // If "Empty or invalid json" and payload is large, retry with truncated strings
+      if (error?.message?.includes('invalid json') && payloadSize > 500_000) {
+        console.warn(`[SupabaseCrud][${this.tableName}] Large payload rejected (${(payloadSize / 1024).toFixed(0)}KB). Retrying with truncated data...`);
+        const truncate = (obj: any, depth = 0): any => {
+          if (depth > 20) return null;
+          if (typeof obj === 'string' && obj.length > 500) return obj.slice(0, 500) + '…';
+          if (Array.isArray(obj)) return obj.map(item => truncate(item, depth + 1));
+          if (obj && typeof obj === 'object') {
+            const out: any = {};
+            for (const [k, v] of Object.entries(obj)) out[k] = truncate(v, depth + 1);
+            return out;
+          }
+          return obj;
+        };
+        const truncatedData = truncate(jsonData);
+        const { data: ins2, error: err2 } = await sb
+          .from(this.tableName)
+          .insert({ data: truncatedData, created_at: now, updated_at: now })
+          .select('id')
+          .single();
+        if (!err2 && ins2) {
+          const id = (ins2 as { id: string }).id;
+          const entity = { ...entityWithoutId, id } as unknown as T;
+          await sb.from(this.tableName).update({ data: JSON.parse(JSON.stringify({ ...truncatedData, id })) }).eq('id', id);
+          console.log(`[SupabaseCrud][${this.tableName}] INSERT id=${id} ✅ DURABLE (truncated retry)`);
+          return entity;
+        }
+        console.error(`[SupabaseCrud][${this.tableName}] Truncated retry also failed:`, err2?.message);
+      }
+
       if (error && isTableMissingError(error.message)) {
         console.warn(`[SupabaseCrud][${this.tableName}] createAsync: table not accessible. Persistence skipped. Run migration.`);
         // Return a fake entity so callers don't crash — data is lost but the flow continues
