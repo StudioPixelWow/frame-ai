@@ -41,6 +41,9 @@ import sharp from 'sharp';
 
 export const maxDuration = 300;
 
+// ── Retry config for transient OpenAI errors ────────────────────────────
+const MAX_RETRIES = 2;
+
 // ── OpenAI API key ──────────────────────────────────────────────────────
 
 function getApiKey(): string {
@@ -336,29 +339,53 @@ async function runGenerate(
     prompts = VARIATION_SUFFIXES.map((suffix) => basePrompt + suffix);
   }
 
-  // Generate 3 images in parallel
+  // Generate 3 images in parallel (MAX_RETRIES is module-level)
   const genResults = await Promise.all(
     prompts.map(async (prompt, idx) => {
-      console.log(`[bulk-gen-item] Generating option ${idx + 1}/3...`);
-      try {
-        if (brandAssetBuffers.length > 0) {
-          const r = await editImage({
-            prompt,
-            referenceImages: brandAssetBuffers,
-            width,
-            height,
-            quality,
-          });
-          if (!r.success || !r.images.length) throw new Error(r.error || `Option ${idx + 1} failed`);
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        console.log(`[bulk-gen-item] Generating option ${idx + 1}/3${attempt > 0 ? ` (retry ${attempt}/${MAX_RETRIES})` : ''}...`);
+        try {
+          if (brandAssetBuffers.length > 0) {
+            const r = await editImage({
+              prompt,
+              referenceImages: brandAssetBuffers,
+              width,
+              height,
+              quality,
+            });
+            if (!r.success || !r.images.length) {
+              const errMsg = r.error || `Option ${idx + 1} failed`;
+              if (attempt < MAX_RETRIES && /50[23]|bad gateway|service unavailable|rate limit|429/i.test(errMsg)) {
+                console.warn(`[bulk-gen-item] Option ${idx + 1} transient error, retrying in 3s: ${errMsg}`);
+                await new Promise(resolve => setTimeout(resolve, 3000 * (attempt + 1)));
+                continue;
+              }
+              throw new Error(errMsg);
+            }
+            return { base64: r.images[0].base64, revisedPrompt: r.images[0].revisedPrompt, error: null };
+          }
+          const r = await generateImage({ prompt, width, height, quality });
+          if (!r.success || !r.images.length) {
+            const errMsg = r.error || `Option ${idx + 1} failed`;
+            if (attempt < MAX_RETRIES && /50[23]|bad gateway|service unavailable|rate limit|429/i.test(errMsg)) {
+              console.warn(`[bulk-gen-item] Option ${idx + 1} transient error, retrying in 3s: ${errMsg}`);
+              await new Promise(resolve => setTimeout(resolve, 3000 * (attempt + 1)));
+              continue;
+            }
+            throw new Error(errMsg);
+          }
           return { base64: r.images[0].base64, revisedPrompt: r.images[0].revisedPrompt, error: null };
+        } catch (err: any) {
+          if (attempt < MAX_RETRIES && /50[23]|bad gateway|service unavailable|rate limit|429/i.test(err.message || '')) {
+            console.warn(`[bulk-gen-item] Option ${idx + 1} transient error, retrying in 3s: ${err.message}`);
+            await new Promise(resolve => setTimeout(resolve, 3000 * (attempt + 1)));
+            continue;
+          }
+          console.error(`[bulk-gen-item] Option ${idx + 1} error (final):`, err.message);
+          return { base64: '', revisedPrompt: undefined as string | undefined, error: err.message as string };
         }
-        const r = await generateImage({ prompt, width, height, quality });
-        if (!r.success || !r.images.length) throw new Error(r.error || `Option ${idx + 1} failed`);
-        return { base64: r.images[0].base64, revisedPrompt: r.images[0].revisedPrompt, error: null };
-      } catch (err: any) {
-        console.error(`[bulk-gen-item] Option ${idx + 1} error:`, err.message);
-        return { base64: '', revisedPrompt: undefined as string | undefined, error: err.message as string };
       }
+      return { base64: '', revisedPrompt: undefined as string | undefined, error: `Option ${idx + 1} failed after ${MAX_RETRIES} retries` as string };
     }),
   );
 
@@ -593,18 +620,30 @@ export async function POST(req: NextRequest) {
       const origPrompt = origVersion.fullPrompt || origVersion.userInstruction || '';
       const refinePrompt = `${origPrompt}\n\nIMPORTANT CORRECTIONS FROM CLIENT:\n${notes}\n\nApply the corrections while keeping the overall composition and brand identity intact.`;
 
-      // Generate refined image using editImage with original as reference
-      const refResult = await editImage({
-        prompt: refinePrompt,
-        referenceImages: [origBuffer],
-        width: origVersion.width || 1024,
-        height: origVersion.height || 1024,
-        quality: 'high',
-      });
+      // Generate refined image using editImage with original as reference — with retry for transient errors
+      let refResult: any = null;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        console.log(`[bulk-gen-item] refine editImage${attempt > 0 ? ` (retry ${attempt}/${MAX_RETRIES})` : ''}...`);
+        refResult = await editImage({
+          prompt: refinePrompt,
+          referenceImages: [origBuffer],
+          width: origVersion.width || 1024,
+          height: origVersion.height || 1024,
+          quality: 'high',
+        });
+        if (refResult.success && refResult.images?.length) break;
+        const errMsg = refResult.error || 'Refinement generation failed';
+        if (attempt < MAX_RETRIES && /50[23]|bad gateway|service unavailable|rate limit|429/i.test(errMsg)) {
+          console.warn(`[bulk-gen-item] refine transient error, retrying in 3s: ${errMsg}`);
+          await new Promise(resolve => setTimeout(resolve, 3000 * (attempt + 1)));
+          continue;
+        }
+        break;
+      }
 
-      if (!refResult.success || !refResult.images.length) {
+      if (!refResult?.success || !refResult?.images?.length) {
         return new Response(
-          JSON.stringify({ success: false, error: refResult.error || 'Refinement generation failed' }),
+          JSON.stringify({ success: false, error: refResult?.error || 'Refinement generation failed' }),
           { status: 500, headers: { 'Content-Type': 'application/json' } },
         );
       }

@@ -360,6 +360,7 @@ export default function VisualGenerationWorkspace({
   const [refiningVersionId, setRefiningVersionId] = useState<string | null>(null);
   const [refineNotes, setRefineNotes] = useState("");
   const [isRefining, setIsRefining] = useState(false);
+  const [refineElapsed, setRefineElapsed] = useState(0);
 
   /* inject keyframes once */
   useEffect(() => {
@@ -469,6 +470,13 @@ export default function VisualGenerationWorkspace({
       loadExistingSessions();
     }
   }, [open, loadExistingSessions]);
+
+  /* Refine elapsed timer */
+  useEffect(() => {
+    if (!isRefining) { setRefineElapsed(0); return; }
+    const t = setInterval(() => setRefineElapsed(prev => prev + 1), 1000);
+    return () => clearInterval(t);
+  }, [isRefining]);
 
   /* ---- Actions ---- */
 
@@ -1246,7 +1254,7 @@ export default function VisualGenerationWorkspace({
                               opacity: !refineNotes.trim() ? 0.5 : 1,
                             }}
                           >
-                            {isRefining ? "מייצר מחדש..." : "שלח ויצר מחדש"}
+                            {isRefining ? `מייצר מחדש... (${refineElapsed}s)` : "שלח ויצר מחדש"}
                           </button>
                         </div>
                       )}

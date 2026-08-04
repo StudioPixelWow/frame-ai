@@ -301,29 +301,55 @@ export async function POST(req: NextRequest) {
         prompts = VARIATION_SUFFIXES.map(suffix => imagePrompt + suffix);
       }
 
-      // Generate 3 images in parallel
+      // Generate 3 images in parallel — with retry for transient errors (502, 503, 429)
+      const MAX_RETRIES = 2;
       const genResults = await Promise.all(
         prompts.map(async (prompt, idx) => {
-          console.log(`[visual-gen] Generating option ${idx + 1}/3...`);
-          try {
-            if (brandAssetBuffers.length > 0) {
-              const r = await editImage({
-                prompt,
-                referenceImages: brandAssetBuffers,
-                width,
-                height,
-                quality,
-              });
-              if (!r.success || !r.images.length) throw new Error(r.error || `Option ${idx + 1} failed`);
+          for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            console.log(`[visual-gen] Generating option ${idx + 1}/3${attempt > 0 ? ` (retry ${attempt}/${MAX_RETRIES})` : ''}...`);
+            try {
+              if (brandAssetBuffers.length > 0) {
+                const r = await editImage({
+                  prompt,
+                  referenceImages: brandAssetBuffers,
+                  width,
+                  height,
+                  quality,
+                });
+                if (!r.success || !r.images.length) {
+                  const errMsg = r.error || `Option ${idx + 1} failed`;
+                  if (attempt < MAX_RETRIES && /50[23]|bad gateway|service unavailable|rate limit|429/i.test(errMsg)) {
+                    console.warn(`[visual-gen] Option ${idx + 1} transient error, retrying in 3s: ${errMsg}`);
+                    await new Promise(resolve => setTimeout(resolve, 3000 * (attempt + 1)));
+                    continue;
+                  }
+                  throw new Error(errMsg);
+                }
+                return { base64: r.images[0].base64, revisedPrompt: r.images[0].revisedPrompt, error: null };
+              }
+              const r = await generateImage({ prompt, width, height, quality });
+              if (!r.success || !r.images.length) {
+                const errMsg = r.error || `Option ${idx + 1} failed`;
+                if (attempt < MAX_RETRIES && /50[23]|bad gateway|service unavailable|rate limit|429/i.test(errMsg)) {
+                  console.warn(`[visual-gen] Option ${idx + 1} transient error, retrying in 3s: ${errMsg}`);
+                  await new Promise(resolve => setTimeout(resolve, 3000 * (attempt + 1)));
+                  continue;
+                }
+                throw new Error(errMsg);
+              }
               return { base64: r.images[0].base64, revisedPrompt: r.images[0].revisedPrompt, error: null };
+            } catch (err: any) {
+              if (attempt < MAX_RETRIES && /50[23]|bad gateway|service unavailable|rate limit|429/i.test(err.message || '')) {
+                console.warn(`[visual-gen] Option ${idx + 1} transient error, retrying in 3s: ${err.message}`);
+                await new Promise(resolve => setTimeout(resolve, 3000 * (attempt + 1)));
+                continue;
+              }
+              console.error(`[visual-gen] Option ${idx + 1} error (final):`, err.message);
+              return { base64: '', revisedPrompt: undefined as string | undefined, error: err.message as string };
             }
-            const r = await generateImage({ prompt, width, height, quality });
-            if (!r.success || !r.images.length) throw new Error(r.error || `Option ${idx + 1} failed`);
-            return { base64: r.images[0].base64, revisedPrompt: r.images[0].revisedPrompt, error: null };
-          } catch (err: any) {
-            console.error(`[visual-gen] Option ${idx + 1} error:`, err.message);
-            return { base64: '', revisedPrompt: undefined as string | undefined, error: err.message as string };
           }
+          // Should not reach here, but safety fallback
+          return { base64: '', revisedPrompt: undefined as string | undefined, error: `Option ${idx + 1} failed after ${MAX_RETRIES} retries` as string };
         })
       );
 
