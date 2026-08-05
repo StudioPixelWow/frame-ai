@@ -1800,6 +1800,24 @@ export default function PremiumReportPage() {
               </div>
 
               <button
+                onClick={() => {
+                  const publicUrl = `${window.location.origin}/report/${planId}`;
+                  navigator.clipboard.writeText(publicUrl).then(() => {
+                    const btn = document.getElementById('share-btn');
+                    if (btn) { btn.textContent = he ? '✓ הקישור הועתק!' : '✓ Link copied!'; setTimeout(() => { btn.textContent = he ? '🔗 שתף ללקוח' : '🔗 Share'; }, 2000); }
+                  });
+                }}
+                id="share-btn"
+                style={{
+                  ...actionBtnStyle,
+                  background: "#10B981",
+                  color: "#fff",
+                }}
+              >
+                {he ? "🔗 שתף ללקוח" : "🔗 Share"}
+              </button>
+
+              <button
                 onClick={handleRegenerate}
                 style={{
                   ...actionBtnStyle,
