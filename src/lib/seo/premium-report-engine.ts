@@ -1737,9 +1737,14 @@ export function generatePremiumReport(
   const loadTimeSec = ((scan?.loadTimeMs || 0) / 1000).toFixed(1);
   const totalPagesScanned = scannedPages.length || scan?.totalPages || 0;
   const missedCount = missedQueries.length;
-  const mentionedCount = mentionedQueries.length;
-  const seoScoreVal = seoScore.overall;
-  const geoScoreVal = geoScore.overall;
+  const mentionedCount = realQueries.filter((q: any) => {
+    if (q.found) return true;
+    const text = (q.responseText || q.snippet || "").toLowerCase();
+    const cn = (clientName || "").toLowerCase();
+    return cn.length > 1 && text.includes(cn);
+  }).length;
+  const seoScoreVal = seoScoreData.overall;
+  const geoScoreVal = geoScoreData.overall;
 
   actionContent.push(
     { type: "paragraph", text: t(he,
