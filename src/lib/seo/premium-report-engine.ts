@@ -794,7 +794,7 @@ export function generatePremiumReport(
   }
 
   sections.push({
-    id: "market_context", number: 19,
+    id: "market_context", number: 3,
     title: t(he, "היכן נמצאת החשיפה", "Where Exposure Is Located"),
     titleEn: "Where Exposure Is Located",
     icon: "🌐",
@@ -802,13 +802,13 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 3: PIXEL SEO Score
+  // SECTION 4: PIXEL SEO Score
   // ═══════════════════════════════════════════════════════════════════════════
 
   const seoSubScoreEntries = Object.entries(seoScoreData.subScores);
 
   sections.push({
-    id: "pixel_seo_score", number: 3,
+    id: "pixel_seo_score", number: 4,
     title: t(he, "ציון PIXEL SEO", "PIXEL SEO Score"),
     titleEn: "PIXEL SEO Score",
     icon: "🔍",
@@ -828,13 +828,13 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 4: PIXEL GEO Score
+  // SECTION 5: PIXEL GEO Score
   // ═══════════════════════════════════════════════════════════════════════════
 
   const geoSubScoreEntries = Object.entries(geoScoreData.subScores);
 
   sections.push({
-    id: "pixel_geo_score", number: 4,
+    id: "pixel_geo_score", number: 5,
     title: t(he, "ציון PIXEL GEO", "PIXEL GEO Score"),
     titleEn: "PIXEL GEO Score",
     icon: "🤖",
@@ -864,7 +864,7 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 5: Engine-by-Engine Snapshot
+  // SECTION 6: Engine-by-Engine Snapshot
   // ═══════════════════════════════════════════════════════════════════════════
 
   const engineCards: PremiumReportBlock[] = [];
@@ -920,7 +920,7 @@ export function generatePremiumReport(
   ]);
 
   sections.push({
-    id: "engine_snapshot", number: 5,
+    id: "engine_snapshot", number: 6,
     title: t(he, "מצב לפי מנוע AI", "Engine-by-Engine Snapshot"),
     titleEn: "Engine-by-Engine Snapshot",
     icon: "🔄",
@@ -938,7 +938,7 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 6: Language/Country Segmentation
+  // SECTION 7: Language/Country Segmentation
   // ═══════════════════════════════════════════════════════════════════════════
 
   const langGroups = groupByCategory(realQueries.map((q: any) => ({
@@ -1001,7 +1001,7 @@ export function generatePremiumReport(
   }
 
   sections.push({
-    id: "language_segmentation", number: 6,
+    id: "language_segmentation", number: 7,
     title: t(he, "פילוח שפה / מדינה", "Language / Country Segmentation"),
     titleEn: "Language / Country Segmentation",
     icon: "🌍",
@@ -1009,7 +1009,7 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 7: Branded vs Non-Branded
+  // SECTION 8: Branded vs Non-Branded
   // ═══════════════════════════════════════════════════════════════════════════
 
   const brandedFound = brandedQs.filter((q: any) => q.found).length;
@@ -1068,7 +1068,7 @@ export function generatePremiumReport(
   }
 
   sections.push({
-    id: "branded_analysis", number: 7,
+    id: "branded_analysis", number: 8,
     title: t(he, "ממותג מול לא-ממותג", "Branded vs Non-Branded"),
     titleEn: "Branded vs Non-Branded",
     icon: "🏷️",
@@ -1076,7 +1076,7 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 8: Topic Cluster Analysis
+  // SECTION 9: Topic Cluster Analysis
   // ═══════════════════════════════════════════════════════════════════════════
 
   const topicGroups = groupByCategory(realQueries, "category");
@@ -1143,7 +1143,7 @@ export function generatePremiumReport(
   }
 
   sections.push({
-    id: "topic_clusters", number: 8,
+    id: "topic_clusters", number: 9,
     title: t(he, "ניתוח אשכולות נושאיים", "Topic Cluster Analysis"),
     titleEn: "Topic Cluster Analysis",
     icon: "🎯",
@@ -1151,7 +1151,7 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 9: Competition for Authority
+  // SECTION 10: Competition for Authority
   // ═══════════════════════════════════════════════════════════════════════════
 
   const competitorContent: PremiumReportBlock[] = [
@@ -1222,7 +1222,7 @@ export function generatePremiumReport(
   }
 
   sections.push({
-    id: "competitor_authority", number: 9,
+    id: "competitor_authority", number: 10,
     title: t(he, "תחרות על סמכות", "Competition for Authority"),
     titleEn: "Competition for Authority",
     icon: "⚔️",
@@ -1230,7 +1230,7 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 10: Technical Audit
+  // SECTION 11: Technical Audit
   // ═══════════════════════════════════════════════════════════════════════════
 
   const technicalContent: PremiumReportBlock[] = [];
@@ -1308,7 +1308,7 @@ export function generatePremiumReport(
   }
 
   sections.push({
-    id: "technical_audit", number: 10,
+    id: "technical_audit", number: 11,
     title: t(he, "ביקורת טכנית", "Technical Audit"),
     titleEn: "Technical Audit",
     icon: "🔧",
@@ -1316,7 +1316,7 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 11: Structured Data & Entity
+  // SECTION 12: Structured Data & Entity
   // ═══════════════════════════════════════════════════════════════════════════
 
   const schemaTypes = scan?.schemaTypes || [];
@@ -1388,7 +1388,7 @@ export function generatePremiumReport(
   }
 
   sections.push({
-    id: "structured_data", number: 11,
+    id: "structured_data", number: 12,
     title: t(he, "נתונים מובנים וישויות", "Structured Data & Entity"),
     titleEn: "Structured Data & Entity",
     icon: "🏗️",
@@ -1396,7 +1396,7 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 12: SEO Organic
+  // SECTION 13: SEO Organic
   // ═══════════════════════════════════════════════════════════════════════════
 
   const organicContent: PremiumReportBlock[] = [];
@@ -1454,7 +1454,7 @@ export function generatePremiumReport(
   }
 
   sections.push({
-    id: "seo_organic", number: 12,
+    id: "seo_organic", number: 13,
     title: t(he, "SEO אורגני", "SEO Organic"),
     titleEn: "SEO Organic",
     icon: "📈",
@@ -1462,7 +1462,7 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 13: Content Gaps
+  // SECTION 14: Content Gaps
   // ═══════════════════════════════════════════════════════════════════════════
 
   const missedQueries = realQueries.filter((q: any) => !q.found);
@@ -1554,7 +1554,7 @@ export function generatePremiumReport(
   }
 
   sections.push({
-    id: "content_gaps", number: 13,
+    id: "content_gaps", number: 14,
     title: t(he, "פערי תוכן", "Content Gaps"),
     titleEn: "Content Gaps",
     icon: "📝",
@@ -1562,7 +1562,7 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 14: Citation Quality
+  // SECTION 15: Citation Quality
   // ═══════════════════════════════════════════════════════════════════════════
 
   const citedQueries = realQueries.filter((q: any) => {
@@ -1646,7 +1646,7 @@ export function generatePremiumReport(
   }
 
   sections.push({
-    id: "citation_quality", number: 14,
+    id: "citation_quality", number: 15,
     title: t(he, "איכות ציטוטים", "Citation Quality"),
     titleEn: "Citation Quality",
     icon: "🔗",
@@ -1654,7 +1654,7 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 15: Brand Accuracy in AI
+  // SECTION 16: Brand Accuracy in AI
   // ═══════════════════════════════════════════════════════════════════════════
 
   const accuracyContent: PremiumReportBlock[] = [
@@ -1722,7 +1722,7 @@ export function generatePremiumReport(
   }
 
   sections.push({
-    id: "brand_accuracy", number: 15,
+    id: "brand_accuracy", number: 16,
     title: t(he, "דיוק מותג ב-AI", "Brand Accuracy in AI"),
     titleEn: "Brand Accuracy in AI",
     icon: "🎯",
@@ -1730,7 +1730,7 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 16: Action Plan
+  // SECTION 17: Action Plan
   // ═══════════════════════════════════════════════════════════════════════════
 
   const actionContent: PremiumReportBlock[] = [
@@ -1800,7 +1800,7 @@ export function generatePremiumReport(
   );
 
   sections.push({
-    id: "action_plan", number: 16,
+    id: "action_plan", number: 17,
     title: t(he, "תוכנית פעולה", "Action Plan"),
     titleEn: "Action Plan",
     icon: "📋",
@@ -1808,7 +1808,7 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 17: Success Metrics / KPIs
+  // SECTION 18: Success Metrics / KPIs
   // ═══════════════════════════════════════════════════════════════════════════
 
   const kpiContent: PremiumReportBlock[] = [
@@ -1848,7 +1848,7 @@ export function generatePremiumReport(
   );
 
   sections.push({
-    id: "success_metrics", number: 17,
+    id: "success_metrics", number: 18,
     title: t(he, "מדדי הצלחה / KPIs", "Success Metrics / KPIs"),
     titleEn: "Success Metrics / KPIs",
     icon: "📐",
@@ -1856,7 +1856,7 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 18: Methodology
+  // SECTION 19: Methodology
   // ═══════════════════════════════════════════════════════════════════════════
 
   const scanDate = scan?.scannedAt || plan.createdAt || new Date().toISOString();
@@ -1956,7 +1956,7 @@ export function generatePremiumReport(
   );
 
   sections.push({
-    id: "methodology", number: 18,
+    id: "methodology", number: 19,
     title: t(he, "מתודולוגיה", "Methodology"),
     titleEn: "Methodology",
     icon: "🔬",

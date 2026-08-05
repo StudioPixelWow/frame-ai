@@ -52,8 +52,9 @@ const PRIORITY_MAP: Record<string, { bg: string; color: string; label: string; l
 const SECTION_ICONS: Record<string, string> = {
   cover: "📋",
   executive_summary: "📊",
+  market_context: "🌐",
   pixel_seo_score: "🎯",
-  pixel_geo_score: "🌐",
+  pixel_geo_score: "🤖",
   engine_snapshot: "⚙️",
   language_segmentation: "🌍",
   branded_analysis: "🏷️",
@@ -64,10 +65,11 @@ const SECTION_ICONS: Record<string, string> = {
   seo_organic: "🔍",
   content_gaps: "💡",
   citation_quality: "📝",
-  brand_accuracy: "🤖",
+  brand_accuracy: "🎯",
   action_plan: "🚀",
   success_metrics: "📈",
   methodology: "🔬",
+  appendices: "📎",
 };
 
 const MODE_SECTIONS: Record<string, string[]> = {
