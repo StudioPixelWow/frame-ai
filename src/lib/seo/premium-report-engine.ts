@@ -1730,73 +1730,146 @@ export function generatePremiumReport(
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 17: Action Plan
+  // SECTION 17: Action Plan — Aggressive 90-Day Plan
   // ═══════════════════════════════════════════════════════════════════════════
 
-  const actionContent: PremiumReportBlock[] = [
-    { type: "paragraph", text: t(he,
-      `תוכנית פעולה מובנית ל-90 ימים עם 3 שלבים: תשתית (0-30 יום), פערי תוכן (31-60 יום), וצמיחה (61-90 יום). כל משימה מבוססת על ממצאי הסריקה.`,
-      `Structured 90-day action plan with 3 phases: infrastructure (0-30 days), content gaps (31-60 days), and growth (61-90 days). Each task is based on scan findings.`) },
-  ];
+  const actionContent: PremiumReportBlock[] = [];
+  const loadTimeSec = ((scan?.loadTimeMs || 0) / 1000).toFixed(1);
+  const totalPagesScanned = scannedPages.length || scan?.totalPages || 0;
+  const missedCount = missedQueries.length;
+  const mentionedCount = mentionedQueries.length;
+  const seoScoreVal = seoScore.overall;
+  const geoScoreVal = geoScore.overall;
 
-  // Phase 1: Infrastructure (0-30 days)
-  const phase1Actions: PremiumReportBlock[] = [];
-  phase1Actions.push({ type: "heading", text: t(he, "שלב 1: תשתית (0-30 יום)", "Phase 1: Infrastructure (0-30 days)"), level: 3 });
-
-  if (!scan?.hasSSL) {
-    phase1Actions.push({ type: "action_item", title: t(he, "התקנת SSL", "Install SSL"), description: t(he, "התקן תעודת SSL (Let's Encrypt) והפנה HTTP ל-HTTPS", "Install SSL certificate (Let's Encrypt) and redirect HTTP to HTTPS"), priority: "critical", impact: t(he, "גבוהה", "High"), effort: t(he, "נמוך", "Low"), deadline: t(he, "שבוע 1", "Week 1"), kpi: t(he, "אתר נגיש ב-HTTPS", "Site accessible via HTTPS"), evidence: t(he, "סריקה: האתר לא מאובטח", "Scan: Site not secured") });
-  }
-  if (!scan?.mobileOptimized) {
-    phase1Actions.push({ type: "action_item", title: t(he, "התאמה למובייל", "Mobile Optimization"), description: t(he, "יישם עיצוב רספונסיבי ובדוק עם Mobile-Friendly Test", "Implement responsive design and test with Mobile-Friendly Test"), priority: "critical", impact: t(he, "גבוהה", "High"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "שבוע 2", "Week 2"), kpi: t(he, "עובר Mobile-Friendly Test", "Passes Mobile-Friendly Test"), evidence: t(he, "סריקה: האתר לא מותאם למובייל", "Scan: Site not mobile-optimized") });
-  }
-  if ((scan?.loadTimeMs || 0) > 3000) {
-    phase1Actions.push({ type: "action_item", title: t(he, "שיפור מהירות", "Speed Improvement"), description: t(he, "דחוס תמונות, הפעל CDN, מזער CSS/JS", "Compress images, enable CDN, minify CSS/JS"), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "שבוע 2", "Week 2"), kpi: t(he, "זמן טעינה מתחת ל-3 שניות", "Load time under 3 seconds"), evidence: t(he, `סריקה: ${((scan?.loadTimeMs || 0) / 1000).toFixed(1)}s`, `Scan: ${((scan?.loadTimeMs || 0) / 1000).toFixed(1)}s`) });
-  }
-  if (!scan?.hasSitemap) {
-    phase1Actions.push({ type: "action_item", title: t(he, "יצירת Sitemap", "Create Sitemap"), description: t(he, "צור sitemap.xml והגש ל-Google Search Console", "Create sitemap.xml and submit to Google Search Console"), priority: "high", impact: t(he, "בינונית", "Medium"), effort: t(he, "נמוך", "Low"), deadline: t(he, "שבוע 1", "Week 1"), kpi: t(he, "Sitemap נגיש ומוגש ל-GSC", "Sitemap accessible and submitted to GSC") });
-  }
-  if (!scan?.hasRobotsTxt) {
-    phase1Actions.push({ type: "action_item", title: t(he, "יצירת Robots.txt", "Create Robots.txt"), description: t(he, "צור robots.txt עם הנחיות סריקה וקישור ל-Sitemap", "Create robots.txt with crawl directives and Sitemap link"), priority: "high", impact: t(he, "בינונית", "Medium"), effort: t(he, "נמוך", "Low"), deadline: t(he, "שבוע 1", "Week 1"), kpi: t(he, "Robots.txt תקין ונגיש", "Valid and accessible robots.txt") });
-  }
-  if (!scan?.structuredData) {
-    phase1Actions.push({ type: "action_item", title: t(he, "הוספת Schema מובנה", "Add Structured Schema"), description: t(he, "הוסף Organization, LocalBusiness, FAQPage ו-BreadcrumbList Schema", "Add Organization, LocalBusiness, FAQPage, and BreadcrumbList Schema"), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "שבוע 3", "Week 3"), kpi: t(he, "Schema תקין ב-Google Rich Results Test", "Valid Schema in Google Rich Results Test"), evidence: t(he, "סריקה: חסרים נתונים מובנים", "Scan: Missing structured data") });
-  }
-
-  // Always add basic items
-  phase1Actions.push({ type: "action_item", title: t(he, "חיבור Google Search Console", "Connect Google Search Console"), description: t(he, "אמת בעלות על הדומיין וחבר GSC למעקב שוטף", "Verify domain ownership and connect GSC for ongoing tracking"), priority: plan.gscData ? "low" : "high", impact: t(he, "גבוהה", "High"), effort: t(he, "נמוך", "Low"), deadline: t(he, "שבוע 1", "Week 1"), kpi: t(he, "GSC פעיל ומדווח", "GSC active and reporting") });
-
-  actionContent.push(...phase1Actions);
-
-  // Phase 2: Content Gaps (31-60 days)
   actionContent.push(
-    { type: "divider" },
-    { type: "heading", text: t(he, "שלב 2: פערי תוכן (31-60 יום)", "Phase 2: Content Gaps (31-60 days)"), level: 3 }
+    { type: "paragraph", text: t(he,
+      `תוכנית פעולה אגרסיבית ומקיפה ל-90 ימים, מחולקת ל-3 שלבים. התוכנית מבוססת על ממצאי הסריקה ומותאמת למצב הנוכחי של ${clientName || domain}. ציון PIXEL SEO נוכחי: ${seoScoreVal}/100, ציון PIXEL GEO: ${geoScoreVal}/100. יעד: שיפור של 30-50 נקודות תוך 90 יום.`,
+      `Aggressive and comprehensive 90-day action plan, split into 3 phases. Plan is based on scan findings and tailored to the current state of ${clientName || domain}. Current PIXEL SEO score: ${seoScoreVal}/100, PIXEL GEO score: ${geoScoreVal}/100. Target: 30-50 point improvement within 90 days.`) },
   );
 
-  const highPriorityGaps = missedQueries
-    .filter((q: any) => {
-      const queryObj = visQueries.find((vq: any) => vq.query === q.query || vq.id === q.queryId);
-      return queryObj?.importance === "high";
-    })
-    .slice(0, 5);
+  // ── PHASE 1: Infrastructure & Technical Foundation (0-30 days) ──────────
+  actionContent.push(
+    { type: "heading", text: t(he, "שלב 1: תשתית טכנית ובסיס SEO (ימים 0-30)", "Phase 1: Technical Infrastructure & SEO Foundation (Days 0-30)"), level: 3 },
+    { type: "paragraph", text: t(he,
+      "המטרה: לבנות בסיס טכני מושלם. ללא תשתית חזקה, שום פעולת תוכן או GEO לא תניב תוצאות. שלב זה כולל תיקוני SEO טכני, חיבור כלי ניטור, ואופטימיזציה של כל העמודים הקיימים.",
+      "Goal: Build a perfect technical foundation. Without strong infrastructure, no content or GEO action will yield results. This phase includes technical SEO fixes, monitoring tools, and optimization of all existing pages.") },
+  );
 
-  if (highPriorityGaps.length > 0) {
-    for (const gap of highPriorityGaps) {
-      actionContent.push({ type: "action_item", title: t(he, `מאמר: "${(gap.query || "").substring(0, 40)}"`, `Article: "${(gap.query || "").substring(0, 40)}"`), description: t(he, "כתוב מאמר סמכותי עם FAQ Schema, מקורות, ו-2000+ מילים", "Write authoritative article with FAQ Schema, sources, and 2000+ words"), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "גבוה", "High"), deadline: t(he, "שבוע 5-8", "Week 5-8"), kpi: t(he, "מאמר מפורסם ומאונדקס", "Article published and indexed"), evidence: t(he, `שאילתה חסרה: "${gap.query}"`, `Missing query: "${gap.query}"`) });
-    }
-  } else if (missedQueries.length > 0) {
-    actionContent.push({ type: "action_item", title: t(he, "יצירת 3-5 מאמרים ממוקדים", "Create 3-5 Targeted Articles"), description: t(he, "כתוב מאמרים שעונים על שאילתות AI בהן העסק חסר", "Write articles answering AI queries where the business is missing"), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "גבוה", "High"), deadline: t(he, "שבוע 5-8", "Week 5-8"), kpi: t(he, "מאמרים מפורסמים ומאונדקסים", "Articles published and indexed") });
+  // Week 1: Critical setup
+  actionContent.push({ type: "action_item", title: t(he, "חיבור Google Search Console + Analytics", "Connect Google Search Console + Analytics"), description: t(he, "אמת בעלות על הדומיין, חבר GSC ו-GA4. הגדר דשבורד מעקב עם KPIs ראשוניים. בלי כלי ניטור — אי אפשר למדוד התקדמות.", "Verify domain ownership, connect GSC and GA4. Set up tracking dashboard with initial KPIs. Without monitoring tools — progress can't be measured."), priority: "critical", impact: t(he, "גבוהה", "High"), effort: t(he, "נמוך", "Low"), deadline: t(he, "יום 1-3", "Day 1-3"), kpi: t(he, "GSC + GA4 פעילים ומדווחים", "GSC + GA4 active and reporting") });
+
+  if (!scan?.hasSSL) {
+    actionContent.push({ type: "action_item", title: t(he, "התקנת תעודת SSL", "Install SSL Certificate"), description: t(he, "התקן SSL (Let's Encrypt) והפנה כל HTTP ל-HTTPS. Google מעניש אתרים לא מאובטחים ב-SERP.", "Install SSL (Let's Encrypt) and redirect all HTTP to HTTPS. Google penalizes unsecured sites in SERP."), priority: "critical", impact: t(he, "גבוהה", "High"), effort: t(he, "נמוך", "Low"), deadline: t(he, "יום 1-2", "Day 1-2"), kpi: t(he, "100% תעבורה דרך HTTPS", "100% traffic via HTTPS"), evidence: t(he, "סריקה: אתר לא מאובטח", "Scan: Unsecured site") });
   }
 
-  actionContent.push({ type: "action_item", title: t(he, "עדכון תוכן קיים", "Update Existing Content"), description: t(he, "הוסף תשובות ישירות, FAQ, ונתונים מובנים לדפים קיימים", "Add direct answers, FAQ, and structured data to existing pages"), priority: "medium", impact: t(he, "בינונית", "Medium"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "שבוע 5-8", "Week 5-8"), kpi: t(he, "דפים מעודכנים עם Schema", "Updated pages with Schema") });
+  actionContent.push({ type: "action_item", title: t(he, "אופטימיזציית Meta Tags לכל הדפים", "Optimize Meta Tags for All Pages"), description: t(he, "כתוב Title ו-Meta Description ייחודיים לכל דף. Title: עד 60 תווים עם מילת מפתח ראשית. Description: עד 155 תווים עם CTA. כלול את שם העסק בכל Title.", "Write unique Title and Meta Description for every page. Title: up to 60 chars with primary keyword. Description: up to 155 chars with CTA. Include business name in every Title."), priority: "critical", impact: t(he, "גבוהה", "High"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "יום 3-7", "Day 3-7"), kpi: t(he, "0 דפים ללא Meta Tags", "0 pages without Meta Tags"), evidence: t(he, `סריקה: ${scannedPages.filter((p: any) => p.missingMeta).length} דפים ללא Meta`, `Scan: ${scannedPages.filter((p: any) => p.missingMeta).length} pages without Meta`) });
 
-  // Phase 3: Growth (61-90 days)
+  actionContent.push({ type: "action_item", title: t(he, "תיקון כותרות H1 בכל הדפים", "Fix H1 Headings on All Pages"), description: t(he, "וודא שלכל דף יש H1 אחד בדיוק שמכיל מילת מפתח ראשית. H1 כפול או חסר פוגע בדירוג.", "Ensure every page has exactly one H1 containing the primary keyword. Duplicate or missing H1 hurts ranking."), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "נמוך", "Low"), deadline: t(he, "יום 3-7", "Day 3-7"), kpi: t(he, "כל הדפים עם H1 ייחודי", "All pages with unique H1"), evidence: t(he, `סריקה: ${scannedPages.filter((p: any) => p.missingH1).length} דפים ללא H1`, `Scan: ${scannedPages.filter((p: any) => p.missingH1).length} pages without H1`) });
+
+  // Week 2: Technical SEO
+  actionContent.push({ type: "action_item", title: t(he, "שיפור מהירות טעינה — Core Web Vitals", "Improve Load Speed — Core Web Vitals"), description: t(he, `זמן טעינה נוכחי: ${loadTimeSec}s. יעד: מתחת ל-2.5 שניות. פעולות: דחיסת תמונות ל-WebP, Lazy Loading, מזעור CSS/JS, הפעלת CDN, דחיית JavaScript לא קריטי. LCP, FID, CLS חייבים לעבור.`, `Current load time: ${loadTimeSec}s. Target: under 2.5 seconds. Actions: compress images to WebP, Lazy Loading, minify CSS/JS, enable CDN, defer non-critical JavaScript. LCP, FID, CLS must pass.`), priority: "critical", impact: t(he, "גבוהה", "High"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "יום 7-14", "Day 7-14"), kpi: t(he, "Core Web Vitals ירוקים בכל 3 הערכים", "Green Core Web Vitals on all 3 metrics") });
+
+  if (!scan?.mobileOptimized) {
+    actionContent.push({ type: "action_item", title: t(he, "אופטימיזציית מובייל מלאה", "Full Mobile Optimization"), description: t(he, "יישם עיצוב רספונסיבי, viewport תקין, כפתורים ב-48px מינימום, פונט קריא. בדוק Mobile-Friendly Test של Google.", "Implement responsive design, proper viewport, buttons at 48px minimum, readable font. Test with Google Mobile-Friendly Test."), priority: "critical", impact: t(he, "גבוהה", "High"), effort: t(he, "גבוה", "High"), deadline: t(he, "יום 7-14", "Day 7-14"), kpi: t(he, "עובר Mobile-Friendly Test", "Passes Mobile-Friendly Test") });
+  }
+
+  actionContent.push({ type: "action_item", title: t(he, "הטמעת Schema Markup מקיף", "Implement Comprehensive Schema Markup"), description: t(he, "הוסף Organization Schema בעמוד הראשי, BreadcrumbList בכל הדפים, FAQPage בדפי שאלות, Article בפוסטים, LocalBusiness אם רלוונטי. Schema מגדיל סיכויי הופעה ב-Rich Results ומשפר נראות AI.", "Add Organization Schema on homepage, BreadcrumbList on all pages, FAQPage on FAQ pages, Article on posts, LocalBusiness if relevant. Schema increases Rich Results chances and improves AI visibility."), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "יום 10-17", "Day 10-17"), kpi: t(he, "Schema תקין ב-Rich Results Test", "Valid Schema in Rich Results Test") });
+
+  if (!scan?.hasSitemap) {
+    actionContent.push({ type: "action_item", title: t(he, "יצירת XML Sitemap + הגשה ל-GSC", "Create XML Sitemap + Submit to GSC"), description: t(he, "צור sitemap.xml דינמי שמתעדכן אוטומטית, הגש ל-Google Search Console ו-Bing Webmaster Tools.", "Create dynamic sitemap.xml that auto-updates, submit to Google Search Console and Bing Webmaster Tools."), priority: "high", impact: t(he, "בינונית", "Medium"), effort: t(he, "נמוך", "Low"), deadline: t(he, "יום 7-10", "Day 7-10"), kpi: t(he, "Sitemap מאונדקס ב-GSC", "Sitemap indexed in GSC") });
+  }
+
+  if (!scan?.hasRobotsTxt) {
+    actionContent.push({ type: "action_item", title: t(he, "יצירת Robots.txt אופטימלי", "Create Optimal Robots.txt"), description: t(he, "צור robots.txt שחוסם דפי admin/duplicate ומצביע על Sitemap. ודא שאינו חוסם דפים חשובים.", "Create robots.txt that blocks admin/duplicate pages and points to Sitemap. Ensure it doesn't block important pages."), priority: "high", impact: t(he, "בינונית", "Medium"), effort: t(he, "נמוך", "Low"), deadline: t(he, "יום 7-10", "Day 7-10"), kpi: t(he, "Robots.txt תקין", "Valid robots.txt") });
+  }
+
+  // Week 3-4: On-page optimization
+  actionContent.push({ type: "action_item", title: t(he, "אופטימיזציית תמונות — Alt Tags, WebP, דחיסה", "Image Optimization — Alt Tags, WebP, Compression"), description: t(he, "הוסף Alt Text תיאורי עם מילות מפתח לכל תמונה. המר ל-WebP, דחוס ל-100KB מקסימום, הגדר Lazy Loading. תמונות ללא Alt פוגעות ב-SEO ונגישות.", "Add descriptive Alt Text with keywords to every image. Convert to WebP, compress to 100KB max, set Lazy Loading. Images without Alt hurt SEO and accessibility."), priority: "high", impact: t(he, "בינונית", "Medium"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "יום 14-21", "Day 14-21"), kpi: t(he, "100% תמונות עם Alt Tags", "100% images with Alt Tags") });
+
+  actionContent.push({ type: "action_item", title: t(he, "בניית מבנה קישורים פנימיים", "Build Internal Linking Structure"), description: t(he, "צור מפת קישורים פנימית: כל דף מקבל ונותן לפחות 3 קישורים. השתמש ב-Anchor Text עם מילות מפתח. קישור פנימי חזק = זחילה וסמכות טובים יותר.", "Create internal link map: every page gives and receives at least 3 links. Use keyword-rich Anchor Text. Strong internal linking = better crawling and authority."), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "יום 14-21", "Day 14-21"), kpi: t(he, "כל דף עם 3+ קישורים פנימיים", "Every page with 3+ internal links") });
+
+  actionContent.push({ type: "action_item", title: t(he, "תיקון Canonical Tags + הפניות", "Fix Canonical Tags + Redirects"), description: t(he, "הוסף Canonical URL לכל דף למניעת תוכן כפול. תקן הפניות 301 עבור URLs ישנים. ודא שאין שרשראות הפניה.", "Add Canonical URL to every page to prevent duplicate content. Fix 301 redirects for old URLs. Ensure no redirect chains."), priority: "medium", impact: t(he, "בינונית", "Medium"), effort: t(he, "נמוך", "Low"), deadline: t(he, "יום 21-28", "Day 21-28"), kpi: t(he, "0 שגיאות Canonical ב-GSC", "0 Canonical errors in GSC") });
+
+  actionContent.push({ type: "action_item", title: t(he, "הגדרת ניטור שוטף + Baseline", "Set Up Ongoing Monitoring + Baseline"), description: t(he, "תעד את כל המדדים הנוכחיים כ-Baseline: דירוגים, תעבורה, ציונים. הגדר התראות GSC, ניטור זמינות, דוח שבועי אוטומטי.", "Document all current metrics as Baseline: rankings, traffic, scores. Set up GSC alerts, uptime monitoring, weekly automated report."), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "נמוך", "Low"), deadline: t(he, "יום 25-30", "Day 25-30"), kpi: t(he, "Baseline מתועד + ניטור פעיל", "Baseline documented + active monitoring") });
+
+  // ── PHASE 2: Content, Authority & GEO Optimization (31-60 days) ─────────
   actionContent.push(
     { type: "divider" },
-    { type: "heading", text: t(he, "שלב 3: צמיחה (61-90 יום)", "Phase 3: Growth (61-90 days)"), level: 3 },
-    { type: "action_item", title: t(he, "בניית קישורים", "Link Building"), description: t(he, "בנה 10-20 קישורים מאתרי סמכות בתחום", "Build 10-20 links from authority sites in the field"), priority: "medium", impact: t(he, "גבוהה", "High"), effort: t(he, "גבוה", "High"), deadline: t(he, "שבוע 9-12", "Week 9-12"), kpi: t(he, "עלייה ב-DA", "DA increase") },
-    { type: "action_item", title: t(he, "הפצת תוכן", "Content Distribution"), description: t(he, "פרסם תוכן בפלטפורמות חיצוניות: לינקדאין, מדיום, פורומים מקצועיים", "Publish content on external platforms: LinkedIn, Medium, professional forums"), priority: "medium", impact: t(he, "בינונית", "Medium"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "שבוע 9-12", "Week 9-12"), kpi: t(he, "תוכן מפורסם ב-5+ פלטפורמות", "Content published on 5+ platforms") },
-    { type: "action_item", title: t(he, "סריקה חוזרת והשוואה", "Re-scan and Compare"), description: t(he, "בצע סריקה חוזרת והשווה ציונים לבסיס המקורי", "Perform re-scan and compare scores to original baseline"), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "נמוך", "Low"), deadline: t(he, "שבוע 12", "Week 12"), kpi: t(he, "שיפור בציון PIXEL SEO/GEO", "Improvement in PIXEL SEO/GEO score") },
+    { type: "heading", text: t(he, "שלב 2: תוכן, סמכות ואופטימיזציית GEO (ימים 31-60)", "Phase 2: Content, Authority & GEO Optimization (Days 31-60)"), level: 3 },
+    { type: "paragraph", text: t(he,
+      "המטרה: בניית סמכות תוכנית דרך מאמרים אגרסיביים, סגירת פערי GEO, ויצירת תוכן שמנועי AI ישתמשו בו כמקור. כל מאמר חייב להיות 2,000+ מילים, עם FAQ Schema, מקורות, ונתונים.",
+      "Goal: Build content authority through aggressive articles, close GEO gaps, and create content that AI engines will use as a source. Every article must be 2,000+ words, with FAQ Schema, sources, and data.") },
+  );
+
+  // Content gap articles based on missed queries
+  const topGaps = missedQueries.slice(0, 8);
+  if (topGaps.length > 0) {
+    for (let i = 0; i < Math.min(topGaps.length, 5); i++) {
+      const gap = topGaps[i];
+      const qText = (gap.query || "").substring(0, 50);
+      actionContent.push({ type: "action_item", title: t(he, `מאמר סמכותי: "${qText}"`, `Authority Article: "${qText}"`), description: t(he, `כתוב מאמר מקיף (2,500+ מילים) שעונה ישירות על השאילתה. כלול: נתונים סטטיסטיים, מקורות, FAQ Schema (5+ שאלות), תמונות מקוריות, ולינקים פנימיים ל-3+ דפים. יעד: להיות המקור שמנועי AI מצטטים.`, `Write comprehensive article (2,500+ words) that directly answers the query. Include: statistics, sources, FAQ Schema (5+ questions), original images, and internal links to 3+ pages. Target: become the source AI engines cite.`), priority: "critical", impact: t(he, "גבוהה", "High"), effort: t(he, "גבוה", "High"), deadline: t(he, `יום ${31 + i * 5}-${35 + i * 5}`, `Day ${31 + i * 5}-${35 + i * 5}`), kpi: t(he, "מאמר מפורסם, מאונדקס, ומופיע ב-AI", "Article published, indexed, and appearing in AI"), evidence: t(he, `העסק לא מוזכר בשאילתה: "${qText}"`, `Business not mentioned in query: "${qText}"`) });
+    }
+  } else {
+    actionContent.push({ type: "action_item", title: t(he, "יצירת 5 מאמרי סמכות ממוקדים", "Create 5 Targeted Authority Articles"), description: t(he, "כתוב 5 מאמרים מקיפים (2,500+ מילים כל אחד) על הנושאים המרכזיים של העסק. כל מאמר עם FAQ Schema, מקורות, נתונים, ותמונות מקוריות.", "Write 5 comprehensive articles (2,500+ words each) on the business's core topics. Each article with FAQ Schema, sources, data, and original images."), priority: "critical", impact: t(he, "גבוהה", "High"), effort: t(he, "גבוה", "High"), deadline: t(he, "יום 31-55", "Day 31-55"), kpi: t(he, "5 מאמרים מפורסמים ומאונדקסים", "5 articles published and indexed") });
+  }
+
+  actionContent.push({ type: "action_item", title: t(he, "בניית דף FAQ מקיף", "Build Comprehensive FAQ Page"), description: t(he, "צור דף FAQ עם 20+ שאלות ותשובות מקיפות. כל תשובה: 100-200 מילים, עם מקורות. הוסף FAQPage Schema. דפי FAQ מופיעים ב-Rich Snippets ומגדילים CTR ב-30%+.", "Create FAQ page with 20+ comprehensive Q&As. Each answer: 100-200 words, with sources. Add FAQPage Schema. FAQ pages appear in Rich Snippets and increase CTR by 30%+."), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "יום 35-42", "Day 35-42"), kpi: t(he, "FAQ מאונדקס עם Rich Snippet", "FAQ indexed with Rich Snippet") });
+
+  actionContent.push({ type: "action_item", title: t(he, "עדכון וחיזוק תוכן קיים", "Refresh & Strengthen Existing Content"), description: t(he, "עבור על כל הדפים הקיימים: הוסף תשובות ישירות לשאלות שמשתמשים שואלים, הרחב תוכן דק ל-800+ מילים, הוסף Schema, עדכן נתונים ישנים, שפר Headings.", "Review all existing pages: add direct answers to user questions, expand thin content to 800+ words, add Schema, update old data, improve Headings."), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "יום 40-55", "Day 40-55"), kpi: t(he, "0 דפים עם פחות מ-500 מילים", "0 pages with less than 500 words") });
+
+  actionContent.push({ type: "action_item", title: t(he, "בניית דף 'אודות' + עמוד מומחיות (E-E-A-T)", "Build 'About' + Expertise Page (E-E-A-T)"), description: t(he, "צור דף אודות מקיף עם ניסיון, הסמכות, פרסומים, מדיה. הוסף Person Schema ל-AuthorBox. Google ומנועי AI מעדיפים תוכן ממקורות עם E-E-A-T מוכח.", "Create comprehensive about page with experience, certifications, publications, media. Add Person Schema to AuthorBox. Google and AI engines prefer content from sources with proven E-E-A-T."), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "יום 38-45", "Day 38-45"), kpi: t(he, "עמוד E-E-A-T עם Person Schema", "E-E-A-T page with Person Schema") });
+
+  actionContent.push({ type: "action_item", title: t(he, "אופטימיזציית GEO — תוכן מותאם למנועי AI", "GEO Optimization — AI-Engine Tailored Content"), description: t(he, `נראות AI נוכחית: ${geoScoreVal}/100. יעד: 60+. הוסף לכל מאמר: פסקת סיכום ראשונה שעונה ישירות על השאלה, נתונים מספריים, ציטוטים ממומחים, וקישורים למקורות סמכותיים. מנועי AI מצטטים תוכן שנותן תשובות ישירות.`, `Current AI visibility: ${geoScoreVal}/100. Target: 60+. Add to every article: opening summary paragraph that directly answers the question, numerical data, expert quotes, and links to authoritative sources. AI engines cite content that gives direct answers.`), priority: "critical", impact: t(he, "גבוהה", "High"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "יום 45-58", "Day 45-58"), kpi: t(he, "ציון GEO 60+", "GEO score 60+") });
+
+  actionContent.push({ type: "action_item", title: t(he, "יצירת 3 מדריכים מקיפים (Pillar Content)", "Create 3 Comprehensive Guides (Pillar Content)"), description: t(he, "כתוב 3 מדריכים מקיפים (5,000+ מילים) על הנושאים המרכזיים. כל מדריך: תוכן עניינים, 10+ פרקים, HowTo Schema, תמונות/אינפוגרפיקות, ו-20+ קישורים פנימיים. מדריכים מקיפים בונים סמכות נושאית.", "Write 3 comprehensive guides (5,000+ words) on core topics. Each guide: table of contents, 10+ chapters, HowTo Schema, images/infographics, and 20+ internal links. Comprehensive guides build topical authority."), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "גבוה", "High"), deadline: t(he, "יום 45-60", "Day 45-60"), kpi: t(he, "3 Pillar Pages מפורסמים", "3 Pillar Pages published") });
+
+  actionContent.push({ type: "action_item", title: t(he, "בניית עדויות ומקרי בוחן", "Build Testimonials & Case Studies"), description: t(he, "אסוף והוסף 10+ עדויות לקוח עם שם ותפקיד. כתוב 2-3 מקרי בוחן מפורטים עם נתונים. הוסף Review Schema. עדויות מחזקות E-E-A-T ומגבירות אמון.", "Collect and add 10+ client testimonials with name and title. Write 2-3 detailed case studies with data. Add Review Schema. Testimonials strengthen E-E-A-T and boost trust."), priority: "medium", impact: t(he, "בינונית", "Medium"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "יום 50-60", "Day 50-60"), kpi: t(he, "10+ עדויות + Review Schema", "10+ testimonials + Review Schema") });
+
+  // ── PHASE 3: Growth, Distribution & Domination (61-90 days) ─────────────
+  actionContent.push(
+    { type: "divider" },
+    { type: "heading", text: t(he, "שלב 3: צמיחה, הפצה ושליטה (ימים 61-90)", "Phase 3: Growth, Distribution & Domination (Days 61-90)"), level: 3 },
+    { type: "paragraph", text: t(he,
+      "המטרה: להפוך את העסק למקור הסמכותי ביותר בתחום. בניית קישורים חיצוניים, הפצת תוכן בפלטפורמות AI, חיזוק Citations, ומדידת תוצאות. שלב זה הופך את ההשקעה לתוצאות מדידות.",
+      "Goal: Turn the business into the most authoritative source in its field. Build external links, distribute content on AI platforms, strengthen Citations, and measure results. This phase converts investment into measurable outcomes.") },
+  );
+
+  actionContent.push({ type: "action_item", title: t(he, "קמפיין בניית קישורים — 20+ קישורים מסמכות", "Link Building Campaign — 20+ Authority Links"), description: t(he, "בנה 20-30 קישורים ממקורות איכותיים: פוסטים אורחים באתרים מובילים בתחום, ראיונות, מאמרי מומחה, מדריכים, אינפוגרפיקות שמפיצים. יעד: DA 30+ בלינקים הנכנסים.", "Build 20-30 links from quality sources: guest posts on leading industry sites, interviews, expert articles, guides, infographics for distribution. Target: DA 30+ on incoming links."), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "גבוה", "High"), deadline: t(he, "יום 61-80", "Day 61-80"), kpi: t(he, "20+ קישורים חדשים ממקורות סמכותיים", "20+ new links from authoritative sources") });
+
+  actionContent.push({ type: "action_item", title: t(he, "הפצת תוכן בפלטפורמות AI ומקצועיות", "Content Distribution on AI & Professional Platforms"), description: t(he, "פרסם תוכן מותאם ב-LinkedIn (מאמרים), Medium, פורומים מקצועיים, Quora, Reddit (subreddits רלוונטיים). כל פרסום עם קישור חזרה לאתר. מנועי AI אוספים מידע מפלטפורמות אלו.", "Publish adapted content on LinkedIn (articles), Medium, professional forums, Quora, Reddit (relevant subreddits). Every post with backlink. AI engines collect information from these platforms."), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "יום 61-75", "Day 61-75"), kpi: t(he, "תוכן מפורסם ב-8+ פלטפורמות", "Content published on 8+ platforms") });
+
+  actionContent.push({ type: "action_item", title: t(he, "בניית Citation Profile מקיף", "Build Comprehensive Citation Profile"), description: t(he, "רשום את העסק ב-20+ ספריות מקצועיות ומקומיות. ודא NAP (שם, כתובת, טלפון) אחיד בכל הספריות. Citations חזקים = סמכות מוגברת בעיני Google ומנועי AI.", "Register business in 20+ professional and local directories. Ensure consistent NAP (Name, Address, Phone) across all directories. Strong citations = enhanced authority for Google and AI engines."), priority: "medium", impact: t(he, "בינונית", "Medium"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "יום 65-80", "Day 65-80"), kpi: t(he, "20+ רישומים עם NAP אחיד", "20+ listings with consistent NAP") });
+
+  actionContent.push({ type: "action_item", title: t(he, "יצירת תוכן וידאו + YouTube SEO", "Create Video Content + YouTube SEO"), description: t(he, "צור 5-10 סרטונים קצרים (3-5 דקות) שעונים על שאלות נפוצות. העלה ל-YouTube עם כותרות, תיאורים, ותגיות אופטימליים. הטמע באתר. Google מציג סרטונים ב-SERP ומנועי AI מפנים לתוכן וידאו.", "Create 5-10 short videos (3-5 min) answering common questions. Upload to YouTube with optimized titles, descriptions, and tags. Embed on site. Google shows videos in SERP and AI engines reference video content."), priority: "medium", impact: t(he, "גבוהה", "High"), effort: t(he, "גבוה", "High"), deadline: t(he, "יום 65-85", "Day 65-85"), kpi: t(he, "5+ סרטונים באתר + YouTube", "5+ videos on site + YouTube") });
+
+  actionContent.push({ type: "action_item", title: t(he, "השקת ניוזלטר / בלוג שבועי", "Launch Weekly Newsletter / Blog"), description: t(he, "התחל פרסום תוכן שבועי קבוע: פוסט בלוג + ניוזלטר. תוכן חדש באופן עקבי מאותת ל-Google ולמנועי AI שהאתר פעיל ומעודכן. עקביות = סמכות.", "Start consistent weekly content: blog post + newsletter. Consistent new content signals to Google and AI engines that the site is active and updated. Consistency = authority."), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "יום 70-90", "Day 70-90"), kpi: t(he, "פרסום שבועי קבוע", "Consistent weekly publishing") });
+
+  actionContent.push({ type: "action_item", title: t(he, "PR דיגיטלי — 3 אזכורים בתקשורת", "Digital PR — 3 Media Mentions"), description: t(he, "השג 3+ אזכורים בתקשורת דיגיטלית: ראיונות, מאמרי מומחה, הופעות בפודקאסטים. כל אזכור = קישור + חיזוק E-E-A-T + נראות AI. תקשורת מקוונת היא ערוץ קריטי לבניית סמכות.", "Get 3+ digital media mentions: interviews, expert articles, podcast appearances. Each mention = link + E-E-A-T boost + AI visibility. Online media is a critical channel for authority building."), priority: "medium", impact: t(he, "גבוהה", "High"), effort: t(he, "גבוה", "High"), deadline: t(he, "יום 70-88", "Day 70-88"), kpi: t(he, "3+ אזכורים בתקשורת", "3+ media mentions") });
+
+  actionContent.push({ type: "action_item", title: t(he, "Local SEO — Google Business Profile + מפות", "Local SEO — Google Business Profile + Maps"), description: t(he, "אופטמז את Google Business Profile: תמונות מעודכנות, שעות פעילות, קטגוריות, פוסטים שבועיים, ותגובות לביקורות. הוסף LocalBusiness Schema לאתר. GBP מוביל ל-Map Pack ולתוצאות מקומיות.", "Optimize Google Business Profile: updated photos, hours, categories, weekly posts, and review responses. Add LocalBusiness Schema to site. GBP drives Map Pack and local results."), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "נמוך", "Low"), deadline: t(he, "יום 61-70", "Day 61-70"), kpi: t(he, "GBP מלא ב-100% + פעילות שבועית", "GBP 100% complete + weekly activity") });
+
+  actionContent.push({ type: "action_item", title: t(he, "סריקה חוזרת מלאה + דוח השוואה", "Full Re-scan + Comparison Report"), description: t(he, `בצע סריקת PIXEL SEO/GEO מלאה והשווה לתוצאות הסריקה הראשונית. יעד: שיפור ציון SEO מ-${seoScoreVal} ל-${Math.min(100, seoScoreVal + 35)}+, ציון GEO מ-${geoScoreVal} ל-${Math.min(100, geoScoreVal + 30)}+. הפק דוח ROI מפורט.`, `Perform full PIXEL SEO/GEO scan and compare to initial scan results. Target: improve SEO score from ${seoScoreVal} to ${Math.min(100, seoScoreVal + 35)}+, GEO score from ${geoScoreVal} to ${Math.min(100, geoScoreVal + 30)}+. Generate detailed ROI report.`), priority: "critical", impact: t(he, "גבוהה", "High"), effort: t(he, "נמוך", "Low"), deadline: t(he, "יום 88-90", "Day 88-90"), kpi: t(he, `ציון SEO ${Math.min(100, seoScoreVal + 35)}+ | ציון GEO ${Math.min(100, geoScoreVal + 30)}+`, `SEO score ${Math.min(100, seoScoreVal + 35)}+ | GEO score ${Math.min(100, geoScoreVal + 30)}+`) });
+
+  actionContent.push({ type: "action_item", title: t(he, "הגדרת תוכנית המשך ל-6 חודשים הבאים", "Define 6-Month Continuation Plan"), description: t(he, "על בסיס תוצאות 90 הימים, הכן תוכנית המשך: מילות מפתח חדשות, תוכן רבעוני, יעדי צמיחה, תקציב קישורים, ולוח זמנים. SEO הוא מרתון — עקביות מנצחת.", "Based on 90-day results, prepare continuation plan: new keywords, quarterly content, growth targets, link budget, and timeline. SEO is a marathon — consistency wins."), priority: "high", impact: t(he, "גבוהה", "High"), effort: t(he, "בינוני", "Medium"), deadline: t(he, "יום 85-90", "Day 85-90"), kpi: t(he, "תוכנית 6 חודשים מאושרת", "6-month plan approved") });
+
+  // Summary table
+  const phase1Count = actionContent.filter((b: any) => b.type === "action_item" && (b.deadline || "").includes("יום") && parseInt(((b.deadline || "").match(/\d+/) || ["0"])[0]) <= 30).length || 10;
+  const phase2Count = actionContent.filter((b: any) => b.type === "action_item" && (b.deadline || "").includes("יום") && parseInt(((b.deadline || "").match(/\d+/) || ["0"])[0]) > 30 && parseInt(((b.deadline || "").match(/\d+/) || ["0"])[0]) <= 60).length || 8;
+  const phase3Count = actionContent.filter((b: any) => b.type === "action_item" && (b.deadline || "").includes("יום") && parseInt(((b.deadline || "").match(/\d+/) || ["0"])[0]) > 60).length || 10;
+  const totalActions = phase1Count + phase2Count + phase3Count;
+
+  actionContent.push(
+    { type: "divider" },
+    { type: "heading", text: t(he, "סיכום תוכנית 90 ימים", "90-Day Plan Summary"), level: 3 },
+    { type: "table",
+      headers: [t(he, "שלב", "Phase"), t(he, "תקופה", "Period"), t(he, "פעולות", "Actions"), t(he, "מיקוד", "Focus")],
+      rows: [
+        [t(he, "שלב 1: תשתית", "Phase 1: Infrastructure"), t(he, "ימים 0-30", "Days 0-30"), `${phase1Count}`, t(he, "SEO טכני, Meta, Schema, מהירות, ניטור", "Technical SEO, Meta, Schema, Speed, Monitoring")],
+        [t(he, "שלב 2: תוכן + GEO", "Phase 2: Content + GEO"), t(he, "ימים 31-60", "Days 31-60"), `${phase2Count}`, t(he, "מאמרים, FAQ, E-E-A-T, Pillar Content, GEO", "Articles, FAQ, E-E-A-T, Pillar Content, GEO")],
+        [t(he, "שלב 3: צמיחה", "Phase 3: Growth"), t(he, "ימים 61-90", "Days 61-90"), `${phase3Count}`, t(he, "קישורים, הפצה, PR, Citations, וידאו", "Links, Distribution, PR, Citations, Video")],
+        [t(he, "סה״כ", "Total"), t(he, "90 ימים", "90 days"), `${totalActions}`, t(he, "תוכנית אגרסיבית מלאה", "Full aggressive plan")],
+      ],
+    },
   );
 
   sections.push({
