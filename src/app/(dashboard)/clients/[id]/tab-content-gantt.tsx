@@ -3672,6 +3672,8 @@ export default function TabContentGantt({ client, employees }: TabContentGanttPr
       {showBulkGen && (
         <BulkVisualGeneration
           clientId={client.id}
+          month={selectedMonth}
+          year={selectedYear}
           onClose={() => setShowBulkGen(false)}
           onComplete={() => {
             refetchGanttItems();

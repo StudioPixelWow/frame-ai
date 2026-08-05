@@ -28,6 +28,8 @@ interface ItemProgress {
 
 interface Props {
   clientId: string;
+  month?: number;   // 0-based month index
+  year?: number;
   onClose: () => void;
   onComplete: () => void;
 }
@@ -53,7 +55,7 @@ function formatTime(seconds: number): string {
 
 // ── Component ────────────────────────────────────────────────────────────
 
-export default function BulkVisualGeneration({ clientId, onClose, onComplete }: Props) {
+export default function BulkVisualGeneration({ clientId, month, year, onClose, onComplete }: Props) {
   const [items, setItems] = useState<BulkItem[]>([]);
   const [logoUrl, setLogoUrl] = useState("");
   const [progress, setProgress] = useState<Record<string, ItemProgress>>({});
@@ -74,7 +76,10 @@ export default function BulkVisualGeneration({ clientId, onClose, onComplete }: 
   useEffect(() => {
     (async () => {
       try {
-        const resp = await fetch(`/api/visual-generation/bulk-generate-item?clientId=${clientId}`);
+        const params = new URLSearchParams({ clientId });
+        if (month !== undefined) params.set('month', String(month + 1)); // convert 0-based to 1-based
+        if (year !== undefined) params.set('year', String(year));
+        const resp = await fetch(`/api/visual-generation/bulk-generate-item?${params.toString()}`);
         if (!resp.ok) throw new Error("Failed to load items");
         const data = await resp.json();
         setItems(data.items || []);

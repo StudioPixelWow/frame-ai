@@ -244,9 +244,19 @@ async function runAutoBrief(
     concepts.push(conceptMatches[0].trim());
     concepts.push(conceptMatches[1].trim());
     concepts.push(conceptMatches[2].trim());
+  } else if (conceptMatches.length === 2) {
+    // Got 2 concepts — duplicate the first with a variation suffix to ensure 3 distinct generations
+    concepts.push(conceptMatches[0].trim());
+    concepts.push(conceptMatches[1].trim());
+    concepts.push(conceptMatches[0].trim() + '\n\nגרסה אלטרנטיבית: שנה את הקומפוזיציה, הזווית והאווירה כדי ליצור מראה שונה לחלוטין.');
+    console.log('[bulk-gen-item] Auto-brief produced only 2 concepts, created variation for 3rd');
   } else {
-    // Fallback: use the whole text as concept 1
-    concepts.push(rawContent);
+    // Fallback: got 1 concept — create 3 variations with distinct creative directions
+    const base = rawContent.trim();
+    concepts.push(base);
+    concepts.push(base + '\n\nגישה אלטרנטיבית: צור גרסה מינימליסטית ונקייה יותר — רקע פשוט, טיפוגרפיה גדולה, פחות אלמנטים ויזואליים.');
+    concepts.push(base + '\n\nגישה אלטרנטיבית: צור גרסה דרמטית וקולנועית — ניגודיות גבוהה, תאורה עוצמתית, קלוזאפ על האלמנט המרכזי.');
+    console.log('[bulk-gen-item] Auto-brief produced only 1 concept, created 2 variations');
   }
 
   return concepts;
@@ -936,6 +946,8 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const clientId = searchParams.get('clientId');
+    const monthParam = searchParams.get('month'); // 1-based (1=Jan, 12=Dec)
+    const yearParam = searchParams.get('year');
 
     if (!clientId) {
       return new Response(
@@ -948,9 +960,21 @@ export async function GET(req: NextRequest) {
     const allItems = await clientGanttItems.queryAsync(
       (i: ClientGanttItem) => i.clientId === clientId,
     );
-    const itemsWithoutGraphics = allItems.filter(
+    let itemsWithoutGraphics = allItems.filter(
       (i: any) => !i.imageUrls || i.imageUrls.length === 0,
     );
+
+    // Filter by month/year if provided
+    if (monthParam && yearParam) {
+      const filterMonth = parseInt(monthParam, 10) - 1; // convert to 0-based
+      const filterYear = parseInt(yearParam, 10);
+      itemsWithoutGraphics = itemsWithoutGraphics.filter((i: any) => {
+        const dateStr = i.scheduledDate || i.date;
+        if (!dateStr) return false;
+        const d = new Date(dateStr);
+        return d.getMonth() === filterMonth && d.getFullYear() === filterYear;
+      });
+    }
 
     // Gather brand intelligence (we need logoUrl for previews)
     const brandIntel = await gatherBrandIntelligence(clientId);
