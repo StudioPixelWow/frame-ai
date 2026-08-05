@@ -1118,9 +1118,18 @@ function ActionPlanKanban({
   ];
 
   function classifyDeadline(deadline: string): string {
+    // Parse the first number from the deadline string (e.g., "יום 7-14" → 7)
+    const match = deadline.match(/(\d+)/);
+    if (match) {
+      const firstDay = parseInt(match[1], 10);
+      if (firstDay <= 30) return "0-30";
+      if (firstDay <= 60) return "31-60";
+      return "61-90";
+    }
+    // Fallback for non-numeric deadlines
     const d = deadline.toLowerCase();
-    if (d.includes("30") || d.includes("ארוך") || d.includes("0-30") || d.includes("asap") || d.includes("immediate") || d.includes("מיידי")) return "0-30";
-    if (d.includes("60") || d.includes("31-60") || d.includes("חודשיים")) return "31-60";
+    if (d.includes("מיידי") || d.includes("asap") || d.includes("immediate")) return "0-30";
+    if (d.includes("ארוך") || d.includes("חודשיים")) return "31-60";
     return "61-90";
   }
 
