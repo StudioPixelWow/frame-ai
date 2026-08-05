@@ -141,6 +141,40 @@ function ScoreGauge({
 }
 
 // ══════════════════════════════════════════════════════════════
+// HELPER COMPONENTS
+// ══════════════════════════════════════════════════════════════
+
+function MiniGauge({ value, color, size = 48 }: { value: number; color: string; size?: number }) {
+  const r = (size - 8) / 2;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (value / 100) * circ;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={C.border} strokeWidth={4} opacity={0.4} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={4}
+        strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+        transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+      <text x={size / 2} y={size / 2} textAnchor="middle" dominantBaseline="central"
+        fontSize={size / 3.8} fontWeight={800} fill={color}>{value}%</text>
+    </svg>
+  );
+}
+
+function ConfidenceBadge({ level, he }: { level: "high" | "medium" | "low"; he: boolean }) {
+  const map = {
+    high: { bg: "#D1FAE5", color: "#065F46", label: he ? "גבוהה" : "High" },
+    medium: { bg: "#FEF3C7", color: "#92400E", label: he ? "בינונית" : "Medium" },
+    low: { bg: "#FEE2E2", color: "#991B1B", label: he ? "נמוכה" : "Low" },
+  };
+  const c = map[level];
+  return (
+    <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700, background: c.bg, color: c.color }}>
+      {c.label}
+    </span>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
 // BLOCK RENDERER — renders each report content block
 // ══════════════════════════════════════════════════════════════
 
@@ -257,8 +291,164 @@ function RenderBlock({ block, he }: { block: PremiumReportBlock; he: boolean }) 
           <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>{block.description}</div>
         </div>
       );
+    case "stat_row":
+      return (
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          {block.stats.map((s: any, i: number) => (
+            <div key={i} style={{ flex: "1 1 140px", padding: "18px 20px", borderRadius: 16, background: `${s.color}08`, border: `1px solid ${s.color}18`, textAlign: "center" }}>
+              {s.icon && <div style={{ fontSize: 22, marginBottom: 6 }}>{s.icon}</div>}
+              <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>{s.label}</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: s.color }}>{s.value}</div>
+              {s.change && (
+                <div style={{ fontSize: 11, fontWeight: 600, marginTop: 2, color: s.change.startsWith("+") ? C.success : s.change.startsWith("-") ? C.danger : C.textMuted }}>{s.change}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    case "finding": {
+      const sev = SEVERITY_MAP[block.severity || "info"] || SEVERITY_MAP.info;
+      return (
+        <div style={{ borderRadius: 14, border: `1px solid ${sev.border}`, background: sev.bg, padding: "18px 22px", pageBreakInside: "avoid" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <span style={{ fontSize: 14 }}>{sev.icon}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: sev.color, background: `${sev.color}15`, padding: "2px 10px", borderRadius: 6 }}>
+              {he ? sev.label : sev.labelEn}
+            </span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: sev.color, flex: 1 }}>{block.title}</span>
+            {block.confidence && <ConfidenceBadge level={block.confidence} he={he} />}
+          </div>
+          <p style={{ fontSize: 13, lineHeight: 1.7, color: sev.color, margin: "0 0 10px", opacity: 0.85 }}>{block.detail}</p>
+          <div style={{ padding: "12px 16px", borderRadius: 10, background: "rgba(255,255,255,0.6)", border: `1px solid ${sev.border}` }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: sev.color, marginBottom: 4, opacity: 0.7 }}>{he ? "המלצה:" : "Recommendation:"}</div>
+            <div style={{ fontSize: 13, color: sev.color, fontWeight: 500 }}>{block.recommendation}</div>
+          </div>
+          {block.evidence && (
+            <div style={{ marginTop: 8, fontSize: 11, color: sev.color, opacity: 0.6, fontStyle: "italic" }}>{he ? "ראיה:" : "Evidence:"} {block.evidence}</div>
+          )}
+        </div>
+      );
+    }
+    case "engine_card":
+      return (
+        <div style={{ borderRadius: 16, border: `1px solid ${C.border}`, background: C.card, padding: 24, boxShadow: "0 2px 12px rgba(0,0,0,0.03)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+            <span style={{ fontSize: 28 }}>{block.icon}</span>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{block.engine}</div>
+              <div style={{ fontSize: 11, color: C.textMuted }}>{block.queriesTested} {he ? "שאילתות נבדקו" : "queries tested"}</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+            <div style={{ flex: "1 1 80px", textAlign: "center" }}>
+              <MiniGauge value={Math.round(block.mentionRate)} color={block.mentionRate >= 50 ? C.success : block.mentionRate >= 25 ? C.warning : C.danger} />
+              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>{he ? "שיעור אזכור" : "Mention Rate"}</div>
+            </div>
+            <div style={{ flex: "1 1 80px", textAlign: "center" }}>
+              <MiniGauge value={Math.round(block.citationRate)} color={block.citationRate >= 30 ? C.success : block.citationRate >= 15 ? C.warning : C.danger} />
+              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>{he ? "שיעור ציטוט" : "Citation Rate"}</div>
+            </div>
+            <div style={{ flex: "1 1 80px", textAlign: "center" }}>
+              <MiniGauge value={Math.round(block.firstMentionRate)} color={C.primary} />
+              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>{he ? "אזכור ראשון" : "First Mention"}</div>
+            </div>
+          </div>
+          {block.topCitedPages?.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, marginBottom: 6 }}>{he ? "דפים מצוטטים:" : "Top Cited Pages:"}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {block.topCitedPages.slice(0, 5).map((page: string, i: number) => (
+                  <div key={i} style={{ fontSize: 12, color: C.primary, padding: "4px 10px", borderRadius: 8, background: C.primaryLight, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{page}</div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    case "competitor_row": {
+      const threatColor = block.mentions > 10 ? C.danger : block.mentions > 5 ? C.warning : C.success;
+      return (
+        <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 20px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, flexWrap: "wrap" }}>
+          <div style={{ width: 6, height: 40, borderRadius: 3, background: threatColor, flexShrink: 0 }} />
+          <div style={{ flex: "1 1 140px", minWidth: 120 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{block.domain}</div>
+            <div style={{ fontSize: 11, color: C.textMuted }}>{block.sourceType}</div>
+          </div>
+          <div style={{ textAlign: "center", flex: "0 0 70px" }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{block.mentions}</div>
+            <div style={{ fontSize: 10, color: C.textMuted }}>{he ? "אזכורים" : "Mentions"}</div>
+          </div>
+          <div style={{ textAlign: "center", flex: "0 0 70px" }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: C.primary }}>{block.citations}</div>
+            <div style={{ fontSize: 10, color: C.textMuted }}>{he ? "ציטוטים" : "Citations"}</div>
+          </div>
+          <div style={{ flex: "1 1 100px", display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {(block.engines || []).map((e: string, i: number) => (
+              <span key={i} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: C.primaryLight, color: C.primaryDark, fontWeight: 600 }}>{e}</span>
+            ))}
+          </div>
+          <div style={{ flex: "1 1 100px", display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {(block.topics || []).slice(0, 3).map((tp: string, i: number) => (
+              <span key={i} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: C.bg, color: C.textSecondary }}>{tp}</span>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    case "query_result":
+      return (
+        <div style={{ borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, padding: "14px 18px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, fontSize: 14, fontWeight: 600, color: C.text }}>&quot;{block.query}&quot;</div>
+            <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: C.bg, color: C.textSecondary, fontWeight: 600 }}>{block.language}</span>
+            <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: C.bg, color: C.textSecondary }}>{block.category}</span>
+            <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: block.branded ? "#FEF3C7" : C.primaryLight, color: block.branded ? "#92400E" : C.primaryDark, fontWeight: 600 }}>
+              {block.branded ? (he ? "ממותג" : "Branded") : (he ? "לא-ממותג" : "Non-Branded")}
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+            {(block.engines || []).map((eng: any, i: number) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 8, background: eng.cited ? `${C.success}12` : eng.mentioned ? `${C.primary}10` : `${C.danger}08`, border: `1px solid ${eng.cited ? `${C.success}25` : eng.mentioned ? `${C.primary}20` : `${C.danger}15`}` }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: C.textSecondary }}>{eng.engine}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: eng.cited ? C.success : eng.mentioned ? C.primary : C.danger }}>{eng.cited ? "◆" : eng.mentioned ? "✓" : "✗"}</span>
+                {eng.position != null && <span style={{ fontSize: 10, color: C.textMuted }}>#{eng.position}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    case "methodology_field":
+      return (
+        <div style={{ display: "flex", alignItems: "baseline", gap: 12, padding: "8px 0", borderBottom: `1px solid ${C.borderLight}` }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.textSecondary, minWidth: 140, flexShrink: 0 }}>{block.label}</div>
+          <div style={{ fontSize: 13, color: block.value === "לא זמין" || block.value === "N/A" ? C.textMuted : C.text, fontWeight: block.value === "לא זמין" || block.value === "N/A" ? 400 : 500, fontStyle: block.value === "לא זמין" || block.value === "N/A" ? "italic" : "normal" }}>{block.value}</div>
+        </div>
+      );
+    case "kpi_target":
+      return (
+        <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 20px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{block.metric}</div>
+            <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{block.timeframe}</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: C.textMuted }}>{he ? "נוכחי" : "Current"}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: C.textSecondary }}>{block.current}</div>
+          </div>
+          <div style={{ width: 1, height: 32, background: C.border }} />
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: C.textMuted }}>{he ? "יעד" : "Target"}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: C.primary }}>{block.target}</div>
+          </div>
+          <ConfidenceBadge level={block.confidence as "high" | "medium" | "low"} he={he} />
+        </div>
+      );
     case "divider":
       return <hr style={{ border: "none", borderTop: `1px solid ${C.borderLight}`, margin: "20px 0" }} />;
+    case "page_break":
+      return <div className="page-break" style={{ height: 1 }} />;
+    case "spacer":
+      return <div style={{ height: block.height }} />;
     default:
       return null;
   }
