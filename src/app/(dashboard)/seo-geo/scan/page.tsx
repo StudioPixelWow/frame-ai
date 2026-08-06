@@ -198,6 +198,8 @@ function ScanPageInner() {
   }, []);
   const [elapsed, setElapsed] = useState(0);
   const [showEvidence, setShowEvidence] = useState<any>(null);
+  const [showSharePopup, setShowSharePopup] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   // Platform API availability (fetched from server)
   const [platformApiStatus, setPlatformApiStatus] = useState<Record<string, boolean>>({});
@@ -221,6 +223,13 @@ function ScanPageInner() {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
+
+  // Auto-show share popup when scan completes successfully
+  useEffect(() => {
+    if (phase === 'done' && job?.validation?.passed && savedPlanId && !savedPlanId.startsWith('temp-')) {
+      setShowSharePopup(true);
+    }
+  }, [phase, job?.validation?.passed, savedPlanId]);
 
   // Simulated stage progression while waiting for sync response
   const STAGE_DEFS: Array<{ stage: string; labelHe: string; durationRange: [number, number] }> = [
@@ -1218,6 +1227,141 @@ function ScanPageInner() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Share Report Popup ────────────────────────────────── */}
+      {showSharePopup && (
+        <div
+          onClick={() => setShowSharePopup(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+            display: 'flex', justifyContent: 'center', alignItems: 'center',
+            zIndex: 2000, backdropFilter: 'blur(4px)',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 20, padding: '36px 40px',
+              width: 440, maxWidth: '90vw', direction: 'rtl',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05)',
+              position: 'relative',
+            }}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setShowSharePopup(false)}
+              style={{
+                position: 'absolute', top: 14, left: 14,
+                background: 'none', border: 'none', fontSize: 20,
+                cursor: 'pointer', color: C.textMuted, lineHeight: 1,
+              }}
+            >
+              ✕
+            </button>
+
+            {/* Success icon */}
+            <div style={{
+              width: 64, height: 64, borderRadius: '50%',
+              background: 'linear-gradient(135deg, #00B5FE, #0090cc)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 20px',
+              boxShadow: '0 8px 24px rgba(0,181,254,0.3)',
+            }}>
+              <span style={{ fontSize: 32, color: '#fff' }}>✓</span>
+            </div>
+
+            <h2 style={{
+              fontSize: 22, fontWeight: 800, color: C.text,
+              textAlign: 'center', margin: '0 0 8px',
+            }}>
+              הסריקה הושלמה בהצלחה!
+            </h2>
+            <p style={{
+              fontSize: 14, color: C.textSecondary,
+              textAlign: 'center', margin: '0 0 28px', lineHeight: 1.6,
+            }}>
+              הדוח המקצועי מוכן — שתף אותו עם הלקוח בלחיצה אחת
+            </p>
+
+            {/* Primary CTA — Share report */}
+            <button
+              onClick={() => {
+                const shareUrl = `${window.location.origin}/report/${savedPlanId}`;
+                navigator.clipboard.writeText(shareUrl).then(() => {
+                  setShareCopied(true);
+                  setTimeout(() => setShareCopied(false), 3000);
+                }).catch(() => {
+                  window.prompt('העתק את הקישור:', shareUrl);
+                });
+              }}
+              style={{
+                width: '100%', padding: '16px 24px',
+                background: shareCopied ? C.success : 'linear-gradient(135deg, #00B5FE, #0090cc)',
+                color: '#fff', border: 'none', borderRadius: 14,
+                fontSize: 16, fontWeight: 700, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                transition: 'all 0.3s ease',
+                boxShadow: shareCopied ? '0 4px 16px rgba(34,197,94,0.3)' : '0 4px 16px rgba(0,181,254,0.3)',
+              }}
+            >
+              <span style={{ fontSize: 20 }}>{shareCopied ? '✓' : '🔗'}</span>
+              {shareCopied ? 'הקישור הועתק!' : 'שתף דוח מלא ללקוח'}
+            </button>
+
+            {/* Secondary CTAs */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
+              marginTop: 14,
+            }}>
+              <button
+                onClick={() => {
+                  setShowSharePopup(false);
+                  router.push(`/seo-geo/${savedPlanId}/report`);
+                }}
+                style={{
+                  padding: '12px 16px', background: C.bg,
+                  border: `1px solid ${C.border}`, borderRadius: 12,
+                  cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                  color: C.text, display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', gap: 8,
+                }}
+              >
+                <span>📄</span> צפה בדוח
+              </button>
+              <button
+                onClick={() => {
+                  setShowSharePopup(false);
+                  router.push(`/seo-geo/${savedPlanId}`);
+                }}
+                style={{
+                  padding: '12px 16px', background: C.bg,
+                  border: `1px solid ${C.border}`, borderRadius: 12,
+                  cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                  color: C.text, display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', gap: 8,
+                }}
+              >
+                <span>📋</span> תוכנית 60 יום
+              </button>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowSharePopup(false);
+                router.push(`/seo-geo/${savedPlanId}/results`);
+              }}
+              style={{
+                width: '100%', padding: '10px 16px', marginTop: 10,
+                background: 'transparent', border: 'none',
+                cursor: 'pointer', fontSize: 13, fontWeight: 500,
+                color: C.textSecondary, textAlign: 'center',
+              }}
+            >
+              צפה בתוצאות הסריקה →
+            </button>
           </div>
         </div>
       )}
