@@ -36,6 +36,10 @@ interface Proposal {
   id: string;
   clientId: string;
   clientName: string;
+  clientEmail: string;
+  clientPhone: string;
+  clientContactPerson: string;
+  clientBusinessName: string;
   title: string;
   status: string;
   publicToken: string;
@@ -896,7 +900,7 @@ export default function PublicProposalPage() {
           }}
         >
           <span>
-            <strong>לקוח:</strong> {proposal.clientName}
+            <strong>עבור:</strong> {proposal.clientBusinessName || proposal.clientContactPerson || proposal.clientName}
           </span>
           <span>
             <strong>תאריך:</strong> {formatDate(proposal.createdAt)}

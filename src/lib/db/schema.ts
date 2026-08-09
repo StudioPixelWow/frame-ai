@@ -3837,6 +3837,10 @@ export interface Proposal {
   id: string;
   clientId: string;
   clientName: string;
+  clientEmail: string;
+  clientPhone: string;
+  clientContactPerson: string;
+  clientBusinessName: string;
   title: string;
   templateId: string | null;
   status: ProposalStatus;

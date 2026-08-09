@@ -66,7 +66,9 @@ export default function ProposalsPage() {
       const q = searchQuery.trim().toLowerCase();
       return (
         p.title.toLowerCase().includes(q) ||
-        p.clientName.toLowerCase().includes(q)
+        (p.clientName || '').toLowerCase().includes(q) ||
+        (p.clientBusinessName || '').toLowerCase().includes(q) ||
+        (p.clientContactPerson || '').toLowerCase().includes(q)
       );
     })
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -281,7 +283,7 @@ export default function ProposalsPage() {
 
                     {/* Client */}
                     <td style={{ ...tdStyle, color: 'var(--foreground-muted)' }}>
-                      {p.clientName || '—'}
+                      {p.clientBusinessName || p.clientContactPerson || p.clientName || '—'}
                     </td>
 
                     {/* Status Badge */}

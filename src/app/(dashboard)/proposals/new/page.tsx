@@ -42,6 +42,11 @@ interface ClientInfo {
 interface WizardData {
   clientId: string;
   clientName: string;
+  clientEmail: string;
+  clientPhone: string;
+  clientContactPerson: string;
+  clientBusinessName: string;
+  isNewClient: boolean;
   title: string;
   templateId: string;
   intro: string;
@@ -62,6 +67,11 @@ interface WizardData {
 const DEFAULT_DATA: WizardData = {
   clientId: '',
   clientName: '',
+  clientEmail: '',
+  clientPhone: '',
+  clientContactPerson: '',
+  clientBusinessName: '',
+  isNewClient: false,
   title: '',
   templateId: '',
   intro: '',
@@ -199,6 +209,11 @@ function ProposalWizardInner() {
             setData({
               clientId: existing.clientId ?? '',
               clientName: existing.clientName ?? '',
+              clientEmail: existing.clientEmail ?? '',
+              clientPhone: existing.clientPhone ?? '',
+              clientContactPerson: existing.clientContactPerson ?? '',
+              clientBusinessName: existing.clientBusinessName ?? '',
+              isNewClient: !existing.clientId || existing.clientId === '__new__',
               title: existing.title ?? '',
               templateId: existing.templateId ?? '',
               intro: existing.intro ?? '',
@@ -278,9 +293,16 @@ function ProposalWizardInner() {
   const validateStep = (s: number): boolean => {
     switch (s) {
       case 1:
-        if (!data.clientId) {
-          toast('יש לבחור לקוח', 'warning');
-          return false;
+        if (data.isNewClient) {
+          if (!data.clientName.trim()) {
+            toast('יש להזין שם לקוח', 'warning');
+            return false;
+          }
+        } else {
+          if (!data.clientId) {
+            toast('יש לבחור לקוח', 'warning');
+            return false;
+          }
         }
         if (!data.title.trim()) {
           toast('יש להזין כותרת להצעה', 'warning');
@@ -613,6 +635,22 @@ function ProposalWizardInner() {
       );
     });
 
+    const tabBtnStyle = (active: boolean): React.CSSProperties => ({
+      flex: 1,
+      padding: '0.7rem 1rem',
+      borderRadius: 10,
+      border: 'none',
+      background: active ? 'var(--accent)' : 'transparent',
+      color: active ? '#fff' : 'var(--foreground-muted)',
+      fontSize: '0.9rem',
+      fontWeight: 700,
+      cursor: isReadOnly ? 'default' : 'pointer',
+      fontFamily: 'inherit',
+      transition: 'all 0.2s',
+    });
+
+    const showTitleField = data.isNewClient ? data.clientName.trim() : data.clientId;
+
     return (
       <div>
         <h2
@@ -623,115 +661,227 @@ function ProposalWizardInner() {
             marginBottom: '1rem',
           }}
         >
-          בחירת לקוח
+          פרטי לקוח
         </h2>
 
-        {/* Search */}
-        <input
-          type="text"
-          placeholder="חיפוש לקוח..."
-          value={clientSearch}
-          onChange={(e) => setClientSearch(e.target.value)}
-          style={{ ...inputStyle, marginBottom: '1rem' }}
-        />
-
-        {/* Client cards grid */}
+        {/* Toggle: New / Existing */}
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-            gap: 12,
+            display: 'flex',
+            gap: 4,
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 12,
+            padding: 4,
+            marginBottom: '1.25rem',
           }}
         >
-          {filtered.map((c) => {
-            const isSelected = data.clientId === c.id;
-            return (
-              <div
-                key={c.id}
-                onClick={() => {
-                  if (isReadOnly) return;
-                  const name = c.name || c.company || '';
-                  updateData({
-                    clientId: c.id,
-                    clientName: name,
-                    title:
-                      data.title || `הצעת מחיר — ${name}`,
-                  });
-                }}
-                style={{
-                  ...cardStyle,
-                  cursor: isReadOnly ? 'default' : 'pointer',
-                  borderColor: isSelected ? 'var(--accent)' : 'var(--border)',
-                  boxShadow: isSelected
-                    ? '0 0 0 2px rgba(0,181,254,0.25)'
-                    : 'none',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isSelected)
-                    e.currentTarget.style.borderColor = 'var(--accent)';
-                }}
-                onMouseLeave={(e) => {
-                  if (!isSelected)
-                    e.currentTarget.style.borderColor = 'var(--border)';
-                }}
-              >
-                <div
-                  style={{
-                    fontWeight: 700,
-                    fontSize: '0.95rem',
-                    color: 'var(--foreground)',
-                  }}
-                >
-                  {c.name || 'ללא שם'}
-                </div>
-                {c.company && (
-                  <div
-                    style={{
-                      fontSize: '0.82rem',
-                      color: 'var(--foreground-muted)',
-                      marginTop: 2,
-                    }}
-                  >
-                    {c.company}
-                  </div>
-                )}
-                {isSelected && (
-                  <div
-                    style={{
-                      marginTop: 6,
-                      fontSize: '0.75rem',
-                      color: 'var(--accent)',
-                      fontWeight: 700,
-                    }}
-                  >
-                    ✓ נבחר
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {filtered.length === 0 && (
-            <div
-              style={{
-                gridColumn: '1 / -1',
-                textAlign: 'center',
-                padding: '2rem',
-                color: 'var(--foreground-muted)',
-              }}
-            >
-              לא נמצאו לקוחות
-            </div>
-          )}
+          <button
+            type="button"
+            style={tabBtnStyle(data.isNewClient)}
+            onClick={() => {
+              if (isReadOnly) return;
+              updateData({
+                isNewClient: true,
+                clientId: '__new__',
+              });
+            }}
+          >
+            + לקוח חדש
+          </button>
+          <button
+            type="button"
+            style={tabBtnStyle(!data.isNewClient)}
+            onClick={() => {
+              if (isReadOnly) return;
+              updateData({
+                isNewClient: false,
+                clientId: '',
+                clientName: '',
+                clientEmail: '',
+                clientPhone: '',
+                clientContactPerson: '',
+                clientBusinessName: '',
+              });
+            }}
+          >
+            לקוח קיים
+          </button>
         </div>
 
-        {/* Title field (visible once client is selected) */}
-        {data.clientId && (
+        {/* ── New client form ─────────────────────────── */}
+        {data.isNewClient && (
+          <div style={{ ...cardStyle, marginBottom: '1.25rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div>
+                <label style={labelStyle}>שם איש קשר *</label>
+                <input
+                  type="text"
+                  placeholder="ישראל ישראלי"
+                  value={data.clientContactPerson}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    updateData({
+                      clientContactPerson: v,
+                      clientName: v || data.clientBusinessName,
+                    });
+                  }}
+                  style={inputStyle}
+                  readOnly={isReadOnly}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>שם העסק</label>
+                <input
+                  type="text"
+                  placeholder="שם החברה / העסק"
+                  value={data.clientBusinessName}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    updateData({
+                      clientBusinessName: v,
+                      clientName: v || data.clientContactPerson,
+                      title: data.title || (v ? `הצעת מחיר — ${v}` : ''),
+                    });
+                  }}
+                  style={inputStyle}
+                  readOnly={isReadOnly}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>אימייל</label>
+                <input
+                  type="email"
+                  placeholder="email@example.com"
+                  value={data.clientEmail}
+                  onChange={(e) => updateData({ clientEmail: e.target.value })}
+                  style={{ ...inputStyle, direction: 'ltr', textAlign: 'right' }}
+                  readOnly={isReadOnly}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>טלפון</label>
+                <input
+                  type="tel"
+                  placeholder="050-0000000"
+                  value={data.clientPhone}
+                  onChange={(e) => updateData({ clientPhone: e.target.value })}
+                  style={{ ...inputStyle, direction: 'ltr', textAlign: 'right' }}
+                  readOnly={isReadOnly}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Existing client selection ───────────────── */}
+        {!data.isNewClient && (
+          <>
+            <input
+              type="text"
+              placeholder="חיפוש לקוח..."
+              value={clientSearch}
+              onChange={(e) => setClientSearch(e.target.value)}
+              style={{ ...inputStyle, marginBottom: '1rem' }}
+            />
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: 12,
+              }}
+            >
+              {filtered.map((c) => {
+                const isSelected = data.clientId === c.id;
+                return (
+                  <div
+                    key={c.id}
+                    onClick={() => {
+                      if (isReadOnly) return;
+                      const name = c.name || c.company || '';
+                      updateData({
+                        clientId: c.id,
+                        clientName: name,
+                        clientBusinessName: c.company || '',
+                        clientContactPerson: c.name || '',
+                        title: data.title || `הצעת מחיר — ${name}`,
+                      });
+                    }}
+                    style={{
+                      ...cardStyle,
+                      cursor: isReadOnly ? 'default' : 'pointer',
+                      borderColor: isSelected ? 'var(--accent)' : 'var(--border)',
+                      boxShadow: isSelected
+                        ? '0 0 0 2px rgba(0,181,254,0.25)'
+                        : 'none',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isSelected)
+                        e.currentTarget.style.borderColor = 'var(--accent)';
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isSelected)
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        fontSize: '0.95rem',
+                        color: 'var(--foreground)',
+                      }}
+                    >
+                      {c.name || 'ללא שם'}
+                    </div>
+                    {c.company && (
+                      <div
+                        style={{
+                          fontSize: '0.82rem',
+                          color: 'var(--foreground-muted)',
+                          marginTop: 2,
+                        }}
+                      >
+                        {c.company}
+                      </div>
+                    )}
+                    {isSelected && (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          fontSize: '0.75rem',
+                          color: 'var(--accent)',
+                          fontWeight: 700,
+                        }}
+                      >
+                        ✓ נבחר
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {filtered.length === 0 && (
+                <div
+                  style={{
+                    gridColumn: '1 / -1',
+                    textAlign: 'center',
+                    padding: '2rem',
+                    color: 'var(--foreground-muted)',
+                  }}
+                >
+                  לא נמצאו לקוחות
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Title field */}
+        {showTitleField && (
           <div style={{ marginTop: '1.5rem' }}>
-            <label style={labelStyle}>
-              כותרת ההצעה
-            </label>
+            <label style={labelStyle}>כותרת ההצעה</label>
             <input
               type="text"
               value={data.title}
