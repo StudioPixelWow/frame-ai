@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { proposals } from '@/lib/db/collections';
+import { proposals, leads } from '@/lib/db/collections';
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,6 +24,43 @@ export async function POST(req: NextRequest) {
       publishedAt: now,
       updatedAt: now,
     } as any);
+
+    /* ── Auto-create lead for new clients ───────────────────── */
+    const isNewClient = !existing.clientId || existing.clientId === '__new__';
+    if (isNewClient) {
+      try {
+        const leadName = existing.clientContactPerson || existing.clientBusinessName || existing.clientName || 'ליד מהצעת מחיר';
+        await leads.createAsync({
+          fullName: leadName,
+          name: leadName,
+          company: existing.clientBusinessName || '',
+          email: existing.clientEmail || '',
+          phone: existing.clientPhone || '',
+          source: 'proposal',
+          interestType: 'other',
+          status: 'proposal_sent',
+          proposalSent: true,
+          proposalAmount: existing.price || 0,
+          value: existing.price || 0,
+          followupDone: false,
+          notes: `נוצר אוטומטית מהצעת מחיר: ${existing.title}`,
+          assigneeId: null,
+          followUpAt: null,
+          convertedAt: null,
+          convertedClientId: null,
+          convertedEntityType: null,
+          convertedEntityId: null,
+          campaignId: null,
+          campaignName: '',
+          adAccountId: '',
+          adSetId: null,
+          adId: null,
+        } as any);
+        console.log('[proposals/publish] Auto-created lead for new client:', leadName);
+      } catch (leadErr) {
+        console.error('[proposals/publish] Failed to auto-create lead (non-blocking):', leadErr);
+      }
+    }
 
     return NextResponse.json(updated);
   } catch (err) {

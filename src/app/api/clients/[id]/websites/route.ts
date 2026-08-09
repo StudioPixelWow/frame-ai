@@ -43,10 +43,10 @@ function extractDomain(urlString: string): string {
 
 async function handleGET(
   req: NextRequest,
-  context: { params: Promise<{ clientId: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { clientId } = await context.params;
+    const { id: clientId } = await context.params;
 
     // Check client access
     const accessErr = requireClientAccess(req, clientId);
@@ -74,13 +74,13 @@ async function handleGET(
 
 async function handlePOST(
   req: NextRequest,
-  context: { params: Promise<{ clientId: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   const postErr = requireRole(req, 'admin', 'employee');
   if (postErr) return postErr;
 
   try {
-    const { clientId } = await context.params;
+    const { id: clientId } = await context.params;
 
     const { body, error: parseErr } = await parseBody<{
       url: string;

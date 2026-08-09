@@ -6,9 +6,9 @@ export const maxDuration = 60;
 
 import { buildUnifiedReportHtml, buildUnifiedReportData } from '@/lib/reports/unified';
 
-export async function GET(req: NextRequest, ctx: { params: Promise<{ clientId: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const { clientId } = await ctx.params;
+    const { id: clientId } = await ctx.params;
     if (!clientId) return NextResponse.json({ error: 'clientId נדרש' }, { status: 400 });
     const format = req.nextUrl.searchParams.get('format') || 'html';
     if (format === 'json') {

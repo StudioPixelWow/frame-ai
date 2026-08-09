@@ -22,10 +22,10 @@ function toSnake(s: string): string {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ clientId: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { clientId } = await params;
+    const clientId = (await params).id;
     if (!clientId) {
       return NextResponse.json({ error: 'חסר מזהה לקוח' }, { status: 400 });
     }
@@ -102,10 +102,10 @@ export async function POST(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ clientId: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { clientId } = await params;
+    const clientId = (await params).id;
     if (!clientId) {
       return NextResponse.json({ error: 'חסר מזהה לקוח' }, { status: 400 });
     }

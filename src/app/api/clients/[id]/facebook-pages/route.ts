@@ -51,10 +51,10 @@ async function getSystemToken(): Promise<{ accessToken: string; businessId: stri
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ clientId: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { clientId } = await params;
+    const clientId = (await params).id;
     if (!clientId) {
       return NextResponse.json({ error: 'חסר מזהה לקוח' }, { status: 400 });
     }

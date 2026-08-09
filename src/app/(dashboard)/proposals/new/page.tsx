@@ -181,6 +181,13 @@ function ProposalWizardInner() {
   const [showDiscount, setShowDiscount] = useState(false);
   const savingRef = useRef(false);
 
+  /* Step 2 UX state */
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [showMobilePreview, setShowMobilePreview] = useState(false);
+  const [confirmTemplateChange, setConfirmTemplateChange] = useState(false);
+  const [step2Mode, setStep2Mode] = useState<'select' | 'edit'>('edit');
+
   /* ── Fetch initial data ─────────────────────────────────── */
   useEffect(() => {
     let cancelled = false;
@@ -496,6 +503,44 @@ function ProposalWizardInner() {
     [items[idx], items[target]] = [items[target], items[idx]];
     items.forEach((it, i) => (it.order = i));
     updateSection(sectionId, { items });
+  };
+
+  const moveSection = (sectionId: string, dir: 'up' | 'down') => {
+    const idx = data.sections.findIndex((s) => s.id === sectionId);
+    if (idx < 0) return;
+    const target = dir === 'up' ? idx - 1 : idx + 1;
+    if (target < 0 || target >= data.sections.length) return;
+    const sections = [...data.sections];
+    [sections[idx], sections[target]] = [sections[target], sections[idx]];
+    sections.forEach((s, i) => (s.order = i));
+    updateData({ sections });
+  };
+
+  const toggleSectionCollapse = (sectionId: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) next.delete(sectionId);
+      else next.add(sectionId);
+      return next;
+    });
+  };
+
+  const getSelectedTemplateName = (): string => {
+    const t = templates.find((t) => t.id === data.templateId);
+    return t?.name ?? '';
+  };
+
+  const handleChangeTemplate = () => {
+    if (data.sections.length > 0) {
+      setConfirmTemplateChange(true);
+    } else {
+      setStep2Mode('select');
+    }
+  };
+
+  const confirmChangeTemplate = () => {
+    setConfirmTemplateChange(false);
+    setStep2Mode('select');
   };
 
   /* ── Price calculations ─────────────────────────────────── */
@@ -899,53 +944,359 @@ function ProposalWizardInner() {
      RENDER: STEP 2 — SERVICES
      ═══════════════════════════════════════════════════════ */
 
-  const renderStep2 = () => (
-    <div>
-      <h2
-        style={{
-          fontSize: '1.3rem',
-          fontWeight: 700,
-          color: 'var(--foreground)',
-          marginBottom: '1rem',
-        }}
-      >
-        בחירת תבנית
-        ועריכת שירותים
-      </h2>
+  const renderStep2 = () => {
+    const totalItems = data.sections.reduce((sum, s) => sum + s.items.length, 0);
+    const includedItems = data.sections.reduce(
+      (sum, s) => sum + s.items.filter((it) => it.included).length,
+      0,
+    );
+    const templateName = getSelectedTemplateName();
+    const hasTemplate = !!data.templateId && data.sections.length > 0;
+    const showTemplateSelector = !hasTemplate || step2Mode === 'select';
 
-      {/* Template grid */}
+    /* ── Template selection grid ─────────────────────── */
+    if (showTemplateSelector) {
+      return (
+        <div>
+          <h2
+            style={{
+              fontSize: '1.3rem',
+              fontWeight: 700,
+              color: 'var(--foreground)',
+              marginBottom: 6,
+            }}
+          >
+            בחירת סוג שירות
+          </h2>
+          <p
+            style={{
+              fontSize: '0.88rem',
+              color: 'var(--foreground-muted)',
+              marginBottom: '1.5rem',
+              lineHeight: 1.6,
+            }}
+          >
+            בחר את סוג השירות שברצונך להציע ללקוח. המערכת תכין עבורך הצעה מלאה על בסיס התבנית.
+          </p>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+              gap: 12,
+            }}
+          >
+            {templates.map((t) => {
+              const isCurrent = data.templateId === t.id;
+              return (
+                <div
+                  key={t.id}
+                  onClick={() => {
+                    if (isReadOnly) return;
+                    selectTemplate(t);
+                    setStep2Mode('edit');
+                    setCollapsedSections(new Set());
+                  }}
+                  style={{
+                    ...cardStyle,
+                    cursor: isReadOnly ? 'default' : 'pointer',
+                    borderColor: isCurrent ? 'var(--accent)' : 'var(--border)',
+                    boxShadow: isCurrent
+                      ? '0 0 0 2px rgba(0,181,254,0.25)'
+                      : 'none',
+                    transition: 'all 0.2s',
+                    padding: '1rem 1.15rem',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isCurrent)
+                      e.currentTarget.style.borderColor = 'var(--accent)';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isCurrent)
+                      e.currentTarget.style.borderColor = 'var(--border)';
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginBottom: 6,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: '0.72rem',
+                        color: 'var(--foreground-muted)',
+                        fontWeight: 600,
+                      }}
+                    >
+                      #{t.code}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                        padding: '2px 9px',
+                        borderRadius: 20,
+                        background:
+                          t.category === 'retainer'
+                            ? 'rgba(0,181,254,0.12)'
+                            : 'rgba(240,255,2,0.15)',
+                        color:
+                          t.category === 'retainer'
+                            ? 'var(--accent)'
+                            : '#b8a900',
+                        border: `1px solid ${
+                          t.category === 'retainer'
+                            ? 'rgba(0,181,254,0.3)'
+                            : 'rgba(240,255,2,0.4)'
+                        }`,
+                      }}
+                    >
+                      {t.category === 'retainer' ? 'ריטיינר' : 'פרויקט'}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      fontWeight: 700,
+                      fontSize: '0.92rem',
+                      color: 'var(--foreground)',
+                    }}
+                  >
+                    {t.name}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '0.75rem',
+                      color: 'var(--foreground-muted)',
+                      marginTop: 4,
+                    }}
+                  >
+                    {t.sections.length} קבוצות &middot;{' '}
+                    {t.sections.reduce((s, sec) => s + sec.items.length, 0)}{' '}
+                    שירותים
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {step2Mode === 'select' && hasTemplate && (
+            <button
+              onClick={() => setStep2Mode('edit')}
+              style={{
+                ...ghostBtnStyle,
+                marginTop: '1.25rem',
+                fontSize: '0.85rem',
+              }}
+            >
+              ← חזור לעריכת ההצעה
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    /* ── Service editor (main view) ──────────────────── */
+    const renderMiniPreview = () => (
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-          gap: 12,
-          marginBottom: '2rem',
+          background: '#fff',
+          borderRadius: 14,
+          padding: '1.5rem 1.25rem',
+          color: '#1a1a2e',
+          border: '1px solid #e5e7eb',
+          fontSize: '0.82rem',
+          lineHeight: 1.7,
         }}
       >
-        {templates.map((t) => {
-          const isSelected = data.templateId === t.id;
-          return (
+        <div
+          style={{
+            textAlign: 'center',
+            borderBottom: '2px solid #00B5FE',
+            paddingBottom: '0.75rem',
+            marginBottom: '1rem',
+          }}
+        >
+          <div style={{ fontSize: '1rem', fontWeight: 800, color: '#1a1a2e' }}>
+            Studio Pixel
+          </div>
+          <div style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: 2 }}>
+            פתרונות שיווק דיגיטלי
+          </div>
+        </div>
+        {data.clientName && (
+          <div
+            style={{
+              textAlign: 'center',
+              fontSize: '0.78rem',
+              color: '#6b7280',
+              marginBottom: '1rem',
+            }}
+          >
+            עבור: {data.clientName}
+          </div>
+        )}
+        <div
+          style={{
+            textAlign: 'center',
+            fontSize: '0.78rem',
+            fontWeight: 700,
+            color: '#00B5FE',
+            marginBottom: '1rem',
+            padding: '0.4rem',
+            background: '#f0f9ff',
+            borderRadius: 8,
+          }}
+        >
+          {templateName}
+        </div>
+        {data.sections
+          .filter((s) => s.items.some((it) => it.included))
+          .map((section) => (
+            <div key={section.id} style={{ marginBottom: '0.75rem' }}>
+              <div
+                style={{
+                  fontWeight: 700,
+                  fontSize: '0.78rem',
+                  color: '#1a1a2e',
+                  borderRight: '3px solid #00B5FE',
+                  paddingRight: 8,
+                  marginBottom: 4,
+                }}
+              >
+                {section.title}
+              </div>
+              {section.items
+                .filter((it) => it.included)
+                .map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      fontSize: '0.72rem',
+                      color: '#374151',
+                      paddingRight: 14,
+                      position: 'relative',
+                    }}
+                  >
+                    <span
+                      style={{
+                        position: 'absolute',
+                        right: 4,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        width: 4,
+                        height: 4,
+                        borderRadius: '50%',
+                        background: '#00B5FE',
+                      }}
+                    />
+                    {item.text.length > 50
+                      ? item.text.slice(0, 50) + '...'
+                      : item.text}
+                  </div>
+                ))}
+            </div>
+          ))}
+      </div>
+    );
+
+    return (
+      <div>
+        {/* ── Confirm template change dialog ─────────── */}
+        {confirmTemplateChange && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+            }}
+            onClick={() => setConfirmTemplateChange(false)}
+          >
             <div
-              key={t.id}
-              onClick={() => {
-                if (!isReadOnly) selectTemplate(t);
-              }}
+              onClick={(e) => e.stopPropagation()}
               style={{
-                ...cardStyle,
-                cursor: isReadOnly ? 'default' : 'pointer',
-                borderColor: isSelected ? 'var(--accent)' : 'var(--border)',
-                boxShadow: isSelected
-                  ? '0 0 0 2px rgba(0,181,254,0.25)'
-                  : 'none',
-                transition: 'all 0.2s',
+                background: 'var(--surface-raised)',
+                borderRadius: 16,
+                padding: '2rem',
+                maxWidth: 420,
+                width: '90%',
+                border: '1px solid var(--border)',
+                textAlign: 'center',
               }}
-              onMouseEnter={(e) => {
-                if (!isSelected)
-                  e.currentTarget.style.borderColor = 'var(--accent)';
-              }}
-              onMouseLeave={(e) => {
-                if (!isSelected)
-                  e.currentTarget.style.borderColor = 'var(--border)';
+            >
+              <div style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>⚠️</div>
+              <h3
+                style={{
+                  fontSize: '1.1rem',
+                  fontWeight: 700,
+                  color: 'var(--foreground)',
+                  marginBottom: 8,
+                }}
+              >
+                החלפת תבנית
+              </h3>
+              <p
+                style={{
+                  fontSize: '0.88rem',
+                  color: 'var(--foreground-muted)',
+                  marginBottom: '1.5rem',
+                  lineHeight: 1.6,
+                }}
+              >
+                החלפת התבנית תחליף את רשימת השירותים הנוכחית. כל השינויים שביצעת
+                יאבדו. להמשיך?
+              </p>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                <button
+                  onClick={() => setConfirmTemplateChange(false)}
+                  style={ghostBtnStyle}
+                >
+                  ביטול
+                </button>
+                <button
+                  onClick={confirmChangeTemplate}
+                  style={{
+                    ...primaryBtnStyle,
+                    background: '#ef4444',
+                  }}
+                >
+                  החלף תבנית
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Mobile preview drawer ──────────────────── */}
+        {showMobilePreview && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.5)',
+              zIndex: 1000,
+              display: 'flex',
+              alignItems: 'flex-end',
+              justifyContent: 'center',
+            }}
+            onClick={() => setShowMobilePreview(false)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'var(--surface-raised)',
+                borderRadius: '20px 20px 0 0',
+                padding: '1.5rem',
+                width: '100%',
+                maxWidth: 500,
+                maxHeight: '80vh',
+                overflowY: 'auto',
               }}
             >
               <div
@@ -953,265 +1304,689 @@ function ProposalWizardInner() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
+                  marginBottom: '1rem',
+                }}
+              >
+                <h3
+                  style={{
+                    fontSize: '1rem',
+                    fontWeight: 700,
+                    color: 'var(--foreground)',
+                    margin: 0,
+                  }}
+                >
+                  תצוגה מקדימה
+                </h3>
+                <button
+                  onClick={() => setShowMobilePreview(false)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '1.2rem',
+                    cursor: 'pointer',
+                    color: 'var(--foreground-muted)',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+              {renderMiniPreview()}
+            </div>
+          </div>
+        )}
+
+        {/* ── Main layout: Editor + Preview ──────────── */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) 280px',
+            gap: '1.5rem',
+            alignItems: 'start',
+          }}
+          className="step2-layout"
+        >
+          {/* ── Editor column ─────────────────────────── */}
+          <div>
+            {/* Header */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <h2
+                style={{
+                  fontSize: '1.35rem',
+                  fontWeight: 800,
+                  color: 'var(--foreground)',
                   marginBottom: 6,
                 }}
               >
+                ההצעה שלך מוכנה
+              </h2>
+              <p
+                style={{
+                  fontSize: '0.88rem',
+                  color: 'var(--foreground-muted)',
+                  lineHeight: 1.6,
+                  marginBottom: 10,
+                }}
+              >
+                בנינו עבורך את תכולת השירות על בסיס תבנית &ldquo;{templateName}
+                &rdquo;. אפשר לערוך, להסיר או להוסיף כל סעיף לפני שממשיכים.
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <span
                   style={{
-                    fontSize: '0.75rem',
-                    color: 'var(--foreground-muted)',
-                    fontWeight: 600,
-                  }}
-                >
-                  #{t.code}
-                </span>
-                <span
-                  style={{
-                    fontSize: '0.7rem',
+                    fontSize: '0.72rem',
                     fontWeight: 700,
-                    padding: '3px 10px',
+                    padding: '4px 12px',
                     borderRadius: 20,
-                    background:
-                      t.category === 'retainer'
-                        ? 'rgba(0,181,254,0.12)'
-                        : 'rgba(240,255,2,0.15)',
-                    color:
-                      t.category === 'retainer' ? 'var(--accent)' : '#b8a900',
-                    border: `1px solid ${
-                      t.category === 'retainer'
-                        ? 'rgba(0,181,254,0.3)'
-                        : 'rgba(240,255,2,0.4)'
-                    }`,
+                    background: 'rgba(0,181,254,0.1)',
+                    color: 'var(--accent)',
+                    border: '1px solid rgba(0,181,254,0.25)',
                   }}
                 >
-                  {t.category === 'retainer'
-                    ? 'ריטיינר'
-                    : 'פרויקט'}
+                  מבוסס על: {templateName}
                 </span>
+                {!isReadOnly && (
+                  <button
+                    onClick={handleChangeTemplate}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      fontSize: '0.78rem',
+                      color: 'var(--accent)',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      fontWeight: 600,
+                      textDecoration: 'underline',
+                      padding: 0,
+                    }}
+                  >
+                    החלף תבנית
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Summary stats */}
+            <div
+              style={{
+                display: 'flex',
+                gap: 12,
+                marginBottom: '1.25rem',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div
+                style={{
+                  background: 'var(--surface-raised)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 10,
+                  padding: '0.6rem 1rem',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  color: 'var(--foreground)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <span style={{ color: 'var(--accent)', fontSize: '1rem' }}>⬡</span>
+                {data.sections.length} קבוצות שירות
               </div>
               <div
                 style={{
-                  fontWeight: 700,
-                  fontSize: '0.92rem',
+                  background: 'var(--surface-raised)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 10,
+                  padding: '0.6rem 1rem',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
                   color: 'var(--foreground)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
                 }}
               >
-                {t.name}
+                <span style={{ color: '#22c55e', fontSize: '0.9rem' }}>✓</span>
+                {includedItems === totalItems
+                  ? `${totalItems} שירותים נבחרו`
+                  : `${includedItems} מתוך ${totalItems} שירותים כלולים`}
               </div>
-              {isSelected && (
-                <div
-                  style={{
-                    marginTop: 8,
-                    fontSize: '0.75rem',
-                    color: 'var(--accent)',
-                    fontWeight: 700,
-                  }}
-                >
-                  ✓ נבחרה
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Intro text */}
-      {data.templateId && (
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={labelStyle}>
-            טקסט פתיחה
-          </label>
-          <textarea
-            value={data.intro}
-            onChange={(e) => updateData({ intro: e.target.value })}
-            rows={4}
-            style={{ ...inputStyle, resize: 'vertical' }}
-            readOnly={isReadOnly}
-          />
-        </div>
-      )}
-
-      {/* Editable sections */}
-      {data.sections.map((section, si) => (
-        <div key={section.id} style={{ ...cardStyle, marginBottom: 16 }}>
-          {/* Section header */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              marginBottom: 12,
-            }}
-          >
-            <input
-              type="text"
-              value={section.title}
-              onChange={(e) =>
-                updateSection(section.id, { title: e.target.value })
-              }
-              style={{
-                ...inputStyle,
-                fontWeight: 700,
-                fontSize: '1rem',
-                flex: 1,
-              }}
-              readOnly={isReadOnly}
-            />
-            {!isReadOnly && (
+              {/* Mobile preview button */}
               <button
-                onClick={() => deleteSection(section.id)}
+                onClick={() => setShowMobilePreview(true)}
                 style={{
                   ...ghostBtnStyle,
-                  color: '#ef4444',
-                  borderColor: '#fecaca',
-                  padding: '0.4rem 0.8rem',
-                  fontSize: '0.8rem',
+                  padding: '0.5rem 1rem',
+                  fontSize: '0.82rem',
+                  display: 'none',
+                }}
+                className="step2-mobile-preview-btn"
+              >
+                תצוגה מקדימה
+              </button>
+            </div>
+
+            {/* Intro text */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={labelStyle}>טקסט פתיחה</label>
+              <textarea
+                value={data.intro}
+                onChange={(e) => updateData({ intro: e.target.value })}
+                rows={3}
+                style={{ ...inputStyle, resize: 'vertical', fontSize: '0.85rem' }}
+                readOnly={isReadOnly}
+              />
+            </div>
+
+            {/* ── Service group cards ─────────────────── */}
+            {data.sections.map((section, si) => {
+              const isCollapsed = collapsedSections.has(section.id);
+              const sectionIncluded = section.items.filter((it) => it.included).length;
+              const sectionTotal = section.items.length;
+
+              return (
+                <div
+                  key={section.id}
+                  style={{
+                    background: 'var(--surface-raised)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 14,
+                    marginBottom: 12,
+                    overflow: 'hidden',
+                    transition: 'box-shadow 0.2s',
+                  }}
+                >
+                  {/* Section header */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '0.85rem 1rem',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                      borderBottom: isCollapsed
+                        ? 'none'
+                        : '1px solid var(--border)',
+                    }}
+                    onClick={() => toggleSectionCollapse(section.id)}
+                  >
+                    {/* Drag handle + collapse arrow */}
+                    <span
+                      style={{
+                        fontSize: '0.7rem',
+                        color: 'var(--foreground-muted)',
+                        transition: 'transform 0.2s',
+                        transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                        display: 'inline-block',
+                        flexShrink: 0,
+                      }}
+                    >
+                      ▼
+                    </span>
+
+                    {/* Section title */}
+                    <span
+                      style={{
+                        flex: 1,
+                        fontWeight: 700,
+                        fontSize: '0.95rem',
+                        color: 'var(--foreground)',
+                      }}
+                    >
+                      {section.title}
+                    </span>
+
+                    {/* Item count badge */}
+                    <span
+                      style={{
+                        fontSize: '0.72rem',
+                        color: 'var(--foreground-muted)',
+                        fontWeight: 600,
+                        padding: '2px 8px',
+                        borderRadius: 12,
+                        background: 'var(--surface)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {sectionIncluded === sectionTotal
+                        ? `${sectionTotal} שירותים`
+                        : `${sectionIncluded}/${sectionTotal}`}
+                    </span>
+
+                    {/* Section actions */}
+                    {!isReadOnly && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: 2,
+                          flexShrink: 0,
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          onClick={() => moveSection(section.id, 'up')}
+                          disabled={si === 0}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            fontSize: '0.65rem',
+                            cursor: si === 0 ? 'default' : 'pointer',
+                            opacity: si === 0 ? 0.25 : 0.5,
+                            padding: '4px 5px',
+                            color: 'var(--foreground-muted)',
+                            fontFamily: 'inherit',
+                          }}
+                          title="הזז למעלה"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          onClick={() => moveSection(section.id, 'down')}
+                          disabled={si === data.sections.length - 1}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            fontSize: '0.65rem',
+                            cursor:
+                              si === data.sections.length - 1
+                                ? 'default'
+                                : 'pointer',
+                            opacity:
+                              si === data.sections.length - 1 ? 0.25 : 0.5,
+                            padding: '4px 5px',
+                            color: 'var(--foreground-muted)',
+                            fontFamily: 'inherit',
+                          }}
+                          title="הזז למטה"
+                        >
+                          ▼
+                        </button>
+                        <button
+                          onClick={() => deleteSection(section.id)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            fontSize: '0.72rem',
+                            cursor: 'pointer',
+                            opacity: 0.4,
+                            padding: '4px 6px',
+                            color: '#ef4444',
+                            fontFamily: 'inherit',
+                          }}
+                          title="מחק קבוצה"
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.opacity = '1';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.opacity = '0.4';
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Section title inline edit (below header) */}
+                  {!isCollapsed && !isReadOnly && (
+                    <div style={{ padding: '0.5rem 1rem 0' }}>
+                      <input
+                        type="text"
+                        value={section.title}
+                        onChange={(e) =>
+                          updateSection(section.id, { title: e.target.value })
+                        }
+                        style={{
+                          ...inputStyle,
+                          fontSize: '0.82rem',
+                          padding: '0.4rem 0.7rem',
+                          background: 'var(--surface)',
+                          borderColor: 'transparent',
+                        }}
+                        onFocus={(e) => {
+                          e.currentTarget.style.borderColor = 'var(--accent)';
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.borderColor = 'transparent';
+                        }}
+                        placeholder="שם הקבוצה..."
+                      />
+                    </div>
+                  )}
+
+                  {/* Items list */}
+                  {!isCollapsed && (
+                    <div style={{ padding: '0.5rem 0.75rem 0.75rem' }}>
+                      {section.items.map((item, ii) => {
+                        const isEditing = editingItemId === item.id;
+                        return (
+                          <div
+                            key={item.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: 8,
+                              padding: '0.45rem 0.4rem',
+                              borderRadius: 8,
+                              marginBottom: 2,
+                              opacity: item.included ? 1 : 0.45,
+                              transition: 'all 0.15s',
+                              background: isEditing
+                                ? 'var(--surface)'
+                                : 'transparent',
+                            }}
+                          >
+                            {/* Toggle checkbox */}
+                            <div
+                              onClick={() => {
+                                if (isReadOnly) return;
+                                updateItem(section.id, item.id, {
+                                  included: !item.included,
+                                });
+                              }}
+                              style={{
+                                width: 20,
+                                height: 20,
+                                borderRadius: 6,
+                                border: item.included
+                                  ? '2px solid var(--accent)'
+                                  : '2px solid var(--border)',
+                                background: item.included
+                                  ? 'var(--accent)'
+                                  : 'transparent',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: isReadOnly ? 'default' : 'pointer',
+                                flexShrink: 0,
+                                marginTop: 2,
+                                transition: 'all 0.15s',
+                              }}
+                            >
+                              {item.included && (
+                                <span
+                                  style={{
+                                    color: '#fff',
+                                    fontSize: '0.65rem',
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  ✓
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Service text */}
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={item.text}
+                                onChange={(e) =>
+                                  updateItem(section.id, item.id, {
+                                    text: e.target.value,
+                                  })
+                                }
+                                onBlur={() => setEditingItemId(null)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === 'Escape')
+                                    setEditingItemId(null);
+                                }}
+                                autoFocus
+                                style={{
+                                  ...inputStyle,
+                                  flex: 1,
+                                  fontSize: '0.85rem',
+                                  padding: '0.3rem 0.5rem',
+                                  textDecoration: item.included
+                                    ? 'none'
+                                    : 'line-through',
+                                }}
+                              />
+                            ) : (
+                              <span
+                                onClick={() => {
+                                  if (!isReadOnly) setEditingItemId(item.id);
+                                }}
+                                style={{
+                                  flex: 1,
+                                  fontSize: '0.85rem',
+                                  color: item.included
+                                    ? 'var(--foreground)'
+                                    : 'var(--foreground-muted)',
+                                  lineHeight: 1.5,
+                                  cursor: isReadOnly ? 'default' : 'text',
+                                  textDecoration: item.included
+                                    ? 'none'
+                                    : 'line-through',
+                                  paddingTop: 1,
+                                }}
+                              >
+                                {item.text || (
+                                  <span style={{ color: 'var(--foreground-muted)', fontStyle: 'italic' }}>
+                                    לחץ לעריכה...
+                                  </span>
+                                )}
+                              </span>
+                            )}
+
+                            {/* Item actions */}
+                            {!isReadOnly && !isEditing && (
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  gap: 1,
+                                  opacity: 0.3,
+                                  flexShrink: 0,
+                                  marginTop: 1,
+                                  transition: 'opacity 0.15s',
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.opacity = '0.8';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.opacity = '0.3';
+                                }}
+                              >
+                                <button
+                                  onClick={() => moveItem(section.id, item.id, 'up')}
+                                  disabled={ii === 0}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    fontSize: '0.6rem',
+                                    cursor: ii === 0 ? 'default' : 'pointer',
+                                    padding: '3px 4px',
+                                    color: 'var(--foreground-muted)',
+                                    opacity: ii === 0 ? 0.3 : 1,
+                                    fontFamily: 'inherit',
+                                  }}
+                                  title="העלה"
+                                >
+                                  ▲
+                                </button>
+                                <button
+                                  onClick={() => moveItem(section.id, item.id, 'down')}
+                                  disabled={ii === section.items.length - 1}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    fontSize: '0.6rem',
+                                    cursor:
+                                      ii === section.items.length - 1
+                                        ? 'default'
+                                        : 'pointer',
+                                    padding: '3px 4px',
+                                    color: 'var(--foreground-muted)',
+                                    opacity:
+                                      ii === section.items.length - 1 ? 0.3 : 1,
+                                    fontFamily: 'inherit',
+                                  }}
+                                  title="הורד"
+                                >
+                                  ▼
+                                </button>
+                                <button
+                                  onClick={() => setEditingItemId(item.id)}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    fontSize: '0.7rem',
+                                    cursor: 'pointer',
+                                    padding: '3px 4px',
+                                    color: 'var(--foreground-muted)',
+                                    fontFamily: 'inherit',
+                                  }}
+                                  title="ערוך"
+                                >
+                                  ✎
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    deleteItem(section.id, item.id)
+                                  }
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    fontSize: '0.65rem',
+                                    cursor: 'pointer',
+                                    padding: '3px 4px',
+                                    color: '#ef4444',
+                                    fontFamily: 'inherit',
+                                  }}
+                                  title="מחק"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Add item */}
+                      {!isReadOnly && (
+                        <button
+                          onClick={() => addItem(section.id)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            fontSize: '0.8rem',
+                            color: 'var(--accent)',
+                            cursor: 'pointer',
+                            fontFamily: 'inherit',
+                            fontWeight: 600,
+                            padding: '0.4rem 0.4rem',
+                            marginTop: 4,
+                          }}
+                        >
+                          + הוסף שירות
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Add section button — subtle */}
+            {!isReadOnly && (
+              <button
+                onClick={addSection}
+                style={{
+                  background: 'none',
+                  border: '1px dashed var(--border)',
+                  borderRadius: 10,
+                  padding: '0.65rem 1.2rem',
+                  fontSize: '0.82rem',
+                  color: 'var(--foreground-muted)',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  fontWeight: 600,
+                  width: '100%',
+                  textAlign: 'center',
+                  transition: 'all 0.15s',
+                  marginTop: 4,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--accent)';
+                  e.currentTarget.style.color = 'var(--accent)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                  e.currentTarget.style.color = 'var(--foreground-muted)';
                 }}
               >
-                מחיקה
+                + הוסף קבוצת שירות
               </button>
+            )}
+
+            {/* Error state — template failed to load */}
+            {data.sections.length === 0 && (
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: '3rem 2rem',
+                  color: 'var(--foreground-muted)',
+                }}
+              >
+                <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⚠️</div>
+                <p style={{ fontSize: '0.92rem', fontWeight: 600, marginBottom: 8 }}>
+                  לא הצלחנו לטעון את תבנית השירות
+                </p>
+                <p style={{ fontSize: '0.82rem', marginBottom: '1rem' }}>
+                  אפשר לנסות שוב או לבחור תבנית אחרת.
+                </p>
+                <button
+                  onClick={handleChangeTemplate}
+                  style={primaryBtnStyle}
+                >
+                  בחר תבנית
+                </button>
+              </div>
             )}
           </div>
 
-          {/* Items */}
-          {section.items.map((item, ii) => (
+          {/* ── Preview column (desktop only) ─────────── */}
+          <div
+            style={{
+              position: 'sticky',
+              top: '1rem',
+            }}
+            className="step2-preview-column"
+          >
             <div
-              key={item.id}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '0.45rem 0.6rem',
-                borderRadius: 8,
-                background: item.included ? 'transparent' : 'var(--surface)',
-                marginBottom: 4,
-                opacity: item.included ? 1 : 0.5,
-                transition: 'opacity 0.2s',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                color: 'var(--foreground-muted)',
+                marginBottom: 8,
+                textAlign: 'center',
               }}
             >
-              <input
-                type="checkbox"
-                checked={item.included}
-                onChange={(e) =>
-                  updateItem(section.id, item.id, {
-                    included: e.target.checked,
-                  })
-                }
-                disabled={isReadOnly}
-                style={{
-                  accentColor: 'var(--accent)',
-                  width: 18,
-                  height: 18,
-                  cursor: isReadOnly ? 'default' : 'pointer',
-                  flexShrink: 0,
-                }}
-              />
-              <input
-                type="text"
-                value={item.text}
-                onChange={(e) =>
-                  updateItem(section.id, item.id, { text: e.target.value })
-                }
-                placeholder="הזינו טקסט..."
-                style={{
-                  ...inputStyle,
-                  flex: 1,
-                  border: 'none',
-                  background: 'transparent',
-                  padding: '0.35rem 0.5rem',
-                  textDecoration: item.included ? 'none' : 'line-through',
-                }}
-                readOnly={isReadOnly}
-              />
-              {!isReadOnly && (
-                <>
-                  <button
-                    onClick={() => moveItem(section.id, item.id, 'up')}
-                    disabled={ii === 0}
-                    style={{
-                      ...ghostBtnStyle,
-                      padding: '0.2rem 0.45rem',
-                      fontSize: '0.7rem',
-                      opacity: ii === 0 ? 0.3 : 1,
-                      cursor: ii === 0 ? 'default' : 'pointer',
-                    }}
-                    title="העלה"
-                  >
-                    ▲
-                  </button>
-                  <button
-                    onClick={() => moveItem(section.id, item.id, 'down')}
-                    disabled={ii === section.items.length - 1}
-                    style={{
-                      ...ghostBtnStyle,
-                      padding: '0.2rem 0.45rem',
-                      fontSize: '0.7rem',
-                      opacity: ii === section.items.length - 1 ? 0.3 : 1,
-                      cursor:
-                        ii === section.items.length - 1
-                          ? 'default'
-                          : 'pointer',
-                    }}
-                    title="הורדה"
-                  >
-                    ▼
-                  </button>
-                  <button
-                    onClick={() => deleteItem(section.id, item.id)}
-                    style={{
-                      ...ghostBtnStyle,
-                      padding: '0.2rem 0.45rem',
-                      fontSize: '0.7rem',
-                      color: '#ef4444',
-                      borderColor: '#fecaca',
-                    }}
-                    title="מחיקה"
-                  >
-                    ✕
-                  </button>
-                </>
-              )}
+              תצוגה מקדימה
             </div>
-          ))}
-
-          {/* Add item button */}
-          {!isReadOnly && (
-            <button
-              onClick={() => addItem(section.id)}
-              style={{
-                ...ghostBtnStyle,
-                marginTop: 8,
-                fontSize: '0.82rem',
-                color: 'var(--accent)',
-                borderColor: 'var(--accent)',
-                padding: '0.4rem 1rem',
-              }}
-            >
-              + הוסף פריט
-            </button>
-          )}
+            {renderMiniPreview()}
+          </div>
         </div>
-      ))}
 
-      {/* Add section button */}
-      {!isReadOnly && (
-        <button
-          onClick={addSection}
-          style={{
-            ...primaryBtnStyle,
-            width: '100%',
-            padding: '0.75rem',
-            background: 'transparent',
-            color: 'var(--accent)',
-            border: '2px dashed var(--accent)',
-          }}
-        >
-          + הוסף קבוצת
-          שירות
-        </button>
-      )}
-    </div>
-  );
+        {/* ── Responsive CSS ─────────────────────────── */}
+        <style>{`
+          @media (max-width: 860px) {
+            .step2-layout {
+              grid-template-columns: 1fr !important;
+            }
+            .step2-preview-column {
+              display: none !important;
+            }
+            .step2-mobile-preview-btn {
+              display: flex !important;
+            }
+          }
+        `}</style>
+      </div>
+    );
+  };
 
   /* ═══════════════════════════════════════════════════════
      RENDER: STEP 3 — PRICE & TERMS

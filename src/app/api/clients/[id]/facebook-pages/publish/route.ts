@@ -24,9 +24,9 @@ function genId() {
   return `sp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ clientId: string }> }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { clientId } = await params;
+    const clientId = (await params).id;
     if (!clientId) return NextResponse.json({ error: 'חסר מזהה לקוח' }, { status: 400 });
 
     const body = await request.json();
@@ -92,9 +92,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 }
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ clientId: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { clientId } = await params;
+    const clientId = (await params).id;
     const sb = getSupabase();
     const { data } = await sb
       .from('app_social_posts')

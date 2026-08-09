@@ -6,9 +6,9 @@ import { ensureSeeded } from '@/lib/db/seed';
 import { listReportsForClient, getConnectionForClient } from '@/lib/google-ads/db';
 import { googleAdsConfigured } from '@/lib/google-ads/provider';
 
-export async function GET(_req: NextRequest, context: { params: Promise<{ clientId: string }> }) {
+export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   ensureSeeded();
-  const { clientId } = await context.params;
+  const { id: clientId } = await context.params;
   const [reports, conn] = await Promise.all([
     listReportsForClient(clientId),
     getConnectionForClient(clientId),

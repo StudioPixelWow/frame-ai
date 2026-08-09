@@ -23,10 +23,10 @@ import {
 
 async function handleGET(
   req: NextRequest,
-  context: { params: Promise<{ clientId: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { clientId } = await context.params;
+    const { id: clientId } = await context.params;
 
     // Check client access
     const accessErr = requireClientAccess(req, clientId);
