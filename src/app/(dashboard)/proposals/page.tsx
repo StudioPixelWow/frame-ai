@@ -2,150 +2,375 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState } from 'react';
-import { useClients } from '@/lib/api/use-entity';
-import { PageHeader } from '@/components/ui/saas-kit';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { useToast } from '@/components/ui/toast';
+import { PageHeader, KpiRow, KpiCard, EmptyState, LoadingState } from '@/components/ui/saas-kit';
+import type { Proposal, ProposalStatus } from '@/lib/db/schema';
 
-const C = {
-  primary: '#00B5FE', primaryDark: '#0095D0', bg: '#F7F9FC', card: '#FFFFFF',
-  text: '#1A1A2E', sub: '#5A5A7A', muted: '#9A9AB0', border: '#E8EAF0', success: '#10B981',
+/* ── Status config ────────────────────────────────────────────── */
+const STATUS_MAP: Record<ProposalStatus, { label: string; color: string }> = {
+  draft:     { label: 'טיוטה',   color: 'var(--foreground-muted)' },
+  published: { label: 'פורסמה',  color: 'var(--accent)' },
+  viewed:    { label: 'נצפתה',   color: '#f59e0b' },
+  approved:  { label: 'אושרה',   color: '#22c55e' },
+  rejected:  { label: 'נדחתה',   color: '#ef4444' },
 };
-const SERVICES = ['ניהול סושיאל', 'Google Ads', 'Meta Ads', 'SEO/GEO', 'בניית אתר', 'תוכן ווידאו (UGC)', 'מיתוג ועיצוב', 'אסטרטגיה שיווקית', 'ניוזלטר/דיוור', 'ניהול קהילה'];
-const TONES = ['מקצועי', 'חם', 'חד'] as const;
 
+const FILTER_OPTIONS: { value: ProposalStatus | 'all'; label: string }[] = [
+  { value: 'all',       label: 'הכל' },
+  { value: 'draft',     label: 'טיוטה' },
+  { value: 'published', label: 'פורסמה' },
+  { value: 'viewed',    label: 'נצפתה' },
+  { value: 'approved',  label: 'אושרה' },
+  { value: 'rejected',  label: 'נדחתה' },
+];
+
+/* ── Component ────────────────────────────────────────────────── */
 export default function ProposalsPage() {
-  const { data: clients } = useClients();
-  const [clientId, setClientId] = useState('');
-  const [clientName, setClientName] = useState('');
-  const [businessField, setBusinessField] = useState('');
-  const [services, setServices] = useState<string[]>([]);
-  const [budget, setBudget] = useState('');
-  const [goals, setGoals] = useState('');
-  const [tone, setTone] = useState<typeof TONES[number]>('מקצועי');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-  const [res, setRes] = useState<any>(null);
+  const router = useRouter();
+  const toast = useToast();
 
-  const toggle = (s: string) => setServices((p) => p.includes(s) ? p.filter((x) => x !== s) : [...p, s]);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<ProposalStatus | 'all'>('all');
+  const [hoveredRow, setHoveredRow] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const pickClient = (id: string) => {
-    setClientId(id);
-    const c: any = (clients || []).find((x: any) => x.id === id);
-    if (c) { setClientName(c.name || ''); setBusinessField((c as any).clientType || businessField); }
-  };
-
-  const generate = async () => {
-    if (!clientName.trim()) { setErr('נדרש שם לקוח'); return; }
-    setBusy(true); setErr(''); setRes(null);
+  const fetchProposals = useCallback(async () => {
     try {
-      const r = await fetch('/api/proposals/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, clientName, businessField, services, budget, goals, tone }) });
-      const d = await r.json();
-      if (!r.ok || !d.success) throw new Error(d.error || 'שגיאה');
-      setRes(d);
-    } catch (e) { setErr(e instanceof Error ? e.message : 'שגיאה'); }
-    finally { setBusy(false); }
+      const r = await fetch('/api/data/proposals');
+      const data = await r.json();
+      setProposals(data ?? []);
+    } catch {
+      setProposals([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchProposals(); }, [fetchProposals]);
+
+  /* ── Derived data ───────────────────────────────────────────── */
+  const counts = {
+    total:     proposals.length,
+    draft:     proposals.filter((p) => p.status === 'draft').length,
+    published: proposals.filter((p) => p.status === 'published').length,
+    approved:  proposals.filter((p) => p.status === 'approved').length,
   };
 
-  const openPrint = () => {
-    if (!res?.html) return;
-    const w = window.open('', '_blank'); if (!w) return;
-    w.document.write(res.html); w.document.close();
+  const filtered = proposals
+    .filter((p) => statusFilter === 'all' || p.status === statusFilter)
+    .filter((p) => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.trim().toLowerCase();
+      return (
+        p.title.toLowerCase().includes(q) ||
+        p.clientName.toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  /* ── Actions ────────────────────────────────────────────────── */
+  const handleDuplicate = async (proposalId: string) => {
+    try {
+      const r = await fetch('/api/proposals/duplicate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proposalId }),
+      });
+      if (!r.ok) throw new Error();
+      await fetchProposals();
+      toast('ההצעה שוכפלה בהצלחה', 'success');
+    } catch {
+      toast('שגיאה בשכפול ההצעה', 'error');
+    }
   };
 
-  const inp: React.CSSProperties = { width: '100%', border: `1px solid ${C.border}`, borderRadius: 10, padding: '0.55rem 0.8rem', fontSize: 13.5, marginBottom: 10, fontFamily: 'inherit' };
-  const p = res?.proposal;
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('למחוק את ההצעה? לא ניתן לשחזר פעולה זו.')) return;
+    try {
+      const r = await fetch(`/api/data/proposals?id=${id}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error();
+      await fetchProposals();
+      toast('ההצעה נמחקה', 'success');
+    } catch {
+      toast('שגיאה במחיקת ההצעה', 'error');
+    }
+  };
 
+  const handleView = (p: Proposal) => {
+    if (p.status === 'draft') return;
+    window.open(`/proposal/${p.publicToken}`, '_blank');
+  };
+
+  /* ── Styles ─────────────────────────────────────────────────── */
+  const selectStyle: React.CSSProperties = {
+    padding: '0.55rem 0.9rem',
+    borderRadius: 10,
+    border: '1px solid var(--border)',
+    background: 'var(--surface)',
+    color: 'var(--foreground)',
+    fontSize: '0.85rem',
+    fontFamily: 'inherit',
+    cursor: 'pointer',
+    minWidth: 140,
+  };
+
+  const actionBtnStyle: React.CSSProperties = {
+    background: 'transparent',
+    border: '1px solid var(--border)',
+    borderRadius: 8,
+    padding: '0.35rem 0.65rem',
+    fontSize: '0.78rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    color: 'var(--foreground-muted)',
+    fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
+  };
+
+  const thStyle: React.CSSProperties = {
+    padding: '0.75rem 1rem',
+    fontSize: '0.8rem',
+    fontWeight: 700,
+    color: 'var(--foreground-muted)',
+    textAlign: 'right',
+    whiteSpace: 'nowrap',
+  };
+
+  const tdStyle: React.CSSProperties = {
+    padding: '0.75rem 1rem',
+    fontSize: '0.87rem',
+    color: 'var(--foreground)',
+    textAlign: 'right',
+    verticalAlign: 'middle',
+  };
+
+  /* ── Render ─────────────────────────────────────────────────── */
   return (
-    <div dir="rtl" style={{ maxWidth: 980, margin: '0 auto', padding: '1.5rem 1.25rem 4rem', color: C.text, background: C.bg, minHeight: '100vh' }}>
+    <div dir="rtl" style={{ maxWidth: 1200, margin: '0 auto', padding: '1.5rem 1.25rem 4rem', minHeight: '100vh' }}>
+
+      {/* Header */}
       <PageHeader
-        title="📝 מחולל הצעות עבודה"
-        subtitle="בנה הצעת עבודה מקצועית ומשכנעת בעברית תוך שניות — מותאמת ללקוח, לשירותים ולתקציב."
+        title="הצעות מחיר"
+        primaryAction={{
+          label: 'הצעה חדשה +',
+          href: '/proposals/new',
+          variant: 'primary',
+        }}
+        search={{
+          value: searchQuery,
+          onChange: setSearchQuery,
+          placeholder: 'חיפוש לפי כותרת או לקוח...',
+        }}
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '1rem 1.2rem' }}>
-          <label style={{ fontSize: 12, fontWeight: 700, color: C.sub }}>לקוח קיים (אופציונלי)</label>
-          <select value={clientId} onChange={(e) => pickClient(e.target.value)} style={inp}>
-            <option value="">— בחר לקוח לטעינה אוטומטית —</option>
-            {(clients || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <label style={{ fontSize: 12, fontWeight: 700, color: C.sub }}>שם הלקוח *</label>
-          <input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="שם העסק/הלקוח" style={inp} />
-          <label style={{ fontSize: 12, fontWeight: 700, color: C.sub }}>תחום העסק</label>
-          <input value={businessField} onChange={(e) => setBusinessField(e.target.value)} placeholder="לדוגמה: מסעדה, קליניקה, חנות אונליין" style={inp} />
-          <label style={{ fontSize: 12, fontWeight: 700, color: C.sub }}>תקציב/טווח (אופציונלי)</label>
-          <input value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="לדוגמה: ₪5,000 לחודש" style={inp} />
-        </div>
+      {/* KPI Cards */}
+      <KpiRow>
+        <KpiCard
+          label="סה״כ הצעות"
+          value={counts.total}
+          icon="📋"
+          color="var(--accent)"
+        />
+        <KpiCard
+          label="טיוטות"
+          value={counts.draft}
+          icon="📝"
+          color="var(--foreground-muted)"
+        />
+        <KpiCard
+          label="פורסמו"
+          value={counts.published}
+          icon="📤"
+          color="var(--accent)"
+        />
+        <KpiCard
+          label="אושרו"
+          value={counts.approved}
+          icon="✅"
+          color="#22c55e"
+        />
+      </KpiRow>
 
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '1rem 1.2rem' }}>
-          <label style={{ fontSize: 12, fontWeight: 700, color: C.sub }}>שירותים מבוקשים</label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '8px 0 12px' }}>
-            {SERVICES.map((s) => (
-              <button key={s} onClick={() => toggle(s)} style={{ border: 'none', borderRadius: 999, padding: '0.35rem 0.8rem', fontSize: 12, fontWeight: 700, cursor: 'pointer', background: services.includes(s) ? C.primary : C.bg, color: services.includes(s) ? '#fff' : C.sub, boxShadow: services.includes(s) ? 'none' : `inset 0 0 0 1px ${C.border}` }}>{services.includes(s) ? '✓ ' : ''}{s}</button>
-            ))}
-          </div>
-          <label style={{ fontSize: 12, fontWeight: 700, color: C.sub }}>מטרות הלקוח</label>
-          <textarea value={goals} onChange={(e) => setGoals(e.target.value)} rows={3} placeholder="מה הלקוח רוצה להשיג? (פניות, מכירות, מודעות…)" style={{ ...inp, resize: 'vertical' }} />
-          <label style={{ fontSize: 12, fontWeight: 700, color: C.sub }}>טון</label>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {TONES.map((t) => <button key={t} onClick={() => setTone(t)} style={{ flex: 1, border: 'none', borderRadius: 10, padding: '0.5rem', fontSize: 13, fontWeight: 700, cursor: 'pointer', background: tone === t ? C.primary : C.bg, color: tone === t ? '#fff' : C.sub, boxShadow: tone === t ? 'none' : `inset 0 0 0 1px ${C.border}` }}>{t}</button>)}
-          </div>
-        </div>
+      {/* Filter Bar */}
+      <div style={{
+        background: 'var(--surface-raised)',
+        border: '1px solid var(--border)',
+        borderRadius: 16,
+        padding: '0.85rem 1.25rem',
+        marginBottom: '1.5rem',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        flexWrap: 'wrap',
+      }}>
+        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--foreground-muted)' }}>סטטוס:</span>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as ProposalStatus | 'all')}
+          style={selectStyle}
+        >
+          {FILTER_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <span style={{ fontSize: '0.8rem', color: 'var(--foreground-muted)', marginRight: 'auto' }}>
+          {filtered.length} תוצאות
+        </span>
       </div>
 
-      <button onClick={generate} disabled={busy || !clientName.trim()} style={{ marginTop: 14, background: busy ? '#cbd5e1' : C.primary, color: '#fff', border: 'none', borderRadius: 12, padding: '0.75rem 1.8rem', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>
-        {busy ? '⏳ בונה הצעה…' : '✨ צור הצעת עבודה'}
-      </button>
-      {err && <div style={{ marginTop: 10, color: '#B45309', fontSize: 13, fontWeight: 600 }}>{err}</div>}
+      {/* Content */}
+      {loading ? (
+        <LoadingState label="טוען הצעות..." />
+      ) : proposals.length === 0 ? (
+        <EmptyState
+          icon="📄"
+          title="אין הצעות מחיר עדיין"
+          hint="צרו את ההצעה הראשונה שלכם כדי להתחיל"
+          action={{ label: 'צור הצעה חדשה', href: '/proposals/new' }}
+        />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon="🔍"
+          title="לא נמצאו הצעות"
+          hint="נסו לשנות את הפילטר או את מילת החיפוש"
+        />
+      ) : (
+        /* Proposals Table */
+        <div style={{
+          background: 'var(--surface-raised)',
+          border: '1px solid var(--border)',
+          borderRadius: 16,
+          overflow: 'hidden',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+        }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                <th style={thStyle}>כותרת</th>
+                <th style={thStyle}>לקוח</th>
+                <th style={thStyle}>סטטוס</th>
+                <th style={thStyle}>מחיר</th>
+                <th style={thStyle}>תאריך יצירה</th>
+                <th style={{ ...thStyle, textAlign: 'center' }}>פעולות</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((p) => {
+                const status = STATUS_MAP[p.status];
+                const isHovered = hoveredRow === p.id;
+                return (
+                  <tr
+                    key={p.id}
+                    onMouseEnter={() => setHoveredRow(p.id)}
+                    onMouseLeave={() => setHoveredRow(null)}
+                    style={{
+                      borderBottom: '1px solid var(--border)',
+                      background: isHovered ? 'var(--surface)' : 'transparent',
+                      transition: 'background 0.15s ease',
+                    }}
+                  >
+                    {/* Title */}
+                    <td style={{ ...tdStyle, fontWeight: 600, maxWidth: 240 }}>
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {p.title || 'ללא כותרת'}
+                      </div>
+                    </td>
 
-      {p && (
-        <div style={{ marginTop: 22, background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '1.4rem 1.6rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h2 style={{ fontSize: 20, fontWeight: 900, margin: 0 }}>{p.headline}</h2>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={openPrint} style={{ background: C.primary, color: '#fff', border: 'none', borderRadius: 9, padding: '0.45rem 0.9rem', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>🖨 PDF / הדפסה</button>
-              <button onClick={() => navigator.clipboard?.writeText(plainText(p))} style={{ background: C.bg, color: C.text, border: `1px solid ${C.border}`, borderRadius: 9, padding: '0.45rem 0.9rem', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>📋 העתק</button>
-            </div>
-          </div>
-          <p style={{ fontSize: 14.5, lineHeight: 1.8 }}>{p.intro}</p>
-          <Section title="הבנת הצורך"><p style={{ color: C.sub, fontSize: 14, lineHeight: 1.8 }}>{p.understanding}</p></Section>
-          <Section title="מה כולל השירות">
-            {(p.deliverables || []).map((d: any, i: number) => (
-              <div key={i} style={{ background: C.bg, borderRadius: 12, padding: '0.8rem 1rem', marginBottom: 8 }}>
-                <div style={{ fontWeight: 800, color: C.primaryDark, marginBottom: 4 }}>{d.service}</div>
-                <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 13.5, lineHeight: 1.9 }}>{(d.items || []).map((it: string, j: number) => <li key={j}>{it}</li>)}</ul>
-              </div>
-            ))}
-          </Section>
-          <Section title="מבנה החבילה"><div style={{ background: C.bg, border: `2px solid ${C.primary}30`, borderRadius: 12, padding: '0.8rem 1rem', fontSize: 14 }}>{p.packageSummary}</div></Section>
-          <Section title="איך עובדים">
-            {(p.process || []).map((s: string, i: number) => (
-              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 7 }}>
-                <span style={{ flexShrink: 0, width: 24, height: 24, borderRadius: '50%', background: C.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12 }}>{i + 1}</span>
-                <span style={{ fontSize: 13.5, paddingTop: 2 }}>{s}</span>
-              </div>
-            ))}
-          </Section>
-          <Section title="למה Studio Pixel"><ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 14, lineHeight: 1.9 }}>{(p.whyUs || []).map((w: string, i: number) => <li key={i}>{w}</li>)}</ul></Section>
-          <div style={{ marginTop: 14, textAlign: 'center', background: C.bg, borderRadius: 12, padding: '1rem' }}><b style={{ fontSize: 15 }}>{p.closing}</b></div>
+                    {/* Client */}
+                    <td style={{ ...tdStyle, color: 'var(--foreground-muted)' }}>
+                      {p.clientName || '—'}
+                    </td>
+
+                    {/* Status Badge */}
+                    <td style={tdStyle}>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        color: status.color,
+                        background: p.status === 'draft'
+                          ? 'var(--surface)'
+                          : `${status.color}1a`,
+                        border: p.status === 'draft'
+                          ? '1px solid var(--border)'
+                          : `1px solid ${status.color}30`,
+                        borderRadius: 8,
+                        padding: '4px 12px',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {status.label}
+                      </span>
+                    </td>
+
+                    {/* Price */}
+                    <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      {p.price != null ? (
+                        <>
+                          {`₪${p.price.toLocaleString()}`}
+                          {p.includeVat && (
+                            <span style={{ fontSize: '0.72rem', color: 'var(--foreground-muted)', marginRight: 4 }}>
+                              + מע״מ
+                            </span>
+                          )}
+                        </>
+                      ) : '—'}
+                    </td>
+
+                    {/* Date */}
+                    <td style={{ ...tdStyle, color: 'var(--foreground-muted)', whiteSpace: 'nowrap' }}>
+                      {new Date(p.createdAt).toLocaleDateString('he-IL')}
+                    </td>
+
+                    {/* Actions */}
+                    <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+                        {/* View published */}
+                        {p.status !== 'draft' && (
+                          <button
+                            onClick={() => handleView(p)}
+                            style={{ ...actionBtnStyle, color: 'var(--accent)', borderColor: 'var(--accent)' }}
+                          >
+                            צפייה
+                          </button>
+                        )}
+
+                        {/* Edit */}
+                        <button
+                          onClick={() => router.push(`/proposals/edit/${p.id}`)}
+                          style={actionBtnStyle}
+                        >
+                          עריכה
+                        </button>
+
+                        {/* Duplicate */}
+                        <button
+                          onClick={() => handleDuplicate(p.id)}
+                          style={actionBtnStyle}
+                        >
+                          שכפול
+                        </button>
+
+                        {/* Delete */}
+                        <button
+                          onClick={() => handleDelete(p.id)}
+                          style={{ ...actionBtnStyle, color: '#ef4444', borderColor: '#fecaca' }}
+                        >
+                          מחיקה
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
   );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div style={{ margin: '16px 0' }}>
-      <div style={{ fontSize: 12, fontWeight: 800, color: C.primary, letterSpacing: 1, marginBottom: 6 }}>{title}</div>
-      {children}
-    </div>
-  );
-}
-
-function plainText(p: any): string {
-  const parts = [p.headline, '', p.intro, '', 'הבנת הצורך:', p.understanding, ''];
-  for (const d of (p.deliverables || [])) { parts.push(`${d.service}:`); for (const i of (d.items || [])) parts.push(`• ${i}`); parts.push(''); }
-  parts.push('מבנה החבילה:', p.packageSummary, '', 'איך עובדים:', ...(p.process || []).map((s: string, i: number) => `${i + 1}. ${s}`), '', 'למה אנחנו:', ...(p.whyUs || []).map((w: string) => `• ${w}`), '', p.closing);
-  return parts.join('\n');
 }

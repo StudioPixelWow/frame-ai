@@ -14,6 +14,7 @@ const PUBLIC_ROUTES = [
   '/privacy',        // public — Meta App privacy policy URL
   '/data-deletion',  // public — Meta App data deletion URL
   '/report',         // public — shareable premium report for clients
+  '/proposal',       // public — client proposal approval page
 ];
 
 // Routes that require admin role

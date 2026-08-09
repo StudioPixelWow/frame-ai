@@ -3801,3 +3801,96 @@ export interface AIGenerationVersion {
   durationMs: number | null;
   createdAt: string;
 }
+
+/* ═══════════════════════════════════════════════════════
+   PROPOSAL MANAGEMENT MODULE
+   ═══════════════════════════════════════════════════════ */
+
+export type ProposalStatus = 'draft' | 'published' | 'viewed' | 'approved' | 'rejected';
+export type ProposalPricingType = 'retainer' | 'project';
+export type ProposalDiscountType = 'percent' | 'amount';
+
+export interface ProposalSection {
+  id: string;
+  title: string;
+  items: ProposalItem[];
+  order: number;
+}
+
+export interface ProposalItem {
+  id: string;
+  text: string;
+  included: boolean;
+  order: number;
+}
+
+export interface ProposalApprovalData {
+  approvedAt: string;
+  signatureDataUrl: string;
+  fullName: string;
+  businessName: string;
+  businessId: string;
+  date: string;
+}
+
+export interface Proposal {
+  id: string;
+  clientId: string;
+  clientName: string;
+  title: string;
+  templateId: string | null;
+  status: ProposalStatus;
+  publicToken: string;
+
+  /* Content */
+  intro: string;
+  sections: ProposalSection[];
+
+  /* Pricing */
+  pricingType: ProposalPricingType;
+  price: number;
+  discount: number;
+  discountType: ProposalDiscountType;
+  vatRate: number;
+  includeVat: boolean;
+  paymentTerms: string;
+  customPaymentTerms: string;
+  contractPeriod: string;
+
+  /* General terms */
+  generalTerms: string[];
+
+  /* Tracking */
+  publishedAt: string | null;
+  firstViewedAt: string | null;
+  lastViewedAt: string | null;
+  viewCount: number;
+
+  /* Approval */
+  approval: ProposalApprovalData | null;
+  approvedSnapshot: Record<string, unknown> | null;
+
+  /* Meta */
+  notes: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProposalTemplateSection {
+  title: string;
+  items: string[];
+}
+
+export interface ProposalTemplate {
+  id: string;
+  code: string;
+  name: string;
+  category: ProposalPricingType;
+  intro: string;
+  sections: ProposalTemplateSection[];
+  paymentTermsTemplate: string;
+  generalTerms: string[];
+  createdAt: string;
+  updatedAt: string;
+}

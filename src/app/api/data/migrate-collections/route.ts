@@ -99,6 +99,9 @@ const TABLES = [
   'app_ai_video_analyses',
   // Lead Research & Growth Intelligence
   'app_lead_research',
+  // Proposal Management
+  'app_proposals',
+  'app_proposal_templates',
 ];
 
 export async function GET() {

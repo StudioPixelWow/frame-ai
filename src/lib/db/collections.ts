@@ -95,6 +95,8 @@ import type {
   JobRun,
   AIGenerationSession,
   AIGenerationVersion,
+  Proposal,
+  ProposalTemplate,
 } from './schema';
 
 // clients — removed from JsonStore. All client reads/writes go through Supabase
@@ -236,3 +238,7 @@ export const jobRuns = new SupabaseCrud<JobRun>('job_runs', 'jrn');
 // Visual Generation from Gantt
 export const aiGenerationSessions = new SupabaseCrud<AIGenerationSession>('ai_generation_sessions', 'ags');
 export const aiGenerationVersions = new SupabaseCrud<AIGenerationVersion>('ai_generation_versions', 'agv');
+
+// Proposal Management
+export const proposals = new SupabaseCrud<Proposal>('app_proposals', 'prp');
+export const proposalTemplates = new SupabaseCrud<ProposalTemplate>('app_proposal_templates', 'prt');
